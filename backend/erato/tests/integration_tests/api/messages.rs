@@ -4718,6 +4718,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["display"]["server_name"], "Approval Probe");
+    assert_eq!(approval_request["display"]["label"]["source"], "generic");
     assert_eq!(approval_request["preset"], "restrictive");
     // The gated call is also recorded as a decision the client can name.
     assert_eq!(approval_request["kind"], "mcp_tool");
@@ -4877,12 +4878,23 @@ async fn continuestream_resumes_a_parked_tool_approval(
         resumed_content[0]["display"]["server_name"],
         "Approval Probe"
     );
+    assert_eq!(
+        resumed_content[0]["display"]["label"]["source"], "generic",
+        "a call that ran without asking is labelled too"
+    );
     assert_eq!(resumed_content[2]["tool_call_id"], probe_id);
     assert_eq!(resumed_content[2]["always_allow"], false);
     // The decision names the approval it answered, whichever body carried it.
     assert_eq!(resumed_content[2]["approval_id"], probe_id);
     assert_eq!(resumed_content[3]["status"], "success");
-    assert_eq!(resumed_content[3]["display"], approval_request["display"]);
+    let mut row_display = approval_request["display"].clone();
+    assert!(row_display["description"].is_string());
+    row_display.as_object_mut().unwrap().remove("description");
+    row_display["description_truncated"] = json!(false);
+    assert_eq!(
+        resumed_content[3]["display"], row_display,
+        "the row keeps the card's display, label included, but not its description"
+    );
     assert!(
         serde_json::to_string(&resumed_content[3]["output"])
             .unwrap()
@@ -5198,6 +5210,94 @@ async fn park_a_turn_on_the_approval_gate_with_config(
     // The mock server is deliberately left out of the return: every test below
     // drops it and reads the row instead.
     (app_state, server, chat_id, assistant_message_id, content)
+}
+
+/// Every MCP call is stored with a label, the call that ran without asking as
+/// well as the gated one. With no better source the label is generic, and its
+/// readable view names the gated call's arguments by path without copying
+/// their values; the approval fields stay what the gate decided.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
+    let arguments = json!({
+        "destination": {"page_id": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
+        "pages": [{"title": "Quarterly plan", "body": "Line one.\nLine two."}],
+        "notify": true,
+    });
+    let mut mocks = MockSet::new();
+    {
+        let arguments = arguments.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions");
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[
+                    ("call_read", "read_approval_fixture", json!({})),
+                    ("call_probe", "publish_approval_probe", arguments.clone()),
+                ]),
+            );
+        });
+    }
+    let (_app_state, _server, _chat_id, _assistant_message_id, content) =
+        park_a_turn_on_the_approval_gate(pool, mocks).await;
+    let content = content.as_array().unwrap();
+    assert_eq!(content.len(), 2, "{content:?}");
+
+    let read = &content[0];
+    assert_eq!(read["content_type"], "tool_use");
+    assert_eq!(read["status"], "success");
+    assert_eq!(
+        read["display"]["label"],
+        json!({
+            "action": "other",
+            "object_kind": "other",
+            "arguments": {"path": "", "kind": "group"},
+            "source": "generic",
+        })
+    );
+
+    let request = &content[1];
+    assert_eq!(request["content_type"], "tool_approval_request");
+    assert_eq!(request["approvals"][0]["display"], request["display"]);
+    assert_eq!(request["input"], arguments);
+    assert_eq!(request["preset"], "restrictive");
+    let label = &request["display"]["label"];
+    assert_eq!(label["source"], "generic");
+    fn walk<'a>(node: &'a Value, out: &mut Vec<(&'a str, &'a str)>) {
+        out.push((
+            node["path"].as_str().unwrap(),
+            node["kind"].as_str().unwrap(),
+        ));
+        for child in node["children"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let mut view = Vec::new();
+    walk(&label["arguments"], &mut view);
+    assert_eq!(
+        view,
+        [
+            ("", "group"),
+            ("/destination", "group"),
+            ("/destination/page_id", "id"),
+            ("/pages", "list"),
+            ("/pages/0", "group"),
+            ("/pages/0/title", "value"),
+            ("/pages/0/body", "text"),
+            ("/notify", "value"),
+        ]
+    );
+    let stored = serde_json::to_string(label).unwrap();
+    assert!(
+        !stored.contains("Quarterly plan") && !stored.contains("9b1d5f2e"),
+        "the view holds paths, the values stay in the input: {stored}"
+    );
 }
 
 /// A turn that ran two calls before the gate stopped it must hand the model
@@ -6873,6 +6973,15 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             .iter()
             .map(|part| part["content_type"].as_str().unwrap())
             .collect();
+        let settled = &resumed.raw_message["content"][3];
+        assert_eq!(
+            settled["display"]["label"]["source"], "generic",
+            "{decision}"
+        );
+        assert_eq!(
+            tool_updates[0]["display"], settled["display"],
+            "{decision}: the live update carries the display the row is stored with"
+        );
         let expected_decision_part = if decision == "reject" {
             "tool_rejection"
         } else {

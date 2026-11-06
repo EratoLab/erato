@@ -994,6 +994,7 @@ mod tests {
                 content_index: 1,
                 tool_call_id: "call".into(),
                 tool_name: "read_file".into(),
+                display: None,
                 input: None,
                 status: ToolCallStatus::InProgress,
                 progress_message: Some("Reading page".into()),
@@ -1008,6 +1009,7 @@ mod tests {
                 content_index: 1,
                 tool_call_id: "call".into(),
                 tool_name: "read_file".into(),
+                display: None,
                 input: None,
                 status: ToolCallStatus::Success,
                 progress_message: None,
@@ -1089,6 +1091,7 @@ mod tests {
             description: Some("Description".into()),
             description_truncated: true,
             server_name: None,
+            label: None,
         });
         let completion = completion_from_content(
             Uuid::nil(),
@@ -1134,6 +1137,7 @@ mod tests {
                 description: None,
                 description_truncated: false,
                 server_name: Some("Team Wiki".into()),
+                label: None,
             });
         let completion = completion_from_content(
             Uuid::nil(),
@@ -1347,6 +1351,7 @@ mod tests {
                 content_index: 1,
                 tool_call_id: "read".into(),
                 tool_name: "read_file".into(),
+                display: None,
                 status: ToolCallStatus::Success,
                 input: None,
                 output: None,

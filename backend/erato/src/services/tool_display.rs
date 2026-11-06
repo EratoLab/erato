@@ -1,6 +1,8 @@
 //! One projection of MCP-authored display text for the catalog and durable
 //! approval requests. Clients render it as plain text, never as trusted markup.
 
+pub mod label;
+
 use crate::config::McpRuntimeConfig;
 use crate::models::message::ToolDisplayMetadata;
 use crate::services::display_text::{
@@ -29,19 +31,33 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         description_truncated: description.as_ref().is_some_and(|value| value.truncated),
         description: description.map(|value| value.text),
         server_name: None,
+        label: None,
     }
 }
 
-/// What a call of an MCP tool shows wherever it appears: the tool's descriptor
-/// and the server's name from the live config, stored with the call's parts.
+/// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
+/// the server's name from the live config and the call's label, stored with
+/// the call's parts.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
+    arguments: &serde_json::Value,
 ) -> ToolDisplayMetadata {
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
+        label: Some(label::generic_label(arguments)),
         ..tool_display_metadata(tool)
+    }
+}
+
+/// What a tool row and its live updates keep of a call's display. Only
+/// approval cards show the description, and a row would repeat it per call.
+pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
+    ToolDisplayMetadata {
+        description: None,
+        description_truncated: false,
+        ..display.clone()
     }
 }
 
@@ -87,22 +103,59 @@ mod tests {
         }))
         .unwrap();
         let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
-        let display = mcp_tool_call_display(&config, "dynamics", &tool);
+        let arguments = serde_json::json!({});
+        let display = mcp_tool_call_display(&config, "dynamics", &tool, &arguments);
         assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
         assert_eq!(display.title, "create_record");
         assert_eq!(
-            mcp_tool_call_display(&config, "web_access", &tool)
+            mcp_tool_call_display(&config, "web_access", &tool, &arguments)
                 .server_name
                 .as_deref(),
             Some("Web access")
         );
         assert_eq!(
-            mcp_tool_call_display(&config, "removed-since", &tool)
+            mcp_tool_call_display(&config, "removed-since", &tool, &arguments)
                 .server_name
                 .as_deref(),
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn every_call_is_labelled_from_its_own_arguments_and_the_catalog_is_not() {
+        let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "tablename": "account",
+            "item": {"name": "Contoso", "parentaccountid": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
+        });
+        let display =
+            mcp_tool_call_display(&McpRuntimeConfig::default(), "dynamics", &tool, &arguments);
+        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+        let paths: Vec<_> = display
+            .label
+            .as_ref()
+            .unwrap()
+            .arguments
+            .as_ref()
+            .unwrap()
+            .children
+            .iter()
+            .map(|node| node.path.as_str())
+            .collect();
+        assert_eq!(paths, ["/tablename", "/item"]);
+        assert_eq!(tool_display_metadata(&tool).label, None);
+
+        let row = tool_row_display(&display);
+        assert_eq!(display.description.as_deref(), Some("Creates a record."));
+        assert_eq!(
+            row,
+            ToolDisplayMetadata {
+                description: None,
+                description_truncated: false,
+                ..display
+            }
+        );
     }
 
     #[test]
