@@ -423,6 +423,9 @@ pub struct ToolUse {
     pub tool_call_id: String,
     pub status: ToolCallStatus,
     pub tool_name: String,
+    /// Set on MCP calls; copied from the approval item when the call was gated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<ToolDisplayMetadata>,
     pub progress_message: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
@@ -458,6 +461,11 @@ pub struct ToolDisplayMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub description_truncated: bool,
+    /// The MCP server as the operator named it, else its id tidied up; never
+    /// text from the server itself. Absent on client tools and older rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub server_name: Option<String>,
 }
 
 /// Which surface a durable approval stop belongs to. `McpTool` is the

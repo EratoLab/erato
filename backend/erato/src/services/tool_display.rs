@@ -1,6 +1,7 @@
 //! One projection of MCP-authored display text for the catalog and durable
 //! approval requests. Clients render it as plain text, never as trusted markup.
 
+use crate::config::McpRuntimeConfig;
 use crate::models::message::ToolDisplayMetadata;
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
@@ -27,6 +28,20 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         title,
         description_truncated: description.as_ref().is_some_and(|value| value.truncated),
         description: description.map(|value| value.text),
+        server_name: None,
+    }
+}
+
+/// What a call of an MCP tool shows wherever it appears: the tool's descriptor
+/// and the server's name from the live config, stored with the call's parts.
+pub fn mcp_tool_call_display(
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+) -> ToolDisplayMetadata {
+    ToolDisplayMetadata {
+        server_name: Some(config.mcp_server_display_name(server_id)),
+        ..tool_display_metadata(tool)
     }
 }
 
@@ -53,6 +68,41 @@ mod tests {
         assert_eq!(display.description.as_deref(), Some("description"));
         tool.title = Some("\u{202E}".into());
         assert_eq!(tool_display_metadata(&tool).title, "Annotated title");
+    }
+
+    #[test]
+    fn calls_carry_the_configured_server_name_or_the_tidied_id() {
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dynamics": {
+                    "display_name": "Dynamics 365",
+                    "transport_type": "streamable_http",
+                    "url": "http://localhost/mcp",
+                },
+                "web_access": {
+                    "transport_type": "streamable_http",
+                    "url": "http://localhost/mcp",
+                },
+            }
+        }))
+        .unwrap();
+        let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
+        let display = mcp_tool_call_display(&config, "dynamics", &tool);
+        assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
+        assert_eq!(display.title, "create_record");
+        assert_eq!(
+            mcp_tool_call_display(&config, "web_access", &tool)
+                .server_name
+                .as_deref(),
+            Some("Web access")
+        );
+        assert_eq!(
+            mcp_tool_call_display(&config, "removed-since", &tool)
+                .server_name
+                .as_deref(),
+            Some("Removed since")
+        );
+        assert_eq!(tool_display_metadata(&tool).server_name, None);
     }
 
     #[test]

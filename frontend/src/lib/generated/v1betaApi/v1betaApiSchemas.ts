@@ -2507,6 +2507,10 @@ export type ListShareGrantsResponse = {
 export type McpServerStatus = {
   authentication_mode: string;
   connection_status: McpServerStatusValue;
+  /**
+   * The operator's name for the server, else its id tidied up.
+   */
+  display_name: string;
   id: string;
 };
 
@@ -4152,10 +4156,19 @@ export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 export type ToolDisplayMetadata = {
   description?: string | null | undefined;
   description_truncated: boolean;
+  /**
+   * The MCP server as the operator named it, else its id tidied up; never
+   * text from the server itself. Absent on client tools and older rows.
+   */
+  server_name?: string;
   title: string;
 };
 
 export type ToolUse = {
+  /**
+   * @default null
+   */
+  display?: null | ToolDisplayMetadata;
   /**
    * @default null
    */

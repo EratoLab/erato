@@ -9420,6 +9420,7 @@
         "type": "object",
         "required": [
           "id",
+          "display_name",
           "authentication_mode",
           "connection_status"
         ],
@@ -9429,6 +9430,10 @@
           },
           "connection_status": {
             "$ref": "#/components/schemas/McpServerStatusValue"
+          },
+          "display_name": {
+            "type": "string",
+            "description": "The operator's name for the server, else its id tidied up."
           },
           "id": {
             "type": "string"
@@ -12395,6 +12400,10 @@
           "description_truncated": {
             "type": "boolean"
           },
+          "server_name": {
+            "type": "string",
+            "description": "The MCP server as the operator named it, else its id tidied up; never\ntext from the server itself. Absent on client tools and older rows."
+          },
           "title": {
             "type": "string"
           }
@@ -12403,6 +12412,18 @@
       "ToolUse": {
         "type": "object",
         "properties": {
+          "display": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolDisplayMetadata",
+                "description": "Set on MCP calls; copied from the approval item when the call was gated."
+              }
+            ],
+            "default": null
+          },
           "ended_at": {
             "type": [
               "string",

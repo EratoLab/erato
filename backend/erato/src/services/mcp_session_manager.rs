@@ -1183,6 +1183,7 @@ mod tests {
         exclude_tools: Vec<&str>,
     ) -> McpServerConfig {
         McpServerConfig {
+            display_name: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),

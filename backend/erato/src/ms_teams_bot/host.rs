@@ -829,6 +829,16 @@ fn approval_display(display: crate::models::message::ToolDisplayMetadata) -> Too
     }
 }
 
+/// The server name saved with the request; rows saved before it existed show the id.
+fn approval_source(
+    display: Option<&crate::models::message::ToolDisplayMetadata>,
+    server_id: &str,
+) -> Option<String> {
+    display
+        .and_then(|display| display.server_name.clone())
+        .or_else(|| Some(server_id.to_string()).filter(|id| !id.is_empty()))
+}
+
 fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPart]) -> Completion {
     let (text, earlier_text) = answer_text(content);
     // A client tool runs on the user's device, never in Teams, so its approval
@@ -866,15 +876,15 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
                         Some(child) => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: child.tool_name,
+                            source: approval_source(child.display.as_ref(), &child.mcp_server_id),
                             display: child.display.map(approval_display),
-                            source: Some(child.mcp_server_id).filter(|id| !id.is_empty()),
                             input: child.input,
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
                             tool_name: item.tool_name,
+                            source: approval_source(item.display.as_ref(), &request.mcp_server_id),
                             display: item.display.map(approval_display),
-                            source: Some(request.mcp_server_id.clone()).filter(|id| !id.is_empty()),
                             input: item.input,
                         },
                     })
@@ -1078,11 +1088,12 @@ mod tests {
             title: "Search desktop".into(),
             description: Some("Description".into()),
             description_truncated: true,
+            server_name: None,
         });
         let completion = completion_from_content(
             Uuid::nil(),
             Uuid::nil(),
-            &[ContentPart::ToolApprovalRequest(request)],
+            &[ContentPart::ToolApprovalRequest(request.clone())],
         );
         let approvals = completion.approvals.unwrap();
         let item = &approvals.items[0];
@@ -1092,6 +1103,17 @@ mod tests {
         let display = item.display.as_ref().unwrap();
         assert_eq!(display.title, "Search desktop");
         assert_eq!(display.description.as_deref(), Some("Description…"));
+
+        if let Some(display) = request.display.as_mut() {
+            display.server_name = Some("Desktop Search".into());
+        }
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[ContentPart::ToolApprovalRequest(request)],
+        );
+        let approvals = completion.approvals.unwrap();
+        assert_eq!(approvals.items[0].source.as_deref(), Some("Desktop Search"));
     }
 
     #[test]

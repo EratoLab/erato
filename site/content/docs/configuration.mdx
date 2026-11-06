@@ -4287,6 +4287,25 @@ show_in_assistant_editor = true
 
 To show chat connectors while hiding preferences, set `show_frontend_tab = false` and `show_in_chat_input = true`. An omitted `show_in_assistant_editor` still inherits `false`.
 
+#### `mcp_servers.<server-id>.display_name`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.display_name */}
+
+The name users see for this server on approval cards (in the web app, for delegated tasks and in Microsoft Teams), in the tool steps of a response and in the Servers & Tools preferences tab. The name always comes from this configuration, never from the MCP server itself.
+
+**Type:** optional `string`, not blank, at most 128 bytes, without control characters
+
+**Default:** the server ID tidied up: underscores and hyphens become spaces and the first letter is capitalized, so `web_access` is shown as "Web access". Messages saved before this setting existed keep showing the server ID.
+
+**Example:**
+
+```toml
+[mcp_servers.dynamics]
+display_name = "Dynamics 365"
+transport_type = "streamable_http"
+url = "https://mcp.example.com/dynamics"
+```
+
 #### `mcp_servers.<server-id>.protocol_mode`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.protocol_mode */}

@@ -34,6 +34,8 @@ pub enum McpServerStatusValue {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct McpServerStatus {
     pub id: String,
+    /// The operator's name for the server, else its id tidied up.
+    pub display_name: String,
     pub authentication_mode: String,
     pub connection_status: McpServerStatusValue,
 }
@@ -177,12 +179,14 @@ pub async fn list_mcp_servers(
         .filter_map(|server_id| {
             let config = mcp.config.mcp_servers.get(&server_id)?;
             let authentication_mode = authentication_mode_name(&config.authentication).to_string();
+            let display_name = mcp.config.mcp_server_display_name(&server_id);
             let servers = &mcp.servers;
             let auth_context = &auth_context;
             Some(async move {
                 let connection_status = servers.probe_connection(&server_id, auth_context).await;
                 McpServerStatus {
                     id: server_id,
+                    display_name,
                     authentication_mode,
                     connection_status: map_status(connection_status),
                 }

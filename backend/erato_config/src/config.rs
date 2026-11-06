@@ -87,9 +87,37 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': stateless protocol requires streamable_http"
             ));
         }
+        if server
+            .display_name
+            .as_deref()
+            .is_some_and(|name| !is_valid_display_name(name))
+        {
+            return Err(eyre!(
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control characters"
+            ));
+        }
     }
 
     Ok(())
+}
+
+fn is_valid_display_name(name: &str) -> bool {
+    !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
+}
+
+/// `web_access` reads as "Web access": separators become spaces and the first
+/// letter is capitalized; the rest of the id is kept as written.
+fn tidy_mcp_server_id(id: &str) -> String {
+    let words = id
+        .split(|c: char| c == '_' || c == '-' || c.is_whitespace())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut chars = words.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => id.to_string(),
+    }
 }
 
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
@@ -257,6 +285,19 @@ pub struct McpRuntimeConfig {
 }
 
 impl McpRuntimeConfig {
+    /// The operator's name for the server, else its id tidied up. Takes the id
+    /// because a server's config does not know its own key.
+    #[must_use]
+    pub fn mcp_server_display_name(&self, server_id: &str) -> String {
+        self.mcp_servers
+            .get(server_id)
+            .and_then(|server| server.display_name.as_deref())
+            .map_or_else(
+                || tidy_mcp_server_id(server_id),
+                |name| name.trim().to_string(),
+            )
+    }
+
     #[must_use]
     pub fn from_app_config(config: &AppConfig) -> Self {
         Self {
@@ -986,7 +1027,7 @@ impl DesktopSidecarConfig {
         }
         if let Some(name) = &self.display_name {
             eyre::ensure!(
-                !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control),
+                is_valid_display_name(name),
                 "Invalid desktop_sidecar.display_name"
             );
             fields.insert("display_name".into(), name.clone().into());
@@ -3776,6 +3817,11 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
+    /// Name shown to users for this server, at most 128 bytes without control
+    /// characters. When omitted, the server id is shown tidied up.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub display_name: Option<String>,
     // The type of transport that the MCP server uses.
     // Supported values are:
     // - "sse" (Server-Sent Events)

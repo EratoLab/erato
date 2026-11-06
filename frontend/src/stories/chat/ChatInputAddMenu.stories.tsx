@@ -171,14 +171,30 @@ export const WithEmailSection: Story = {
 };
 
 const CONNECTOR_SERVERS: McpServerStatus[] = [
-  { id: "linear", connection_status: "SUCCESS", authentication_mode: "oauth2" },
-  { id: "github", connection_status: "SUCCESS", authentication_mode: "oauth2" },
+  {
+    id: "linear",
+    display_name: "linear",
+    connection_status: "SUCCESS",
+    authentication_mode: "oauth2",
+  },
+  {
+    id: "github",
+    display_name: "github",
+    connection_status: "SUCCESS",
+    authentication_mode: "oauth2",
+  },
   {
     id: "jira",
+    display_name: "jira",
     connection_status: "NEEDS_AUTHENTICATION",
     authentication_mode: "oauth2",
   },
-  { id: "wiki", connection_status: "FAILURE", authentication_mode: "none" },
+  {
+    id: "wiki",
+    display_name: "wiki",
+    connection_status: "FAILURE",
+    authentication_mode: "none",
+  },
 ];
 
 /**

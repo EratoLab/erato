@@ -76,6 +76,14 @@ const PlainToolUseStep = ({
         title={
           <>
             {toolName}
+            {part.display?.server_name && (
+              <span
+                dir="auto"
+                className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
+              >
+                {part.display.server_name}
+              </span>
+            )}
             {part.progress_message && (
               <span
                 className="pl-2 font-normal text-theme-fg-muted"

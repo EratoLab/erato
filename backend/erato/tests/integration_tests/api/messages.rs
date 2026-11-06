@@ -71,6 +71,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        display_name: None,
         protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}{path}"),
@@ -4648,11 +4649,14 @@ async fn continuestream_resumes_a_parked_tool_approval(
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
-        mcp_server_config(
-            &mock_mcp_base_url(),
-            "/mcp/approval-policy",
-            McpServerAuthenticationConfig::None,
-        ),
+        McpServerConfig {
+            display_name: Some("Approval Probe".into()),
+            ..mcp_server_config(
+                &mock_mcp_base_url(),
+                "/mcp/approval-policy",
+                McpServerAuthenticationConfig::None,
+            )
+        },
     );
     app_config.mcp_server_permissions.rules.insert(
         "allow-mock-mcp".to_string(),
@@ -4713,6 +4717,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["content_type"], "tool_approval_request");
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
+    assert_eq!(approval_request["display"]["server_name"], "Approval Probe");
     assert_eq!(approval_request["preset"], "restrictive");
     // The gated call is also recorded as a decision the client can name.
     assert_eq!(approval_request["kind"], "mcp_tool");
@@ -4722,6 +4727,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
     let read_id = generated_tool_call_id(assistant_message_id, 1, "call_read");
     assert_eq!(approvals[0]["approval_id"], probe_id);
     assert_eq!(approvals[0]["tool_name"], "publish_approval_probe");
+    assert_eq!(approvals[0]["display"], approval_request["display"]);
     assert!(
         approval_request["pending_tool_calls"]
             .as_array()
@@ -4867,11 +4873,16 @@ async fn continuestream_resumes_a_parked_tool_approval(
         ]
     );
     assert_eq!(resumed_content[0]["tool_call_id"], read_id);
+    assert_eq!(
+        resumed_content[0]["display"]["server_name"],
+        "Approval Probe"
+    );
     assert_eq!(resumed_content[2]["tool_call_id"], probe_id);
     assert_eq!(resumed_content[2]["always_allow"], false);
     // The decision names the approval it answered, whichever body carried it.
     assert_eq!(resumed_content[2]["approval_id"], probe_id);
     assert_eq!(resumed_content[3]["status"], "success");
+    assert_eq!(resumed_content[3]["display"], approval_request["display"]);
     assert!(
         serde_json::to_string(&resumed_content[3]["output"])
             .unwrap()

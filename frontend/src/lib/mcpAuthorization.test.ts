@@ -90,6 +90,7 @@ describe("MCP authorization lifecycle", () => {
       servers: [
         {
           id: "sales",
+          display_name: "sales",
           authentication_mode: "oauth2",
           connection_status: "NEEDS_AUTHENTICATION",
         },

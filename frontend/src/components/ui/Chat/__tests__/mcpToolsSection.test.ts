@@ -16,6 +16,7 @@ const server = (
   connectionStatus: McpServerStatus["connection_status"] = "SUCCESS",
 ): McpServerStatus => ({
   id,
+  display_name: id,
   connection_status: connectionStatus,
   authentication_mode: "oauth2",
 });

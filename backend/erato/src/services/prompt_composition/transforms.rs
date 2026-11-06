@@ -1085,6 +1085,7 @@ mod tests {
             tool_call_id: "call-1".to_string(),
             status: ToolCallStatus::Success,
             tool_name: tool_name.to_string(),
+            display: None,
             progress_message: None,
             progress: None,
             total: None,

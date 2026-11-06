@@ -2367,6 +2367,7 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
+            display_name: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
@@ -6955,6 +6956,7 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
+            display_name: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
@@ -7638,6 +7640,7 @@ fn gate_mock_mcp_tools_on_approval(config: &mut erato::config::AppConfig) {
     config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         erato::config::McpServerConfig {
+            display_name: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
@@ -8451,6 +8454,7 @@ fn allow_mcp_server(config: &mut erato::config::AppConfig, id: &str, path: &str)
     config.mcp_servers.insert(
         id.to_string(),
         erato::config::McpServerConfig {
+            display_name: None,
             url: format!("{}{path}", mock_mcp_base_url()),
             ..approval_fixture_server()
         },
@@ -9258,6 +9262,7 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
             config.mcp_servers.insert(
                 "mock_mcp_budget".to_string(),
                 erato::config::McpServerConfig {
+                    display_name: None,
                     protocol_mode: Default::default(),
                     transport_type: "streamable_http".to_string(),
                     url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
@@ -10628,6 +10633,7 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
     let base_url = std::env::var("TEST_MOCK_MCP_SERVER_BASE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:44321".to_string());
     erato::config::McpServerConfig {
+        display_name: None,
         protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}/mcp/approval-policy"),

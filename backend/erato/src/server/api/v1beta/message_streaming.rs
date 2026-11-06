@@ -539,6 +539,7 @@ fn gate_mcp_tool_call(
     config: &McpToolApprovalConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
+    display: &crate::models::message::ToolDisplayMetadata,
     tool_call: &genai::chat::ToolCall,
     user_decision: Option<UserToolDecision>,
 ) -> ToolCallGate {
@@ -550,7 +551,7 @@ fn gate_mcp_tool_call(
             tool_call,
             ToolApprovalKind::McpTool,
             server_id,
-            Some(crate::services::tool_display::tool_display_metadata(tool)),
+            Some(display.clone()),
             verdict.annotations.clone(),
             match config.preset {
                 McpToolApprovalPreset::Permissive => "permissive",
@@ -5696,6 +5697,7 @@ async fn settle_delegation_slot<
         tool_call_id: tool_call.call_id.clone(),
         status: message_status,
         tool_name: tool_call.fn_name.clone(),
+        display: None,
         input: Some(tool_call.fn_arguments.clone()),
         progress_message: None,
         progress: None,
@@ -6035,6 +6037,7 @@ async fn settle_or_park_delegation_slot<
                         tool_call_id: meta.tool_call.call_id.clone(),
                         status: MessageToolCallStatus::InProgress,
                         tool_name: meta.tool_call.fn_name.clone(),
+                        display: None,
                         input: Some(meta.tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -7449,6 +7452,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
+                        display: None,
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -7498,6 +7502,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
+                        display: None,
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -7830,6 +7835,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: message_status,
                         tool_name: unfinished_tool_call.fn_name.clone(),
+                        display: None,
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -7944,6 +7950,7 @@ async fn stream_generate_chat_completion<'a>(
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             status: MessageToolCallStatus::InProgress,
                             tool_name: unfinished_tool_call.fn_name.clone(),
+                            display: None,
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             progress_message: None,
                             progress: None,
@@ -8214,6 +8221,7 @@ async fn stream_generate_chat_completion<'a>(
                             tool_call_id: call_id.clone(),
                             status: MessageToolCallStatus::Error,
                             tool_name: tool_name.clone(),
+                            display: None,
                             input: Some(tool_input.clone()),
                             progress_message: None,
                             progress: None,
@@ -8663,6 +8671,7 @@ async fn stream_generate_chat_completion<'a>(
                                 ToolUse {
                                     tool_call_id: call_id.clone(),
                                     tool_name: tool_name.clone(),
+                                    display: None,
                                     status: MessageToolCallStatus::InProgress,
                                     input: Some(tool_input.clone()),
                                     output: Some(json!({"status":"input_required"})),
@@ -8959,6 +8968,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: call_id.clone(),
                         status: message_status,
                         tool_name: tool_name.clone(),
+                        display: None,
                         input: Some(tool_input),
                         progress_message: None,
                         progress: None,
@@ -9020,6 +9030,11 @@ async fn stream_generate_chat_completion<'a>(
                 tool_call: unfinished_tool_call.clone(),
                 tool: managed_tool.tool.clone(),
             };
+            let display = crate::services::tool_display::mcp_tool_call_display(
+                &mcp.config,
+                &managed_tool_call.server_id,
+                &managed_tool_call.tool,
+            );
 
             // MCP approval is a durable stop, not an in-memory park. Persist
             // the request in the assistant message and let `continuestream`
@@ -9044,6 +9059,7 @@ async fn stream_generate_chat_completion<'a>(
                 approval_config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
+                &display,
                 &unfinished_tool_call,
                 user_decision,
             ) {
@@ -9111,6 +9127,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
+                        display: Some(display.clone()),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -9377,6 +9394,7 @@ async fn stream_generate_chat_completion<'a>(
                                     tool_call_id: unfinished_tool_call.call_id.clone(),
                                     status: MessageToolCallStatus::Error,
                                     tool_name: unfinished_tool_call.fn_name.clone(),
+                                    display: Some(display.clone()),
                                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                                     progress_message: None,
                                     progress: None,
@@ -9478,6 +9496,7 @@ async fn stream_generate_chat_completion<'a>(
                                     MessageToolCallStatus::Success
                                 },
                                 tool_name: finished_tool_call.fn_name,
+                                display: Some(display.clone()),
                                 input: Some(finished_tool_call.fn_arguments),
                                 progress_message: None,
                                 progress: None,
@@ -9554,6 +9573,7 @@ async fn stream_generate_chat_completion<'a>(
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             status: MessageToolCallStatus::Error,
                             tool_name: unfinished_tool_call.fn_name.clone(),
+                            display: Some(display.clone()),
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             progress_message: None,
                             progress: None,
@@ -10045,6 +10065,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: pending_wait.tool_call.call_id.clone(),
                         status: message_status,
                         tool_name: pending_wait.tool_call.fn_name.clone(),
+                        display: None,
                         input: Some(pending_wait.tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -12812,6 +12833,7 @@ mod tests {
     use crate::models::message::{ApprovalItem, ToolApprovalKind};
     use crate::models::user_tool_approval_setting::UserToolDecision;
     use crate::services::mcp_tool_approval::evaluate_mcp_tool_approval;
+    use crate::services::tool_display::{mcp_tool_call_display, tool_display_metadata};
     use genai::chat::ToolCall;
     use rmcp::model::{Tool, ToolAnnotations};
     use sea_orm::prelude::Uuid;
@@ -13169,6 +13191,24 @@ mod tests {
         );
     }
 
+    /// The gate as the call site drives it, with the tool's own descriptor.
+    fn gate_call(
+        config: &McpToolApprovalConfig,
+        server_id: &str,
+        tool: &Tool,
+        call: &ToolCall,
+        user_decision: Option<UserToolDecision>,
+    ) -> ToolCallGate {
+        gate_mcp_tool_call(
+            config,
+            server_id,
+            tool,
+            &tool_display_metadata(tool),
+            call,
+            user_decision,
+        )
+    }
+
     #[test]
     fn approval_request_refuses_a_name_that_display_cleaning_would_change() {
         let restrictive = McpToolApprovalConfig {
@@ -13184,14 +13224,14 @@ mod tests {
         };
 
         let plain = Tool::new("publish", "publish", Map::new());
-        match gate_mcp_tool_call(&restrictive, "server", &plain, &call("publish"), None) {
+        match gate_call(&restrictive, "server", &plain, &call("publish"), None) {
             ToolCallGate::Ask(request) => assert_eq!(request.tool_name, "publish"),
             other => panic!("expected an approval request, got {other:?}"),
         }
 
         let overridden = "publish\u{202E}hsilbup";
         let tool = Tool::new(overridden.to_string(), "publish", Map::new());
-        match gate_mcp_tool_call(&restrictive, "server", &tool, &call(overridden), None) {
+        match gate_call(&restrictive, "server", &tool, &call(overridden), None) {
             ToolCallGate::Refuse(message) => {
                 assert!(!message.contains('\u{202E}'), "{message}");
                 assert!(message.contains("publishhsilbup"), "{message}");
@@ -13202,7 +13242,7 @@ mod tests {
         let long_name = "x".repeat(MAX_DISPLAY_NAME_CHARS + 1);
         let tool = Tool::new(long_name.clone(), "long", Map::new());
         assert!(matches!(
-            gate_mcp_tool_call(&restrictive, "server", &tool, &call(&long_name), None),
+            gate_call(&restrictive, "server", &tool, &call(&long_name), None),
             ToolCallGate::Refuse(_)
         ));
     }
@@ -13222,8 +13262,17 @@ mod tests {
         };
         let mut tool = Tool::new("new_mcp_tool", "Explains this particular tool.", Map::new());
         tool.title = Some("A friendly title".into());
+        let servers: crate::config::McpRuntimeConfig = serde_json::from_value(json!({
+            "mcp_servers": {"new_server": {
+                "display_name": "New Server",
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            }}
+        }))
+        .unwrap();
+        let display = mcp_tool_call_display(&servers, "new_server", &tool);
         let ToolCallGate::Ask(request) =
-            gate_mcp_tool_call(&config, "new_server", &tool, &call, None)
+            gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None)
         else {
             panic!("expected approval");
         };
@@ -13232,6 +13281,11 @@ mod tests {
             serde_json::from_value(json.clone()).unwrap();
         tool.title = Some("Changed after the request".into());
         assert_eq!(restored.display.as_ref().unwrap().title, "A friendly title");
+        assert_eq!(
+            restored.display.as_ref().unwrap().server_name.as_deref(),
+            Some("New Server")
+        );
+        assert_eq!(restored.mcp_server_id, "new_server");
         assert_eq!(restored.tool_name, "new_mcp_tool");
         assert_eq!(restored.input, call.fn_arguments);
         assert_eq!(restored.approval_items()[0].display, restored.display);
@@ -13327,8 +13381,7 @@ mod tests {
             thought_signatures: None,
         };
         let tool = Tool::new("publish", "publish", Map::new());
-        let ToolCallGate::Ask(request) =
-            gate_mcp_tool_call(&restrictive, "server", &tool, &call, None)
+        let ToolCallGate::Ask(request) = gate_call(&restrictive, "server", &tool, &call, None)
         else {
             panic!("expected approval");
         };
@@ -14100,7 +14153,7 @@ mod tests {
         };
         let tool = Tool::new("publish", "publish", Map::new());
 
-        match gate_mcp_tool_call(&restrictive, "server", &tool, &call, None) {
+        match gate_call(&restrictive, "server", &tool, &call, None) {
             ToolCallGate::Ask(request) => {
                 assert_eq!(request.kind, ToolApprovalKind::McpTool);
                 assert_eq!(request.approvals.len(), 1);
@@ -14353,7 +14406,7 @@ mod tests {
             (&disabled, &unannotated, false),
         ];
         for (config, tool, expected) in cases {
-            let gate = gate_mcp_tool_call(config, "server", tool, &call, None);
+            let gate = gate_call(config, "server", tool, &call, None);
             let verdict = evaluate_mcp_tool_approval(config, tool);
             let asks = matches!(gate, ToolCallGate::Ask(_));
             assert_eq!(asks, expected, "{:?} {}", config, tool.name);
@@ -14373,11 +14426,11 @@ mod tests {
         );
         let ask = Some(UserToolDecision::Ask);
         assert!(matches!(
-            gate_mcp_tool_call(&permissive, "server", &read_only_closed, &call, ask),
+            gate_call(&permissive, "server", &read_only_closed, &call, ask),
             ToolCallGate::Ask(_)
         ));
         assert_eq!(
-            gate_mcp_tool_call(&disabled, "server", &read_only_closed, &call, ask),
+            gate_call(&disabled, "server", &read_only_closed, &call, ask),
             ToolCallGate::Run
         );
         let granting = McpToolApprovalConfig {
@@ -14386,11 +14439,11 @@ mod tests {
         };
         let grant = Some(UserToolDecision::AlwaysAllow);
         assert_eq!(
-            gate_mcp_tool_call(&granting, "server", &unannotated, &call, grant),
+            gate_call(&granting, "server", &unannotated, &call, grant),
             ToolCallGate::Run
         );
         assert!(matches!(
-            gate_mcp_tool_call(&restrictive, "server", &unannotated, &call, grant),
+            gate_call(&restrictive, "server", &unannotated, &call, grant),
             ToolCallGate::Ask(_)
         ));
     }
@@ -14431,7 +14484,7 @@ mod tests {
         let denied = Some(UserToolDecision::Denied);
         for config in [&permissive, &restrictive, &granting, &disabled] {
             for tool in [&read_only_closed, &unannotated] {
-                match gate_mcp_tool_call(config, "server", tool, &call, denied) {
+                match gate_call(config, "server", tool, &call, denied) {
                     ToolCallGate::Refuse(message) => {
                         assert!(message.contains("'publish'"), "{:?} {}", config, tool.name);
                         assert!(
@@ -21584,6 +21637,7 @@ pub(crate) async fn run_continuation(
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
                 tool_name: item.tool_name.clone(),
+                display: item.display.clone(),
                 input: Some(item.input.clone()),
                 progress_message: None,
                 progress: None,
@@ -21682,6 +21736,7 @@ pub(crate) async fn run_continuation(
                         tool_call_id: item.tool_call_id.clone(),
                         status,
                         tool_name: item.tool_name.clone(),
+                        display: item.display.clone(),
                         input: Some(item.input.clone()),
                         progress_message: None,
                         progress: None,
@@ -21695,6 +21750,7 @@ pub(crate) async fn run_continuation(
                     tool_call_id: item.tool_call_id.clone(),
                     status: MessageToolCallStatus::Error,
                     tool_name: item.tool_name.clone(),
+                    display: item.display.clone(),
                     input: Some(item.input.clone()),
                     progress_message: None,
                     progress: None,
@@ -21723,6 +21779,7 @@ pub(crate) async fn run_continuation(
                 tool_call_id: item.tool_call_id.clone(),
                 status: MessageToolCallStatus::Error,
                 tool_name: item.tool_name.clone(),
+                display: item.display.clone(),
                 input: Some(item.input.clone()),
                 progress_message: None,
                 progress: None,
@@ -21887,6 +21944,7 @@ pub(crate) async fn run_continuation(
             tool_call_id: item.tool_call_id.clone(),
             status: MessageToolCallStatus::Error,
             tool_name: item.tool_name.clone(),
+            display: None,
             input: Some(item.input.clone()),
             progress_message: None,
             progress: None,
@@ -22746,6 +22804,7 @@ async fn resume_parked_generation(
             tool_call_id: call.call_id.clone(),
             status: MessageToolCallStatus::Error,
             tool_name: call.fn_name.clone(),
+            display: None,
             input: Some(call.fn_arguments.clone()),
             progress_message: None,
             progress: None,

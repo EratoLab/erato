@@ -186,11 +186,13 @@ describe("ChatInputAddControls", () => {
         servers: [
           {
             id: "linear",
+            display_name: "linear",
             connection_status: "SUCCESS",
             authentication_mode: "oauth2",
           },
           {
             id: "jira",
+            display_name: "jira",
             connection_status: "NEEDS_AUTHENTICATION",
             authentication_mode: "oauth2",
           },

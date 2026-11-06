@@ -323,6 +323,7 @@ describe("FacetSelector", () => {
       servers: [
         {
           id: "linear",
+          display_name: "linear",
           connection_status: "SUCCESS",
           authentication_mode: "oauth2",
         },
@@ -356,6 +357,7 @@ describe("FacetSelector", () => {
       servers: [
         {
           id: "linear",
+          display_name: "linear",
           connection_status: "SUCCESS",
           authentication_mode: "oauth2",
         },
