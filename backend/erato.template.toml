@@ -249,6 +249,26 @@ chat_provider_ids = ["test-token-limit"]
 # # token_service_url = "https://europe.token.botframework.com"
 # # assistant_id = "<assistant UUID new Teams chats are bound to>"
 # # context_message_count = 20
+#
+# # A "Did you know…?" tip for users who have not used Erato for a while, sent
+# # to their personal chat with the bot. Requires [scheduled_deliveries] enabled.
+# [integrations.ms_office.teams.bot.inactivity_nudge]
+# enabled = true
+# # Inactivity (no chat activity on any surface) before a tip (default: "7d")
+# inactive_after = "7d"
+# # Another tip after each further inactive_after of silence (default: false)
+# repeat = false
+# # Tip texts in the order a user first sees them; one language per deployment
+# tips = ["Did you know? You can attach files to your question and I will read them."]
+# # Email addresses that get tips; empty means everyone (default: [])
+# pilot_users = []
+# # Tips scheduled per hourly run (default: 200)
+# max_per_run = 200
+# [integrations.ms_office.teams.bot.inactivity_nudge.send_window]
+# weekdays = ["mon", "tue", "wed", "thu", "fri"]   # (default)
+# start_hour = 8                                   # 0–23 (default: 8)
+# end_hour = 18                                    # 1–24 (default: 18)
+# time_zone = "Europe/Berlin"                      # IANA zone (default)
 
 # Frontend configuration options for embedded scenarios
 # [frontend]

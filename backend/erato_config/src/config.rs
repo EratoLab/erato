@@ -1349,6 +1349,19 @@ impl AppConfig {
         if let Err(e) = config.integrations.ms_office.validate() {
             panic!("Invalid Microsoft Office integration configuration: {}", e);
         }
+        if config
+            .integrations
+            .ms_office
+            .teams
+            .bot
+            .inactivity_nudge
+            .enabled
+            && !config.scheduled_deliveries.enabled
+        {
+            panic!(
+                "Invalid Microsoft Office integration configuration: the Teams bot inactivity nudge requires `scheduled_deliveries.enabled = true`."
+            );
+        }
 
         // Validate Prometheus configuration
         if let Err(e) = config.integrations.prometheus.validate(config.http_port) {
@@ -7682,6 +7695,11 @@ pub struct TeamsBotConfig {
     // the web login. Defaults to `true`.
     #[serde(default = "default_true")]
     pub security_groups_only: bool,
+    // A "Did you know…?" tip for users who have not used Erato for a while,
+    // sent to their personal chat with the bot.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub inactivity_nudge: TeamsInactivityNudgeConfig,
 }
 
 impl Default for TeamsBotConfig {
@@ -7702,6 +7720,7 @@ impl Default for TeamsBotConfig {
             context_message_count: default_teams_bot_context_message_count(),
             streaming: true,
             security_groups_only: true,
+            inactivity_nudge: TeamsInactivityNudgeConfig::default(),
         }
     }
 }
@@ -7714,6 +7733,198 @@ fn default_teams_bot_context_message_count() -> u32 {
     20
 }
 
+/// A "Did you know…?" tip for users who have not used Erato for a while,
+/// delivered to their personal Teams chat with the bot. Rows are created by
+/// a producer on the scheduled-deliveries executor, which must be enabled.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct TeamsInactivityNudgeConfig {
+    // Whether inactive users get a tip. Requires `scheduled_deliveries.enabled`
+    // and the bot. Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    // How long a user has to be inactive (no chat activity on any surface:
+    // web, Teams, Outlook, Word) before a tip is sent, as a duration such as
+    // `7d`, `36h` or `90m`. Defaults to `7d`.
+    #[serde(default = "default_teams_nudge_inactive_after")]
+    pub inactive_after: String,
+    // Whether another tip follows after each further `inactive_after` of
+    // silence. Defaults to `false`: one tip per inactivity period, and the
+    // next one only after the user was active again.
+    #[serde(default)]
+    pub repeat: bool,
+    #[serde(default)]
+    pub send_window: TeamsNudgeSendWindowConfig,
+    // The tips, in the order a user first sees them; each user gets the next
+    // one in turn. One language per deployment. Required when enabled.
+    #[serde(default)]
+    pub tips: Vec<String>,
+    // Email addresses of the users who get tips, for a pilot; empty means
+    // every user. Defaults to empty.
+    #[serde(default)]
+    pub pilot_users: Vec<String>,
+    // How many tips one producer run schedules at most. Defaults to `200`.
+    #[serde(default = "default_teams_nudge_max_per_run")]
+    pub max_per_run: u32,
+}
+
+/// When tips may be sent. A tip that becomes due outside the window waits
+/// for the next slot inside it.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct TeamsNudgeSendWindowConfig {
+    // Weekdays tips are sent on: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`,
+    // `sun`. Defaults to Monday to Friday.
+    #[serde(default = "default_teams_nudge_weekdays")]
+    pub weekdays: Vec<String>,
+    // Hour of the day (0–23) from which tips are sent. Defaults to `8`.
+    #[serde(default = "default_teams_nudge_start_hour")]
+    pub start_hour: u8,
+    // Hour of the day (1–24) from which no more tips are sent. Defaults to `18`.
+    #[serde(default = "default_teams_nudge_end_hour")]
+    pub end_hour: u8,
+    // IANA time zone the window is in. Defaults to `Europe/Berlin`.
+    #[serde(default = "default_teams_nudge_time_zone")]
+    pub time_zone: String,
+}
+
+fn default_teams_nudge_inactive_after() -> String {
+    "7d".to_string()
+}
+
+fn default_teams_nudge_max_per_run() -> u32 {
+    200
+}
+
+fn default_teams_nudge_weekdays() -> Vec<String> {
+    ["mon", "tue", "wed", "thu", "fri"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+fn default_teams_nudge_start_hour() -> u8 {
+    8
+}
+
+fn default_teams_nudge_end_hour() -> u8 {
+    18
+}
+
+fn default_teams_nudge_time_zone() -> String {
+    "Europe/Berlin".to_string()
+}
+
+impl Default for TeamsInactivityNudgeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            inactive_after: default_teams_nudge_inactive_after(),
+            repeat: false,
+            send_window: TeamsNudgeSendWindowConfig::default(),
+            tips: Vec::new(),
+            pilot_users: Vec::new(),
+            max_per_run: default_teams_nudge_max_per_run(),
+        }
+    }
+}
+
+impl Default for TeamsNudgeSendWindowConfig {
+    fn default() -> Self {
+        Self {
+            weekdays: default_teams_nudge_weekdays(),
+            start_hour: default_teams_nudge_start_hour(),
+            end_hour: default_teams_nudge_end_hour(),
+            time_zone: default_teams_nudge_time_zone(),
+        }
+    }
+}
+
+impl TeamsInactivityNudgeConfig {
+    pub fn validate(&self, bot_enabled: bool) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if !bot_enabled {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.enabled` requires `integrations.ms_office.teams.bot.enabled`."
+            ));
+        }
+        let inactive_after = self.inactive_after_duration().map_err(|error| {
+            eyre!(
+                "Teams bot `inactivity_nudge.inactive_after` must be a duration such as `7d` or `36h`: {error}"
+            )
+        })?;
+        if inactive_after.is_zero() {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.inactive_after` must be longer than zero."
+            ));
+        }
+        if self.tips.is_empty() || self.tips.iter().any(|tip| tip.trim().is_empty()) {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.tips` must list at least one non-empty tip when enabled."
+            ));
+        }
+        if self.max_per_run == 0 {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.max_per_run` must be at least 1."
+            ));
+        }
+        self.send_window.validate()
+    }
+
+    pub fn inactive_after_duration(&self) -> Result<std::time::Duration, Report> {
+        Ok(humantime::parse_duration(self.inactive_after.trim())?)
+    }
+}
+
+impl TeamsNudgeSendWindowConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        let weekdays = self.weekday_set()?;
+        if !weekdays.contains(&true) {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.send_window.weekdays` must name at least one weekday."
+            ));
+        }
+        if self.start_hour > 23 || self.end_hour > 24 || self.start_hour >= self.end_hour {
+            return Err(eyre!(
+                "Teams bot `inactivity_nudge.send_window` needs `start_hour` (0–23) before `end_hour` (1–24)."
+            ));
+        }
+        self.time_zone_parsed()?;
+        Ok(())
+    }
+
+    /// Monday first.
+    pub fn weekday_set(&self) -> Result<[bool; 7], Report> {
+        let mut set = [false; 7];
+        for name in &self.weekdays {
+            let index = match name.trim().to_ascii_lowercase().as_str() {
+                "mon" | "monday" => 0,
+                "tue" | "tuesday" => 1,
+                "wed" | "wednesday" => 2,
+                "thu" | "thursday" => 3,
+                "fri" | "friday" => 4,
+                "sat" | "saturday" => 5,
+                "sun" | "sunday" => 6,
+                other => {
+                    return Err(eyre!(
+                        "Teams bot `inactivity_nudge.send_window.weekdays` has an unknown weekday `{other}`; use mon…sun."
+                    ));
+                }
+            };
+            set[index] = true;
+        }
+        Ok(set)
+    }
+
+    pub fn time_zone_parsed(&self) -> Result<chrono_tz::Tz, Report> {
+        self.time_zone.trim().parse::<chrono_tz::Tz>().map_err(|error| {
+            eyre!(
+                "Teams bot `inactivity_nudge.send_window.time_zone` is not an IANA time zone: {error}"
+            )
+        })
+    }
+}
+
 /// Path of the Teams bot messaging endpoint on an Erato deployment.
 pub const TEAMS_BOT_MESSAGES_PATH: &str = "/api/integrations/ms_teams/messages";
 /// OAuth connection name the setup helper creates on the Azure Bot.
@@ -7721,6 +7932,7 @@ pub const DEFAULT_TEAMS_BOT_OAUTH_CONNECTION_NAME: &str = "graph-sso";
 
 impl TeamsBotConfig {
     pub fn validate(&self) -> Result<(), Report> {
+        self.inactivity_nudge.validate(self.enabled)?;
         if !self.enabled {
             return Ok(());
         }

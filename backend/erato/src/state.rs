@@ -232,8 +232,18 @@ impl AppState {
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
 
-        let scheduled_deliveries =
-            Arc::new(crate::services::scheduled_deliveries::DeliveryRegistry::new());
+        let ms_teams_bot =
+            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
+        let mut scheduled_deliveries =
+            crate::services::scheduled_deliveries::DeliveryRegistry::new();
+        if let Some(bot) = &ms_teams_bot {
+            crate::ms_teams_bot::nudge::register(
+                &mut scheduled_deliveries,
+                bot,
+                &config.integrations.ms_office.teams.bot,
+            )?;
+        }
+        let scheduled_deliveries = Arc::new(scheduled_deliveries);
         let actor_manager =
             ActorManager::new(db.clone(), config.clone(), scheduled_deliveries.clone()).await;
         let langfuse_client = LangfuseClient::from_config(
@@ -314,8 +324,6 @@ impl AppState {
             &config.file_type_detection,
         )?;
 
-        let ms_teams_bot =
-            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
         let entra_group_overage =
             crate::services::entra_group_overage::EntraGroupOverageResolver::from_config(
                 &config.integrations.entra_id.group_overage,

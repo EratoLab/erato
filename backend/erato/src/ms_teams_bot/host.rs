@@ -134,7 +134,7 @@ impl Session {
 
 #[derive(Clone)]
 pub struct Host {
-    app_state: AppState,
+    pub(super) app_state: AppState,
 }
 
 impl Host {

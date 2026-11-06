@@ -341,6 +341,45 @@ authentication manifest. Keep the original connection and credentials during
 rollout. Additive changes to a shared Entra app also affect the other environments
 using it; remove only additions whose consumers you have checked.
 
+## Inactivity nudge
+
+The bot can remind people who have not used Erato for a while that it is there: after `inactive_after` without any chat activity (web app, Teams, Outlook or Word), the user gets one "Did you know…?" tip as a card in their personal chat with the bot. Someone who stays inactive is not nudged again until they have used Erato and then gone quiet for another period, unless `repeat` is on. Tips are only sent inside the send window, on working days during office hours by default.
+
+Users who do not want tips press **Don't remind me** on the card or send `/reminders off` (`/erinnerungen aus`) to the bot; `/reminders on` (`/erinnerungen an`) turns them back on. Only users who have a personal chat with the bot can be reached; the app installed through an app setup policy is enough, the user does not have to write first.
+
+```toml
+[scheduled_deliveries]
+enabled = true   # the executor that sends due messages; required
+
+[integrations.ms_office.teams.bot.inactivity_nudge]
+enabled = true
+inactive_after = "7d"   # also "36h", "90m" for test systems
+tips = [
+  "Did you know? You can attach files to your question and I will read them.",
+  "Did you know? @mention me in a group chat and I will answer there.",
+]
+# pilot_users = ["anna@example.com"]   # empty: everyone
+# repeat = false
+[integrations.ms_office.teams.bot.inactivity_nudge.send_window]
+weekdays = ["mon", "tue", "wed", "thu", "fri"]
+start_hour = 8
+end_hour = 18
+time_zone = "Europe/Berlin"
+```
+
+| Option                    | Type     | Default                                | Description                                                                                  |
+| ------------------------- | -------- | -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `enabled`                 | boolean  | `false`                                | Send tips to inactive users; requires `scheduled_deliveries.enabled`                         |
+| `inactive_after`          | duration | `"7d"`                                 | Inactivity before a tip, such as `7d`, `36h` or `90m`                                        |
+| `repeat`                  | boolean  | `false`                                | Another tip after each further `inactive_after` of silence                                  |
+| `send_window.weekdays`    | list     | `["mon", "tue", "wed", "thu", "fri"]`  | Days tips are sent on                                                                        |
+| `send_window.start_hour`  | integer  | `8`                                    | Hour (0–23) from which tips are sent                                                         |
+| `send_window.end_hour`    | integer  | `18`                                   | Hour (1–24) from which no more tips are sent                                                 |
+| `send_window.time_zone`   | string   | `"Europe/Berlin"`                      | IANA time zone of the window                                                                 |
+| `tips`                    | list     |                                        | Tip texts in the order a user first sees them; one language per deployment                   |
+| `pilot_users`             | list     | `[]`                                   | Email addresses that get tips; empty means everyone                                          |
+| `max_per_run`             | integer  | `200`                                  | Tips scheduled per hourly run                                                                |
+
 ## Configuration Options
 
 | Option                  | Type    | Default                            | Description                                                                                          |

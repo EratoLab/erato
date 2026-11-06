@@ -3627,6 +3627,66 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "integrations.ms_office.teams.bot.inactivity_nudge.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.inactive_after": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.max_per_run": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.pilot_users.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.repeat": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.send_window.end_hour": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.send_window.start_hour": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.send_window.time_zone": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.send_window.weekdays.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.teams.bot.inactivity_nudge.tips.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "integrations.ms_office.teams.bot.messaging_endpoint": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",

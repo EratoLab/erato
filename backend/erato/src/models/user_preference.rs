@@ -308,6 +308,41 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     })
 }
 
+/// Whether the user asked the Teams bot to stop sending tips.
+pub async fn teams_nudges_opted_out(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+) -> Result<bool, Report> {
+    Ok(get_user_preferences(conn, user_id)
+        .await?
+        .is_some_and(|prefs| prefs.teams_nudges_opted_out_at.is_some()))
+}
+
+/// Record the user's answer to the Teams bot's tips without touching their
+/// other preferences. Opting out twice keeps the first date.
+pub async fn set_teams_nudges_opt_out(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    opted_out: bool,
+) -> Result<(), Report> {
+    use sea_orm::ConnectionTrait;
+    conn.execute_raw(crate::query_metrics::named_statement_from_sql_and_values(
+        conn.get_database_backend(),
+        "user_preferences.set_teams_nudges_opt_out",
+        r#"INSERT INTO user_preferences (user_id, teams_nudges_opted_out_at)
+           VALUES ($1, CASE WHEN $2 THEN now() ELSE NULL END)
+           ON CONFLICT (user_id) DO UPDATE
+           SET teams_nudges_opted_out_at = CASE
+                   WHEN $2 THEN COALESCE(user_preferences.teams_nudges_opted_out_at, now())
+                   ELSE NULL
+               END,
+               updated_at = now()"#,
+        [(*user_id).into(), opted_out.into()],
+    ))
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{StartingAssistantState, apply_starting_assistant_patch};
