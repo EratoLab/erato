@@ -20,6 +20,7 @@ spec:
       annotations:
         reloader.stakater.com/auto: "true"
     spec:
+      {{- include "erato-local.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: dex
           image: "{{ .Values.dex.image.repository }}:{{ .Values.dex.image.tag }}"
@@ -48,4 +49,4 @@ spec:
         - name: config
           configMap:
             name: {{ .Release.Name }}-dex
-{{- end }} 
+{{- end }}

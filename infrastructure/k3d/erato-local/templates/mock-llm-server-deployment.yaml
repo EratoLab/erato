@@ -18,6 +18,7 @@ spec:
         app.kubernetes.io/name: mock-llm-server
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- include "erato-local.imagePullSecrets" . | nindent 6 }}
       containers:
         - name: mock-llm-server
           image: "{{ .Values.mockLlmServer.image.repository }}:{{ .Values.mockLlmServer.image.tag }}"

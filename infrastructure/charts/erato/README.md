@@ -468,6 +468,11 @@ msTeamsBot:
 | backend.service.type | string | `"ClusterIP"` | Backend service type |
 | commonAnnotations | object | `{}` | Annotations to add to all deployed objects |
 | commonLabels | object | `{}` | Labels to add to all deployed objects |
+| deployment.appHost | string | `""` | Hostname for Erato's application ingress, overriding `ingress.host`. |
+| deployment.ingressClassName | string | `""` | Ingress class for this deployment, overriding `ingress.className`. |
+| deployment.ingressTlsHost | string | `""` | TLS hostname for ingress controllers that provision certificates externally. |
+| deployment.tailscaleTags | string | `""` | Tags to attach when creating a Tailscale ingress. |
+| deployment.tlsSecretName | string | `""` | TLS Secret for this deployment, overriding `ingress.tls.secretName`. |
 | gatewayApi.annotations | object | `{}` | Additional annotations for the HTTPRoute resource |
 | gatewayApi.enabled | bool | `false` | Enable Gateway API HTTPRoute generation. Requires an existing Gateway API v1 Gateway. |
 | gatewayApi.extraRules | list | `[]` | Additional HTTPRoute rules, rendered with tpl for advanced matches, filters, redirects, rewrites, or backends. Example: extraRules:   - matches:       - path:           type: PathPrefix           value: /custom-path |

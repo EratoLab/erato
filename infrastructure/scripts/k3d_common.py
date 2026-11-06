@@ -55,7 +55,22 @@ def get_helm_scenario_args(scenario: str) -> List[str]:
         raise ValueError(f"Invalid scenario: {scenario}. Valid scenarios: {VALID_SCENARIOS}")
     
     source_file = get_scenario_source_file(scenario)
-    args = ["--set", f"testScenarioConfig.sourceFile={source_file}"]
+    args = [
+        "--set", f"testScenarioConfig.sourceFile={source_file}",
+        # Reset values owned by a scenario before applying its overrides.
+        # This prevents a multi-replica or nginx-auth deployment from leaking
+        # those settings into the next scenario.
+        "--set", "erato.backend.replicaCount=1",
+        "--set", "erato.backend.loadBalancer.enabled=false",
+        "--set", "erato.backend.resources.requests.cpu=500m",
+        "--set", "erato.backend.resources.requests.memory=512Mi",
+        "--set", "erato.backend.resources.limits.cpu=2000m",
+        "--set", "erato.backend.resources.limits.memory=2Gi",
+        "--set", "erato.oauth2Proxy.enabled=true",
+        "--set", "dex.enabled=true",
+        "--set", "nginxAuth.enabled=false",
+        "--set", "erato.ingress.enabled=true",
+    ]
     if scenario == "multi-replica":
         args.extend(
             [

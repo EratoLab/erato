@@ -13,6 +13,18 @@ commonLabels: {}
 # -- Annotations to add to all deployed objects
 commonAnnotations: {}
 
+deployment:
+  # -- Hostname for Erato's application ingress, overriding `ingress.host`.
+  appHost: ""
+  # -- Ingress class for this deployment, overriding `ingress.className`.
+  ingressClassName: ""
+  # -- TLS Secret for this deployment, overriding `ingress.tls.secretName`.
+  tlsSecretName: ""
+  # -- TLS hostname for ingress controllers that provision certificates externally.
+  ingressTlsHost: ""
+  # -- Tags to attach when creating a Tailscale ingress.
+  tailscaleTags: ""
+
 ingress:
   # -- Enable ingress record generation for Erato
   enabled: true
