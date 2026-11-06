@@ -34,6 +34,14 @@ Typical "Notable changes" categories to copy & paste:
 
 **MCP server display names.** `mcp_servers.<id>.display_name` sets the name people see for a server on approval cards (web, delegated tasks and Teams), in a response's tool steps and in the Servers & Tools preferences tab. Without it the id is shown tidied up (`web_access` as "Web access"); messages saved earlier keep showing the id.
 
+#### Security
+
+MCP servers that ask for the user's consent through a tool argument (such as Dataverse's `hasUserApproved` on `delete_record`) can name it in `mcp_servers.<id>.approval_argument`. Erato then hides the argument from the model, asks the user before every call of a tool that declares it (no "Always allow" for those), and fills it from the user's decision at dispatch, so the model can no longer claim a consent it was never given.
+
+#### Bug fixes
+
+MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes

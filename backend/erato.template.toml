@@ -118,6 +118,11 @@ chat_provider_ids = ["test-token-limit"]
 # exclude_tools = ["get_secret_*"]
 # # Or opt in only selected tools on this server:
 # wait_tools = ["dispatch_*", "poll_*"]
+# # Name of the argument through which this server asks for the user's consent to
+# # a call (for example Dataverse's `hasUserApproved`). Erato hides it from the
+# # model, asks before each call of a tool that declares it, and fills it from the
+# # user's decision.
+# approval_argument = "hasUserApproved"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)

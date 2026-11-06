@@ -263,6 +263,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
         "server1".to_string(),
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server1".to_string(),
@@ -742,6 +743,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         "server1".to_string(),
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server1".to_string(),
@@ -760,6 +762,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         "server2".to_string(),
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp/server2".to_string(),
@@ -944,6 +947,7 @@ async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgr
         "restricted-server".to_string(),
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://127.0.0.1:8123/mcp".to_string(),
