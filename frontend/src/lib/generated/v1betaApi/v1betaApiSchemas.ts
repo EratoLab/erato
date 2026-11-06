@@ -4155,7 +4155,8 @@ export type ToolArgumentKind = "group" | "list" | "id" | "text" | "value";
 
 /**
  * One argument in the readable view. A member's name is the last segment of
- * its path; the value is read from `input` at `path`.
+ * its path; the value is read from `input` at `path`. Both are raw: the
+ * reader unescapes the segment and cleans and caps both like other server text.
  */
 export type ToolArgumentNode = {
   /**

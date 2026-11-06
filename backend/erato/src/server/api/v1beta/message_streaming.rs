@@ -1130,6 +1130,7 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     tool_call_id: String,
     tool_name: String,
     /// The same display, label included, that the stored `ToolUse` part gets.
+    /// Of a call's progress updates only the first carries it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     display: Option<crate::models::message::ToolDisplayMetadata>,
@@ -1240,6 +1241,9 @@ async fn await_mcp_tool_with_progress<
         }
         let message: MSG = update.clone().into();
         send_generation_event(&message, tx.clone()).await?;
+        // Every event is kept in the history and the database, and later
+        // ticks only move the progress: the first one carries the display.
+        update.display = None;
     }
 }
 
@@ -23587,7 +23591,12 @@ mod mcp_progress_event_tests {
                 content_index: 2,
                 tool_call_id: "call-progress".into(),
                 tool_name: "read_file".into(),
-                display: None,
+                display: Some(crate::services::tool_display::mcp_tool_call_display(
+                    &crate::config::McpRuntimeConfig::default(),
+                    "files",
+                    &rmcp::model::Tool::new("read_file", "Reads.", rmcp::model::JsonObject::new()),
+                    &json!({ "path": "notes.txt" }),
+                )),
                 input: None,
                 status: ToolCallStatus::InProgress,
                 progress_message: None,
@@ -23610,6 +23619,10 @@ mod mcp_progress_event_tests {
             assert_eq!(value["content_index"], 2);
             assert_eq!(value["progress"], f64::from(step));
             assert_eq!(value["status"], "in_progress");
+            assert_eq!(
+                value["display"]["label"]["source"].as_str(),
+                (step == 1).then_some("generic")
+            );
             assert!(sse_rx.try_recv().unwrap().is_ok());
             assert!(streaming_event_to_sse(&event).is_ok());
             ack_tx.send(()).await.unwrap();
