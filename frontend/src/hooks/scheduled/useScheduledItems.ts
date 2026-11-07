@@ -1,9 +1,8 @@
 import { t } from "@lingui/core/macro";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 import {
-  fetchDeleteScheduledItem,
   SCHEDULED_ITEMS_QUERY_KEY,
   scheduledItemFromApi,
   scheduledPageNotice,
@@ -14,6 +13,7 @@ import { snoozeUntil } from "@/components/ui/Scheduled/scheduledTime";
 import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import {
   useCancelScheduledItem,
+  useDeleteScheduledItem,
   useListScheduledItems,
   useSnoozeScheduledItem,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -80,8 +80,7 @@ export function useScheduledItems(): ScheduledItemsState {
   const { mutate: cancelItem } = useCancelScheduledItem({
     onSettled: refetch,
   });
-  const { mutate: deleteItem } = useMutation({
-    mutationFn: (itemId: string) => fetchDeleteScheduledItem(itemId),
+  const { mutate: deleteItem } = useDeleteScheduledItem({
     onSettled: refetch,
   });
 
@@ -146,16 +145,19 @@ export function useScheduledItems(): ScheduledItemsState {
   const remove = useCallback(
     (item: ScheduledItem) => {
       const name = item.name;
-      deleteItem(item.id, {
-        onError: (error) =>
-          reportFailure(
-            t({
-              id: "scheduled.delete.failed",
-              message: `“${name}” could not be deleted`,
-            }),
-            error,
-          ),
-      });
+      deleteItem(
+        { pathParams: { itemId: item.id } },
+        {
+          onError: (error) =>
+            reportFailure(
+              t({
+                id: "scheduled.delete.failed",
+                message: `“${name}” could not be deleted`,
+              }),
+              error,
+            ),
+        },
+      );
     },
     [deleteItem, reportFailure],
   );

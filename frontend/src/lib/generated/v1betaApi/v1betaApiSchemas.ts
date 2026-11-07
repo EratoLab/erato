@@ -3782,6 +3782,7 @@ export type ScheduledItemErrorCode =
   | "finished"
   | "in_flight"
   | "nothing_to_snooze"
+  | "not_finished"
   | "internal";
 
 /**
@@ -3837,6 +3838,32 @@ export type ScheduledItemsResponse = {
 };
 
 export type ScheduledItemsTab = "upcoming" | "past";
+
+/**
+ * A template on the Scheduled page's empty state; it opens the form
+ * prefilled with `name` and `message`.
+ */
+export type ScheduledTemplate = {
+  /**
+   * A short line shown with the button; may be empty.
+   */
+  description: string;
+  id: string;
+  /**
+   * May be empty.
+   */
+  message: string;
+  name: string;
+  /**
+   * The label of the template's button.
+   */
+  title: string;
+  type: ScheduledItemType;
+};
+
+export type ScheduledTemplatesResponse = {
+  templates: ScheduledTemplate[];
+};
 
 /**
  * A drive item (file or folder)

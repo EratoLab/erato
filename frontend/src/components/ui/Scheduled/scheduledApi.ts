@@ -1,7 +1,5 @@
 import { t } from "@lingui/core/macro";
 
-import { v1betaApiFetch } from "@/lib/generated/v1betaApi/v1betaApiFetcher";
-
 import type {
   ScheduledItem,
   ScheduledItemChannel,
@@ -11,6 +9,7 @@ import type {
   DeliveryChannelInfo,
   DeliveryChannelStatus,
   ScheduledItem as ApiScheduledItem,
+  ScheduledItemErrorCode,
   ScheduledItemsResponse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -105,26 +104,7 @@ export function scheduledPageNotice(
 }
 /* eslint-enable lingui/no-unlocalized-strings */
 
-/**
- * The refusal codes of the scheduled items API, plus `not_finished` from
- * deleting an item that is not over yet.
- */
-export type ScheduledRefusalCode =
-  | "not_found"
-  | "invalid_request"
-  | "type_not_available"
-  | "invalid_trigger"
-  | "trigger_in_past"
-  | "linked_chat_not_found"
-  | "channel_unknown"
-  | "channel_unavailable"
-  | "channel_not_set_up"
-  | "limit_reached"
-  | "finished"
-  | "in_flight"
-  | "nothing_to_snooze"
-  | "not_finished"
-  | "internal";
+export type ScheduledRefusalCode = ScheduledItemErrorCode;
 
 /**
  * The refusal code of a failed request, or null for a network error or a
@@ -226,19 +206,3 @@ export function scheduledRefusalMessage(code: string | null): string {
       });
   }
 }
-
-/** Delete an item that is over. */
-export const fetchDeleteScheduledItem = (itemId: string) =>
-  v1betaApiFetch<
-    undefined,
-    undefined,
-    undefined,
-    Record<string, never>,
-    Record<string, never>,
-    { itemId: string }
-  >({
-    // eslint-disable-next-line lingui/no-unlocalized-strings -- API path
-    url: "/api/v1beta/me/scheduled-items/{itemId}",
-    method: "delete",
-    pathParams: { itemId },
-  });
