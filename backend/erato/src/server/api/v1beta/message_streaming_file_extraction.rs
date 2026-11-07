@@ -581,7 +581,14 @@ fn bounded_members(value: &Value) -> Value {
 
 fn https_link(resource: &rmcp::model::Resource) -> Option<ToolResultLink> {
     let url = url::Url::parse(&resource.uri).ok()?;
-    if url.scheme() != "https" || url.as_str().len() > MAX_RECEIPT_FIELD_BYTES {
+    // Userinfo lets `https://trusted.example@other.example/` read as the
+    // wrong host, and would store any credentials in it.
+    let kept = url.scheme() == "https"
+        && url.host_str().is_some()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.as_str().len() <= MAX_RECEIPT_FIELD_BYTES;
+    if !kept {
         return None;
     }
     Some(ToolResultLink {
@@ -593,11 +600,15 @@ fn https_link(resource: &rmcp::model::Resource) -> Option<ToolResultLink> {
 }
 
 /// A `ui://` resource is an MCP App's view, which nothing renders yet; a
-/// `data:` URI is a body rather than a name.
+/// `data:` URI is a body rather than a name. The URI is shown as text, never
+/// linked; script schemes are dropped in case that changes.
 fn resource_uri(uri: &str) -> Option<String> {
     let (scheme, _) = uri.split_once(':')?;
     let kept = uri.len() <= MAX_RECEIPT_FIELD_BYTES
-        && !matches!(scheme.to_ascii_lowercase().as_str(), "ui" | "data")
+        && !matches!(
+            scheme.to_ascii_lowercase().as_str(),
+            "ui" | "data" | "javascript" | "vbscript"
+        )
         && sanitize_display_text(uri, MAX_RECEIPT_FIELD_BYTES).text == uri;
     kept.then(|| uri.to_string())
 }
@@ -911,7 +922,6 @@ mod tests {
                             serde_json::from_str(&processed.tool_response.content).unwrap();
                         assert_eq!(output, original);
                         assert!(output.get("files").is_none());
-                        // With file fields, `output` already is the structured content.
                         assert_eq!(
                             processed.result_details,
                             beside_text.then(details_beside_text)
@@ -1047,11 +1057,14 @@ mod tests {
             {"type": "text", "text": "Done."},
             {"type": "resource_link", "uri": "http://records.example.test/rows/1", "name": "plain"},
             {"type": "resource_link", "uri": "javascript:alert(1)", "name": "script"},
+            {"type": "resource_link", "uri": "https://records.example.test@other.example.test/rows/1", "name": "lookalike"},
+            {"type": "resource_link", "uri": "https://user:token@records.example.test/rows/1", "name": "credentials"},
             {"type": "resource_link", "uri": "ui://records/view", "name": "app"},
             {"type": "resource_link", "uri": format!("https://records.example.test/{long_path}"), "name": "long"},
             {"type": "resource_link", "uri": "HTTPS://Records.Example.Test/rows/2", "name": "\u{2066}row-2\u{2069}", "title": "  "},
             {"type": "resource", "resource": {"uri": "ui://records/view", "mimeType": "text/html;profile=mcp-app", "text": "<html></html>"}},
             {"type": "resource", "resource": {"uri": "data:text/plain;base64,eA==", "text": "x"}},
+            {"type": "resource", "resource": {"uri": "JavaScript:alert(1)", "text": "x"}},
             {"type": "resource", "resource": {"uri": "records://rows/2\u{202E}", "text": "x"}},
             {"type": "resource", "resource": {"uri": "records://rows/2", "text": long_text}},
         ]}))

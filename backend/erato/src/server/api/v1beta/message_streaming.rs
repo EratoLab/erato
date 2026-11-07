@@ -6519,7 +6519,17 @@ mod generation_event_wire_format_tests {
                         progress: with_progress.then_some(1.0),
                         total: with_progress.then_some(2.0),
                         output: Some(json!({ "results": [] })),
-                        result_details: None,
+                        result_details: with_progress.then(|| {
+                            crate::models::message::ToolResultDetails {
+                                links: vec![crate::models::message::ToolResultLink {
+                                    uri: "https://records.example.test/rows/1".into(),
+                                    name: Some("row-1".into()),
+                                    title: None,
+                                    mime_type: None,
+                                }],
+                                ..Default::default()
+                            }
+                        }),
                     }
                 });
             }

@@ -4600,8 +4600,9 @@ export type ToolResultDetails = {
 };
 
 /**
- * A resource link from the result. Only `https` links are kept; the name,
- * title and MIME type are display-cleaned and capped like a tool title.
+ * A resource link from the result. Only `https` links without user info are
+ * kept; the name, title and MIME type are display-cleaned and capped like a
+ * tool title.
  */
 export type ToolResultLink = {
   mime_type?: string;
@@ -4611,8 +4612,8 @@ export type ToolResultLink = {
 };
 
 /**
- * A resource embedded in the result. `ui://` and `data:` resources are not
- * kept.
+ * A resource embedded in the result. `ui://`, `data:`, `javascript:` and
+ * `vbscript:` resources are not kept.
  */
 export type ToolResultResource = {
   mime_type?: string;

@@ -463,8 +463,9 @@ pub struct ToolResultDetails {
     pub resources: Vec<ToolResultResource>,
 }
 
-/// A resource link from the result. Only `https` links are kept; the name,
-/// title and MIME type are display-cleaned and capped like a tool title.
+/// A resource link from the result. Only `https` links without user info are
+/// kept; the name, title and MIME type are display-cleaned and capped like a
+/// tool title.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultLink {
     pub uri: String,
@@ -479,8 +480,8 @@ pub struct ToolResultLink {
     pub mime_type: Option<String>,
 }
 
-/// A resource embedded in the result. `ui://` and `data:` resources are not
-/// kept.
+/// A resource embedded in the result. `ui://`, `data:`, `javascript:` and
+/// `vbscript:` resources are not kept.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultResource {
     /// The resource's own URI: an identifier, not a link to open.

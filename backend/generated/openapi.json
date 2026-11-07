@@ -13619,7 +13619,7 @@
       },
       "ToolResultLink": {
         "type": "object",
-        "description": "A resource link from the result. Only `https` links are kept; the name,\ntitle and MIME type are display-cleaned and capped like a tool title.",
+        "description": "A resource link from the result. Only `https` links without user info are\nkept; the name, title and MIME type are display-cleaned and capped like a\ntool title.",
         "required": [
           "uri"
         ],
@@ -13640,7 +13640,7 @@
       },
       "ToolResultResource": {
         "type": "object",
-        "description": "A resource embedded in the result. `ui://` and `data:` resources are not\nkept.",
+        "description": "A resource embedded in the result. `ui://`, `data:`, `javascript:` and\n`vbscript:` resources are not kept.",
         "required": [
           "uri"
         ],
