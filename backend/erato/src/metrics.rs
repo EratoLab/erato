@@ -165,6 +165,9 @@ async fn report_cache_size_metrics_once(app_state: &AppState) {
 
     let token_count_metrics = cache_metrics(&app_state.token_count_cache).await;
     report_cache_metrics("token_count_cache", token_count_metrics);
+
+    let tool_label_metrics = cache_metrics(app_state.tool_label_cache.entries()).await;
+    report_cache_metrics("tool_label_cache", tool_label_metrics);
 }
 
 struct CacheMetrics {
