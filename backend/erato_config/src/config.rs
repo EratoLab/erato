@@ -3395,14 +3395,19 @@ impl Default for ChatHistoryCompactionConfig {
     }
 }
 
-/// Off by default. When enabled, the arguments of the calls the rules are
-/// unsure of go to the chosen provider; the operator chooses that provider.
+/// Off by default. When enabled, a skeleton of the calls the rules are unsure
+/// of goes to the chosen provider: by default only on turns that already run
+/// on that provider, and only for users whose model permissions allow it.
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(default)]
 pub struct ToolLabelsConfig {
     pub enabled: bool,
     /// Explicit provider, required when enabled.
     pub chat_provider_id: Option<String>,
+    /// Also label the calls of turns that run on another provider.
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub allow_other_provider: bool,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]

@@ -5027,11 +5027,19 @@ Soft target for the resulting context as a percentage of the selected conversati
 
 {/* erato_toml_config_key: tool_labels */}
 
-Approval cards and the trace show what an MCP call does to what, and where. Generic rules label most calls from the tool's name and the shape of its arguments. When the rules are unsure, a configured model can pick the label instead. The card never waits for it: it shows the rules' label first and the model's label when it arrives, usually within a few seconds. A parked approval card picks up the new label on the next poll of parked chats.
+Approval cards and the trace show what an MCP call does to what, and where. Generic rules label most calls from the tool's name and the shape of its arguments. When the rules are unsure, a configured model can pick the label instead. The card never waits for it: it shows the rules' label first and the model's label when it arrives, usually within a few seconds. A parked approval card picks up the new label on the next poll of parked chats; only the label changes, never the card's buttons, its approval or anything else stored with it.
 
-The model only chooses: pointers into the call's real argument paths, and an action and a kind from closed lists. Erato reads every value it shows through those pointers, so the model cannot put text of its own on the card. A reply that names a path the call does not have, fails to parse or takes longer than 10 seconds is dropped, and the card keeps the rules' label. The same check as for the rules holds the model's verb against the tool's name and annotations; when they disagree, the card shows the generic label. A model's label is kept per user, tool and argument shape, so later calls of the same shape reuse it without another request.
+The model only chooses: pointers into the call's real argument paths, and an action and a kind from closed lists. Erato reads every value it shows through those pointers, so the model cannot put text of its own on the card. A reply that names a path the call does not have, fails to parse, is longer than 16 KiB or takes longer than 10 seconds is dropped, and the card keeps the rules' label. The same checks as for the rules hold the model's label: its verb must agree with the tool's name and annotations, consent flags and the names inside lookup objects are never shown as facts, and a label must show every recipient; otherwise the card shows the generic label. A model's label is kept per user, tool and argument shape, so later calls of the same shape reuse it without another request.
 
-The model receives the tool's name, an argument skeleton (short values as they are, longer text as its length and first characters, arrays cut to three entries) and the list of argument paths. The server's tool description is not sent. **The arguments leave Erato for the configured provider**: choose a provider that may see the data your MCP servers work with.
+**What leaves Erato.** For each call the rules are unsure of, the model receives:
+
+- the tool's name;
+- an argument skeleton: member names and the first three entries of each array, with every text value replaced by its length (`<str len=12>`) and every number by `<number>`. Only two kinds of values go as they are: the values of `command`, `op`, `kind`, `action`, `mode` and `operation` members that read as identifiers, and values the tool's input schema lists for that member in an `enum` or `const` (up to 64 characters, without control or invisible characters). Booleans and nulls go as they are;
+- the list of the call's argument paths.
+
+The server's tool description, the tool's schema and every other argument value stay in Erato. By default the model only labels the calls of turns that already run on the labeller's provider, so nothing reaches a provider the chat did not already use; `allow_other_provider` lifts that. The labeller is never used for a user whose [`model_permissions`](#model_permissions) do not include its provider.
+
+Each backend replica runs at most four labeller requests at a time and a turn starts at most 32. A call past either limit is not queued: it keeps the rules' label, and a later call of the same shape asks again. Labeller requests share the provider's rate limits with chat turns. Provider errors are logged by kind (for example `rate_limited` or `server_error`) without the provider's response.
 
 Labeller requests are traced in Langfuse like chat history compaction, as `tool_labels.label`. Their tokens are not counted against user budgets.
 
@@ -5051,9 +5059,22 @@ Ask the model where the rules are unsure. **Default:** `false`.
 
 {/* erato_toml_config_key: tool_labels.chat_provider_id */}
 
-Explicit provider used to label calls, required when enabled. It must identify a configured chat provider; there is no fallback to the highest-priority provider. Point it at a small, fast model whose provider entry has low or no `reasoning_effort`, since the provider's model settings carry over. The JSON schema of the reply is sent to providers of kind `openai`, `azure_openai`, `openai_responses`, `azure_openai_responses`, `gemini` and `vertex_ai`; other kinds get the instruction only, and every reply is checked either way. Run a local model as `provider_kind = "openai"` on its `/v1` endpoint rather than as `ollama`.
+Explicit provider used to label calls, required when enabled. It must identify a configured chat provider; there is no fallback to the highest-priority provider. Unless `allow_other_provider` is set, only turns that run on this provider get model labels. Point it at a small, fast model whose provider entry has low or no `reasoning_effort`, since the provider's model settings carry over. The JSON schema of the reply is sent to providers of kind `openai`, `azure_openai`, `openai_responses`, `azure_openai_responses`, `gemini` and `vertex_ai`; other kinds get the instruction only, and every reply is checked either way. Run a local model as `provider_kind = "openai"` on its `/v1` endpoint rather than as `ollama`.
 
 Before enabling it on a deployment, compare the chosen model's labels with the rules' on calls of the MCP servers it serves, and enable it where it does not make the labels worse.
+
+#### `tool_labels.allow_other_provider`
+
+{/* erato_toml_config_key: tool_labels.allow_other_provider */}
+
+Also label the calls of turns that run on another provider. The skeleton of those calls then goes to the labeller's provider, which the chat itself did not use; enable it only when that provider may see the data your MCP servers work with. Model permissions still apply. **Default:** `false`.
+
+```toml
+[tool_labels]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+allow_other_provider = true
+```
 
 ### `prompt_optimizer`
 

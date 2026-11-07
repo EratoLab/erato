@@ -34,7 +34,7 @@ Typical "Notable changes" categories to copy & paste:
 
 **MCP server display names.** `mcp_servers.<id>.display_name` sets the name people see for a server on approval cards (web, delegated tasks and Teams), in a response's tool steps and in the Servers & Tools preferences tab. Without it the id is shown tidied up (`web_access` as "Web access"); messages saved earlier keep showing the id.
 
-**Model labels for tool calls (opt-in).** Where the generic rules cannot tell what an MCP call does, `[tool_labels]` with `enabled = true` and an explicit `chat_provider_id` lets a configured chat provider pick the label from the call's own argument paths. Cards show the rules' label first and the model's when it arrives, parked approval cards included. The call's arguments go to that provider; its tokens do not count against user budgets.
+**Model labels for tool calls (opt-in).** Where the generic rules cannot tell what an MCP call does, `[tool_labels]` with `enabled = true` and an explicit `chat_provider_id` lets a configured chat provider pick the label from the call's own argument paths. Cards show the rules' label first and the model's when it arrives, parked approval cards included. The provider receives a skeleton of the call without its free text, only on turns that already run on that provider (unless `allow_other_provider = true`) and only for users whose model permissions include it; its tokens do not count against user budgets.
 
 ## [0.8.0] - 2026-11-03
 

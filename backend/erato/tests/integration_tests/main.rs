@@ -233,6 +233,9 @@ async fn test_app_state_internal(
         token_count_cache,
         tool_label_cache: Default::default(),
         tool_label_timeout: erato::services::tool_labeller::LABEL_TIMEOUT,
+        tool_label_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(
+            erato::services::tool_labeller::MAX_CONCURRENT_LABELS,
+        )),
         file_processing_semaphore,
         file_processing_pipeline_semaphore,
         file_processor,

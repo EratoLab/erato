@@ -138,6 +138,9 @@ pub struct AppState {
     pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// How long one labeller request may take; tests shorten it.
     pub tool_label_timeout: std::time::Duration,
+    /// Labeller requests in flight on this replica; a call past the cap is
+    /// not labelled by a model.
+    pub tool_label_permits: Arc<Semaphore>,
     /// Global limiter for file processing work on cache misses.
     pub file_processing_semaphore: Arc<Semaphore>,
     /// Global limiter for end-to-end per-file processing concurrency.
@@ -360,6 +363,9 @@ impl AppState {
             token_count_cache,
             tool_label_cache: Default::default(),
             tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
+            tool_label_permits: Arc::new(Semaphore::new(
+                crate::services::tool_labeller::MAX_CONCURRENT_LABELS,
+            )),
             file_processing_semaphore,
             file_processing_pipeline_semaphore,
             file_processor,
@@ -1290,6 +1296,7 @@ impl Clone for AppState {
             token_count_cache: self.token_count_cache.clone(),
             tool_label_cache: self.tool_label_cache.clone(),
             tool_label_timeout: self.tool_label_timeout,
+            tool_label_permits: self.tool_label_permits.clone(),
             file_processing_semaphore: self.file_processing_semaphore.clone(),
             file_processing_pipeline_semaphore: self.file_processing_pipeline_semaphore.clone(),
             file_processor: self.file_processor.clone(),

@@ -2175,15 +2175,15 @@ pub async fn update_message_content(
     Ok(updated_message_model)
 }
 
-/// Puts `display` on the parked card of `tool_call_id`: the stop's own call,
+/// Puts `label` on the parked card of `tool_call_id`: the stop's own call,
 /// written path by path and only while that stop is still the message's last
-/// part, so a decision or a later whole-content write always wins. Returns
-/// whether the card was there to take it.
-pub async fn upgrade_open_approval_display(
+/// part, so a decision or a later whole-content write always wins. Nothing
+/// but the label changes. Returns whether the card was there to take it.
+pub async fn upgrade_open_approval_label(
     conn: &DatabaseConnection,
     message_id: Uuid,
     tool_call_id: &str,
-    display: &ToolDisplayMetadata,
+    label: &ToolCallLabel,
 ) -> Result<bool, Report> {
     // `approvals[0]` is the stop's own call; children folded into it follow.
     let result = conn
@@ -2194,8 +2194,12 @@ pub async fn upgrade_open_approval_display(
             UPDATE "messages"
             SET "raw_message" = jsonb_set(
                 jsonb_set(
-                    jsonb_set("raw_message", '{content,-1,display}', $3::jsonb),
-                    '{content,-1,approvals,0,display}', $3::jsonb
+                    CASE
+                        WHEN jsonb_typeof("raw_message" #> '{content,-1,approvals,0,display}') = 'object'
+                        THEN jsonb_set("raw_message", '{content,-1,approvals,0,display,label}', $3::jsonb)
+                        ELSE "raw_message"
+                    END,
+                    '{content,-1,display,label}', $3::jsonb
                 ),
                 '{content,-1,labels_updated_at}', to_jsonb(now())
             )
@@ -2203,11 +2207,12 @@ pub async fn upgrade_open_approval_display(
               AND "raw_message" #>> '{content,-1,content_type}' = 'tool_approval_request'
               AND "raw_message" #>> '{content,-1,tool_call_id}' = $2
               AND "raw_message" #>> '{content,-1,approvals,0,tool_call_id}' = $2
+              AND jsonb_typeof("raw_message" #> '{content,-1,display}') = 'object'
             "#,
             [
                 message_id.into(),
                 tool_call_id.into(),
-                serde_json::to_string(display)?.into(),
+                serde_json::to_string(label)?.into(),
             ],
         ))
         .await?;

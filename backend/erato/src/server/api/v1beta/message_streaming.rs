@@ -6648,7 +6648,7 @@ async fn stream_generate_chat_completion<'a>(
     user_id: String,
     chat_id: Uuid,
     chat_provider_id: Option<&str>,
-    _user_groups: &[String],
+    user_groups: &[String],
     mcp_auth_context: McpRequestAuthContext<'_>,
     mcp_servers_unavailable: Vec<String>,
     mcp_servers_needing_auth: Vec<String>,
@@ -6716,6 +6716,13 @@ async fn stream_generate_chat_completion<'a>(
         assistant_id,
         &langfuse_trace_enrichment.platform,
         streaming_task,
+        crate::services::tool_labeller::TurnLabeller::for_turn(
+            app_state,
+            policy,
+            subject,
+            user_groups,
+            chat_provider_id,
+        ),
     );
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
@@ -9308,9 +9315,7 @@ async fn stream_generate_chat_completion<'a>(
                 ToolCallGate::Refuse(_) => false,
             };
             if shown && let Some(key) = label_mapping.unlabelled {
-                label_upgrades.start(
-                    app_state,
-                    chat_provider_headers_context,
+                label_upgrades.start(app_state, chat_provider_headers_context, || {
                     crate::services::tool_labeller::LabelJob {
                         key,
                         server_id: managed_tool_call.server_id.clone(),
@@ -9319,8 +9324,8 @@ async fn stream_generate_chat_completion<'a>(
                         context: tool_result_context.clone(),
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         shown: display.clone(),
-                    },
-                );
+                    }
+                });
             }
             let (refusal, allowed_by) = match gate {
                 ToolCallGate::Run(allowed_by) => (None, allowed_by),

@@ -4659,6 +4659,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "tool_labels.allow_other_provider": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
   "tool_labels.chat_provider_id": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",

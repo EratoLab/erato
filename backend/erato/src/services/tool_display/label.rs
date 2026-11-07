@@ -226,7 +226,7 @@ pub fn checked_label(
 }
 
 // The server chose the name: logs get a short, cleaned copy.
-fn logged_tool_name(tool_name: &str) -> String {
+pub(crate) fn logged_tool_name(tool_name: &str) -> String {
     sanitize_display_text(
         context::text_prefix(tool_name, MAX_DISPLAY_NAME_CHARS * 4),
         MAX_DISPLAY_NAME_CHARS,
