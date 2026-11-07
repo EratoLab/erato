@@ -35,6 +35,42 @@ pub struct ManagedToolCall {
     pub server_id: String,
     pub tool_call: GenaiToolCall,
     pub tool: rmcp::model::Tool,
+    /// Set when the tool declares the server's consent argument.
+    pub approval_argument: Option<ApprovalArgument>,
+}
+
+/// The consent argument Erato fills in at dispatch: the server's name for it
+/// and whether the user approved this very call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApprovalArgument {
+    pub name: String,
+    pub user_approved: bool,
+}
+
+/// Erato's answer replaces whatever the model put there: the model never sees
+/// the argument, so any value it sent is a claim it was not entitled to make.
+fn write_approval_argument(arguments: &mut serde_json::Value, approval: &ApprovalArgument) {
+    if !arguments.is_object() {
+        *arguments = serde_json::Value::Object(Default::default());
+    }
+    arguments[approval.name.as_str()] = serde_json::Value::Bool(approval.user_approved);
+}
+
+/// Drop the consent argument from the schema the model sees, so it has nothing
+/// to set; the server still receives it from Erato.
+fn hide_approval_argument(schema: &mut serde_json::Value, name: &str) {
+    if let Some(properties) = schema
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        properties.remove(name);
+    }
+    if let Some(required) = schema
+        .get_mut("required")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        required.retain(|entry| entry.as_str() != Some(name));
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -170,6 +206,13 @@ impl McpServers {
                 server_id: managed_tool.server_id.clone(),
                 tool_call,
                 tool: managed_tool.tool.clone(),
+                // No gate ran for this call, so no user decision exists for it.
+                approval_argument: managed_tool.approval_argument.clone().map(|name| {
+                    ApprovalArgument {
+                        name,
+                        user_approved: false,
+                    }
+                }),
             })
         } else {
             Err(eyre!(
@@ -208,6 +251,9 @@ impl McpServers {
             auth_context,
         )
         .await?;
+        if let Some(approval) = &managed_tool_call.approval_argument {
+            write_approval_argument(&mut tool_args, approval);
+        }
         params.arguments = tool_args.as_object().cloned();
 
         self.session_manager
@@ -235,6 +281,9 @@ pub fn convert_mcp_tools_to_genai_tools(
             // Convert Arc<JsonObject> to serde_json::Value
             let mut input_schema_value: serde_json::Value =
                 serde_json::Value::Object(tool.input_schema.as_ref().clone());
+            if let Some(name) = managed_tool.approval_argument.as_deref() {
+                hide_approval_argument(&mut input_schema_value, name);
+            }
             let input_capabilities =
                 discover_file_mime_capabilities(&input_schema_value, FileMimeDirection::Accepted);
             append_input_mime_descriptions(&mut input_schema_value, &input_capabilities);
@@ -1005,6 +1054,57 @@ mod tests {
     }
 
     #[test]
+    fn consent_argument_is_hidden_from_the_model_and_written_at_dispatch() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "recordId": {"type": "string"},
+                "hasUserApproved": {"type": "boolean"}
+            },
+            "required": ["recordId", "hasUserApproved"]
+        });
+        let tool = rmcp::model::Tool::new(
+            "delete_record",
+            "Delete",
+            schema.as_object().unwrap().clone(),
+        );
+        let converted = super::convert_mcp_tools_to_genai_tools(
+            vec![super::ManagedTool {
+                server_id: "dv".to_string(),
+                tool,
+                approval_argument: Some("hasUserApproved".to_string()),
+            }],
+            false,
+        );
+        let offered = converted[0].schema.as_ref().unwrap();
+        assert!(
+            offered["properties"].get("hasUserApproved").is_none(),
+            "{offered}"
+        );
+        assert_eq!(offered["required"], serde_json::json!(["recordId"]));
+
+        let approval = super::ApprovalArgument {
+            name: "hasUserApproved".to_string(),
+            user_approved: false,
+        };
+        let mut arguments = serde_json::json!({"recordId": "r1", "hasUserApproved": true});
+        super::write_approval_argument(&mut arguments, &approval);
+        assert_eq!(
+            arguments,
+            serde_json::json!({"recordId": "r1", "hasUserApproved": false})
+        );
+        let mut missing = serde_json::Value::Null;
+        super::write_approval_argument(
+            &mut missing,
+            &super::ApprovalArgument {
+                user_approved: true,
+                ..approval
+            },
+        );
+        assert_eq!(missing, serde_json::json!({"hasUserApproved": true}));
+    }
+
+    #[test]
     fn mime_guidance_is_added_to_input_schema_and_tool_summary() {
         let mut input = json!({"type":"object","properties":{"source":{"type":"string",
             "description":"Source file","contentEncoding":"base64","chat.erato/file_content_field":true,
@@ -1031,6 +1131,7 @@ mod tests {
             vec![super::ManagedTool {
                 server_id: "docs".to_string(),
                 tool: mcp_tool,
+                approval_argument: None,
             }],
             false,
         );

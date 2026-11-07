@@ -844,6 +844,7 @@ impl McpSessionManager {
                 all_tools.push(ManagedTool {
                     server_id: server_id.clone(),
                     tool: tool.tool,
+                    approval_argument: tool.approval_argument,
                 });
             }
         }
@@ -1165,6 +1166,9 @@ impl McpSessionManager {
 pub struct ManagedTool {
     pub server_id: String,
     pub tool: Tool,
+    /// The server's consent argument when this tool declares it; hidden from
+    /// the model and written by Erato at dispatch.
+    pub approval_argument: Option<String>,
 }
 
 #[cfg(test)]
@@ -1184,6 +1188,7 @@ mod tests {
     ) -> McpServerConfig {
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),

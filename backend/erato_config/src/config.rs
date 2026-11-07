@@ -3874,6 +3874,14 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub tools: HashMap<String, McpToolConfig>,
+    /// Name of a tool argument through which this server asks for the user's
+    /// consent to a call, such as Dataverse's `hasUserApproved`. On every tool
+    /// that declares the argument, Erato hides it from the model, asks the user
+    /// before each call while the approval gate is on, and sets it from that
+    /// decision when the call is dispatched.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.8.1"))]
+    pub approval_argument: Option<String>,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.

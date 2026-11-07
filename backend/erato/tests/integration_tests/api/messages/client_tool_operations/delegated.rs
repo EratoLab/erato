@@ -580,6 +580,7 @@ fn gate_mock_mcp_tools_on_approval(row: &HostRow, config: &mut erato::config::Ap
         "mock_mcp_approval".into(),
         McpServerConfig {
             display_name: None,
+            approval_argument: None,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".into(),
             url: format!("{}/mcp/approval-policy", mock_mcp_base_url()),
