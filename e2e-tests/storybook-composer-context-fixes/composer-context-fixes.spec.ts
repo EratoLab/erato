@@ -393,7 +393,7 @@ test("a confirmation over Preferences is named by its own title", async ({
   await expect(preferences).toHaveCount(1);
   await expect(page.locator('[role="dialog"]')).toHaveCount(2);
 
-  await confirm.getByRole("button", { name: "Cancel action" }).click();
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(confirm).toHaveCount(0);
   await expect(preferences).toBeVisible();
 

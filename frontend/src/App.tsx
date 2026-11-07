@@ -38,6 +38,9 @@ const DesktopSidecarSetupPage = lazy(
 );
 const BrandingOverviewPage = lazy(() => import("./pages/BrandingOverviewPage"));
 const ScheduledPage = lazy(() => import("./pages/ScheduledPage"));
+const ScheduledItemFormPage = lazy(
+  () => import("./pages/ScheduledItemFormPage"),
+);
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const SharedChatPage = lazy(() => import("./pages/SharedChatPage"));
 
@@ -148,6 +151,8 @@ function AppRoutes() {
         </Route>
         <Route path="scheduled" element={<ScheduledLayout />}>
           <Route index element={<ScheduledPage />} />
+          <Route path="new" element={<ScheduledItemFormPage />} />
+          <Route path=":itemId/edit" element={<ScheduledItemFormPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

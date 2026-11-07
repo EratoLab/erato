@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { groupScheduledItemsByDay, scheduledItemTab } from "./scheduledItems";
+import {
+  formatScheduledDateTime,
+  groupScheduledItemsByDay,
+  scheduledItemTab,
+} from "./scheduledItems";
 
 import type { ScheduledItemStatus } from "./ScheduledStatusPill";
 import type { ScheduledItem } from "./scheduledItems";
@@ -113,5 +117,27 @@ describe("groupScheduledItemsByDay", () => {
       ["Today", ["overdue"]],
       ["Tomorrow", ["tomorrow"]],
     ]);
+  });
+});
+
+describe("formatScheduledDateTime", () => {
+  const sundayMorning = "2026-11-08T08:00:00Z";
+
+  it("writes a 12-hour clock's hour without a leading zero", () => {
+    expect(
+      formatScheduledDateTime(sundayMorning, {
+        locale: "en-US",
+        timeZone: "Europe/Berlin",
+      }),
+    ).toBe("Sun, Nov 8, 9:00 AM");
+  });
+
+  it("keeps a 24-hour clock's hour at two digits", () => {
+    expect(
+      formatScheduledDateTime(sundayMorning, {
+        locale: "de",
+        timeZone: "Europe/Berlin",
+      }),
+    ).toBe("So., 8. Nov., 09:00");
   });
 });

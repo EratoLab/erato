@@ -588,7 +588,7 @@ describe("AssistantsPage", () => {
         within(card()).getByRole("button", { name: "Open menu" }),
       );
       fireEvent.click(screen.getByRole("menuitem", { name: "Archive" }));
-      fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     };
     const archived = { id: "writer", archived_at: "2026-01-04T00:00:00Z" };
 

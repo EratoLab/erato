@@ -1,5 +1,6 @@
 import { t } from "@lingui/core/macro";
 
+import { scheduledLimitMessage } from "./scheduledApi";
 import { Alert } from "../Feedback/Alert";
 
 import type { ScheduledPageNotice } from "./scheduledApi";
@@ -42,16 +43,11 @@ export function ScheduledPageNoticeAlert({
           })}
         </Alert>
       );
-    case "limit_reached": {
-      const max = notice.max;
+    case "limit_reached":
       return (
         <Alert type="info" role="status" data-testid="scheduled-notice">
-          {t({
-            id: "scheduled.notice.limitReached",
-            message: `You have the maximum of ${max} upcoming items. Cancel one to schedule another.`,
-          })}
+          {scheduledLimitMessage(notice.max)}
         </Alert>
       );
-    }
   }
 }

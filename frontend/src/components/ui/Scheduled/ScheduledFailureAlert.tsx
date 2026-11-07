@@ -58,8 +58,8 @@ export function ScheduledFailureAlert({
             message: `“${name}” was due ${when} and could not be carried out.`,
           })
         : t({
-            id: "scheduled.failure.many",
-            message: "They are listed under Past with what went wrong.",
+            id: "scheduled.failure.manyUnderPast",
+            message: "They are listed under Past.",
           })}
     </Alert>
   );

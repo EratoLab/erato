@@ -21,6 +21,8 @@ const TYPE_ICON: Record<ScheduledItemType, string> = {
 interface ScheduledTemplatesProps {
   templates: ScheduledTemplate[];
   onSelect: (template: ScheduledTemplate) => void;
+  /** Disables every template and takes the place of their descriptions. */
+  disabledReason?: string | null;
 }
 
 /**
@@ -30,6 +32,7 @@ interface ScheduledTemplatesProps {
 export function ScheduledTemplates({
   templates,
   onSelect,
+  disabledReason,
 }: ScheduledTemplatesProps) {
   const headingId = useId();
   const Renderer = resolveComponentOverride(
@@ -38,6 +41,26 @@ export function ScheduledTemplates({
   );
 
   if (templates.length === 0) return null;
+
+  const pills = (
+    <Renderer
+      className="max-w-3xl"
+      starterPrompts={templates.map((template) => ({
+        id: template.id,
+        title: template.title,
+        resolvedTitle: template.title,
+        subtitle: disabledReason ?? template.description,
+        resolvedSubtitle: disabledReason ?? template.description,
+        prompt: "",
+        icon: TYPE_ICON[template.type],
+      }))}
+      onStarterPromptSelect={(prompt) => {
+        if (disabledReason) return;
+        const template = templates.find((entry) => entry.id === prompt.id);
+        if (template) onSelect(template);
+      }}
+    />
+  );
 
   return (
     <section
@@ -54,27 +77,24 @@ export function ScheduledTemplates({
           message: "Start from a template",
         })}
       </h2>
-      <Renderer
-        className="max-w-3xl"
-        starterPrompts={templates.map((template) => ({
-          id: template.id,
-          title: template.title,
-          resolvedTitle: template.title,
-          subtitle: template.description,
-          resolvedSubtitle: template.description,
-          prompt: "",
-          icon: TYPE_ICON[template.type],
-        }))}
-        onStarterPromptSelect={(prompt) => {
-          const template = templates.find((entry) => entry.id === prompt.id);
-          if (template) onSelect(template);
-        }}
-      />
+      {disabledReason ? (
+        // A disabled fieldset disables the pills of any override renderer
+        // without a prop of its own.
+        <fieldset
+          disabled
+          className="flex w-full min-w-0 justify-center opacity-50 [&_button]:cursor-not-allowed"
+        >
+          {pills}
+        </fieldset>
+      ) : (
+        pills
+      )}
       <p className="text-xs text-theme-fg-muted">
-        {t({
-          id: "scheduled.templates.note",
-          message: "A template opens the form with the text filled in.",
-        })}
+        {disabledReason ??
+          t({
+            id: "scheduled.templates.note",
+            message: "A template opens the form with the text filled in.",
+          })}
       </p>
     </section>
   );

@@ -4,6 +4,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   scheduledChannelStatus,
   scheduledItemFromApi,
+  scheduledLimitReached,
+  scheduledNoChannelConnected,
   scheduledPageNotice,
   scheduledRefusalCode,
   scheduledRefusalMessage,
@@ -158,5 +160,29 @@ describe("refusals", () => {
     expect(scheduledRefusalMessage("something_new")).toBe(
       "Something went wrong. Please try again.",
     );
+  });
+});
+
+describe("scheduledLimitReached", () => {
+  it("is reached at the maximum, and never without one", () => {
+    expect(scheduledLimitReached(9, 10)).toBe(false);
+    expect(scheduledLimitReached(10, 10)).toBe(true);
+    expect(scheduledLimitReached(10, 0)).toBe(false);
+    expect(scheduledLimitReached(10, undefined)).toBe(false);
+  });
+});
+
+describe("scheduledNoChannelConnected", () => {
+  it("holds until one channel reaches the user", () => {
+    expect(
+      scheduledNoChannelConnected([
+        { channel: "teams_personal", status: "not_set_up" },
+      ]),
+    ).toBe(true);
+    expect(
+      scheduledNoChannelConnected([
+        { channel: "teams_personal", status: "connected" },
+      ]),
+    ).toBe(false);
   });
 });

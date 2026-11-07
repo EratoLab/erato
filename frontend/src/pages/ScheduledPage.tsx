@@ -14,6 +14,10 @@ import { ScheduledNewMenu } from "@/components/ui/Scheduled/ScheduledNewMenu";
 import { ScheduledPageNoticeAlert } from "@/components/ui/Scheduled/ScheduledPageNoticeAlert";
 import { ScheduledTemplates } from "@/components/ui/Scheduled/ScheduledTemplates";
 import {
+  scheduledLimitMessage,
+  scheduledLimitReached,
+} from "@/components/ui/Scheduled/scheduledApi";
+import {
   groupScheduledItemsByDay,
   scheduledItemTab,
 } from "@/components/ui/Scheduled/scheduledItems";
@@ -44,6 +48,11 @@ export interface ScheduledPageViewProps extends ScheduledItemActions {
   counts?: Record<ScheduledTab, number>;
   /** Whether anything new can be scheduled, shown above the list. */
   notice?: ScheduledPageNotice | null;
+  /**
+   * How many upcoming items the user may have. At the limit, the New menu's
+   * Reminder and the templates are disabled.
+   */
+  maxUpcoming?: number;
   templates: ScheduledTemplate[];
   isLoading?: boolean;
   error?: Error | null;
@@ -66,6 +75,7 @@ export function ScheduledPageView({
   items,
   counts,
   notice = null,
+  maxUpcoming,
   templates,
   isLoading = false,
   error = null,
@@ -141,6 +151,15 @@ export function ScheduledPageView({
     ? counts.upcoming + counts.past === 0
     : items.length === 0;
 
+  const limitNotice =
+    maxUpcoming != null &&
+    scheduledLimitReached(
+      counts?.upcoming ?? byTab.upcoming.length,
+      maxUpcoming,
+    )
+      ? scheduledLimitMessage(maxUpcoming)
+      : null;
+
   let content: React.ReactNode;
   if (isLoading) {
     content = (
@@ -178,7 +197,11 @@ export function ScheduledPageView({
               "Get a reminder at a time you choose, or describe it in a chat and Erato sets it up.",
           })}
         />
-        <ScheduledTemplates templates={templates} onSelect={onTemplateSelect} />
+        <ScheduledTemplates
+          templates={templates}
+          onSelect={onTemplateSelect}
+          disabledReason={limitNotice}
+        />
       </>
     );
   } else {
@@ -197,6 +220,7 @@ export function ScheduledPageView({
           <ScheduledItemGroups
             groups={groups}
             dateContext={dateContext}
+            now={now}
             {...rowActions}
           />
         ) : tab === "upcoming" ? (
@@ -241,6 +265,7 @@ export function ScheduledPageView({
           <ScheduledNewMenu
             onNewReminder={onNewReminder}
             onCreateWithChat={onCreateWithChat}
+            limitNotice={limitNotice}
           />
         </div>
       </PageHeader>
@@ -290,19 +315,21 @@ export default function ScheduledPage() {
     counts,
     timeZone,
     notice,
+    maxUpcoming,
     isLoading,
     error,
     snooze,
     cancel,
     remove,
   } = useScheduledItems();
-  const templates = useScheduledTemplates();
+  const { templates } = useScheduledTemplates();
 
   return (
     <ScheduledPageView
       items={items}
       counts={counts}
       notice={notice}
+      maxUpcoming={maxUpcoming}
       timeZone={timeZone}
       templates={templates}
       isLoading={isLoading}
