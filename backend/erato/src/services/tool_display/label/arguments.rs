@@ -17,7 +17,7 @@ pub const MAX_GROUP_MEMBERS: usize = 50;
 pub const MAX_LIST_ENTRIES: usize = 25;
 /// Longer strings, or any with a line break, show as a block of text.
 pub const MAX_INLINE_CHARS: usize = 80;
-const MAX_ID_CHARS: usize = 128;
+pub(super) const MAX_ID_CHARS: usize = 128;
 
 /// The view of `arguments`, and whether the caps left any of them out.
 pub fn readable_arguments(arguments: &Value) -> (ToolArgumentNode, bool) {
@@ -139,7 +139,7 @@ fn is_id_text(text: &str, key: Option<&str>) -> bool {
 }
 
 /// `id`, `page_id`, `recordId`, `page_ids`, `uuid`; not `valid` or `paid`.
-fn names_an_id(key: &str) -> bool {
+pub(super) fn names_an_id(key: &str) -> bool {
     let lower = key.to_ascii_lowercase();
     if matches!(lower.as_str(), "id" | "ids") || lower.ends_with("uuid") || lower.ends_with("guid")
     {
@@ -159,7 +159,7 @@ fn names_an_id(key: &str) -> bool {
 }
 
 /// A GUID with or without hyphens and braces, as Dataverse and Notion write them.
-fn looks_like_a_uuid(text: &str) -> bool {
+pub(super) fn looks_like_a_uuid(text: &str) -> bool {
     let bare = text
         .strip_prefix('{')
         .and_then(|inner| inner.strip_suffix('}'))

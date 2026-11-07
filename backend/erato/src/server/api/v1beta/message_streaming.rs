@@ -3241,6 +3241,8 @@ pub struct PreparedChatRequest {
     // Move with the prepared payloads when the struct is destructured.
     _payload_reservations: Vec<crate::metrics::memory::PayloadReservation>,
     pub(crate) retrieval_context: crate::services::file_retrieval::RetrievalContext,
+    // Names and earlier field values from the replayed tool results, for labels.
+    pub(crate) tool_result_context: crate::services::tool_display::label::ToolResultContext,
     pub(crate) attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     // Our internal abstract structure of the message chain
     generation_input_messages: GenerationInputMessages,
@@ -4786,6 +4788,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     )
     .await?;
 
+    let tool_result_context =
+        crate::services::tool_display::label::ToolResultContext::from_messages(
+            &generation_input_messages,
+        );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
         policy,
@@ -5243,6 +5249,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     Ok(PreparedChatRequest {
         _payload_reservations: payload_reservations,
         retrieval_context,
+        tool_result_context,
         attachment_plans,
         generation_input_messages,
         generation_parameters,
@@ -6482,6 +6489,7 @@ mod generation_event_wire_format_tests {
                                     rmcp::model::JsonObject::new(),
                                 ),
                                 &json!({ "query": "example" }),
+                                &Default::default(),
                             )
                         }),
                         input: Some(json!({ "query": "example" })),
@@ -6515,6 +6523,7 @@ async fn stream_generate_chat_completion<'a>(
     chat_request: ChatRequest,
     attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     mut retrieval_context: crate::services::file_retrieval::RetrievalContext,
+    mut tool_result_context: crate::services::tool_display::label::ToolResultContext,
     langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -7406,6 +7415,7 @@ async fn stream_generate_chat_completion<'a>(
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
+            tool_result_context.observe(&current_message_content);
             let mcp_row_display = available_mcp_tools_by_name
                 .get(unfinished_tool_call.fn_name.as_str())
                 .map(|managed| {
@@ -7414,6 +7424,7 @@ async fn stream_generate_chat_completion<'a>(
                         &managed.server_id,
                         &managed.tool,
                         &unfinished_tool_call.fn_arguments,
+                        &tool_result_context,
                     ))
                 });
             // Emit event for tool call proposed
@@ -9078,11 +9089,13 @@ async fn stream_generate_chat_completion<'a>(
                 tool_call: unfinished_tool_call.clone(),
                 tool: managed_tool.tool.clone(),
             };
+            tool_result_context.observe(&current_message_content);
             let display = crate::services::tool_display::mcp_tool_call_display(
                 &mcp.config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &managed_tool_call.tool_call.fn_arguments,
+                &tool_result_context,
             );
             let row_display = tool_row_display(&display);
 
@@ -13268,6 +13281,7 @@ mod tests {
                 server_id,
                 tool,
                 &call.fn_arguments,
+                &Default::default(),
             ),
             call,
             user_decision,
@@ -13335,7 +13349,13 @@ mod tests {
             }}
         }))
         .unwrap();
-        let display = mcp_tool_call_display(&servers, "new_server", &tool, &call.fn_arguments);
+        let display = mcp_tool_call_display(
+            &servers,
+            "new_server",
+            &tool,
+            &call.fn_arguments,
+            &Default::default(),
+        );
         let ToolCallGate::Ask(request) =
             gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None)
         else {
@@ -14578,6 +14598,7 @@ mod tests {
                         "server",
                         tool,
                         &call.fn_arguments,
+                        &Default::default(),
                     );
                     let gates: Vec<_> = [None, generic.label.clone(), Some(delete.clone())]
                         .into_iter()
@@ -16901,6 +16922,7 @@ async fn run_generation_after_user_message_memory_inner(
     let PreparedChatRequest {
         _payload_reservations,
         retrieval_context,
+        tool_result_context,
         attachment_plans,
         chat_request,
         chat_options,
@@ -17076,6 +17098,7 @@ async fn run_generation_after_user_message_memory_inner(
         chat_request,
         attachment_plans,
         retrieval_context,
+        tool_result_context,
         langfuse_trace_enrichment,
         chat_options,
         initial_assistant_message.id,
@@ -17689,6 +17712,7 @@ pub(crate) async fn start_regeneration(
             let PreparedChatRequest {
                 _payload_reservations,
                 retrieval_context,
+                tool_result_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -17824,6 +17848,7 @@ pub(crate) async fn start_regeneration(
                 chat_request,
                 attachment_plans,
                 retrieval_context,
+                tool_result_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -18318,6 +18343,7 @@ pub(crate) async fn start_edit(
             let PreparedChatRequest {
                 _payload_reservations,
                 retrieval_context,
+                tool_result_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -18453,6 +18479,7 @@ pub(crate) async fn start_edit(
                 chat_request,
                 attachment_plans,
                 retrieval_context,
+                tool_result_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -22662,6 +22689,8 @@ async fn resume_parked_generation(
     )
     .await;
     let source_generation_input_messages = retrieval_source.clone();
+    let tool_result_context =
+        crate::services::tool_display::label::ToolResultContext::from_messages(&retrieval_source);
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(
             app_state,
@@ -23075,6 +23104,7 @@ async fn resume_parked_generation(
         chat_request,
         attachment_plans,
         retrieval_context,
+        tool_result_context,
         LangfuseTraceEnrichment::default(),
         chat_options,
         message.id,
@@ -23600,6 +23630,7 @@ mod mcp_progress_event_tests {
                     "files",
                     &rmcp::model::Tool::new("read_file", "Reads.", rmcp::model::JsonObject::new()),
                     &json!({ "path": "notes.txt" }),
+                    &Default::default(),
                 )),
                 input: None,
                 status: ToolCallStatus::InProgress,
