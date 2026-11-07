@@ -3834,6 +3834,358 @@
         ]
       }
     },
+    "/api/v1beta/me/scheduled-items": {
+      "get": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "The user's scheduled items, one entry per item.",
+        "operationId": "list_scheduled_items",
+        "parameters": [
+          {
+            "name": "tab",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ScheduledItemsTab"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "Schedule a reminder. Refused, with nothing stored, when the channel\ncannot reach the user, the schedule has no future time, or the user has\nthe maximum number of upcoming items.",
+        "operationId": "create_scheduled_item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduledItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The user has the maximum number of upcoming items (`limit_reached`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input, unreachable channel or a schedule in the past",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/scheduled-items/{item_id}": {
+      "get": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "operationId": "get_scheduled_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The item",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item, or not the user's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "Edit an item that is not over. A changed schedule moves the coming\noccurrence (and drops a snooze); a schedule that is unchanged keeps the\nitem's zone, a changed one is read in the user's current zone.",
+        "operationId": "update_scheduled_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The item",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduledItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The item is over (`finished`) or being delivered (`in_flight`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input, unreachable channel or a schedule in the past",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/scheduled-items/{item_id}/cancel": {
+      "post": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "Cancel an item: a repeating one stops for good.",
+        "operationId": "cancel_scheduled_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The item",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The item is already over (`finished`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/scheduled-items/{item_id}/snooze": {
+      "post": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "Move the item's coming occurrence to a later time; a repeating item's\nnext occurrence keeps its regular time.",
+        "operationId": "snooze_scheduled_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The item",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnoozeScheduledItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The item is over or nothing is waiting to be delivered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`until` is not in the future (`trigger_in_past`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/starter-prompts": {
       "get": {
         "tags": [],
@@ -8010,12 +8362,48 @@
           }
         }
       },
+      "DayOfWeek": {
+        "type": "string",
+        "enum": [
+          "mon",
+          "tue",
+          "wed",
+          "thu",
+          "fri",
+          "sat",
+          "sun"
+        ]
+      },
       "DelegationRunMode": {
         "type": "string",
         "description": "How a delegated child run relates to the turn that spawned it: `wait`\nblocks the turn on the child and feeds the result back into it,\n`background` returns at launch and the child result never re-enters the\nturn.",
         "enum": [
           "wait",
           "background"
+        ]
+      },
+      "DeliveryChannelInfo": {
+        "type": "object",
+        "required": [
+          "channel",
+          "status"
+        ],
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeliveryChannelStatus"
+          }
+        }
+      },
+      "DeliveryChannelStatus": {
+        "type": "string",
+        "description": "Whether a delivery channel can reach the user.",
+        "enum": [
+          "connected",
+          "not_set_up",
+          "unavailable"
         ]
       },
       "DesktopSidecarDistributionFileResponse": {
@@ -8202,6 +8590,17 @@
             "$ref": "#/components/schemas/McpServerStatusValue"
           }
         }
+      },
+      "DisplayStatus": {
+        "type": "string",
+        "description": "The status the Scheduled page shows, the same for every item type.",
+        "enum": [
+          "scheduled",
+          "snoozed",
+          "done",
+          "failed",
+          "cancelled"
+        ]
       },
       "Drive": {
         "type": "object",
@@ -8951,6 +9350,15 @@
           }
         }
       },
+      "Frequency": {
+        "type": "string",
+        "enum": [
+          "daily",
+          "weekdays",
+          "weekly",
+          "monthly"
+        ]
+      },
       "FrequentAssistantItem": {
         "allOf": [
           {
@@ -9297,6 +9705,45 @@
           "reference_only"
         ]
       },
+      "LastDelivery": {
+        "type": "object",
+        "description": "The most recent occurrence that is over.",
+        "required": [
+          "due",
+          "outcome"
+        ],
+        "properties": {
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "due": {
+            "$ref": "#/components/schemas/OccurrenceTime",
+            "description": "When it was due (a snoozed occurrence: the snoozed time)."
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/LastDeliveryOutcome"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why it failed or was not sent."
+          }
+        }
+      },
+      "LastDeliveryOutcome": {
+        "type": "string",
+        "enum": [
+          "delivered",
+          "failed",
+          "cancelled"
+        ]
+      },
       "LinkFileRequest": {
         "type": "object",
         "description": "Request to link an external file (SharePoint, Google Drive, etc.)",
@@ -9319,6 +9766,22 @@
           "source": {
             "type": "string",
             "description": "The source/provider type: \"sharepoint\" (future: \"google_drive\", etc.)"
+          }
+        }
+      },
+      "LinkedChat": {
+        "type": "object",
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -10427,6 +10890,24 @@
           }
         }
       },
+      "OccurrenceTime": {
+        "type": "object",
+        "required": [
+          "at",
+          "local"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "local": {
+            "type": "string",
+            "description": "The wall-clock time in the item's zone.",
+            "example": "2026-11-13T10:00:00"
+          }
+        }
+      },
       "OperationError": {
         "type": "object",
         "required": [
@@ -11457,6 +11938,98 @@
           }
         ]
       },
+      "RepeatEnd": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "never"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The last day an occurrence may fall on.",
+            "required": [
+              "date",
+              "kind"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "on_date"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "After this many occurrences.",
+            "required": [
+              "count",
+              "kind"
+            ],
+            "properties": {
+              "count": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "after_count"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "RepeatRule": {
+        "type": "object",
+        "required": [
+          "frequency",
+          "time",
+          "starts_on"
+        ],
+        "properties": {
+          "ends": {
+            "$ref": "#/components/schemas/RepeatEnd"
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/Frequency"
+          },
+          "starts_on": {
+            "type": "string",
+            "format": "date",
+            "description": "The first day an occurrence may fall on."
+          },
+          "time": {
+            "type": "string",
+            "description": "Local time of day, `HH:MM`.",
+            "example": "09:00"
+          },
+          "weekdays": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DayOfWeek"
+            },
+            "description": "The days of a weekly rule; empty for the other frequencies."
+          }
+        }
+      },
       "ResolveShareLinkResponse": {
         "type": "object",
         "required": [
@@ -11529,6 +12102,245 @@
         "description": "What a client asks to have retried.\n\nExactly ONE variant, deliberately. The Foundations contract also describes\nretrying a stuck result *delivery*, but that half is not built, so\n`\"delivery\"` must be an unknown serde variant - a `422` the client can act\non - rather than a value this route accepts and then refuses with a `409`\nthat would read like a transient condition. Adding a variant here without\nthe rest of the work is what `retry_with_an_unknown_kind_is_422` exists to\ncatch.",
         "enum": [
           "task"
+        ]
+      },
+      "ScheduledItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "name",
+          "message",
+          "trigger",
+          "time_zone",
+          "status",
+          "occurrence_count",
+          "channel",
+          "channel_status",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "acknowledged_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the user marked the last delivery done on its card. Set once the\ncard has a Done button (ERMAIN-1112)."
+          },
+          "channel": {
+            "type": "string"
+          },
+          "channel_status": {
+            "$ref": "#/components/schemas/DeliveryChannelStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_delivery": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LastDelivery"
+              }
+            ]
+          },
+          "linked_chat": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LinkedChat"
+              }
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "The body of what arrives."
+          },
+          "name": {
+            "type": "string",
+            "description": "Shown in the list and as the title when it arrives."
+          },
+          "next_occurrence": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OccurrenceTime",
+                "description": "When it arrives next (a snoozed occurrence: the snoozed time); absent\nonce the item is over."
+              }
+            ]
+          },
+          "occurrence_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many occurrences there were, including the coming one.",
+            "minimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/DisplayStatus"
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "The IANA zone the trigger's times are in."
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/Trigger",
+            "description": "As entered; its times are local to `time_zone`."
+          },
+          "type": {
+            "$ref": "#/components/schemas/ScheduledItemType"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScheduledItemError": {
+        "type": "object",
+        "description": "A refusal the form can show: `code` to branch on, `message` in English.",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ScheduledItemErrorCode"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduledItemErrorCode": {
+        "type": "string",
+        "enum": [
+          "not_found",
+          "invalid_request",
+          "type_not_available",
+          "invalid_trigger",
+          "trigger_in_past",
+          "linked_chat_not_found",
+          "channel_unknown",
+          "channel_unavailable",
+          "channel_not_set_up",
+          "limit_reached",
+          "finished",
+          "in_flight",
+          "nothing_to_snooze",
+          "internal"
+        ]
+      },
+      "ScheduledItemRequest": {
+        "type": "object",
+        "description": "One body for create and edit, as the form sends it.",
+        "required": [
+          "name",
+          "message",
+          "trigger"
+        ],
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "Defaults to `teams_personal`, the only channel today."
+          },
+          "linked_chat_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "One of the user's chats; the delivered message links to it."
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/Trigger",
+            "description": "Local to the user's stored zone; the request carries no zone."
+          },
+          "type": {
+            "$ref": "#/components/schemas/ScheduledItemType"
+          }
+        }
+      },
+      "ScheduledItemType": {
+        "type": "string",
+        "enum": [
+          "reminder",
+          "scheduled_task"
+        ]
+      },
+      "ScheduledItemsResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "upcoming_count",
+          "past_count",
+          "time_zone",
+          "time_zone_source",
+          "channels",
+          "max_upcoming"
+        ],
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeliveryChannelInfo"
+            },
+            "description": "Every delivery channel and whether it reaches the user."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledItem"
+            }
+          },
+          "max_upcoming": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many upcoming items a user may have.",
+            "minimum": 0
+          },
+          "past_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "The zone a new item's times are entered in."
+          },
+          "time_zone_source": {
+            "$ref": "#/components/schemas/TimeZoneSource"
+          },
+          "upcoming_count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ScheduledItemsTab": {
+        "type": "string",
+        "enum": [
+          "upcoming",
+          "past"
         ]
       },
       "SearchFileHit": {
@@ -11807,6 +12619,19 @@
           }
         }
       },
+      "SnoozeScheduledItemRequest": {
+        "type": "object",
+        "required": [
+          "until"
+        ],
+        "properties": {
+          "until": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the current occurrence should arrive instead. The next one keeps\nits regular time."
+          }
+        }
+      },
       "StartMcpServerOauthResponse": {
         "type": "object",
         "required": [
@@ -12041,6 +12866,13 @@
             "type": "string"
           }
         }
+      },
+      "TimeZoneSource": {
+        "type": "string",
+        "enum": [
+          "user",
+          "deployment_default"
+        ]
       },
       "TokenUsageFileInput": {
         "type": "object",
@@ -12494,6 +13326,60 @@
             "default": null
           }
         }
+      },
+      "Trigger": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "At a local date and time.",
+            "required": [
+              "date",
+              "time",
+              "kind"
+            ],
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "once"
+                ]
+              },
+              "time": {
+                "type": "string",
+                "description": "Local time of day, `HH:MM`.",
+                "example": "10:00"
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RepeatRule",
+                "description": "On a repeating schedule."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "repeat"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "On a repeating schedule."
+          }
+        ],
+        "description": "What makes an item happen. Times are local to the zone stored with the\nitem; event-driven triggers will be further variants."
       },
       "UnarchiveChatResponse": {
         "type": "object",

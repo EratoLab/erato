@@ -16,13 +16,13 @@
 pub mod recurrence;
 
 use crate::db::entity::prelude::{Chats, ScheduledItems};
-use crate::db::entity::scheduled_deliveries::{self, CreatedBy};
+use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
 use crate::models::chat::resolve_chat_display_name;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
     DeliveryContent, DeliveryLink, DeliveryProducer, NewDelivery, ResolvedContent, StillDue,
-    cancel_open, schedule,
+    cancel_open, schedule, snooze,
 };
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
@@ -30,12 +30,18 @@ use eyre::{Report, eyre};
 use recurrence::Trigger;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ConnectionTrait, DatabaseConnection, DbBackend, EntityTrait,
-    FromQueryResult, IntoActiveModel, Statement, TransactionTrait,
+    ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend,
+    EntityTrait, FromQueryResult, IntoActiveModel, QueryFilter, QueryOrder, QuerySelect, Statement,
+    TransactionTrait,
 };
+use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::HashMap;
+use utoipa::ToSchema;
 
 pub const REMINDER: &str = "reminder";
+/// Upcoming items a user may have, as for the reminder tool.
+pub const MAX_ACTIVE_ITEMS: u64 = 10;
 /// Items one `produce` pass advances; the rest wait for the next tick.
 const PRODUCE_BATCH: i64 = 200;
 const OPEN_STATES: &str = "('pending', 'claimed', 'snoozed')";
@@ -211,6 +217,216 @@ pub async fn cancel(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Ch
     .await?;
     txn.commit().await?;
     Ok(Ok(item))
+}
+
+/// Move the item's open occurrence to `until`. The next occurrence keeps
+/// its regular time.
+pub async fn snooze_occurrence(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    item_id: Uuid,
+    until: DateTime<Utc>,
+) -> Change<Model> {
+    let Some(item) = find(db, user_id, item_id).await? else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    if item.status != ItemStatus::Active {
+        return Ok(Err(Refusal::Finished));
+    }
+    let Some(row) = current_occurrence(db, &item)
+        .await?
+        .filter(|row| row.state.is_open())
+    else {
+        return Ok(Err(Refusal::NothingToSnooze));
+    };
+    if !snooze(db, row.id, until).await? {
+        return Ok(Err(Refusal::NothingToSnooze));
+    }
+    Ok(Ok(item))
+}
+
+async fn find(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<Model>, Report> {
+    Ok(ScheduledItems::find_by_id(item_id)
+        .filter(scheduled_items::Column::UserId.eq(user_id))
+        .one(db)
+        .await?)
+}
+
+/// The status the Scheduled page shows, the same for every item type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DisplayStatus {
+    Scheduled,
+    Snoozed,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+/// An item with its open occurrence and its latest settled one.
+#[derive(Debug, Clone)]
+pub struct ItemView {
+    pub item: Model,
+    pub current: Option<scheduled_deliveries::Model>,
+    pub last: Option<scheduled_deliveries::Model>,
+}
+
+/// The one place that maps an item and its occurrences to what the page
+/// shows. "Done" means delivered; whether it should mean "the user pressed
+/// Done" is still open, and `acknowledged_at` is reported separately.
+pub fn display_status(view: &ItemView, now: DateTime<Utc>) -> DisplayStatus {
+    if view.item.status == ItemStatus::Cancelled {
+        return DisplayStatus::Cancelled;
+    }
+    match (&view.current, &view.last) {
+        (Some(current), _) if current.state == DeliveryState::Snoozed => DisplayStatus::Snoozed,
+        (Some(_), _) => DisplayStatus::Scheduled,
+        // Between two occurrences, before the producer's next tick.
+        (None, _) if next_occurrence(view, now).is_some() => DisplayStatus::Scheduled,
+        (None, Some(last)) => match last.state {
+            DeliveryState::Failed => DisplayStatus::Failed,
+            DeliveryState::Cancelled => DisplayStatus::Cancelled,
+            _ => DisplayStatus::Done,
+        },
+        (None, None) => DisplayStatus::Done,
+    }
+}
+
+/// When the item arrives next: its open occurrence's time (snoozed or
+/// not), or for an active item between two occurrences the time the
+/// producer will schedule.
+pub fn next_occurrence(view: &ItemView, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    if let Some(current) = &view.current {
+        return Some(current.due_at.with_timezone(&Utc));
+    }
+    let item = &view.item;
+    if item.status != ItemStatus::Active {
+        return None;
+    }
+    let after = item
+        .occurrence_at
+        .map_or(now, |at| at.with_timezone(&Utc).max(now));
+    trigger_of(item)
+        .ok()?
+        .next_after(zone_of(item).ok()?, after, count_of(item))
+}
+
+/// The user's upcoming (active) or past (ended, cancelled) items; past ones
+/// newest first, at most `past_limit`.
+pub async fn list(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    past: bool,
+    past_limit: u64,
+) -> Result<Vec<ItemView>, Report> {
+    let query = ScheduledItems::find().filter(scheduled_items::Column::UserId.eq(user_id));
+    let items = if past {
+        query
+            .filter(scheduled_items::Column::Status.ne(ItemStatus::Active))
+            .order_by_desc(scheduled_items::Column::UpdatedAt)
+            .limit(past_limit)
+            .all(db)
+            .await?
+    } else {
+        query
+            .filter(scheduled_items::Column::Status.eq(ItemStatus::Active))
+            .order_by_asc(scheduled_items::Column::OccurrenceAt)
+            .all(db)
+            .await?
+    };
+    views(db, user_id, items).await
+}
+
+/// One of the user's items.
+pub async fn get(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    item_id: Uuid,
+) -> Result<Option<ItemView>, Report> {
+    let Some(item) = find(db, user_id, item_id).await? else {
+        return Ok(None);
+    };
+    Ok(views(db, user_id, vec![item]).await?.pop())
+}
+
+/// How many upcoming and past items the user has.
+pub async fn counts(db: &DatabaseConnection, user_id: Uuid) -> Result<(u64, u64), Report> {
+    #[derive(FromQueryResult)]
+    struct Counts {
+        upcoming: i64,
+        past: i64,
+    }
+    let counts = Counts::find_by_statement(statement(
+        "scheduled_items.counts",
+        "SELECT count(*) FILTER (WHERE status = 'active') AS upcoming,
+                count(*) FILTER (WHERE status <> 'active') AS past
+         FROM scheduled_items WHERE user_id = $1",
+        vec![user_id.into()],
+    ))
+    .one(db)
+    .await?;
+    Ok(counts.map_or((0, 0), |counts| {
+        (counts.upcoming.max(0) as u64, counts.past.max(0) as u64)
+    }))
+}
+
+async fn views(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    items: Vec<Model>,
+) -> Result<Vec<ItemView>, Report> {
+    if items.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids = items
+        .iter()
+        .map(|item| item.id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    // Per item, the open occurrence and the newest settled one.
+    let sql = format!(
+        "SELECT DISTINCT ON (dedupe_key, state IN {OPEN_STATES}) *
+         FROM scheduled_deliveries
+         WHERE user_id = $1 AND dedupe_key = ANY(string_to_array($2, ','))
+         ORDER BY dedupe_key, state IN {OPEN_STATES}, created_at DESC, id DESC"
+    );
+    let rows = scheduled_deliveries::Model::find_by_statement(statement(
+        "scheduled_items.occurrences",
+        &sql,
+        vec![user_id.into(), ids.into()],
+    ))
+    .all(db)
+    .await?;
+    let mut by_item: HashMap<String, (Option<_>, Option<_>)> = HashMap::new();
+    for row in rows {
+        let Some(key) = row.dedupe_key.clone() else {
+            continue;
+        };
+        let entry = by_item.entry(key).or_default();
+        if matches!(
+            row.state,
+            DeliveryState::Pending | DeliveryState::Claimed | DeliveryState::Snoozed
+        ) {
+            entry.0 = Some(row);
+        } else {
+            entry.1 = Some(row);
+        }
+    }
+    Ok(items
+        .into_iter()
+        .map(|item| {
+            let (current, last) = by_item.remove(&item.id.to_string()).unwrap_or_default();
+            ItemView {
+                item,
+                current,
+                last,
+            }
+        })
+        .collect())
 }
 
 /// The item's occurrence that is not settled yet, if any.
