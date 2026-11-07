@@ -26,6 +26,8 @@ interface AlertProps {
   className?: string;
   /** Icon to display (if not provided, uses default for type) */
   icon?: ReactNode;
+  /** Controls under the message, such as a button that resolves the alert. */
+  action?: ReactNode;
   /** Optional geometry variant for chat message surfaces */
   geometryVariant?: "default" | "message";
   /**
@@ -48,6 +50,7 @@ export const Alert: React.FC<AlertProps> = ({
   onDismiss,
   className = "",
   icon,
+  action,
   geometryVariant = "default",
   role = "alert",
   "data-testid": dataTestId,
@@ -102,11 +105,18 @@ export const Alert: React.FC<AlertProps> = ({
       data-tone={type}
       data-testid={dataTestId}
     >
-      <div className="mt-0.5 shrink-0">{alertIcon}</div>
+      <div className="mt-0.5 shrink-0" aria-hidden="true">
+        {alertIcon}
+      </div>
 
       <div className="min-w-0 flex-1">
         {title && <h4 className="mb-1 font-medium">{title}</h4>}
         <div className="text-sm">{children}</div>
+        {action != null && (
+          <div className="mt-3 flex flex-wrap gap-2" data-ui="alert-action">
+            {action}
+          </div>
+        )}
       </div>
 
       {dismissible && onDismiss && (

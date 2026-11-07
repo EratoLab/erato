@@ -10,7 +10,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict EaE4yPwbTsr3GjNFOwd5fZMK9HxNTsL4kxoUNHZR6PpplEyIRu8BqNfcx4ffki7
+\restrict dWey6AoUV9HQHlxlcn95719tGQ1T3SCud2RCn9oyFNx8CBcLjyJgBvnZKdug9cZ
 
 -- Dumped from database version 17.2 (Debian 17.2-1.pgdg120+1)
 -- Dumped by pg_dump version 17.11 (Homebrew)
@@ -670,6 +670,30 @@ CREATE TABLE public.scheduled_deliveries (
 
 
 --
+-- Name: scheduled_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.scheduled_items (
+    id uuid DEFAULT public.uuidv7() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    name text NOT NULL,
+    message text DEFAULT ''::text NOT NULL,
+    linked_chat_id uuid,
+    channel text NOT NULL,
+    trigger jsonb NOT NULL,
+    time_zone text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    occurrence_at timestamp with time zone,
+    occurrence_count integer DEFAULT 0 NOT NULL,
+    origin jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT scheduled_items_status_check CHECK ((status = ANY (ARRAY['active'::text, 'ended'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: share_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -810,6 +834,8 @@ CREATE TABLE public.user_preferences (
     client_tool_file_approval text,
     client_tool_decisions jsonb DEFAULT '{}'::jsonb NOT NULL,
     teams_nudges_opted_out_at timestamp with time zone,
+    time_zone text,
+    language text,
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),
@@ -1133,6 +1159,14 @@ ALTER TABLE ONLY public.runtime_configuration
 
 ALTER TABLE ONLY public.scheduled_deliveries
     ADD CONSTRAINT scheduled_deliveries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: scheduled_items scheduled_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_items
+    ADD CONSTRAINT scheduled_items_pkey PRIMARY KEY (id);
 
 
 --
@@ -1666,6 +1700,20 @@ CREATE INDEX scheduled_deliveries_user_kind ON public.scheduled_deliveries USING
 
 
 --
+-- Name: scheduled_items_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX scheduled_items_active ON public.scheduled_items USING btree (kind) WHERE (status = 'active'::text);
+
+
+--
+-- Name: scheduled_items_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX scheduled_items_user ON public.scheduled_items USING btree (user_id, status);
+
+
+--
 -- Name: temp_chat_generation_commands_pending_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1824,6 +1872,13 @@ CREATE TRIGGER on_update_set_updated_columns_runtime_configuration BEFORE UPDATE
 --
 
 CREATE TRIGGER on_update_set_updated_columns_scheduled_deliveries BEFORE UPDATE ON public.scheduled_deliveries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
+
+
+--
+-- Name: scheduled_items on_update_set_updated_columns_scheduled_items; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER on_update_set_updated_columns_scheduled_items BEFORE UPDATE ON public.scheduled_items FOR EACH ROW EXECUTE FUNCTION public.set_updated_at_column();
 
 
 --
@@ -2174,6 +2229,22 @@ ALTER TABLE ONLY public.scheduled_deliveries
 
 
 --
+-- Name: scheduled_items scheduled_items_linked_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_items
+    ADD CONSTRAINT scheduled_items_linked_chat_id_fkey FOREIGN KEY (linked_chat_id) REFERENCES public.chats(id) ON DELETE SET NULL;
+
+
+--
+-- Name: scheduled_items scheduled_items_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.scheduled_items
+    ADD CONSTRAINT scheduled_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: temp_chat_generation_commands temp_chat_generation_commands_generation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2233,5 +2304,5 @@ ALTER TABLE ONLY public.user_tool_approval_settings
 -- PostgreSQL database dump complete
 --
 
-\unrestrict EaE4yPwbTsr3GjNFOwd5fZMK9HxNTsL4kxoUNHZR6PpplEyIRu8BqNfcx4ffki7
+\unrestrict dWey6AoUV9HQHlxlcn95719tGQ1T3SCud2RCn9oyFNx8CBcLjyJgBvnZKdug9cZ
 

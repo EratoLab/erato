@@ -19,6 +19,7 @@ import { SidecarToolDecisions } from "./SidecarToolDecisions";
 import { Button } from "../Controls/Button";
 import { SidecarIndexingControls } from "../DesktopSidecar/SidecarIndexingCard";
 import { SidecarPermissions } from "../DesktopSidecar/SidecarPermissions";
+import { SidecarUiPackageStatus } from "../DesktopSidecar/SidecarUiPackageStatus";
 import { ComputerIcon, FolderIcon } from "../icons";
 
 /**
@@ -164,6 +165,7 @@ function DesktopSidecarEntityRow({
             >
               <SidecarConnectionActions onRetry={onRetry} />
               <SidecarPermissions />
+              <SidecarUiPackageStatus />
             </SettingsDisclosure>
           </div>
         )}

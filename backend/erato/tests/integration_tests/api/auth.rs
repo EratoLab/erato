@@ -228,6 +228,72 @@ async fn test_profile_preferences_update_and_delete(pool: Pool<Postgres>) {
     );
 }
 
+/// The web client reports its browser zone and UI language through the
+/// preferences route; the profile returns what is stored, and a value that
+/// is not an IANA zone or a language tag is refused without storing
+/// anything.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_profile_preferences_store_the_client_time_zone_and_language(pool: Pool<Postgres>) {
+    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let profile: Value = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(profile.get("preference_time_zone"), None);
+    assert_eq!(profile.get("preference_language"), None);
+
+    let updated = server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&serde_json::json!({
+            "preference_time_zone": "Europe/Berlin",
+            "preference_language": "de_de"
+        }))
+        .await;
+    updated.assert_status_ok();
+    let updated: Value = updated.json();
+    assert_eq!(updated["preference_time_zone"], "Europe/Berlin");
+    assert_eq!(updated["preference_language"], "de-DE");
+
+    for invalid in [
+        serde_json::json!({"preference_time_zone": "W. Europe Standard Time"}),
+        serde_json::json!({"preference_time_zone": "Europe/Berlin", "preference_language": "not a tag"}),
+    ] {
+        server
+            .put("/api/v1beta/me/profile/preferences")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&invalid)
+            .await
+            .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    // Saving other preferences leaves the reported values alone.
+    server
+        .put("/api/v1beta/me/profile/preferences")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&serde_json::json!({"preference_nickname": "Max"}))
+        .await
+        .assert_status_ok();
+    let profile: Value = server
+        .get("/api/v1beta/me/profile")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(profile["preference_time_zone"], "Europe/Berlin");
+    assert_eq!(profile["preference_language"], "de-DE");
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_client_tool_decisions_replace_the_map_and_reject_invalid_names(pool: Pool<Postgres>) {
     let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
