@@ -2917,6 +2917,7 @@ export type MessageSubmitStreamingResponseToolCallUpdate = {
    */
   progress?: number;
   progress_message?: string;
+  result_details?: ToolResultDetails;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;
@@ -4316,6 +4317,44 @@ export type ToolDisplayMetadata = {
   title: string;
 };
 
+/**
+ * The parts of an MCP result that `output` leaves out, bounded in size.
+ */
+export type ToolResultDetails = {
+  links?: ToolResultLink[];
+  resources?: ToolResultResource[];
+  structured?: Value;
+};
+
+/**
+ * A resource link from the result. Only `https` links without user info are
+ * kept; the name, title and MIME type are display-cleaned and capped like a
+ * tool title.
+ */
+export type ToolResultLink = {
+  mime_type?: string;
+  name?: string;
+  title?: string;
+  uri: string;
+};
+
+/**
+ * A resource embedded in the result. `ui://`, `data:`, `javascript:` and
+ * `vbscript:` resources are not kept.
+ */
+export type ToolResultResource = {
+  mime_type?: string;
+  /**
+   * The text as the server sent it, or `[omitted: N bytes]`. Absent on a
+   * blob, whose body is never kept.
+   */
+  text?: string;
+  /**
+   * The resource's own URI: an identifier, not a link to open.
+   */
+  uri: string;
+};
+
 export type ToolUse = {
   /**
    * @default null
@@ -4342,6 +4381,10 @@ export type ToolUse = {
    * @default null
    */
   progress_message?: string | null | undefined;
+  /**
+   * @default null
+   */
+  result_details?: ToolResultDetails;
   /**
    * @default null
    */

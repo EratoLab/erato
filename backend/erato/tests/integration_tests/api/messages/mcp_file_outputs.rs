@@ -18,12 +18,18 @@ const PNG: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
 const CSV: &str = "eCx5CjEsMgo=";
 const MARKER: &str = "MCP-FILE-RESULT";
+const DETAILS_TITLE: &str = "SYNTHETIC-DETAILS-TITLE";
+const DETAILS_LINK: &str = "https://records.example.test/rows/row-1";
+const DETAILS_TEXT: &str = "SYNTHETIC-RESOURCE-TEXT";
 
 #[derive(Clone)]
 struct Fixture {
     output: Value,
     protocol: erato::config::McpProtocolMode,
     structured: bool,
+    /// No file fields; the result adds structured content that differs from
+    /// its text, links and resources.
+    details: bool,
     is_error: bool,
     storage_failure: bool,
     calls: Arc<AtomicUsize>,
@@ -47,6 +53,9 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "file-output-test", "version": "1"}
         }),
+        "tools/list" if fixture.details => json!({"tools": [{
+            "name": "generate_files", "inputSchema": {"type": "object"}
+        }]}),
         "tools/list" => json!({"tools": [{
             "name": "generate_files", "inputSchema": {"type": "object"},
             "outputSchema": {
@@ -69,6 +78,22 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
             if fixture.structured {
                 // Both copies contain Base64 on the wire; neither may leak to history.
                 result["structuredContent"] = fixture.output;
+            }
+            if fixture.details {
+                result["structuredContent"] =
+                    json!({"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_TITLE}});
+                result["content"].as_array_mut().unwrap().extend([
+                    json!({"type": "resource_link", "uri": DETAILS_LINK, "name": "row-1",
+                           "title": DETAILS_TITLE}),
+                    json!({"type": "resource_link", "uri": "http://records.example.test/rows/row-1",
+                           "name": "plain"}),
+                    json!({"type": "resource", "resource": {"uri": "records://rows/row-1",
+                           "mimeType": "text/plain", "text": DETAILS_TEXT}}),
+                    json!({"type": "resource", "resource": {"uri": "ui://records/row",
+                           "mimeType": "text/html;profile=mcp-app", "text": "<p>app</p>"}}),
+                    json!({"type": "resource", "resource": {"uri": "records://rows/row-1/chart",
+                           "mimeType": "image/png", "blob": PNG}}),
+                ]);
             }
             result
         }
@@ -169,6 +194,28 @@ async fn check_output(
             expected_status,
             expected_files,
             protocol,
+            false,
+        )
+        .await;
+    }
+}
+
+async fn check_details(pool: Pool<Postgres>, approval: Option<&str>) {
+    for protocol in [
+        erato::config::McpProtocolMode::Legacy,
+        erato::config::McpProtocolMode::Stateless,
+    ] {
+        check_output_for_protocol(
+            pool.clone(),
+            json!({"stdout": MARKER}),
+            approval,
+            false,
+            false,
+            false,
+            "success",
+            0,
+            protocol,
+            true,
         )
         .await;
     }
@@ -185,11 +232,13 @@ async fn check_output_for_protocol(
     expected_status: &str,
     expected_files: usize,
     protocol: erato::config::McpProtocolMode,
+    details: bool,
 ) {
     let fixture = Fixture {
         output,
         protocol,
         structured,
+        details,
         is_error,
         storage_failure,
         calls: Arc::default(),
@@ -391,6 +440,61 @@ async fn check_output_for_protocol(
             })
             .expect("terminal tool update");
         assert_eq!(event_output["output"], tool["output"]);
+        assert_eq!(event_output["result_details"], tool["result_details"]);
+    }
+    if fixture.details {
+        assert_eq!(
+            tool["result_details"],
+            json!({
+                "structured": {"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_TITLE}},
+                "links": [{"uri": DETAILS_LINK, "name": "row-1", "title": DETAILS_TITLE}],
+                "resources": [
+                    {"uri": "records://rows/row-1", "mime_type": "text/plain", "text": DETAILS_TEXT},
+                    {"uri": "records://rows/row-1/chart", "mime_type": "image/png"},
+                ],
+            }),
+            "{tool}"
+        );
+        assert_eq!(tool["output"], fixture.output);
+        let follow_up = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(
+                &json!({"existing_chat_id": chat_id, "previous_message_id": message_id,
+                          "user_message": "Show that row again"}),
+            )
+            .await;
+        follow_up.assert_status_ok();
+        let follow_up_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+            &follow_up,
+        )))
+        .unwrap();
+        let replayed = Messages::find_by_id(follow_up_id)
+            .one(&state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_input_messages
+            .unwrap()
+            .to_string();
+        assert!(
+            replayed.contains(MARKER),
+            "the result must replay: {replayed}"
+        );
+        let bodies = recorder.bodies();
+        assert_eq!(bodies.len(), 2);
+        for value in bodies.into_iter().chain([replayed]) {
+            for detail in [DETAILS_TITLE, DETAILS_LINK, DETAILS_TEXT] {
+                assert!(
+                    !value.contains(detail),
+                    "{detail} reached the model: {value}"
+                );
+            }
+        }
+        for value in [row.raw_message.to_string(), response.text()] {
+            assert!(!value.contains(PNG), "raw payload leaked: {value}");
+            assert!(!value.contains("structuredContent"));
+        }
     }
     for pointer in &pointers {
         let id = Uuid::parse_str(pointer["file_upload_id"].as_str().unwrap()).unwrap();
@@ -582,6 +686,14 @@ async fn approved_empty_files(pool: Pool<Postgres>) {
     .await;
 }
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn approved_result_details(pool: Pool<Postgres>) {
+    check_details(pool, Some("approve")).await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_result_details(pool: Pool<Postgres>) {
+    check_details(pool, None).await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_ordinary_result(pool: Pool<Postgres>) {
     check_output(
         pool,
@@ -654,6 +766,7 @@ async fn integrated_file_retrieval_full_text_and_replay(pool: Pool<Postgres>) {
         output: json!({}),
         protocol: erato::config::McpProtocolMode::Legacy,
         structured: false,
+        details: false,
         is_error: false,
         storage_failure: false,
         calls: Arc::default(),

@@ -1730,6 +1730,7 @@ impl DelegationProgressEmitter<'_> {
                 progress: None,
                 total: None,
                 output: Some(self.frame_output(trace)),
+                result_details: None,
             },
             "broadcast delegation progress",
         )

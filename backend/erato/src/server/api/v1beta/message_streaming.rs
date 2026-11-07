@@ -1146,6 +1146,10 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     #[schema(nullable = false)]
     total: Option<f64>,
     output: Option<JsonValue>,
+    /// The stored part's `result_details`; set on the terminal update only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    result_details: Option<crate::models::message::ToolResultDetails>,
 }
 
 #[derive(Serialize, ToSchema, Clone, Debug)]
@@ -1234,6 +1238,7 @@ async fn await_mcp_tool_with_progress<
                     progress: update.progress,
                     total: update.total,
                     output: None,
+                    result_details: None,
                 },
                 "broadcast MCP progress",
             )
@@ -2066,6 +2071,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             progress,
             total,
             output,
+            result_details,
         } => {
             let status = match status {
                 BgToolCallStatus::Preparing => ToolCallStatus::Preparing,
@@ -2086,6 +2092,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
                     progress: *progress,
                     total: *total,
                     output: output.clone(),
+                    result_details: result_details.clone(),
                 },
             )
             .data_json()?;
@@ -5722,6 +5729,7 @@ async fn settle_delegation_slot<
         progress: None,
         total: None,
         output: Some(output_value.clone()),
+        result_details: None,
         started_at: Some(tool_call_started),
         ended_at: Some(now_timestamp()),
     });
@@ -5756,6 +5764,7 @@ async fn settle_delegation_slot<
         progress: None,
         total: None,
         output: Some(output_value.clone()),
+        result_details: None,
     };
     if let Some(task) = streaming_task {
         send_background_event(
@@ -5772,6 +5781,7 @@ async fn settle_delegation_slot<
                 progress: None,
                 total: None,
                 output: Some(output_value.clone()),
+                result_details: None,
             },
             "broadcast delegation tool update",
         )
@@ -6064,6 +6074,7 @@ async fn settle_or_park_delegation_slot<
                         progress: None,
                         total: None,
                         output: Some(output.clone()),
+                        result_details: None,
                         started_at: Some(meta.tool_call_started.clone()),
                         ended_at: None,
                     }));
@@ -6156,6 +6167,7 @@ async fn send_tool_generation_update<
                 progress,
                 total: None,
                 output: None,
+                result_details: None,
             },
             "broadcast tool generation progress",
         )
@@ -6173,6 +6185,7 @@ async fn send_tool_generation_update<
         progress,
         total: None,
         output: None,
+        result_details: None,
     }
     .into();
     send_generation_event(&message, tx.clone()).await
@@ -6210,6 +6223,7 @@ async fn announce_reserved_task_slot<
                 progress: None,
                 total: None,
                 output: Some(output.clone()),
+                result_details: None,
             },
             "broadcast reserved task slot",
         )
@@ -6227,6 +6241,7 @@ async fn announce_reserved_task_slot<
         progress: None,
         total: None,
         output: Some(output),
+        result_details: None,
     }
     .into();
     send_generation_event(&message, tx.clone()).await
@@ -6498,6 +6513,17 @@ mod generation_event_wire_format_tests {
                         progress: with_progress.then_some(1.0),
                         total: with_progress.then_some(2.0),
                         output: Some(json!({ "results": [] })),
+                        result_details: with_progress.then(|| {
+                            crate::models::message::ToolResultDetails {
+                                links: vec![crate::models::message::ToolResultLink {
+                                    uri: "https://records.example.test/rows/1".into(),
+                                    name: Some("row-1".into()),
+                                    title: None,
+                                    mime_type: None,
+                                }],
+                                ..Default::default()
+                            }
+                        }),
                     }
                 });
             }
@@ -7511,6 +7537,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(json!({ "status": "rejected", "error": error_message })),
+                        result_details: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -7561,6 +7588,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(json!({ "status": "error", "error": error_message })),
+                        result_details: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -7863,6 +7891,7 @@ async fn stream_generate_chat_completion<'a>(
                     progress: None,
                     total: None,
                     output: Some(output_value.clone()),
+                    result_details: None,
                 };
                 if let Some(task) = streaming_task {
                     send_background_event(
@@ -7879,6 +7908,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value.clone()),
+                            result_details: None,
                         },
                         "broadcast client-action tool update",
                     )
@@ -7898,6 +7928,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
+                        result_details: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -8013,6 +8044,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(crate::services::delegation::queued_placeholder_output()),
+                            result_details: None,
                             started_at: Some(tool_call_started),
                             ended_at: None,
                         },
@@ -8284,6 +8316,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(json!({ "status": status, "error": response_text })),
+                            result_details: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -8732,6 +8765,7 @@ async fn stream_generate_chat_completion<'a>(
                                     status: MessageToolCallStatus::InProgress,
                                     input: Some(tool_input.clone()),
                                     output: Some(json!({"status":"input_required"})),
+                                    result_details: None,
                                     progress_message: None,
                                     progress: None,
                                     total: None,
@@ -8996,6 +9030,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
+                        result_details: None,
                     },
                     "broadcast client tool result",
                 )
@@ -9012,6 +9047,7 @@ async fn stream_generate_chat_completion<'a>(
                     progress: None,
                     total: None,
                     output: Some(output_value.clone()),
+                    result_details: None,
                 };
                 let update_message: GenerationStreamingMessage = update_event.into();
                 // Best-effort (see the call event above): a dropped SSE
@@ -9033,6 +9069,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
+                        result_details: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -9196,6 +9233,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(json!({ "status": "rejected", "error": error_message })),
+                        result_details: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -9240,6 +9278,7 @@ async fn stream_generate_chat_completion<'a>(
                     progress: None,
                     total: None,
                     output: None,
+                    result_details: None,
                 },
                 streaming_task,
                 tx.clone(),
@@ -9428,6 +9467,7 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
+                                result_details: None,
                             };
                             if let Some(task) = streaming_task {
                                 send_background_event(
@@ -9444,6 +9484,7 @@ async fn stream_generate_chat_completion<'a>(
                                         progress: None,
                                         total: None,
                                         output: Some(output_value.clone()),
+                                        result_details: None,
                                     },
                                     "broadcast failed MCP tool output processing",
                                 )
@@ -9466,6 +9507,7 @@ async fn stream_generate_chat_completion<'a>(
                                     progress: None,
                                     total: None,
                                     output: Some(output_value),
+                                    result_details: None,
                                     started_at: Some(tool_call_started),
                                     ended_at: Some(now_timestamp()),
                                 },
@@ -9484,6 +9526,7 @@ async fn stream_generate_chat_completion<'a>(
                     let tool_response = post_processed.tool_response;
                     let output_value = post_processed.output_value;
                     let file_content_parts = post_processed.file_content_parts;
+                    let result_details = post_processed.result_details;
                     // The server's own verdict. A run it flagged with `isError`
                     // settles as an error, and its payload still goes back to the
                     // model for recovery.
@@ -9522,6 +9565,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: output_value_for_event.clone(),
+                            result_details: result_details.clone(),
                         };
                         // Forward to streaming_task if present
                         if let Some(task) = streaming_task {
@@ -9543,6 +9587,7 @@ async fn stream_generate_chat_completion<'a>(
                                     progress: None,
                                     total: None,
                                     output: output_value_for_event,
+                                    result_details: result_details.clone(),
                                 },
                                 "broadcast completed MCP tool call",
                             )
@@ -9570,6 +9615,7 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: output_value.clone(),
+                                result_details,
                                 started_at: Some(tool_call_started.clone()),
                                 ended_at: Some(now_timestamp()),
                             },
@@ -9611,6 +9657,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
+                        result_details: None,
                     };
                     if let Some(task) = streaming_task {
                         send_background_event(
@@ -9627,6 +9674,7 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
+                                result_details: None,
                             },
                             "broadcast failed MCP tool call",
                         )
@@ -9649,6 +9697,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value),
+                            result_details: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -10105,6 +10154,7 @@ async fn stream_generate_chat_completion<'a>(
                     progress: None,
                     total: None,
                     output: Some(output_value.clone()),
+                    result_details: None,
                 };
                 if let Some(task) = streaming_task {
                     send_background_event(
@@ -10124,6 +10174,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value.clone()),
+                            result_details: None,
                         },
                         "broadcast completed wait tool call",
                     )
@@ -10143,6 +10194,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
+                        result_details: None,
                         started_at: Some(pending_wait.tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -20952,6 +21004,7 @@ async fn update_resumed_child_slot(
             progress: None,
             total: None,
             output: Some(output.clone()),
+            result_details: None,
         },
         "broadcast resumed delegated task slot",
     )
@@ -20969,6 +21022,7 @@ async fn update_resumed_child_slot(
             progress: None,
             total: None,
             output: Some(output),
+            result_details: None,
         }
         .into();
     send_generation_event(&event, tx.clone()).await
@@ -21884,6 +21938,7 @@ pub(crate) async fn run_continuation(
                 output: Some(
                     json!({"status": "rejected", "error": "The user denied this tool call."}),
                 ),
+                result_details: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -21922,6 +21977,7 @@ pub(crate) async fn run_continuation(
                     progress: None,
                     total: None,
                     output: None,
+                    result_details: None,
                 },
                 Some(task),
                 tx.clone(),
@@ -21933,12 +21989,12 @@ pub(crate) async fn run_continuation(
                 Ok(result) => {
                     // Use the same schema-aware conversion as uninterrupted calls. Only
                     // the converted value enters history, streaming, and model replay.
-                    let (status, output) = if let Some(error) =
+                    let (status, output, result_details) = if let Some(error) =
                         parse_content_filter_error_from_mcp_tool_result(&result)
                     {
                         let output = serde_json::to_value(&error)?;
                         mcp_content_filter_error = Some(error);
-                        (MessageToolCallStatus::Error, Some(output))
+                        (MessageToolCallStatus::Error, Some(output), None)
                     } else {
                         match post_process_mcp_tool_result(
                             app_state,
@@ -21961,7 +22017,7 @@ pub(crate) async fn run_continuation(
                                 } else {
                                     MessageToolCallStatus::Success
                                 };
-                                (status, processed.output_value)
+                                (status, processed.output_value, processed.result_details)
                             }
                             Err(error) => (
                                 MessageToolCallStatus::Error,
@@ -21969,6 +22025,7 @@ pub(crate) async fn run_continuation(
                                     &result,
                                     &format!("Failed to process MCP tool output: {error}"),
                                 )),
+                                None,
                             ),
                         }
                     };
@@ -21982,6 +22039,7 @@ pub(crate) async fn run_continuation(
                         progress: None,
                         total: None,
                         output,
+                        result_details,
                         started_at: Some(started_at),
                         ended_at: Some(now_timestamp()),
                     }
@@ -21999,6 +22057,7 @@ pub(crate) async fn run_continuation(
                         "status": "error",
                         "error": format!("Failed to call MCP tool: {error}"),
                     })),
+                    result_details: None,
                     started_at: Some(now_timestamp()),
                     ended_at: Some(now_timestamp()),
                 },
@@ -22025,6 +22084,7 @@ pub(crate) async fn run_continuation(
                 progress: None,
                 total: None,
                 output: Some(json!({ "status": "rejected", "error": error_message })),
+                result_details: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -22051,6 +22111,7 @@ pub(crate) async fn run_continuation(
             progress: None,
             total: None,
             output: tool_use.output.clone(),
+            result_details: tool_use.result_details.clone(),
         };
         send_background_event(
             task,
@@ -22070,6 +22131,7 @@ pub(crate) async fn run_continuation(
                 progress: None,
                 total: None,
                 output: tool_use.output.clone(),
+                result_details: tool_use.result_details.clone(),
             },
             "broadcast continued MCP tool call",
         )
@@ -22206,6 +22268,7 @@ pub(crate) async fn run_continuation(
                     },
                 })
             }),
+            result_details: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         };
@@ -22221,6 +22284,7 @@ pub(crate) async fn run_continuation(
             progress: None,
             total: None,
             output: tool_use.output.clone(),
+            result_details: None,
         };
         send_background_event(
             task,
@@ -22236,6 +22300,7 @@ pub(crate) async fn run_continuation(
                 progress: None,
                 total: None,
                 output: tool_use.output.clone(),
+                result_details: None,
             },
             "broadcast declined task plan item",
         )
@@ -23059,6 +23124,7 @@ async fn resume_parked_generation(
                 "status": "rejected",
                 "error": refusal_for_abandoned_call(&call.fn_name),
             })),
+            result_details: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         }));
@@ -23626,6 +23692,7 @@ mod mcp_progress_event_tests {
                 progress: None,
                 total: None,
                 output: None,
+                result_details: None,
             },
             Some(&task),
             tx,
@@ -23687,6 +23754,7 @@ mod mcp_progress_event_tests {
                 progress: None,
                 total: None,
                 output: None,
+                result_details: None,
             },
             Some(&task),
             sse_tx,
