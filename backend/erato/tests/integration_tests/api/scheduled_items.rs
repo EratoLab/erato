@@ -3,7 +3,8 @@
 
 use axum::http::StatusCode;
 use axum_test::TestServer;
-use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc, Weekday};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc, Weekday};
+use erato::config::{ScheduledTemplateConfig, ScheduledTemplateType};
 use erato::models::user::get_or_create_user;
 use erato::models::user_preference::record_client_locale;
 use erato::services::scheduled_deliveries::{
@@ -25,6 +26,7 @@ use crate::test_utils::{
 };
 
 const ITEMS: &str = "/api/v1beta/me/scheduled-items";
+const TEMPLATES: &str = "/api/v1beta/me/scheduled-templates";
 const CHANNEL: &str = "teams_personal";
 
 struct Setup {
@@ -606,4 +608,298 @@ async fn test_delivered_and_failed_items_move_to_past(pool: Pool<Postgres>) {
         "no personal Teams conversation"
     );
     assert_eq!(failed["next_occurrence"], Value::Null);
+}
+
+/// A failed occurrence that was retried first shows when it was due, not
+/// when it was last tried, and no time carries fractions of a second.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_a_retried_occurrence_keeps_its_due_time(pool: Pool<Postgres>) {
+    let setup = setup(pool, true, Some("Europe/Berlin")).await;
+    let server = &setup.server;
+    let settings = ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: std::time::Duration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: std::time::Duration::from_secs(60),
+    };
+    let created: Value = post(
+        server,
+        ITEMS,
+        &reminder("Retried", once(in_days(2), "09:00")),
+    )
+    .await
+    .json();
+    let id = created["id"].as_str().unwrap().to_string();
+    let set_due = |at: Option<DateTime<Utc>>| {
+        let db = setup.db.clone();
+        let id = id.clone();
+        async move {
+            db.execute_raw(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "UPDATE scheduled_deliveries
+                 SET due_at = COALESCE($2, now() - interval '1 second')
+                 WHERE dedupe_key = $1 AND state = 'pending'",
+                [id.into(), at.map(|at| at.fixed_offset()).into()],
+            ))
+            .await
+            .unwrap();
+        }
+    };
+    let due = (Utc::now() - Duration::minutes(30))
+        .with_second(0)
+        .unwrap()
+        .with_nanosecond(0)
+        .unwrap();
+    set_due(Some(due)).await;
+
+    setup.channel.answer_with(DeliveryOutcome::Retry {
+        reason: "transport".into(),
+        retry_after: None,
+    });
+    assert_eq!(
+        run_delivery_tick(&setup.db, &settings, &setup.registry)
+            .await
+            .retried,
+        1
+    );
+    let retrying: Value = server
+        .get(&format!("{ITEMS}/{id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(retrying["status"], "scheduled");
+    let next = retrying["next_occurrence"]["local"].as_str().unwrap();
+    assert!(!next.contains('.'), "{next}");
+
+    set_due(None).await;
+    setup.channel.answer_with(DeliveryOutcome::Failed {
+        reason: "403 MessageWritesBlocked: Message writes are blocked".into(),
+    });
+    assert_eq!(
+        run_delivery_tick(&setup.db, &settings, &setup.registry)
+            .await
+            .failed,
+        1
+    );
+    // The next tick ends the one-off, which moves it to Past.
+    run_delivery_tick(&setup.db, &settings, &setup.registry).await;
+    let past = list(server, "past").await;
+    let failed = past["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == id.as_str())
+        .cloned()
+        .unwrap();
+    assert_eq!(failed["status"], "failed");
+    let shown = &failed["last_delivery"]["due"];
+    assert_eq!(
+        shown["at"],
+        due.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
+    );
+    assert_eq!(
+        shown["local"],
+        due.with_timezone(&chrono_tz::Europe::Berlin)
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string()
+    );
+}
+
+async fn delivery_rows(db: &DatabaseConnection, dedupe_key: &str) -> i64 {
+    db.query_one_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "SELECT count(*) AS rows FROM scheduled_deliveries WHERE dedupe_key = $1",
+        [dedupe_key.into()],
+    ))
+    .await
+    .unwrap()
+    .unwrap()
+    .try_get("", "rows")
+    .unwrap()
+}
+
+/// Only an item that is over can be deleted, and only by its owner; it goes
+/// with its occurrence rows. A cancelled item whose occurrence is being
+/// delivered right now waits for that delivery.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_only_finished_items_are_deleted(pool: Pool<Postgres>) {
+    let setup = setup(pool, true, Some("Europe/Berlin")).await;
+    let server = &setup.server;
+    let delete = |id: String, token: String| async move {
+        server
+            .delete(&format!("{ITEMS}/{id}"))
+            .with_bearer_token(&token)
+            .await
+    };
+    let create = |name: &'static str| async move {
+        let created: Value = post(server, ITEMS, &reminder(name, once(in_days(2), "09:00")))
+            .await
+            .json();
+        created["id"].as_str().unwrap().to_string()
+    };
+
+    let upcoming = create("Upcoming").await;
+    let response = delete(upcoming.clone(), TEST_JWT_TOKEN.to_string()).await;
+    assert_refused(&response, StatusCode::CONFLICT, "not_finished");
+    let snoozed = server
+        .post(&format!("{ITEMS}/{upcoming}/snooze"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"until": Utc::now() + Duration::days(5)}))
+        .await;
+    snoozed.assert_status_ok();
+    let response = delete(upcoming.clone(), TEST_JWT_TOKEN.to_string()).await;
+    assert_refused(&response, StatusCode::CONFLICT, "not_finished");
+
+    let delivered = create("Delivered").await;
+    setup
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE scheduled_deliveries SET due_at = now() - interval '1 second'
+             WHERE dedupe_key = $1",
+            [delivered.clone().into()],
+        ))
+        .await
+        .unwrap();
+    let settings = ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: std::time::Duration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: std::time::Duration::from_secs(60),
+    };
+    run_delivery_tick(&setup.db, &settings, &setup.registry).await;
+    assert_eq!(setup.channel.deliveries().len(), 1);
+    let other = JwtTokenBuilder::new().subject("someone-else").build();
+    let response = delete(delivered.clone(), other).await;
+    assert_refused(&response, StatusCode::NOT_FOUND, "not_found");
+    delete(delivered.clone(), TEST_JWT_TOKEN.to_string())
+        .await
+        .assert_status(StatusCode::NO_CONTENT);
+    let gone = server
+        .get(&format!("{ITEMS}/{delivered}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    assert_refused(&gone, StatusCode::NOT_FOUND, "not_found");
+    assert_eq!(delivery_rows(&setup.db, &delivered).await, 0);
+    let response = delete(delivered.clone(), TEST_JWT_TOKEN.to_string()).await;
+    assert_refused(&response, StatusCode::NOT_FOUND, "not_found");
+
+    let cancelled = create("Cancelled").await;
+    server
+        .post(&format!("{ITEMS}/{cancelled}/cancel"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    delete(cancelled.clone(), TEST_JWT_TOKEN.to_string())
+        .await
+        .assert_status(StatusCode::NO_CONTENT);
+    assert_eq!(delivery_rows(&setup.db, &cancelled).await, 0);
+
+    let in_flight = create("In flight").await;
+    setup
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "UPDATE scheduled_deliveries SET state = 'claimed', claimed_at = now()
+             WHERE dedupe_key = $1",
+            [in_flight.clone().into()],
+        ))
+        .await
+        .unwrap();
+    server
+        .post(&format!("{ITEMS}/{in_flight}/cancel"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    let response = delete(in_flight.clone(), TEST_JWT_TOKEN.to_string()).await;
+    assert_refused(&response, StatusCode::CONFLICT, "not_finished");
+    assert_eq!(delivery_rows(&setup.db, &in_flight).await, 1);
+
+    let unknown = delete(Uuid::new_v4().to_string(), TEST_JWT_TOKEN.to_string()).await;
+    assert_refused(&unknown, StatusCode::NOT_FOUND, "not_found");
+    let past = list(server, "past").await;
+    assert_eq!(past["past_count"], 1);
+    assert_eq!(past["items"][0]["id"], in_flight.as_str());
+}
+
+/// Templates come from `[scheduled.templates]` in `priority_order`, then by
+/// id; none ship in code, and a switched-off section offers none.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_templates_come_from_the_config(pool: Pool<Postgres>) {
+    let template = |title: &str| ScheduledTemplateConfig {
+        r#type: ScheduledTemplateType::Reminder,
+        title: title.to_string(),
+        description: format!("About {title}"),
+        name: format!("{title} name"),
+        message: String::new(),
+    };
+    let mut config = hermetic_app_config(None, None);
+    let templates = &mut config.scheduled.templates;
+    templates.enabled = true;
+    templates.priority_order = vec!["meeting".into(), "missing".into(), "offer".into()];
+    for (id, title) in [
+        ("offer", "Follow up on an offer"),
+        ("meeting", "Prepare for a meeting"),
+        ("deadline", "Before a deadline"),
+        ("chat", "Continue a chat later"),
+    ] {
+        templates.templates.insert(id.into(), template(title));
+    }
+    let disabled = {
+        let mut config = config.clone();
+        config.scheduled.templates.enabled = false;
+        config
+    };
+    let server = create_test_server(test_app_state(config, pool.clone()).await);
+    let response = server
+        .get(TEMPLATES)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let body: Value = response.json();
+    let ids: Vec<&str> = body["templates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|template| template["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, ["meeting", "offer", "chat", "deadline"]);
+    assert_eq!(
+        body["templates"][0],
+        json!({
+            "id": "meeting",
+            "type": "reminder",
+            "title": "Prepare for a meeting",
+            "description": "About Prepare for a meeting",
+            "name": "Prepare for a meeting name",
+            "message": "",
+        })
+    );
+
+    let server = create_test_server(test_app_state(disabled, pool.clone()).await);
+    let body: Value = server
+        .get(TEMPLATES)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(body, json!({"templates": []}));
+    let server = create_test_server(test_app_state(hermetic_app_config(None, None), pool).await);
+    let body: Value = server
+        .get(TEMPLATES)
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(body, json!({"templates": []}));
 }

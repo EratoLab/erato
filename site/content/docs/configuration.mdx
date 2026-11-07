@@ -7194,6 +7194,60 @@ The executor that delivers scheduled messages, which Erato owes a user at a due 
 enabled = true
 ```
 
+### `scheduled`
+
+{/* erato_toml_config_key: scheduled */}
+
+The web app's Scheduled page, where users see and manage their reminders. The page and its sidebar entry are shown when the [`scheduled_deliveries`](#scheduled_deliveries) executor is enabled (`scheduled_deliveries.enabled = true`).
+
+#### `scheduled.templates`
+
+{/* erato_toml_config_key: scheduled.templates */}
+{/* erato_toml_config_key: scheduled.templates.enabled */}
+{/* erato_toml_config_key: scheduled.templates.priority_order */}
+{/* erato_toml_config_key: scheduled.templates.priority_order.[] */}
+{/* erato_toml_config_key: scheduled.templates.templates */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.type */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.title */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.description */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.name */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.message */}
+
+Templates offered on the Scheduled page while the user has no items, shaped like [`starter_prompts`](#starter_prompts). Clicking one opens the form filled with the template's name and message; the user still chooses when and presses Schedule. Erato ships no templates: without this section, or with `enabled = false`, none are offered.
+
+- `enabled`: whether templates are offered.
+- `priority_order`: template ids in display order. Templates not listed follow, sorted by id; ids without a template are ignored.
+- `templates.<template-id>`: one template.
+  - `type`: what the template creates. Only `reminder` for now, which is also the default.
+  - `title`: the label of the template's button.
+  - `description`: a short line shown with the button. Optional.
+  - `name`: the reminder name the form is filled with.
+  - `message`: the reminder message the form is filled with. Optional.
+
+**Default values:** disabled; no templates.
+
+**Example**
+
+```toml
+[scheduled.templates]
+enabled = true
+priority_order = ["follow_up_offer", "prepare_meeting", "before_deadline", "continue_chat"]
+
+[scheduled.templates.templates.follow_up_offer]
+type = "reminder"
+title = "Follow up on an offer"
+description = "Check whether the customer has answered"
+name = "Follow up on the offer"
+message = "Has the customer answered? If not, send a short follow-up."
+
+[scheduled.templates.templates.prepare_meeting]
+type = "reminder"
+title = "Prepare for a meeting"
+description = "Time to read up before it starts"
+name = "Prepare for the meeting"
+message = "Go through the agenda and the open points."
+```
+
 ### `generation_status`
 
 Configuration for the persisted per-chat generation status that powers the chat list's running/finished/error indicators. While a generation runs, the backend periodically refreshes a heartbeat on the chat; generations whose heartbeat goes stale (for example because the process was killed mid-generation) are marked as errored.

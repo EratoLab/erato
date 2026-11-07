@@ -1630,7 +1630,7 @@ export type ContentPartToolRejection = {
    * Why the call was rejected when the user did not decide it directly.
    * The only value is `withdrawn`.
    */
-  reason?: null | undefined;
+  reason?: string | null | undefined;
   rejected_at: string;
   tool_call_id: string;
   /**
@@ -2472,13 +2472,13 @@ export type LastDelivery = {
   /**
    * @format date-time
    */
-  delivered_at?: null | undefined;
+  delivered_at?: string | null | undefined;
   due: OccurrenceTime;
   outcome: LastDeliveryOutcome;
   /**
    * Why it failed or was not sent.
    */
-  reason?: null | undefined;
+  reason?: string | null | undefined;
 };
 
 export type LastDeliveryOutcome = "delivered" | "failed" | "cancelled";
@@ -3718,7 +3718,7 @@ export type ScheduledItem = {
    *
    * @format date-time
    */
-  acknowledged_at?: null | undefined;
+  acknowledged_at?: string | null | undefined;
   channel: string;
   channel_status: DeliveryChannelStatus;
   /**
@@ -3782,6 +3782,7 @@ export type ScheduledItemErrorCode =
   | "finished"
   | "in_flight"
   | "nothing_to_snooze"
+  | "not_finished"
   | "internal";
 
 /**
@@ -3797,7 +3798,7 @@ export type ScheduledItemRequest = {
    *
    * @format uuid
    */
-  linked_chat_id?: null | undefined;
+  linked_chat_id?: string | null | undefined;
   message: string;
   name: string;
   trigger: Trigger;
@@ -3837,6 +3838,32 @@ export type ScheduledItemsResponse = {
 };
 
 export type ScheduledItemsTab = "upcoming" | "past";
+
+/**
+ * A template on the Scheduled page's empty state; it opens the form
+ * prefilled with `name` and `message`.
+ */
+export type ScheduledTemplate = {
+  /**
+   * A short line shown with the button; may be empty.
+   */
+  description: string;
+  id: string;
+  /**
+   * May be empty.
+   */
+  message: string;
+  name: string;
+  /**
+   * The label of the template's button.
+   */
+  title: string;
+  type: ScheduledItemType;
+};
+
+export type ScheduledTemplatesResponse = {
+  templates: ScheduledTemplate[];
+};
 
 /**
  * A drive item (file or folder)

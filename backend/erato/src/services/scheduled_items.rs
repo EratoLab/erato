@@ -64,6 +64,8 @@ pub enum Refusal {
     InFlight,
     /// There is no open occurrence to snooze.
     NothingToSnooze,
+    /// The item may still deliver something, so it cannot be deleted.
+    NotFinished,
 }
 
 /// `Ok(Err(_))` is a refusal the caller reports; `Err(_)` a failure.
@@ -243,6 +245,43 @@ pub async fn snooze_occurrence(
         return Ok(Err(Refusal::NothingToSnooze));
     }
     Ok(Ok(item))
+}
+
+/// Delete a finished item (done, failed or cancelled) with its occurrence
+/// rows.
+pub async fn delete(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Change<()> {
+    let txn = db.begin().await?;
+    let Some(item) = lock(&txn, Some(user_id), item_id).await? else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    // A cancelled item's occurrence that was already claimed still goes out,
+    // and the producer needs the item for it.
+    if current_occurrence(&txn, &item).await?.is_some() {
+        return Ok(Err(Refusal::NotFinished));
+    }
+    let view = ItemView {
+        item,
+        current: None,
+        last: None,
+    };
+    if display_status(&view, Utc::now()) == DisplayStatus::Scheduled {
+        return Ok(Err(Refusal::NotFinished));
+    }
+    let item = view.item;
+    txn.execute_raw(statement(
+        "scheduled_items.delete_occurrences",
+        "DELETE FROM scheduled_deliveries
+         WHERE user_id = $1 AND kind = $2 AND dedupe_key = $3",
+        vec![
+            item.user_id.into(),
+            item.kind.clone().into(),
+            item.id.to_string().into(),
+        ],
+    ))
+    .await?;
+    ScheduledItems::delete_by_id(item.id).exec(&txn).await?;
+    txn.commit().await?;
+    Ok(Ok(()))
 }
 
 async fn find(
@@ -519,7 +558,8 @@ async fn reschedule<C: ConnectionTrait>(
     db.execute_raw(statement(
         "scheduled_items.reschedule",
         "UPDATE scheduled_deliveries
-         SET state = 'pending', due_at = $2, payload = payload || $3::jsonb
+         SET state = 'pending', due_at = $2, payload = payload || $3::jsonb,
+             outcome = outcome - 'original_due_at'
          WHERE id = $1 AND state IN ('pending', 'snoozed')",
         vec![
             delivery_id.into(),
