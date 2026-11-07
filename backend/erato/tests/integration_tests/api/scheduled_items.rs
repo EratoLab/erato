@@ -3,7 +3,7 @@
 
 use axum::http::StatusCode;
 use axum_test::TestServer;
-use chrono::{Datelike, Duration, NaiveDate, TimeZone, Utc, Weekday};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc, Weekday};
 use erato::config::{ScheduledTemplateConfig, ScheduledTemplateType};
 use erato::models::user::get_or_create_user;
 use erato::models::user_preference::record_client_locale;
@@ -608,6 +608,105 @@ async fn test_delivered_and_failed_items_move_to_past(pool: Pool<Postgres>) {
         "no personal Teams conversation"
     );
     assert_eq!(failed["next_occurrence"], Value::Null);
+}
+
+/// A failed occurrence that was retried first shows when it was due, not
+/// when it was last tried, and no time carries fractions of a second.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_a_retried_occurrence_keeps_its_due_time(pool: Pool<Postgres>) {
+    let setup = setup(pool, true, Some("Europe/Berlin")).await;
+    let server = &setup.server;
+    let settings = ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: std::time::Duration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: std::time::Duration::from_secs(60),
+    };
+    let created: Value = post(
+        server,
+        ITEMS,
+        &reminder("Retried", once(in_days(2), "09:00")),
+    )
+    .await
+    .json();
+    let id = created["id"].as_str().unwrap().to_string();
+    let set_due = |at: Option<DateTime<Utc>>| {
+        let db = setup.db.clone();
+        let id = id.clone();
+        async move {
+            db.execute_raw(Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                "UPDATE scheduled_deliveries
+                 SET due_at = COALESCE($2, now() - interval '1 second')
+                 WHERE dedupe_key = $1 AND state = 'pending'",
+                [id.into(), at.map(|at| at.fixed_offset()).into()],
+            ))
+            .await
+            .unwrap();
+        }
+    };
+    let due = (Utc::now() - Duration::minutes(30))
+        .with_second(0)
+        .unwrap()
+        .with_nanosecond(0)
+        .unwrap();
+    set_due(Some(due)).await;
+
+    setup.channel.answer_with(DeliveryOutcome::Retry {
+        reason: "transport".into(),
+        retry_after: None,
+    });
+    assert_eq!(
+        run_delivery_tick(&setup.db, &settings, &setup.registry)
+            .await
+            .retried,
+        1
+    );
+    let retrying: Value = server
+        .get(&format!("{ITEMS}/{id}"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .json();
+    assert_eq!(retrying["status"], "scheduled");
+    let next = retrying["next_occurrence"]["local"].as_str().unwrap();
+    assert!(!next.contains('.'), "{next}");
+
+    set_due(None).await;
+    setup.channel.answer_with(DeliveryOutcome::Failed {
+        reason: "403 MessageWritesBlocked: Message writes are blocked".into(),
+    });
+    assert_eq!(
+        run_delivery_tick(&setup.db, &settings, &setup.registry)
+            .await
+            .failed,
+        1
+    );
+    // The next tick ends the one-off, which moves it to Past.
+    run_delivery_tick(&setup.db, &settings, &setup.registry).await;
+    let past = list(server, "past").await;
+    let failed = past["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == id.as_str())
+        .cloned()
+        .unwrap();
+    assert_eq!(failed["status"], "failed");
+    let shown = &failed["last_delivery"]["due"];
+    assert_eq!(
+        shown["at"],
+        due.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, true)
+    );
+    assert_eq!(
+        shown["local"],
+        due.with_timezone(&chrono_tz::Europe::Berlin)
+            .format("%Y-%m-%dT%H:%M:%S")
+            .to_string()
+    );
 }
 
 async fn delivery_rows(db: &DatabaseConnection, dedupe_key: &str) -> i64 {

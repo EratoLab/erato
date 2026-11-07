@@ -13,6 +13,7 @@ use crate::models::chat::resolve_chat_display_name;
 use crate::models::user_preference::user_time_zone;
 use crate::ms_teams_bot::nudge::CHANNEL as TEAMS_CHANNEL;
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
+use crate::services::scheduled_deliveries::occurrence_due_at;
 use crate::services::scheduled_items::recurrence::{Trigger, local_time};
 use crate::services::scheduled_items::{
     self, DisplayStatus, ItemInput, ItemView, MAX_ACTIVE_ITEMS, REMINDER, Refusal,
@@ -23,7 +24,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, SubsecRound, Utc};
 use chrono_tz::Tz;
 use erato_config::config::{ScheduledTemplateType, ScheduledTemplatesConfig};
 use eyre::Report;
@@ -374,7 +375,10 @@ async fn linked_chats(
         .collect())
 }
 
+/// Whole seconds: a retry or a snooze stores the database's microseconds,
+/// which the page would otherwise show in `local`.
 fn occurrence_time(zone: Tz, at: DateTime<Utc>) -> OccurrenceTime {
+    let at = at.trunc_subsecs(0);
     OccurrenceTime {
         at,
         local: local_time(zone, at),
@@ -390,9 +394,11 @@ fn last_delivery(zone: Tz, row: &scheduled_deliveries::Model) -> Option<LastDeli
         DeliveryState::Pending | DeliveryState::Claimed | DeliveryState::Snoozed => return None,
     };
     Some(LastDelivery {
-        due: occurrence_time(zone, row.due_at.with_timezone(&Utc)),
+        due: occurrence_time(zone, occurrence_due_at(row)),
         outcome,
-        delivered_at: row.delivered_at.map(|at| at.with_timezone(&Utc)),
+        delivered_at: row
+            .delivered_at
+            .map(|at| at.with_timezone(&Utc).trunc_subsecs(0)),
         reason: (outcome != LastDeliveryOutcome::Delivered)
             .then(|| row.outcome.get("reason").and_then(|reason| reason.as_str()))
             .flatten()

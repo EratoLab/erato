@@ -558,7 +558,8 @@ async fn reschedule<C: ConnectionTrait>(
     db.execute_raw(statement(
         "scheduled_items.reschedule",
         "UPDATE scheduled_deliveries
-         SET state = 'pending', due_at = $2, payload = payload || $3::jsonb
+         SET state = 'pending', due_at = $2, payload = payload || $3::jsonb,
+             outcome = outcome - 'original_due_at'
          WHERE id = $1 AND state IN ('pending', 'snoozed')",
         vec![
             delivery_id.into(),
