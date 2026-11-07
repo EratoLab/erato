@@ -4404,6 +4404,21 @@ allow_tools = ["get_*"]
 exclude_tools = ["get_secret_*"]
 ```
 
+#### `mcp_servers.<server-id>.approval_argument`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.approval_argument */}
+
+Name of a tool argument through which this server asks for the user's consent to a call, such as `hasUserApproved` on the Dataverse MCP server's `delete_record`. For every tool whose input schema declares the argument, Erato removes it from the schema the model sees and drops any value the model sends, asks the user before each call while `mcp_servers_global.approval.enabled` is on (the preset and a stored "Always allow" do not apply to such tools, and the approval card offers no standing grant), and sets the argument when the call is dispatched: `true` after the user approved the call, `false` otherwise (for example with the approval gate disabled). Tools that do not declare the argument are unaffected.
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[mcp_servers.dynamics]
+approval_argument = "hasUserApproved"
+```
+
 ### MCP tool annotation defaults and overrides
 
 Tool annotations can be configured globally, per server, or per exact tool. All settings come from `erato.toml` sources. The backend resolves each hint independently in this order (highest priority first):
