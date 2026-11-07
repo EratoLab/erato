@@ -4,7 +4,9 @@
 use super::*;
 use crate::test_utils::build_openai_delayed_text_streaming_response;
 use erato::config::McpToolApprovalPreset;
-use erato::models::message::ToolCallLabelSource;
+use erato::models::message::{
+    ToolCallLabelSource, ToolDisplayMetadata, upgrade_open_approval_display,
+};
 use erato::services::tool_display::label::cache::ToolLabelCacheKey;
 use std::time::Duration;
 
@@ -252,12 +254,7 @@ async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: P
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     // Late enough that the turn has parked before it answers.
-    labeller(
-        &mut mocks,
-        &recorder,
-        Some(REPLY),
-        Duration::from_millis(1500),
-    );
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(3));
     calls_update_record(&mut mocks);
     let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, true).await;
     let (chat_id, message_id, _events) = submit(&app_state).await;
@@ -311,6 +308,82 @@ async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: P
     let served = served["content"].as_array().unwrap().last().unwrap();
     assert_eq!(served["display"], upgraded["display"]);
     assert_eq!(recorder.bodies().len(), 1);
+}
+
+/// A label that arrives after the card was approved leaves the message as
+/// the continuation stored it, and a label for another call never touches
+/// the card.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alone(
+    pool: Pool<Postgres>,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    // Late enough that the continuation has ended before it answers.
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(3));
+    calls_update_record(&mut mocks);
+    answers_with(
+        &mut mocks,
+        &[CALL_ID],
+        &[SENTINEL],
+        build_openai_text_streaming_response(&["The record is rejected."]),
+    );
+    let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, true).await;
+    let (_chat_id, message_id, _events) = submit(&app_state).await;
+
+    let parked = card(&app_state, message_id).await;
+    let display: ToolDisplayMetadata = serde_json::from_value(parked["display"].clone()).unwrap();
+    assert!(
+        !upgrade_open_approval_display(&app_state.db, message_id, "call_other", &display)
+            .await
+            .unwrap()
+    );
+
+    let continued = app_server(app_state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    let key = label_key(&app_state).await;
+    assert_eq!(
+        app_state.tool_label_cache.lookup(&key, &arguments()).await,
+        None,
+        "the label arrived before the continuation ended"
+    );
+    let stored = message_content(&app_state, message_id).await;
+    let row = stored
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "update_record")
+        .unwrap_or_else(|| panic!("{stored:?}"));
+    assert_eq!(row["display"]["label"]["source"], "rules");
+    assert_ne!(
+        stored.last().unwrap()["content_type"],
+        "tool_approval_request"
+    );
+
+    let label = app_state
+        .tool_label_cache
+        .get_or_compute(key, &arguments(), async { None })
+        .await
+        .expect("the model's label");
+    assert_eq!(label.source, ToolCallLabelSource::Model);
+    // The labeller tries the card right after its label resolves.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(message_content(&app_state, message_id).await, stored);
+    assert!(
+        stored
+            .iter()
+            .all(|part| part.get("labels_updated_at").is_none()),
+        "{stored:?}"
+    );
 }
 
 /// A labeller that fails, times out or points outside the call's paths
