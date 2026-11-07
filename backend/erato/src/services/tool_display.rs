@@ -46,7 +46,7 @@ pub fn mcp_tool_call_display(
     arguments: &serde_json::Value,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
-    let mut label = label::generic_label(arguments);
+    let mut label = label::mcp_call_label(server_id, tool, arguments);
     context.resolve(&mut label, arguments);
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
@@ -68,6 +68,7 @@ pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
     use rmcp::model::{JsonObject, Tool, ToolAnnotations};
 
     #[test]
@@ -153,7 +154,22 @@ mod tests {
             &arguments,
             &Default::default(),
         );
-        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+        let rules = display.label.as_ref().unwrap();
+        assert_eq!(
+            (rules.action, rules.object_kind, rules.source),
+            (
+                ToolCallAction::Create,
+                ToolCallObjectKind::Row,
+                ToolCallLabelSource::Rules
+            )
+        );
+        let item = &rules.items[0];
+        assert_eq!(item.title.as_ref().unwrap().values[0].text, "Contoso");
+        assert_eq!(
+            item.target.as_ref().unwrap().pointer,
+            "/item/parentaccountid"
+        );
+        assert_eq!(rules.arguments, label::generic_label(&arguments).arguments);
         let paths: Vec<_> = display
             .label
             .as_ref()

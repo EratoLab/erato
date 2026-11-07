@@ -6,6 +6,7 @@
 mod arguments;
 pub mod context;
 pub mod pointer;
+pub mod rules;
 
 pub use arguments::readable_arguments;
 pub use context::ToolResultContext;
@@ -72,6 +73,59 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
             .collect(),
         source: ToolCallLabelSource::Generic,
     }
+}
+
+/// The label an MCP call shows: the rules' when the cross-check agrees with
+/// it, else the generic one. `tool` carries the resolved annotations.
+pub fn mcp_call_label(
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+) -> ToolCallLabel {
+    let rules = rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
+    checked_label(server_id, tool, arguments, &rules.mapping)
+}
+
+/// A mapping's label, whatever its source, once the cross-check agrees with
+/// its verb and its core pointers all reach a value; otherwise the generic
+/// label and a log line that names the reason and no argument value.
+pub fn checked_label(
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    mapping: &ToolCallLabelMapping,
+) -> ToolCallLabel {
+    if mapping.source == ToolCallLabelSource::Generic {
+        return generic_label(arguments);
+    }
+    let flags = rules::cross_check(tool, arguments, mapping.action);
+    if !flags.is_empty() {
+        let reasons = flags
+            .iter()
+            .map(|flag| flag.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        tracing::info!(
+            server_id = %server_id,
+            tool_name = %tool.name,
+            action = ?mapping.action,
+            source = ?mapping.source,
+            reasons = %reasons,
+            "Showing the generic label for a tool call: its verb disagrees with the tool's name or annotations"
+        );
+        return generic_label(arguments);
+    }
+    resolve_label(mapping, arguments).unwrap_or_else(|UnresolvedPointer { item, part }| {
+        tracing::info!(
+            server_id = %server_id,
+            tool_name = %tool.name,
+            source = ?mapping.source,
+            item,
+            part,
+            "Showing the generic label for a tool call: a label pointer reaches nothing in its arguments"
+        );
+        generic_label(arguments)
+    })
 }
 
 /// The mapping's label for one call. A core pointer that reaches nothing
@@ -409,5 +463,149 @@ mod tests {
         )
         .unwrap();
         assert_eq!(older.label, None);
+    }
+
+    #[derive(Clone, Default)]
+    struct Capture(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Capture {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The label `run` computes and what it logged.
+    fn logged(run: impl FnOnce() -> ToolCallLabel) -> (ToolCallLabel, String) {
+        let capture = Capture::default();
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let label = tracing::subscriber::with_default(subscriber, run);
+        let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+        (label, log)
+    }
+
+    fn create_page(annotations: Option<rmcp::model::ToolAnnotations>) -> rmcp::model::Tool {
+        let mut tool = rmcp::model::Tool::new(
+            "create_page",
+            "Creates a page.",
+            rmcp::model::JsonObject::new(),
+        );
+        tool.annotations = annotations;
+        tool
+    }
+
+    #[test]
+    fn an_mcp_call_shows_the_rules_label_unless_its_resolved_hints_disagree() {
+        let arguments = json!({"title": "Secret plan", "parent_id": "secret-parent"});
+        let hints = |read_only, destructive| {
+            Some(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                read_only,
+                destructive,
+                None,
+                None,
+            ))
+        };
+        // An absent destructive hint says nothing; normalized, it would read
+        // as destructive and flag every create.
+        for annotations in [None, hints(Some(false), None)] {
+            let (label, log) =
+                logged(|| mcp_call_label("notion", &create_page(annotations), &arguments));
+            assert_eq!(
+                (label.action, label.source),
+                (ToolCallAction::Create, ToolCallLabelSource::Rules)
+            );
+            assert_eq!(
+                texts(label.items[0].title.as_ref().unwrap()),
+                ["Secret plan"]
+            );
+            assert!(log.is_empty(), "{log}");
+        }
+
+        let (label, log) =
+            logged(|| mcp_call_label("notion", &create_page(hints(Some(true), None)), &arguments));
+        assert_eq!(label, generic_label(&arguments));
+        for expected in ["notion", "create_page", "read_only_annotation", "Create"] {
+            assert!(log.contains(expected), "{expected}: {log}");
+        }
+        assert!(
+            !log.contains("Secret") && !log.contains("secret-parent"),
+            "{log}"
+        );
+    }
+
+    #[test]
+    fn a_label_from_any_source_falls_back_to_generic_when_checks_fail() {
+        let arguments = notion_batch();
+        let tool = rmcp::model::Tool::new(
+            "notion-create-pages",
+            "Creates pages.",
+            rmcp::model::JsonObject::new(),
+        );
+        let model = ToolCallLabelMapping {
+            source: ToolCallLabelSource::Model,
+            ..create_rows()
+        };
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &model));
+        assert_eq!(label, resolve_label(&model, &arguments).unwrap());
+        assert!(log.is_empty(), "{log}");
+
+        let deleting = ToolCallLabelMapping {
+            action: ToolCallAction::Delete,
+            ..model.clone()
+        };
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &deleting));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(log.contains("name_verb") && log.contains("Model"), "{log}");
+
+        let mut missing = model.clone();
+        missing.items[0].after = Some("/pages/*/body".into());
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &missing));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(
+            log.contains("part=\"after\"") || log.contains("part=after"),
+            "{log}"
+        );
+        assert!(!log.contains("Acme"), "{log}");
+
+        let generic = ToolCallLabelMapping {
+            source: ToolCallLabelSource::Generic,
+            ..deleting
+        };
+        assert_eq!(
+            checked_label("notion", &tool, &arguments, &generic),
+            generic_label(&arguments)
+        );
+
+        let changes = json!({"changes": [{"op": "delete", "thread": "t_1"}]});
+        let schema = json!({"type": "object", "properties": {"changes": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"op": {"type": "string"}, "thread": {"type": "string"}}},
+        }}});
+        let word = rmcp::model::Tool::new(
+            "word_submit_comment_changes",
+            "Changes comments.",
+            schema.as_object().unwrap().clone(),
+        );
+        let creating = ToolCallLabelMapping {
+            action: ToolCallAction::Create,
+            object_kind: ToolCallObjectKind::Comment,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/changes/*/thread".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let (label, log) = logged(|| checked_label("word", &word, &changes, &creating));
+        assert_eq!(label, generic_label(&changes));
+        assert!(log.contains("field_verb"), "{log}");
     }
 }
