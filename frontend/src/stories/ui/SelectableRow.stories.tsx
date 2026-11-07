@@ -1,7 +1,10 @@
 import { userEvent } from "@storybook/test";
 import { useState } from "react";
 
-import { SelectableRow } from "../../components/ui/Controls/SelectableRow";
+import {
+  SELECTABLE_ROW_CHECKBOX_SELECTOR,
+  SelectableRow,
+} from "../../components/ui/Controls/SelectableRow";
 import { SpinnerIcon } from "../../components/ui/Feedback/SpinnerIcon";
 import {
   CheckIcon,
@@ -118,6 +121,32 @@ const Badge = ({ children }: { children: React.ReactNode }) => (
   </span>
 );
 
+const STATUS_TEXT: Record<CheckStatus, string> = {
+  checking: "wird geprüft",
+  checked: "geprüft",
+  concern: "Richtlinienbedenken",
+};
+
+// One tab stop for the list: only the active row's checkbox is tabbable, and
+// ↑/↓ move focus over the row checkboxes.
+const moveFocus = (event: React.KeyboardEvent<HTMLUListElement>) => {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+    return;
+  }
+  const boxes = Array.from(
+    event.currentTarget.querySelectorAll<HTMLInputElement>(
+      SELECTABLE_ROW_CHECKBOX_SELECTOR,
+    ),
+  );
+  const index = boxes.indexOf(document.activeElement as HTMLInputElement);
+  const target = index + (event.key === "ArrowDown" ? 1 : -1);
+  const next = index === -1 ? undefined : boxes.at(target);
+  if (next && target >= 0) {
+    event.preventDefault();
+    next.focus();
+  }
+};
+
 const ReviewRows = ({
   items = ITEMS,
   initialSelected = [],
@@ -129,20 +158,43 @@ const ReviewRows = ({
 }: ReviewRowsProps) => {
   const [selected, setSelected] = useState(() => new Set(initialSelected));
   const [open, setOpen] = useState(current);
+  const [active, setActive] = useState(items[0]?.id);
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the list owns ↑/↓ for its rows
     <ul
       aria-label="Treffer"
       className="max-w-full border-b border-theme-border"
       style={{ width }}
+      onKeyDown={moveFocus}
+      onFocus={(event) => {
+        const boxes = Array.from(
+          event.currentTarget.querySelectorAll(
+            '[data-selectable-row] input[type="checkbox"]',
+          ),
+        );
+        const index = boxes.indexOf(event.target);
+        if (index !== -1) {
+          setActive(items[index].id);
+        }
+      }}
     >
       {items.map((item) => {
         const itemStatus = selected.has(item.id) ? status[item.id] : undefined;
         const concern = itemStatus === "concern";
         const isOpen = open === item.id;
+        const ids = {
+          meta: `story-${item.id}-meta`,
+          date: `story-${item.id}-date`,
+          status: `story-${item.id}-status`,
+        };
         return (
           <SelectableRow
             key={item.id}
+            tabIndex={active === item.id ? 0 : -1}
+            describedBy={[ids.meta, ids.date, itemStatus && ids.status]
+              .filter(Boolean)
+              .join(" ")}
             selected={selected.has(item.id)}
             onSelectedChange={(next) =>
               setSelected((previous) => {
@@ -171,21 +223,30 @@ const ReviewRows = ({
             title={item.title}
             titleEnd={concern ? <Badge>Richtlinienbedenken</Badge> : undefined}
             meta={
-              itemStatus === "checking"
-                ? `${item.meta} · wird geprüft …`
-                : item.meta
+              <span id={ids.meta}>
+                {itemStatus === "checking"
+                  ? `${item.meta} · wird geprüft …`
+                  : item.meta}
+              </span>
             }
-            end={item.date}
+            end={<span id={ids.date}>{item.date}</span>}
             trailing={
-              itemStatus === "checking" ? (
-                <SpinnerIcon size="sm" />
-              ) : itemStatus === "checked" ? (
-                <CheckIcon className="size-4" aria-label="geprüft" />
-              ) : isOpen ? (
-                <ChevronLeftIcon className="size-4" aria-hidden="true" />
-              ) : (
-                <ChevronRightIcon className="size-4" aria-hidden="true" />
-              )
+              <>
+                {itemStatus === "checking" ? (
+                  <SpinnerIcon size="sm" />
+                ) : itemStatus === "checked" ? (
+                  <CheckIcon className="size-4" aria-hidden="true" />
+                ) : isOpen ? (
+                  <ChevronLeftIcon className="size-4" aria-hidden="true" />
+                ) : (
+                  <ChevronRightIcon className="size-4" aria-hidden="true" />
+                )}
+                {itemStatus ? (
+                  <span id={ids.status} className="sr-only">
+                    {STATUS_TEXT[itemStatus]}
+                  </span>
+                ) : null}
+              </>
             }
             tone={concern ? "warning" : "neutral"}
             busy={itemStatus === "checking"}
@@ -306,7 +367,8 @@ export const LongTitle: Story = {
   ),
 };
 
-/** Below 36rem the list stacks meta and date under the title. */
+/** The caller chooses `layout="stacked"` for a narrow list: meta and date
+    move under the title. The row has no breakpoint of its own. */
 export const Stacked: Story = {
   render: () => (
     <ReviewRows
@@ -317,6 +379,37 @@ export const Stacked: Story = {
       status={{ "0.0": "checked", "0.2": "concern" }}
     />
   ),
+};
+
+/** English dates are the widest shipped format; the end column fits them
+    without reaching the status column. */
+export const EnglishDates: Story = {
+  render: () => (
+    <ReviewRows
+      initialSelected={["0.0", "0.2"]}
+      status={{ "0.0": "checked", "0.2": "checking" }}
+      items={ITEMS.map((item, index) => ({
+        ...item,
+        date: [
+          "Sep 16, 2026, 2:19 PM",
+          "Oct 29, 2026, 2:31 PM",
+          "Sep 16, 2026, 2:19 PM",
+          "Oct 2, 2026, 9:04 AM",
+          "Oct 2, 2026, 9:04 AM",
+        ][index],
+      }))}
+    />
+  ),
+};
+
+/** One tab stop: Tab lands on the first row's checkbox, ↓ and ↑ rove over the
+    row checkboxes, and Space selects. */
+export const RovingFocus: Story = {
+  render: () => <ReviewRows />,
+  play: async () => {
+    await userEvent.tab();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown} ");
+  },
 };
 
 export const Dark: Story = {

@@ -1,5 +1,7 @@
 import clsx from "clsx";
-import { forwardRef, useCallback, useId, useRef } from "react";
+import { forwardRef, useId, useRef } from "react";
+
+import { useMergedRef } from "@/hooks/ui/useMergedRef";
 
 import { Checkbox } from "./Checkbox";
 
@@ -92,17 +94,7 @@ export const SelectableRow = forwardRef<HTMLInputElement, SelectableRowProps>(
   ) {
     const checkboxId = useId();
     const checkboxRef = useRef<HTMLInputElement | null>(null);
-    const setRef = useCallback(
-      (node: HTMLInputElement | null) => {
-        checkboxRef.current = node;
-        if (typeof ref === "function") {
-          ref(node);
-        } else if (ref) {
-          ref.current = node;
-        }
-      },
-      [ref],
-    );
+    const setRef = useMergedRef(checkboxRef, ref);
 
     const open = () => {
       checkboxRef.current?.focus();
@@ -148,7 +140,7 @@ export const SelectableRow = forwardRef<HTMLInputElement, SelectableRowProps>(
         <label
           htmlFor={checkboxId}
           data-ui="selectable-row-check"
-          className="flex min-w-6 cursor-pointer items-center justify-center self-stretch has-[:disabled]:cursor-not-allowed"
+          className="flex min-w-6 cursor-pointer items-center justify-start self-stretch has-[:disabled]:cursor-not-allowed"
         >
           <Checkbox
             ref={setRef}
@@ -198,7 +190,7 @@ export const SelectableRow = forwardRef<HTMLInputElement, SelectableRowProps>(
         </span>
         <span
           data-ui="selectable-row-end"
-          className="whitespace-nowrap text-end"
+          className="min-w-0 truncate text-end"
         >
           {end}
         </span>

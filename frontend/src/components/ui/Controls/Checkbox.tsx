@@ -1,5 +1,7 @@
 import clsx from "clsx";
-import { forwardRef, useCallback, useLayoutEffect, useRef } from "react";
+import { forwardRef, useLayoutEffect, useRef } from "react";
+
+import { useMergedRef } from "@/hooks/ui/useMergedRef";
 
 import type React from "react";
 
@@ -42,17 +44,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     ref,
   ) {
     const inputRef = useRef<HTMLInputElement | null>(null);
-    const setRef = useCallback(
-      (node: HTMLInputElement | null) => {
-        inputRef.current = node;
-        if (typeof ref === "function") {
-          ref(node);
-        } else if (ref) {
-          ref.current = node;
-        }
-      },
-      [ref],
-    );
+    const setRef = useMergedRef(inputRef, ref);
 
     useLayoutEffect(() => {
       if (inputRef.current) {

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ModalBase } from "./ModalBase";
+import { DropdownMenu } from "../Controls/DropdownMenu";
 
 afterEach(() => {
   cleanup();
@@ -132,14 +133,43 @@ describe("ModalBase", () => {
     ).toHaveLength(1);
   });
 
-  it("marks every dialog modal", () => {
-    render(
+  it("leaves a plain dialog non-modal unless asked", () => {
+    const { rerender } = render(
       <ModalBase isOpen={true} onClose={vi.fn()} title="Details">
         <p>Body</p>
       </ModalBase>,
     );
 
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-modal");
+
+    rerender(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Details" modal>
+        <p>Body</p>
+      </ModalBase>,
+    );
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("keeps a dropdown opened inside a dialog outside any aria-modal subtree", async () => {
+    render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Pick a comment">
+        <DropdownMenu
+          items={[{ label: "Newest first", onClick: vi.fn() }]}
+          triggerAriaLabel="Sort"
+        />
+      </ModalBase>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+    const menu = await screen.findByRole("menu");
+
+    // The panel portals to <body>, beside the dialog, so an aria-modal shell
+    // would hide it from WebKit/VoiceOver and Chromium on macOS.
+    expect(screen.getByRole("dialog")).not.toContainElement(menu);
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Newest first" }),
+    ).toBeVisible();
   });
 
   it("renders a headerless alert dialog named and described by its content", () => {

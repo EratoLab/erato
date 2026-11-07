@@ -3,7 +3,7 @@ import { forwardRef } from "react";
 
 import type React from "react";
 
-export type ProgressBarTone = "default" | "warning";
+export type ProgressBarTone = "neutral" | "warning";
 
 export type ProgressBarSize = "sm" | "md";
 
@@ -30,7 +30,7 @@ export const ProgressBar = forwardRef<HTMLDivElement, ProgressBarProps>(
       max = 100,
       label,
       valueText,
-      tone = "default",
+      tone = "neutral",
       size = "md",
       className,
       "data-ui": dataUi,
@@ -55,7 +55,7 @@ export const ProgressBar = forwardRef<HTMLDivElement, ProgressBarProps>(
         aria-valuenow={now}
         aria-valuetext={valueText}
         data-ui={dataUi ?? "progress"}
-        data-tone={tone === "default" ? undefined : tone}
+        data-tone={tone === "neutral" ? undefined : tone}
         data-size={size}
         className={clsx("progress-geometry progress-skin", className)}
       >

@@ -25,6 +25,14 @@ interface ModalBaseProps {
   footer?: React.ReactNode;
   /** `alertdialog` for a dialog that interrupts with a message to act on. */
   role?: "dialog" | "alertdialog";
+  /**
+   * Sets `aria-modal`. Defaults to on for an `alertdialog` only: the dialog
+   * neither traps Tab nor makes the page inert, and popovers, tooltips and
+   * toasts portal outside it, so screen readers that hide everything outside
+   * an `aria-modal` dialog would lose them. Turn it on only for a dialog
+   * whose content opens none of those.
+   */
+  modal?: boolean;
   /** Id of the element that names the dialog when it has no `title`. */
   labelledBy?: string;
   describedBy?: string;
@@ -52,6 +60,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   placement = "center",
   footer,
   role = "dialog",
+  modal = role === "alertdialog",
   labelledBy,
   describedBy,
   showCloseButton = true,
@@ -172,7 +181,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         // Make the content div focusable
         tabIndex={-1}
         role={role}
-        aria-modal="true"
+        aria-modal={modal ? "true" : undefined}
         aria-labelledby={title ? titleId : labelledBy}
         aria-describedby={describedBy}
         data-ui="modal-shell"
