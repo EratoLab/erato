@@ -12750,6 +12750,11 @@
             ],
             "description": "User's job title."
           },
+          "preference_language": {
+            "type": "string",
+            "description": "The client's UI language as a BCP 47 tag, reported like the time zone.",
+            "example": "de"
+          },
           "preference_nickname": {
             "type": [
               "string",
@@ -12774,6 +12779,11 @@
               "null"
             ],
             "description": "The user's own start-screen pick when it is a hub assistant, as an\n`assistant_hub_assistants.id` (NOT the clone's `assistants.id` — those\ngo stale on every hub republish). Explicit `null` removes the pick and\nreturns to inheriting any audience pin."
+          },
+          "preference_time_zone": {
+            "type": "string",
+            "description": "The client's IANA time zone (the browser's\n`Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it\nwhen it differs from the profile's `preference_time_zone`; anything\nthat is not an IANA zone name is rejected with 422.",
+            "example": "Europe/Berlin"
           }
         }
       },
@@ -12871,6 +12881,10 @@
             "type": "string",
             "description": "User's job title."
           },
+          "preference_language": {
+            "type": "string",
+            "description": "The language (BCP 47) the user's client last reported, used for\nmessages Erato sends later, such as reminders."
+          },
           "preference_nickname": {
             "type": "string",
             "description": "Preferred name to address the user with."
@@ -12886,6 +12900,10 @@
           "preference_starting_hub_assistant_id": {
             "type": "string",
             "description": "The user's own start-screen pick when it is a hub assistant, stored as\nan `assistant_hub_assistants.id` — stable across hub republishes, unlike\nthe clone's `assistants.id`. The LIVE assistant id it points at is\nresolved per request by `GET /me/starting-assistant`."
+          },
+          "preference_time_zone": {
+            "type": "string",
+            "description": "The IANA time zone the user's client last reported (web app or\nTeams). Local times the user enters, such as a reminder's date and\ntime, are resolved in it."
           },
           "preferred_language": {
             "type": "string",

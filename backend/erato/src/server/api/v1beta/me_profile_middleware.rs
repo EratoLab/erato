@@ -103,6 +103,17 @@ pub struct UserProfile {
     /// an admin's audience pin, while "never set" inherits it.
     #[serde(default)]
     pub preference_starting_assistant_cleared: bool,
+    /// The IANA time zone the user's client last reported (web app or
+    /// Teams). Local times the user enters, such as a reminder's date and
+    /// time, are resolved in it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_time_zone: Option<String>,
+    /// The language (BCP 47) the user's client last reported, used for
+    /// messages Erato sends later, such as reminders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_language: Option<String>,
 }
 
 impl UserProfile {
@@ -127,6 +138,8 @@ impl UserProfile {
             preference_starting_hub_assistant_id: None,
             preference_starting_assistant_id: None,
             preference_starting_assistant_cleared: false,
+            preference_time_zone: None,
+            preference_language: None,
         }
     }
 
@@ -191,6 +204,8 @@ impl UserProfile {
             self.preference_starting_assistant_id =
                 prefs.starting_assistant_id.map(|id| id.to_string());
             self.preference_starting_assistant_cleared = prefs.starting_assistant_cleared;
+            self.preference_time_zone = prefs.time_zone;
+            self.preference_language = prefs.language;
             self.client_tool_decisions =
                 crate::models::user_preference::client_tool_decisions_from_json(
                     &prefs.client_tool_decisions,

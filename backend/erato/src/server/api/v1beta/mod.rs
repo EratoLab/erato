@@ -957,6 +957,17 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_starting_assistant_cleared: Option<bool>,
+    /// The client's IANA time zone (the browser's
+    /// `Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it
+    /// when it differs from the profile's `preference_time_zone`; anything
+    /// that is not an IANA zone name is rejected with 422.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "Europe/Berlin")]
+    pub preference_time_zone: Option<String>,
+    /// The client's UI language as a BCP 47 tag, reported like the time zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "de")]
+    pub preference_language: Option<String>,
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -1024,6 +1035,22 @@ pub async fn update_profile_preferences(
     {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
+    let time_zone = request
+        .preference_time_zone
+        .as_deref()
+        .map(|zone| {
+            models::user_preference::normalize_time_zone(zone)
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
+        })
+        .transpose()?;
+    let language = request
+        .preference_language
+        .as_deref()
+        .map(|language| {
+            models::user_preference::normalize_language(language)
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
+        })
+        .transpose()?;
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
@@ -1039,6 +1066,8 @@ pub async fn update_profile_preferences(
             starting_hub_assistant_id,
             starting_assistant_id,
             starting_assistant_cleared: request.preference_starting_assistant_cleared,
+            time_zone,
+            language,
         },
     )
     .await
@@ -1078,6 +1107,8 @@ pub async fn update_profile_preferences(
     profile.preference_starting_assistant_id =
         updated_prefs.starting_assistant_id.map(|id| id.to_string());
     profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
+    profile.preference_time_zone = updated_prefs.time_zone;
+    profile.preference_language = updated_prefs.language;
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );
