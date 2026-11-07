@@ -38,27 +38,48 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 /// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
 /// the server's name from the live config and the call's label, with the IDs
 /// it names resolved from earlier results in the chat, stored with the call's
-/// parts.
+/// parts. `approval_argument` is the tool's consent argument, which the label
+/// leaves out.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
+    let arguments = without_approval_argument(arguments, approval_argument);
+    let scope = names_scope(config, server_id);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
-        let mut label = label::mcp_call_label(server_id, tool, arguments);
-        context.resolve(&mut label, arguments);
+        let mut label = label::mcp_call_label(server_id, tool, &arguments);
+        if let Some(server) = &scope {
+            context.resolve(&mut label, &arguments, server);
+        }
         label
     })
-    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, arguments)))
-    .or_else(|| label::guarded(|| label::generic_label(arguments)));
+    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, &arguments)))
+    .or_else(|| label::guarded(|| label::generic_label(&arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
         ..tool_display_metadata(tool)
     }
+}
+
+/// The server name a call's tool rows carry, under which the context keeps
+/// the names that server's results gave. `None`, and so no names, for a
+/// server the config does not hold or whose name another server shares.
+fn names_scope(config: &McpRuntimeConfig, server_id: &str) -> Option<String> {
+    if !config.mcp_servers.contains_key(server_id) {
+        return None;
+    }
+    let name = config.mcp_server_display_name(server_id);
+    let shared = config
+        .mcp_servers
+        .keys()
+        .any(|other| other != server_id && config.mcp_server_display_name(other) == name);
+    (!shared).then_some(name)
 }
 
 /// What a parent chat keeps of the display a delegated child's call carries:
@@ -70,6 +91,26 @@ pub fn child_approval_display(display: &ToolDisplayMetadata) -> ToolDisplayMetad
         label::context::forget_resolved(label);
     }
     display
+}
+
+/// Erato sets the consent argument from the user's decision at dispatch, so a
+/// value the model sent there is not what the call writes.
+fn without_approval_argument<'a>(
+    arguments: &'a serde_json::Value,
+    approval_argument: Option<&str>,
+) -> std::borrow::Cow<'a, serde_json::Value> {
+    match (arguments, approval_argument) {
+        (serde_json::Value::Object(members), Some(name)) if members.contains_key(name) => {
+            std::borrow::Cow::Owned(serde_json::Value::Object(
+                members
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != name)
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+            ))
+        }
+        _ => std::borrow::Cow::Borrowed(arguments),
+    }
 }
 
 /// What a tool row and its live updates keep of a call's display. Only
@@ -126,8 +167,14 @@ mod tests {
         .unwrap();
         let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
         let arguments = serde_json::json!({});
-        let display =
-            mcp_tool_call_display(&config, "dynamics", &tool, &arguments, &Default::default());
+        let display = mcp_tool_call_display(
+            &config,
+            "dynamics",
+            &tool,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
         assert_eq!(display.title, "create_record");
         assert_eq!(
@@ -136,6 +183,7 @@ mod tests {
                 "web_access",
                 &tool,
                 &arguments,
+                None,
                 &Default::default()
             )
             .server_name
@@ -148,6 +196,7 @@ mod tests {
                 "removed-since",
                 &tool,
                 &arguments,
+                None,
                 &Default::default()
             )
             .server_name
@@ -155,6 +204,48 @@ mod tests {
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn names_come_only_from_a_configured_server_whose_name_no_other_shares() {
+        let server = |display_name: Option<&str>| {
+            let mut server = serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            });
+            if let Some(name) = display_name {
+                server["display_name"] = name.into();
+            }
+            server
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dynamics": server(Some("CRM")),
+                "notes": server(Some("Notes")),
+                "notes_mirror": server(Some(" Notes ")),
+                "web_access": server(None),
+                "crawler": server(Some("Web access")),
+                "files": server(None),
+            }
+        }))
+        .unwrap();
+        let tool = Tool::new("search", "Searches.", JsonObject::new());
+        for (server_id, expected) in [("dynamics", "CRM"), ("files", "Files")] {
+            let stored = mcp_tool_call_display(
+                &config,
+                server_id,
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            )
+            .server_name;
+            assert_eq!(stored.as_deref(), Some(expected));
+            assert_eq!(names_scope(&config, server_id), stored);
+        }
+        for server_id in ["notes", "notes_mirror", "web_access", "crawler", "removed"] {
+            assert_eq!(names_scope(&config, server_id), None, "{server_id}");
+        }
     }
 
     #[test]
@@ -169,6 +260,7 @@ mod tests {
             "dynamics",
             &tool,
             &arguments,
+            None,
             &Default::default(),
         );
         let rules = display.label.as_ref().unwrap();
@@ -214,12 +306,101 @@ mod tests {
     }
 
     #[test]
+    fn the_consent_argument_is_never_part_of_the_label() {
+        let tool = Tool::new("delete_record", "Deletes a record.", JsonObject::new());
+        let config = McpRuntimeConfig::default();
+        let arguments = serde_json::json!({
+            "recordId": "r1",
+            "hasUserApproved": true,
+            "item": {"hasUserApproved": "a member of the record"},
+            "zeta": 1,
+        });
+        let without = serde_json::json!({
+            "recordId": "r1",
+            "item": {"hasUserApproved": "a member of the record"},
+            "zeta": 1,
+        });
+        let label_of = |arguments: &serde_json::Value, approval_argument| {
+            mcp_tool_call_display(
+                &config,
+                "dv",
+                &tool,
+                arguments,
+                approval_argument,
+                &Default::default(),
+            )
+            .label
+            .unwrap()
+        };
+        let shown = label_of(&arguments, Some("hasUserApproved"));
+        assert_eq!(
+            (
+                shown.action,
+                shown.items[0].id.as_ref().unwrap().pointer.as_str()
+            ),
+            (ToolCallAction::Delete, "/recordId")
+        );
+        assert_eq!(shown.arguments, label::generic_label(&without).arguments);
+        let kept = label_of(&arguments, None);
+        assert_eq!(kept.items, shown.items);
+        assert_eq!(kept.arguments, label::generic_label(&arguments).arguments);
+        assert_ne!(
+            label::generic_label(&arguments).arguments,
+            label::generic_label(&without).arguments
+        );
+        for unchanged in [
+            serde_json::json!({"recordId": "r1"}),
+            serde_json::json!("hasUserApproved"),
+            serde_json::json!([{"hasUserApproved": true}]),
+        ] {
+            assert_eq!(
+                label_of(&unchanged, Some("hasUserApproved")).arguments,
+                label::generic_label(&unchanged).arguments
+            );
+        }
+
+        let mapping = label::ToolCallLabelMapping {
+            action: crate::models::message::ToolCallAction::Delete,
+            object_kind: crate::models::message::ToolCallObjectKind::Row,
+            items: vec![label::ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/*".into()],
+                ..Default::default()
+            }],
+            source: crate::models::message::ToolCallLabelSource::Rules,
+        };
+        let shown = without_approval_argument(&arguments, Some("hasUserApproved"));
+        let label = label::resolve_label(&mapping, &shown).unwrap();
+        let paths: Vec<_> = label.items[0].fields[0]
+            .values
+            .iter()
+            .map(|value| value.path.as_str())
+            .collect();
+        assert_eq!(paths, ["/recordId", "/item", "/zeta"]);
+        let consent = label::ToolCallLabelMapping {
+            items: vec![label::ToolCallLabelItemMapping {
+                title: Some("/hasUserApproved".into()),
+                ..Default::default()
+            }],
+            ..mapping
+        };
+        assert!(label::resolve_label(&consent, &shown).is_err());
+    }
+
+    #[test]
     fn a_hostile_descriptor_changes_neither_the_label_nor_its_size() {
         let arguments = serde_json::json!({"title": "Plan", "parent_id": "p1"});
         let config = McpRuntimeConfig::default();
         let plain = Tool::new("publish", "Publishes.", JsonObject::new());
-        let expected =
-            mcp_tool_call_display(&config, "notion", &plain, &arguments, &Default::default()).label;
+        let expected = mcp_tool_call_display(
+            &config,
+            "notion",
+            &plain,
+            &arguments,
+            None,
+            &Default::default(),
+        )
+        .label;
         assert_eq!(
             expected.as_ref().map(|label| label.source),
             Some(crate::models::message::ToolCallLabelSource::Rules)
@@ -239,14 +420,26 @@ mod tests {
         annotations.idempotent_hint = Some(false);
         hostile.annotations = Some(annotations.clone());
         hostile.title = Some("\u{200B}\u{FEFF}".into());
-        let display =
-            mcp_tool_call_display(&config, "notion", &hostile, &arguments, &Default::default());
+        let display = mcp_tool_call_display(
+            &config,
+            "notion",
+            &hostile,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.label, expected);
         annotations.read_only_hint = Some(true);
         annotations.destructive_hint = Some(true);
         hostile.annotations = Some(annotations);
-        let display =
-            mcp_tool_call_display(&config, "notion", &hostile, &arguments, &Default::default());
+        let display = mcp_tool_call_display(
+            &config,
+            "notion",
+            &hostile,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.label, Some(label::generic_label(&arguments)));
         assert_eq!(display.title, "publish");
         assert!(display.description_truncated);
@@ -257,6 +450,7 @@ mod tests {
                 "notion",
                 &hostile,
                 &serde_json::json!("not json {"),
+                None,
                 &Default::default(),
             )
             .label
@@ -278,9 +472,16 @@ mod tests {
             "hasUserApproved": true,
             "account": {"recordId": "a_1", "relatedTable": "account", "name": "Typed name"},
         });
-        let label = mcp_tool_call_display(&config, "mail", &tool, &arguments, &Default::default())
-            .label
-            .unwrap();
+        let label = mcp_tool_call_display(
+            &config,
+            "mail",
+            &tool,
+            &arguments,
+            None,
+            &Default::default(),
+        )
+        .label
+        .unwrap();
         assert_eq!(
             (label.action, label.source),
             (ToolCallAction::Send, ToolCallLabelSource::Rules)

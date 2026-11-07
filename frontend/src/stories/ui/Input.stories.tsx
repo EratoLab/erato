@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Input } from "@/components/ui/Input/Input";
+import { Select } from "@/components/ui/Input/Select";
 
 import type { Meta, StoryObj } from "@storybook/react";
 
@@ -14,7 +15,20 @@ const meta = {
   argTypes: {
     type: {
       control: "select",
-      options: ["text", "email", "url", "password", "search", "tel"],
+      options: [
+        "text",
+        "email",
+        "url",
+        "password",
+        "search",
+        "tel",
+        "date",
+        "time",
+      ],
+    },
+    geometry: {
+      control: "inline-radio",
+      options: ["input", "control"],
     },
     disabled: {
       control: "boolean",
@@ -129,6 +143,50 @@ export const PasswordType: Story = {
   render: (args) => (
     <div className="w-80">
       <Input {...args} />
+    </div>
+  ),
+};
+
+// Date and time fields
+export const DateAndTime: Story = {
+  render: () => (
+    <div className="flex gap-3">
+      <div className="w-44">
+        <Input type="date" aria-label="Date" defaultValue="2026-11-09" />
+      </div>
+      <div className="w-32">
+        <Input type="time" aria-label="Time" defaultValue="09:00" />
+      </div>
+    </div>
+  ),
+};
+
+// `geometry="control"` lines a field up with a Select in one row.
+export const ControlGeometryNextToSelect: Story = {
+  render: () => (
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="w-60">
+        <Select aria-label="Trigger" defaultValue="once">
+          <option value="once">At a date and time</option>
+          <option value="repeat">On a repeating schedule</option>
+        </Select>
+      </div>
+      <div className="w-44">
+        <Input
+          type="date"
+          geometry="control"
+          aria-label="Date"
+          defaultValue="2026-11-09"
+        />
+      </div>
+      <div className="w-32">
+        <Input
+          type="time"
+          geometry="control"
+          aria-label="Time"
+          defaultValue="09:00"
+        />
+      </div>
     </div>
   ),
 };

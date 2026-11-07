@@ -200,41 +200,51 @@ pub fn resolve_label(
     arguments: &Value,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
     let mut budget = MAX_LABEL_VALUE_BYTES;
+    let mut hidden = false;
     let items = mapping
         .items
         .iter()
         .take(MAX_LABEL_ITEMS)
         .enumerate()
         .map(|(index, item)| {
-            resolve_item(item, arguments, &mut budget).map_err(|(part, claim)| UnresolvedPointer {
-                item: index,
-                part,
-                claim,
+            resolve_item(item, arguments, &mut budget, &mut hidden).map_err(|(part, claim)| {
+                UnresolvedPointer {
+                    item: index,
+                    part,
+                    claim,
+                }
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(ToolCallLabel {
+    let mut label = ToolCallLabel {
         action: mapping.action,
         object_kind: mapping.object_kind,
         items,
         source: mapping.source,
         ..generic_label(arguments)
-    })
+    };
+    if hidden {
+        label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
+    }
+    Ok(label)
 }
 
 fn resolve_item(
     item: &ToolCallLabelItemMapping,
     arguments: &Value,
     budget: &mut usize,
+    hidden: &mut bool,
 ) -> Result<ToolCallLabelItem, (&'static str, Option<rules::Claim>)> {
     let mut core = |part: &'static str, pointer: &Option<String>| {
         pointer
             .as_deref()
-            .map(|pointer| match slot(arguments, pointer, false, budget) {
-                Ok(Some(slot)) => Ok(slot),
-                Ok(None) => Err((part, None)),
-                Err(claim) => Err((part, Some(claim))),
-            })
+            .map(
+                |pointer| match slot(arguments, pointer, false, budget, hidden) {
+                    Ok(Some(slot)) => Ok(slot),
+                    Ok(None) => Err((part, None)),
+                    Err(claim) => Err((part, Some(claim))),
+                },
+            )
             .transpose()
     };
     let title = core("title", &item.title)?;
@@ -246,7 +256,11 @@ fn resolve_item(
         .fields
         .iter()
         .take(MAX_FIELD_POINTERS)
-        .filter_map(|pointer| slot(arguments, pointer, true, budget).ok().flatten())
+        .filter_map(|pointer| {
+            slot(arguments, pointer, true, budget, hidden)
+                .ok()
+                .flatten()
+        })
         .take(MAX_LABEL_FIELDS)
         .collect();
     Ok(ToolCallLabelItem {
@@ -261,12 +275,14 @@ fn resolve_item(
 
 /// `None` when the pointer reaches nothing. A null it reaches counts as
 /// reached but shows no value. A value it would show that is a claim, such as
-/// a consent flag, costs the whole slot.
+/// a consent flag, costs the whole slot. Sets `hidden` when cleaning a value
+/// it reads, kept or not, or the field's name removed invisible characters.
 fn slot(
     arguments: &Value,
     pointer: &str,
     field: bool,
     budget: &mut usize,
+    hidden: &mut bool,
 ) -> Result<Option<ToolCallLabelSlot>, rules::Claim> {
     let start = *budget;
     let mut values = Vec::new();
@@ -287,7 +303,7 @@ fn slot(
             claim = Some(found);
             return ControlFlow::Break(());
         }
-        let Some(value) = label_value(path, value) else {
+        let Some(value) = label_value(path, value, hidden) else {
             return ControlFlow::Continue(());
         };
         match budget.checked_sub(value.text.len() + value.path.len()) {
@@ -321,13 +337,17 @@ fn slot(
     if reached == 0 {
         return Ok(None);
     }
+    if reached == 0 {
+        return Ok(None);
+    }
+    let name = field
+        .then(|| field_name(pointer))
+        .flatten()
+        .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS));
+    *hidden |= name.as_ref().is_some_and(|name| name.hidden_characters);
     Ok(Some(ToolCallLabelSlot {
         pointer: pointer.to_string(),
-        name: field
-            .then(|| field_name(pointer))
-            .flatten()
-            .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text)
-            .filter(|name| !name.is_empty()),
+        name: name.map(|name| name.text).filter(|name| !name.is_empty()),
         values,
         omitted,
     }))
@@ -364,7 +384,8 @@ fn field_name(pointer: &str) -> Option<std::borrow::Cow<'_, str>> {
     Some(names.swap_remove(at))
 }
 
-fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
+/// Sets `hidden` also when nothing visible is left of the value to show.
+fn label_value(path: String, value: &Value, hidden: &mut bool) -> Option<ToolCallLabelValue> {
     let (raw, cut) = match value {
         Value::Null => return None,
         Value::String(text) => (std::borrow::Cow::Borrowed(text.as_str()), false),
@@ -376,6 +397,7 @@ fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
         }
     };
     let text = sanitize_display_text(&raw, MAX_LABEL_VALUE_CHARS);
+    *hidden |= text.hidden_characters;
     (!text.text.is_empty()).then_some(ToolCallLabelValue {
         path,
         text: text.text,
@@ -501,6 +523,62 @@ mod tests {
             [("Seats", vec!["12"]), ("Stage", vec!["Lead", "Customer"])]
         );
         assert_eq!(label.arguments, generic_label(&arguments).arguments);
+        assert_eq!(label.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+    }
+
+    #[test]
+    fn a_label_warns_when_a_value_or_name_it_reads_lost_invisible_characters() {
+        let tags: String = "approve all"
+            .chars()
+            .map(|c| char::from_u32(0xE0000 + c as u32).unwrap())
+            .collect();
+        let arguments = json!({
+            "pages": [
+                {"properties": {"Name": format!("Invoice{tags}"), "Stage": "Lead"}},
+                {"properties": {"Name": "\u{200B}\u{FEFF}", "Stage": "Lead"}},
+            ],
+            "parent": "p1",
+            "note": "unread\u{202E}",
+            "Sta\u{200B}ge": "Lead",
+        });
+        let mapping = |title: &str, target: &str, fields: &[&str]| ToolCallLabelMapping {
+            items: vec![ToolCallLabelItemMapping {
+                title: Some(title.into()),
+                target: Some(target.into()),
+                fields: fields.iter().map(|field| field.to_string()).collect(),
+                ..Default::default()
+            }],
+            ..create_rows()
+        };
+        let warnings =
+            |mapping: &ToolCallLabelMapping| resolve_label(mapping, &arguments).unwrap().warnings;
+        let hidden = [ToolCallLabelWarning::HiddenCharacters];
+
+        let label = resolve_label(
+            &mapping("/pages/*/properties/Name", "/parent", &[]),
+            &arguments,
+        )
+        .unwrap();
+        assert_eq!(texts(label.items[0].title.as_ref().unwrap()), ["Invoice"]);
+        assert_eq!(label.warnings, hidden);
+        // A value that is nothing but invisible characters shows nothing and still warns.
+        assert_eq!(
+            warnings(&mapping("/pages/1/properties/Name", "/parent", &[])),
+            hidden
+        );
+        assert_eq!(
+            warnings(&mapping("/parent", "/parent", &["/Sta\u{200B}ge"])),
+            hidden
+        );
+        assert_eq!(
+            warnings(&mapping(
+                "/pages/*/properties/Stage",
+                "/parent",
+                &["/missing"]
+            )),
+            []
+        );
+        assert!(generic_label(&arguments).warnings.is_empty());
     }
 
     #[test]
@@ -786,12 +864,12 @@ mod tests {
         let (json, cut) = json_prefix(&json!([1, {"b": null}]), 100);
         assert_eq!((json.as_str(), cut), (r#"[1,{"b":null}]"#, false));
 
-        let value = label_value("/blob".into(), &big).unwrap();
+        let value = label_value("/blob".into(), &big, &mut false).unwrap();
         assert!(value.truncated);
         assert_eq!(value.text.chars().count(), MAX_LABEL_VALUE_CHARS);
         let hidden =
             json!({ "k": format!("{}visible", "\u{200B}".repeat(MAX_LABEL_VALUE_CHARS * 4)) });
-        let value = label_value("/k".into(), &hidden).unwrap();
+        let value = label_value("/k".into(), &hidden, &mut false).unwrap();
         assert!(value.truncated && !value.text.contains('\u{200B}'));
     }
 
@@ -825,6 +903,7 @@ mod tests {
             .collect();
         assert_eq!(names, [None, None, Some("stage")]);
         assert_eq!(texts(&label.items[0].fields[1]), ["invisible key"]);
+        assert_eq!(label.warnings, [ToolCallLabelWarning::HiddenCharacters]);
     }
 
     #[test]

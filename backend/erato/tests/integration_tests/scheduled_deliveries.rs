@@ -13,7 +13,8 @@ use erato::models::user::get_or_create_user;
 use erato::services::scheduled_deliveries::{
     DeliveryChannel, DeliveryContent, DeliveryOutcome, DeliveryProducer, DeliveryRegistry,
     ExecutorSettings, NewDelivery, RecordingChannel, ResolvedContent, StillDue, TickOutcome,
-    cancel_open, count_delivered, find, run_delivery_tick, schedule, schedule_once, snooze,
+    cancel_open, count_delivered, find, occurrence_due_at, run_delivery_tick, schedule,
+    schedule_once, snooze,
 };
 use eyre::Report;
 use ractor::registry;
@@ -325,6 +326,12 @@ async fn retryable_outcomes_requeue_until_max_attempts(pool: Pool<Postgres>) {
     );
     assert_eq!(requeued.outcome["attempts"], 1);
     assert_eq!(requeued.outcome["last_error"], "throttled");
+    let due = created.due_at.with_timezone(&Utc);
+    assert_eq!(
+        occurrence_due_at(&requeued),
+        due,
+        "a retry keeps the due time"
+    );
 
     // Not due yet: untouched.
     assert!(
@@ -355,7 +362,78 @@ async fn retryable_outcomes_requeue_until_max_attempts(pool: Pool<Postgres>) {
     assert_eq!(failed.state, DeliveryState::Failed);
     assert_eq!(failed.outcome["attempts"], 3);
     assert_eq!(failed.outcome["reason"], "transport (after 3 attempts)");
+    assert_eq!(occurrence_due_at(&failed), due);
     assert_eq!(channel.deliveries().len(), 3);
+}
+
+/// A retry keeps the occurrence's due time; a snooze or a producer's
+/// deferral moves the occurrence, so later retries keep the new time.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn retries_keep_the_due_time_and_snoozes_and_deferrals_move_it(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    channel.answer_with(DeliveryOutcome::Retry {
+        reason: "throttled".into(),
+        retry_after: None,
+    });
+    let registry = registry_with(TestProducer::new(), &channel);
+    let created = schedule(
+        &db,
+        new_delivery(user.id, Utc::now() - Duration::minutes(5), Some("moves")),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(
+        run_delivery_tick(&db, &settings(), &registry).await.retried,
+        1
+    );
+    let retried = row(&db, created.id).await;
+    assert!(retried.due_at > created.due_at);
+    assert_eq!(
+        occurrence_due_at(&retried),
+        created.due_at.with_timezone(&Utc)
+    );
+
+    // Snoozed into the past, so the next tick takes it at once.
+    assert!(
+        snooze(&db, created.id, Utc::now() - Duration::minutes(1))
+            .await
+            .unwrap()
+    );
+    let snoozed = row(&db, created.id).await;
+    assert!(snoozed.outcome.get("original_due_at").is_none());
+    let snoozed_to = snoozed.due_at.with_timezone(&Utc);
+    assert_eq!(occurrence_due_at(&snoozed), snoozed_to);
+    assert_eq!(
+        run_delivery_tick(&db, &settings(), &registry).await.retried,
+        1
+    );
+    assert_eq!(
+        occurrence_due_at(&row(&db, created.id).await),
+        snoozed_to,
+        "retries after a snooze keep the snoozed time"
+    );
+
+    let later = Utc::now() + Duration::hours(1);
+    let deferring = TestProducer {
+        still_due: Mutex::new(StillDue::Later { due_at: later }),
+        ..TestProducer::new()
+    };
+    make_due(&db, created.id).await;
+    let outcome = run_delivery_tick(&db, &settings(), &registry_with(deferring, &channel)).await;
+    assert_eq!(outcome.deferred, 1, "{outcome:?}");
+    let deferred = row(&db, created.id).await;
+    assert!(deferred.outcome.get("original_due_at").is_none());
+    assert_eq!(
+        occurrence_due_at(&deferred),
+        deferred.due_at.with_timezone(&Utc)
+    );
+    assert!((occurrence_due_at(&deferred) - later).num_seconds().abs() < 2);
 }
 
 /// A channel that reports the user as unreachable fails the row for good.

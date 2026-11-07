@@ -2,6 +2,8 @@
 export type { PolicyGuides } from "./policy-guides.js";
 export type { SidecarStatusV1Params } from "./sidecar-status-v1-params.js";
 export type { SidecarStatusV1Result } from "./sidecar-status-v1-result.js";
+export type { SidecarInstallUiPackageV1Params } from "./sidecar-install-ui-package-v1-params.js";
+export type { SidecarInstallUiPackageV1Result } from "./sidecar-install-ui-package-v1-result.js";
 export type { SidecarRequestPermissionV1Params } from "./sidecar-request-permission-v1-params.js";
 export type { SidecarRequestPermissionV1Result } from "./sidecar-request-permission-v1-result.js";
 export type { JobToolCall } from "./job-tool-call.js";

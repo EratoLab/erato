@@ -1,13 +1,20 @@
 //! The Teams side of a tip: the card reaches the user's personal
 //! conversation through the Connector, Connector refusals are mapped, and
-//! installing the app records the conversation for known users.
+//! installing the app records the conversation for known users. A user
+//! reminder arrives as the committed sample card.
 use super::*;
 use crate::config::AppConfig;
 use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::teams_nudges_opted_out;
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
 use crate::ms_teams_bot::handler::{on_bot_added, on_message};
-use crate::services::scheduled_deliveries::{NewDelivery, find, schedule};
+use crate::services::scheduled_deliveries::{
+    ExecutorSettings, NewDelivery, find, run_delivery_tick, schedule,
+};
+use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
+use crate::services::scheduled_items::{
+    self, ItemInput, REMINDER, ReminderProducer, current_occurrence,
+};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -75,6 +82,7 @@ async fn harness(pool: sqlx::PgPool) -> (AppState, Arc<TeamsBot>, Shared, String
 
 fn content(token: Uuid) -> DeliveryContent {
     DeliveryContent {
+        title: None,
         text: "Did you know you can attach files?".into(),
         summary: Some("A tip from Erato".into()),
         links: vec![DeliveryLink {
@@ -406,4 +414,136 @@ async fn opting_out_needs_no_sign_in(pool: sqlx::PgPool) {
         sent[4]["text"],
         "This button was already used or has expired."
     );
+}
+
+/// The zone and language Teams reports with a message are kept for the
+/// sender, also on a command that needs no sign-in.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_teams_client_zone_and_language_are_stored(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "zoned", None)
+        .await
+        .unwrap();
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000beef";
+    record_entra_object_id(&state.db, &user, OID).await.unwrap();
+    let activity: Activity = serde_json::from_value(json!({
+        "type": "message", "id": "m1", "serviceUrl": base, "text": "/reminders off",
+        "locale": "en-US",
+        "from": {"id": "29:user", "aadObjectId": OID}, "recipient": {"id": "28:bot"},
+        "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"},
+        "entities": [{"type": "clientInfo", "locale": "de-DE", "country": "DE",
+                      "platform": "Windows", "timezone": "Europe/Berlin"}]
+    }))
+    .unwrap();
+
+    on_message(bot.clone(), host.clone(), activity).await;
+    replies(&shared, 1).await;
+
+    let prefs = crate::models::user_preference::get_user_preferences(&state.db, &user.id)
+        .await
+        .unwrap()
+        .expect("preferences row");
+    assert_eq!(prefs.time_zone.as_deref(), Some("Europe/Berlin"));
+    assert_eq!(prefs.language.as_deref(), Some("de-DE"));
+}
+
+/// A user reminder through the executor, the reminder producer and this
+/// channel. The posted activity is the committed sample
+/// `snapshots/scheduled_reminder_card.snap.json`, which also renders the card
+/// for review; after an intended change to the card, refresh it with
+/// `INSTA_UPDATE=always just test a_reminder_arrives_as_the_sample_card`.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "reminded", None)
+        .await
+        .unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        &base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let chat_id = Uuid::new_v4();
+    state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "INSERT INTO chats (id, owner_user_id, title_by_user_provided)
+             VALUES ($1, $2, 'Q4 rate comparison')",
+            [chat_id.into(), user.id.to_string().into()],
+        ))
+        .await
+        .unwrap();
+    let item = scheduled_items::create(
+        &state.db,
+        user.id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Call Alex back".into(),
+            message: "Ask whether they need the revised rates before Friday.".into(),
+            linked_chat_id: Some(chat_id),
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(1),
+                time: LocalTime::new(9, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE scheduled_deliveries SET due_at = now() - interval '1 second' WHERE id = $1",
+            [occurrence.id.into()],
+        ))
+        .await
+        .unwrap();
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(ReminderProducer::new(Some(
+        "https://erato.example.com".into(),
+    ))));
+    registry.register_channel(Arc::new(TeamsPersonalChannel::new(bot)));
+    let executor = ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: Duration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: Duration::from_secs(60),
+    };
+    let tick = run_delivery_tick(&state.db, &executor, &registry).await;
+    assert_eq!(tick.delivered, 1, "{tick:?}");
+
+    let (conversation, activity) = shared.lock().unwrap().outgoing.remove(0);
+    assert_eq!(conversation, "a:personal");
+    let mut sample = serde_json::to_string_pretty(&activity).unwrap();
+    for (id, placeholder) in [
+        (chat_id, "CHAT_ID"),
+        (occurrence.id, "DELIVERY_ID"),
+        (item.id, "ITEM_ID"),
+    ] {
+        sample = sample.replace(&id.to_string(), placeholder);
+    }
+    sample.push('\n');
+    let mut snapshot = insta::Settings::clone_current();
+    snapshot.set_prepend_module_to_snapshot(false);
+    snapshot.bind(|| {
+        insta::assert_binary_snapshot!("scheduled_reminder_card.json", sample.into_bytes())
+    });
 }
