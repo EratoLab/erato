@@ -1,17 +1,9 @@
+import { WORD_COMMENT_OPS } from "@/lib/wordReview/wordCommentChanges";
+
 import { readPointerAll } from "./serverText";
 
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-
-/** The operations a comment proposal stages; any other value is counted, never named. */
-export const COMMENT_OPS = [
-  "add",
-  "reply",
-  "resolve",
-  "reopen",
-  "edit",
-  "delete",
-] as const;
-export type CommentOp = (typeof COMMENT_OPS)[number];
+import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 /**
  * What one of Erato's own proposal tools proposes, for the one line its trace
@@ -20,7 +12,7 @@ export type CommentOp = (typeof COMMENT_OPS)[number];
 export type OwnProposal =
   | { kind: "document" }
   /** One entry per change in call order; `other` for an operation this build has no word for. */
-  | { kind: "comments"; changes: (CommentOp | "other")[] }
+  | { kind: "comments"; changes: (WordCommentOp | "other")[] }
   | { kind: "email" }
   | { kind: "event" }
   | { kind: "action" };
@@ -34,14 +26,14 @@ export const OWN_PROPOSAL_KINDS = [
   "action",
 ] as const satisfies readonly OwnProposalKind[];
 
-const isCommentOp = (value: unknown): value is CommentOp =>
-  (COMMENT_OPS as readonly unknown[]).includes(value);
+const isCommentOp = (value: unknown): value is WordCommentOp =>
+  (WORD_COMMENT_OPS as readonly unknown[]).includes(value);
 
 // Counted from the input, not the label's values, which stop at ten.
 const commentChangesOf = (
   label: ToolCallLabel,
   input: unknown,
-): (CommentOp | "other")[] => {
+): (WordCommentOp | "other")[] => {
   const ops = label.items
     ?.flatMap((item) => item.fields ?? [])
     .find((field) => field.name === "op");
@@ -76,9 +68,9 @@ export const ownProposalOf = (
 
 /** How many changes of each operation a comment proposal holds, in operation order. */
 export const commentOpCounts = (
-  changes: readonly (CommentOp | "other")[],
-): { op: CommentOp | "other"; count: number }[] =>
-  [...COMMENT_OPS, "other" as const]
+  changes: readonly (WordCommentOp | "other")[],
+): { op: WordCommentOp | "other"; count: number }[] =>
+  [...WORD_COMMENT_OPS, "other" as const]
     .map((op) => ({
       op,
       count: changes.filter((change) => change === op).length,

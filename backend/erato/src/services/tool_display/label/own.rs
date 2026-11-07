@@ -3,9 +3,7 @@
 //! name what a call proposes; nothing is written until the user confirms it
 //! on the tool's own card.
 
-use super::{
-    ToolCallLabelItemMapping, ToolCallLabelMapping, UnresolvedPointer, generic_label, resolve_label,
-};
+use super::{ToolCallLabelItemMapping, ToolCallLabelMapping, generic_label, resolve_label};
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelSource, ToolCallObjectKind,
 };
@@ -49,27 +47,23 @@ impl From<ClientToolLabelObjectKind> for ToolCallObjectKind {
 }
 
 /// The mapping a client tool's `[label]` table gives its calls: one item
-/// when the table sets any pointer, none otherwise.
+/// holding the table's fields, or none when it lists no field.
 pub fn client_tool_mapping(config: &ClientToolLabelConfig) -> ToolCallLabelMapping {
-    // Startup refuses a pointer that does not parse; one kept as written
-    // reaches nothing.
-    let pointer = |path: &String| parse_label_pointer(path).unwrap_or_else(|_| path.clone());
-    let item = ToolCallLabelItemMapping {
-        title: config.title.as_ref().map(pointer),
-        id: config.id.as_ref().map(pointer),
-        target: config.target.as_ref().map(pointer),
-        before: config.before.as_ref().map(pointer),
-        after: config.after.as_ref().map(pointer),
-        fields: config.fields.iter().map(pointer).collect(),
-    };
+    // Startup refuses a path that does not parse; one kept as written reaches
+    // nothing.
+    let fields: Vec<String> = config
+        .fields
+        .iter()
+        .map(|path| parse_label_pointer(path).unwrap_or_else(|_| path.clone()))
+        .collect();
     ToolCallLabelMapping {
         action: config.action.into(),
         object_kind: config.object_kind.into(),
-        items: config
-            .pointers()
-            .next()
-            .is_some()
-            .then_some(item)
+        items: (!fields.is_empty())
+            .then(|| ToolCallLabelItemMapping {
+                fields,
+                ..Default::default()
+            })
             .into_iter()
             .collect(),
         source: ToolCallLabelSource::OwnMapping,
@@ -77,22 +71,19 @@ pub fn client_tool_mapping(config: &ClientToolLabelConfig) -> ToolCallLabelMappi
 }
 
 /// The label of a call of one of Erato's own tools. No rule second-guesses a
-/// verb written by hand next to the tool; a core pointer that reaches nothing
-/// still shows the generic label, with a log line that names no value.
-pub fn own_label(
-    tool_name: &str,
-    mapping: &ToolCallLabelMapping,
-    arguments: &Value,
-) -> ToolCallLabel {
-    resolve_label(mapping, arguments).unwrap_or_else(|UnresolvedPointer { item, part }| {
-        tracing::info!(
-            tool_name = %tool_name,
-            item,
-            part,
-            "Showing the generic label for a call of an Erato tool: a label pointer reaches nothing in its arguments"
-        );
-        generic_label(arguments)
-    })
+/// verb written by hand next to the tool, and nothing shows a proposal's
+/// readable arguments, so its rows do not carry them.
+pub fn own_label(mapping: &ToolCallLabelMapping, arguments: &Value) -> ToolCallLabel {
+    match resolve_label(mapping, arguments) {
+        Ok(label) => ToolCallLabel {
+            arguments: None,
+            warnings: Vec::new(),
+            ..label
+        },
+        // Not reached: own mappings set only fields, and a field that reaches
+        // nothing is left out.
+        Err(_) => generic_label(arguments),
+    }
 }
 
 #[cfg(test)]
@@ -104,11 +95,6 @@ mod tests {
         ClientToolLabelConfig {
             action: ClientToolLabelAction::Comment,
             object_kind: ClientToolLabelObjectKind::Comment,
-            title: None,
-            id: None,
-            target: None,
-            before: None,
-            after: None,
             fields: vec!["$.changes[*].op".into()],
         }
     }
@@ -145,7 +131,7 @@ mod tests {
         let mapping = client_tool_mapping(&comment_changes());
         assert_eq!(mapping.items[0].fields, ["/changes/*/op"]);
         for arguments in comment_change_calls() {
-            let label = own_label("word_submit_comment_changes", &mapping, &arguments);
+            let label = own_label(&mapping, &arguments);
             assert_eq!(
                 (label.action, label.object_kind, label.source),
                 (
@@ -160,61 +146,49 @@ mod tests {
                 ops.values.len(),
                 arguments["changes"].as_array().unwrap().len()
             );
+            assert_eq!((label.arguments, label.warnings), (None, Vec::new()));
             let text = serde_json::to_string(&label.items).unwrap();
             assert!(!text.contains("Text") && !text.contains("Quote"), "{text}");
         }
     }
 
     #[test]
-    fn a_table_without_pointers_gives_the_verb_and_kind_alone() {
+    fn a_table_without_fields_gives_the_verb_and_kind_alone() {
         let plan = ClientToolLabelConfig {
             action: ClientToolLabelAction::Update,
             object_kind: ClientToolLabelObjectKind::Document,
             fields: Vec::new(),
-            ..comment_changes()
         };
-        let arguments = json!({"version": 1, "snapshot": "s_1", "entries": []});
         let label = own_label(
-            "submit_document_plan",
             &client_tool_mapping(&plan),
-            &arguments,
+            &json!({"version": 1, "snapshot": "s_1", "entries": []}),
         );
         assert_eq!(
-            (label.action, label.object_kind, label.source),
-            (
-                ToolCallAction::Update,
-                ToolCallObjectKind::Document,
-                ToolCallLabelSource::OwnMapping
-            )
+            label,
+            ToolCallLabel {
+                action: ToolCallAction::Update,
+                object_kind: ToolCallObjectKind::Document,
+                items: Vec::new(),
+                arguments: None,
+                warnings: Vec::new(),
+                source: ToolCallLabelSource::OwnMapping,
+            }
         );
-        assert!(label.items.is_empty());
-        assert_eq!(label.arguments, generic_label(&arguments).arguments);
     }
 
     #[test]
-    fn a_core_pointer_that_reaches_nothing_shows_the_generic_label() {
-        let config = ClientToolLabelConfig {
-            id: Some("$.changes[*].thread".into()),
-            ..comment_changes()
-        };
-        let mapping = client_tool_mapping(&config);
-        let arguments = json!({"changes": []});
-        assert_eq!(
-            own_label("word_submit_comment_changes", &mapping, &arguments),
-            generic_label(&arguments)
-        );
+    fn a_field_that_reaches_nothing_is_left_out_of_the_label() {
         let unparsed = ClientToolLabelConfig {
-            id: Some("changes.thread".into()),
+            fields: vec!["changes.op".into()],
             ..comment_changes()
         };
-        let arguments = json!({"changes": [{"thread": "t_1"}]});
-        assert_eq!(
-            own_label(
-                "word_submit_comment_changes",
-                &client_tool_mapping(&unparsed),
-                &arguments
-            ),
-            generic_label(&arguments)
-        );
+        for (config, arguments) in [
+            (comment_changes(), json!({"changes": []})),
+            (unparsed, json!({"changes": [{"op": "reply"}]})),
+        ] {
+            let label = own_label(&client_tool_mapping(&config), &arguments);
+            assert_eq!(label.source, ToolCallLabelSource::OwnMapping);
+            assert!(label.items[0].fields.is_empty(), "{arguments}");
+        }
     }
 }

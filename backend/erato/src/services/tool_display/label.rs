@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const MAX_LABEL_ITEMS: usize = 3;
-pub const MAX_LABEL_FIELDS: usize = 4;
+pub const MAX_LABEL_FIELDS: usize = erato_config::config::MAX_CLIENT_TOOL_LABEL_FIELDS;
 /// Values kept per pointer; a wildcard over a large batch counts the rest.
 pub const MAX_SLOT_VALUES: usize = 10;
 /// A value longer than this is cut; the full value stays in the input.

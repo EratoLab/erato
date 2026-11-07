@@ -1,12 +1,13 @@
 import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { WORD_COMMENT_OPS } from "@/lib/wordReview/wordCommentChanges";
 import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
 
 import { GIST_PHASES } from "./gist";
-import { COMMENT_OPS, OWN_PROPOSAL_KINDS, ownProposalOf } from "./ownProposal";
+import { OWN_PROPOSAL_KINDS, ownProposalOf } from "./ownProposal";
 import {
   commentChangeRow,
   commentOpCount,
@@ -154,7 +155,7 @@ describe("Erato's own proposals", () => {
         GIST_PHASES.map((phase) => ownProposalLine(proposals[kind], phase)),
       );
       expect(new Set(lines).size).toBe(lines.length);
-      for (const op of COMMENT_OPS) {
+      for (const op of WORD_COMMENT_OPS) {
         const one = ownProposalObject({ kind: "comments", changes: [op] });
         const many = ownProposalObject({ kind: "comments", changes: [op, op] });
         expect(one).not.toMatch(/\d|toolGist/);

@@ -3,7 +3,8 @@ import { plural, t } from "@lingui/core/macro";
 import { commentOpCounts } from "./ownProposal";
 
 import type { GistPhase } from "./gist";
-import type { CommentOp, OwnProposal } from "./ownProposal";
+import type { OwnProposal } from "./ownProposal";
+import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 /**
  * The words of an Erato proposal's trace line, built from the call's verb,
@@ -11,7 +12,7 @@ import type { CommentOp, OwnProposal } from "./ownProposal";
  * `lib/` so the component registry does not put it on the kit surface.
  */
 
-const commentsOf = (op: CommentOp | "other", count: number): string => {
+const commentsOf = (op: WordCommentOp | "other", count: number): string => {
   switch (op) {
     case "add":
       return t({
@@ -102,7 +103,7 @@ export const ownProposalObject = (proposal: OwnProposal): string => {
 };
 
 /** One operation's count in a mixed batch, e.g. "2 resolved". */
-export const commentOpCount = (op: CommentOp, count: number): string => {
+export const commentOpCount = (op: WordCommentOp, count: number): string => {
   switch (op) {
     case "add":
       return t({
@@ -138,7 +139,7 @@ export const commentOpCount = (op: CommentOp, count: number): string => {
 };
 
 /** One change of a mixed batch, as its own row. */
-export const commentChangeRow = (op: CommentOp | "other"): string => {
+export const commentChangeRow = (op: WordCommentOp | "other"): string => {
   switch (op) {
     case "add":
       return t({ id: "toolGist.proposal.change.add", message: "New comment" });

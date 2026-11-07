@@ -5,6 +5,7 @@ import {
   recordSidecarLocalTrace,
   useSidecarLocalTraceStore,
 } from "@/lib/desktopSidecar/localTraceStore";
+import { WORD_SUBMIT_COMMENT_CHANGES_TOOL } from "@/lib/wordReview/wordCommentChanges";
 
 import { ToolUseStep } from "./ToolUseStep";
 
@@ -497,7 +498,7 @@ describe("ToolUseStep proposal row", () => {
         part={{
           ...PART,
           tool_call_id: "call-comments",
-          tool_name: "word_submit_comment_changes",
+          tool_name: WORD_SUBMIT_COMMENT_CHANGES_TOOL,
           status: status === "error" ? "error" : "success",
           input: commentChanges(["reply"]) as unknown as ToolUse["input"],
           output: {
@@ -505,7 +506,7 @@ describe("ToolUseStep proposal row", () => {
             result: { rows: 1 },
           } as unknown as ToolUse["output"],
           display: {
-            title: "word_submit_comment_changes",
+            title: WORD_SUBMIT_COMMENT_CHANGES_TOOL,
             description_truncated: false,
             label: {
               action: "comment",
@@ -538,7 +539,7 @@ describe("ToolUseStep proposal row", () => {
 
     const toggle = screen.getByRole("button", { name: /Proposed/ });
     expect(toggle).toHaveTextContent("Proposed a reply to a comment");
-    expect(toggle).not.toHaveTextContent("word_submit_comment_changes");
+    expect(toggle).not.toHaveTextContent(WORD_SUBMIT_COMMENT_CHANGES_TOOL);
     expect(screen.getByTestId("tool-call-proposal-line")).toHaveAttribute(
       "title",
       "Proposed a reply to a comment",
@@ -549,7 +550,7 @@ describe("ToolUseStep proposal row", () => {
 
     fireEvent.click(toggle);
     expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
-      "word_submit_comment_changes",
+      WORD_SUBMIT_COMMENT_CHANGES_TOOL,
     );
     expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(false);
   });
@@ -614,7 +615,9 @@ describe("ToolUseStep proposal row", () => {
     proposal({ display: undefined });
 
     expect(
-      screen.getByRole("button", { name: /word_submit_comment_changes/ }),
+      screen.getByRole("button", {
+        name: new RegExp(WORD_SUBMIT_COMMENT_CHANGES_TOOL),
+      }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("tool-call-proposal-line")).toBeNull();
     expect(screen.queryByTestId("tool-call-identity")).toBeNull();

@@ -6941,7 +6941,7 @@ from the latest earlier turn. Older calls in that chat stay compacted.
 A client tool that stages a proposal for the user, such as a document change or
 comment changes, shows its name in the chat's trace by default. Add a `label`
 table to show one line about what the call proposes instead, such as "Proposed
-changes to the document" or "Proposed a reply to 3 comments". The tool's own card
+changes to the document" or "Proposed replies to 3 comments". The tool's own card
 still carries the details, and the raw arguments and result stay one click away.
 
 ```toml
@@ -6959,23 +6959,30 @@ fields = ["$.changes[*].op"]
 
 {/* erato_toml_config_key: client_tools.tools.<key>.label.action */}
 {/* erato_toml_config_key: client_tools.tools.<key>.label.object_kind */}
-{/* erato_toml_config_key: client_tools.tools.<key>.label.title */}
-{/* erato_toml_config_key: client_tools.tools.<key>.label.id */}
-{/* erato_toml_config_key: client_tools.tools.<key>.label.target */}
-{/* erato_toml_config_key: client_tools.tools.<key>.label.before */}
-{/* erato_toml_config_key: client_tools.tools.<key>.label.after */}
 {/* erato_toml_config_key: client_tools.tools.<key>.label.fields.[] */}
 
 - **`action`** _(required)_ - What a call proposes: `create`, `update`, `delete`, `move`, `send` or `comment`.
 - **`object_kind`** _(required)_ - What it acts on: `page`, `row`, `database`, `folder`, `note`, `comment`, `paragraph`, `document`, `email`, `message`, `event`, `file`, `task` or `other`.
-- **`title`**, **`id`**, **`target`**, **`before`**, **`after`** _(optional)_ - Where the thing's title, ID, destination and old and new values sit in the call's arguments. A call where one of them reaches nothing shows its arguments instead of the line.
-- **`fields`** _(default: `[]`)_ - Up to 4 key values. One that reaches nothing in a call is left out. For a comment proposal, a field named `op` gives each change's operation (`add`, `reply`, `resolve`, `reopen`, `edit` or `delete`), so the line counts them.
+- **`fields`** _(default: `[]`)_ - Up to 4 paths to key values. One that reaches nothing in a call is left out. For a comment proposal, a field named `op` gives each change's operation (`add`, `reply`, `resolve`, `reopen`, `edit` or `delete`), so the line counts them.
+
+The chat has words for these pairs:
+
+| `action` | `object_kind` | Line |
+| --- | --- | --- |
+| `update` | `document` | Proposed changes to the document |
+| `comment`, `update` or `delete` | `comment` | Proposed a new comment, replies to 3 comments, 2 comment changes, ... (counted from `op`) |
+| `send` | `email` | Proposed an email |
+| `create` | `event` | Proposed an appointment |
+
+Any other pair reads "Proposed an action". Fields other than `op` are stored with
+the call but not shown.
 
 Paths are `$.key.key` paths into the call's arguments, like the replay fields,
 where `key[*]` stands for every element of an array. The backend reads every value
 through them; the label never holds text of its own. Startup fails on an invalid
-path. Client tools that share a model-facing name across namespaces must use the
-same `label`. Calls stored before a tool had a label show as before.
+path, on more than 4 fields and on any other key in the table. Client tools that
+share a model-facing name across namespaces must use the same `label`. Calls stored
+before a tool had a label show as before.
 
 ### `budget`
 

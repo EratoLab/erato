@@ -1907,7 +1907,7 @@ impl AppConfig {
                         qualified, MAX_CLIENT_TOOL_LABEL_FIELDS
                     );
                 }
-                for path in label.pointers() {
+                for path in &label.fields {
                     if let Err(error) = parse_label_pointer(path) {
                         panic!(
                             "Client tool '{}' has an invalid label pointer: {}",
@@ -6505,47 +6505,19 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
 }
 
 /// `[client_tools.tools.<id>.label]`. What a call of the tool proposes, as a
-/// verb and a kind from closed lists, and where the thing it acts on sits in
-/// the call's arguments. Values are always read through the pointers, never
-/// written here. Pointers are `$.key` paths, where `key[*]` stands for every
-/// element of an array (`$.changes[*].op`).
+/// verb and a kind from closed lists, plus key values read from the call's
+/// arguments. Values are always read through the paths, never written here.
+/// Paths are `$.key` paths, where `key[*]` stands for every element of an
+/// array (`$.changes[*].op`).
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
 pub struct ClientToolLabelConfig {
     pub action: ClientToolLabelAction,
     pub object_kind: ClientToolLabelObjectKind,
-    /// `title`, `id`, `target`, `before` and `after` must reach a value in a
-    /// call, or the call shows its arguments in place of the label.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    /// Where the thing goes or lives.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub before: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after: Option<String>,
     /// Key values, at most 4. One that reaches nothing in a call is left out.
     /// On a comment proposal, a field named `op` gives each change's operation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<String>,
-}
-
-impl ClientToolLabelConfig {
-    /// Every pointer the table sets, core pointers first.
-    pub fn pointers(&self) -> impl Iterator<Item = &String> {
-        [
-            &self.title,
-            &self.id,
-            &self.target,
-            &self.before,
-            &self.after,
-        ]
-        .into_iter()
-        .flatten()
-        .chain(&self.fields)
-    }
 }
 
 /// `client_tools.tools.<id>.label.action`: what a call proposes. Erato's own
@@ -10526,6 +10498,11 @@ mod client_tool_replay_serialization_tests {
             ClientToolReplayConfig::default()
         );
     }
+}
+
+#[cfg(test)]
+mod client_tool_label_tests {
+    use super::*;
 
     #[test]
     fn label_pointers_read_every_array_element_and_nothing_else() {
@@ -10552,7 +10529,7 @@ mod client_tool_replay_serialization_tests {
     }
 
     #[test]
-    fn label_config_round_trips_without_unset_pointers() {
+    fn label_config_round_trips_and_refuses_what_the_chat_does_not_show() {
         let label: ClientToolLabelConfig = serde_json::from_value(serde_json::json!({
             "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
         }))
@@ -10564,11 +10541,14 @@ mod client_tool_replay_serialization_tests {
                 "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
             })
         );
-        assert!(
-            serde_json::from_value::<ClientToolLabelConfig>(serde_json::json!({
-                "action": "read", "object_kind": "comment"
-            }))
-            .is_err()
-        );
+        for refused in [
+            serde_json::json!({"action": "read", "object_kind": "comment"}),
+            serde_json::json!({"action": "create", "object_kind": "row", "title": "$.name"}),
+        ] {
+            assert!(
+                serde_json::from_value::<ClientToolLabelConfig>(refused.clone()).is_err(),
+                "{refused}"
+            );
+        }
     }
 }

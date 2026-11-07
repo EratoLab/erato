@@ -219,6 +219,27 @@ describe("Word chats shown outside Word", () => {
     );
   });
 
+  it("folds an accepted submission whose display has no proposal label", async () => {
+    const messages = messagesOf(retryAccepted);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      isAcceptedWordSubmission(part) && part.content_type === "tool_use"
+        ? {
+            ...part,
+            display: {
+              title: "submit_document_plan",
+              description_truncated: false,
+            },
+          }
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual([]);
+    expect(screen.queryByTestId("tool-call-proposal-line")).toBeNull();
+  });
+
   it("rebuilds the review from reads stored in an earlier message", async () => {
     renderChat(planAfterEarlierReads());
 

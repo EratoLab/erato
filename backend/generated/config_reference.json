@@ -1485,43 +1485,13 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
-  "client_tools.tools.<key>.label.after": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.9.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "client_tools.tools.<key>.label.before": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.9.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
   "client_tools.tools.<key>.label.fields.[]": {
     "default_value_security": "unknown",
     "introduced_in": "0.9.0",
     "security_relevance": "unknown",
     "stability": "unstable"
   },
-  "client_tools.tools.<key>.label.id": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.9.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
   "client_tools.tools.<key>.label.object_kind": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.9.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "client_tools.tools.<key>.label.target": {
-    "default_value_security": "unknown",
-    "introduced_in": "0.9.0",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
-  "client_tools.tools.<key>.label.title": {
     "default_value_security": "unknown",
     "introduced_in": "0.9.0",
     "security_relevance": "unknown",

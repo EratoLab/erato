@@ -1270,24 +1270,42 @@ async fn timed_out_submission_finishes_without_retrying_the_host(pool: Pool<Post
     );
 }
 
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_labelled_submission_names_its_proposal_on_its_update_and_its_row(pool: Pool<Postgres>) {
-    let label = erato::config::ClientToolLabelConfig {
+fn document_label() -> erato::config::ClientToolLabelConfig {
+    erato::config::ClientToolLabelConfig {
         action: erato::config::ClientToolLabelAction::Update,
         object_kind: erato::config::ClientToolLabelObjectKind::Document,
-        title: Some("$.title".into()),
-        id: None,
-        target: None,
-        before: None,
-        after: None,
         fields: vec![],
-    };
+    }
+}
+
+fn completed_tool_rows(events: &[Value]) -> &[Value] {
+    let completed = events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .expect("completed message");
+    completed["message"]["content"].as_array().unwrap()
+}
+
+fn assert_document_proposal(display: &Value) {
+    let label = &display["label"];
+    assert_eq!(
+        (&label["action"], &label["object_kind"], &label["source"]),
+        (&json!("update"), &json!("document"), &json!("own_mapping")),
+        "Got: {display}"
+    );
+    assert_eq!(display["title"], "submit_draft");
+    assert!(label.get("arguments").is_none(), "Got: {display}");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_labelled_submission_names_its_proposal_on_its_update_and_its_row(pool: Pool<Postgres>) {
     let (_, events) = run_scenario(
         pool,
         vec![submission("call_accept", json!("Draft A"))],
         vec![json!({"result":{"draft_id":"draft-1"}})],
         ScenarioOptions {
-            label: Some(label),
+            label: Some(document_label()),
             ..Default::default()
         },
     )
@@ -1297,25 +1315,40 @@ async fn a_labelled_submission_names_its_proposal_on_its_update_and_its_row(pool
         .rev()
         .find(|event| event["message_type"] == "tool_call_update" && event["status"] == "success")
         .expect("settled submission");
-    let label = &update["display"]["label"];
-    assert_eq!(
-        (&label["action"], &label["object_kind"], &label["source"]),
-        (&json!("update"), &json!("document"), &json!("own_mapping"))
-    );
-    assert_eq!(label["items"][0]["title"]["values"][0]["text"], "Draft A");
-    assert_eq!(update["display"]["title"], "submit_draft");
-    let completed = events
-        .iter()
-        .rev()
-        .find(|event| event["message_type"] == "assistant_message_completed")
-        .unwrap();
-    let row = completed["message"]["content"]
-        .as_array()
-        .unwrap()
+    assert_document_proposal(&update["display"]);
+    let row = completed_tool_rows(&events)
         .iter()
         .find(|part| part["content_type"] == "tool_use")
         .unwrap();
     assert_eq!(row["display"], update["display"]);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_refused_labelled_submission_keeps_its_label_on_its_row(pool: Pool<Postgres>) {
+    let mut denied = rejected("repair_arguments");
+    denied["deny_tool"] = json!("client/submit_draft");
+    let (_, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_first", json!("Draft A")),
+            submission("call_refused", json!("Draft B")),
+        ],
+        vec![denied],
+        ScenarioOptions {
+            label: Some(document_label()),
+            ..Default::default()
+        },
+    )
+    .await;
+    let refused = completed_tool_rows(&events)
+        .iter()
+        .find(|part| {
+            part["output"]["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("disabled the tool"))
+        })
+        .expect("refused submission row");
+    assert_document_proposal(&refused["display"]);
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]

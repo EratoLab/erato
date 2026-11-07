@@ -6473,7 +6473,6 @@ parameters = '{ "type": "object" }'
 [client_tools.tools.comments.label]
 action = "comment"
 object_kind = "comment"
-id = "$.changes[*].thread"
 fields = ["$.changes[*].op"]
 "#,
     );
@@ -6487,7 +6486,6 @@ fields = ["$.changes[*].op"]
         label.object_kind,
         erato::config::ClientToolLabelObjectKind::Comment
     );
-    assert_eq!(label.id.as_deref(), Some("$.changes[*].thread"));
     assert_eq!(
         erato::config::parse_label_pointer(&label.fields[0]).unwrap(),
         "/changes/*/op"
@@ -6508,6 +6506,42 @@ parameters = '{ "type": "object" }'
 action = "comment"
 object_kind = "comment"
 fields = ["$.changes[0].op"]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "lists more than 4 label fields")]
+fn test_client_tool_label_lists_at_most_4_fields() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.comments]
+name = "submit_comments"
+description = "five fields"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.a", "$.b", "$.c", "$.d", "$.e"]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "unknown field `title`")]
+fn test_client_tool_label_has_no_title_pointer() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.rows]
+name = "create_row"
+description = "the chat shows no title for a proposal"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.rows.label]
+action = "create"
+object_kind = "row"
+title = "$.name"
 "#,
     );
 }

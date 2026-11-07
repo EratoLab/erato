@@ -68,16 +68,18 @@ pub fn client_tool_call_display(
     let mapping = label::own::client_tool_mapping(config.label.as_ref()?);
     Some(own_tool_display(
         &config.name,
-        label::own::own_label(&config.name, &mapping, arguments),
+        label::own::own_label(&mapping, arguments),
     ))
 }
 
 /// What a `propose_client_action` call shows: the label of the action it
 /// proposes, whose card carries the rest.
 pub fn client_action_call_display(arguments: &serde_json::Value) -> ToolDisplayMetadata {
-    let name = crate::services::client_actions::CLIENT_ACTION_TOOL_NAME;
     let mapping = crate::services::client_actions::client_action_label_mapping(arguments);
-    own_tool_display(name, label::own::own_label(name, &mapping, arguments))
+    own_tool_display(
+        crate::services::client_actions::CLIENT_ACTION_TOOL_NAME,
+        label::own::own_label(&mapping, arguments),
+    )
 }
 
 fn own_tool_display(

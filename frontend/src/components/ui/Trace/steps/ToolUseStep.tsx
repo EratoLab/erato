@@ -37,8 +37,8 @@ import type {
   ToolUse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
-import type { CommentOp } from "@/lib/toolCallGist/ownProposal";
 import type { CleanText } from "@/lib/toolCallGist/serverText";
+import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
@@ -113,7 +113,7 @@ const GistRowDetails = ({
 const CommentChangeRows = ({
   changes,
 }: {
-  changes: readonly (CommentOp | "other")[];
+  changes: readonly (WordCommentOp | "other")[];
 }) => (
   <ol
     className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
