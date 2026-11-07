@@ -3574,6 +3574,8 @@ A "Did you know…?" tip for users who have not used Erato for a while, sent as 
 
 **Default values:** disabled; `inactive_after` is `"7d"`; `repeat` is `false`; Monday to Friday, `8` to `18`, `Europe/Berlin`; no tips; everyone; `200`.
 
+With [`runtime_configuration`](#runtime_configuration) enabled, this section can be changed while Erato runs, for example from the admin panel: it is reloaded with the other runtime sources and applies to the next producer run and to tips already scheduled. A section that fails validation is ignored and the previous settings stay. `integrations.ms_office.teams.bot.enabled` and `scheduled_deliveries.enabled` are still read at startup only.
+
 ##### `integrations.ms_office.teams.bot` (optional behavior)
 
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_enabled */}

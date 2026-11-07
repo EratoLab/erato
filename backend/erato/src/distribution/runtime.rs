@@ -1,6 +1,6 @@
 //! Runtime distribution artifacts loaded from the database.
 
-use crate::config::{AppConfig, ConfigSourceFile, McpRuntimeConfig};
+use crate::config::{AppConfig, ConfigSourceFile, McpRuntimeConfig, TeamsInactivityNudgeConfig};
 use crate::db::entity::prelude::RuntimeConfiguration;
 use crate::db::entity::runtime_configuration;
 use crate::distribution::desktop_ui::{self, DesktopUiPackage};
@@ -117,6 +117,12 @@ pub struct ReloadableAppState {
     /// artifact or when assembly failed. Rebuilt with the bundle, whose
     /// translation overrides it carries.
     pub desktop_ui_package: Option<Arc<DesktopUiPackage>>,
+    /// The Teams inactivity nudge's settings, layered from the same sources
+    /// as `mcp` so an admin-panel override applies without a restart. The
+    /// nudge producer reads them on every use (`ms_teams_bot::nudge`). A
+    /// section that fails validation keeps the previous settings, as a
+    /// malformed policy does, so it cannot hold up the rest of a reload.
+    pub teams_nudge: TeamsInactivityNudgeConfig,
 }
 
 impl ReloadableAppState {
@@ -135,6 +141,13 @@ impl ReloadableAppState {
                 config: McpRuntimeConfig::from_app_config(config),
                 servers: mcp_servers,
             },
+            teams_nudge: config
+                .integrations
+                .ms_office
+                .teams
+                .bot
+                .inactivity_nudge
+                .clone(),
         }
     }
 }
@@ -152,9 +165,13 @@ impl ReloadableAppState {
     async fn load_memory_inner(app_state: &AppState) -> Result<Self, Report> {
         // Scoped so the read guard drops here: callers assign the result into
         // a `write()` on the same lock.
-        let (previous_policy, previous_mcp) = {
+        let (previous_policy, previous_mcp, previous_nudge) = {
             let previous = app_state.reloadable.read().await;
-            (previous.experience_policy.clone(), previous.mcp.clone())
+            (
+                previous.experience_policy.clone(),
+                previous.mcp.clone(),
+                previous.teams_nudge.clone(),
+            )
         };
 
         let translation_rows = RuntimeConfiguration::find()
@@ -220,6 +237,8 @@ impl ReloadableAppState {
             );
         }
 
+        let teams_nudge = load_teams_nudge(app_state, &config_sources, previous_nudge);
+
         Ok(Self {
             distribution_bundle,
             experience_policy,
@@ -228,8 +247,45 @@ impl ReloadableAppState {
                 servers: previous_mcp.servers,
             },
             desktop_ui_package,
+            teams_nudge,
         })
     }
+}
+
+/// The Teams inactivity nudge's section from the layered sources, or the
+/// previous settings when it fails validation. Whether the bot is enabled
+/// and whether scheduled deliveries run are startup settings: the section is
+/// validated against the first, and switching the nudge on without the
+/// second is accepted but logged, because nothing would be sent.
+fn load_teams_nudge(
+    app_state: &AppState,
+    config_sources: &[ConfigSourceFile],
+    previous: TeamsInactivityNudgeConfig,
+) -> TeamsInactivityNudgeConfig {
+    let bot_enabled = app_state.config.integrations.ms_office.teams.bot.enabled;
+    let next = match TeamsInactivityNudgeConfig::from_toml_sources(config_sources, bot_enabled) {
+        Ok(next) => next,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                "Failed to load the Teams inactivity nudge settings; keeping the previous settings"
+            );
+            return previous;
+        }
+    };
+    if next != previous {
+        if next.enabled && !app_state.config.scheduled_deliveries.enabled {
+            tracing::warn!(
+                "The Teams inactivity nudge is enabled, but `scheduled_deliveries.enabled` is off; \
+                 no tips are sent until it is on, which takes a restart"
+            );
+        }
+        tracing::info!(
+            enabled = next.enabled,
+            "Reloaded the Teams inactivity nudge settings"
+        );
+    }
+    next
 }
 
 /// Load the org-wide experience policy from the runtime configuration table.

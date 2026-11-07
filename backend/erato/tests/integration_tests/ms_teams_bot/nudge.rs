@@ -346,6 +346,51 @@ async fn guard_drops_tips_that_are_no_longer_owed(pool: Pool<Postgres>) {
     );
 }
 
+/// The running server's producer reads the reloadable settings on every use,
+/// so a reload (an admin-panel change) applies without a restart: switched
+/// off, nothing is scheduled and an open tip is cancelled at send time;
+/// switched on again, the current pilot list decides.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_producer_follows_reloaded_settings(pool: Pool<Postgres>) {
+    let app_state =
+        crate::test_app_state(crate::test_utils::hermetic_app_config(None, None), pool).await;
+    let db = app_state.db.clone();
+    app_state.reloadable.write().await.teams_nudge = config();
+    let producer =
+        InactivityNudgeProducer::reloadable(app_state.reloadable.clone(), APP_NAME, None);
+
+    let inactive = user(&db, "reloaded", "reloaded@example.com").await;
+    personal_conversation(&db, inactive.id, "a:reloaded").await;
+    last_activity_hours_ago(&db, inactive.id, 3.0).await;
+    assert_eq!(producer.schedule_due(&db).await.unwrap(), 1);
+    let row = open_rows(&db, inactive.id).await.remove(0);
+    assert_eq!(producer.still_due(&db, &row).await.unwrap(), StillDue::Yes);
+
+    app_state.reloadable.write().await.teams_nudge.enabled = false;
+    assert_eq!(producer.produce(&db).await.unwrap(), 0);
+    assert_eq!(
+        producer.still_due(&db, &row).await.unwrap(),
+        StillDue::No {
+            reason: "inactivity nudge switched off".into()
+        }
+    );
+
+    {
+        let mut reloadable = app_state.reloadable.write().await;
+        reloadable.teams_nudge.enabled = true;
+        reloadable.teams_nudge.pilot_users = vec!["someone-else@example.com".into()];
+    }
+    assert_eq!(
+        producer.still_due(&db, &row).await.unwrap(),
+        StillDue::No {
+            reason: "not a pilot user".into()
+        }
+    );
+}
+
 /// The card's button is claimed once, only by the user it was sent to and
 /// only from the conversation it was sent in; `/reminders` toggles the
 /// preference the producer and guard read.
@@ -519,7 +564,12 @@ async fn tips_outside_the_send_window_wait_for_the_next_slot(pool: Pool<Postgres
         config.send_window.start_hour = start;
         config.send_window.end_hour = start + 1;
     });
-    let expected = closed.window().next_slot(Utc::now());
+    let expected = closed
+        .settings()
+        .await
+        .unwrap()
+        .window()
+        .next_slot(Utc::now());
     assert!(expected > Utc::now());
 
     let row = open_rows(&db, user.id).await.remove(0);
