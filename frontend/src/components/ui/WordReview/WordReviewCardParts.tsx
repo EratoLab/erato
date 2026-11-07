@@ -1,10 +1,11 @@
 import { plural, t } from "@lingui/core/macro";
-import { useId, useState } from "react";
 
 import { Card } from "@/components/ui/Container/Card";
 import { Button } from "@/components/ui/Controls/Button";
-import { Collapse } from "@/components/ui/Controls/Collapse";
-import { DisclosureChevron } from "@/components/ui/Controls/DisclosureChevron";
+import {
+  Disclosure,
+  DisclosureButton,
+} from "@/components/ui/Controls/Disclosure";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
@@ -189,64 +190,8 @@ export function WordCheckFirst({
   );
 }
 
-function DisclosureButton({
-  open,
-  controls,
-  onToggle,
-  children,
-}: {
-  open: boolean;
-  controls: string;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      aria-expanded={open}
-      aria-controls={controls}
-      icon={<DisclosureChevron open={open} />}
-      onClick={onToggle}
-    >
-      {children}
-    </Button>
-  );
-}
-
-/** A labelled toggle whose body mounts only while open. */
-export function WordDisclosure({
-  label,
-  openLabel = label,
-  className,
-  bodyClassName,
-  children,
-}: {
-  label: string;
-  openLabel?: string;
-  className?: string;
-  bodyClassName?: string;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <div className={className}>
-      <DisclosureButton
-        open={open}
-        controls={id}
-        onToggle={() => setOpen(!open)}
-      >
-        {open ? openLabel : label}
-      </DisclosureButton>
-      <Collapse isOpen={open}>
-        <div id={id} className={bodyClassName}>
-          {open && children}
-        </div>
-      </Collapse>
-    </div>
-  );
-}
+/** The Word cards' name for the shared disclosure, kept for the add-in and kits. */
+export const WordDisclosure = Disclosure;
 
 export function WordReviewDetailsToggle({
   collapsed,
