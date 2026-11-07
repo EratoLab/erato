@@ -224,7 +224,7 @@ describe("gistOf", () => {
     );
     expect(gist!.items[0].fields[0].values[0]).toEqual({
       value: expect.objectContaining({ text: "Won", origin: "written" }),
-      earlier: expect.objectContaining({ text: "Open", origin: "resolved" }),
+      earlier: expect.objectContaining({ text: "Open", origin: "earlier" }),
     });
   });
 

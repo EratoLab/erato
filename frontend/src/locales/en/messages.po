@@ -7977,6 +7977,11 @@ msgstr "{shape, select, full {Could not update {kind} {title} in {where}} titled
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.earlier"
+msgstr "Value from an earlier result in this chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Name from an earlier result in this chat"
 

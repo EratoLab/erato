@@ -7977,6 +7977,11 @@ msgstr "{shape, select, full {Nie udało się zaktualizować: {kind} {title} w {
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.earlier"
+msgstr "Wartość z wcześniejszego wyniku w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Nazwa z wcześniejszego wyniku w tym czacie"
 

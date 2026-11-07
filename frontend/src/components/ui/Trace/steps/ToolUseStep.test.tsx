@@ -286,6 +286,23 @@ describe("ToolUseStep decision row", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
+  it("shows a call that ran and failed with a rejected-looking server result as Failed", () => {
+    settled(
+      {
+        allowed_by: "policy",
+        output: {
+          status: "rejected",
+          error: "record locked",
+        } as unknown as ToolUse["output"],
+      },
+      "error",
+    );
+
+    expect(decisionRow()).toHaveTextContent("Ran without asking");
+    expect(decisionRow()).not.toHaveTextContent("Not run");
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
   it.each([
     [{ status: "approved", alwaysAllow: true }, "You chose “Always allow”"],
     [
@@ -392,8 +409,11 @@ describe("ToolUseStep gist row", () => {
     const values = screen.getByTestId("tool-call-gist-values");
     expect(isFolded(values)).toBe(false);
     expect(values).toHaveTextContent("Status");
-    expect(screen.getByTestId("tool-call-gist-earlier")).toHaveTextContent(
-      "Lead",
+    const earlier = screen.getByTestId("tool-call-gist-earlier");
+    expect(earlier).toHaveTextContent("Lead");
+    expect(earlier.querySelector("[data-origin]")).toHaveAttribute(
+      "title",
+      "Value from an earlier result in this chat",
     );
     expect(values).toHaveTextContent("Customer");
     expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(true);
