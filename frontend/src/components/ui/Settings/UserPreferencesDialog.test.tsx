@@ -542,16 +542,19 @@ describe("UserPreferencesDialog", () => {
         servers: [
           {
             id: "notion",
+            display_name: "notion",
             authentication_mode: "oauth2",
             connection_status: "NEEDS_AUTHENTICATION",
           },
           {
             id: "slack",
+            display_name: "slack",
             authentication_mode: "forwarded",
             connection_status: "SUCCESS",
           },
           {
             id: "legacy",
+            display_name: "legacy",
             authentication_mode: "fixed",
             connection_status: "FAILURE",
           },
@@ -612,6 +615,7 @@ describe("UserPreferencesDialog", () => {
             servers: [
               {
                 id: "notion",
+                display_name: "notion",
                 authentication_mode: "oauth2",
                 connection_status: "NEEDS_AUTHENTICATION",
               },
@@ -631,6 +635,7 @@ describe("UserPreferencesDialog", () => {
             servers: [
               {
                 id: "notion",
+                display_name: "notion",
                 authentication_mode: "oauth2",
                 connection_status: "SUCCESS",
               },
@@ -680,6 +685,7 @@ describe("UserPreferencesDialog", () => {
             servers: [
               {
                 id: "notion",
+                display_name: "notion",
                 authentication_mode: "oauth2",
                 connection_status: connected
                   ? "SUCCESS"

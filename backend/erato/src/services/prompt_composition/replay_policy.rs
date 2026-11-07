@@ -213,6 +213,7 @@ mod tests {
                 tool_call_id: "call-1".into(),
                 status: ToolCallStatus::Success,
                 tool_name: tool_name.into(),
+                display: None,
                 progress_message: None,
                 progress: None,
                 total: None,

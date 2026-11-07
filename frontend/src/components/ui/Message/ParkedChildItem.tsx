@@ -174,7 +174,7 @@ export const ParkedChildItem = ({
                     id: "clientToolApproval.thisDevice",
                     message: "This device",
                   })
-                : child.mcp_server_id
+                : (child.display?.server_name ?? child.mcp_server_id)
             }
             // The task brief above is this item's heading.
             titleClassName="font-normal"

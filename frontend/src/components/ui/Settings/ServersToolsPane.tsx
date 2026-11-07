@@ -62,7 +62,7 @@ function McpServerEntityRow({
           className="size-4 text-theme-fg-secondary"
         />
       }
-      name={server.id}
+      name={server.display_name}
       // Work the row is waiting on outranks the connection state it is about
       // to change — and carries the ring, so progress reads on the row itself
       // rather than only in a notice somewhere above the list.

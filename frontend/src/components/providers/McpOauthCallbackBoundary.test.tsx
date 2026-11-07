@@ -64,7 +64,11 @@ function mount(search: string) {
 }
 beforeEach(() => {
   mockServers.mockReturnValue({
-    data: { servers: [{ id: "sales", authentication_mode: "oauth2" }] },
+    data: {
+      servers: [
+        { id: "sales", display_name: "sales", authentication_mode: "oauth2" },
+      ],
+    },
     isError: false,
   });
 });

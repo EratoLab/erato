@@ -266,6 +266,26 @@ describe("McpToolApprovalCard", () => {
     expect(screen.getByText(/"release"/)).toBeInTheDocument();
   });
 
+  it("names the server by the name saved with the request", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...approvalRequest,
+          display: {
+            title: "publish_approval_probe",
+            description_truncated: false,
+            server_name: "Approval Probe",
+          },
+        }}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByText("Approval Probe")).toBeInTheDocument();
+    expect(screen.queryByText("mock_mcp_approval")).not.toBeInTheDocument();
+  });
+
   it("uses the saved descriptor as plain text and submits the executable identity", async () => {
     const continueToolApproval = vi.fn().mockResolvedValue(undefined);
     const request = {
@@ -417,6 +437,7 @@ describe("McpToolApprovalCard", () => {
                   title: "Child tool title",
                   description: "A truncated child description",
                   description_truncated: true,
+                  server_name: "Approval Probe",
                 },
               },
             },
@@ -425,6 +446,8 @@ describe("McpToolApprovalCard", () => {
       />,
     );
     expect(screen.getByText("Child tool title")).toBeInTheDocument();
+    expect(screen.getByText("Approval Probe")).toBeInTheDocument();
+    expect(screen.queryByText("mock_mcp_approval")).not.toBeInTheDocument();
     expect(
       screen.getByText("A truncated child description"),
     ).toBeInTheDocument();
@@ -1530,6 +1553,27 @@ describe("client tool approvals", () => {
     preset: "",
     kind: "client_tool" as const,
   };
+
+  it("names this device even when a server name was saved", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...clientToolRequest,
+          display: {
+            title: "search_sidecar_index",
+            description_truncated: false,
+            server_name: "Desktop",
+          },
+        }}
+        resolution={null}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-tool-approval");
+    expect(card).toHaveTextContent("This device");
+    expect(card).not.toHaveTextContent("Desktop");
+  });
 
   it("asks on the same card as an MCP tool, naming this device instead of a server", () => {
     renderCard(

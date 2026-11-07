@@ -72,6 +72,7 @@ allow_always = true
 # lists the gated server, which is what puts it in the CHILD's tool set; the
 # mock LLM only calls it from a child's turn.
 [mcp_servers.mock_mcp_approval]
+display_name = "Approval Probe"
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/approval-policy"
 

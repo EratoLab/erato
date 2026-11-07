@@ -65,7 +65,7 @@ export const OwnCallApprovalItem = ({
               id: "clientToolApproval.thisDevice",
               message: "This device",
             })
-          : serverId
+          : (display?.server_name ?? serverId)
       }
     />
     <div className="mt-2 max-h-48 overflow-y-auto">

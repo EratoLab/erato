@@ -47,6 +47,7 @@ vi.mock("./DesktopSidecarTabContent", () => ({
 
 const sales: McpServerStatus = {
   id: "sales",
+  display_name: "Sales CRM",
   authentication_mode: "oauth2",
   connection_status: "NEEDS_AUTHENTICATION",
 };
@@ -105,6 +106,13 @@ afterEach(() => {
 });
 
 describe("MCP authorization feedback in server settings", () => {
+  it("names each server by its display name", () => {
+    render(tree());
+    expect(screen.getByTestId("servers-tools-mcp-row")).toHaveTextContent(
+      "Sales CRM",
+    );
+  });
+
   it("offers a real recovery link when opening the browser returns null, without restarting the wait", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     render(tree());

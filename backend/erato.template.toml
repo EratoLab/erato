@@ -110,6 +110,8 @@ chat_provider_ids = ["test-token-limit"]
 # max_wait_seconds = 60
 #
 # [mcp_servers.file_provider]
+# # Optional: the name users see (default: the id tidied up, "File provider")
+# display_name = "File Provider"
 # transport_type = "sse"
 # url = "http://127.0.0.1:63490/sse"
 # allow_tools = ["get_*", "list_pages"]

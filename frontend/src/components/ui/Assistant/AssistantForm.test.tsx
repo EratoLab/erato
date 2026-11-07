@@ -131,11 +131,13 @@ function renderForm({
 const mockMcpServers: McpServerStatus[] = [
   {
     id: "search-server",
+    display_name: "search-server",
     authentication_mode: "none",
     connection_status: "SUCCESS",
   },
   {
     id: "oauth-server",
+    display_name: "oauth-server",
     authentication_mode: "oauth2",
     connection_status: "NEEDS_AUTHENTICATION",
   },

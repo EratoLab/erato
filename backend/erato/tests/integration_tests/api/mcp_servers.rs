@@ -36,6 +36,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        display_name: None,
         protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}{path}"),
@@ -489,7 +490,10 @@ async fn test_list_mcp_servers_bounds_parallel_probes_and_preserves_order(pool: 
     }
     config.mcp_servers.insert(
         "failed".into(),
-        mcp_server_config(&base_url, "/failed", McpServerAuthenticationConfig::None),
+        McpServerConfig {
+            display_name: Some("Failing Probe".into()),
+            ..mcp_server_config(&base_url, "/failed", McpServerAuthenticationConfig::None)
+        },
     );
     let app_state = test_app_state(config, pool).await;
     let mcp = app_state.mcp_state().await;
@@ -527,6 +531,8 @@ async fn test_list_mcp_servers_bounds_parallel_probes_and_preserves_order(pool: 
             .all(|row| row["connection_status"] == "SUCCESS")
     );
     assert_eq!(rows[6]["connection_status"], "FAILURE");
+    assert_eq!(rows[0]["display_name"], "A");
+    assert_eq!(rows[6]["display_name"], "Failing Probe");
     assert_eq!(peak.load(Ordering::SeqCst), 4);
     for id in ["a", "b", "c", "d", "e", "f", "failed"] {
         assert_eq!(mcp.servers.active_session_count(id).await, 0);

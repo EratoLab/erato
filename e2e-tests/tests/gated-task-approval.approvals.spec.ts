@@ -31,9 +31,12 @@ const PLANNING_FACET = "Plan & delegate";
 /** Its configured id, which is what the selected-facet chip is keyed by. */
 const PLANNING_FACET_ID = "plan";
 
-/** The child's gated tool, and the server it lives on. */
+/**
+ * The child's gated tool, and the name its server `mock_mcp_approval` is
+ * configured to show.
+ */
 const GATED_TOOL = "publish_approval_probe";
-const GATED_SERVER = "mock_mcp_approval";
+const GATED_SERVER_NAME = "Approval Probe";
 
 /** Turns the origin turn, the child turn and the park take before the click. */
 const PARK_TIMEOUT_MS = 60000;
@@ -110,7 +113,7 @@ test("parks a task child on its gated call and finishes the run in the origin ch
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
   await expect(item).toContainText(GATED_TOOL);
-  await expect(item).toContainText(GATED_SERVER);
+  await expect(item).toContainText(GATED_SERVER_NAME);
   // The child chat the decision covers, which is what makes this the origin's
   // surface for another chat's question rather than its own. Matched as an id
   // rather than as "not empty", which an attribute that had been dropped

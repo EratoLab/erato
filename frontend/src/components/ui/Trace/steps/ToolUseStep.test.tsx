@@ -147,6 +147,31 @@ describe("ToolUseStep sidecar trace", () => {
     ).toBeNull();
   });
 
+  it("names the MCP server saved with the call next to the tool", () => {
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_name: "create_record",
+          status: "success",
+          display: {
+            title: "create_record",
+            description_truncated: false,
+            server_name: "Dynamics 365",
+          },
+        }}
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /create_record/ }),
+    ).toHaveTextContent("Dynamics 365");
+  });
+
   it("keeps payloads behind the toggle for tools without a trace", () => {
     render(
       <ToolUseStep

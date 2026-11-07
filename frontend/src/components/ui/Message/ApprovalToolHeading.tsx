@@ -41,7 +41,12 @@ export const ApprovalToolHeading = ({
         >
           {title}
         </span>
-        <span className="text-xs text-theme-fg-muted">{source}</span>
+        <span
+          dir="auto"
+          className="text-xs text-theme-fg-muted [unicode-bidi:isolate]"
+        >
+          {source}
+        </span>
       </div>
       {title !== toolName ? (
         <p

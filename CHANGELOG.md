@@ -32,6 +32,8 @@ Typical "Notable changes" categories to copy & paste:
 
 **Teams bot: inactivity nudge.** Users who have not used Erato for a while (`inactive_after`, default 7 days, on any surface) get one "Did you know…?" tip as a card in their personal chat with the bot, inside a configurable send window (Mon–Fri 08:00–18:00 Europe/Berlin by default), once per inactivity period. The card offers "Open <app>" and "Don't remind me"; `/reminders off` and `/reminders on` (German: `/erinnerungen aus|an`) do the same. The bot now records the personal conversation when it is added to a user's chat, so people the app was installed for by policy can be reached before they write. Enable with `[integrations.ms_office.teams.bot.inactivity_nudge] enabled = true`, `tips = [...]`, plus `[scheduled_deliveries] enabled = true`; `pilot_users` limits a rollout to listed addresses.
 
+**MCP server display names.** `mcp_servers.<id>.display_name` sets the name people see for a server on approval cards (web, delegated tasks and Teams), in a response's tool steps and in the Servers & Tools preferences tab. Without it the id is shown tidied up (`web_access` as "Web access"); messages saved earlier keep showing the id.
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes

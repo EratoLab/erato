@@ -87,9 +87,48 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': stateless protocol requires streamable_http"
             ));
         }
+        if server
+            .display_name
+            .as_deref()
+            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
+        {
+            return Err(eyre!(
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
+            ));
+        }
     }
 
     Ok(())
+}
+
+fn is_valid_display_name(name: &str) -> bool {
+    !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
+}
+
+/// Bidi marks, embeddings, overrides and isolates: any of them can make the
+/// rendered order of a string differ from its logical order. Tool text from MCP
+/// servers is stripped of them and MCP server display names may not contain
+/// them, since the server name is shown right next to that text.
+pub fn is_bidi_control(c: char) -> bool {
+    matches!(
+        c,
+        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// `web_access` reads as "Web access": separators become spaces and the first
+/// letter is capitalized; the rest of the id is kept as written.
+fn tidy_mcp_server_id(id: &str) -> String {
+    let words = id
+        .split(|c: char| c == '_' || c == '-' || c.is_whitespace())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut chars = words.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => id.to_string(),
+    }
 }
 
 const DEFAULT_PROMPT_OPTIMIZER_PROMPT: &str = r#"
@@ -257,6 +296,19 @@ pub struct McpRuntimeConfig {
 }
 
 impl McpRuntimeConfig {
+    /// The operator's name for the server, else its id tidied up. Takes the id
+    /// because a server's config does not know its own key.
+    #[must_use]
+    pub fn mcp_server_display_name(&self, server_id: &str) -> String {
+        self.mcp_servers
+            .get(server_id)
+            .and_then(|server| server.display_name.as_deref())
+            .map_or_else(
+                || tidy_mcp_server_id(server_id),
+                |name| name.trim().to_string(),
+            )
+    }
+
     #[must_use]
     pub fn from_app_config(config: &AppConfig) -> Self {
         Self {
@@ -986,7 +1038,7 @@ impl DesktopSidecarConfig {
         }
         if let Some(name) = &self.display_name {
             eyre::ensure!(
-                !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control),
+                is_valid_display_name(name),
                 "Invalid desktop_sidecar.display_name"
             );
             fields.insert("display_name".into(), name.clone().into());
@@ -3776,6 +3828,12 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
+    /// Name shown to users for this server, at most 128 bytes without control
+    /// or bidi formatting characters. When omitted, the server id is shown
+    /// tidied up.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub display_name: Option<String>,
     // The type of transport that the MCP server uses.
     // Supported values are:
     // - "sse" (Server-Sent Events)

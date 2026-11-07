@@ -6975,11 +6975,13 @@ describe("ChatInput", () => {
   describe("connectors", () => {
     const CONNECTED = {
       id: "linear",
+      display_name: "linear",
       connection_status: "SUCCESS",
       authentication_mode: "oauth2",
     };
     const UNCONNECTED = {
       id: "jira",
+      display_name: "jira",
       connection_status: "NEEDS_AUTHENTICATION",
       authentication_mode: "oauth2",
     };

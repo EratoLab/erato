@@ -3598,6 +3598,7 @@ mod test_cases {
                 tool_call_id: call_id.into(),
                 status: ToolCallStatus::Success,
                 tool_name: name.into(),
+                display: None,
                 progress_message: None,
                 progress: None,
                 total: None,
