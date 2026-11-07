@@ -47,6 +47,7 @@ describe("tool progress in the trace header", () => {
         rerender(renderStep(`Reading file step ${step}/3`));
         const progress = screen.getByText(`Reading file step ${step}/3`);
         expect(progress).toBeVisible();
+        expect(progress).toHaveAttribute("dir", "auto");
         expect(progress.parentElement).toHaveTextContent(
           `read_fileReading file step ${step}/3`,
         );

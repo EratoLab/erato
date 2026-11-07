@@ -11,15 +11,16 @@ import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 import { DelegationStep } from "./DelegationStep";
+import { refusedWithoutDecision, ToolDecisionRow } from "./ToolDecisionRow";
 import { ToolStatusPill } from "./ToolStatusPill";
 
-import type { ToolApprovalStatus } from "../Trace";
+import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
-  approvalStatus?: ToolApprovalStatus;
+  decision?: ToolDecision;
 }
 
 const PlainToolUseStep = ({
@@ -28,7 +29,7 @@ const PlainToolUseStep = ({
   isStreaming,
   isCollapsed,
   isLastStep,
-  approvalStatus,
+  decision,
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
@@ -70,6 +71,7 @@ const PlainToolUseStep = ({
       data-tool-name={toolName}
       data-tool-status={resolvedStatus}
     >
+      <ToolDecisionRow part={part} decision={decision} />
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
@@ -86,7 +88,8 @@ const PlainToolUseStep = ({
             )}
             {part.progress_message && (
               <span
-                className="pl-2 font-normal text-theme-fg-muted"
+                dir="auto"
+                className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
                 title={part.progress_message}
               >
                 {part.progress_message}
@@ -95,15 +98,18 @@ const PlainToolUseStep = ({
           </>
         }
         titleSlot={
-          <ToolStatusPill
-            status={status}
-            approvalStatus={approvalStatus}
-            label={
-              part.status === "preparing" && status !== "interrupted"
-                ? t({ id: "trace.tool.preparing", message: "Preparing" })
-                : undefined
-            }
-          />
+          // A denied or refused call never ran: its decision row says so.
+          decision?.status === "denied" ||
+          refusedWithoutDecision(part, decision) ? undefined : (
+            <ToolStatusPill
+              status={status}
+              label={
+                part.status === "preparing" && status !== "interrupted"
+                  ? t({ id: "trace.tool.preparing", message: "Preparing" })
+                  : undefined
+              }
+            />
+          )
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}

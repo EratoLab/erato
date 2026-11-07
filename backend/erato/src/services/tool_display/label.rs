@@ -428,6 +428,7 @@ mod tests {
             description_truncated: false,
             server_name: Some("Notion".into()),
             label: Some(label),
+            read_only: false,
         };
         let json = serde_json::to_value(&display).unwrap();
         assert_eq!(json["label"]["action"], "create");

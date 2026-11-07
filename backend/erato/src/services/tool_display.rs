@@ -32,6 +32,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         description: description.map(|value| value.text),
         server_name: None,
         label: None,
+        read_only: false,
     }
 }
 
@@ -51,6 +52,8 @@ pub fn mcp_tool_call_display(
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label: Some(label),
+        read_only: crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
+            .read_only_hint,
         ..tool_display_metadata(tool)
     }
 }
@@ -138,6 +141,38 @@ mod tests {
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn a_call_is_read_only_only_when_its_annotations_say_so() {
+        let read_only = |hint: Option<bool>| {
+            let mut tool = Tool::new("tool", "", JsonObject::new());
+            if let Some(hint) = hint {
+                tool.annotations = Some(ToolAnnotations::from_raw(
+                    None,
+                    Some(hint),
+                    None,
+                    None,
+                    None,
+                ));
+            }
+            let display = mcp_tool_call_display(
+                &McpRuntimeConfig::default(),
+                "server",
+                &tool,
+                &serde_json::json!({}),
+                &Default::default(),
+            );
+            (display.read_only, serde_json::to_value(&display).unwrap())
+        };
+        let (flag, json) = read_only(Some(true));
+        assert!(flag);
+        assert_eq!(json["read_only"], true);
+        for hint in [Some(false), None] {
+            let (flag, json) = read_only(hint);
+            assert!(!flag);
+            assert!(json.get("read_only").is_none());
+        }
     }
 
     #[test]

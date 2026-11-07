@@ -297,7 +297,7 @@ fn project_mcp_server_tool(
             McpServerToolPolicy::Auto
         },
         user_decision: user_decision.into(),
-        effective: effective_mcp_tool_state(approval, &verdict, user_decision),
+        effective: effective_mcp_tool_state(approval, &verdict, user_decision).0,
         is_wait_tool,
         name,
     }

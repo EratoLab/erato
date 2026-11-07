@@ -333,6 +333,7 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         description_truncated: false,
         server_name: None,
         label: Some(label),
+        read_only: false,
     });
     assert_eq!(
         name(&after(vec![labelled]), json!(TASK)).as_deref(),
