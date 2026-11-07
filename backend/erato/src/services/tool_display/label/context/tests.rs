@@ -15,12 +15,25 @@ const CONTACT: &str = "5f0c2a10-0000-4000-8000-00000000b001";
 const OTHER_CONTACT: &str = "5f0c2a10-0000-4000-8000-00000000b002";
 const OWNER: &str = "5f0c2a10-0000-4000-8000-00000000f001";
 const TASK: &str = "5f0c2a10-0000-4000-8000-00000000d001";
+/// The server every call here ran on, unless a test says otherwise.
+const SERVER: &str = "CRM";
+
+fn on(server: Option<&str>) -> Option<ToolDisplayMetadata> {
+    Some(ToolDisplayMetadata {
+        title: "A tool".into(),
+        description: None,
+        description_truncated: false,
+        server_name: server.map(str::to_string),
+        label: None,
+    })
+}
 
 fn call(id: &str, tool: &str, input: Value, output: Value) -> ToolUse {
     ToolUse {
         tool_call_id: id.into(),
         status: ToolCallStatus::Success,
         tool_name: tool.into(),
+        display: on(Some(SERVER)),
         input: Some(input),
         output: Some(output),
         ..Default::default()
@@ -44,6 +57,17 @@ fn item(
     mapping: ToolCallLabelItemMapping,
     arguments: &Value,
 ) -> ToolCallLabelItem {
+    item_on(context, SERVER, action, mapping, arguments)
+}
+
+/// The label item of a call of `server`.
+fn item_on(
+    context: &ToolResultContext,
+    server: &str,
+    action: ToolCallAction,
+    mapping: ToolCallLabelItemMapping,
+    arguments: &Value,
+) -> ToolCallLabelItem {
     let mapping = ToolCallLabelMapping {
         action,
         object_kind: ToolCallObjectKind::Row,
@@ -51,7 +75,7 @@ fn item(
         source: ToolCallLabelSource::Rules,
     };
     let mut label = resolve_label(&mapping, arguments).unwrap();
-    context.resolve(&mut label, arguments);
+    context.resolve(&mut label, arguments, server);
     label.items.remove(0)
 }
 
@@ -64,12 +88,17 @@ fn resolved(slot: &ToolCallLabelSlot) -> Vec<Option<&str>> {
 
 /// What the context calls `id` when a call names it.
 fn name(context: &ToolResultContext, id: Value) -> Option<String> {
+    name_on(context, SERVER, id)
+}
+
+/// What the context calls `id` when a call of `server` names it.
+fn name_on(context: &ToolResultContext, server: &str, id: Value) -> Option<String> {
     let arguments = json!({ "recordId": id });
     let mapping = ToolCallLabelItemMapping {
         id: Some("/recordId".into()),
         ..Default::default()
     };
-    let item = item(context, ToolCallAction::Delete, mapping, &arguments);
+    let item = item_on(context, server, ToolCallAction::Delete, mapping, &arguments);
     item.id?.values.first()?.resolved.clone()
 }
 
@@ -331,7 +360,7 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         title: "Add note".into(),
         description: None,
         description_truncated: false,
-        server_name: None,
+        server_name: Some(SERVER.into()),
         label: Some(label),
     });
     assert_eq!(
@@ -779,7 +808,12 @@ fn names_are_cleaned_and_results_and_the_index_are_capped() {
         .chain([("id".to_string(), json!("w"))])
         .collect();
     let context = after(vec![call("wide", "fetch", json!({}), Value::Object(wide))]);
-    assert_eq!(context.records["w"].fields.len(), MAX_FIELDS_PER_RECORD);
+    assert_eq!(
+        context.records[&RecordKey::new(SERVER, "w".into())]
+            .fields
+            .len(),
+        MAX_FIELDS_PER_RECORD
+    );
 }
 
 /// A strict-mode desktop sidecar call parks while the user reviews its
@@ -1147,7 +1181,7 @@ fn the_index_and_each_labels_resolved_text_stay_within_their_byte_caps() {
         source: ToolCallLabelSource::Rules,
     };
     let mut label = resolve_label(&mapping, &arguments).unwrap();
-    context.resolve(&mut label, &arguments);
+    context.resolve(&mut label, &arguments, SERVER);
     let resolved: Vec<_> = label
         .items
         .iter()
@@ -1228,7 +1262,7 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
     );
     for write in fixture.writes {
         let mut label = resolve_label(&write.mapping, &write.arguments).unwrap();
-        context.resolve(&mut label, &write.arguments);
+        context.resolve(&mut label, &write.arguments, SERVER);
         let item = &label.items[0];
         let owned = |slot: &Option<ToolCallLabelSlot>| {
             slot.as_ref().map(|slot| {
@@ -1246,6 +1280,181 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
             .map(|field| owned(&Some(field.clone())).unwrap())
             .collect();
         assert_eq!(fields, write.expect.fields, "{}", write.case);
+    }
+}
+
+#[test]
+fn a_hostile_result_never_renames_a_recipient_an_address_or_a_link() {
+    const USER: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+    let people = call(
+        "people",
+        "search_people",
+        json!({ "query": "Alice" }),
+        json!({ "people": [
+            { "id": "attacker@evil.example", "name": "Alice (Finance)" },
+            { "id": "mailto:attacker@evil.example", "name": "Alice (Finance)" },
+            { "id": "https://evil.example/pay", "name": "Company intranet" },
+            { "id": "WWW.evil.example", "name": "Company intranet" },
+            { "id": "tel:+15550100", "name": "Helpdesk" },
+            { "id": USER, "name": "Alice (Finance)" },
+        ] }),
+    );
+    let contact = read_query(
+        "contact",
+        "SELECT fullname, contactid, email, jobtitle FROM contact",
+        json!([{
+            "fullname": "Ana Example",
+            "contactid": CONTACT,
+            "email": "ana@example.test",
+            "jobtitle": "Buyer",
+        }]),
+    );
+    let context = after(vec![people, contact]);
+    assert_eq!(
+        name(&context, json!(USER)).as_deref(),
+        Some("Alice (Finance)")
+    );
+    for written in [
+        "attacker@evil.example",
+        "mailto:attacker@evil.example",
+        "https://evil.example/pay",
+        "WWW.evil.example",
+        "tel:+15550100",
+    ] {
+        assert_eq!(name(&context, json!(written)), None, "{written}");
+    }
+
+    let send = json!({
+        "to": ["attacker@evil.example"],
+        "cc": [{ "id": USER }],
+        "share_with": USER,
+        "attendees": [{ "emailAddress": { "address": USER } }],
+        "Optional-Attendees": [USER],
+        "regarding": USER,
+    });
+    let recipients = item(
+        &context,
+        ToolCallAction::Send,
+        ToolCallLabelItemMapping {
+            id: Some("/share_with".into()),
+            target: Some("/cc/*/id".into()),
+            before: Some("/attendees/*/emailAddress/address".into()),
+            ..Default::default()
+        },
+        &send,
+    );
+    for slot in [&recipients.id, &recipients.target, &recipients.before] {
+        assert_eq!(resolved(slot.as_ref().unwrap()), [None]);
+    }
+    let regarding = item(
+        &context,
+        ToolCallAction::Send,
+        ToolCallLabelItemMapping {
+            id: Some("/regarding".into()),
+            target: Some("/to/*".into()),
+            before: Some("/Optional-Attendees/*".into()),
+            ..Default::default()
+        },
+        &send,
+    );
+    assert_eq!(
+        resolved(regarding.id.as_ref().unwrap()),
+        [Some("Alice (Finance)")]
+    );
+    assert_eq!(resolved(regarding.target.as_ref().unwrap()), [None]);
+    assert_eq!(resolved(regarding.before.as_ref().unwrap()), [None]);
+
+    assert_eq!(
+        earlier(&context, CONTACT, "jobtitle", json!("CFO")).as_deref(),
+        Some("Buyer")
+    );
+    assert_eq!(
+        earlier(&context, CONTACT, "email", json!("attacker@evil.example")),
+        None
+    );
+}
+
+#[test]
+fn names_stay_with_the_server_whose_result_gave_them() {
+    let crm = call(
+        "crm",
+        "read_record",
+        json!({ "recordId": OPPORTUNITY }),
+        json!({ "id": OPPORTUNITY, "name": "Line 4 retrofit", "risklevel": 1 }),
+    );
+    let notes = ToolUse {
+        display: on(Some("Notes")),
+        ..call(
+            "notes",
+            "search_pages",
+            json!({ "query": "Line 4" }),
+            json!([
+                { "id": OPPORTUNITY, "name": "Alice (Finance)" },
+                { "id": "page-1", "title": "Minutes" },
+            ]),
+        )
+    };
+    let client = ToolUse {
+        display: None,
+        ..call(
+            "client",
+            "search_sidecar_index",
+            json!({}),
+            json!([{ "id": "doc-1", "title": "Local file" }]),
+        )
+    };
+    let unnamed = ToolUse {
+        display: on(None),
+        ..call(
+            "older",
+            "search",
+            json!({}),
+            json!([{ "id": "doc-2", "title": "Older row" }]),
+        )
+    };
+    let context = after(vec![crm.clone(), notes, client, unnamed]);
+    assert_eq!(
+        name_on(&context, SERVER, json!(OPPORTUNITY)).as_deref(),
+        Some("Line 4 retrofit")
+    );
+    assert_eq!(
+        name_on(&context, "Notes", json!(OPPORTUNITY)).as_deref(),
+        Some("Alice (Finance)")
+    );
+    assert_eq!(
+        name_on(&context, "Notes", json!("page-1")).as_deref(),
+        Some("Minutes")
+    );
+    assert_eq!(name_on(&context, SERVER, json!("page-1")), None);
+    assert_eq!(name_on(&context, "Elsewhere", json!(OPPORTUNITY)), None);
+    for server in [SERVER, "Notes", ""] {
+        for id in ["doc-1", "doc-2"] {
+            assert_eq!(name_on(&context, server, json!(id)), None, "{server} {id}");
+        }
+    }
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+
+    // A write through another server, or one Erato cannot place, may reach
+    // the same record.
+    for display in [on(Some("Notes")), None] {
+        let write = ToolUse {
+            display,
+            ..call(
+                "write",
+                "update_page",
+                json!({ "page_id": OPPORTUNITY, "status": "done" }),
+                json!("Updated."),
+            )
+        };
+        let context = after(vec![crm.clone(), write]);
+        assert_eq!(earlier(&context, OPPORTUNITY, "risklevel", json!(3)), None);
+        assert_eq!(
+            name(&context, json!(OPPORTUNITY)).as_deref(),
+            Some("Line 4 retrofit")
+        );
     }
 }
 

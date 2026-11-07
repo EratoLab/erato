@@ -2,7 +2,8 @@
 //! name of the record an ID stands for, and the values its fields held. Read
 //! by code from results. What the model wrote into a call never names a
 //! record, a lookup's `name` included; the one exception is the name a create
-//! call gave the record its result reports.
+//! call gave the record its result reports. Names stay with the MCP server
+//! whose result gave them, and never reach a recipient, an address or a link.
 
 use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
 use super::pointer;
@@ -47,18 +48,67 @@ const MAX_WORD_SCAN_BYTES: usize = 8 * 1024;
 const NAME_KEYS: [&str; 4] = ["name", "title", "subject", "fullname"];
 /// Where a link says its record lives.
 const LINK_TYPE_KEYS: [&str; 4] = ["relatedTable", "LogicalName", "type", "@odata.type"];
+/// Members naming who a message, invite or share is for or copies, and where
+/// a user object holds its address, compared without `_` and `-` and ignoring
+/// case. A value below one shows as written: a name read from a result could
+/// pass an attacker's address off as a colleague.
+const RECIPIENT_MEMBERS: [&str; 26] = [
+    "to",
+    "torecipients",
+    "recipient",
+    "recipients",
+    "attendee",
+    "attendees",
+    "requiredattendees",
+    "invitee",
+    "invitees",
+    "guests",
+    "participants",
+    "sharewith",
+    "sharedwith",
+    "shareto",
+    "sendto",
+    "cc",
+    "ccrecipients",
+    "bcc",
+    "bccrecipients",
+    "optionalattendees",
+    "email",
+    "emailaddress",
+    "address",
+    "mail",
+    "userprincipalname",
+    "upn",
+];
 
 /// Names and field values by ID, from the successful tool results of a chat.
 /// Reads only settled calls: a call still waiting, such as a client tool
 /// whose result is held for the user's review, has no output to read yet.
 #[derive(Debug, Clone, Default)]
 pub struct ToolResultContext {
-    records: HashMap<String, Record>,
-    order: VecDeque<String>,
+    records: HashMap<RecordKey, Record>,
+    order: VecDeque<RecordKey>,
     /// Calls already read, so the running turn's parts are read once.
     seen: HashSet<String>,
     /// Estimated size of `records`, kept under [`MAX_INDEX_BYTES`].
     bytes: usize,
+}
+
+/// A record as one MCP server reported it: `server` is the name its tool rows
+/// carry, `id` the lookup key of its ID.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RecordKey {
+    server: String,
+    id: String,
+}
+
+impl RecordKey {
+    fn new(server: &str, id: String) -> Self {
+        Self {
+            server: server.to_string(),
+            id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -111,9 +161,11 @@ impl ToolResultContext {
 
     /// Fills `resolved` on the label's values: the record name for `id`,
     /// `target` and `before`, and on an update each field's earlier value,
-    /// read from the one record the item's `id` names. A miss stays `None`,
-    /// and so does every value past [`MAX_RESOLVED_BYTES`] of resolved text.
-    pub fn resolve(&self, label: &mut ToolCallLabel, arguments: &Value) {
+    /// read from the one record the item's `id` names. Only results of
+    /// `server`, the name the call's own tool rows carry, are used. A miss
+    /// stays `None`, and so does every value below a recipient member and
+    /// every value past [`MAX_RESOLVED_BYTES`] of resolved text.
+    pub fn resolve(&self, label: &mut ToolCallLabel, arguments: &Value, server: &str) {
         let update = label.action == ToolCallAction::Update;
         let mut budget = MAX_RESOLVED_BYTES;
         let mut kept = |found: Option<String>| {
@@ -128,7 +180,7 @@ impl ToolResultContext {
             {
                 for value in &mut slot.values {
                     value.resolved = kept(
-                        self.record_at(arguments, &value.path)
+                        self.record_at(arguments, &value.path, server)
                             .and_then(|record| record.name.clone()),
                     );
                 }
@@ -141,7 +193,7 @@ impl ToolResultContext {
                 .as_ref()
                 .filter(|slot| slot.omitted == 0)
                 .and_then(|slot| match slot.values.as_slice() {
-                    [only] => self.record_at(arguments, &only.path),
+                    [only] => self.record_at(arguments, &only.path, server),
                     _ => None,
                 });
             let Some(record) = record else {
@@ -149,12 +201,15 @@ impl ToolResultContext {
             };
             for field in &mut item.fields {
                 for value in &mut field.values {
-                    value.resolved = kept(field_member(&value.path).and_then(|member| {
+                    let member = Some(&value.path)
+                        .filter(|path| !below_a_recipient(path))
+                        .and_then(|path| field_member(path));
+                    value.resolved = kept(member.and_then(|member| {
                         let earlier = record.fields.get(&member)?;
                         // A status `1` is a value; a link's earlier ID only
                         // shows as its record's name, never as the raw ID.
                         if looks_like_a_uuid(earlier) || names_an_id(&member) {
-                            let lookup = self.record(&text_key(earlier)?)?;
+                            let lookup = self.record(server, text_key(earlier)?)?;
                             lookup.name.clone()
                         } else {
                             Some(earlier.clone())
@@ -165,17 +220,25 @@ impl ToolResultContext {
         }
     }
 
-    fn record(&self, key: &str) -> Option<&Record> {
-        self.records.get(key).filter(|record| !record.ambiguous)
+    fn record(&self, server: &str, id: String) -> Option<&Record> {
+        if !indexable(&id) {
+            return None;
+        }
+        self.records
+            .get(&RecordKey::new(server, id))
+            .filter(|record| !record.ambiguous)
     }
 
-    fn record_at(&self, arguments: &Value, path: &str) -> Option<&Record> {
+    fn record_at(&self, arguments: &Value, path: &str, server: &str) -> Option<&Record> {
+        if below_a_recipient(path) {
+            return None;
+        }
         let mut reached = None;
         pointer::visit(arguments, path, |_, value| {
             reached = Some(value);
             ControlFlow::Break(())
         });
-        self.record(&id_key(reached?)?)
+        self.record(server, id_key(reached?)?)
     }
 
     fn read(&mut self, tool: &ToolUse) {
@@ -207,36 +270,44 @@ impl ToolResultContext {
             return;
         }
         // Whatever a call named may have changed, failed calls included, so
-        // the values read before it no longer count as the earlier ones.
+        // the values read before it no longer count as the earlier ones. On
+        // every server: a call of another server, or of none, can reach the
+        // same record.
         if let Some(arguments) = &tool.input {
             match argument_ids(arguments, true) {
-                Some(keys) => {
-                    for key in keys {
-                        self.retire(&key);
-                    }
-                }
+                Some(keys) => self.retire(&keys.into_iter().collect()),
                 // Some IDs went unread, so any record may be among them.
                 None => self.retire_all(),
             }
         }
+        let Some(server) = result_server(tool) else {
+            return;
+        };
         if tool.status != ToolCallStatus::Success {
             return;
         }
         match &tool.output {
-            Some(Value::String(text)) => self.read_created(tool, text),
+            Some(Value::String(text)) => self.read_created(tool, text, server),
             Some(output) => {
                 let words = words(tool.input.as_ref());
                 let mut walk = Walk {
                     nodes: MAX_NODES_PER_VALUE,
                     records: MAX_RECORDS_PER_RESULT,
                 };
-                self.read_node(output, &words, &mut walk, 0);
+                self.read_node(output, server, &words, &mut walk, 0);
             }
             None => {}
         }
     }
 
-    fn read_node(&mut self, value: &Value, words: &HashSet<String>, walk: &mut Walk, depth: usize) {
+    fn read_node(
+        &mut self,
+        value: &Value,
+        server: &str,
+        words: &HashSet<String>,
+        walk: &mut Walk,
+        depth: usize,
+    ) {
         if walk.records == 0 || depth > MAX_DEPTH {
             return;
         }
@@ -251,14 +322,14 @@ impl ToolResultContext {
                     let fields = fields_of(object, member, words, walk);
                     if name.is_some() || !fields.is_empty() {
                         walk.records -= 1;
-                        self.merge(key, name, fields);
+                        self.merge(RecordKey::new(server, key), name, fields);
                     }
                 }
                 for child in object.values().filter(|child| is_container(child)) {
                     if walk.nodes == 0 || walk.records == 0 {
                         break;
                     }
-                    self.read_node(child, words, walk, depth + 1);
+                    self.read_node(child, server, words, walk, depth + 1);
                 }
             }
             Value::Array(entries) => {
@@ -267,7 +338,7 @@ impl ToolResultContext {
                         break;
                     }
                     if is_container(entry) {
-                        self.read_node(entry, words, walk, depth + 1);
+                        self.read_node(entry, server, words, walk, depth + 1);
                     }
                 }
             }
@@ -275,12 +346,17 @@ impl ToolResultContext {
         }
     }
 
-    fn retire(&mut self, key: &str) {
-        if let Some(record) = self.records.get_mut(key) {
-            let before = record_bytes(key, record);
-            record.fields.clear();
-            let after = record_bytes(key, record);
-            self.bytes = self.bytes.saturating_sub(before - after);
+    fn retire(&mut self, ids: &HashSet<String>) {
+        if ids.is_empty() {
+            return;
+        }
+        for (key, record) in &mut self.records {
+            if !record.fields.is_empty() && ids.contains(&key.id) {
+                let before = record_bytes(key, record);
+                record.fields.clear();
+                let after = record_bytes(key, record);
+                self.bytes = self.bytes.saturating_sub(before - after);
+            }
         }
     }
 
@@ -297,7 +373,7 @@ impl ToolResultContext {
 
     /// A create whose short text result holds exactly one ID: the record
     /// takes the name the call gave it.
-    fn read_created(&mut self, tool: &ToolUse, text: &str) {
+    fn read_created(&mut self, tool: &ToolUse, text: &str, server: &str) {
         if text.chars().nth(MAX_CREATE_RESULT_CHARS).is_some() || !is_create(tool) {
             return;
         }
@@ -312,14 +388,12 @@ impl ToolResultContext {
             return;
         }
         if let Some(name) = created_name(arguments) {
-            self.merge(key, Some(name), HashMap::new());
+            self.merge(RecordKey::new(server, key), Some(name), HashMap::new());
         }
     }
 
-    fn merge(&mut self, key: String, name: Option<String>, fields: HashMap<String, String>) {
-        // Every server numbers its own records, and `ToolUse` does not say
-        // which server a result came from, so `7` could be anything.
-        if key.bytes().all(|byte| byte.is_ascii_digit()) {
+    fn merge(&mut self, key: RecordKey, name: Option<String>, fields: HashMap<String, String>) {
+        if !indexable(&key.id) {
             return;
         }
         let record = match self.records.remove(&key) {
@@ -333,7 +407,7 @@ impl ToolResultContext {
                 let named_twice = record.name.is_some()
                     && name.is_some()
                     && record.name != name
-                    && !looks_like_a_uuid(&key);
+                    && !looks_like_a_uuid(&key.id);
                 if named_twice {
                     record = Record {
                         ambiguous: true,
@@ -383,14 +457,18 @@ impl ToolResultContext {
 
 /// What a record costs the index, roughly: its text plus a fixed overhead
 /// per entry.
-fn record_bytes(key: &str, record: &Record) -> usize {
+fn record_bytes(key: &RecordKey, record: &Record) -> usize {
     const OVERHEAD: usize = 64;
     let fields: usize = record
         .fields
         .iter()
         .map(|(member, value)| OVERHEAD + member.len() + value.len())
         .sum();
-    OVERHEAD + key.len() + record.name.as_ref().map_or(0, String::len) + fields
+    OVERHEAD
+        + key.server.len()
+        + key.id.len()
+        + record.name.as_ref().map_or(0, String::len)
+        + fields
 }
 
 /// Drops what a chat's results said about a label's values, keeping the
@@ -410,6 +488,47 @@ pub fn forget_resolved(label: &mut ToolCallLabel) {
             }
         }
     }
+}
+
+/// The MCP server a result came from, as its tool row names it. Rows without
+/// one (client tools, rows older than server names) give no names.
+fn result_server(tool: &ToolUse) -> Option<&str> {
+    tool.display
+        .as_ref()?
+        .server_name
+        .as_deref()
+        .filter(|name| !name.is_empty())
+}
+
+/// IDs the index never holds. Digits: every table numbers its own records,
+/// so `7` could be anything. Addresses and links: a call writing one must
+/// show it as written, never as a name a result gave it.
+fn indexable(id: &str) -> bool {
+    const LINK_PREFIXES: [&str; 6] = ["mailto:", "tel:", "sms:", "data:", "javascript:", "www."];
+    let link_prefix = |prefix: &&str| {
+        id.get(..prefix.len())
+            .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+    };
+    !id.bytes().all(|byte| byte.is_ascii_digit())
+        && !id.contains('@')
+        && !id.contains("://")
+        && !LINK_PREFIXES.iter().any(link_prefix)
+}
+
+/// Whether a value's path passes through a recipient or address member. A
+/// path too long to read counts as one.
+fn below_a_recipient(path: &str) -> bool {
+    path.len() > pointer::MAX_PATH_BYTES
+        || pointer::member_names(path).iter().any(|member| {
+            member.len() <= 32 && {
+                let bare: String = member
+                    .chars()
+                    .filter(|c| !matches!(c, '_' | '-'))
+                    .map(|c| c.to_ascii_lowercase())
+                    .collect();
+                RECIPIENT_MEMBERS.contains(&bare.as_str())
+            }
+        })
 }
 
 fn is_settled(tool: &ToolUse) -> bool {

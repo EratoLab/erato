@@ -49,10 +49,13 @@ pub fn mcp_tool_call_display(
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
     let arguments = without_approval_argument(arguments, approval_argument);
+    let scope = names_scope(config, server_id);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
         let mut label = label::generic_label(&arguments);
-        context.resolve(&mut label, &arguments);
+        if let Some(server) = &scope {
+            context.resolve(&mut label, &arguments, server);
+        }
         label
     })
     .or_else(|| label::guarded(|| label::generic_label(&arguments)));
@@ -61,6 +64,21 @@ pub fn mcp_tool_call_display(
         label,
         ..tool_display_metadata(tool)
     }
+}
+
+/// The server name a call's tool rows carry, under which the context keeps
+/// the names that server's results gave. `None`, and so no names, for a
+/// server the config does not hold or whose name another server shares.
+fn names_scope(config: &McpRuntimeConfig, server_id: &str) -> Option<String> {
+    if !config.mcp_servers.contains_key(server_id) {
+        return None;
+    }
+    let name = config.mcp_server_display_name(server_id);
+    let shared = config
+        .mcp_servers
+        .keys()
+        .any(|other| other != server_id && config.mcp_server_display_name(other) == name);
+    (!shared).then_some(name)
 }
 
 /// What a parent chat keeps of the display a delegated child's call carries:
@@ -184,6 +202,48 @@ mod tests {
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn names_come_only_from_a_configured_server_whose_name_no_other_shares() {
+        let server = |display_name: Option<&str>| {
+            let mut server = serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            });
+            if let Some(name) = display_name {
+                server["display_name"] = name.into();
+            }
+            server
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dynamics": server(Some("CRM")),
+                "notes": server(Some("Notes")),
+                "notes_mirror": server(Some(" Notes ")),
+                "web_access": server(None),
+                "crawler": server(Some("Web access")),
+                "files": server(None),
+            }
+        }))
+        .unwrap();
+        let tool = Tool::new("search", "Searches.", JsonObject::new());
+        for (server_id, expected) in [("dynamics", "CRM"), ("files", "Files")] {
+            let stored = mcp_tool_call_display(
+                &config,
+                server_id,
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            )
+            .server_name;
+            assert_eq!(stored.as_deref(), Some(expected));
+            assert_eq!(names_scope(&config, server_id), stored);
+        }
+        for server_id in ["notes", "notes_mirror", "web_access", "crawler", "removed"] {
+            assert_eq!(names_scope(&config, server_id), None, "{server_id}");
+        }
     }
 
     #[test]
