@@ -890,6 +890,7 @@ mod tests {
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,

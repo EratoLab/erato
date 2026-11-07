@@ -58,6 +58,42 @@ pub fn mcp_tool_call_display(
     }
 }
 
+/// What a call of one of Erato's own client tools shows: the label its
+/// `[label]` table writes by hand. `None` for a tool without one, whose calls
+/// show as before.
+pub fn client_tool_call_display(
+    config: &erato_config::config::ClientToolConfig,
+    arguments: &serde_json::Value,
+) -> Option<ToolDisplayMetadata> {
+    let mapping = label::own::client_tool_mapping(config.label.as_ref()?);
+    Some(own_tool_display(
+        &config.name,
+        label::own::own_label(&config.name, &mapping, arguments),
+    ))
+}
+
+/// What a `propose_client_action` call shows: the label of the action it
+/// proposes, whose card carries the rest.
+pub fn client_action_call_display(arguments: &serde_json::Value) -> ToolDisplayMetadata {
+    let name = crate::services::client_actions::CLIENT_ACTION_TOOL_NAME;
+    let mapping = crate::services::client_actions::client_action_label_mapping(arguments);
+    own_tool_display(name, label::own::own_label(name, &mapping, arguments))
+}
+
+fn own_tool_display(
+    name: &str,
+    label: crate::models::message::ToolCallLabel,
+) -> ToolDisplayMetadata {
+    ToolDisplayMetadata {
+        title: name.to_string(),
+        description: None,
+        description_truncated: false,
+        server_name: None,
+        label: Some(label),
+        read_only: false,
+    }
+}
+
 /// What a tool row and its live updates keep of a call's display. Only
 /// approval cards show the description, and a row would repeat it per call.
 pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
@@ -228,6 +264,49 @@ mod tests {
                 description_truncated: false,
                 ..display
             }
+        );
+    }
+
+    #[test]
+    fn erato_tools_show_their_hand_written_label_and_unlabelled_ones_show_as_before() {
+        let mut config: erato_config::config::ClientToolConfig =
+            serde_json::from_value(serde_json::json!({
+                "name": "word_submit_comment_changes",
+                "namespace": "word",
+                "description": "Stage comment changes.",
+                "parameters": "{}",
+            }))
+            .unwrap();
+        let arguments = serde_json::json!({"changes": [{"op": "resolve", "thread": "t_1"}]});
+        assert_eq!(client_tool_call_display(&config, &arguments), None);
+        config.label = Some(
+            serde_json::from_value(serde_json::json!({
+                "action": "comment",
+                "object_kind": "comment",
+                "fields": ["$.changes[*].op"],
+            }))
+            .unwrap(),
+        );
+        let display = client_tool_call_display(&config, &arguments).unwrap();
+        assert_eq!(display.title, "word_submit_comment_changes");
+        assert_eq!((display.server_name, display.description), (None, None));
+        let label = display.label.unwrap();
+        assert_eq!(
+            (label.action, label.source),
+            (ToolCallAction::Comment, ToolCallLabelSource::OwnMapping)
+        );
+        assert_eq!(label.items[0].fields[0].values[0].text, "resolve");
+
+        let proposal = client_action_call_display(&serde_json::json!({"action": "outlook.reply"}));
+        assert_eq!(proposal.title, "propose_client_action");
+        let label = proposal.label.unwrap();
+        assert_eq!(
+            (label.action, label.object_kind, label.source),
+            (
+                ToolCallAction::Send,
+                ToolCallObjectKind::Email,
+                ToolCallLabelSource::OwnMapping
+            )
         );
     }
 

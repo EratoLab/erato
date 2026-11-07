@@ -714,6 +714,7 @@ struct ScenarioOptions {
     responses: bool,
     check_metadata: bool,
     withdraw_submission_on_approval: bool,
+    label: Option<erato::config::ClientToolLabelConfig>,
 }
 
 impl Default for ScenarioOptions {
@@ -730,6 +731,7 @@ impl Default for ScenarioOptions {
             responses: false,
             check_metadata: false,
             withdraw_submission_on_approval: false,
+            label: None,
         }
     }
 }
@@ -752,6 +754,7 @@ async fn run_scenario(
         responses,
         check_metadata,
         withdraw_submission_on_approval,
+        label,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -846,11 +849,13 @@ async fn run_scenario(
         parameters: json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}).to_string(),
         timeout_ms: Some(timeout_ms),
         submission: (max_attempts > 0).then_some(ClientToolSubmissionConfig { max_attempts, max_recovery_reads: recovery_reads, recovery_read_tools: vec!["client/read_context".into()], ..Default::default() }),
+        label,
         ..Default::default()
     });
     for name in ["read_context", "unrelated_work", "other_submission"] {
         let mut tool = config.client_tools.tools["draft"].clone();
         tool.name = name.into();
+        tool.label = None;
         if name != "other_submission" {
             tool.submission = None;
         }
@@ -1266,6 +1271,54 @@ async fn timed_out_submission_finishes_without_retrying_the_host(pool: Pool<Post
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_labelled_submission_names_its_proposal_on_its_update_and_its_row(pool: Pool<Postgres>) {
+    let label = erato::config::ClientToolLabelConfig {
+        action: erato::config::ClientToolLabelAction::Update,
+        object_kind: erato::config::ClientToolLabelObjectKind::Document,
+        title: Some("$.title".into()),
+        id: None,
+        target: None,
+        before: None,
+        after: None,
+        fields: vec![],
+    };
+    let (_, events) = run_scenario(
+        pool,
+        vec![submission("call_accept", json!("Draft A"))],
+        vec![json!({"result":{"draft_id":"draft-1"}})],
+        ScenarioOptions {
+            label: Some(label),
+            ..Default::default()
+        },
+    )
+    .await;
+    let update = events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "tool_call_update" && event["status"] == "success")
+        .expect("settled submission");
+    let label = &update["display"]["label"];
+    assert_eq!(
+        (&label["action"], &label["object_kind"], &label["source"]),
+        (&json!("update"), &json!("document"), &json!("own_mapping"))
+    );
+    assert_eq!(label["items"][0]["title"]["values"][0]["text"], "Draft A");
+    assert_eq!(update["display"]["title"], "submit_draft");
+    let completed = events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .unwrap();
+    let row = completed["message"]["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .unwrap();
+    assert_eq!(row["display"], update["display"]);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>) {
     let (requests, events) = run_submission(
         pool,
@@ -1295,6 +1348,7 @@ async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>
             .iter()
             .any(|event| event["output"].get("submission").is_some())
     );
+    assert!(events.iter().all(|event| event.get("display").is_none()));
 }
 
 /// Client files must survive the full tool loop, completion SSE and persisted

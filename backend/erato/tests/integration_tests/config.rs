@@ -6457,6 +6457,86 @@ keep_output_fields = ["$.result.blocks[0]"]
 }
 
 #[test]
+fn test_client_tool_label_loads_with_array_pointers() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.plain]
+name = "plain"
+description = "no label"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments]
+name = "submit_comments"
+description = "stages comment changes"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments.label]
+action = "comment"
+object_kind = "comment"
+id = "$.changes[*].thread"
+fields = ["$.changes[*].op"]
+"#,
+    );
+    assert_eq!(config.client_tools.tools["plain"].label, None);
+    let label = config.client_tools.tools["comments"]
+        .label
+        .as_ref()
+        .unwrap();
+    assert_eq!(label.action, erato::config::ClientToolLabelAction::Comment);
+    assert_eq!(
+        label.object_kind,
+        erato::config::ClientToolLabelObjectKind::Comment
+    );
+    assert_eq!(label.id.as_deref(), Some("$.changes[*].thread"));
+    assert_eq!(
+        erato::config::parse_label_pointer(&label.fields[0]).unwrap(),
+        "/changes/*/op"
+    );
+}
+
+#[test]
+#[should_panic(expected = "invalid label pointer")]
+fn test_client_tool_label_pointers_are_validated() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.comments]
+name = "submit_comments"
+description = "array indices are not supported"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.changes[0].op"]
+"#,
+    );
+}
+
+#[test]
+#[should_panic(expected = "must use the same label")]
+fn test_same_named_client_tools_must_agree_on_label() {
+    migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.a]
+name = "submit_comments"
+namespace = "word"
+description = "labelled"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.a.label]
+action = "comment"
+object_kind = "comment"
+
+[client_tools.tools.b]
+name = "submit_comments"
+namespace = "other"
+description = "not labelled"
+parameters = '{ "type": "object" }'
+"#,
+    );
+}
+
+#[test]
 #[should_panic(expected = "must use the same replay settings")]
 fn test_same_named_client_tools_must_agree_on_replay() {
     migrate_config_with_action_facets(

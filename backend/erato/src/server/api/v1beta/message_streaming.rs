@@ -7898,12 +7898,15 @@ async fn stream_generate_chat_completion<'a>(
                     };
                 let tool_error =
                     matches!(status, ToolCallStatus::Error).then(|| response_text.clone());
+                let display = crate::services::tool_display::client_action_call_display(
+                    &unfinished_tool_call.fn_arguments,
+                );
                 let update_event = MessageSubmitStreamingResponseToolCallUpdate {
                     message_id: assistant_message_id,
                     content_index: tool_index,
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     tool_name: unfinished_tool_call.fn_name.clone(),
-                    display: None,
+                    display: Some(display.clone()),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     status,
                     progress_message: None,
@@ -7921,7 +7924,7 @@ async fn stream_generate_chat_completion<'a>(
                             content_index: tool_index,
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             tool_name: unfinished_tool_call.fn_name.clone(),
-                            display: None,
+                            display: Some(display.clone()),
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             status: bg_status,
                             progress_message: None,
@@ -7943,7 +7946,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: message_status,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: None,
+                        display: Some(display),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -8189,6 +8192,12 @@ async fn stream_generate_chat_completion<'a>(
                     tool_call_parent_observation_ids.remove(&call_id);
 
                 let tool_policy = offered_client_tools.get(&tool_name);
+                let display = tool_policy.and_then(|policy| {
+                    crate::services::tool_display::client_tool_call_display(
+                        &policy.config,
+                        &tool_input,
+                    )
+                });
                 // Set when a context approval covers the call: the lineage a
                 // host that checks the scope gets, and whether the call needs
                 // a stream that checks it.
@@ -8333,7 +8342,7 @@ async fn stream_generate_chat_completion<'a>(
                             tool_call_id: call_id.clone(),
                             status: MessageToolCallStatus::Error,
                             tool_name: tool_name.clone(),
-                            display: None,
+                            display: display.clone(),
                             input: Some(tool_input.clone()),
                             progress_message: None,
                             progress: None,
@@ -8785,7 +8794,7 @@ async fn stream_generate_chat_completion<'a>(
                                 ToolUse {
                                     tool_call_id: call_id.clone(),
                                     tool_name: tool_name.clone(),
-                                    display: None,
+                                    display: display.clone(),
                                     status: MessageToolCallStatus::InProgress,
                                     input: Some(tool_input.clone()),
                                     output: Some(json!({"status":"input_required"})),
@@ -9048,7 +9057,7 @@ async fn stream_generate_chat_completion<'a>(
                         content_index,
                         tool_call_id: call_id.clone(),
                         tool_name: tool_name.clone(),
-                        display: None,
+                        display: display.clone(),
                         input: Some(tool_input.clone()),
                         status: bg_status,
                         progress_message: None,
@@ -9066,7 +9075,7 @@ async fn stream_generate_chat_completion<'a>(
                     content_index,
                     tool_call_id: call_id.clone(),
                     tool_name: tool_name.clone(),
-                    display: None,
+                    display: display.clone(),
                     input: Some(tool_input.clone()),
                     status,
                     progress_message: None,
@@ -9090,7 +9099,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: call_id.clone(),
                         status: message_status,
                         tool_name: tool_name.clone(),
-                        display: None,
+                        display,
                         input: Some(tool_input),
                         progress_message: None,
                         progress: None,
