@@ -13527,6 +13527,7 @@
         "description": "Something the card says next to a label.",
         "enum": [
           "arguments_truncated",
+          "hidden_characters",
           "other"
         ]
       },

@@ -4543,7 +4543,10 @@ export type ToolCallLabelValue = {
 /**
  * Something the card says next to a label.
  */
-export type ToolCallLabelWarning = "arguments_truncated" | "other";
+export type ToolCallLabelWarning =
+  | "arguments_truncated"
+  | "hidden_characters"
+  | "other";
 
 /**
  * What kind of thing a call acts on.
