@@ -22,6 +22,11 @@ pub const MAX_LABEL_FIELDS: usize = 4;
 pub const MAX_SLOT_VALUES: usize = 10;
 /// A value longer than this is cut; the full value stays in the input.
 pub const MAX_LABEL_VALUE_CHARS: usize = 200;
+/// Field pointers tried per item, whether or not they reach a value.
+pub const MAX_FIELD_POINTERS: usize = 16;
+/// Bytes of value text and paths in one label; values past it are counted
+/// as omitted, so the stored label stays small whatever the mapping says.
+pub const MAX_LABEL_VALUE_BYTES: usize = 16 * 1024;
 
 /// Where a label's parts sit in a call's arguments: pointers and closed-list
 /// choices, never values, so one mapping fits every call of the same shape
@@ -55,6 +60,17 @@ pub struct UnresolvedPointer {
     pub part: &'static str,
 }
 
+/// Runs a labeller so that a bug in it costs the call its label and never the
+/// call: the card then renders as it did before labels.
+pub fn guarded(labeller: impl FnOnce() -> ToolCallLabel) -> Option<ToolCallLabel> {
+    // A labeller only reads its inputs, so a panic leaves nothing half-changed.
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(labeller))
+        .inspect_err(|_| {
+            tracing::error!("Showing a tool call without a label: labelling it panicked")
+        })
+        .ok()
+}
+
 /// The label any call can have: no claim about what the call does, only its
 /// arguments in readable form.
 pub fn generic_label(arguments: &Value) -> ToolCallLabel {
@@ -79,13 +95,15 @@ pub fn resolve_label(
     mapping: &ToolCallLabelMapping,
     arguments: &Value,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
+    let mut budget = MAX_LABEL_VALUE_BYTES;
     let items = mapping
         .items
         .iter()
         .take(MAX_LABEL_ITEMS)
         .enumerate()
         .map(|(index, item)| {
-            resolve_item(item, arguments).map_err(|part| UnresolvedPointer { item: index, part })
+            resolve_item(item, arguments, &mut budget)
+                .map_err(|part| UnresolvedPointer { item: index, part })
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ToolCallLabel {
@@ -100,80 +118,159 @@ pub fn resolve_label(
 fn resolve_item(
     item: &ToolCallLabelItemMapping,
     arguments: &Value,
+    budget: &mut usize,
 ) -> Result<ToolCallLabelItem, &'static str> {
-    let core = |part: &'static str, pointer: &Option<String>| {
+    let mut core = |part: &'static str, pointer: &Option<String>| {
         pointer
             .as_deref()
-            .map(|pointer| slot(arguments, pointer, false).ok_or(part))
+            .map(|pointer| slot(arguments, pointer, false, budget).ok_or(part))
             .transpose()
     };
+    let title = core("title", &item.title)?;
+    let id = core("id", &item.id)?;
+    let target = core("target", &item.target)?;
+    let before = core("before", &item.before)?;
+    let after = core("after", &item.after)?;
+    let fields = item
+        .fields
+        .iter()
+        .take(MAX_FIELD_POINTERS)
+        .filter_map(|pointer| slot(arguments, pointer, true, budget))
+        .take(MAX_LABEL_FIELDS)
+        .collect();
     Ok(ToolCallLabelItem {
-        title: core("title", &item.title)?,
-        id: core("id", &item.id)?,
-        target: core("target", &item.target)?,
-        before: core("before", &item.before)?,
-        after: core("after", &item.after)?,
-        fields: item
-            .fields
-            .iter()
-            .filter_map(|pointer| slot(arguments, pointer, true))
-            .take(MAX_LABEL_FIELDS)
-            .collect(),
+        title,
+        id,
+        target,
+        before,
+        after,
+        fields,
     })
 }
 
 /// `None` when the pointer reaches nothing. A null it reaches counts as
 /// reached but shows no value.
-fn slot(arguments: &Value, pointer: &str, field: bool) -> Option<ToolCallLabelSlot> {
-    let reached = pointer::resolve(arguments, pointer);
-    if reached.is_empty() {
-        return None;
-    }
-    let mut slot = ToolCallLabelSlot {
-        pointer: pointer.to_string(),
-        name: field
-            .then(|| pointer::last_name(pointer))
-            .flatten()
-            .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text),
-        values: Vec::new(),
-        omitted: 0,
-    };
-    let mut keep = |path: String, value: &Value| {
-        if slot.values.len() == MAX_SLOT_VALUES {
-            slot.omitted = slot.omitted.saturating_add(1);
-        } else if let Some(value) = label_value(path, value) {
-            slot.values.push(value);
+fn slot(
+    arguments: &Value,
+    pointer: &str,
+    field: bool,
+    budget: &mut usize,
+) -> Option<ToolCallLabelSlot> {
+    let mut values = Vec::new();
+    let mut omitted = 0u32;
+    let mut out_of_budget = false;
+    let mut keep = |path: Option<&str>, index: Option<usize>, value: &Value| {
+        let room = values.len() < MAX_SLOT_VALUES && !out_of_budget;
+        let Some(path) = path.filter(|_| room) else {
+            omitted = omitted.saturating_add(1);
+            return;
+        };
+        let path = match index {
+            Some(index) => format!("{path}/{index}"),
+            None => path.to_string(),
+        };
+        let Some(value) = label_value(path, value) else {
+            return;
+        };
+        match budget.checked_sub(value.text.len() + value.path.len()) {
+            Some(left) => {
+                *budget = left;
+                values.push(value);
+            }
+            None => {
+                out_of_budget = true;
+                omitted = omitted.saturating_add(1);
+            }
         }
     };
-    for pointer::Reached { path, value } in reached {
+    let reached = pointer::visit(arguments, pointer, |path, value| {
         // An array reached whole lists its entries, as `*` would.
         match value {
             Value::Array(entries) => {
                 for (index, entry) in entries.iter().enumerate() {
-                    keep(format!("{path}/{index}"), entry);
+                    keep(path, Some(index), entry);
                 }
             }
-            value => keep(path, value),
+            value => keep(path, None, value),
         }
+        std::ops::ControlFlow::Continue(())
+    });
+    if reached == 0 {
+        return None;
     }
-    Some(slot)
+    Some(ToolCallLabelSlot {
+        pointer: pointer.to_string(),
+        name: field
+            .then(|| pointer::last_name(pointer))
+            .flatten()
+            .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text)
+            .filter(|name| !name.is_empty()),
+        values,
+        omitted,
+    })
 }
 
 fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
-    let raw = match value {
+    let (raw, cut) = match value {
         Value::Null => return None,
-        Value::String(text) => std::borrow::Cow::Borrowed(text.as_str()),
-        Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
-            std::borrow::Cow::Owned(value.to_string())
+        Value::String(text) => (std::borrow::Cow::Borrowed(text.as_str()), false),
+        Value::Bool(_) | Value::Number(_) => (std::borrow::Cow::Owned(value.to_string()), false),
+        // Four bytes per character at most, so the prefix still fills the cap.
+        Value::Array(_) | Value::Object(_) => {
+            let (json, cut) = json_prefix(value, MAX_LABEL_VALUE_CHARS * 4 + 4);
+            (std::borrow::Cow::Owned(json), cut)
         }
     };
     let text = sanitize_display_text(&raw, MAX_LABEL_VALUE_CHARS);
     (!text.text.is_empty()).then_some(ToolCallLabelValue {
         path,
         text: text.text,
-        truncated: text.truncated,
+        truncated: text.truncated || cut,
         resolved: None,
     })
+}
+
+/// Compact JSON of `value`, stopped after `max_bytes`, and whether it was cut:
+/// a huge object costs no more than its first bytes.
+fn json_prefix(value: &Value, max_bytes: usize) -> (String, bool) {
+    struct Capped {
+        bytes: Vec<u8>,
+        max_bytes: usize,
+        cut: bool,
+    }
+    impl std::io::Write for Capped {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let room = self.max_bytes.saturating_sub(self.bytes.len());
+            if buf.len() > room {
+                let (head, _) = buf.split_at(room);
+                self.bytes.extend_from_slice(head);
+                self.cut = true;
+                return Err(std::io::Error::other("value cut at the label cap"));
+            }
+            self.bytes.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut capped = Capped {
+        bytes: Vec::new(),
+        max_bytes,
+        cut: false,
+    };
+    let _ = serde_json::to_writer(&mut capped, value);
+    let text = match String::from_utf8(capped.bytes) {
+        Ok(text) => text,
+        Err(error) => {
+            let valid = error.utf8_error().valid_up_to();
+            let mut bytes = error.into_bytes();
+            bytes.truncate(valid);
+            String::from_utf8(bytes).unwrap_or_default()
+        }
+    };
+    (text, capped.cut)
 }
 
 #[cfg(test)]
@@ -361,6 +458,254 @@ mod tests {
         let stored = serde_json::to_string(&label).unwrap();
         assert!(stored.len() < huge.len(), "{} bytes", stored.len());
         assert_eq!(label.warnings, [ToolCallLabelWarning::ArgumentsTruncated]);
+    }
+
+    fn hostile_arguments() -> Vec<Value> {
+        let mut deep = json!("leaf");
+        for _ in 0..120 {
+            deep = json!({ "next": [deep] });
+        }
+        let odd_keys: serde_json::Map<_, _> = [
+            "",
+            "/",
+            "~",
+            "~0",
+            "~1",
+            "a/b~c",
+            "*",
+            "0",
+            "\u{202E}evil",
+            "\u{0}\u{1B}[31m",
+            "\u{200B}",
+            "\u{E0041}",
+        ]
+        .into_iter()
+        .map(|key| (key.to_string(), json!(key)))
+        .chain([("k".repeat(10_000), json!("long key"))])
+        .collect();
+        let rows: Vec<_> = (0..50_000).map(|i| json!({ "name": i, "id": i })).collect();
+        vec![
+            Value::Null,
+            json!(true),
+            json!(-1.5e308),
+            json!(""),
+            json!("{\"half\": [1, 2"),
+            json!("plain text the model wrote instead of JSON\n\nsecond line"),
+            json!([]),
+            json!({}),
+            json!([1, [2, [3, {"x": null}]]]),
+            deep,
+            Value::Object(odd_keys),
+            json!({ "rows": rows }),
+            json!({ "body": "ä".repeat(2 * 1024 * 1024), "nested": {"blob": "x".repeat(1024 * 1024)} }),
+        ]
+    }
+
+    fn hostile_mapping() -> ToolCallLabelMapping {
+        let item = ToolCallLabelItemMapping {
+            title: Some("/*".into()),
+            id: Some("/*/*".into()),
+            target: Some("/*/*/*".into()),
+            before: Some("/".into()),
+            after: Some("/rows/*/name".into()),
+            fields: vec!["/*/*".into(); 1_000],
+        };
+        ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![item; 100],
+            source: ToolCallLabelSource::Model,
+        }
+    }
+
+    #[test]
+    fn any_arguments_and_any_mapping_give_a_small_label_or_the_generic_one() {
+        let pointers = [
+            "",
+            "/",
+            "no slash",
+            "/*",
+            "/*/*/*/*",
+            "/~",
+            "/rows/-1",
+            "/rows/99999999999999999999999",
+            &"/*".repeat(40),
+            &format!("/{}", "a".repeat(10_000)),
+        ];
+        for arguments in hostile_arguments() {
+            let generic = generic_label(&arguments);
+            assert_eq!(generic.source, ToolCallLabelSource::Generic);
+            let stored = serde_json::to_string(&generic).unwrap().len();
+            assert!(stored < 64 * 1024, "generic label of {stored} bytes");
+
+            let label = guarded(|| match resolve_label(&hostile_mapping(), &arguments) {
+                Ok(label) => label,
+                Err(_) => generic_label(&arguments),
+            })
+            .unwrap();
+            let stored = serde_json::to_string(&label).unwrap().len();
+            assert!(stored < 128 * 1024, "label of {stored} bytes");
+            for pointer in pointers {
+                let mapping = ToolCallLabelMapping {
+                    items: vec![ToolCallLabelItemMapping {
+                        title: Some(pointer.to_string()),
+                        fields: vec![pointer.to_string()],
+                        ..Default::default()
+                    }],
+                    ..hostile_mapping()
+                };
+                if let Ok(label) = resolve_label(&mapping, &arguments) {
+                    assert_eq!(label.items.len(), 1);
+                    assert!(serde_json::to_string(&label).unwrap().len() < 64 * 1024);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn one_label_keeps_a_bounded_amount_of_value_text() {
+        let pages: Vec<_> = (0..40)
+            .map(|i| json!({ "title": format!("{i:03}{}", "w".repeat(MAX_LABEL_VALUE_CHARS)) }))
+            .collect();
+        let arguments = json!({ "pages": pages });
+        let label = resolve_label(&hostile_mapping(), &arguments);
+        assert_eq!(
+            label,
+            Err(UnresolvedPointer {
+                item: 0,
+                part: "before"
+            })
+        );
+
+        let item = ToolCallLabelItemMapping {
+            title: Some("/pages/*/title".into()),
+            id: Some("/pages".into()),
+            target: Some("/pages/*/title".into()),
+            fields: vec!["/pages/*/title".into(); MAX_LABEL_FIELDS],
+            ..Default::default()
+        };
+        let mapping = ToolCallLabelMapping {
+            items: vec![item; MAX_LABEL_ITEMS],
+            ..create_rows()
+        };
+        let label = resolve_label(&mapping, &arguments).unwrap();
+        let slots: Vec<_> = label
+            .items
+            .iter()
+            .flat_map(|item| {
+                [&item.title, &item.id, &item.target]
+                    .into_iter()
+                    .flatten()
+                    .chain(&item.fields)
+            })
+            .collect();
+        let kept: usize = slots
+            .iter()
+            .flat_map(|slot| &slot.values)
+            .map(|value| value.text.len() + value.path.len())
+            .sum();
+        assert!(kept <= MAX_LABEL_VALUE_BYTES, "{kept}");
+        let shown: usize = slots.iter().map(|slot| slot.values.len()).sum();
+        let omitted: u32 = slots.iter().map(|slot| slot.omitted).sum();
+        assert_eq!(shown + omitted as usize, slots.len() * 40);
+        assert!(slots.last().unwrap().values.is_empty());
+        let first = label.items[0].title.as_ref().unwrap();
+        assert_eq!(first.values.len(), MAX_SLOT_VALUES);
+        assert!(first.values.iter().all(|value| value.truncated));
+        let id = label.items[0].id.as_ref().unwrap();
+        assert!(id.values[0].text.starts_with(r#"{"title":"000"#));
+    }
+
+    #[test]
+    fn whole_objects_are_cut_before_they_are_written_out() {
+        let big = json!({ "a": "x".repeat(4 * 1024 * 1024), "b": [1, 2, 3] });
+        let (json, cut) = json_prefix(&big, 100);
+        assert!(cut && json.len() == 100 && json.starts_with(r#"{"a":"xxx"#));
+        let (json, cut) = json_prefix(&json!({"name": "ä€😀"}), 13);
+        assert_eq!((json.as_str(), cut), (r#"{"name":"ä"#, true));
+        let (json, cut) = json_prefix(&json!([1, {"b": null}]), 100);
+        assert_eq!((json.as_str(), cut), (r#"[1,{"b":null}]"#, false));
+
+        let value = label_value("/blob".into(), &big).unwrap();
+        assert!(value.truncated);
+        assert_eq!(value.text.chars().count(), MAX_LABEL_VALUE_CHARS);
+        let hidden =
+            json!({ "k": format!("{}visible", "\u{200B}".repeat(MAX_LABEL_VALUE_CHARS * 4)) });
+        let value = label_value("/k".into(), &hidden).unwrap();
+        assert!(value.truncated && !value.text.contains('\u{200B}'));
+    }
+
+    #[test]
+    fn field_pointers_and_names_are_bounded_and_never_blank() {
+        let arguments = json!({ "": "empty key", "\u{200B}": "invisible key", "stage": "Lead" });
+        let mut fields = vec!["/missing".to_string(); MAX_FIELD_POINTERS];
+        fields.push("/stage".into());
+        let mapping = ToolCallLabelMapping {
+            items: vec![ToolCallLabelItemMapping {
+                fields,
+                ..Default::default()
+            }],
+            ..create_rows()
+        };
+        let label = resolve_label(&mapping, &arguments).unwrap();
+        assert!(label.items[0].fields.is_empty());
+
+        let mapping = ToolCallLabelMapping {
+            items: vec![ToolCallLabelItemMapping {
+                fields: vec!["/".into(), "/\u{200B}".into(), "/stage".into()],
+                ..Default::default()
+            }],
+            ..create_rows()
+        };
+        let label = resolve_label(&mapping, &arguments).unwrap();
+        let names: Vec<_> = label.items[0]
+            .fields
+            .iter()
+            .map(|field| field.name.as_deref())
+            .collect();
+        assert_eq!(names, [None, None, Some("stage")]);
+        assert_eq!(texts(&label.items[0].fields[1]), ["invisible key"]);
+    }
+
+    #[test]
+    fn a_labeller_that_panics_costs_only_the_label() {
+        let arguments = json!({"title": "Plan"});
+        assert_eq!(
+            guarded(|| generic_label(&arguments)),
+            Some(generic_label(&arguments))
+        );
+        assert_eq!(guarded(|| panic!("a labeller bug")), None);
+    }
+
+    #[test]
+    fn a_stored_label_this_version_cannot_read_drops_only_the_label() {
+        for broken in [
+            json!("a string"),
+            json!(42),
+            json!([]),
+            json!({}),
+            json!({"action": "create", "object_kind": "row", "source": "rules", "items": {"a": 1}}),
+            json!({"action": "create", "object_kind": "row", "source": "rules",
+                   "items": [{"title": {"pointer": "/t", "values": [{"path": "/t", "text": 5}]}}]}),
+            json!({"action": "other", "object_kind": "other", "source": "generic",
+                   "arguments": {"path": "", "kind": "group", "omitted": -1}}),
+            json!({"action": ["create"], "object_kind": "row", "source": "rules"}),
+        ] {
+            let parsed: ToolDisplayMetadata = serde_json::from_value(json!({
+                "title": "Create pages",
+                "description_truncated": false,
+                "server_name": "Notion",
+                "label": broken,
+            }))
+            .unwrap_or_else(|error| panic!("{broken}: {error}"));
+            assert_eq!(parsed.label, None, "{broken}");
+            assert_eq!(parsed.server_name.as_deref(), Some("Notion"));
+        }
+        let null: ToolDisplayMetadata = serde_json::from_value(
+            json!({"title": "Create pages", "description_truncated": false, "label": null}),
+        )
+        .unwrap();
+        assert_eq!(null.label, None);
     }
 
     #[test]

@@ -46,7 +46,7 @@ pub fn mcp_tool_call_display(
 ) -> ToolDisplayMetadata {
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
-        label: Some(label::generic_label(arguments)),
+        label: label::guarded(|| label::generic_label(arguments)),
         ..tool_display_metadata(tool)
     }
 }
@@ -155,6 +155,48 @@ mod tests {
                 description_truncated: false,
                 ..display
             }
+        );
+    }
+
+    #[test]
+    fn a_hostile_descriptor_changes_neither_the_label_nor_its_size() {
+        let arguments = serde_json::json!({"title": "Plan", "parent_id": "p1"});
+        let config = McpRuntimeConfig::default();
+        let plain = Tool::new("publish", "Publishes.", JsonObject::new());
+        let expected = mcp_tool_call_display(&config, "notion", &plain, &arguments).label;
+        assert_eq!(expected, Some(label::generic_label(&arguments)));
+
+        let mut schema = JsonObject::new();
+        schema.insert("type".into(), serde_json::json!(42));
+        schema.insert(
+            "properties".into(),
+            serde_json::json!(["not", "an", "object"]),
+        );
+        schema.insert("required".into(), serde_json::json!({"title": true}));
+        schema.insert("blob".into(), serde_json::json!("s".repeat(1024 * 1024)));
+        let mut hostile = Tool::new("publish\u{202E}\u{200B}", "x".repeat(1024 * 1024), schema);
+        let mut annotations = ToolAnnotations::default();
+        annotations.title = Some("\u{E0041}".repeat(1_000));
+        annotations.read_only_hint = Some(true);
+        annotations.destructive_hint = Some(true);
+        annotations.idempotent_hint = Some(false);
+        hostile.annotations = Some(annotations);
+        hostile.title = Some("\u{200B}\u{FEFF}".into());
+        let display = mcp_tool_call_display(&config, "notion", &hostile, &arguments);
+        assert_eq!(display.label, expected);
+        assert_eq!(display.title, "publish");
+        assert!(display.description_truncated);
+        assert!(serde_json::to_string(&display).unwrap().len() < 32 * 1024);
+        assert_eq!(
+            mcp_tool_call_display(
+                &config,
+                "notion",
+                &hostile,
+                &serde_json::json!("not json {")
+            )
+            .label
+            .map(|label| label.source),
+            Some(crate::models::message::ToolCallLabelSource::Generic)
         );
     }
 

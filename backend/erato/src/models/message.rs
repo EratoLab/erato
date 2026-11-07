@@ -470,9 +470,22 @@ pub struct ToolDisplayMetadata {
     pub server_name: Option<String>,
     /// What this call does to what, and where. Absent on client tools and
     /// older rows, which render as before.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "label_or_none"
+    )]
     #[schema(nullable = false)]
     pub label: Option<ToolCallLabel>,
+}
+
+/// A stored label this version cannot read is dropped, never the row: the
+/// call then renders as it did before labels.
+fn label_or_none<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ToolCallLabel>, D::Error> {
+    let stored = Option::<JsonValue>::deserialize(deserializer)?;
+    Ok(stored.and_then(|label| serde_json::from_value(label).ok()))
 }
 
 /// What a tool call does to what, and where, read from its arguments by code.
@@ -2680,6 +2693,33 @@ mod tool_approval_part_tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_stored_label_this_version_cannot_read_never_fails_its_row() {
+        let display = json!({
+            "title": "Create pages",
+            "description_truncated": false,
+            "server_name": "Notion",
+            "label": {"action": "create", "object_kind": "row", "source": "rules",
+                      "items": [{"title": {"pointer": "/t", "values": [{"path": 1}]}}]},
+        });
+        let message = MessageSchema::validate(&json!({
+            "role": "assistant",
+            "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                         "status": "success", "tool_name": "create_pages",
+                         "display": display, "input": {"t": "Plan"}}],
+        }))
+        .expect("a label it cannot read leaves the row readable");
+        let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+            panic!("expected one tool row");
+        };
+        let display = tool.display.as_ref().unwrap();
+        assert_eq!(
+            (display.title.as_str(), &display.label),
+            ("Create pages", &None)
+        );
+        assert_eq!(display.server_name.as_deref(), Some("Notion"));
     }
 
     /// Approval rows are durable and predate every field this stop now carries,
