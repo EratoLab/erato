@@ -42,8 +42,12 @@ export interface ScheduledItem {
 export interface ScheduledTemplate {
   id: string;
   type: ScheduledItemType;
+  /** The pill's label and line under it. */
   title: string;
   description: string;
+  /** What the template fills into the form. */
+  name: string;
+  message: string;
 }
 
 export type ScheduledTab = "upcoming" | "past";

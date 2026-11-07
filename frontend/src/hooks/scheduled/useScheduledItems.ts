@@ -15,6 +15,7 @@ import {
   useCancelScheduledItem,
   useDeleteScheduledItem,
   useListScheduledItems,
+  useListScheduledTemplates,
   useSnoozeScheduledItem,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
@@ -177,7 +178,20 @@ export function useScheduledItems(): ScheduledItemsState {
   };
 }
 
-/** Templates for the empty page; the template API comes with ERMAIN-1141. */
-export function useScheduledTemplates(): ScheduledTemplate[] {
-  return [];
+const NO_TEMPLATES: ScheduledTemplate[] = [];
+
+/**
+ * The templates the deployment configures, for the empty page and the form.
+ * A deployment without any, or a failed request, shows none.
+ */
+export function useScheduledTemplates(): {
+  templates: ScheduledTemplate[];
+  isLoading: boolean;
+} {
+  const { data, isLoading } = useListScheduledTemplates(
+    {},
+    // Configuration: it changes with a deployment, not while the page is open.
+    { staleTime: 5 * 60 * 1000, retry: false },
+  );
+  return { templates: data?.templates ?? NO_TEMPLATES, isLoading };
 }

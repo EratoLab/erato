@@ -296,7 +296,7 @@ export default function ScheduledPage() {
     cancel,
     remove,
   } = useScheduledItems();
-  const templates = useScheduledTemplates();
+  const { templates } = useScheduledTemplates();
 
   return (
     <ScheduledPageView
