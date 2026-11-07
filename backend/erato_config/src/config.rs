@@ -87,13 +87,11 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': stateless protocol requires streamable_http"
             ));
         }
-        if server
-            .display_name
-            .as_deref()
-            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
-        {
+        if server.display_name.as_deref().is_some_and(|name| {
+            !is_valid_display_name(name) || name.chars().any(is_invisible_format_char)
+        }) {
             return Err(eyre!(
-                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
     }
@@ -105,14 +103,19 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// Bidi marks, embeddings, overrides and isolates: any of them can make the
-/// rendered order of a string differ from its logical order. Tool text from MCP
-/// servers is stripped of them and MCP server display names may not contain
-/// them, since the server name is shown right next to that text.
-pub fn is_bidi_control(c: char) -> bool {
+/// Bidi controls, which can reorder a string, and zero-width, byte order mark
+/// and tag characters, which can hide text in it. MCP tool text is stripped of
+/// them and MCP server display names, shown next to that text, may not hold them.
+pub fn is_invisible_format_char(c: char) -> bool {
     matches!(
         c,
-        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        '\u{061C}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+            | '\u{E0000}'..='\u{E007F}'
     )
 }
 
@@ -3828,9 +3831,9 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
-    /// Name shown to users for this server, at most 128 bytes without control
-    /// or bidi formatting characters. When omitted, the server id is shown
-    /// tidied up.
+    /// Name shown to users for this server, at most 128 bytes without control,
+    /// bidi or invisible formatting characters. When omitted, the server id is
+    /// shown tidied up.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub display_name: Option<String>,
