@@ -6122,6 +6122,7 @@ async fn send_tool_generation_update<
     message_id: Uuid,
     content_index: usize,
     call: &genai::chat::ToolCall,
+    display: Option<crate::models::message::ToolDisplayMetadata>,
     status: ToolCallStatus,
     progress: Option<f64>,
     task: Option<&Arc<StreamingTask>>,
@@ -6141,7 +6142,7 @@ async fn send_tool_generation_update<
                 content_index,
                 tool_call_id: call.call_id.clone(),
                 tool_name: call.fn_name.clone(),
-                display: None,
+                display: display.clone(),
                 input: Some(call.fn_arguments.clone()),
                 status: bg_status,
                 progress_message: None,
@@ -6158,7 +6159,7 @@ async fn send_tool_generation_update<
         content_index,
         tool_call_id: call.call_id.clone(),
         tool_name: call.fn_name.clone(),
-        display: None,
+        display,
         input: Some(call.fn_arguments.clone()),
         status,
         progress_message: None,
@@ -7405,6 +7406,16 @@ async fn stream_generate_chat_completion<'a>(
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
+            let mcp_row_display = available_mcp_tools_by_name
+                .get(unfinished_tool_call.fn_name.as_str())
+                .map(|managed| {
+                    tool_row_display(&crate::services::tool_display::mcp_tool_call_display(
+                        &mcp.config,
+                        &managed.server_id,
+                        &managed.tool,
+                        &unfinished_tool_call.fn_arguments,
+                    ))
+                });
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();
@@ -7416,6 +7427,7 @@ async fn stream_generate_chat_completion<'a>(
                         assistant_message_id,
                         tool_index,
                         &unfinished_tool_call,
+                        mcp_row_display.clone(),
                         ToolCallStatus::InProgress,
                         None,
                         streaming_task,
@@ -7482,18 +7494,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: available_mcp_tools_by_name
-                            .get(unfinished_tool_call.fn_name.as_str())
-                            .map(|managed| {
-                                tool_row_display(
-                                    &crate::services::tool_display::mcp_tool_call_display(
-                                        &mcp.config,
-                                        &managed.server_id,
-                                        &managed.tool,
-                                        &unfinished_tool_call.fn_arguments,
-                                    ),
-                                )
-                            }),
+                        display: mcp_row_display,
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -7630,6 +7631,7 @@ async fn stream_generate_chat_completion<'a>(
                     assistant_message_id,
                     tool_index,
                     &unfinished_tool_call,
+                    None,
                     status,
                     None,
                     streaming_task,
@@ -7720,6 +7722,7 @@ async fn stream_generate_chat_completion<'a>(
                     assistant_message_id,
                     tool_index,
                     &unfinished_tool_call,
+                    None,
                     status,
                     None,
                     streaming_task,
@@ -10729,6 +10732,7 @@ async fn stream_generate_chat_completion<'a>(
                                 assistant_message_id,
                                 progress.index,
                                 &preview_call,
+                                None,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
                                 streaming_task,

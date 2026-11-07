@@ -5238,10 +5238,11 @@ async fn park_a_turn_and_keep_its_events(
 }
 
 /// Every MCP call is stored with a label, the call that ran without asking as
-/// well as the gated one, and a call's live update carries the display its row
-/// is stored with. With no better source the label is generic, and its
-/// readable view names the gated call's arguments by path without copying
-/// their values; the approval fields stay what the gate decided.
+/// well as the gated one, and a call's live updates, the first running one as
+/// well as the final one, carry the display its row is stored with. With no
+/// better source the label is generic, and its readable view names the gated
+/// call's arguments by path without copying their values; the approval fields
+/// stay what the gate decided.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -5293,6 +5294,16 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
         .collect();
     assert_eq!(read_updates.len(), 1, "{read_updates:?}");
     assert_eq!(read_updates[0]["display"], read["display"]);
+    let first_running_update = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["status"] == "in_progress"
+                && json["tool_call_id"] == read["tool_call_id"]
+        })
+        .expect("Expected the streamed call to go in progress");
+    assert_eq!(first_running_update["display"], read["display"]);
 
     let request = &content[1];
     assert_eq!(request["content_type"], "tool_approval_request");
