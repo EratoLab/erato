@@ -40,6 +40,12 @@ export interface DropdownMenuItem {
   confirmTitle?: string;
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
+  /**
+   * Button labels of the confirmation. Needed when the row's own action is
+   * itself "Cancel", which the dialog's default dismiss label would echo.
+   */
+  confirmButtonText?: string;
+  confirmCancelButtonText?: string;
   checked?: boolean;
   testId?: string;
   /** Optional secondary muted line under the label. */
@@ -410,6 +416,8 @@ export const DropdownMenu = memo(
               confirmingItem.confirmButtonVariant ??
               (confirmingItem.variant === "danger" ? "danger" : "primary")
             }
+            confirmButtonText={confirmingItem.confirmButtonText}
+            cancelButtonText={confirmingItem.confirmCancelButtonText}
           />
         )}
       </>

@@ -281,6 +281,38 @@ describe("DropdownMenu", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
+  it("labels the confirmation buttons for a row whose action is Cancel", async () => {
+    const onCancel = vi.fn();
+    render(
+      <DropdownMenu
+        items={[
+          {
+            id: "cancel",
+            label: "Cancel",
+            onClick: onCancel,
+            variant: "danger",
+            confirmAction: true,
+            confirmTitle: "Cancel this item?",
+            confirmButtonText: "Cancel it",
+            confirmCancelButtonText: "Keep it",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel" }));
+
+    const keep = await screen.findByRole("button", { name: "Cancel action" });
+    const confirm = screen.getByRole("button", { name: "Confirm action" });
+    expect(keep).toHaveTextContent("Keep it");
+    expect(confirm).toHaveTextContent("Cancel it");
+    expect(onCancel).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it("draws a divider without a label for a row that asks for one", async () => {
     render(
       <DropdownMenu
