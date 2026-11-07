@@ -7877,6 +7877,16 @@ msgstr "{shape, select, full {Verschieben fehlgeschlagen: {kind} {title} nach {w
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "Der Aufruf hat selbst einen Zustimmungswert gesetzt, der hier nicht angezeigt wird. Es zählt nur Ihre Entscheidung auf dieser Karte."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Einige Werte in diesem Aufruf enthalten versteckte Zeichen, die hier entfernt sind. Was der Aufruf schreibt, kann von dem abweichen, was Sie sehen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Weitere Argumente"
 
@@ -7929,6 +7939,11 @@ msgstr "Wert aus einem früheren Ergebnis in diesem Chat"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Name aus einem früheren Ergebnis in diesem Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "geschrieben als"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

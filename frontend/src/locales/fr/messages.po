@@ -7877,6 +7877,16 @@ msgstr "{shape, select, full {Échec du déplacement : {kind} {title} vers {wher
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "L’appel a défini lui-même une valeur d’approbation, qui n’est pas affichée. Seule votre décision sur cette carte compte."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Certaines valeurs de cet appel contiennent des caractères cachés, retirés ici. Ce que l’appel écrit peut différer de ce que vous voyez."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Autres arguments"
 
@@ -7929,6 +7939,11 @@ msgstr "Valeur tirée d’un résultat précédent de cette conversation"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Nom tiré d’un résultat précédent de cette conversation"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "écrit comme"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

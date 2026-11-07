@@ -7877,6 +7877,16 @@ msgstr "{shape, select, full {No se pudo mover: {kind} {title} a {where}} titled
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "La llamada estableció por su cuenta un valor de aprobación, que no se muestra. Solo cuenta tu decisión en esta tarjeta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Algunos valores de esta llamada contienen caracteres ocultos, que aquí se eliminan. Lo que escribe la llamada puede diferir de lo que ves."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Otros argumentos"
 
@@ -7929,6 +7939,11 @@ msgstr "Valor tomado de un resultado anterior de este chat"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Nombre tomado de un resultado anterior de este chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "escrito como"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

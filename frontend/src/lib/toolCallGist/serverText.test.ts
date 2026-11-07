@@ -19,25 +19,89 @@ describe("cleanServerText", () => {
     expect(cleanServerText("ä".repeat(5), 3)).toEqual({
       text: "äää",
       truncated: true,
+      hiddenCharacters: false,
     });
     expect(cleanServerText("abc", 3).truncated).toBe(false);
   });
 
   it("reads anything but text as empty", () => {
     for (const raw of [undefined, null, 42, { text: "x" }, ["x"], true]) {
-      expect(cleanServerText(raw)).toEqual({ text: "", truncated: false });
+      expect(cleanServerText(raw)).toEqual({
+        text: "",
+        truncated: false,
+        hiddenCharacters: false,
+      });
     }
   });
 
   it("reads only the start of a megabyte-long text, and says it was cut", () => {
     const cleaned = cleanServerText("a".repeat(5_000_000), 10);
-    expect(cleaned).toEqual({ text: "a".repeat(10), truncated: true });
+    expect(cleaned).toEqual({
+      text: "a".repeat(10),
+      truncated: true,
+      hiddenCharacters: false,
+    });
     const mostlyDropped = cleanServerText(
       `${"\u202E".repeat(1_000)}visible`,
       10,
     );
     expect(mostlyDropped.truncated).toBe(true);
     expect(mostlyDropped.text).not.toContain("\u202E");
+  });
+
+  it.each([
+    ["the Arabic letter mark", "\u061C"],
+    ["a zero-width space", "\u200B"],
+    ["a zero-width non-joiner", "\u200C"],
+    ["a zero-width joiner", "\u200D"],
+    ["a left-to-right mark", "\u200E"],
+    ["a right-to-left mark", "\u200F"],
+    ["a bidi embedding", "\u202A"],
+    ["a bidi override", "\u202E"],
+    ["a word joiner", "\u2060"],
+    ["a bidi isolate", "\u2066"],
+    ["a pop directional isolate", "\u2069"],
+    ["a byte order mark", "\uFEFF"],
+    ["the first tag character", "\u{E0000}"],
+    ["a tag letter", "\u{E0041}"],
+    ["the cancel tag", "\u{E007F}"],
+  ])("removes %s and says the text hid something", (_name, char) => {
+    expect(cleanServerText(`pay${char}ee`)).toEqual({
+      text: "payee",
+      truncated: false,
+      hiddenCharacters: true,
+    });
+  });
+
+  it("hides nothing by dropping control characters or keeping near neighbours", () => {
+    expect(cleanServerText("a\u0007b\r\u009Fc")).toEqual({
+      text: "abc",
+      truncated: false,
+      hiddenCharacters: false,
+    });
+    for (const kept of [
+      "\u061B",
+      "\u200A",
+      "\u2010",
+      "\u2029",
+      "\u2061",
+      "\u{E0080}",
+      "👩",
+    ]) {
+      expect(cleanServerText(`x${kept}`).hiddenCharacters).toBe(false);
+    }
+    expect(cleanServerText("x\u{E0080}").text).toBe("x\u{E0080}");
+  });
+
+  it("reads text hidden in tag characters as removed", () => {
+    const tagged = Array.from("ignore", (c) =>
+      String.fromCodePoint(0xe0000 + c.codePointAt(0)!),
+    ).join("");
+    expect(cleanServerText(`Invoice${tagged} 42`)).toEqual({
+      text: "Invoice 42",
+      truncated: false,
+      hiddenCharacters: true,
+    });
   });
 
   it("drops half a character pair cut at the end", () => {

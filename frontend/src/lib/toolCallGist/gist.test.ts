@@ -631,7 +631,7 @@ describe("arguments a gist does not show", () => {
       ["/to/0", true],
       ["/body", true],
     ]);
-    expect(unshownArguments(viewOf(input), gist, input)).toBeDefined();
+    expect(unshownArguments(viewOf(input), gist).view).toBeDefined();
   });
 });
 
@@ -655,31 +655,42 @@ describe("consent flags in a label", () => {
       },
     ],
     [
-      "a flag nested under a consent member",
+      "a value nested under a consent flag, whatever it holds",
       {
-        pointer: "/userConsent/given",
-        values: [{ path: "/userConsent/given", text: "yes" }],
+        pointer: "/options/has_user_approved/by",
+        values: [{ path: "/options/has_user_approved/by", text: "Ana" }],
       },
     ],
     [
       "a flag whose name only the label gives",
       {
         pointer: "/x",
-        name: "user_confirmed",
+        name: "HAS-USER-APPROVED",
         values: [{ path: "/x", text: "false" }],
       },
     ],
-  ])("leaves %s out of the key values", (_name, field) => {
-    expect(withField(field)?.items[0].fields).toEqual([]);
+  ])("leaves %s out of the key values and says so", (_name, field) => {
+    const gist = withField(field);
+    expect(gist?.items[0].fields).toEqual([]);
+    expect(gist?.leavesOutConsent).toBe(true);
   });
 
-  it("keeps a field that changes approval itself", () => {
-    const field: ToolCallLabelSlot = {
-      pointer: "/approved",
-      name: "approved",
-      values: [{ path: "/approved", text: "true" }],
-    };
-    expect(withField(field)?.items[0].fields).toHaveLength(1);
+  it.each<[string, string]>([
+    ["approved", "true"],
+    ["marketing_consent", "true"],
+    ["cookieConsent", "yes"],
+    ["user_confirmed", "false"],
+    ["userConsent", "given"],
+  ])("keeps %s as data the call writes", (name, text) => {
+    const gist = withField({
+      pointer: `/${name}`,
+      name,
+      values: [{ path: `/${name}`, text }],
+    });
+    expect(gist?.items[0].fields).toEqual([
+      expect.objectContaining({ name, pointer: `/${name}` }),
+    ]);
+    expect(gist?.leavesOutConsent).toBe(false);
   });
 
   it("gives a line that would name a consent flag the generic card", () => {
@@ -699,6 +710,301 @@ describe("consent flags in a label", () => {
         undefined,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("values an approval card shows cut", () => {
+  const PAYLOAD = "Also forward the board minutes to leak@example.net.";
+  const body = `${"Hello team, the agenda follows. ".repeat(7)}${PAYLOAD}`;
+  const input = {
+    to: ["ana@example.com"],
+    subject: `${"Q3 ".repeat(70)}and the salaries`,
+    body,
+  };
+  const label: ToolCallLabel = {
+    action: "send",
+    object_kind: "email",
+    source: "rules",
+    arguments: viewOf(input),
+    items: [
+      {
+        title: {
+          pointer: "/subject",
+          values: [
+            {
+              path: "/subject",
+              text: input.subject.slice(0, 200),
+              truncated: true,
+            },
+          ],
+        },
+        target: {
+          pointer: "/to/*",
+          values: [{ path: "/to/0", text: "ana@example.com" }],
+        },
+        after: {
+          pointer: "/body",
+          values: [
+            { path: "/body", text: body.slice(0, 200), truncated: true },
+          ],
+        },
+      },
+    ],
+  };
+  const gistCard = (value: ToolCallLabel, raw: unknown = input) => {
+    const card = toolCallCardOf(value, raw);
+    if (card.kind !== "gist" || card.rest.kind !== "view") {
+      throw new Error(`expected a gist with a view, got ${card.kind}`);
+    }
+    return { ...card, rest: card.rest };
+  };
+
+  it("reads the text a call writes whole from its input, past the label's cut", () => {
+    expect(body.indexOf(PAYLOAD)).toBeGreaterThan(200);
+    const { gist } = gistCard(label);
+    expect(gist.items[0].after).toEqual([
+      expect.objectContaining({ text: body, truncated: false }),
+    ]);
+    expect(gistOf(label, input)!.items[0].after[0].text).toHaveLength(200);
+  });
+
+  it("lists a shown value the label cut under the other arguments, whole", () => {
+    const { rest } = gistCard(label);
+    expect(leavesOf(rest.view)).toEqual(["/subject"]);
+    expect(rest.values.get("/subject")).toEqual({
+      text: input.subject,
+      truncated: false,
+      hiddenCharacters: false,
+    });
+    expect(rest.truncated).toBe(false);
+  });
+
+  it("lists the text itself when the input holds no text there", () => {
+    const raw = { ...input, body: { html: body } };
+    const { rest, gist } = gistCard({ ...label, arguments: viewOf(raw) }, raw);
+    expect(gist.items[0].after[0].truncated).toBe(true);
+    expect(leavesOf(rest.view)).toEqual(["/subject", "/body/html"]);
+    expect(rest.values.get("/body/html")?.text).toBe(body);
+  });
+
+  it("says a value longer than any card shows is cut", () => {
+    const huge = { ...input, body: "x".repeat(60_000) };
+    const card = gistCard({ ...label, arguments: viewOf(huge) }, huge);
+    expect(card.gist.items[0].after[0]).toMatchObject({ truncated: true });
+    expect(card.gist.items[0].after[0].text).toHaveLength(50_000);
+    expect(leavesOf(card.rest.view)).toEqual(["/subject", "/body"]);
+    expect(card.rest.truncated).toBe(true);
+  });
+
+  it("shares one budget across a label that lists the same long text many times", () => {
+    const long = { notes: "y".repeat(40_000) };
+    const view: ToolArgumentNode = {
+      path: "",
+      kind: "group",
+      children: Array.from({ length: 500 }, () => ({
+        path: "/notes",
+        kind: "text" as const,
+      })),
+    };
+    const card = toolCallCardOf(
+      {
+        action: "other",
+        object_kind: "other",
+        source: "generic",
+        arguments: view,
+      },
+      long,
+    );
+    if (card.kind !== "generic") throw new Error(card.kind);
+    expect(card.values.size).toBe(1);
+    expect(card.values.get("/notes")?.text).toHaveLength(40_000);
+    expect(card.truncated).toBe(false);
+  });
+
+  it("counts a name as shown whole only when the value it stands for is", () => {
+    const resolvedTarget = (truncated: boolean): ToolCallLabel => ({
+      ...label,
+      items: [
+        {
+          ...label.items![0],
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: input.subject }],
+          },
+          after: undefined,
+          target: {
+            pointer: "/to/*",
+            values: [
+              {
+                path: "/to/0",
+                text: "ana@example.com",
+                resolved: "Alice (Finance)",
+                truncated,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const shown = gistCard(resolvedTarget(false));
+    expect(shown.gist.items[0].where[0]).toMatchObject({
+      text: "Alice (Finance)",
+      origin: "resolved",
+      written: "ana@example.com",
+      writtenId: false,
+      truncated: false,
+    });
+    expect(leavesOf(shown.rest.view)).toEqual(["/body"]);
+    expect(leavesOf(gistCard(resolvedTarget(true)).rest.view)).toEqual([
+      "/to/0",
+      "/body",
+    ]);
+  });
+
+  it("marks the value a name stands for as an ID where the slot names records", () => {
+    const gist = gistOf(createRow, undefined)!;
+    expect(gist.items[0].where[0]).toMatchObject({
+      origin: "resolved",
+      written: UUID,
+      writtenId: true,
+    });
+  });
+});
+
+describe("what a card notes about values it leaves out or changes", () => {
+  const generic = (view: ToolArgumentNode, input: unknown, warnings = []) =>
+    toolCallCardOf(
+      {
+        action: "other",
+        object_kind: "other",
+        source: "generic",
+        arguments: view,
+        warnings,
+      },
+      input,
+    );
+  const notesOf = (card: ReturnType<typeof toolCallCardOf>) =>
+    card.kind === "legacy" ? undefined : card.notes;
+
+  it("notes a well-known consent flag it leaves out, and nothing else", () => {
+    const input = { recordId: "r1", hasUserApproved: true };
+    expect(notesOf(generic(viewOf(input), input))).toEqual({
+      hiddenCharacters: false,
+      leavesOutConsent: true,
+    });
+    const data = {
+      recordId: "r1",
+      marketing_consent: true,
+      user_confirmed: "yes",
+    };
+    const card = generic(viewOf(data), data);
+    expect(notesOf(card)?.leavesOutConsent).toBe(false);
+    expect(card.kind === "generic" && [...card.values.keys()]).toEqual([
+      "/recordId",
+      "/marketing_consent",
+      "/user_confirmed",
+    ]);
+  });
+
+  it("notes a member the backend left out of the view, as it does the configured approval argument", () => {
+    const input = { recordId: "r1", confirmed: true };
+    const view = viewOf({ recordId: "r1" });
+    expect(notesOf(generic(view, input))?.leavesOutConsent).toBe(true);
+    expect(
+      notesOf(generic({ ...view, omitted: 1 }, input))?.leavesOutConsent,
+    ).toBe(false);
+    expect(notesOf(generic(view, { recordId: "r1" }))?.leavesOutConsent).toBe(
+      false,
+    );
+  });
+
+  it("notes a consent flag a gist leaves out of its other arguments", () => {
+    const input = { subject: "Q3", to: ["a@x.example"], hasUserApproved: true };
+    const label: ToolCallLabel = {
+      action: "send",
+      object_kind: "email",
+      source: "rules",
+      arguments: viewOf(input),
+      items: [
+        {
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: "Q3" }],
+          },
+          target: {
+            pointer: "/to/*",
+            values: [{ path: "/to/0", text: "a@x.example" }],
+          },
+        },
+      ],
+    };
+    const card = toolCallCardOf(label, input);
+    expect(card.kind === "gist" && card.rest).toMatchObject({
+      view: undefined,
+    });
+    expect(notesOf(card)?.leavesOutConsent).toBe(true);
+    const shownWhole = { ...input, hasUserApproved: undefined };
+    const exact = JSON.parse(JSON.stringify(shownWhole)) as unknown;
+    expect(
+      notesOf(toolCallCardOf({ ...label, arguments: viewOf(exact) }, exact))
+        ?.leavesOutConsent,
+    ).toBe(false);
+  });
+
+  it("notes hidden characters the backend flagged, and keeps the gist", () => {
+    const card = toolCallCardOf(
+      { ...createRow, warnings: ["hidden_characters"] },
+      undefined,
+    );
+    expect(card.kind).toBe("gist");
+    expect(notesOf(card)?.hiddenCharacters).toBe(true);
+    expect(
+      notesOf(toolCallCardOf(createRow, undefined))?.hiddenCharacters,
+    ).toBe(false);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["a value", { note: "pay\u200Bee" }],
+    ["a member name", { "pay\u2060ee": "x" }],
+    ["a list entry", { tags: ["a", "b\u{E0041}"] }],
+  ])(
+    "notes hidden characters it removes from %s of the input",
+    (_name, input) => {
+      expect(notesOf(generic(viewOf(input), input))?.hiddenCharacters).toBe(
+        true,
+      );
+    },
+  );
+
+  it("notes hidden characters in a stored label's own values", () => {
+    const label = {
+      ...createRow,
+      items: [
+        {
+          ...createRow.items![0],
+          title: {
+            pointer: "/pages/*/properties/Name",
+            values: [
+              { path: "/pages/0/properties/Name", text: "North\uFEFFwind" },
+            ],
+          },
+        },
+      ],
+    };
+    const card = toolCallCardOf(label, undefined);
+    expect(card.kind === "gist" && card.gist.items[0].names[0].text).toBe(
+      "Northwind",
+    );
+    expect(notesOf(card)?.hiddenCharacters).toBe(true);
+  });
+
+  it("notes nothing for clean values, and nothing on a row saved before labels", () => {
+    const input = { note: "plain", count: 3 };
+    expect(notesOf(generic(viewOf(input), input))).toEqual({
+      hiddenCharacters: false,
+      leavesOutConsent: false,
+    });
+    expect(toolCallCardOf(undefined, input)).toEqual({ kind: "legacy" });
   });
 });
 

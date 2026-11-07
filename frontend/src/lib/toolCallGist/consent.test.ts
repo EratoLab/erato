@@ -1,39 +1,42 @@
 import { describe, expect, it } from "vitest";
 
-import { isConsentClaim, isConsentMember, isYesOrNo } from "./consent";
+import { isConsentClaim, isConsentMember } from "./consent";
 
 describe("consent flags", () => {
   it.each([
     "hasUserApproved",
-    "user_confirmed",
-    "userAgreed",
-    "consent",
-    "explicitConsentGiven",
-  ])("reads %s as a consent member", (name) => {
+    "has_user_approved",
+    "HAS-USER-APPROVED",
+    "hasuserapproved",
+    "has_User-Approved",
+  ])("reads %s as a consent flag", (name) => {
     expect(isConsentMember(name)).toBe(true);
   });
 
-  it.each(["approved", "user", "confirmation_email", "username"])(
-    "reads %s as an ordinary member",
-    (name) => {
-      expect(isConsentMember(name)).toBe(false);
-    },
-  );
-
-  it("counts only a yes or no as a claim", () => {
-    for (const value of [true, false, "yes", " NO ", "true"]) {
-      expect(isYesOrNo(value)).toBe(true);
-    }
-    for (const value of ["maybe", 1, null, {}, "yes".padEnd(100, " ")]) {
-      expect(isYesOrNo(value)).toBe(false);
-    }
+  it.each([
+    "marketing_consent",
+    "cookieConsent",
+    "consent",
+    "user_confirmed",
+    "userAgreed",
+    "explicitConsentGiven",
+    "approved",
+    "hasUserApprovedAt",
+    "has user approved",
+    "hasUserApproved​",
+    "_".repeat(20) + "hasUserApproved",
+  ])("reads %s as data the call writes", (name) => {
+    expect(isConsentMember(name)).toBe(false);
   });
 
-  it("finds a consent member at or above the value", () => {
-    expect(isConsentClaim(true, "/hasUserApproved")).toBe(true);
-    expect(isConsentClaim("yes", "/meta/userConsent/given")).toBe(true);
-    expect(isConsentClaim(true, "/approved")).toBe(false);
-    expect(isConsentClaim("Alice", "/hasUserApproved")).toBe(false);
-    expect(isConsentClaim(true, 7, undefined, "/user~1approved")).toBe(true);
+  it("finds a consent flag at or above a value, whatever it holds", () => {
+    expect(isConsentClaim("/hasUserApproved")).toBe(true);
+    expect(isConsentClaim("/options/has_user_approved/by")).toBe(true);
+    expect(isConsentClaim("/hasUserApproved/0")).toBe(true);
+    expect(isConsentClaim("/meta/userConsent/given")).toBe(false);
+    expect(isConsentClaim("/marketing_consent")).toBe(false);
+    expect(isConsentClaim(7, undefined, "/x/has~1user~0approved")).toBe(false);
+    expect(isConsentClaim(7, undefined, "/x", "/hasUserApproved")).toBe(true);
+    expect(isConsentClaim("hasUserApproved")).toBe(false);
   });
 });

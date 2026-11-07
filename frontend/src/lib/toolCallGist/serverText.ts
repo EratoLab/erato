@@ -1,7 +1,8 @@
 /**
  * Values read from a call's raw `input` or `output`, made inert the way the
- * backend's `sanitize_display_text` makes the label's values: no control or
- * bidi characters, NFC, at most two newlines in a row, trimmed and capped.
+ * backend's `sanitize_display_text` makes the label's values: no control,
+ * bidi or invisible formatting characters, NFC, at most two newlines in a
+ * row, trimmed and capped.
  */
 
 /** The backend's cap for a tool's name or title. */
@@ -10,19 +11,32 @@ export const MAX_SERVER_TEXT_CHARS = 200;
 export const MAX_SERVER_DESCRIPTION_CHARS = 4_000;
 /** A failure message is a sentence or two, never the server's stack trace. */
 export const MAX_FAILURE_MESSAGE_CHARS = 300;
+/** An argument an approval card shows whole; past it the card says it is cut. */
+export const MAX_ARGUMENT_VALUE_CHARS = 50_000;
 
 export interface CleanText {
   text: string;
   truncated: boolean;
+  /**
+   * Whether bidi controls or zero-width, byte order mark or tag characters
+   * were removed, so the text differs from the value in ways nobody can see.
+   */
+  hiddenCharacters: boolean;
 }
 
-const isDropped = (code: number): boolean =>
-  (code < 0x20 && code !== 0x0a && code !== 0x09) ||
-  (code >= 0x7f && code <= 0x9f) ||
-  code === 0x200e ||
-  code === 0x200f ||
+/** The backend's `is_invisible_format_char`. */
+export const isInvisibleFormatChar = (code: number): boolean =>
+  code === 0x061c ||
+  (code >= 0x200b && code <= 0x200f) ||
   (code >= 0x202a && code <= 0x202e) ||
-  (code >= 0x2066 && code <= 0x2069);
+  code === 0x2060 ||
+  (code >= 0x2066 && code <= 0x2069) ||
+  code === 0xfeff ||
+  (code >= 0xe0000 && code <= 0xe007f);
+
+const isControl = (code: number): boolean =>
+  (code < 0x20 && code !== 0x0a && code !== 0x09) ||
+  (code >= 0x7f && code <= 0x9f);
 
 // Enough room for the dropped characters and line breaks a capped text may
 // lose, without walking a megabyte-long string a server sent.
@@ -32,12 +46,19 @@ export const cleanServerText = (
   raw: unknown,
   maxChars: number = MAX_SERVER_TEXT_CHARS,
 ): CleanText => {
-  if (typeof raw !== "string") return { text: "", truncated: false };
+  if (typeof raw !== "string") {
+    return { text: "", truncated: false, hiddenCharacters: false };
+  }
   const scanned = raw.slice(0, maxChars * SCAN_FACTOR);
+  let hiddenCharacters = false;
   const kept = Array.from(scanned)
     .filter((char) => {
       const code = char.codePointAt(0) ?? 0;
-      return !isDropped(code) && !(code >= 0xd800 && code <= 0xdfff);
+      if (isInvisibleFormatChar(code)) {
+        hiddenCharacters = true;
+        return false;
+      }
+      return !isControl(code) && !(code >= 0xd800 && code <= 0xdfff);
     })
     .join("")
     .normalize("NFC")
@@ -45,12 +66,22 @@ export const cleanServerText = (
     .trim();
   const chars = Array.from(kept);
   return chars.length > maxChars
-    ? { text: chars.slice(0, maxChars).join("").trimEnd(), truncated: true }
-    : { text: kept, truncated: scanned.length < raw.length };
+    ? {
+        text: chars.slice(0, maxChars).join("").trimEnd(),
+        truncated: true,
+        hiddenCharacters,
+      }
+    : { text: kept, truncated: scanned.length < raw.length, hiddenCharacters };
 };
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A count read as data: anything but a positive finite number is none. */
+export const countOf = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
 
 const unescapeSegment = (segment: string): string =>
   segment.replace(/~1/g, "/").replace(/~0/g, "~");

@@ -7877,6 +7877,16 @@ msgstr "{shape, select, full {Nie udało się przenieść: {kind} {title} do {wh
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "Wywołanie samo ustawiło wartość zatwierdzenia, której tu nie pokazano. Liczy się tylko Twoja decyzja na tej karcie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Niektóre wartości w tym wywołaniu zawierają ukryte znaki, które tu usunięto. To, co zapisze wywołanie, może się różnić od tego, co widzisz."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Pozostałe argumenty"
 
@@ -7929,6 +7939,11 @@ msgstr "Wartość z wcześniejszego wyniku w tym czacie"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Nazwa z wcześniejszego wyniku w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "zapisane jako"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

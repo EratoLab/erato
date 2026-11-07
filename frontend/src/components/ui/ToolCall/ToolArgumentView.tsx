@@ -5,22 +5,15 @@ import { isConsentClaim } from "@/lib/toolCallGist/consent";
 import { shortId } from "@/lib/toolCallGist/gist";
 import {
   cleanServerText,
-  jsonPreview,
   lastPointerSegment,
-  MAX_SERVER_DESCRIPTION_CHARS,
   MAX_SERVER_TEXT_CHARS,
-  readPointer,
 } from "@/lib/toolCallGist/serverText";
 
 import type { ToolArgumentNode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ArgumentTexts } from "@/lib/toolCallGist/argumentValues";
+import type { CleanText } from "@/lib/toolCallGist/serverText";
 
 const ISOLATED = "[unicode-bidi:isolate]";
-
-const scalarText = (value: unknown, maxChars: number): string => {
-  if (typeof value === "string") return value;
-  if (value === undefined) return "";
-  return jsonPreview(value, maxChars);
-};
 
 const childrenOf = (node: ToolArgumentNode): ToolArgumentNode[] =>
   Array.isArray(node.children) ? node.children : [];
@@ -37,67 +30,59 @@ const omittedLabel = (omitted: number) =>
     }),
   });
 
-const Scalar = ({
-  node,
-  value,
-  compact,
-}: {
-  node: ToolArgumentNode;
-  value: unknown;
-  compact: boolean;
-}) => {
-  const maxChars =
-    node.kind === "text" && !compact
-      ? MAX_SERVER_DESCRIPTION_CHARS
-      : MAX_SERVER_TEXT_CHARS;
-  const { text, truncated } = cleanServerText(
-    scalarText(value, maxChars),
-    maxChars,
-  );
+const NO_TEXT: CleanText = {
+  text: "",
+  truncated: false,
+  hiddenCharacters: false,
+};
+
+// Long text gets a box of its own that scrolls, so a value is never cut.
+const isLongText = (kind: string, text: string) =>
+  kind === "text" || text.includes("\n") || text.length > MAX_SERVER_TEXT_CHARS;
+
+const Scalar = ({ node, values, compact }: NodeProps) => {
+  const { text, truncated } = values.get(node.path) ?? NO_TEXT;
   const shown = truncated ? `${text}…` : text;
-  switch (node.kind) {
-    case "id":
-      return (
-        <span
-          dir="auto"
-          title={shown}
-          className={clsx("font-mono text-xs", ISOLATED)}
-        >
-          {shortId(shown)}
-        </span>
-      );
-    case "text":
-      return (
-        <p
-          dir="auto"
-          className={clsx(
-            "max-h-32 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-            ISOLATED,
-          )}
-        >
-          {shown}
-        </p>
-      );
-    default:
-      return (
-        <span dir="auto" className={clsx("break-words", ISOLATED)}>
-          {shown}
-        </span>
-      );
+  if (node.kind === "id") {
+    return (
+      <span
+        dir="auto"
+        title={shown}
+        className={clsx("font-mono text-xs", ISOLATED)}
+      >
+        {shortId(shown)}
+      </span>
+    );
   }
+  return isLongText(node.kind, shown) ? (
+    <p
+      dir="auto"
+      className={clsx(
+        "overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+        compact ? "max-h-24" : "max-h-32",
+        ISOLATED,
+      )}
+      data-testid="tool-argument-text"
+    >
+      {shown}
+    </p>
+  ) : (
+    <span dir="auto" className={clsx("break-words", ISOLATED)}>
+      {shown}
+    </span>
+  );
 };
 
 interface NodeProps {
   node: ToolArgumentNode;
-  input: unknown;
+  values: ArgumentTexts;
   compact: boolean;
 }
 
-const Members = ({ node, input, compact }: NodeProps) => {
+const Members = ({ node, values, compact }: NodeProps) => {
   const members = childrenOf(node).flatMap((child) => {
-    const value = readPointer(input, child.path);
     const name = cleanServerText(lastPointerSegment(child.path)).text;
-    return isConsentClaim(value, child.path) ? [] : [{ child, name }];
+    return isConsentClaim(child.path) ? [] : [{ child, name }];
   });
   return (
     <dl className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 gap-y-1">
@@ -110,7 +95,7 @@ const Members = ({ node, input, compact }: NodeProps) => {
             {name}
           </dt>
           <dd className="min-w-0 [overflow-wrap:anywhere]">
-            <ArgumentNode node={child} input={input} compact={compact} />
+            <ArgumentNode node={child} values={values} compact={compact} />
           </dd>
         </div>
       ))}
@@ -118,13 +103,13 @@ const Members = ({ node, input, compact }: NodeProps) => {
   );
 };
 
-const ArgumentNode = ({ node, input, compact }: NodeProps) => {
+const ArgumentNode = ({ node, values, compact }: NodeProps) => {
   const omitted = omittedOf(node);
   switch (node.kind) {
     case "group":
       return (
         <div className="space-y-1">
-          <Members node={node} input={input} compact={compact} />
+          <Members node={node} values={values} compact={compact} />
           {omitted > 0 && (
             <p className="text-theme-fg-muted">{omittedLabel(omitted)}</p>
           )}
@@ -135,7 +120,7 @@ const ArgumentNode = ({ node, input, compact }: NodeProps) => {
         <ul className="list-disc space-y-1 pl-4">
           {childrenOf(node).map((child, index) => (
             <li key={index} className="min-w-0">
-              <ArgumentNode node={child} input={input} compact={compact} />
+              <ArgumentNode node={child} values={values} compact={compact} />
             </li>
           ))}
           {omitted > 0 && (
@@ -146,31 +131,26 @@ const ArgumentNode = ({ node, input, compact }: NodeProps) => {
         </ul>
       );
     default:
-      return (
-        <Scalar
-          node={node}
-          value={readPointer(input, node.path)}
-          compact={compact}
-        />
-      );
+      return <Scalar node={node} values={values} compact={compact} />;
   }
 };
 
 /**
  * A call's arguments as names and values, from the readable view the backend
- * sends with the label. The view holds paths only; names and values are read
- * from `input` and shown as inert text, because the call wrote them.
- * `compact` keeps long text to a short value, for a list beside a summary.
+ * sends with the label. The view holds paths only; names come from the paths
+ * and values are the call's input as `readArgumentValues` read it, whole,
+ * shown as inert text, because the call wrote them. `compact` gives long text
+ * a shorter box, for a list beside a summary.
  */
 export const ToolArgumentView = ({
   view,
-  input,
+  values,
   compact = false,
   className,
   "data-testid": dataTestId = "tool-argument-view",
 }: {
   view: ToolArgumentNode;
-  input: unknown;
+  values: ArgumentTexts;
   compact?: boolean;
   className?: string;
   "data-testid"?: string;
@@ -189,7 +169,7 @@ export const ToolArgumentView = ({
           {t({ id: "toolArguments.none", message: "No arguments" })}
         </p>
       ) : (
-        <ArgumentNode node={view} input={input} compact={compact} />
+        <ArgumentNode node={view} values={values} compact={compact} />
       )}
     </div>
   );
