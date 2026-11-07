@@ -210,6 +210,30 @@ fn some_names_read_as_one_verb() {
             "{tool}"
         );
     }
+    // A verb field that names no verb leaves the compound to the name.
+    for (name, arguments, action) in [
+        (
+            "create_comment",
+            json!({"page_id": "p", "markdown": "x", "kind": "page"}),
+            ToolCallAction::Comment,
+        ),
+        (
+            "post_message",
+            json!({"channel": "C1", "text": "Hi", "mode": "markdown"}),
+            ToolCallAction::Send,
+        ),
+    ] {
+        assert_eq!(
+            label(name, arguments.clone()).mapping.action,
+            action,
+            "{name}"
+        );
+        assert_eq!(
+            cross_check(&tool(name, None, &[]), &arguments, action),
+            [],
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -240,6 +264,19 @@ fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
         (new.title.as_deref(), new.target.as_deref()),
         (Some("/name"), Some("/parent_id"))
     );
+    for arguments in [
+        json!({"name": "Ada", "company_id": "c_1"}),
+        json!({"name": "Ada", "parentId": "p_1"}),
+        json!({"name": "Ada", "source": "web_form"}),
+    ] {
+        let created = label("upsert_contact", arguments.clone());
+        assert_eq!(
+            created.mapping.action,
+            ToolCallAction::Create,
+            "{arguments}"
+        );
+        assert_eq!(created.mapping.items[0].id, None, "{arguments}");
+    }
     assert_eq!(
         label("save_issue", json!({"title": "New"})).mapping.action,
         ToolCallAction::Create
@@ -621,6 +658,20 @@ fn the_cross_check_holds_any_label_against_the_tool_s_name() {
             "{name}"
         );
     }
+    let audit = json!({"action": "delete", "limit": 50});
+    assert_eq!(
+        label("list_audit_events", audit.clone()).mapping.action,
+        ToolCallAction::Delete
+    );
+    assert_eq!(
+        cross_check(
+            &tool("list_audit_events", None, &["action"]),
+            &audit,
+            ToolCallAction::Delete
+        ),
+        [CrossCheckFlag::ReadName],
+        "a declared verb field does not lift the read name"
+    );
     assert_eq!(
         check(
             "create_pull_request",

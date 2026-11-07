@@ -2882,6 +2882,69 @@ describe("gist cards", () => {
     expect(id).toHaveClass("font-mono");
   });
 
+  it("lines a batch's fields up only under the names' own arrays, and lists the rest once", () => {
+    const field = (pointer: string, values: [string, string][]) => ({
+      pointer,
+      values: values.map(([path, text]) => ({ path, text })),
+    });
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          display: {
+            ...createRowDisplay,
+            label: {
+              action: "update",
+              object_kind: "paragraph",
+              source: "rules",
+              items: [
+                {
+                  id: field("/entries/*/source/*/id", [
+                    ["/entries/0/source/0/id", "p-1"],
+                    ["/entries/0/source/1/id", "p-2"],
+                    ["/entries/1/source/0/id", "p-3"],
+                  ]),
+                  fields: [
+                    field("/entries/*/source/*/tags/*", [
+                      ["/entries/0/source/1/tags/0", "legal"],
+                    ]),
+                    field("/entries/*/kind", [
+                      ["/entries/0/kind", "replace"],
+                      ["/entries/1/kind", "keep"],
+                    ]),
+                    field("/deleted/*/source/*", [
+                      ["/deleted/0/source/0", "d-17"],
+                      ["/deleted/0/source/1", "d-18"],
+                    ]),
+                    field("/other/*/x", [
+                      ["/other/0/x", "alpha"],
+                      ["/other/1/x", "beta"],
+                    ]),
+                  ],
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    const rows = Array.from(
+      screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+    );
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "p-1",
+      "p-2tagslegal",
+      "p-3",
+    ]);
+    const values = screen.getByTestId("tool-call-gist-values");
+    for (const text of ["replace", "keep", "d-17", "d-18", "alpha", "beta"]) {
+      expect(values).toHaveTextContent(text);
+    }
+  });
+
   it("warns when the call shares what it creates with the workspace, past the label's fields", () => {
     renderCard(
       <McpToolApprovalCard
