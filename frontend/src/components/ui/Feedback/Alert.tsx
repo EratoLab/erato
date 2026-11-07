@@ -102,7 +102,9 @@ export const Alert: React.FC<AlertProps> = ({
       data-tone={type}
       data-testid={dataTestId}
     >
-      <div className="mt-0.5 shrink-0">{alertIcon}</div>
+      <div className="mt-0.5 shrink-0" aria-hidden="true">
+        {alertIcon}
+      </div>
 
       <div className="min-w-0 flex-1">
         {title && <h4 className="mb-1 font-medium">{title}</h4>}

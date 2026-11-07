@@ -371,6 +371,14 @@
   --theme-starter-prompt-icon-fg: var(--theme-fg-primary);
   --theme-starter-prompt-title-fg: var(--theme-fg-primary);
   --theme-starter-prompt-subtitle-fg: var(--theme-fg-secondary);
+
+  /* Selectable rows. Not in theme.json's radius/spacing maps: a theme.css
+     sets them. The rules repeat these values as fallbacks. */
+  --theme-radius-selectable-row: 0;
+  --theme-spacing-selectable-row-height: 2.25rem;
+  --theme-spacing-selectable-row-padding-y: 0.4375rem;
+  --theme-spacing-selectable-row-padding-x: 1.5rem;
+  --theme-selectable-row-selected-bg: var(--theme-bg-secondary);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -974,6 +982,89 @@ body {
       transform: rotate(360deg);
     }
   }
+
+  /* A row that frames a checkbox (SelectableRow). Every cell is always
+     rendered, so the grid areas hold whichever slots a row leaves empty. The
+     divider colour comes from .selectable-row-skin. The end column fits a
+     medium date with a short time in every shipped locale (en is the widest,
+     about 143px in Geist at text-sm); a longer value truncates. */
+  .selectable-row-geometry {
+    display: grid;
+    grid-template-columns:
+      1.5rem 1rem minmax(0, 1fr) var(--selectable-row-meta-width, 9.5rem)
+      var(--selectable-row-end-width, 9.25rem) 1.375rem;
+    grid-template-areas: "check icon title meta end trailing";
+    column-gap: 0.625rem;
+    align-items: center;
+    min-height: var(--theme-spacing-selectable-row-height, 2.25rem);
+    padding: var(--theme-spacing-selectable-row-padding-y, 0.4375rem)
+      var(--theme-spacing-selectable-row-padding-x, 1.5rem);
+    border-radius: var(--theme-radius-selectable-row, 0);
+    border-block-start-width: 1px;
+    border-block-start-style: solid;
+  }
+
+  /* Stacked: the title spans the second line's two cells. Meta takes only its
+     own width (and truncates first), so "· end" follows it inline instead of
+     sitting at the far edge. */
+  .selectable-row-geometry[data-layout="stacked"] {
+    grid-template-columns:
+      1.5rem 1rem minmax(0, max-content) minmax(max-content, 1fr)
+      1.375rem;
+    grid-template-areas:
+      "check icon title title trailing"
+      "check icon meta end trailing";
+    row-gap: 0.125rem;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-check"] {
+    grid-area: check;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-icon"] {
+    grid-area: icon;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-title"] {
+    grid-area: title;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-meta"] {
+    grid-area: meta;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-end"] {
+    grid-area: end;
+  }
+
+  .selectable-row-geometry > [data-ui="selectable-row-trailing"] {
+    grid-area: trailing;
+  }
+
+  .selectable-row-geometry[data-layout="stacked"]
+    > [data-ui="selectable-row-end"] {
+    text-align: start;
+  }
+
+  .selectable-row-geometry[data-layout="stacked"]
+    > [data-ui="selectable-row-meta"]:not(:empty)
+    + [data-ui="selectable-row-end"]:not(:empty)::before {
+    content: "\00B7";
+    content: "\00B7" / "";
+    margin-inline-end: 0.375rem;
+  }
+
+  /* Determinate progress. Colours come from .progress-skin. */
+  .progress-geometry {
+    display: block;
+    overflow: hidden;
+    block-size: 0.5rem;
+    border-radius: var(--theme-radius-pill);
+  }
+
+  .progress-geometry[data-size="sm"] {
+    block-size: 0.25rem;
+  }
 }
 
 .theme-transition {
@@ -1454,6 +1545,131 @@ body {
    Unlayered, so a customer theme.css rule wins without a specificity fight. */
 .list-row-geometry {
   border-radius: var(--card-child-radius, var(--theme-radius-control));
+}
+
+/* SelectableRow surfaces. State moves variables, the base rule paints, as in
+   .card-skin. Tone follows selection on purpose: a flagged row that is also
+   selected keeps its warning fill. */
+.selectable-row-skin {
+  color: var(--selectable-row-fg, var(--theme-fg-primary));
+  background-color: var(--selectable-row-bg, transparent);
+  border-block-start-color: var(
+    --selectable-row-divider,
+    var(--theme-border-subtle)
+  );
+}
+
+.selectable-row-skin [data-ui="selectable-row-meta"],
+.selectable-row-skin [data-ui="selectable-row-end"] {
+  color: var(--selectable-row-meta, var(--theme-fg-muted));
+}
+
+.selectable-row-skin [data-ui="selectable-row-icon"] {
+  color: var(
+    --selectable-row-icon,
+    var(--selectable-row-meta, var(--theme-fg-muted))
+  );
+}
+
+/* Meta steps up to fg-secondary on the hover and selected fills: fg-muted on
+   them falls below 4.5:1 (3.9:1 light, 3:1 dark on the hover fill). */
+.selectable-row-skin:hover:where(
+    :not([data-tone="warning"], [data-tone="error"], [data-disabled])
+  ) {
+  --selectable-row-bg: var(--theme-bg-hover);
+  --selectable-row-meta: var(--theme-fg-secondary);
+}
+
+.selectable-row-skin[data-selected] {
+  --selectable-row-bg: var(
+    --theme-selectable-row-selected-bg,
+    var(--theme-bg-secondary)
+  );
+  --selectable-row-meta: var(--theme-fg-secondary);
+}
+
+.selectable-row-skin[data-tone="warning"] {
+  --selectable-row-bg: var(--theme-warning-bg);
+  --selectable-row-fg: var(--theme-warning-fg);
+  --selectable-row-meta: var(--theme-warning-fg);
+  --selectable-row-divider: var(--theme-warning-border);
+}
+
+.selectable-row-skin[data-tone="error"] {
+  --selectable-row-bg: var(--theme-error-bg);
+  --selectable-row-fg: var(--theme-error-fg);
+  --selectable-row-meta: var(--theme-error-fg);
+  --selectable-row-divider: var(--theme-error-border);
+}
+
+/* The divider under a toned row is the toned row's lower edge. */
+.selectable-row-skin[data-tone="warning"] + .selectable-row-skin {
+  --selectable-row-divider: var(--theme-warning-border);
+}
+
+.selectable-row-skin[data-tone="error"] + .selectable-row-skin {
+  --selectable-row-divider: var(--theme-error-border);
+}
+
+.selectable-row-skin[data-disabled] {
+  --selectable-row-fg: var(--theme-fg-muted);
+  --selectable-row-meta: var(--theme-fg-muted);
+}
+
+/* The row rings itself when its checkbox has keyboard focus, so the checkbox
+   drops its own ring; without :has() the checkbox keeps it. */
+@supports selector(:has(*)) {
+  .selectable-row-skin:has(
+      > [data-ui="selectable-row-check"] input:focus-visible
+    ) {
+    outline: 2px solid var(--theme-focus-ring);
+    outline-offset: -2px;
+  }
+
+  .selectable-row-skin > [data-ui="selectable-row-check"] input:focus-visible {
+    outline: none;
+  }
+}
+
+/* Forced colors drop the fills, so a toned or current row keeps an edge. An
+   outline, not a border, so the grid does not move. */
+@media (forced-colors: active) {
+  .selectable-row-skin[data-tone="warning"],
+  .selectable-row-skin[data-tone="error"],
+  .selectable-row-skin[data-current] {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+}
+
+.progress-skin {
+  background-color: var(--progress-track, var(--theme-bg-accent));
+}
+
+.progress-skin[data-tone="warning"] {
+  --progress-fill: var(--theme-warning-fg);
+}
+
+.progress-fill-skin {
+  background-color: var(--progress-fill, var(--theme-fg-accent));
+  transition: inline-size 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill-skin {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .progress-skin {
+    outline: 1px solid CanvasText;
+  }
+
+  .progress-fill-skin {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
 }
 
 /* Drag affordance on the expanded sidebar's right edge. The cursor is
