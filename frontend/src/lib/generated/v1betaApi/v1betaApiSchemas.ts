@@ -1802,6 +1802,8 @@ export type CreateUserToolApprovalSettingRequest = {
   tool_name: string;
 };
 
+export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
 /**
  * How a delegated child run relates to the turn that spawned it: `wait`
  * blocks the turn on the child and feeds the result back into it,
@@ -1809,6 +1811,16 @@ export type CreateUserToolApprovalSettingRequest = {
  * turn.
  */
 export type DelegationRunMode = "wait" | "background";
+
+export type DeliveryChannelInfo = {
+  channel: string;
+  status: DeliveryChannelStatus;
+};
+
+/**
+ * Whether a delivery channel can reach the user.
+ */
+export type DeliveryChannelStatus = "connected" | "not_set_up" | "unavailable";
 
 export type DesktopSidecarDistributionFileResponse = {
   download_filename: string;
@@ -1911,6 +1923,16 @@ export type DesktopSidecarUiPackageTokenResponse = {
 export type DisconnectMcpServerOauthResponse = {
   connection_status: McpServerStatusValue;
 };
+
+/**
+ * The status the Scheduled page shows, the same for every item type.
+ */
+export type DisplayStatus =
+  | "scheduled"
+  | "snoozed"
+  | "done"
+  | "failed"
+  | "cancelled";
 
 /**
  * A drive accessible to the user (OneDrive, Sharepoint, etc.)
@@ -2254,6 +2276,8 @@ export type FileUploadResponse = {
   rejected_files?: string[];
 };
 
+export type Frequency = "daily" | "weekdays" | "weekly" | "monthly";
+
 /**
  * An assistant with its associated files
  */
@@ -2442,6 +2466,24 @@ export type HostContext = {
 export type InclusionMode = "full" | "preview" | "reference_only";
 
 /**
+ * The most recent occurrence that is over.
+ */
+export type LastDelivery = {
+  /**
+   * @format date-time
+   */
+  delivered_at?: null | undefined;
+  due: OccurrenceTime;
+  outcome: LastDeliveryOutcome;
+  /**
+   * Why it failed or was not sent.
+   */
+  reason?: null | undefined;
+};
+
+export type LastDeliveryOutcome = "delivered" | "failed" | "cancelled";
+
+/**
  * Request to link an external file (SharePoint, Google Drive, etc.)
  */
 export type LinkFileRequest = {
@@ -2454,6 +2496,14 @@ export type LinkFileRequest = {
    * The source/provider type: "sharepoint" (future: "google_drive", etc.)
    */
   source: string;
+};
+
+export type LinkedChat = {
+  /**
+   * @format uuid
+   */
+  id: string;
+  title: string;
 };
 
 export type ListClientOperationsResponse = {
@@ -3011,6 +3061,19 @@ export type NothingToReactError = {
   task_result_message_id: string;
 };
 
+export type OccurrenceTime = {
+  /**
+   * @format date-time
+   */
+  at: string;
+  /**
+   * The wall-clock time in the item's zone.
+   *
+   * @example 2026-11-13T10:00:00
+   */
+  local: string;
+};
+
 export type OperationError = {
   code: string;
   /**
@@ -3566,6 +3629,47 @@ export type RegenerateMessageStreamingResponseMessage =
       message_type: "error";
     });
 
+export type RepeatEnd =
+  | {
+      kind: "never";
+    }
+  | {
+      /**
+       * @format date
+       */
+      date: string;
+      kind: "on_date";
+    }
+  | {
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      count: number;
+      kind: "after_count";
+    };
+
+export type RepeatRule = {
+  ends?: RepeatEnd;
+  frequency: Frequency;
+  /**
+   * The first day an occurrence may fall on.
+   *
+   * @format date
+   */
+  starts_on: string;
+  /**
+   * Local time of day, `HH:MM`.
+   *
+   * @example 09:00
+   */
+  time: string;
+  /**
+   * The days of a weekly rule; empty for the other frequencies.
+   */
+  weekdays?: DayOfWeek[];
+};
+
 export type ResolveShareLinkResponse = {
   owner_display_name?: null | undefined;
   owner_picture?: null | undefined;
@@ -3606,6 +3710,133 @@ export type RetryDelegatedRunResponse = {
  * catch.
  */
 export type RetryKind = "task";
+
+export type ScheduledItem = {
+  /**
+   * When the user marked the last delivery done on its card. Set once the
+   * card has a Done button (ERMAIN-1112).
+   *
+   * @format date-time
+   */
+  acknowledged_at?: null | undefined;
+  channel: string;
+  channel_status: DeliveryChannelStatus;
+  /**
+   * @format date-time
+   */
+  created_at: string;
+  /**
+   * @format uuid
+   */
+  id: string;
+  last_delivery?: null | LastDelivery;
+  linked_chat?: null | LinkedChat;
+  /**
+   * The body of what arrives.
+   */
+  message: string;
+  /**
+   * Shown in the list and as the title when it arrives.
+   */
+  name: string;
+  next_occurrence?: null | OccurrenceTime;
+  /**
+   * How many occurrences there were, including the coming one.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  occurrence_count: number;
+  status: DisplayStatus;
+  /**
+   * The IANA zone the trigger's times are in.
+   */
+  time_zone: string;
+  trigger: Trigger;
+  type: ScheduledItemType;
+  /**
+   * @format date-time
+   */
+  updated_at: string;
+};
+
+/**
+ * A refusal the form can show: `code` to branch on, `message` in English.
+ */
+export type ScheduledItemError = {
+  code: ScheduledItemErrorCode;
+  message: string;
+};
+
+export type ScheduledItemErrorCode =
+  | "not_found"
+  | "invalid_request"
+  | "type_not_available"
+  | "invalid_trigger"
+  | "trigger_in_past"
+  | "linked_chat_not_found"
+  | "channel_unknown"
+  | "channel_unavailable"
+  | "channel_not_set_up"
+  | "limit_reached"
+  | "finished"
+  | "in_flight"
+  | "nothing_to_snooze"
+  | "internal";
+
+/**
+ * One body for create and edit, as the form sends it.
+ */
+export type ScheduledItemRequest = {
+  /**
+   * Defaults to `teams_personal`, the only channel today.
+   */
+  channel?: string;
+  /**
+   * One of the user's chats; the delivered message links to it.
+   *
+   * @format uuid
+   */
+  linked_chat_id?: null | undefined;
+  message: string;
+  name: string;
+  trigger: Trigger;
+  type?: ScheduledItemType;
+};
+
+export type ScheduledItemType = "reminder" | "scheduled_task";
+
+export type ScheduledItemsResponse = {
+  /**
+   * Every delivery channel and whether it reaches the user.
+   */
+  channels: DeliveryChannelInfo[];
+  items: ScheduledItem[];
+  /**
+   * How many upcoming items a user may have.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  max_upcoming: number;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  past_count: number;
+  /**
+   * The zone a new item's times are entered in.
+   */
+  time_zone: string;
+  time_zone_source: TimeZoneSource;
+  /**
+   * @format int64
+   * @minimum 0
+   */
+  upcoming_count: number;
+};
+
+export type ScheduledItemsTab = "upcoming" | "past";
 
 /**
  * A drive item (file or folder)
@@ -3749,6 +3980,16 @@ export type SharepointSearchResponse = {
    * A discovery, pagination, or result budget was reached. Refine the query.
    */
   truncated: boolean;
+};
+
+export type SnoozeScheduledItemRequest = {
+  /**
+   * When the current occurrence should arrive instead. The next one keeps
+   * its regular time.
+   *
+   * @format date-time
+   */
+  until: string;
 };
 
 export type StartMcpServerOauthResponse = {
@@ -3900,6 +4141,8 @@ export type TaskResultInput = {
   sequence: number;
   status: string;
 };
+
+export type TimeZoneSource = "user" | "deployment_default";
 
 export type TokenUsageFileInput = {
   /**
@@ -4212,6 +4455,28 @@ export type ToolUse = {
    */
   total?: number;
 };
+
+/**
+ * What makes an item happen. Times are local to the zone stored with the
+ * item; event-driven triggers will be further variants.
+ */
+export type Trigger =
+  | {
+      /**
+       * @format date
+       */
+      date: string;
+      kind: "once";
+      /**
+       * Local time of day, `HH:MM`.
+       *
+       * @example 10:00
+       */
+      time: string;
+    }
+  | (RepeatRule & {
+      kind: "repeat";
+    });
 
 /**
  * Response from the unarchive chat endpoint

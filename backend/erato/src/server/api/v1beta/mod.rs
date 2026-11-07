@@ -16,6 +16,7 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod ms_office;
 pub mod policy_engine_middleware;
+pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
 pub mod sharepoint;
@@ -201,6 +202,22 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/mcp-tool-approval-settings/{setting_id}",
             axum::routing::delete(deactivate_user_tool_approval_setting),
+        )
+        .route(
+            "/scheduled-items",
+            get(scheduled_items::list_scheduled_items).post(scheduled_items::create_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}",
+            get(scheduled_items::get_scheduled_item).put(scheduled_items::update_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}/cancel",
+            post(scheduled_items::cancel_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}/snooze",
+            post(scheduled_items::snooze_scheduled_item),
         )
         .route("/recent_chats", get(recent_chats))
         .route("/generating", get(generating_chats))
@@ -484,6 +501,12 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         create_user_tool_approval_setting,
         apply_user_tool_approval_settings_batch,
         deactivate_user_tool_approval_setting,
+        scheduled_items::list_scheduled_items,
+        scheduled_items::get_scheduled_item,
+        scheduled_items::create_scheduled_item,
+        scheduled_items::update_scheduled_item,
+        scheduled_items::cancel_scheduled_item,
+        scheduled_items::snooze_scheduled_item,
         create_chat,
         chat_detail,
         update_chat,
@@ -687,7 +710,28 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         entra_id::OrganizationGroupsResponse,
         starting_assistant::StartingAssistantResponse,
         starting_assistant::StartingAssistantInfo,
-        starting_assistant::StartingAssistantSource
+        starting_assistant::StartingAssistantSource,
+        scheduled_items::ScheduledItem,
+        scheduled_items::ScheduledItemType,
+        scheduled_items::ScheduledItemRequest,
+        scheduled_items::ScheduledItemsResponse,
+        scheduled_items::ScheduledItemsTab,
+        scheduled_items::SnoozeScheduledItemRequest,
+        scheduled_items::ScheduledItemError,
+        scheduled_items::ScheduledItemErrorCode,
+        scheduled_items::DeliveryChannelInfo,
+        scheduled_items::DeliveryChannelStatus,
+        scheduled_items::TimeZoneSource,
+        scheduled_items::OccurrenceTime,
+        scheduled_items::LastDelivery,
+        scheduled_items::LastDeliveryOutcome,
+        scheduled_items::LinkedChat,
+        crate::services::scheduled_items::DisplayStatus,
+        crate::services::scheduled_items::recurrence::Trigger,
+        crate::services::scheduled_items::recurrence::RepeatRule,
+        crate::services::scheduled_items::recurrence::RepeatEnd,
+        crate::services::scheduled_items::recurrence::Frequency,
+        crate::services::scheduled_items::recurrence::DayOfWeek
     ))
 )]
 pub struct ApiV1ApiDoc;
