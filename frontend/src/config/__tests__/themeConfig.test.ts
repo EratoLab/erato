@@ -87,6 +87,7 @@ describe("themeConfig", () => {
     msalAuthority: null,
     maskReasoningTraceText: false,
     desktopSidecarSettingsTabEnabled: false,
+    scheduledEnabled: false,
     ...overrides,
   });
 

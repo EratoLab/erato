@@ -27,6 +27,7 @@ const DEFAULT_ICONS = {
     assistants: "GridXmark",
     newChat: "Plus",
     search: "Search",
+    scheduled: "Calendar",
   },
 } as const;
 /* eslint-enable lingui/no-unlocalized-strings */
