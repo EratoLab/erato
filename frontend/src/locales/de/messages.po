@@ -7796,6 +7796,11 @@ msgid "toolGist.move.failed"
 msgstr "{shape, select, full {Verschieben fehlgeschlagen: {kind} {title} nach {where}} titled {Verschieben fehlgeschlagen: {kind} {title}} placed {Verschieben fehlgeschlagen: {kind} nach {where}} other {Verschieben fehlgeschlagen: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Weitere Argumente"
+
+#. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.send.ask"
 msgstr "{shape, select, full {{kind} {title} an {where} senden} titled {{kind} {title} senden} placed {{kind} an {where} senden} other {{kind} senden}}"
@@ -8200,8 +8205,13 @@ msgstr "In {server} öffnen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Link öffnen"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Link öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Link öffnen - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

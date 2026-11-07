@@ -1,11 +1,18 @@
-import { cleanServerText, isRecord, lastPointerSegment } from "./serverText";
+import { isConsentClaim, isConsentMember, isYesOrNo } from "./consent";
+import {
+  cleanServerText,
+  isRecord,
+  lastPointerSegment,
+  MAX_SERVER_DESCRIPTION_CHARS,
+  readPointer,
+} from "./serverText";
 
 import type {
+  ToolArgumentNode,
   ToolCallAction,
   ToolCallLabel,
-  ToolCallLabelItem,
-  ToolCallLabelSlot,
-  ToolCallLabelValue,
+  ToolCallLabelSource,
+  ToolCallLabelWarning,
   ToolCallObjectKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -38,6 +45,21 @@ export const GIST_KINDS = [
 ] as const satisfies readonly ToolCallObjectKind[];
 export type GistKind = (typeof GIST_KINDS)[number];
 
+/* eslint-disable lingui/no-unlocalized-strings -- API enum values */
+const GIST_SOURCES = [
+  "own_mapping",
+  "rules",
+  "model",
+] as const satisfies readonly ToolCallLabelSource[];
+
+const ARGUMENTS_TRUNCATED = "arguments_truncated";
+/* eslint-enable lingui/no-unlocalized-strings */
+
+/** The label warnings a gist card can show; any other sends a call to the generic card. */
+const GIST_LABEL_WARNINGS = [
+  ARGUMENTS_TRUNCATED,
+] as const satisfies readonly ToolCallLabelWarning[];
+
 /** Before approval, after a run the server reported as done, after one it reported as failed. */
 export type GistPhase = "ask" | "done" | "failed";
 export const GIST_PHASES = ["ask", "done", "failed"] as const;
@@ -52,6 +74,8 @@ export type GistValueOrigin = "written" | "resolved" | "earlier" | "id";
 export interface GistValue {
   text: string;
   origin: GistValueOrigin;
+  /** Where the value sits in the call's input; empty on an earlier value. */
+  path: string;
   /** The value as the call wrote it, where `text` shows a name or a short ID. */
   written?: string;
   truncated: boolean;
@@ -88,11 +112,97 @@ export interface Gist {
   warnings: GistWarning[];
 }
 
-const isGistAction = (value: string): value is GistAction =>
-  (GIST_ACTIONS as readonly string[]).includes(value);
+const isOneOf = <T extends string>(
+  values: readonly T[],
+  value: unknown,
+): value is T => typeof value === "string" && values.some((v) => v === value);
 
-const isGistKind = (value: string): value is GistKind =>
-  (GIST_KINDS as readonly string[]).includes(value);
+// A label is read as data from a stored row or a stream event, whatever its
+// type says: anything this build cannot read counts as absent.
+const listOf = (value: unknown): readonly unknown[] =>
+  Array.isArray(value) ? value : [];
+
+const countOf = (value: unknown): number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+
+const MAX_GIST_ITEMS = 10;
+const MAX_GIST_FIELDS = 16;
+const MAX_SLOT_VALUES = 50;
+/** A pointer or path no backend label holds; longer ones are not read. */
+const MAX_PATH_CHARS = 4_096;
+
+interface LabelValue {
+  path: string;
+  text: string;
+  resolved?: string;
+  truncated: boolean;
+}
+
+interface LabelSlot {
+  pointer: string;
+  name?: string;
+  values: LabelValue[];
+  omitted: number;
+}
+
+interface LabelItem {
+  title?: LabelSlot;
+  id?: LabelSlot;
+  target?: LabelSlot;
+  before?: LabelSlot;
+  after?: LabelSlot;
+  fields: LabelSlot[];
+}
+
+const readValue = (raw: unknown): LabelValue | undefined => {
+  if (!isRecord(raw) || typeof raw.path !== "string") return undefined;
+  if (raw.path.length > MAX_PATH_CHARS) return undefined;
+  const text = cleanServerText(raw.text, MAX_SERVER_DESCRIPTION_CHARS);
+  if (text.text.length === 0) return undefined;
+  const resolved = cleanServerText(raw.resolved).text;
+  return {
+    path: raw.path,
+    text: text.text,
+    resolved: resolved.length > 0 ? resolved : undefined,
+    truncated: raw.truncated === true || text.truncated,
+  };
+};
+
+const readSlot = (raw: unknown): LabelSlot | undefined => {
+  if (!isRecord(raw) || typeof raw.pointer !== "string") return undefined;
+  if (raw.pointer.length > MAX_PATH_CHARS) return undefined;
+  const all = listOf(raw.values);
+  const kept = all.slice(0, MAX_SLOT_VALUES);
+  const name = cleanServerText(raw.name).text;
+  return {
+    pointer: raw.pointer,
+    name: name.length > 0 ? name : undefined,
+    values: kept.flatMap((value) => {
+      const read = readValue(value);
+      return read ? [read] : [];
+    }),
+    omitted: countOf(raw.omitted) + (all.length - kept.length),
+  };
+};
+
+const readItem = (raw: unknown): LabelItem | undefined =>
+  isRecord(raw)
+    ? {
+        title: readSlot(raw.title),
+        id: readSlot(raw.id),
+        target: readSlot(raw.target),
+        before: readSlot(raw.before),
+        after: readSlot(raw.after),
+        fields: listOf(raw.fields)
+          .slice(0, MAX_GIST_FIELDS)
+          .flatMap((slot) => {
+            const read = readSlot(slot);
+            return read ? [read] : [];
+          }),
+      }
+    : undefined;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID_NAME = /(^|[_\-.])ids?$|[a-z]Ids?$/;
@@ -145,17 +255,18 @@ const rowOf = (
 };
 
 const gistValue = (
-  slot: ToolCallLabelSlot,
-  value: ToolCallLabelValue,
+  slot: LabelSlot,
+  value: LabelValue,
   identifies: Identifies,
   rowPrefix: readonly string[],
 ): GistValue => {
   const row = rowOf(slot.pointer, value.path, rowPrefix);
-  const truncated = value.truncated === true;
+  const { path, truncated } = value;
   if (value.resolved) {
     return {
       text: value.resolved,
       origin: "resolved",
+      path,
       written: value.text,
       truncated: false,
       row,
@@ -168,24 +279,30 @@ const gistValue = (
     return {
       text: shortId(value.text),
       origin: "id",
+      path,
       written: value.text,
       truncated,
       row,
     };
   }
-  return { text: value.text, origin: "written", truncated, row };
+  return { text: value.text, origin: "written", path, truncated, row };
 };
 
 const valuesOf = (
-  slot: ToolCallLabelSlot | undefined,
+  slot: LabelSlot | undefined,
   identifies: Identifies,
   rowPrefix: readonly string[],
 ): GistValue[] =>
   slot
-    ? (slot.values ?? [])
-        .filter((value) => value.text.length > 0)
-        .map((value) => gistValue(slot, value, identifies, rowPrefix))
+    ? slot.values.map((value) => gistValue(slot, value, identifies, rowPrefix))
     : [];
+
+const claimsConsent = (slot: LabelSlot | undefined): boolean =>
+  (slot?.values ?? []).some(
+    (value) =>
+      isConsentClaim(value.text, value.path, slot?.pointer) ||
+      (isYesOrNo(value.text) && isConsentMember(slot?.name ?? "")),
+  );
 
 const WORKSPACE_VALUES = new Set([
   "workspace",
@@ -216,28 +333,37 @@ export const fieldWarningOf = (
 };
 
 const MAX_WARNING_DEPTH = 6;
+/** Values read for warnings, as many as the backend rules search. */
+const MAX_WARNING_VALUES = 5_000;
 
 // A label keeps only a few fields, so a sharing member past them, or beside a
 // nested title, is found in the raw input.
-const addInputWarnings = (
-  value: unknown,
-  depth: number,
-  warnings: Set<GistWarning>,
-) => {
-  if (depth > MAX_WARNING_DEPTH) return;
-  const members = Array.isArray(value)
-    ? value.map((element) => ["", element] as const)
-    : isRecord(value)
-      ? Object.entries(value)
-      : [];
-  for (const [name, member] of members) {
-    if (typeof member === "string") {
-      const warning = fieldWarningOf(name, [member]);
-      if (warning) warnings.add(warning);
-    } else {
-      addInputWarnings(member, depth + 1, warnings);
+const addInputWarnings = (input: unknown, warnings: Set<GistWarning>) => {
+  let budget = MAX_WARNING_VALUES;
+  const visit = (value: unknown, depth: number) => {
+    if (depth > MAX_WARNING_DEPTH) return;
+    const visitMember = (name: string, member: unknown) => {
+      budget -= 1;
+      if (typeof member === "string") {
+        const warning = fieldWarningOf(name, [member]);
+        if (warning) warnings.add(warning);
+      } else {
+        visit(member, depth + 1);
+      }
+    };
+    if (Array.isArray(value)) {
+      for (const element of value) {
+        if (budget <= 0) return;
+        visitMember("", element);
+      }
+    } else if (isRecord(value)) {
+      for (const name in value) {
+        if (budget <= 0) return;
+        if (Object.hasOwn(value, name)) visitMember(name, value[name]);
+      }
     }
-  }
+  };
+  visit(input, 0);
 };
 
 const gistWarningsOf = (items: GistItem[], input: unknown): GistWarning[] => {
@@ -249,49 +375,49 @@ const gistWarningsOf = (items: GistItem[], input: unknown): GistWarning[] => {
     );
     if (warning) warnings.add(warning);
   }
-  addInputWarnings(input, 0, warnings);
+  addInputWarnings(input, warnings);
   return [...warnings];
 };
 
+// Defense in depth: the backend rules leave consent flags out of a label's
+// fields, and a field that claims one anyway is dropped here too.
 const gistField = (
-  slot: ToolCallLabelSlot,
+  slot: LabelSlot,
   action: GistAction,
   rowPrefix: readonly string[],
 ): GistField | undefined => {
-  const values = (slot.values ?? [])
-    .filter((value) => value.text.length > 0)
-    .map((value) => ({
-      value: gistValue(
-        slot,
-        { ...value, resolved: undefined },
-        "maybe",
-        rowPrefix,
-      ),
-      earlier:
-        action === "update" && value.resolved
-          ? {
-              text: value.resolved,
-              origin: "earlier" as const,
-              truncated: false,
-            }
-          : undefined,
-    }));
+  if (claimsConsent(slot)) return undefined;
+  const values = slot.values.map((value) => ({
+    value: gistValue(
+      slot,
+      { ...value, resolved: undefined },
+      "maybe",
+      rowPrefix,
+    ),
+    earlier:
+      action === "update" && value.resolved
+        ? {
+            text: value.resolved,
+            origin: "earlier" as const,
+            path: "",
+            truncated: false,
+          }
+        : undefined,
+  }));
   if (values.length === 0) return undefined;
   return {
     pointer: slot.pointer,
-    name: slot.name ?? cleanServerText(memberName(slot.pointer) ?? "").text,
+    name: slot.name ?? cleanServerText(memberName(slot.pointer)).text,
     values,
-    omitted: slot.omitted ?? 0,
+    omitted: slot.omitted,
   };
 };
 
 const gistItem = (
-  item: ToolCallLabelItem,
+  item: LabelItem,
   action: GistAction,
 ): GistItem | undefined => {
-  const hasTitle = (item.title?.values ?? []).some(
-    (value) => value.text.length > 0,
-  );
+  const hasTitle = (item.title?.values.length ?? 0) > 0;
   const nameSlot = hasTitle ? item.title : item.id;
   const rowPrefix = rowPrefixOf(nameSlot?.pointer);
   const names = valuesOf(nameSlot, hasTitle ? "never" : "always", rowPrefix);
@@ -302,7 +428,7 @@ const gistItem = (
     whereOmitted: item.target?.omitted ?? 0,
     before: valuesOf(item.before, "maybe", rowPrefix),
     after: valuesOf(item.after, "never", rowPrefix),
-    fields: (item.fields ?? []).flatMap((slot) => {
+    fields: item.fields.flatMap((slot) => {
       const field = gistField(slot, action, rowPrefix);
       return field ? [field] : [];
     }),
@@ -318,19 +444,37 @@ const gistItem = (
 
 /**
  * The gist a label gives, or `undefined` for the generic card: a generic
- * label, a verb, kind or warning this build has no words for, or a label
- * that does not say which record a change is to.
+ * label, a source, verb, kind or warning this build has no words for, a
+ * label that does not say which record a change is to, or one whose line
+ * would show a consent flag.
  */
 export const gistOf = (
   label: ToolCallLabel | null | undefined,
   input: unknown,
 ): Gist | undefined => {
-  if (!label || label.source === "generic") return undefined;
-  if (label.warnings?.includes("other")) return undefined;
-  const action: string = label.action;
-  const kind: string = label.object_kind;
-  if (!isGistAction(action) || !isGistKind(kind)) return undefined;
-  const items = (label.items ?? []).flatMap((item) => {
+  const raw: unknown = label;
+  if (!isRecord(raw) || !isOneOf(GIST_SOURCES, raw.source)) return undefined;
+  if (raw.warnings != null && !Array.isArray(raw.warnings)) return undefined;
+  if (!listOf(raw.warnings).every((w) => isOneOf(GIST_LABEL_WARNINGS, w))) {
+    return undefined;
+  }
+  const { action, object_kind: kind } = raw;
+  if (!isOneOf(GIST_ACTIONS, action) || !isOneOf(GIST_KINDS, kind)) {
+    return undefined;
+  }
+  const labelItems = listOf(raw.items)
+    .slice(0, MAX_GIST_ITEMS)
+    .flatMap((item) => {
+      const read = readItem(item);
+      return read ? [read] : [];
+    });
+  const showsConsent = labelItems.some((item) =>
+    [item.title, item.id, item.target, item.before, item.after].some(
+      claimsConsent,
+    ),
+  );
+  if (showsConsent) return undefined;
+  const items = labelItems.flatMap((item) => {
     const gist = gistItem(item, action);
     return gist ? [gist] : [];
   });
@@ -344,17 +488,237 @@ export const gistOf = (
   return { action, kind, items, warnings: gistWarningsOf(items, input) };
 };
 
+/** Values a line or a value cell shows before it counts the rest. */
+export const MAX_LISTED_VALUES = 3;
+
+export const listedValues = <T>(values: readonly T[]): T[] =>
+  values.slice(0, MAX_LISTED_VALUES);
+
+/** Whether an item's line names its one thing; a batch is counted instead. */
+export const namesInLine = (item: GistItem): boolean =>
+  item.count === 1 && item.names.length > 0;
+
+export interface GistBatchRow {
+  name: GistValue;
+  fields: GistField[];
+}
+
+/**
+ * How the values under an item's line are laid out: a batch's things one per
+ * row with the fields read at each one's position, and the fields read once.
+ */
+export const gistItemLayout = (
+  item: GistItem,
+): { rows: GistBatchRow[] | undefined; shared: GistField[] } => {
+  const isBatch =
+    item.count > 1 && item.names.some((name) => name.row !== undefined);
+  if (!isBatch) return { rows: undefined, shared: item.fields };
+  const rowed = item.fields.filter((field) =>
+    field.values.some(({ value }) => value.row !== undefined),
+  );
+  return {
+    rows: item.names.map((name) => ({
+      name,
+      fields: rowed.flatMap((field) => {
+        const values = field.values.filter(
+          ({ value }) => value.row === name.row,
+        );
+        return values.length > 0 ? [{ ...field, values, omitted: 0 }] : [];
+      }),
+    })),
+    shared: item.fields.filter((field) => !rowed.includes(field)),
+  };
+};
+
+/** Whether an item's line, in the language shown, names its title and its destination. */
+export type GistLineSlots = (
+  gist: Gist,
+  item: GistItem,
+) => { title: boolean; where: boolean };
+
+const sentenceSlots: GistLineSlots = (_gist, item) => ({
+  title: namesInLine(item),
+  where: true,
+});
+
+/**
+ * Where the values a gist card shows sit in the call's input, and whether
+ * each is shown whole. Mirrors what `ToolCallGist` renders in the ask phase.
+ */
+export const gistShownPaths = (
+  gist: Gist,
+  lineSlots: GistLineSlots = sentenceSlots,
+): Map<string, boolean> => {
+  const shown = new Map<string, boolean>();
+  const add = (values: readonly GistValue[]) => {
+    for (const value of values) {
+      shown.set(value.path, shown.get(value.path) === true || !value.truncated);
+    }
+  };
+  const addFields = (fields: readonly GistField[]) => {
+    for (const field of fields) {
+      add(listedValues(field.values).map(({ value }) => value));
+    }
+  };
+  for (const item of gist.items) {
+    const line = lineSlots(gist, item);
+    if (line.title && namesInLine(item)) add(listedValues(item.names));
+    if (line.where) add(listedValues(item.where));
+    add(item.before);
+    add(item.after);
+    const { rows, shared } = gistItemLayout(item);
+    for (const row of rows ?? []) {
+      add([row.name]);
+      addFields(row.fields);
+    }
+    addFields(shared);
+  }
+  return shown;
+};
+
+const MAX_VIEW_DEPTH = 16;
+const MAX_VIEW_NODES = 1_000;
+
+const isBranch = (node: ToolArgumentNode) =>
+  node.kind === "group" || node.kind === "list";
+
+/**
+ * A readable view of the arguments as this build can render it: nodes it
+ * cannot read, or past its caps, are counted as omitted.
+ */
+export const readArgumentView = (
+  raw: unknown,
+): ToolArgumentNode | undefined => {
+  let budget = MAX_VIEW_NODES;
+  const read = (node: unknown, depth: number): ToolArgumentNode | undefined => {
+    if (budget <= 0) return undefined;
+    budget -= 1;
+    if (!isRecord(node)) return undefined;
+    const { path, kind } = node;
+    if (typeof path !== "string" || path.length > MAX_PATH_CHARS) {
+      return undefined;
+    }
+    if (typeof kind !== "string") return undefined;
+    const all = listOf(node.children);
+    const children: ToolArgumentNode[] = [];
+    for (const child of depth < MAX_VIEW_DEPTH ? all : []) {
+      if (budget <= 0) break;
+      const kept = read(child, depth + 1);
+      if (kept) children.push(kept);
+    }
+    return {
+      path,
+      kind: kind as ToolArgumentNode["kind"],
+      children,
+      omitted: countOf(node.omitted) + (all.length - children.length),
+    };
+  };
+  return read(raw, 0);
+};
+
+export const hasOmittedArguments = (node: ToolArgumentNode): boolean =>
+  (node.omitted ?? 0) > 0 || (node.children ?? []).some(hasOmittedArguments);
+
+const isCovered = (
+  shown: ReadonlyMap<string, boolean>,
+  node: ToolArgumentNode,
+): boolean => {
+  const own = shown.get(node.path);
+  if (own === true || (own === false && !isBranch(node))) return true;
+  for (
+    let end = node.path.lastIndexOf("/");
+    end >= 0;
+    end = end === 0 ? -1 : node.path.lastIndexOf("/", end - 1)
+  ) {
+    if (shown.get(node.path.slice(0, end)) === true) return true;
+  }
+  return false;
+};
+
+/**
+ * The part of the readable view a gist card does not show: every argument
+ * with no value on the card, so the card never hides one. Consent flags stay
+ * out, as on the generic card; the raw arguments still have them.
+ */
+export const unshownArguments = (
+  view: ToolArgumentNode,
+  gist: Gist,
+  input: unknown,
+  lineSlots?: GistLineSlots,
+): ToolArgumentNode | undefined => {
+  const shown = gistShownPaths(gist, lineSlots);
+  const prune = (node: ToolArgumentNode): ToolArgumentNode | undefined => {
+    if (isCovered(shown, node)) return undefined;
+    if (!isBranch(node)) {
+      return isConsentClaim(readPointer(input, node.path), node.path)
+        ? undefined
+        : node;
+    }
+    const children = (node.children ?? []).flatMap((child) => {
+      const kept = prune(child);
+      return kept ? [kept] : [];
+    });
+    return children.length > 0 || (node.omitted ?? 0) > 0
+      ? { ...node, children }
+      : undefined;
+  };
+  return prune(view);
+};
+
+/**
+ * What a gist card lists below its line: the arguments it does not show, or,
+ * for a label without a readable view, the raw arguments.
+ */
+export type GistRest =
+  | { kind: "view"; view: ToolArgumentNode | undefined; truncated: boolean }
+  | { kind: "raw" };
+
 /** Which card a call gets. Rows saved before labels render as before. */
 export type ToolCallCard =
-  | { kind: "gist"; gist: Gist }
-  | { kind: "generic"; label: ToolCallLabel }
+  | { kind: "gist"; gist: Gist; rest: GistRest }
+  | {
+      kind: "generic";
+      label: ToolCallLabel;
+      view: ToolArgumentNode | undefined;
+      truncated: boolean;
+    }
   | { kind: "legacy" };
 
+const labelWarns = (label: ToolCallLabel, warning: ToolCallLabelWarning) =>
+  listOf(label.warnings).includes(warning);
+
+/**
+ * The card for a call's label. A label this build cannot read at all gets
+ * the card of a row saved before labels, never an error. `lineSlots` says
+ * which values the line names in the language shown.
+ */
 export const toolCallCardOf = (
   label: ToolCallLabel | null | undefined,
   input: unknown,
+  lineSlots?: GistLineSlots,
 ): ToolCallCard => {
-  if (label == null) return { kind: "legacy" };
-  const gist = gistOf(label, input);
-  return gist ? { kind: "gist", gist } : { kind: "generic", label };
+  if (!isRecord(label)) return { kind: "legacy" };
+  try {
+    const view = readArgumentView(label.arguments);
+    const truncated =
+      labelWarns(label, ARGUMENTS_TRUNCATED) ||
+      (view !== undefined && hasOmittedArguments(view));
+    const gist = gistOf(label, input);
+    if (!gist) return { kind: "generic", label, view, truncated };
+    if (!view) return { kind: "gist", gist, rest: { kind: "raw" } };
+    const rest = unshownArguments(view, gist, input, lineSlots);
+    return {
+      kind: "gist",
+      gist,
+      rest: {
+        kind: "view",
+        view: rest,
+        truncated:
+          labelWarns(label, ARGUMENTS_TRUNCATED) ||
+          (rest !== undefined && hasOmittedArguments(rest)),
+      },
+    };
+  } catch {
+    return { kind: "legacy" };
+  }
 };

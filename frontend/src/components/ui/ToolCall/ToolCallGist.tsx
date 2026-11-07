@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Fragment } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { gistItemLayout, listedValues } from "@/lib/toolCallGist/gist";
 import {
   GIST_SLOTS,
   GIST_TITLE_SLOT,
@@ -13,14 +14,12 @@ import {
 
 import type {
   Gist,
+  GistBatchRow,
   GistField,
   GistItem,
   GistPhase,
   GistValue,
 } from "@/lib/toolCallGist/gist";
-
-/** Names a line or a value cell shows before it counts the rest. */
-const MAX_LISTED_VALUES = 3;
 
 const ISOLATED = "[unicode-bidi:isolate]";
 
@@ -90,7 +89,7 @@ const GistValueList = ({
   values: GistValue[];
   omitted?: number;
 }) => {
-  const shown = values.slice(0, MAX_LISTED_VALUES);
+  const shown = listedValues(values);
   const more = values.length - shown.length + omitted;
   return (
     <>
@@ -143,7 +142,7 @@ const FieldValues = ({
   values: GistField["values"];
   omitted?: number;
 }) => {
-  const shown = values.slice(0, MAX_LISTED_VALUES);
+  const shown = listedValues(values);
   const more = values.length - shown.length + omitted;
   return (
     <>
@@ -176,8 +175,8 @@ const FieldValues = ({
 const FieldList = ({ fields }: { fields: GistField[] }) =>
   fields.length === 0 ? null : (
     <dl className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
-      {fields.map((field) => (
-        <Fragment key={field.pointer}>
+      {fields.map((field, index) => (
+        <Fragment key={index}>
           <dt
             dir="auto"
             className={clsx("break-words text-theme-fg-muted", ISOLATED)}
@@ -195,35 +194,24 @@ const FieldList = ({ fields }: { fields: GistField[] }) =>
 /** A batch's things, one per row, each with the fields read at its position. */
 const BatchRows = ({
   item,
-  fields,
+  rows,
 }: {
   item: GistItem;
-  fields: GistField[];
+  rows: GistBatchRow[];
 }) => (
   <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
-    {item.names.map((name, index) => {
-      const rowFields = fields.flatMap((field) => {
-        const values = field.values.filter(
-          ({ value }) => value.row === name.row,
-        );
-        return values.length > 0 ? [{ ...field, values, omitted: 0 }] : [];
-      });
-      return (
-        <li
-          key={name.row ?? index}
-          className="min-w-0 break-words [overflow-wrap:anywhere]"
-        >
-          <span className="text-sm text-theme-fg-primary">
-            <GistValueText value={name} />
-          </span>
-          {rowFields.length > 0 && (
-            <div className="mt-0.5 pl-3">
-              <FieldList fields={rowFields} />
-            </div>
-          )}
-        </li>
-      );
-    })}
+    {rows.map(({ name, fields }, index) => (
+      <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
+        <span className="text-sm text-theme-fg-primary">
+          <GistValueText value={name} />
+        </span>
+        {fields.length > 0 && (
+          <div className="mt-0.5 pl-3">
+            <FieldList fields={fields} />
+          </div>
+        )}
+      </li>
+    ))}
     {item.count > item.names.length && (
       <li className="text-theme-fg-muted">
         {moreLabel(item.count - item.names.length)}
@@ -291,18 +279,11 @@ export const ToolCallGistValues = ({
   item: GistItem;
   variant: "card" | "row";
 }) => {
-  const isBatch =
-    item.count > 1 && item.names.some((name) => name.row !== undefined);
-  const rowed = isBatch
-    ? item.fields.filter((field) =>
-        field.values.some(({ value }) => value.row !== undefined),
-      )
-    : [];
-  const shared = item.fields.filter((field) => !rowed.includes(field));
+  const { rows, shared } = gistItemLayout(item);
   const changes = textChangeCount(item);
   return (
     <div className="space-y-2" data-testid="tool-call-gist-values">
-      {isBatch && <BatchRows item={item} fields={rowed} />}
+      {rows && <BatchRows item={item} rows={rows} />}
       <FieldList fields={shared} />
       {variant === "card" ? (
         <TextChange item={item} />

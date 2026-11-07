@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   recordSidecarLocalTrace,
@@ -593,6 +593,142 @@ describe("ToolUseStep gist row", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(toggle()).not.toContainElement(link);
     expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it.each([
+    ["another host", "https://files.example/n", "files.example", false],
+    [
+      "a stored match the URL contradicts",
+      "https://evil.example/n",
+      "records.example",
+      true,
+    ],
+    [
+      "a lookalike host",
+      "https://rëcords.example/n",
+      "xn--rcords-fva.example",
+      false,
+    ],
+  ])(
+    "names the host instead of the server for %s",
+    (_name, uri, host, matches) => {
+      labelled({
+        result_details: {
+          links: [{ uri, host, matches_server_host: matches }],
+        },
+      });
+
+      const link = screen.getByTestId("tool-result-link");
+      const shown = new URL(uri).host;
+      expect(link).toHaveTextContent(`Open link - ${shown}`);
+      expect(link).not.toHaveTextContent("Records");
+      expect(link).toHaveAttribute("href", new URL(uri).href);
+    },
+  );
+
+  it.each<[string, unknown]>([
+    ["links that are not a list", { links: "https://records.example" }],
+    ["a URI that is not text", { links: [{ uri: 42 }, null, "x"] }],
+    ["an http link", { links: [{ uri: "http://records.example/a" }] }],
+    [
+      "a link with user info",
+      { links: [{ uri: "https://user:pw@records.example/a" }] },
+    ],
+    ["a URI that does not parse", { links: [{ uri: "https://" }] }],
+    [
+      "a URI longer than any stored one",
+      { links: [{ uri: `https://records.example/${"a".repeat(5_000)}` }] },
+    ],
+  ])("shows no link for %s", (_name, details) => {
+    labelled({ result_details: details as ToolUse["result_details"] });
+
+    expect(toggle()).toHaveTextContent("Updated page Northwind");
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it.each<[string, unknown]>([
+    ["a label that is text", "update page"],
+    ["items that are not a list", { ...updateLabel, items: { a: 1 } }],
+    [
+      "values of the wrong types",
+      {
+        ...updateLabel,
+        items: [
+          {
+            id: {
+              pointer: 7,
+              values: [{ path: "/page_id", text: { a: 1 } }],
+            },
+          },
+          { id: { pointer: "/page_id", values: [null, { path: "/page_id" }] } },
+        ],
+      },
+    ],
+    ["a source from a newer server", { ...updateLabel, source: "adapter" }],
+    ["a warning from a newer server", { ...updateLabel, warnings: ["x"] }],
+  ])("shows %s as the plain tool row", (_name, label) => {
+    labelled({
+      display: {
+        title: "Update page",
+        description_truncated: false,
+        server_name: "Records",
+        label: label as typeof updateLabel,
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /update_page/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
+  });
+
+  it("falls back to the plain row when the label cannot be read at all", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const label = { ...updateLabel };
+    Object.defineProperty(label, "items", {
+      get() {
+        throw new Error("unreadable");
+      },
+    });
+    labelled({
+      display: {
+        title: "Update page",
+        description_truncated: false,
+        server_name: "Records",
+        label,
+      },
+      result_details: {
+        links: [
+          {
+            uri: "https://records.example/pages/northwind",
+            host: "records.example",
+            matches_server_host: true,
+          },
+        ],
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /update_page/ }),
+    ).toHaveTextContent("Records");
+    expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps a huge failure message to a few sentences", () => {
+    labelled(
+      {
+        output:
+          `${"Quota exceeded. ".repeat(200_000)}` as unknown as ToolUse["output"],
+      },
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+
+    const message = screen.getByTestId("tool-failure-message");
+    expect(message.textContent!.length).toBeLessThanOrEqual(301);
+    expect(message.textContent!.endsWith("…")).toBe(true);
   });
 
   it("shows a generic label's call by its tool name, as before", () => {

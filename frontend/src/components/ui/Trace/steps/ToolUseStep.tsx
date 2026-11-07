@@ -1,4 +1,6 @@
 import { t } from "@lingui/core/macro";
+import { useMemo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 
 import {
   ToolCallGistLine,
@@ -14,7 +16,8 @@ import {
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
-import { serverFailureMessage } from "@/lib/toolCallGist/serverText";
+import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
+import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -25,12 +28,9 @@ import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
-import type {
-  ToolResultDetails,
-  ToolResultLink,
-  ToolUse,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
+import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
 import type { CleanText } from "@/lib/toolCallGist/serverText";
 
 interface ToolUseStepProps extends BaseStepProps {
@@ -38,30 +38,37 @@ interface ToolUseStepProps extends BaseStepProps {
   decision?: ToolDecision;
 }
 
-/** Only a result's resource links may become anchors; the backend keeps https ones. */
-const resultLinkOf = (details: ToolResultDetails | undefined) =>
-  details?.links?.find((link) => link.uri.startsWith("https://"));
-
+/**
+ * A result's link, named after the server only when it points at the
+ * server's own host; any other link says where it goes.
+ */
 const ResultLink = ({
   link,
   server,
 }: {
-  link: ToolResultLink;
+  link: ResultLinkData;
   server: string | undefined;
-}) => (
-  <a
-    href={link.uri}
-    target="_blank"
-    rel="noopener noreferrer"
-    title={link.title ?? link.name}
-    className="shrink-0 px-1 text-xs text-theme-fg-accent hover:underline"
-    data-testid="tool-result-link"
-  >
-    {server
-      ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
-      : t({ id: "trace.tool.openLink", message: "Open link" })}
-  </a>
-);
+}) => {
+  const host = link.host;
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={link.title}
+      dir="auto"
+      className="shrink-0 px-1 text-xs text-theme-fg-accent [unicode-bidi:isolate] hover:underline"
+      data-testid="tool-result-link"
+    >
+      {link.onServer && server
+        ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
+        : t({ id: "trace.tool.openLinkHost", message: `Open link - ${host}` })}
+    </a>
+  );
+};
+
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
 
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
@@ -129,7 +136,9 @@ const PlainToolUseStep = ({
   // A denied or refused call never ran: its decision row says so.
   const notRun =
     decision?.status === "denied" || refusedWithoutDecision(part, decision);
-  const gist = gistOf(part.display?.label, part.input);
+  const label = part.display?.label;
+  const gist = useMemo(() => gistOf(label, part.input), [label, part.input]);
+  const serverName = textOf(part.display?.server_name);
   const lead = gist?.items[0];
   const phase: GistPhase = notRun
     ? "ask"
@@ -145,8 +154,11 @@ const PlainToolUseStep = ({
     (failure !== undefined ||
       gist.items.length > 1 ||
       gist.items.some(hasRowValues));
-  const link =
-    part.status === "success" ? resultLinkOf(part.result_details) : undefined;
+  const link = useMemo(
+    () =>
+      part.status === "success" ? resultLinkOf(part.result_details) : undefined,
+    [part.status, part.result_details],
+  );
   const progress = progressText(part.progress_message);
 
   // The sidecar's on-device steps are the step's body: rows like the main
@@ -178,7 +190,7 @@ const PlainToolUseStep = ({
       <ToolCallIdentity
         className="pt-2"
         toolName={toolName}
-        server={part.display?.server_name}
+        server={serverName}
       />
       {payload}
     </>
@@ -244,9 +256,7 @@ const PlainToolUseStep = ({
             />
           )
         }
-        headerSlot={
-          link && <ResultLink link={link} server={part.display?.server_name} />
-        }
+        headerSlot={link && <ResultLink link={link} server={serverName} />}
         detailSlot={
           gist && showsDetails ? (
             <GistRowDetails gist={gist} phase={phase} failure={failure} />
@@ -263,6 +273,28 @@ const PlainToolUseStep = ({
   );
 };
 
+/** The call as rows saved before labels show it: no gist and no result link. */
+const withoutLabel = (
+  part: ToolUseStepProps["part"],
+): ToolUseStepProps["part"] => {
+  const display: unknown = part.display;
+  return {
+    ...part,
+    display: isRecord(display)
+      ? {
+          title: textOf(display.title) ?? part.tool_name ?? "",
+          description_truncated: false,
+          server_name: textOf(display.server_name),
+          read_only:
+            typeof display.read_only === "boolean"
+              ? display.read_only
+              : undefined,
+        }
+      : undefined,
+    result_details: undefined,
+  };
+};
+
 // A refusal, and every frame before the first progress update, has no run to
 // show — those render as the plain tool call. Branching at this level rather
 // than inside keeps each rendering free to hold its own hooks.
@@ -273,6 +305,13 @@ export const ToolUseStep = (props: ToolUseStepProps) => {
   return envelope ? (
     <DelegationStep {...props} envelope={envelope} />
   ) : (
-    <PlainToolUseStep {...props} />
+    // A label or result this build cannot render leaves the row as it was
+    // before labels, never a broken message.
+    <ErrorBoundary
+      resetKeys={[props.part]}
+      fallback={<PlainToolUseStep {...props} part={withoutLabel(props.part)} />}
+    >
+      <PlainToolUseStep {...props} />
+    </ErrorBoundary>
   );
 };
