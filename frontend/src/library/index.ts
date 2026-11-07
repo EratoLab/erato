@@ -259,11 +259,34 @@ export {
 } from "@/components/ui/Controls/DropdownMenu";
 export { Row, type RowProps } from "@/components/ui/Controls/Row";
 export {
+  Checkbox,
+  type CheckboxProps,
+} from "@/components/ui/Controls/Checkbox";
+export {
+  SELECTABLE_ROW_CHECKBOX_SELECTOR,
+  SelectableRow,
+  type SelectableRowLayout,
+  type SelectableRowProps,
+  type SelectableRowTone,
+} from "@/components/ui/Controls/SelectableRow";
+export {
+  DetailFields,
+  type DetailField,
+  type DetailFieldsLayout,
+  type DetailFieldsProps,
+} from "@/components/ui/Container/DetailFields";
+export {
   TabRail,
   type TabRailOption,
   type TabRailProps,
 } from "@/components/ui/Controls/TabRail";
 export { Alert } from "@/components/ui/Feedback/Alert";
+export {
+  ProgressBar,
+  type ProgressBarProps,
+  type ProgressBarSize,
+  type ProgressBarTone,
+} from "@/components/ui/Feedback/ProgressBar";
 export { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 export {
   Toaster,
@@ -438,14 +461,21 @@ export {
 export { validateFileSizes } from "@/utils/validateFileSizes";
 export {
   ChatBubbleIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CloseIcon,
   ComputerIcon,
   DocumentIcon,
+  FolderIcon,
   MailIcon,
   MoonIcon,
+  OpenNewWindowIcon,
+  PageIcon,
   SettingsIcon,
   SidebarToggleIcon,
   SunIcon,
+  WarningIcon,
 } from "@/components/ui/icons";
 export {
   ChatHistoryFilterMenu,

@@ -23,6 +23,14 @@ interface ModalBaseProps {
   placement?: "center" | "bottom";
   /** Actions pinned below the scrolling content, so they stay in view. */
   footer?: React.ReactNode;
+  /** `alertdialog` for a dialog that interrupts with a message to act on. */
+  role?: "dialog" | "alertdialog";
+  /** Id of the element that names the dialog when it has no `title`. */
+  labelledBy?: string;
+  describedBy?: string;
+  /** The header's close button; Escape still closes. */
+  showCloseButton?: boolean;
+  closeOnOverlayClick?: boolean;
 }
 
 // Open dialogs, newest last. Escape belongs to the newest only, so a preview
@@ -43,6 +51,11 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
   contentClassName,
   placement = "center",
   footer,
+  role = "dialog",
+  labelledBy,
+  describedBy,
+  showCloseButton = true,
+  closeOnOverlayClick = true,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   // Dialogs stack (a file preview over a conversation), so each names itself.
@@ -118,6 +131,7 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
 
   const handleOverlayClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
+      closeOnOverlayClick &&
       event.target === event.currentTarget &&
       mouseDownTargetRef.current === event.currentTarget
     ) {
@@ -157,8 +171,10 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
         )}
         // Make the content div focusable
         tabIndex={-1}
-        role="dialog"
-        aria-labelledby={title ? titleId : undefined}
+        role={role}
+        aria-modal="true"
+        aria-labelledby={title ? titleId : labelledBy}
+        aria-describedby={describedBy}
         data-ui="modal-shell"
         data-placement={placement === "bottom" ? "bottom" : undefined}
       >
@@ -172,16 +188,18 @@ export const ModalBase: React.FC<ModalBaseProps> = ({
               {title}
             </h2>
             {/* Keep the close control beside long titles, including in add-in panes. */}
-            <button
-              onClick={onClose}
-              className="modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
-              style={{
-                padding: "var(--theme-spacing-modal-close-button-padding)",
-              }}
-              aria-label={t`Close modal`}
-            >
-              <CloseIcon className="size-6" />
-            </button>
+            {showCloseButton ? (
+              <button
+                onClick={onClose}
+                className="modal-close-geometry focus-ring-tight shrink-0 text-theme-fg-muted hover:bg-theme-bg-secondary"
+                style={{
+                  padding: "var(--theme-spacing-modal-close-button-padding)",
+                }}
+                aria-label={t`Close modal`}
+              >
+                <CloseIcon className="size-6" />
+              </button>
+            ) : null}
           </div>
         )}
 

@@ -110,6 +110,8 @@ ruleTester.run("themable-geometry", builtinRules.get("no-restricted-syntax"), {
     ),
     invalid('<Card className="rounded-xl" />', primitiveUtility),
     invalid("<Row className={`p-2 ${gap} rounded-md`} />", primitiveUtility),
+    invalid('<SelectableRow className="rounded-lg" />', primitiveUtility),
+    invalid('<ProgressBar className="rounded-full" />', primitiveUtility),
     invalid(
       '<div data-ui="chat.card" className="rounded-[1rem]" />',
       frozenArbitrary,
@@ -131,8 +133,8 @@ const assert = (condition, what) => {
 
 assert(themableGeometrySelectors.length === 5, "expected 5 selectors");
 assert(
-  themableGeometryPrimitives.length === 9,
-  "expected 9 primitive component names",
+  themableGeometryPrimitives.length === 13,
+  "expected 13 primitive component names",
 );
 assert(
   themableGeometryConfig({ files: ["src/**/*.tsx"] }).rules[

@@ -42,6 +42,19 @@ describe("Alert", () => {
     expect(alert.getAttribute("style")).toBeNull();
   });
 
+  it("hides its icon from assistive tech", () => {
+    render(
+      <Alert type="warning" icon={<span data-testid="glyph">!</span>}>
+        Alert content
+      </Alert>,
+    );
+
+    expect(screen.getByTestId("glyph").parentElement).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
   it("supports opt-in message geometry for chat surfaces", () => {
     render(
       <Alert type="error" geometryVariant="message">

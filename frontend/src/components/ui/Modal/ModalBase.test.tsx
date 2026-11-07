@@ -132,6 +132,84 @@ describe("ModalBase", () => {
     ).toHaveLength(1);
   });
 
+  it("marks every dialog modal", () => {
+    render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Details">
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("renders a headerless alert dialog named and described by its content", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={onClose}
+        role="alertdialog"
+        labelledBy="ended-title"
+        describedBy="ended-body"
+        closeOnOverlayClick={false}
+      >
+        <h2 id="ended-title">This request was cancelled.</h2>
+        <p id="ended-body">Nothing was shared.</p>
+      </ModalBase>,
+    );
+
+    const dialog = screen.getByRole("alertdialog", {
+      name: "This request was cancelled.",
+      description: "Nothing was shared.",
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("data-ui", "modal-shell");
+    expect(screen.queryByRole("button", { name: "Close modal" })).toBeNull();
+
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers its own title over labelledBy and can drop the close button", () => {
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={vi.fn()}
+        title="Details"
+        labelledBy="elsewhere"
+        showCloseButton={false}
+      >
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Details" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Close modal" })).toBeNull();
+  });
+
+  it("closes on a scrim click by default", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase isOpen={true} onClose={onClose} title="Details">
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves an untitled dialog unlabelled", () => {
     render(
       <ModalBase isOpen={true} onClose={vi.fn()}>

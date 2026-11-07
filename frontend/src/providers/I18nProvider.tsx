@@ -9,8 +9,20 @@ interface I18nProviderProps {
   children: React.ReactNode;
 }
 
+// Screen readers pick their voice from <html lang>, not from the catalog.
+function syncDocumentLanguage() {
+  if (typeof document !== "undefined" && i18n.locale) {
+    document.documentElement.lang = i18n.locale;
+  }
+}
+
 export function I18nProvider({ children }: I18nProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    syncDocumentLanguage();
+    return i18n.on("change", syncDocumentLanguage);
+  }, []);
 
   useEffect(() => {
     void initializeI18n().finally(() => setIsLoading(false));
