@@ -7,7 +7,7 @@ use erato_config::config::{
     ModelReasoningEffort, ModelVerbosity, MsOfficeAddinCommentAuthor,
     MsOfficeAddinCommentWriteMode, MsOfficeAddinLaunchEventType, MsOfficeAddinWordApplyPolicy,
     MsOfficeAddinWordWholeDocumentImport, PromptSourceSpecification, RuntimeConfigurationConfig,
-    ServerConfig, SharepointAllDrivesSource,
+    ServerConfig, SharepointAllDrivesSource, TeamsInactivityNudgeConfig,
 };
 use sqlx::Pool;
 use sqlx::postgres::Postgres;
@@ -6060,6 +6060,54 @@ url = "https://example.test/mcp"
         err.to_string()
             .contains("MCP server id `erato` is reserved"),
         "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn runtime_nudge_configuration_merges_admin_overrides_after_file_sources() {
+    let sources = vec![
+        ConfigSourceFile {
+            source_filename: "erato.toml".to_string(),
+            contents: r#"
+[integrations.ms_office.teams.bot.inactivity_nudge]
+enabled = true
+inactive_after = "7d"
+tips = ["Tip one", "Tip two"]
+
+[integrations.ms_office.teams.bot.inactivity_nudge.send_window]
+time_zone = "Europe/Berlin"
+"#
+            .to_string(),
+        },
+        ConfigSourceFile {
+            source_filename: "admin-panel.toml".to_string(),
+            contents: r#"
+[integrations.ms_office.teams.bot.inactivity_nudge]
+inactive_after = "1h"
+pilot_users = ["pilot@example.com"]
+
+[integrations.ms_office.teams.bot.inactivity_nudge.send_window]
+start_hour = 9
+"#
+            .to_string(),
+        },
+    ];
+
+    let nudge = TeamsInactivityNudgeConfig::from_toml_sources(&sources, true).unwrap();
+    assert!(nudge.enabled);
+    assert_eq!(nudge.inactive_after, "1h");
+    assert_eq!(nudge.tips, ["Tip one", "Tip two"]);
+    assert_eq!(nudge.pilot_users, ["pilot@example.com"]);
+    assert_eq!(nudge.send_window.start_hour, 9);
+    assert_eq!(nudge.send_window.end_hour, 18);
+    assert_eq!(nudge.send_window.time_zone, "Europe/Berlin");
+
+    // Validated as at startup: an enabled nudge needs the bot.
+    assert!(TeamsInactivityNudgeConfig::from_toml_sources(&sources, false).is_err());
+    // No section at all is the default, switched off.
+    assert_eq!(
+        TeamsInactivityNudgeConfig::from_toml_sources(&[], false).unwrap(),
+        TeamsInactivityNudgeConfig::default()
     );
 }
 

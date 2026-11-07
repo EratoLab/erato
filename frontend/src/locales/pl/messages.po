@@ -6568,6 +6568,31 @@ msgid "profile.menu.preferences"
 msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.done"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.scheduled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.snoozed"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr "Znajdź rozmowy i wiadomości w historii czatu"
@@ -7303,6 +7328,61 @@ msgid "sidecar.permissions.unknown"
 msgstr "Nieznane"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Interfejs aplikacji desktopowej: aktualny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Interfejs aplikacji desktopowej: aktualizacja nie powiodła się ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Interfejs aplikacji desktopowej: aktualizowanie…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "błąd sieci"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "brak pakietu na serwerze"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "nieoczekiwany błąd"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "serwer proxy odrzucił połączenie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "nie udało się zapisać na tym urządzeniu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "niezaufany certyfikat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "odmowa dostępu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "nie udało się zweryfikować pakietu"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""
@@ -7798,6 +7878,16 @@ msgstr "{shape, select, full {Nie udało się przenieść: {kind} {title} do {wh
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "Wywołanie samo ustawiło wartość zatwierdzenia, której tu nie pokazano. Liczy się tylko Twoja decyzja na tej karcie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Niektóre wartości w tym wywołaniu zawierają ukryte znaki, które tu usunięto. To, co zapisze wywołanie, może się różnić od tego, co widzisz."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Pozostałe argumenty"
 
@@ -7990,6 +8080,11 @@ msgstr "Wartość z wcześniejszego wyniku w tym czacie"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Nazwa z wcześniejszego wyniku w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "zapisane jako"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

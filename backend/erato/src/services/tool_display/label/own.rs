@@ -84,7 +84,7 @@ pub fn own_label(
     mapping: &ToolCallLabelMapping,
     arguments: &Value,
 ) -> ToolCallLabel {
-    let label = filtered_label(OWN_ORIGIN, tool_name, arguments, mapping);
+    let label = filtered_label(OWN_ORIGIN, tool_name, arguments, mapping, None);
     if label.source == ToolCallLabelSource::Generic {
         return label;
     }
