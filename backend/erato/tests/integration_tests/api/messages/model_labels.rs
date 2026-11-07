@@ -1,0 +1,432 @@
+//! A configured model labels the MCP calls the rules are unsure of. The card
+//! never waits for it: the rules' label shows first, and the model's replaces
+//! it on the running turn's row or on the parked approval card.
+use super::*;
+use crate::test_utils::build_openai_delayed_text_streaming_response;
+use erato::config::McpToolApprovalPreset;
+use erato::models::message::ToolCallLabelSource;
+use erato::services::tool_display::label::cache::ToolLabelCacheKey;
+use std::time::Duration;
+
+const SENTINEL: &str = "You label one tool call";
+const ASK: &str = "Reject the record";
+const CALL_ID: &str = "call_update";
+const REPLY: &str = r#"{"action":"update","object_kind":"row","items":[{"title":null,"id":null,"target":null,"before":null,"after":"/status","fields":[]}]}"#;
+
+/// No `id`, so the rules have nothing to name and are unsure.
+fn arguments() -> Value {
+    json!({"status": "Rejected"})
+}
+
+/// The labeller's answer: `reply` after `delay`, or a provider error.
+fn labeller(
+    mocks: &mut MockSet,
+    recorder: &RequestBodyRecorder,
+    reply: Option<&str>,
+    delay: Duration,
+) {
+    let recorded = recorder.clone();
+    let body = reply.map(|content| {
+        json!({
+            "id": "label", "object": "chat.completion", "created": 1, "model": "mock-model",
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 120, "completion_tokens": 20, "total_tokens": 140},
+        })
+        .to_string()
+    });
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[SENTINEL], &[]))
+            .matcher(recorded);
+        match &body {
+            Some(body) => {
+                then.status(http::StatusCode::OK)
+                    .headers([("Content-Type", "application/json")])
+                    .bytes_stream_with_delays([
+                        BodyAction::Delay(delay),
+                        BodyAction::Bytes(body.clone().into()),
+                    ]);
+            }
+            None => {
+                then.status(http::StatusCode::INTERNAL_SERVER_ERROR)
+                    .json(json!({"error": {"message": "labeller unavailable"}}));
+            }
+        }
+    });
+}
+
+fn calls_update_record(mocks: &mut MockSet) {
+    answers_with(
+        mocks,
+        &[ASK],
+        &[CALL_ID, SENTINEL],
+        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_record", arguments())]),
+    );
+}
+
+async fn labelled_records(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    preset: McpToolApprovalPreset,
+    enabled: bool,
+) -> erato::state::AppState {
+    records_app_state_with(pool, mocks, |config| {
+        let providers = &mut config.chat_providers.as_mut().unwrap().providers;
+        let provider = providers["mock-llm"].clone();
+        providers.insert("labeller".into(), provider);
+        config.tool_labels.enabled = enabled;
+        config.tool_labels.chat_provider_id = Some("labeller".into());
+        config.mcp_servers_global.approval.preset = preset;
+    })
+    .await
+}
+
+async fn submit(app_state: &erato::state::AppState) -> (Uuid, Uuid, Vec<crate::test_utils::Event>) {
+    let response = app_server(app_state.clone())
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": ASK }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let chat_id = Uuid::parse_str(&extract_chat_id(&events).unwrap()).unwrap();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    (chat_id, message_id, events)
+}
+
+/// The key the gate keeps a model's mapping of the call under.
+async fn label_key(app_state: &erato::state::AppState) -> ToolLabelCacheKey {
+    use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let tools = McpServers::new(&app_state.config)
+        .list_tools_for_server_ids(
+            Uuid::new_v4(),
+            Some(&std::collections::HashSet::from(["records".to_string()])),
+            &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
+                oidc_token: None,
+                access_token: None,
+            },
+        )
+        .await
+        .unwrap();
+    let update = tools
+        .iter()
+        .find(|tool| tool.tool.name == "update_record")
+        .unwrap();
+    ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &arguments())
+}
+
+async fn card(app_state: &erato::state::AppState, message_id: Uuid) -> Value {
+    let card = message_content(app_state, message_id).await.pop().unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    card
+}
+
+async fn generating_entry(app_state: &erato::state::AppState, chat_id: Uuid) -> Value {
+    let response = app_server(app_state.clone())
+        .get("/api/v1beta/me/generating")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    response.json::<Value>()["chats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["chat_id"] == chat_id.to_string())
+        .cloned()
+        .unwrap_or(Value::Null)
+}
+
+/// `check` until it gives a value, for at most ten seconds.
+async fn eventually<T, F: std::future::Future<Output = Option<T>>>(
+    what: &str,
+    mut check: impl FnMut() -> F,
+) -> T {
+    for _ in 0..100 {
+        if let Some(value) = check().await {
+            return value;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("{what} never happened");
+}
+
+/// A call that ran without asking is shown with the rules' label, then its
+/// row gets the model's label within the same turn, live and stored. The
+/// model is asked once, with the reply schema and without the tool's
+/// description, and its mapping is kept for the call's shape.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
+    pool: Pool<Postgres>,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
+    calls_update_record(&mut mocks);
+    // Slow enough that the label lands while the turn still runs.
+    answers_with(
+        &mut mocks,
+        &[CALL_ID],
+        &[SENTINEL],
+        build_openai_delayed_text_streaming_response(
+            &["The", " record", " is", " rejected."],
+            Duration::from_millis(300),
+        ),
+    );
+    let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Permissive, true).await;
+    let (_chat_id, message_id, events) = submit(&app_state).await;
+
+    let content = message_content(&app_state, message_id).await;
+    let row = content
+        .iter()
+        .find(|part| part["tool_name"] == "update_record")
+        .unwrap_or_else(|| panic!("{content:?}"));
+    assert_eq!(row["content_type"], "tool_use");
+    let label = &row["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("model"), &json!("update"), &json!("row"))
+    );
+    assert_eq!(label["items"][0]["after"]["pointer"], "/status");
+    assert_eq!(label["items"][0]["after"]["values"][0]["text"], "Rejected");
+    assert!(row["display"].get("description").is_none(), "{row}");
+
+    let updates: Vec<_> = terminal_tool_call_update_events(&events)
+        .into_iter()
+        .filter(|update| update["tool_call_id"] == row["tool_call_id"])
+        .collect();
+    assert_eq!(updates[0]["display"]["label"]["source"], "rules");
+    let last = updates.last().unwrap();
+    assert_eq!(last["display"], row["display"]);
+    assert_eq!(last["status"], row["status"]);
+    assert_eq!(last["output"], row["output"]);
+
+    let bodies = recorder.bodies();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
+    let request: Value = serde_json::from_str(&bodies[0]).unwrap();
+    let format = &request["response_format"];
+    assert_eq!(format["type"], "json_schema");
+    assert_eq!(format["json_schema"]["strict"], true);
+    assert_eq!(
+        format["json_schema"]["schema"]["properties"]["items"]["items"]["properties"]["after"]["anyOf"]
+            [0]["enum"],
+        json!(["/status"])
+    );
+    assert!(bodies[0].contains("TOOL: update_record"), "{}", bodies[0]);
+    assert!(!bodies[0].contains("Updates the record"), "{}", bodies[0]);
+    assert!(request.get("tools").is_none(), "{request}");
+
+    let kept = app_state
+        .tool_label_cache
+        .lookup(&label_key(&app_state).await, &arguments())
+        .await
+        .expect("the model's mapping is kept");
+    assert_eq!(kept.source, ToolCallLabelSource::Model);
+}
+
+/// The turn parks right after the gate, so the label lands on the stored
+/// card: its own call and its item, with the description it was stored
+/// with. The parked chat then says a label changed, which is what makes a
+/// client showing the card load it again.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    // Late enough that the turn has parked before it answers.
+    labeller(
+        &mut mocks,
+        &recorder,
+        Some(REPLY),
+        Duration::from_millis(1500),
+    );
+    calls_update_record(&mut mocks);
+    let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, true).await;
+    let (chat_id, message_id, _events) = submit(&app_state).await;
+
+    let parked = card(&app_state, message_id).await;
+    assert_eq!(parked["display"]["label"]["source"], "rules");
+    assert!(parked.get("labels_updated_at").is_none(), "{parked}");
+
+    let upgraded = eventually("the card's upgrade", || async {
+        let card = card(&app_state, message_id).await;
+        (card["display"]["label"]["source"] == "model").then_some(card)
+    })
+    .await;
+    assert_eq!(upgraded["approvals"][0]["display"], upgraded["display"]);
+    assert_eq!(
+        upgraded["display"]["label"]["items"][0]["after"]["pointer"],
+        "/status"
+    );
+    assert_eq!(
+        upgraded["display"]["description"],
+        parked["display"]["description"]
+    );
+    for unchanged in ["input", "annotations", "requested_at", "pending_tool_calls"] {
+        assert_eq!(upgraded[unchanged], parked[unchanged], "{unchanged}");
+    }
+    let stored_at = upgraded["labels_updated_at"].as_str().unwrap();
+
+    let entry = eventually("the parked chat's marker", || async {
+        let entry = generating_entry(&app_state, chat_id).await;
+        entry.get("labels_updated_at").is_some().then_some(entry)
+    })
+    .await;
+    assert_eq!(entry["state"], "action_required");
+    assert_eq!(
+        chrono::DateTime::parse_from_rfc3339(entry["labels_updated_at"].as_str().unwrap()).unwrap(),
+        chrono::DateTime::parse_from_rfc3339(stored_at).unwrap()
+    );
+
+    let response = app_server(app_state.clone())
+        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    response.assert_status_ok();
+    let messages = response.json::<Value>();
+    let served = messages["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["id"] == message_id.to_string())
+        .unwrap();
+    let served = served["content"].as_array().unwrap().last().unwrap();
+    assert_eq!(served["display"], upgraded["display"]);
+    assert_eq!(recorder.bodies().len(), 1);
+}
+
+/// A labeller that fails, times out or points outside the call's paths
+/// leaves the parked card as the rules labelled it, and keeps nothing.
+async fn the_card_keeps_the_rules_label(
+    pool: Pool<Postgres>,
+    reply: Option<&str>,
+    delay: Duration,
+    timeout: Duration,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    labeller(&mut mocks, &recorder, reply, delay);
+    calls_update_record(&mut mocks);
+    let mut app_state =
+        labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, true).await;
+    app_state.tool_label_timeout = timeout;
+    let (chat_id, message_id, _events) = submit(&app_state).await;
+
+    eventually("the labeller request", || async {
+        (!recorder.bodies().is_empty()).then_some(())
+    })
+    .await;
+    // Waits for the labelling in flight under the same key, then keeps
+    // nothing of its own.
+    let key = label_key(&app_state).await;
+    assert_eq!(
+        app_state
+            .tool_label_cache
+            .get_or_compute(key.clone(), &arguments(), async { None })
+            .await,
+        None
+    );
+    assert_eq!(
+        app_state.tool_label_cache.lookup(&key, &arguments()).await,
+        None
+    );
+
+    let card = card(&app_state, message_id).await;
+    assert_eq!(card["display"]["label"]["source"], "rules");
+    assert_eq!(card["approvals"][0]["display"], card["display"]);
+    assert!(card.get("labels_updated_at").is_none(), "{card}");
+    let entry = eventually("the parked state", || async {
+        let entry = generating_entry(&app_state, chat_id).await;
+        (entry["state"] == "action_required").then_some(entry)
+    })
+    .await;
+    assert!(entry.get("labels_updated_at").is_none(), "{entry}");
+    assert_eq!(recorder.bodies().len(), 1);
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_failing_labeller_leaves_the_rules_label(pool: Pool<Postgres>) {
+    the_card_keeps_the_rules_label(pool, None, Duration::ZERO, Duration::from_secs(10)).await;
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_slow_labeller_leaves_the_rules_label(pool: Pool<Postgres>) {
+    the_card_keeps_the_rules_label(
+        pool,
+        Some(REPLY),
+        Duration::from_secs(3),
+        Duration::from_millis(300),
+    )
+    .await;
+}
+
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_reply_pointing_outside_the_calls_paths_leaves_the_rules_label(pool: Pool<Postgres>) {
+    the_card_keeps_the_rules_label(
+        pool,
+        Some(&REPLY.replace("/status", "/recordId")),
+        Duration::ZERO,
+        Duration::from_secs(10),
+    )
+    .await;
+}
+
+/// Off, nothing goes to the labeller and the card keeps the rules' label.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn nothing_goes_to_the_labeller_while_tool_labels_are_off(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
+    calls_update_record(&mut mocks);
+    let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, false).await;
+    let (_chat_id, message_id, _events) = submit(&app_state).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(recorder.bodies().is_empty(), "{:?}", recorder.bodies());
+    assert_eq!(
+        card(&app_state, message_id).await["display"]["label"]["source"],
+        "rules"
+    );
+}

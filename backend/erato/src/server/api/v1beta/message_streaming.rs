@@ -620,6 +620,7 @@ fn ask_for_tool_call(
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
         approval_scope: None,
+        labels_updated_at: None,
     }))
 }
 
@@ -5954,6 +5955,7 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
+        labels_updated_at: None,
     }
 }
 
@@ -6021,6 +6023,7 @@ fn task_plan_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
+        labels_updated_at: None,
     }
 }
 
@@ -6205,6 +6208,73 @@ async fn send_tool_generation_update<
     }
     .into();
     send_generation_event(&message, tx.clone()).await
+}
+
+/// Sends each row a model's label changed, whole, as the call's live update.
+async fn announce_tool_rows(
+    content: &[ContentPart],
+    indices: &[usize],
+    message_id: Uuid,
+    task: Option<&Arc<StreamingTask>>,
+    tx: &Sender<Result<Event, Report>>,
+) {
+    for &content_index in indices {
+        let Some(ContentPart::ToolUse(tool)) = content.get(content_index) else {
+            continue;
+        };
+        let (status, bg_status) = match tool.status {
+            MessageToolCallStatus::Preparing => {
+                (ToolCallStatus::Preparing, BgToolCallStatus::Preparing)
+            }
+            MessageToolCallStatus::InProgress => {
+                (ToolCallStatus::InProgress, BgToolCallStatus::InProgress)
+            }
+            MessageToolCallStatus::Success => (ToolCallStatus::Success, BgToolCallStatus::Success),
+            MessageToolCallStatus::Error => (ToolCallStatus::Error, BgToolCallStatus::Error),
+        };
+        if let Some(task) = task {
+            send_background_event(
+                task,
+                StreamingEvent::ToolCallUpdate {
+                    message_id,
+                    content_index,
+                    tool_call_id: tool.tool_call_id.clone(),
+                    tool_name: tool.tool_name.clone(),
+                    display: tool.display.clone(),
+                    input: tool.input.clone(),
+                    status: bg_status,
+                    progress_message: tool.progress_message.clone(),
+                    progress: tool.progress,
+                    total: tool.total,
+                    output: tool.output.clone(),
+                    result_details: tool.result_details.clone(),
+                    allowed_by: tool.allowed_by,
+                },
+                "broadcast a tool call's model label",
+            )
+            .await;
+        }
+        let message: GenerationStreamingMessage = MessageSubmitStreamingResponseToolCallUpdate {
+            message_id,
+            content_index,
+            tool_call_id: tool.tool_call_id.clone(),
+            tool_name: tool.tool_name.clone(),
+            display: tool.display.clone(),
+            input: tool.input.clone(),
+            status,
+            progress_message: tool.progress_message.clone(),
+            progress: tool.progress,
+            total: tool.total,
+            output: tool.output.clone(),
+            result_details: tool.result_details.clone(),
+            allowed_by: tool.allowed_by,
+        }
+        .into();
+        // Best-effort: the stored row carries the label either way.
+        if let Err(error) = message.send_event_report(tx.clone()).await {
+            warn_and_capture_error("send a tool call's model label", &error);
+        }
+    }
 }
 
 /// Tell the client what a reserved task slot is doing.
@@ -6636,6 +6706,14 @@ async fn stream_generate_chat_completion<'a>(
                 })
         });
     let mcp = app_state.mcp_state().await;
+    let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
+        &user_id,
+        chat_id,
+        assistant_message_id,
+        assistant_id,
+        &langfuse_trace_enrichment.platform,
+        streaming_task,
+    );
     // Record the real assistant message id on the streaming task. `start_task`
     // only had a placeholder id; client-tool results are routed to a task by
     // message_id (the id the client receives in `client_tool_call`), so it must
@@ -7219,6 +7297,15 @@ async fn stream_generate_chat_completion<'a>(
             }
         }
         'pop_calls: while !unfinished_tool_calls.is_empty() {
+            let upgraded = label_upgrades.apply(&mut current_message_content);
+            announce_tool_rows(
+                &current_message_content,
+                &upgraded,
+                assistant_message_id,
+                streaming_task,
+                &tx,
+            )
+            .await;
             persist_operation_turn!();
             let unfinished_tool_call = unfinished_tool_calls.pop_front().expect("nonempty calls");
             let batch_position = {
@@ -9177,7 +9264,7 @@ async fn stream_generate_chat_completion<'a>(
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &managed_tool_call.tool_call.fn_arguments,
-                &label_mapping,
+                &label_mapping.mapping,
                 &tool_result_context,
             );
             let row_display = tool_row_display(&display);
@@ -9201,14 +9288,36 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(_) => None,
             };
-            let (refusal, allowed_by) = match gate_mcp_tool_call(
+            let gate = gate_mcp_tool_call(
                 approval_config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &display,
                 &unfinished_tool_call,
                 user_decision,
-            ) {
+            );
+            // A refused call has no card a model's label could improve.
+            let shown = match &gate {
+                ToolCallGate::Run(_) => true,
+                ToolCallGate::Ask(_) => !is_delegated_run || child_may_park,
+                ToolCallGate::Refuse(_) => false,
+            };
+            if shown && let Some(key) = label_mapping.unlabelled {
+                label_upgrades.start(
+                    app_state,
+                    chat_provider_headers_context,
+                    crate::services::tool_labeller::LabelJob {
+                        key,
+                        server_id: managed_tool_call.server_id.clone(),
+                        tool: managed_tool_call.tool.clone(),
+                        arguments: managed_tool_call.tool_call.fn_arguments.clone(),
+                        context: tool_result_context.clone(),
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        shown: display.clone(),
+                    },
+                );
+            }
+            let (refusal, allowed_by) = match gate {
                 ToolCallGate::Run(allowed_by) => (None, allowed_by),
                 ToolCallGate::Refuse(error_message) => (Some(error_message), None),
                 ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
@@ -10143,6 +10252,15 @@ async fn stream_generate_chat_completion<'a>(
             break 'loop_call_turns Ok((current_message_content, metadata));
         }
 
+        let upgraded = label_upgrades.apply(&mut current_message_content);
+        announce_tool_rows(
+            &current_message_content,
+            &upgraded,
+            assistant_message_id,
+            streaming_task,
+            &tx,
+        )
+        .await;
         persist_operation_turn!();
 
         if !pending_waits.is_empty() {
@@ -11509,6 +11627,17 @@ async fn stream_generate_chat_completion<'a>(
     }
     persist_correction!();
     let mut completion = completion;
+    if let Ok((content, _)) = &mut completion {
+        let upgraded = label_upgrades.finish(content);
+        announce_tool_rows(
+            content,
+            &upgraded,
+            assistant_message_id,
+            streaming_task,
+            &tx,
+        )
+        .await;
+    }
     if let Some(speech) = speech.take()
         && let Ok((content, metadata)) = &mut completion
     {

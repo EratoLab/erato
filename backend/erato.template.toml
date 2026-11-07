@@ -95,6 +95,12 @@ chat_provider_ids = ["test-token-limit"]
 # # prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Optional fallback" }
 # # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
+# Tool-call labels from a model where the generic rules are unsure (off by default).
+# The calls' arguments go to this provider; pick one that may see them.
+# [tool_labels]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+
 # From ./run_mcp_server.sh
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
 # [mcp_servers_global]

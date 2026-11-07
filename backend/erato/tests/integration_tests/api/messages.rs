@@ -5,6 +5,7 @@ mod client_submissions;
 mod client_tool_decisions;
 mod client_tool_operations;
 mod mcp_file_outputs;
+mod model_labels;
 mod preparation_failures;
 mod token_usage_tool_parts;
 mod tool_arguments;
@@ -5377,6 +5378,16 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
 /// The records server, served in-process so these tests carry their own
 /// fixture, and gated by the restrictive preset.
 async fn records_app_state(pool: Pool<Postgres>, mocks: MockSet) -> erato::state::AppState {
+    records_app_state_with(pool, mocks, |_| {}).await
+}
+
+/// The same records setup, for a test that also needs something in the app
+/// config.
+async fn records_app_state_with(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> erato::state::AppState {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind mock MCP listener");
@@ -5402,6 +5413,7 @@ async fn records_app_state(pool: Pool<Postgres>, mocks: MockSet) -> erato::state
         preset: erato::config::McpToolApprovalPreset::Restrictive,
         allow_always: false,
     };
+    configure(&mut app_config);
     let app_state = test_app_state(app_config, pool).await;
     get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
