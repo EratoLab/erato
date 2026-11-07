@@ -7304,6 +7304,61 @@ msgid "sidecar.permissions.unknown"
 msgstr "Unknown"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Desktop app interface: up to date"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Desktop app interface: update failed ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Desktop app interface: updating…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "network error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "no package on the server"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "unexpected error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "the proxy refused the connection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "could not be saved on this device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "certificate not trusted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "access was refused"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "the package did not verify"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr "{itemCount, plural, one {The assistant planned this sub-task. Declining it is refused to the assistant and the response continues without it.} other {The assistant planned these sub-tasks. Decide each one; the ones you decline are refused and the response continues without them.}}"

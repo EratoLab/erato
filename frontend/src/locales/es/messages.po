@@ -7304,6 +7304,61 @@ msgid "sidecar.permissions.unknown"
 msgstr "Desconocido"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Interfaz de la aplicación de escritorio: actualizada"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Interfaz de la aplicación de escritorio: no se pudo actualizar ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Interfaz de la aplicación de escritorio: actualizando…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "error de red"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "no hay ningún paquete en el servidor"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "error inesperado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "el proxy rechazó la conexión"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "no se pudo guardar en este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "certificado no confiable"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "se denegó el acceso"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "no se pudo verificar el paquete"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""
