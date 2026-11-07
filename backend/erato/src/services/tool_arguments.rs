@@ -102,9 +102,15 @@ pub(crate) fn tool_call_content_index(content: &[ContentPart], id: &str) -> usiz
         .unwrap_or(content.len())
 }
 
-/// Preserve the position first reserved by streaming argument generation.
-pub(crate) fn upsert_tool_use(content: &mut Vec<ContentPart>, tool: ToolUse) -> usize {
+/// Preserve the position first reserved by streaming argument generation, and
+/// the display an earlier write gave the call when this one has none.
+pub(crate) fn upsert_tool_use(content: &mut Vec<ContentPart>, mut tool: ToolUse) -> usize {
     let index = tool_call_content_index(content, &tool.tool_call_id);
+    if let Some(ContentPart::ToolUse(existing)) = content.get_mut(index)
+        && tool.display.is_none()
+    {
+        tool.display = existing.display.take();
+    }
     let part = ContentPart::ToolUse(tool);
     if index == content.len() {
         content.push(part);
@@ -216,6 +222,55 @@ mod tests {
         );
         assert_eq!(content.len(), 2);
         assert_eq!(without_preparing_tools(&content).len(), 1);
+    }
+
+    #[test]
+    fn a_rewrite_without_display_keeps_the_one_the_call_was_given() {
+        let display = crate::services::tool_display::tool_display_metadata(
+            &rmcp::model::Tool::new("publish", "Publishes.", rmcp::model::JsonObject::new()),
+        );
+        let labelled = crate::models::message::ToolDisplayMetadata {
+            label: Some(crate::services::tool_display::label::generic_label(
+                &json!({"title": "Done"}),
+            )),
+            ..display
+        };
+        let mut content = vec![];
+        upsert_tool_use(
+            &mut content,
+            ToolUse {
+                tool_call_id: "one".into(),
+                status: ToolCallStatus::InProgress,
+                display: Some(labelled.clone()),
+                ..Default::default()
+            },
+        );
+        upsert_tool_use(
+            &mut content,
+            ToolUse {
+                tool_call_id: "one".into(),
+                status: ToolCallStatus::Success,
+                ..Default::default()
+            },
+        );
+        assert!(
+            matches!(&content[..], [ContentPart::ToolUse(tool)] if tool.status == ToolCallStatus::Success && tool.display.as_ref() == Some(&labelled))
+        );
+        let relabelled = crate::models::message::ToolDisplayMetadata {
+            label: None,
+            ..labelled
+        };
+        upsert_tool_use(
+            &mut content,
+            ToolUse {
+                tool_call_id: "one".into(),
+                display: Some(relabelled.clone()),
+                ..Default::default()
+            },
+        );
+        assert!(
+            matches!(&content[..], [ContentPart::ToolUse(tool)] if tool.display.as_ref() == Some(&relabelled))
+        );
     }
 
     #[test]
