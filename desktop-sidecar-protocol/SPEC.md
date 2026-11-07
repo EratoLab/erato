@@ -148,7 +148,9 @@ Cancellation is independently authorized using the same Origin, OS user, and
 organization policy as the original request.
 
 JSON-RPC request bodies carry ordinary JSON only and are capped at 262,144
-bytes. Response bodies MAY carry inline base64 bytes — for example the message
+bytes. `sidecar.install_ui_package.v1` splits the desktop UI archive into
+base64 chunks for that reason ([section 11](#desktop-ui-package)). Response
+bodies MAY carry inline base64 bytes — for example the message
 bodies and attachments of `outlook.get_conversation.v1` — and are bounded by a
 separate, larger response cap. A dedicated transfer profile for very large
 payloads may be introduced later, but is not part of 1.0.
@@ -389,14 +391,97 @@ configure. Older clients that do not send the field remain compatible.
 
 The token is deployment-level: it authorizes the two package requests and
 nothing else, is no user credential, and expires (24 hours in the reference
-backend). A sidecar MUST NOT persist it beyond the download, log it, or return
-it through `indexing.status.v1.configuration`. The sidecar downloads the
+backend). A sidecar MUST NOT write the token to persistent storage, log it, or
+return it through `indexing.status.v1.configuration`; it MAY keep it in memory,
+for at most the token's lifetime, to repeat the check. The sidecar downloads the
 package when `digest` differs from the digest of its installed package and
 `host_api` is one it lists in `ui.host_apis`; it verifies the archive against
 its manifest and installs it atomically. A failed download or verification
 keeps the installed package, or the seed, and does not fail the configure
 request. Delivery of `ui_package` is not evidence that the package was
 installed; the next discovery reports `installed`.
+
+**Download state (package 0.1.47).** On a sidecar that reports `ui`,
+`sidecar.status.v1` reports `ui_package`. It is absent on sidecars that host
+no desktop UI and on sidecars built before 0.1.47, and null until this sidecar
+process has accepted a valid `ui_package` through `sidecar.configure.v1`.
+
+| Field          | Meaning                                                                                                                                                                                                                                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`        | `current`: the installed deployment package has `digest`. `pending`: a check, a download or a relay toward `digest` is queued or running. `failed`: the last check, download or relay for `digest` ended without installing it. Clients treat an unknown value as `pending`: they keep polling and never relay. |
+| `digest`       | The package the state is about: the digest the backend's manifest named in the last check, or the latest offered digest when no manifest was read. With `current` it is the installed package's digest.                                                                                                         |
+| `reason`       | Present only with `failed`, from the table below. Clients treat an unknown value as `other`.                                                                                                                                                                                                                    |
+| `attempted_at` | When the last check, download or relay for `digest` started, as an RFC 3339 UTC string at second precision; while a relay runs, the relay's start time. Null when nothing has been attempted, for example when the offered digest was already installed.                                                        |
+| `relay`        | Whether this caller may relay `digest` now. True only if `state` is `failed`, `reason` is `network`, `proxy` or `tls`, `digest` equals the latest offered digest, that offer came from the calling Origin within the token lifetime, and no relay is in flight. Always false without an Origin.                 |
+
+The sidecar derives the state in this order: `current` if the installed
+package's digest equals `digest`, even while a periodic refresh runs or fails;
+otherwise `pending` while a direct check is queued or running or a relay upload
+is in flight; otherwise `failed` with the last attempt's reason if the last
+attempt for `digest` failed; otherwise `pending`. Once `sidecar.configure.v1`
+with a valid `ui_package` has returned, `sidecar.status.v1` reports that offer:
+`pending` if it started a check, `current` if the digest is installed, and
+`failed` with the stored reason if the digest is within its install-failure
+backoff.
+
+| `reason`       | When                                                                                                                                                                                                                     | Relay |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| `network`      | Transport failure with no proxy involved: the name did not resolve, the connection was refused or reset, a connect or request timeout ran out, or the connection failed mid-transfer.                                    | Yes   |
+| `proxy`        | The request went through a proxy and failed (CONNECT refused, 407, an invalid proxy setting), or failed for a `network` reason while a proxy was used or PAC or WPAD is configured, which the sidecar does not evaluate. | Yes   |
+| `tls`          | Certificate verification or handshake failure.                                                                                                                                                                           | Yes   |
+| `unauthorized` | 401. The sidecar drops the offer; the next configure brings a new token.                                                                                                                                                 | No    |
+| `not_found`    | 404. The deployment serves no package.                                                                                                                                                                                   | No    |
+| `verification` | The manifest or archive is malformed, exceeds its budget, names another digest or host API, or fails verification.                                                                                                       | No    |
+| `storage`      | The archive could not be written or activated on the local disk.                                                                                                                                                         | No    |
+| `other`        | Any other status (redirects are not followed), or a failure inside the sidecar.                                                                                                                                          | No    |
+
+**Relay (package 0.1.47).** The sidecar downloads the package itself. When
+its download failed for a `network`, `proxy` or `tls` reason,
+`sidecar.status.v1` reports `relay: true` to the Origin whose offer it tried,
+and that client MAY relay the archive with `sidecar.install_ui_package.v1`. A
+client relays only when discovery reports `ui`, both methods are enabled, and
+the status reports `failed` with `relay: true` and the digest the client
+offered. A client that holds an upload in flight for the digest it offered MAY
+continue it, with the same `upload_id`, while the status reports `pending`, but
+not while it reports an unknown state.
+
+The client fetches the archive from the offered `url` with
+`Authorization: Bearer <token>`. It MUST NOT follow redirects, and it MUST NOT
+relay an archive whose `ETag` names another digest. It sends the archive in
+chunks of exactly 131,072 bytes, except the last, base64 encoded, under one
+random `upload_id`; `chunk_count` is `ceil(total_bytes / 131072)`. A full chunk
+request is about 175 KB, within the 262,144-byte request cap.
+
+The sidecar accepts only the digest the same Origin offered last, within the
+token lifetime. It assembles one upload at a time, in memory, at most 9,437,184
+bytes (72 chunks). It discards an upload idle for 120 s since its last stored
+chunk or older than 10 minutes, and one whose offer changed or expired; the
+status then falls back to the failure underneath, so a client can start over
+from chunk 0. It answers each chunk with one of these states:
+
+- `continue` with `next_chunk_index`: send that chunk of this upload next. A
+  retransmitted or out-of-order chunk is ignored and answered with the chunk
+  the sidecar expects, `0` when no upload is in flight.
+- `installed`: the package with `digest` is installed, also when it already
+  was or a stored archive with that digest verified; stop.
+- `busy`: another upload, or the sidecar's own download, is in flight; retry
+  the same chunk later.
+- `refused` with `reason`: `not_offered` (the calling Origin's latest valid
+  offer names another digest, or there is none), `not_eligible` (the status
+  would report `relay: false`), `verification` or `storage` (the assembled
+  archive failed). Do not retry this upload. Clients treat an unknown state as
+  `refused` and an unknown reason as final for the upload.
+
+The sidecar answers `-32602` when `chunk_count`, `chunk_index` or the decoded
+chunk length contradicts `total_bytes`, or a chunk of the upload in flight
+carries another `digest`, `total_bytes` or `chunk_count`, and leaves the upload
+untouched. It verifies and installs the assembled archive exactly as a
+downloaded one, and answers the last chunk only after the install finished. A
+refused relay has the same six-hour backoff as a refused download, for both
+paths. The method is idempotent per `(upload_id, chunk_index)` and per digest;
+a client MAY retry a chunk. A client SHOULD NOT relay from several windows at
+once. Sidecars that host no desktop UI mark the method disabled with
+`desktop_ui_not_hosted` and answer it with `-32011` and that reason code.
 
 ## 12. Sidecar actions
 
@@ -1184,7 +1269,9 @@ values `granted`, `not_granted`, `unknown`, or
 `not_appliccable_different_platform` (the wire spelling is intentional).
 Clients omit permissions inapplicable to the sidecar's platform, show unknown
 keys using their key as a fallback label, and handle older sidecars without
-these capabilities. The first permission is `macos_full_disk_access`.
+these capabilities. The first permission is `macos_full_disk_access`. On
+sidecars hosting the desktop UI, `sidecar.status.v1` also reports `ui_package`
+([section 11](#desktop-ui-package)).
 
 `sidecar.request_permission.v1` takes `{ "permission": "macos_full_disk_access" }`.
 Its `opened` result acknowledges opening the permission flow, never a grant.

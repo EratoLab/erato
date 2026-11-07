@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
 import { SidecarPermissions } from "./SidecarPermissions";
+import { SidecarUiPackageStatus } from "./SidecarUiPackageStatus";
 import { Button } from "../Controls/Button";
 import { SettingsDisclosure } from "../Settings/SettingsDisclosure";
 import { Trash } from "../icons";
@@ -42,6 +43,7 @@ export function SidecarMaintenance({
       >
         {children}
         <SidecarPermissions />
+        <SidecarUiPackageStatus />
         {resetSupported && data && (
           <div className="space-y-3 border-t border-theme-border pt-4">
             <p className="text-xs text-theme-fg-secondary">

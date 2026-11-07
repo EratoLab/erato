@@ -37,6 +37,18 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.47 reports whether the sidecar installed the desktop UI package
+and lets the client relay it: on a sidecar that hosts the desktop UI,
+`sidecar.status.v1` adds `ui_package` (`state` `current`, `pending` or
+`failed`, the `digest`, a failure `reason`, `attempted_at` and `relay`), and
+the administrative method `sidecar.install_ui_package.v1` accepts the archive
+in base64 chunks of 131,072 bytes when the sidecar's own download failed for a
+network, proxy or TLS reason. Sidecars that host no desktop UI mark the method
+disabled with `desktop_ui_not_hosted`. See
+[the download state and relay](SPEC.md#desktop-ui-package), the
+[relay fixture](conformance/fixtures/desktop-ui-package-relay.json) and the
+[relay example](examples/ui-package-relay.json).
+
 Package 0.1.46 carries the deployment's desktop UI package to the sidecar:
 discovery adds the optional `ui` (the host APIs a sidecar implements, its seed
 and its installed package), and `sidecar.configure.v1` gains the optional

@@ -46,6 +46,8 @@ vi.mock("@erato/desktop-sidecar-protocol", () => ({
   },
   HttpTransport: class {},
   createBrowserClientInfo: () => ({}),
+  UI_PACKAGE_CHUNK_BYTES: 131_072,
+  UI_PACKAGE_MAX_ARCHIVE_BYTES: 9_437_184,
 }));
 vi.mock("@/hooks/profile/useProfileApi", () => ({
   useProfileApi: () => ({
@@ -213,6 +215,94 @@ describe("DesktopSidecarConfigurationSync", () => {
       ([method]) => method === "sidecar.configure.v1",
     )!;
     expect(params).not.toHaveProperty("ui_package");
+  });
+
+  it("watches the package download after configuring a sidecar that takes a relayed package", async () => {
+    mocks.snapshot.ui = { host_apis: [1], seed: null, installed: null };
+    mount();
+    await waitFor(() =>
+      expect(mocks.invoke).toHaveBeenCalledWith(
+        "sidecar.status.v1",
+        {},
+        expect.anything(),
+      ),
+    );
+    const methods = mocks.invoke.mock.calls.map(([method]) => method);
+    expect(methods.indexOf("sidecar.status.v1")).toBeGreaterThan(
+      methods.indexOf("sidecar.configure.v1"),
+    );
+  });
+
+  it.each([
+    ["lists no relay method", "sidecar.install_ui_package.v1", true],
+    ["reports no desktop UI", null, false],
+  ])(
+    "does not watch the package download of a sidecar that %s",
+    async (_name, missing, ui) => {
+      if (ui)
+        mocks.snapshot.ui = { host_apis: [1], seed: null, installed: null };
+      mocks.supports.mockImplementation(
+        (method?: string) => method !== missing,
+      );
+      mount();
+      await waitFor(() => expect(mocks.invalidateQueries).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(
+        mocks.invoke.mock.calls.some(
+          ([method]) => method === "sidecar.status.v1",
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("relays a refused package download and refreshes the sidecar status", async () => {
+    mocks.snapshot.ui = { host_apis: [1], seed: null, installed: null };
+    mocks.invoke.mockImplementation(async (method: string) => {
+      if (method === "indexing.status.v1") return { configuration: saved };
+      if (method === "outlook.list_mailboxes.v1") return { mailboxes: [] };
+      if (method === "sidecar.status.v1")
+        return {
+          permissions: {},
+          ui_package: {
+            state: "failed",
+            digest: packageToken.digest,
+            reason: "proxy",
+            attempted_at: "2026-11-07T10:15:00Z",
+            relay: true,
+          },
+        };
+      if (method === "sidecar.install_ui_package.v1")
+        return { state: "installed" };
+      return {};
+    });
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { ETag: `"${packageToken.digest}"` },
+      }),
+    );
+    mount();
+    await waitFor(() =>
+      expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["sidecar-status", "instance"],
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      `${window.location.origin}${packageToken.url}`,
+      expect.objectContaining({
+        headers: { Authorization: `Bearer ${packageToken.token}` },
+      }),
+    );
+    expect(mocks.invoke).toHaveBeenCalledWith(
+      "sidecar.install_ui_package.v1",
+      expect.objectContaining({
+        digest: packageToken.digest,
+        total_bytes: 3,
+        chunk_index: 0,
+        chunk_count: 1,
+        content_base64: "AQID",
+      }),
+      expect.anything(),
+    );
   });
 
   it.each([

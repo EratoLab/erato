@@ -26,6 +26,7 @@ const ADMINISTRATIVE_METHODS = [
   "sidecar.request_permission.v1",
   "sidecar.open_data_directory.v1",
   "sidecar.status.v1",
+  "sidecar.install_ui_package.v1",
   "sidecar.progress.v1",
   "diagnostics.echo.v1",
   "indexing.status.v1",

@@ -33,6 +33,16 @@ const typeTargets = [
     "SidecarStatusV1Result",
   ],
   [
+    "schemas/methods/sidecar-install-ui-package-v1-params.schema.json",
+    "sidecar-install-ui-package-v1-params.ts",
+    "SidecarInstallUiPackageV1Params",
+  ],
+  [
+    "schemas/methods/sidecar-install-ui-package-v1-result.schema.json",
+    "sidecar-install-ui-package-v1-result.ts",
+    "SidecarInstallUiPackageV1Result",
+  ],
+  [
     "schemas/methods/sidecar-request-permission-v1-params.schema.json",
     "sidecar-request-permission-v1-params.ts",
     "SidecarRequestPermissionV1Params",
@@ -487,6 +497,10 @@ const validatorTargets = {
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-params.schema.json",
   validateSidecarStatusV1Result:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-result.schema.json",
+  validateSidecarInstallUiPackageV1Params:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-install-ui-package-v1-params.schema.json",
+  validateSidecarInstallUiPackageV1Result:
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-install-ui-package-v1-result.schema.json",
   validateSidecarRequestPermissionV1Params:
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-params.schema.json",
   validateSidecarRequestPermissionV1Result:

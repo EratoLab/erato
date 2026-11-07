@@ -5,6 +5,7 @@ import {
   DesktopSidecarClient,
   HttpTransport,
   SidecarClientError,
+  UI_PACKAGE_CHUNK_BYTES,
   checkMethodParams,
   checkMethodResult,
   type SidecarClientInfo,
@@ -175,6 +176,161 @@ describe("DesktopSidecarClient", () => {
     });
   });
 
+  it("offers the desktop UI package relay only through a sidecar hosting the desktop UI and listing the method", async () => {
+    const { client } = await setup();
+    await client.discover();
+    expect(client.supports("sidecar.install_ui_package.v1")).toBe(true);
+
+    const previous = await setup({
+      omitMethods: ["sidecar.install_ui_package.v1"],
+      uiPackageDownload: null,
+    });
+    await previous.client.discover();
+    expect(previous.client.supports("sidecar.status.v1")).toBe(true);
+    expect(previous.client.supports("sidecar.install_ui_package.v1")).toBe(
+      false,
+    );
+    expect(
+      await previous.client.invoke("sidecar.status.v1", {}),
+    ).not.toHaveProperty("ui_package");
+
+    const linux = await setup({ ui: null });
+    await linux.client.discover();
+    expect(linux.client.supports("sidecar.install_ui_package.v1")).toBe(false);
+    expect(
+      linux.client
+        .getSnapshot()
+        .capabilities.get("sidecar.install_ui_package.v1"),
+    ).toMatchObject({
+      availability: "disabled",
+      reasonCode: "desktop_ui_not_hosted",
+    });
+    expect(
+      await linux.client.invoke("sidecar.status.v1", {}),
+    ).not.toHaveProperty("ui_package");
+  });
+
+  it("relays a refused desktop UI package download in chunks until the sidecar installs it", async () => {
+    const digest =
+      "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab";
+    const { sidecar, client } = await setup({
+      uiPackageDownload: { failed: "proxy" },
+    });
+    await client.discover();
+    expect(
+      (await client.invoke("sidecar.status.v1", {})).ui_package,
+    ).toBeNull();
+    await client.invoke("sidecar.configure.v1", {
+      user_configuration: {},
+      organization_configuration: {},
+      ui_package: {
+        url: "https://app.erato.example/api/v1beta/desktop-sidecar/ui-package",
+        token: "token",
+        digest,
+        host_api: 1,
+      },
+    });
+    expect(
+      (await client.invoke("sidecar.status.v1", {})).ui_package,
+    ).toMatchObject({ state: "failed", reason: "proxy", digest, relay: true });
+
+    const archive = new Uint8Array(300_000).map((_, index) => index % 251);
+    const chunkCount = Math.ceil(archive.byteLength / UI_PACKAGE_CHUNK_BYTES);
+    const chunk = (uploadId: string, index: number, digestOf = digest) => ({
+      upload_id: uploadId,
+      digest: digestOf,
+      total_bytes: archive.byteLength,
+      chunk_index: index,
+      chunk_count: chunkCount,
+      content_base64: Buffer.from(
+        archive.subarray(
+          index * UI_PACKAGE_CHUNK_BYTES,
+          (index + 1) * UI_PACKAGE_CHUNK_BYTES,
+        ),
+      ).toString("base64"),
+    });
+    const relay = (params: ReturnType<typeof chunk>) =>
+      client.invoke("sidecar.install_ui_package.v1", params);
+
+    expect(await relay(chunk("other", 0, "0".repeat(64)))).toEqual({
+      state: "refused",
+      reason: "not_offered",
+    });
+    expect(await relay(chunk("u-1", 1))).toEqual({
+      state: "continue",
+      next_chunk_index: 0,
+    });
+    expect(await relay(chunk("u-1", 0))).toEqual({
+      state: "continue",
+      next_chunk_index: 1,
+    });
+    expect(await relay(chunk("u-1", 0))).toEqual({
+      state: "continue",
+      next_chunk_index: 1,
+    });
+    expect(await relay(chunk("u-2", 0))).toEqual({ state: "busy" });
+    expect(
+      (await client.invoke("sidecar.status.v1", {})).ui_package,
+    ).toMatchObject({ state: "pending", relay: false });
+    expect(await relay(chunk("u-1", 1))).toEqual({
+      state: "continue",
+      next_chunk_index: 2,
+    });
+    expect(await relay(chunk("u-1", 2))).toEqual({ state: "installed" });
+    expect(sidecar.relayedArchive).toEqual(archive);
+    expect(
+      (await client.invoke("sidecar.status.v1", {})).ui_package,
+    ).toMatchObject({ state: "current", digest, relay: false });
+    expect(await relay(chunk("u-2", 0))).toEqual({ state: "installed" });
+  });
+
+  it("refuses a relayed archive that fails verification and stops offering the relay", async () => {
+    const digest =
+      "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab";
+    const { client } = await setup({
+      uiPackageDownload: { failed: "network" },
+      acceptRelayedArchive: () => false,
+    });
+    await client.discover();
+    await client.invoke("sidecar.configure.v1", {
+      user_configuration: {},
+      organization_configuration: {},
+      ui_package: {
+        url: "https://app.erato.example/api/v1beta/desktop-sidecar/ui-package",
+        token: "token",
+        digest,
+        host_api: 1,
+      },
+    });
+    const params = {
+      upload_id: "u-1",
+      digest,
+      total_bytes: 3,
+      chunk_index: 0,
+      chunk_count: 1,
+      content_base64: "AAEC",
+    };
+    expect(
+      await client.invoke("sidecar.install_ui_package.v1", params),
+    ).toEqual({ state: "refused", reason: "verification" });
+    expect(
+      (await client.invoke("sidecar.status.v1", {})).ui_package,
+    ).toMatchObject({ state: "failed", reason: "verification", relay: false });
+    expect(
+      await client.invoke("sidecar.install_ui_package.v1", {
+        ...params,
+        upload_id: "u-2",
+      }),
+    ).toEqual({ state: "refused", reason: "not_eligible" });
+    await expect(
+      client.invoke("sidecar.install_ui_package.v1", {
+        ...params,
+        upload_id: "u-3",
+        total_bytes: 4,
+      }),
+    ).rejects.toMatchObject({ kind: "invalid_params" });
+  });
+
   it("supports outlook.get_conversation.v1 with inline body and attachment bytes", async () => {
     const { client } = await setup();
     await client.discover();
@@ -215,6 +371,7 @@ describe("DesktopSidecarClient", () => {
     expect(client.supports("sidecar.status.v1")).toBe(true);
     await expect(client.invoke("sidecar.status.v1", {})).resolves.toEqual({
       permissions: { macos_full_disk_access: "unknown" },
+      ui_package: null,
     });
     await expect(
       client.invoke("sidecar.request_permission.v1", {

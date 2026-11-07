@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-install-ui-package-v1-params.schema.json",
+  "title": "SidecarInstallUiPackageV1Params",
+  "description": "One chunk of the deployment's desktop UI package archive, relayed by the client after the sidecar's own download failed for a network, proxy or TLS reason (package 0.1.47). Every chunk but the last carries exactly 131072 bytes; chunk_count is ceil(total_bytes / 131072).",
+  "type": "object",
+  "required": [
+    "upload_id",
+    "digest",
+    "total_bytes",
+    "chunk_index",
+    "chunk_count",
+    "content_base64"
+  ],
+  "properties": {
+    "upload_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Chosen by the client for one pass over one archive's bytes, the same for all its chunks; a random UUID. The sidecar assembles only one upload at a time."
+    },
+    "digest": {
+      "$ref": "../common.schema.json#/definitions/Sha256Hex",
+      "description": "The package digest, equal to the digest the calling Origin last offered with sidecar.configure.v1."
+    },
+    "total_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9437184
+    },
+    "chunk_index": { "type": "integer", "minimum": 0, "maximum": 71 },
+    "chunk_count": { "type": "integer", "minimum": 1, "maximum": 72 },
+    "content_base64": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 174764,
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "description": "The chunk's bytes, RFC 4648 base64 with padding."
+    }
+  },
+  "additionalProperties": true
+}

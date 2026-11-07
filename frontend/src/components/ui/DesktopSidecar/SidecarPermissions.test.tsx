@@ -1,7 +1,16 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { SidecarPermissions } from "./SidecarPermissions";
+
+function renderPermissions() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SidecarPermissions />
+    </QueryClientProvider>,
+  );
+}
 
 const sidecar = vi.hoisted(() => ({
   state: "ready",
@@ -28,7 +37,7 @@ beforeEach(() => {
   );
 });
 it("offers System Settings and does not mistake opening it for a grant", async () => {
-  render(<SidecarPermissions />);
+  renderPermissions();
   const button = await screen.findByRole("button", {
     name: "Open System Settings",
   });
@@ -48,7 +57,7 @@ it("filters other platforms and displays unknown future permission keys", async 
     macos_full_disk_access: "not_appliccable_different_platform",
     future_permission: "unknown",
   };
-  render(<SidecarPermissions />);
+  renderPermissions();
   expect(await screen.findByText("future_permission: Unknown")).toBeVisible();
   expect(screen.queryByText(/Full Disk Access/)).not.toBeInTheDocument();
 });
@@ -56,11 +65,11 @@ it("hides the list when every permission is inapplicable", async () => {
   sidecar.permissions = {
     macos_full_disk_access: "not_appliccable_different_platform",
   };
-  const { container } = render(<SidecarPermissions />);
+  const { container } = renderPermissions();
   await waitFor(() => expect(container).toBeEmptyDOMElement());
 });
 it("refreshes on return from settings and stops polling after unmount", async () => {
-  const { unmount } = render(<SidecarPermissions />);
+  const { unmount } = renderPermissions();
   await screen.findByText(/Full Disk Access: Not granted/);
   sidecar.permissions = { macos_full_disk_access: "granted" };
   fireEvent.focus(window);
@@ -75,7 +84,7 @@ it("refreshes on return from settings and stops polling after unmount", async ()
 });
 it("shows load and request failures with recovery", async () => {
   sidecar.client.invoke.mockRejectedValueOnce(new Error("offline"));
-  render(<SidecarPermissions />);
+  renderPermissions();
   await screen.findByText("Could not check system permissions.");
   fireEvent.click(
     screen.getByRole("button", { name: "Check permissions again" }),
@@ -92,7 +101,7 @@ it.each(["unavailable", "old sidecar"])(
   (state) => {
     if (state === "old sidecar") sidecar.supported = false;
     else sidecar.state = state;
-    const { container } = render(<SidecarPermissions />);
+    const { container } = renderPermissions();
     expect(container).toBeEmptyDOMElement();
     expect(sidecar.client.invoke).not.toHaveBeenCalled();
   },
