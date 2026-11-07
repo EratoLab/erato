@@ -3,6 +3,7 @@ import { t } from "@lingui/core/macro";
 import {
   ToolCallGistLine,
   ToolCallGistValues,
+  ToolCallIdentity,
   ToolCallInput,
   ToolCallOutput,
 } from "@/components/ui/ToolCall";
@@ -116,7 +117,7 @@ const PlainToolUseStep = ({
   // A denied or refused call never ran: its decision row says so.
   const notRun =
     decision?.status === "denied" || refusedWithoutDecision(part, decision);
-  const gist = gistOf(part.display?.label);
+  const gist = gistOf(part.display?.label, part.input);
   const lead = gist?.items[0];
   const phase: GistPhase = notRun
     ? "ask"
@@ -143,7 +144,7 @@ const PlainToolUseStep = ({
   const hasTrace =
     useSidecarLocalTrace(toolCallId, toolName, part.output) !== undefined;
 
-  const body =
+  const payload =
     toolCallId && hasTrace ? (
       <SidecarLocalTraceSubtree
         toolCallId={toolCallId}
@@ -158,6 +159,19 @@ const PlainToolUseStep = ({
         )}
       </div>
     ) : undefined;
+  // A gist row's title is the line, so the tool it ran is named in the body.
+  const body = gist ? (
+    <>
+      <ToolCallIdentity
+        className="pt-2"
+        toolName={toolName}
+        server={part.display?.server_name}
+      />
+      {payload}
+    </>
+  ) : (
+    payload
+  );
 
   return (
     // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the

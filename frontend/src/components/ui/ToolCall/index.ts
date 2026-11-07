@@ -4,6 +4,7 @@ export { ToolCallOutput } from "./ToolCallOutput";
 export { JsonDisplay } from "./JsonDisplay";
 export { McpToolDescription } from "./McpToolDescription";
 export { ToolArgumentView } from "./ToolArgumentView";
+export { ToolCallIdentity } from "./ToolCallIdentity";
 export {
   GistValueText,
   ToolCallGist,

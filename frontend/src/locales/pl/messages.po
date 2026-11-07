@@ -7616,12 +7616,12 @@ msgid "toolCall.technicalDetails"
 msgstr "Szczegóły techniczne"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ApprovalReferent.tsx
+#: src/components/ui/ToolCall/ToolCallIdentity.tsx
 msgid "toolCall.technicalDetails.server"
 msgstr "Serwer"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/ApprovalReferent.tsx
+#: src/components/ui/ToolCall/ToolCallIdentity.tsx
 msgid "toolCall.technicalDetails.tool"
 msgstr "Narzędzie"
 

@@ -7,14 +7,16 @@ import {
   McpToolDescription,
   ToolArgumentView,
   ToolCallGist,
+  ToolCallIdentity,
   ToolCallInput,
 } from "@/components/ui/ToolCall";
-import { gistOf } from "@/lib/toolCallGist/gist";
+import { toolCallCardOf } from "@/lib/toolCallGist/gist";
 
 import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
 
 import type { ToolDisplayMetadata } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ToolCallCard } from "@/lib/toolCallGist/gist";
 
 interface ApprovalReferentProps {
   toolName: string;
@@ -46,6 +48,11 @@ const referentSource = (
     ? t({ id: "clientToolApproval.thisDevice", message: "This device" })
     : (display?.server_name ?? serverId);
 
+/** A card without a readable view of the arguments shows them raw, once. */
+const showsRawInput = (card: ToolCallCard) =>
+  card.kind === "legacy" ||
+  (card.kind === "generic" && card.label.arguments == null);
+
 /**
  * What an approval asks about, above its consent card. A call with a label
  * reads as its gist: one line on what it does to what, and where, with its
@@ -61,12 +68,11 @@ export const ApprovalReferent = ({
   titleClassName,
   className,
 }: ApprovalReferentProps) => {
-  const label = display?.label;
-  const gist = gistOf(label);
+  const card = toolCallCardOf(display?.label, input);
   const icon = referentIcon(isClientTool);
   const source = referentSource(display, serverId, isClientTool);
 
-  if (gist) {
+  if (card.kind === "gist") {
     return (
       <div className={clsx("space-y-2", className)}>
         <div className="flex min-w-0 items-center gap-2">
@@ -78,7 +84,7 @@ export const ApprovalReferent = ({
             {source}
           </span>
         </div>
-        <ToolCallGist gist={gist} phase="ask" />
+        <ToolCallGist gist={card.gist} phase="ask" />
       </div>
     );
   }
@@ -93,15 +99,15 @@ export const ApprovalReferent = ({
       titleClassName={titleClassName}
     />
   );
-  if (label?.arguments) {
+  if (card.kind === "generic" && card.label.arguments) {
     return (
       <>
         {heading}
         <div className="mt-2 max-h-48 overflow-y-auto">
-          <ToolArgumentView view={label.arguments} input={input} />
+          <ToolArgumentView view={card.label.arguments} input={input} />
         </div>
         {/* eslint-disable-next-line lingui/no-unlocalized-strings -- API warning value */}
-        {label.warnings?.includes("arguments_truncated") && (
+        {card.label.warnings?.includes("arguments_truncated") && (
           <Alert type="info" role="none" className="mt-2">
             {t({
               id: "toolArguments.truncated",
@@ -126,7 +132,7 @@ export const ApprovalReferent = ({
 /**
  * The tool, its server and the raw arguments of a labelled call, one click
  * away below the consent card. Requests saved before labels show their raw
- * input already, so they get none.
+ * input already, so they get none, and nor does a card's raw input repeat.
  */
 export const ApprovalTechnicalDetails = ({
   toolName,
@@ -135,8 +141,9 @@ export const ApprovalTechnicalDetails = ({
   serverId,
   isClientTool,
 }: Omit<ApprovalReferentProps, "titleClassName" | "className">) => {
-  if (!display?.label) return null;
-  const isGist = gistOf(display.label) !== undefined;
+  const card = toolCallCardOf(display?.label, input);
+  if (!display || card.kind === "legacy") return null;
+  const isGist = card.kind === "gist";
   return (
     <Disclosure
       className="mt-1"
@@ -147,26 +154,12 @@ export const ApprovalTechnicalDetails = ({
       })}
       data-testid="approval-technical-details"
     >
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
-        <dt className="text-theme-fg-muted">
-          {t({ id: "toolCall.technicalDetails.tool", message: "Tool" })}
-        </dt>
-        <dd
-          dir="auto"
-          className="break-words font-mono text-theme-fg-primary [unicode-bidi:isolate]"
-        >
-          {toolName}
-        </dd>
-        <dt className="text-theme-fg-muted">
-          {t({ id: "toolCall.technicalDetails.server", message: "Server" })}
-        </dt>
-        <dd
-          dir="auto"
-          className="break-words font-mono text-theme-fg-primary [unicode-bidi:isolate]"
-        >
-          {isClientTool ? referentSource(display, serverId, true) : serverId}
-        </dd>
-      </dl>
+      <ToolCallIdentity
+        toolName={toolName}
+        server={
+          isClientTool ? referentSource(display, serverId, true) : serverId
+        }
+      />
       {/* The generic card shows the descriptor in its heading already. */}
       {isGist && display.title !== toolName && (
         <p
@@ -182,7 +175,7 @@ export const ApprovalTechnicalDetails = ({
           truncated={display.description_truncated}
         />
       )}
-      <ToolCallInput input={input} />
+      {!showsRawInput(card) && <ToolCallInput input={input} />}
     </Disclosure>
   );
 };

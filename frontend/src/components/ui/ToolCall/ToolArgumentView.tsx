@@ -1,16 +1,18 @@
 import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import { shortId } from "@/lib/toolCallGist/gist";
 import {
   cleanServerText,
   lastPointerSegment,
+  MAX_SERVER_DESCRIPTION_CHARS,
+  MAX_SERVER_TEXT_CHARS,
   readPointer,
 } from "@/lib/toolCallGist/serverText";
 
 import type { ToolArgumentNode } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const ISOLATED = "[unicode-bidi:isolate]";
-const SHORT_ID_CHARS = 12;
 
 /**
  * Says what the model claims about the user, never what the call does; the
@@ -56,24 +58,20 @@ const Scalar = ({
 }) => {
   const { text, truncated } = cleanServerText(
     scalarText(value),
-    node.kind === "text" ? 4_000 : 200,
+    node.kind === "text" ? MAX_SERVER_DESCRIPTION_CHARS : MAX_SERVER_TEXT_CHARS,
   );
   const shown = truncated ? `${text}…` : text;
   switch (node.kind) {
-    case "id": {
-      const chars = Array.from(shown);
+    case "id":
       return (
         <span
           dir="auto"
           title={shown}
           className={clsx("font-mono text-xs", ISOLATED)}
         >
-          {chars.length > SHORT_ID_CHARS
-            ? `${chars.slice(0, SHORT_ID_CHARS).join("")}…`
-            : shown}
+          {shortId(shown)}
         </span>
       );
-    }
     case "text":
       return (
         <p

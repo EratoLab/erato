@@ -396,6 +396,14 @@ describe("ToolUseStep gist row", () => {
     );
     expect(values).toHaveTextContent("Customer");
     expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(true);
+    expect(toggle()).not.toHaveTextContent("update_page");
+
+    fireEvent.click(toggle());
+    const identity = screen.getByTestId("tool-call-identity");
+    expect(isFolded(identity)).toBe(false);
+    expect(identity).toHaveTextContent("update_page");
+    expect(identity).toHaveTextContent("Records");
+    expect(screen.getByText("update_page")).toHaveAttribute("dir", "auto");
   });
 
   it("says a failed run could not, with the server's own message", () => {
@@ -466,5 +474,6 @@ describe("ToolUseStep gist row", () => {
     ).toBeInTheDocument();
     expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
     expect(screen.queryByTestId("tool-call-gist-values")).toBeNull();
+    expect(screen.queryByTestId("tool-call-identity")).toBeNull();
   });
 });

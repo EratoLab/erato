@@ -360,5 +360,12 @@ export const gistPlainLine = (
   phase: GistPhase,
 ): string =>
   gistLineSentence(gist, item, phase)
-    .replace(GIST_TITLE_SLOT, plainValues(item.names))
-    .replace(GIST_WHERE_SLOT, plainValues(item.where));
+    .split(GIST_SLOTS)
+    .map((part) =>
+      part === GIST_TITLE_SLOT
+        ? plainValues(item.names)
+        : part === GIST_WHERE_SLOT
+          ? plainValues(item.where)
+          : part,
+    )
+    .join("");

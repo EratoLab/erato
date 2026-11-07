@@ -11,7 +11,7 @@ import {
   GIST_PHASES,
   fieldWarningOf,
   gistOf,
-  toolCallCardKind,
+  toolCallCardOf,
 } from "./gist";
 import {
   GIST_SHAPES,
@@ -23,7 +23,10 @@ import {
   gistWarningLabel,
 } from "./gistLabels";
 
-import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ToolCallLabel,
+  ToolCallLabelSlot,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
 const activate = (locale: "de" | "en" | "pl") => {
@@ -120,7 +123,7 @@ describe("gist sentences", () => {
     afterEach(() => activate("en"));
 
     it("lets a language put the verb where it belongs and count the kind its way", () => {
-      const gist = gistOf(createRow)!;
+      const gist = gistOf(createRow, undefined)!;
       activate("de");
       expect(gistPlainLine(gist, gist.items[0], "ask")).toBe(
         "Zeile “Northwind” in Companies erstellen",
@@ -139,7 +142,7 @@ describe("gist sentences", () => {
 
 describe("gistOf", () => {
   it("reads a rules label as a line with a quoted title, a resolved destination and key values", () => {
-    const gist = gistOf(createRow);
+    const gist = gistOf(createRow, undefined);
     expect(gist).toBeDefined();
     const item = gist!.items[0];
     expect(item.names).toEqual([
@@ -162,23 +165,26 @@ describe("gistOf", () => {
   });
 
   it("shows an ID nothing resolved as a short ID, and a written name as written", () => {
-    const gist = gistOf({
-      ...createRow,
-      action: "update",
-      object_kind: "page",
-      items: [
-        {
-          id: {
-            pointer: "/page_id",
-            values: [{ path: "/page_id", text: UUID }],
+    const gist = gistOf(
+      {
+        ...createRow,
+        action: "update",
+        object_kind: "page",
+        items: [
+          {
+            id: {
+              pointer: "/page_id",
+              values: [{ path: "/page_id", text: UUID }],
+            },
+            target: {
+              pointer: "/channel",
+              values: [{ path: "/channel", text: "release" }],
+            },
           },
-          target: {
-            pointer: "/channel",
-            values: [{ path: "/channel", text: "release" }],
-          },
-        },
-      ],
-    });
+        ],
+      },
+      undefined,
+    );
     const item = gist!.items[0];
     expect(item.names[0]).toMatchObject({
       origin: "id",
@@ -189,28 +195,33 @@ describe("gistOf", () => {
   });
 
   it("pairs an update's field with the value an earlier result had", () => {
-    const gist = gistOf({
-      action: "update",
-      object_kind: "row",
-      source: "rules",
-      items: [
-        {
-          id: {
-            pointer: "/recordId",
-            values: [{ path: "/recordId", text: UUID, resolved: "Northwind" }],
-          },
-          fields: [
-            {
-              pointer: "/item/statuscode",
-              name: "statuscode",
+    const gist = gistOf(
+      {
+        action: "update",
+        object_kind: "row",
+        source: "rules",
+        items: [
+          {
+            id: {
+              pointer: "/recordId",
               values: [
-                { path: "/item/statuscode", text: "Won", resolved: "Open" },
+                { path: "/recordId", text: UUID, resolved: "Northwind" },
               ],
             },
-          ],
-        },
-      ],
-    });
+            fields: [
+              {
+                pointer: "/item/statuscode",
+                name: "statuscode",
+                values: [
+                  { path: "/item/statuscode", text: "Won", resolved: "Open" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      undefined,
+    );
     expect(gist!.items[0].fields[0].values[0]).toEqual({
       value: expect.objectContaining({ text: "Won", origin: "written" }),
       earlier: expect.objectContaining({ text: "Open", origin: "resolved" }),
@@ -218,33 +229,58 @@ describe("gistOf", () => {
   });
 
   it("counts a batch and lines its fields up by array position", () => {
-    const gist = gistOf({
-      ...createRow,
-      items: [
-        {
-          title: {
-            pointer: "/pages/*/properties/Name",
-            values: [
-              { path: "/pages/0/properties/Name", text: "Northwind" },
-              { path: "/pages/1/properties/Name", text: "Fabrikam" },
-            ],
-            omitted: 1,
-          },
-          fields: [
-            {
-              pointer: "/pages/*/properties/Status",
-              name: "Status",
-              values: [{ path: "/pages/1/properties/Status", text: "Lead" }],
+    const gist = gistOf(
+      {
+        ...createRow,
+        items: [
+          {
+            title: {
+              pointer: "/pages/*/properties/Name",
+              values: [
+                { path: "/pages/0/properties/Name", text: "Northwind" },
+                { path: "/pages/1/properties/Name", text: "Fabrikam" },
+              ],
+              omitted: 1,
             },
-          ],
-        },
-      ],
-    });
+            fields: [
+              {
+                pointer: "/pages/*/properties/Status",
+                name: "Status",
+                values: [{ path: "/pages/1/properties/Status", text: "Lead" }],
+              },
+            ],
+          },
+        ],
+      },
+      undefined,
+    );
     const item = gist!.items[0];
     expect(item.count).toBe(3);
     expect(item.names.map((name) => name.row)).toEqual(["0", "1"]);
     expect(item.fields[0].values[0].value.row).toBe("1");
     expect(gistPlainLine(gist!, item, "ask")).toBe("Create 3 rows");
+  });
+
+  it("puts a title into the plain line as written, never as a replacement pattern", () => {
+    const title = "Q$&A $` x $' $$ \uE001";
+    const gist = gistOf(
+      {
+        ...createRow,
+        items: [
+          {
+            ...createRow.items![0],
+            title: {
+              pointer: "/pages/*/properties/Name",
+              values: [{ path: "/pages/0/properties/Name", text: title }],
+            },
+          },
+        ],
+      },
+      undefined,
+    )!;
+    expect(gistPlainLine(gist, gist.items[0], "ask")).toBe(
+      `Create row “${title}” in Companies`,
+    );
   });
 
   it.each<[string, ToolCallLabel]>([
@@ -259,6 +295,18 @@ describe("gistOf", () => {
       { ...createRow, object_kind: "invoice" as ToolCallLabel["object_kind"] },
     ],
     ["a label without items", { ...createRow, items: [] }],
+    [
+      "a delete that does not say which record",
+      {
+        ...createRow,
+        action: "delete",
+        items: [{ fields: createRow.items![0].fields }],
+      },
+    ],
+    [
+      "a label with a warning from a newer server",
+      { ...createRow, warnings: ["other"] },
+    ],
     [
       "an item of no kind that names nothing",
       {
@@ -275,13 +323,86 @@ describe("gistOf", () => {
       },
     ],
   ])("gives %s the generic card", (_name, label) => {
-    expect(gistOf(label)).toBeUndefined();
-    expect(toolCallCardKind(label)).toBe("generic");
+    expect(gistOf(label, undefined)).toBeUndefined();
+    expect(toolCallCardOf(label, undefined)).toEqual({
+      kind: "generic",
+      label,
+    });
+  });
+
+  it("keeps a new record that only has values on the gist", () => {
+    const gist = gistOf(
+      { ...createRow, items: [{ fields: createRow.items![0].fields }] },
+      undefined,
+    );
+    expect(gist && gistPlainLine(gist, gist.items[0], "ask")).toBe(
+      "Create row",
+    );
   });
 
   it("keeps rows saved before labels on the old card", () => {
-    expect(toolCallCardKind(undefined)).toBe("legacy");
-    expect(toolCallCardKind(createRow)).toBe("gist");
+    expect(toolCallCardOf(undefined, {}).kind).toBe("legacy");
+    expect(toolCallCardOf(createRow, {}).kind).toBe("gist");
+  });
+});
+
+describe("gist warnings", () => {
+  const folder = (input: unknown, fields?: ToolCallLabelSlot[]) =>
+    gistOf(
+      {
+        action: "create",
+        object_kind: "folder",
+        source: "rules",
+        items: [
+          {
+            title: {
+              pointer: "/title",
+              values: [{ path: "/title", text: "Hiring" }],
+            },
+            fields,
+          },
+        ],
+      },
+      input,
+    )?.warnings;
+
+  it("reads a sharing member the label kept no field for", () => {
+    expect(
+      folder({
+        title: "Hiring",
+        description: "Open roles",
+        color: "blue",
+        icon: "briefcase",
+        parent: "root",
+        visibility: "workspace",
+      }),
+    ).toEqual(["workspace"]);
+  });
+
+  it("reads a top-level sharing member beside a nested title", () => {
+    const gist = gistOf(createRow, {
+      parent: { data_source_id: UUID },
+      pages: [{ properties: { Name: "Northwind" } }],
+      sharing: "Public",
+    });
+    expect(gist?.warnings).toEqual(["public"]);
+  });
+
+  it("adds the warning of a field the label kept", () => {
+    expect(
+      folder(undefined, [
+        {
+          pointer: "/visibility",
+          name: "visibility",
+          values: [{ path: "/visibility", text: "team" }],
+        },
+      ]),
+    ).toEqual(["workspace"]);
+  });
+
+  it("warns about nothing a call keeps private", () => {
+    expect(folder({ title: "Hiring", visibility: "private" })).toEqual([]);
+    expect(folder({ title: "Hiring", status: "public" })).toEqual([]);
   });
 });
 

@@ -2882,14 +2882,21 @@ describe("gist cards", () => {
     expect(id).toHaveClass("font-mono");
   });
 
-  it("warns when the call shares what it creates with the workspace", () => {
+  it("warns when the call shares what it creates with the workspace, past the label's fields", () => {
     renderCard(
       <McpToolApprovalCard
         messageId="message-1"
         resolution={null}
         request={{
           ...gistRequest,
-          input: { title: "Hiring", visibility: "workspace" },
+          input: {
+            title: "Hiring",
+            description: "Open roles",
+            color: "blue",
+            icon: "briefcase",
+            parent: "root",
+            visibility: "workspace",
+          },
           display: {
             ...createRowDisplay,
             label: {
@@ -2902,13 +2909,13 @@ describe("gist cards", () => {
                     pointer: "/title",
                     values: [{ path: "/title", text: "Hiring" }],
                   },
-                  fields: [
-                    {
-                      pointer: "/visibility",
-                      name: "visibility",
-                      values: [{ path: "/visibility", text: "workspace" }],
-                    },
-                  ],
+                  fields: ["description", "color", "icon", "parent"].map(
+                    (name) => ({
+                      pointer: `/${name}`,
+                      name,
+                      values: [{ path: `/${name}`, text: name }],
+                    }),
+                  ),
                 },
               ],
             },
@@ -2991,6 +2998,32 @@ describe("gist cards", () => {
     openTechnicalDetails();
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
     expect(screen.getByText("hasUserApproved")).toBeInTheDocument();
+  });
+
+  it("shows the raw input once for a label without a readable view", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...approvalRequest,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+            label: { action: "other", object_kind: "other", source: "rules" },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
+    openTechnicalDetails();
+    expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
+      "publish_approval_probe",
+    );
   });
 
   it("renders a request saved before labels exactly as before", () => {

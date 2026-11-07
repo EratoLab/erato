@@ -317,7 +317,7 @@ export const ToolCallGistValues = ({
 
 /**
  * The gist a card shows before approval: each item's line and values, and
- * the warnings its known fields call for.
+ * the warnings the values the call writes call for.
  */
 export const ToolCallGist = ({
   gist,
@@ -325,32 +325,23 @@ export const ToolCallGist = ({
 }: {
   gist: Gist;
   phase: GistPhase;
-}) => {
-  const warnings = [
-    ...new Set(
-      gist.items.flatMap((item) =>
-        item.fields.flatMap((field) => (field.warning ? [field.warning] : [])),
-      ),
-    ),
-  ];
-  return (
-    <div className="space-y-2" data-testid="tool-call-gist">
-      {gist.items.map((item, index) => (
-        <div key={index} className="space-y-1">
-          <p
-            className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
-            data-testid="tool-call-gist-line"
-          >
-            <ToolCallGistLine gist={gist} item={item} phase={phase} />
-          </p>
-          <ToolCallGistValues item={item} variant="card" />
-        </div>
-      ))}
-      {warnings.map((warning) => (
-        <Alert key={warning} type="warning" role="none">
-          {gistWarningLabel(warning)}
-        </Alert>
-      ))}
-    </div>
-  );
-};
+}) => (
+  <div className="space-y-2" data-testid="tool-call-gist">
+    {gist.items.map((item, index) => (
+      <div key={index} className="space-y-1">
+        <p
+          className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+          data-testid="tool-call-gist-line"
+        >
+          <ToolCallGistLine gist={gist} item={item} phase={phase} />
+        </p>
+        <ToolCallGistValues item={item} variant="card" />
+      </div>
+    ))}
+    {gist.warnings.map((warning) => (
+      <Alert key={warning} type="warning" role="none">
+        {gistWarningLabel(warning)}
+      </Alert>
+    ))}
+  </div>
+);

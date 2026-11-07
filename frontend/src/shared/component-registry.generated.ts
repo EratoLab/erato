@@ -421,6 +421,7 @@ export { GistValueText } from "@/components/ui/ToolCall/ToolCallGist";
 export { ToolCallGist } from "@/components/ui/ToolCall/ToolCallGist";
 export { ToolCallGistLine } from "@/components/ui/ToolCall/ToolCallGist";
 export { ToolCallGistValues } from "@/components/ui/ToolCall/ToolCallGist";
+export { ToolCallIdentity } from "@/components/ui/ToolCall/ToolCallIdentity";
 export { ToolCallInput } from "@/components/ui/ToolCall/ToolCallInput";
 export type { ToolCallInputProps } from "@/components/ui/ToolCall/ToolCallInput";
 export { ToolCallOutput } from "@/components/ui/ToolCall/ToolCallOutput";

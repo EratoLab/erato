@@ -6,6 +6,8 @@
 
 /** The backend's cap for a tool's name or title. */
 export const MAX_SERVER_TEXT_CHARS = 200;
+/** The backend's cap for a tool's description (`MAX_DISPLAY_DESCRIPTION_CHARS`). */
+export const MAX_SERVER_DESCRIPTION_CHARS = 4_000;
 /** A failure message is a sentence or two, never the server's stack trace. */
 export const MAX_FAILURE_MESSAGE_CHARS = 300;
 
@@ -38,7 +40,7 @@ export const cleanServerText = (
     : { text: kept, truncated: false };
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const unescapeSegment = (segment: string): string =>

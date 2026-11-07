@@ -1,4 +1,4 @@
-import { cleanServerText, lastPointerSegment } from "./serverText";
+import { cleanServerText, isRecord, lastPointerSegment } from "./serverText";
 
 import type {
   ToolCallAction,
@@ -66,7 +66,6 @@ export interface GistField {
   name: string;
   values: { value: GistValue; earlier?: GistValue }[];
   omitted: number;
-  warning?: GistWarning;
 }
 
 export interface GistItem {
@@ -85,6 +84,7 @@ export interface Gist {
   action: GistAction;
   kind: GistKind;
   items: GistItem[];
+  warnings: GistWarning[];
 }
 
 const isGistAction = (value: string): value is GistAction =>
@@ -198,6 +198,44 @@ export const fieldWarningOf = (
   return undefined;
 };
 
+const MAX_WARNING_DEPTH = 6;
+
+// A label keeps only a few fields, so a sharing member past them, or beside a
+// nested title, is found in the raw input.
+const addInputWarnings = (
+  value: unknown,
+  depth: number,
+  warnings: Set<GistWarning>,
+) => {
+  if (depth > MAX_WARNING_DEPTH) return;
+  const members = Array.isArray(value)
+    ? value.map((element) => ["", element] as const)
+    : isRecord(value)
+      ? Object.entries(value)
+      : [];
+  for (const [name, member] of members) {
+    if (typeof member === "string") {
+      const warning = fieldWarningOf(name, [member]);
+      if (warning) warnings.add(warning);
+    } else {
+      addInputWarnings(member, depth + 1, warnings);
+    }
+  }
+};
+
+const gistWarningsOf = (items: GistItem[], input: unknown): GistWarning[] => {
+  const warnings = new Set<GistWarning>();
+  for (const field of items.flatMap((item) => item.fields)) {
+    const warning = fieldWarningOf(
+      field.name,
+      field.values.map(({ value }) => value.written ?? value.text),
+    );
+    if (warning) warnings.add(warning);
+  }
+  addInputWarnings(input, 0, warnings);
+  return [...warnings];
+};
+
 const gistField = (
   slot: ToolCallLabelSlot,
   action: GistAction,
@@ -216,17 +254,11 @@ const gistField = (
           : undefined,
     }));
   if (values.length === 0) return undefined;
-  const name =
-    slot.name ?? cleanServerText(memberName(slot.pointer) ?? "").text;
   return {
     pointer: slot.pointer,
-    name,
+    name: slot.name ?? cleanServerText(memberName(slot.pointer) ?? "").text,
     values,
     omitted: slot.omitted ?? 0,
-    warning: fieldWarningOf(
-      name,
-      values.map(({ value }) => value.text),
-    ),
   };
 };
 
@@ -260,13 +292,15 @@ const gistItem = (
 
 /**
  * The gist a label gives, or `undefined` for the generic card: a generic
- * label, a verb or kind this build has no words for, or a label that names
- * nothing a sentence could say.
+ * label, a verb, kind or warning this build has no words for, or a label
+ * that does not say which record a change is to.
  */
 export const gistOf = (
   label: ToolCallLabel | null | undefined,
+  input: unknown,
 ): Gist | undefined => {
   if (!label || label.source === "generic") return undefined;
+  if (label.warnings?.includes("other")) return undefined;
   const action: string = label.action;
   const kind: string = label.object_kind;
   if (!isGistAction(action) || !isGistKind(kind)) return undefined;
@@ -274,19 +308,27 @@ export const gistOf = (
     const gist = gistItem(item, action);
     return gist ? [gist] : [];
   });
+  // Only something new can be told apart by its values alone.
+  const needsName =
+    kind === "other" || (action !== "create" && action !== "send");
   const namesSomething = items.some(
     (item) => item.names.length > 0 || item.where.length > 0,
   );
-  if (items.length === 0 || (kind === "other" && !namesSomething)) {
-    return undefined;
-  }
-  return { action, kind, items };
+  if (items.length === 0 || (needsName && !namesSomething)) return undefined;
+  return { action, kind, items, warnings: gistWarningsOf(items, input) };
 };
 
-/** Which card a call's display asks for. Rows saved before labels render as before. */
-export type ToolCallCardKind = "gist" | "generic" | "legacy";
+/** Which card a call gets. Rows saved before labels render as before. */
+export type ToolCallCard =
+  | { kind: "gist"; gist: Gist }
+  | { kind: "generic"; label: ToolCallLabel }
+  | { kind: "legacy" };
 
-export const toolCallCardKind = (
+export const toolCallCardOf = (
   label: ToolCallLabel | null | undefined,
-): ToolCallCardKind =>
-  label == null ? "legacy" : gistOf(label) ? "gist" : "generic";
+  input: unknown,
+): ToolCallCard => {
+  if (label == null) return { kind: "legacy" };
+  const gist = gistOf(label, input);
+  return gist ? { kind: "gist", gist } : { kind: "generic", label };
+};
