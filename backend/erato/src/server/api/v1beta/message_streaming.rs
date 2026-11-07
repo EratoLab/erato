@@ -5876,7 +5876,9 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 child_message_id: child.child_message_id,
                 child_tool_call_id,
                 tool_name: child_tool_name,
-                display: child_display,
+                display: child_display
+                    .as_ref()
+                    .map(crate::services::tool_display::child_approval_display),
                 mcp_server_id: request.mcp_server_id.clone(),
                 input: child_input,
                 annotations: request.annotations.clone(),
@@ -6536,11 +6538,11 @@ mod generation_event_wire_format_tests {
                             crate::models::message::ToolResultDetails {
                                 links: vec![crate::models::message::ToolResultLink {
                                     uri: "https://records.example.test/rows/1".into(),
+                                    host: "records.example.test".into(),
+                                    matches_server_host: true,
                                     name: Some("row-1".into()),
                                     title: None,
-                                    mime_type: None,
                                 }],
-                                ..Default::default()
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -9284,6 +9286,11 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
+            let server_url = mcp
+                .config
+                .mcp_servers
+                .get(&managed_tool_call.server_id)
+                .map(|server| server.url.clone());
             let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
@@ -9466,6 +9473,7 @@ async fn stream_generate_chat_completion<'a>(
                         &unfinished_tool_call,
                         output_schema.as_ref(),
                         &tool_call_result,
+                        server_url.as_deref(),
                     )
                     .await
                     {
@@ -13654,6 +13662,52 @@ mod tests {
         assert_eq!(legacy.approvals.len(), 2);
         assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
         assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn a_parked_childs_label_reaches_the_parent_without_what_the_child_chat_resolved() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use crate::services::tool_display::label::{
+            ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label,
+        };
+        let arguments = json!({"recordId": "rec-1", "item": {"status": "done"}});
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/item/status".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        resolved.items[0].id.as_mut().unwrap().values[0].resolved =
+            Some("Named by the child's results".into());
+        resolved.items[0].fields[0].values[0].resolved = Some("open".into());
+
+        let mut child = parked_child("task-a", "2026-10-20T10:00:00Z");
+        let crate::services::delegation::ChildStop::Approval(request) = &mut child.stop else {
+            unreachable!()
+        };
+        request.input = arguments;
+        let display = request.display.as_mut().expect("an MCP call's display");
+        display.label = Some(resolved);
+        let child_display = display.clone();
+        for item in &mut request.approvals {
+            item.display = Some(child_display.clone());
+        }
+
+        let item = super::parked_child_approval_item(&child);
+        assert_eq!(
+            item.child.and_then(|child| child.display),
+            Some(crate::models::message::ToolDisplayMetadata {
+                label: Some(written),
+                ..child_display.clone()
+            })
+        );
+        assert_eq!(parked_request(&child).display, Some(child_display));
     }
 
     #[test]
@@ -22062,6 +22116,10 @@ pub(crate) async fn run_continuation(
                             &call,
                             output_schema.as_ref(),
                             &result,
+                            mcp.config
+                                .mcp_servers
+                                .get(&server_id)
+                                .map(|server| server.url.as_str()),
                         )
                         .await
                         {
