@@ -361,15 +361,18 @@ mod tests {
         renamed["properties"]["note"] = json!({"type": "string"});
         let mut with_note = first.clone();
         with_note["note"] = json!("Call back on Monday");
-        for (user_id, tool, arguments) in [
+        for (case, (user_id, tool, arguments)) in [
             ("user-a", &records, with_note),
             ("user-a", &records, call("merge", &["Acme"])),
             ("user-a", &tool(renamed), first.clone()),
             ("user-b", &records, first.clone()),
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let before = labeller.runs();
             label(&cache, &labeller, user_id, tool, &arguments).await;
-            assert_eq!(labeller.runs(), before + 1, "{user_id} {arguments}");
+            assert_eq!(labeller.runs(), before + 1, "case {case}");
         }
     }
 
