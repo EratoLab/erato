@@ -579,11 +579,16 @@ catalogs: {locales: [...]}, overrides: {present}, kits: [{name}]}`;
 - `digest`: the lowercase hex SHA-256 of the canonical JSON of `files`
   (compact, keys sorted), the identity clients and sidecars compare.
 
-The package budget is 8 MiB (8388608 bytes) of `totalBytes`, the sidecar's
+The package budget is 16 MiB (16777216 bytes) of `totalBytes`, the sidecar's
 acceptance budget (`MAX_TOTAL_BYTES` in `crates/erato-desktop-sidecar-ui`);
-raising it requires raising the sidecar's acceptance budget first. A package
-over budget, or one that fails assembly, is logged at assembly time and not
-served; the endpoints then answer 404.
+raising it requires raising the sidecar's acceptance budget first. The generic
+archive keeps to the sidecar's 8 MiB seed budget, so a deployment always has
+at least 8 MiB for its catalogs, theme and component kits. The package's
+compressed archive is at most 9,437,184 bytes, what a client can relay (72
+chunks of 131,072 bytes, [SPEC.md](./SPEC.md#desktop-ui-package)) and the most
+the sidecar downloads. A package over budget, an archive over that cap, or a
+package that fails assembly is logged at assembly time and not served; the
+endpoints then answer 404.
 
 ### Endpoints
 
