@@ -304,9 +304,9 @@ pub fn rules_label(
 /// Holds a label's verb against the tool's name and its resolved
 /// annotations, operator overrides included; an absent hint says nothing.
 /// Any flag means the card shows the generic label. When verb fields the
-/// tool's input schema declares set the verb, the name steps back: it
+/// tool's input schema declares set the verb, the name's verb steps back: it
 /// describes the tool, the fields this call. The label must then agree with
-/// the fields.
+/// the fields, and a read-named tool still never gets a write label.
 pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Vec<CrossCheckFlag> {
     let hint = |get: fn(&ToolAnnotations) -> Option<bool>| {
         tool.annotations.as_ref().and_then(get) == Some(true)
@@ -336,11 +336,11 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
         && verb_fields(arguments)
             .into_iter()
             .all(|(member, _)| declares(&tool.input_schema, member));
-    if declared {
-        return flags;
-    }
     if action != ToolCallAction::Other && has(&name, &READ_VERBS) {
         flags.push(CrossCheckFlag::ReadName);
+    }
+    if declared {
+        return flags;
     }
     let named = name_verbs(&name);
     if !named.is_empty() && !named.contains(&action) {
@@ -490,17 +490,19 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
 }
 
 /// Words that only read as one verb together: `create_comment` comments,
-/// `post_message` sends.
+/// `post_message` sends. A verb field that names no verb (`kind: "page"`)
+/// leaves the name to decide.
 fn compound(name: &[String], fields: &[String]) -> Option<(ToolCallAction, VerbSource)> {
+    let no_field_verb = actions_of(fields).is_empty();
     if has(name, &COMMENT_NOUNS) {
         if has(fields, &ADD_VERBS) {
             return Some((ToolCallAction::Comment, VerbSource::Field));
         }
-        if fields.is_empty() && has(name, &ADD_VERBS) {
+        if no_field_verb && has(name, &ADD_VERBS) {
             return Some((ToolCallAction::Comment, VerbSource::Name));
         }
     }
-    (fields.is_empty() && has(name, &["post"]) && has(name, &MESSAGE_NOUNS))
+    (no_field_verb && has(name, &["post"]) && has(name, &MESSAGE_NOUNS))
         .then_some((ToolCallAction::Send, VerbSource::Name))
 }
 
@@ -533,12 +535,13 @@ fn has(words: &[String], any: &[&str]) -> bool {
     words.iter().any(|word| any.contains(&word.as_str()))
 }
 
-/// A parent's or folder's ID says where an item goes, not that it exists.
+/// Only the record's own ID says it exists: another record's ID (`company_id`,
+/// `parentId`) says where it goes, and a `source` or `thread` may hold no ID.
 fn holds_an_id(arguments: &Value) -> bool {
     find(
         arguments,
         Skip::Targets,
-        id_member(|member| names_an_id(member) && !is_one_of(member, &TARGET_MEMBERS)),
+        id_member(|member| is_one_of(member, &ID_MEMBERS) && names_an_id(member)),
     )
     .is_some()
 }

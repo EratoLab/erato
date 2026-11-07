@@ -300,6 +300,25 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         Some("Kick-off")
     );
 
+    // The one ID in the result is the record the call linked to.
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY }]),
+    );
+    let linked = format!("Task created and linked to {OPPORTUNITY}.");
+    for input in [
+        json!({ "title": "Follow up", "regarding_id": OPPORTUNITY }),
+        json!({ "item": { "subject": "Follow up", "regardingobjectid": { "recordId": OPPORTUNITY } } }),
+    ] {
+        let create = call("create", "create_task", input, json!(linked));
+        assert_eq!(name(&after(vec![create.clone()]), json!(OPPORTUNITY)), None);
+        assert_eq!(
+            name(&after(vec![read.clone(), create]), json!(OPPORTUNITY)).as_deref(),
+            Some("Line 4 retrofit")
+        );
+    }
+
     let mut labelled = call(
         "add",
         "add_note",
@@ -445,6 +464,15 @@ fn a_later_call_naming_the_record_retires_its_old_values_but_a_link_does_not() {
             Some("Line 4 retrofit")
         );
     }
+    let denied = ToolUse {
+        output: Some(json!({ "status": "rejected", "error": "The user denied this tool call." })),
+        ..update("denied", ToolCallStatus::Error)
+    };
+    let context = after(vec![read.clone(), denied]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
     let reread = ToolUse {
         tool_call_id: "reread".into(),
         ..read.clone()
@@ -527,6 +555,53 @@ fn a_write_carrying_the_records_data_or_naming_it_in_text_retires_its_old_values
             earlier(&context, OPPORTUNITY, "risklevel", json!(3)),
             None,
             "{text}"
+        );
+    }
+
+    let other = read_query(
+        "other",
+        "SELECT fullname, contactid, jobtitle FROM contact",
+        json!([{ "fullname": "Ana Example", "contactid": CONTACT, "jobtitle": "Buyer" }]),
+    );
+    let keyed = call(
+        "keyed",
+        "update_records",
+        json!({ "updates": { OPPORTUNITY: { "risklevel": 3 } } }),
+        json!("Updated 1 record."),
+    );
+    let context = after(vec![read.clone(), other.clone(), keyed]);
+    assert_eq!(earlier(&context, OPPORTUNITY, "risklevel", json!(3)), None);
+    assert_eq!(
+        earlier(&context, CONTACT, "jobtitle", json!("Lead")).as_deref(),
+        Some("Buyer")
+    );
+
+    // Past a cap the call's IDs are not all read, so no old value counts.
+    let bulk: Vec<_> = (0..MAX_NODES_PER_VALUE)
+        .map(|i| json!({ "id": format!("row{i}"), "status": "done" }))
+        .chain([json!({ "id": OPPORTUNITY, "risklevel": 3 })])
+        .collect();
+    let mut deep = json!({ "recordId": OPPORTUNITY, "risklevel": 3 });
+    for _ in 0..MAX_DEPTH {
+        deep = json!({ "batch": deep });
+    }
+    for (case, arguments) in [("bulk", json!({ "records": bulk })), ("deep", deep)] {
+        let write = call(case, "update_records", arguments, json!("Done."));
+        let context = after(vec![read.clone(), other.clone(), write]);
+        assert_eq!(
+            earlier(&context, OPPORTUNITY, "risklevel", json!(3)),
+            None,
+            "{case}"
+        );
+        assert_eq!(
+            earlier(&context, CONTACT, "jobtitle", json!("Lead")),
+            None,
+            "{case}"
+        );
+        assert_eq!(
+            name(&context, json!(OPPORTUNITY)).as_deref(),
+            Some("Line 4 retrofit"),
+            "{case}"
         );
     }
 }
