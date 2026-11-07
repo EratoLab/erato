@@ -1,12 +1,25 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
-import type { SearchQueryV1Result } from "../typescript/src/index.js";
+import { catalogueDigest } from "../scripts/lib.mjs";
+import {
+  DesktopSidecarClient,
+  MAX_BODY_BYTES,
+  UI_PACKAGE_CHUNK_BYTES,
+  UI_PACKAGE_MAX_ARCHIVE_BYTES,
+  UI_PACKAGE_MAX_CHUNKS,
+  type SearchQueryV1Result,
+  type SidecarStatusV1Result,
+} from "../typescript/src/index.js";
 
 import {
+  validateSidecarInstallUiPackageV1Params,
+  validateSidecarInstallUiPackageV1Result,
+  validateSidecarStatusV1Result,
   validateDiagnosticsEchoV1Params,
   validateDiscoverResult,
   validateDiscoveryDocument,
@@ -46,6 +59,42 @@ interface DesktopUiPackageFixture {
   }[];
   invalidUi: Record<string, unknown>[];
   configure: { name: string; params: unknown; valid: boolean }[];
+}
+
+interface UiPackageRelayFixture {
+  offeredDigest: string;
+  status: { name: string; result: SidecarStatusV1Result; relays: boolean }[];
+  invalidStatus: Record<string, unknown>[];
+  catalogues: {
+    name: string;
+    advertised: boolean;
+    availability?: Record<string, unknown>;
+    uiReported: boolean;
+    relays: boolean;
+  }[];
+  install: {
+    limits: {
+      chunkBytes: number;
+      maxArchiveBytes: number;
+      maxChunks: number;
+      maxContentBase64Length: number;
+    };
+    params: { name: string; params: unknown; valid: boolean }[];
+    results: { name: string; result: unknown; valid: boolean }[];
+  };
+}
+
+/** The reference relay decision of SPEC.md §11 for one status result. */
+function relaysFor(
+  result: SidecarStatusV1Result,
+  offeredDigest: string,
+): boolean {
+  const status = result.ui_package;
+  return (
+    status?.state === "failed" &&
+    status.relay === true &&
+    status.digest === offeredDigest
+  );
 }
 
 describe("language-neutral conformance fixtures", () => {
@@ -115,6 +164,159 @@ describe("language-neutral conformance fixtures", () => {
     for (const testCase of fixture.configure) {
       expect(
         validateSidecarConfigureV1Params(testCase.params),
+        testCase.name,
+      ).toBe(testCase.valid);
+    }
+  });
+
+  it("reports the desktop UI package state and relays only a relay-eligible failure of the offered digest (both rollout directions)", async () => {
+    const fixture = await readFixture<UiPackageRelayFixture>(
+      "desktop-ui-package-relay.json",
+    );
+    for (const testCase of fixture.status) {
+      expect(
+        validateSidecarStatusV1Result(testCase.result),
+        testCase.name,
+      ).toBe(true);
+      expect(
+        relaysFor(testCase.result, fixture.offeredDigest),
+        testCase.name,
+      ).toBe(testCase.relays);
+    }
+    for (const ui_package of fixture.invalidStatus) {
+      expect(
+        validateSidecarStatusV1Result({ permissions: {}, ui_package }),
+        JSON.stringify(ui_package),
+      ).toBe(false);
+    }
+  });
+
+  it("relays only through a sidecar that reports ui and enables sidecar.install_ui_package.v1", async () => {
+    const fixture = await readFixture<UiPackageRelayFixture>(
+      "desktop-ui-package-relay.json",
+    );
+    for (const testCase of fixture.catalogues) {
+      const document = JSON.parse(
+        await readFile(new URL("../openrpc.json", import.meta.url), "utf8"),
+      );
+      if (testCase.advertised) {
+        document.methods.find(
+          (method: { name: string }) =>
+            method.name === "sidecar.install_ui_package.v1",
+        )["x-erato-capability"].availability = testCase.availability;
+      } else {
+        document.methods = document.methods.filter(
+          (method: { name: string }) =>
+            method.name !== "sidecar.install_ui_package.v1",
+        );
+      }
+      document["x-erato-catalogue"].digest = catalogueDigest(document);
+      const result = {
+        protocolVersion: "1.0",
+        serverInfo: { name: "erato-desktop-sidecar", version: "0.1.47" },
+        instanceId: "sidecar-instance-id",
+        document,
+        ...(testCase.uiReported
+          ? { ui: { host_apis: [1], seed: null, installed: null } }
+          : {}),
+      };
+      const client = new DesktopSidecarClient({
+        clientInfo: {
+          name: "conformance",
+          version: "0.1.47",
+          host: { application: "test", runtime: "node" },
+          os: { name: "test" },
+        },
+        transport: {
+          request: async (body) =>
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: (JSON.parse(body) as { id: string }).id,
+              result,
+            }),
+        },
+      });
+      await client.discover();
+      expect(
+        !!client.getSnapshot().ui &&
+          client.supports("sidecar.status.v1") &&
+          client.supports("sidecar.install_ui_package.v1"),
+        testCase.name,
+      ).toBe(testCase.relays);
+    }
+  });
+
+  it("bounds sidecar.install_ui_package.v1 chunks so a full chunk request fits the request cap", async () => {
+    const fixture = await readFixture<UiPackageRelayFixture>(
+      "desktop-ui-package-relay.json",
+    );
+    const { limits } = fixture.install;
+    expect(limits).toEqual({
+      chunkBytes: UI_PACKAGE_CHUNK_BYTES,
+      maxArchiveBytes: UI_PACKAGE_MAX_ARCHIVE_BYTES,
+      maxChunks: UI_PACKAGE_MAX_CHUNKS,
+      maxContentBase64Length: 4 * Math.ceil(UI_PACKAGE_CHUNK_BYTES / 3),
+    });
+    expect(limits.chunkBytes * limits.maxChunks).toBe(limits.maxArchiveBytes);
+    const params = JSON.parse(
+      await readFile(
+        new URL(
+          "../schemas/methods/sidecar-install-ui-package-v1-params.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ).properties;
+    const result = JSON.parse(
+      await readFile(
+        new URL(
+          "../schemas/methods/sidecar-install-ui-package-v1-result.schema.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ).properties;
+    expect(params.content_base64.maxLength).toBe(limits.maxContentBase64Length);
+    expect(params.total_bytes.maximum).toBe(limits.maxArchiveBytes);
+    expect(params.chunk_count.maximum).toBe(limits.maxChunks);
+    expect(params.chunk_index.maximum).toBe(limits.maxChunks - 1);
+    expect(result.next_chunk_index.maximum).toBe(limits.maxChunks - 1);
+
+    const chunk = {
+      upload_id: randomUUID(),
+      digest: fixture.offeredDigest,
+      total_bytes: limits.maxArchiveBytes,
+      chunk_index: limits.maxChunks - 2,
+      chunk_count: limits.maxChunks,
+      content_base64: randomBytes(limits.chunkBytes).toString("base64"),
+    };
+    expect(chunk.content_base64).toHaveLength(limits.maxContentBase64Length);
+    expect(validateSidecarInstallUiPackageV1Params(chunk)).toBe(true);
+    const request = JSON.stringify({
+      jsonrpc: "2.0",
+      id: `c-${randomUUID()}`,
+      method: "sidecar.install_ui_package.v1",
+      params: chunk,
+      "x-erato-deadline-at": new Date(Date.now() + 120_000).toISOString(),
+    });
+    expect(new TextEncoder().encode(request).byteLength).toBeLessThan(
+      MAX_BODY_BYTES,
+    );
+  });
+
+  it("accepts the documented sidecar.install_ui_package.v1 params and results and rejects malformed ones", async () => {
+    const { install } = await readFixture<UiPackageRelayFixture>(
+      "desktop-ui-package-relay.json",
+    );
+    for (const testCase of install.params) {
+      expect(
+        validateSidecarInstallUiPackageV1Params(testCase.params),
+        testCase.name,
+      ).toBe(testCase.valid);
+    }
+    for (const testCase of install.results) {
+      expect(
+        validateSidecarInstallUiPackageV1Result(testCase.result),
         testCase.name,
       ).toBe(testCase.valid);
     }

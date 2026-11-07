@@ -472,3 +472,61 @@ async fn test_client_tool_decisions_default_empty_and_survive_unrelated_updates(
         decisions
     );
 }
+
+/// What a client reports is stored only when it changes; a partial or
+/// unusable report keeps the other value, and the profile form's own writes
+/// leave both alone.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn test_client_locale_is_stored_on_change_and_never_erased(pool: Pool<Postgres>) {
+    use erato::models::user_preference::{record_client_locale, user_time_zone};
+    let conn = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let user = create_user(&conn, "client-locale").await;
+    assert_eq!(user_time_zone(&conn, &user).await.unwrap(), None);
+
+    assert!(
+        record_client_locale(&conn, &user, Some("Europe/Berlin"), Some("de-DE"))
+            .await
+            .unwrap(),
+        "the first report creates the row"
+    );
+    assert!(
+        !record_client_locale(&conn, &user, Some("Europe/Berlin"), Some("de-de"))
+            .await
+            .unwrap(),
+        "the same values after normalization are not written again"
+    );
+    assert!(
+        !record_client_locale(&conn, &user, Some("W. Europe Standard Time"), None)
+            .await
+            .unwrap(),
+        "a Windows zone name is ignored"
+    );
+    assert!(
+        record_client_locale(&conn, &user, Some("America/New_York"), None)
+            .await
+            .unwrap()
+    );
+    let prefs = get_user_preferences(&conn, &user).await.unwrap().unwrap();
+    assert_eq!(prefs.time_zone.as_deref(), Some("America/New_York"));
+    assert_eq!(prefs.language.as_deref(), Some("de-DE"));
+    assert_eq!(
+        user_time_zone(&conn, &user).await.unwrap(),
+        Some(chrono_tz::America::New_York)
+    );
+
+    let prefs = upsert_user_preferences(
+        &conn,
+        &user,
+        UpdateUserPreferencesInput {
+            nickname: Some(Some("Sam".to_owned())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(prefs.time_zone.as_deref(), Some("America/New_York"));
+    assert_eq!(prefs.language.as_deref(), Some("de-DE"));
+}

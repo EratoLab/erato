@@ -27,6 +27,10 @@ pub struct Model {
     #[sea_orm(column_type = "JsonBinary")]
     pub client_tool_decisions: Json,
     pub teams_nudges_opted_out_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub time_zone: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub language: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

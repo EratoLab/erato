@@ -42,6 +42,9 @@ use std::time::Duration;
 /// appends the links as text and leaves the actions out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryContent {
+    /// Shown above the text, such as a reminder's name.
+    #[serde(default)]
+    pub title: Option<String>,
     pub text: String,
     /// Short plain text for notification previews.
     #[serde(default)]
@@ -305,7 +308,10 @@ const INSERT_COLUMNS: &str =
 
 /// Create a pending row. `None` when an open row with the same dedupe key
 /// already exists, which is how a producer run stays idempotent.
-pub async fn schedule(db: &DatabaseConnection, new: NewDelivery) -> Result<Option<Model>, Report> {
+pub async fn schedule<C: ConnectionTrait>(
+    db: &C,
+    new: NewDelivery,
+) -> Result<Option<Model>, Report> {
     let sql = format!(
         "INSERT INTO scheduled_deliveries {INSERT_COLUMNS}
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
@@ -367,8 +373,8 @@ fn insert_values(new: &NewDelivery) -> Vec<sea_orm::Value> {
 /// Cancel the user's open rows, narrowed by kind and dedupe key when given.
 /// Rows in flight (`claimed`) are left to the executor, whose producer guard
 /// is the place to refuse them. Returns how many rows were cancelled.
-pub async fn cancel_open(
-    db: &DatabaseConnection,
+pub async fn cancel_open<C: ConnectionTrait>(
+    db: &C,
     user_id: Uuid,
     kind: Option<&str>,
     dedupe_key: Option<&str>,
@@ -394,7 +400,8 @@ pub async fn cancel_open(
 }
 
 /// Move an open row to a later time. `false` when the row is not open (in
-/// flight or settled). Each snooze is counted in the outcome.
+/// flight or settled). Each snooze is counted in the outcome, and the
+/// snoozed time becomes the occurrence's due time (see [`occurrence_due_at`]).
 pub async fn snooze(
     db: &DatabaseConnection,
     id: Uuid,
@@ -405,7 +412,8 @@ pub async fn snooze(
             POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE,
             "UPDATE scheduled_deliveries
              SET state = 'snoozed', due_at = $2,
-                 outcome = outcome || jsonb_build_object('snoozed', COALESCE((outcome->>'snoozed')::int, 0) + 1)
+                 outcome = (outcome - 'original_due_at')
+                     || jsonb_build_object('snoozed', COALESCE((outcome->>'snoozed')::int, 0) + 1)
              WHERE id = $1 AND state IN ('pending', 'snoozed')",
             vec![id.into(), DateTime::<FixedOffset>::from(until).into()],
         ))
@@ -436,6 +444,21 @@ pub async fn count_delivered(
 
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>, Report> {
     Ok(ScheduledDeliveries::find_by_id(id).one(db).await?)
+}
+
+/// When the row's occurrence was due: the time it was scheduled for, or
+/// snoozed, rescheduled or deferred to. A retry moves `due_at` to the next
+/// attempt and keeps the time before the first retry in
+/// `outcome.original_due_at`, so a retried occurrence still shows its own time.
+pub fn occurrence_due_at(row: &Model) -> DateTime<Utc> {
+    row.outcome
+        .get("original_due_at")
+        .and_then(Value::as_str)
+        .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
+        .map_or_else(
+            || row.due_at.with_timezone(&Utc),
+            |at| at.with_timezone(&Utc),
+        )
 }
 
 /// What the executor reads from the configuration.
@@ -675,11 +698,13 @@ async fn retry_later(
     let result = db
         .execute_raw(statement(
             POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY,
-            "UPDATE scheduled_deliveries
+            r#"UPDATE scheduled_deliveries
              SET state = 'pending', claim_token = NULL, claimed_at = NULL,
                  due_at = now() + make_interval(secs => $3::double precision),
-                 outcome = outcome || $4::jsonb
-             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
+                 outcome = outcome || $4::jsonb || jsonb_build_object('original_due_at', COALESCE(
+                     outcome->'original_due_at',
+                     to_jsonb(to_char(due_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))))
+             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'"#,
             vec![
                 id.into(),
                 claim_token.into(),
@@ -692,7 +717,8 @@ async fn retry_later(
 }
 
 /// Give the row back for a later time, with the deferral counted but no
-/// attempt used.
+/// attempt used. Unlike a retry, the producer chose the time, so it becomes
+/// the occurrence's due time, as a snooze does.
 async fn defer_until(
     db: &DatabaseConnection,
     id: Uuid,
@@ -704,7 +730,8 @@ async fn defer_until(
             POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER,
             "UPDATE scheduled_deliveries
              SET state = 'pending', claim_token = NULL, claimed_at = NULL, due_at = $3,
-                 outcome = outcome || jsonb_build_object('deferred', COALESCE((outcome->>'deferred')::int, 0) + 1)
+                 outcome = (outcome - 'original_due_at')
+                     || jsonb_build_object('deferred', COALESCE((outcome->>'deferred')::int, 0) + 1)
              WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
             vec![
                 id.into(),

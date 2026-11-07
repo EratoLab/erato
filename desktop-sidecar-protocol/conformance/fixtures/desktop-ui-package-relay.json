@@ -1,0 +1,349 @@
+{
+  "description": "The desktop UI package download state and relay (package 0.1.47). `status` holds sidecar.status.v1 results for both rollout directions; `relays` says whether a client that offered `offeredDigest` relays the archive, which it does only for state failed with relay true and the digest it offered. `catalogues` says whether a client relays at all: only when discovery reports `ui` and sidecar.install_ui_package.v1 is enabled. `install` holds the method's limits and its schema-valid and schema-invalid params and results; the sidecar checks the chunk arithmetic itself.",
+  "offeredDigest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+  "status": [
+    {
+      "name": "previous sidecar reports no ui_package",
+      "result": { "permissions": { "macos_full_disk_access": "granted" } },
+      "relays": false
+    },
+    {
+      "name": "no package offered in this sidecar process",
+      "result": {
+        "permissions": { "macos_full_disk_access": "granted" },
+        "ui_package": null
+      },
+      "relays": false
+    },
+    {
+      "name": "download pending",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "pending",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": false
+        }
+      },
+      "relays": false
+    },
+    {
+      "name": "offered package already installed",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "current",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "attempted_at": null,
+          "relay": false
+        }
+      },
+      "relays": false
+    },
+    {
+      "name": "download refused by a proxy",
+      "result": {
+        "permissions": { "macos_full_disk_access": "granted" },
+        "ui_package": {
+          "state": "failed",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "reason": "proxy",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": true
+        }
+      },
+      "relays": true
+    },
+    {
+      "name": "certificate not trusted by the sidecar",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "failed",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "reason": "tls",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": true,
+          "future_field": { "revision": 2 }
+        }
+      },
+      "relays": true
+    },
+    {
+      "name": "network failure for a digest the manifest named instead of the offered one",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "failed",
+          "digest": "3f3d61ceab5fd9c2ff9bba2a2f3bb0fed2fb1c57b2d4d9f0a3b2f1c0d9e8f7a6",
+          "reason": "network",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": true
+        }
+      },
+      "relays": false
+    },
+    {
+      "name": "package failed verification",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "failed",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "reason": "verification",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": false
+        }
+      },
+      "relays": false
+    },
+    {
+      "name": "unknown future state is treated as pending",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "receiving",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": true
+        }
+      },
+      "relays": false
+    },
+    {
+      "name": "unknown future reason is treated as other",
+      "result": {
+        "permissions": {},
+        "ui_package": {
+          "state": "failed",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "reason": "captive_portal",
+          "attempted_at": "2026-11-07T10:15:00Z",
+          "relay": false
+        }
+      },
+      "relays": false
+    }
+  ],
+  "invalidStatus": [
+    {
+      "state": "failed",
+      "reason": "proxy",
+      "attempted_at": "2026-11-07T10:15:00Z",
+      "relay": true
+    },
+    {
+      "state": "failed",
+      "digest": "sha256:9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+      "reason": "proxy",
+      "attempted_at": "2026-11-07T10:15:00Z",
+      "relay": true
+    },
+    {
+      "state": "failed",
+      "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+      "reason": "proxy",
+      "attempted_at": "2026-11-07T10:15:00Z",
+      "relay": "yes"
+    },
+    {
+      "state": "pending",
+      "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+      "attempted_at": 5,
+      "relay": false
+    }
+  ],
+  "catalogues": [
+    {
+      "name": "previous sidecar hosting the desktop UI lists no relay method",
+      "advertised": false,
+      "uiReported": true,
+      "relays": false
+    },
+    {
+      "name": "sidecar hosting no desktop UI disables the relay method",
+      "advertised": true,
+      "availability": {
+        "state": "disabled",
+        "reasonCode": "desktop_ui_not_hosted"
+      },
+      "uiReported": false,
+      "relays": false
+    },
+    {
+      "name": "current sidecar hosting the desktop UI",
+      "advertised": true,
+      "availability": { "state": "enabled" },
+      "uiReported": true,
+      "relays": true
+    }
+  ],
+  "install": {
+    "limits": {
+      "chunkBytes": 131072,
+      "maxArchiveBytes": 9437184,
+      "maxChunks": 72,
+      "maxContentBase64Length": 174764
+    },
+    "params": [
+      {
+        "name": "single-chunk archive",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 3,
+          "chunk_index": 0,
+          "chunk_count": 1,
+          "content_base64": "AAEC"
+        },
+        "valid": true
+      },
+      {
+        "name": "last chunk of three under a UUID upload id, with an additive field",
+        "params": {
+          "upload_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 262145,
+          "chunk_index": 2,
+          "chunk_count": 3,
+          "content_base64": "AA==",
+          "future_field": true
+        },
+        "valid": true
+      },
+      {
+        "name": "upload id with a space",
+        "params": {
+          "upload_id": "u 1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 3,
+          "chunk_index": 0,
+          "chunk_count": 1,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "prefixed digest",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "sha256:9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 3,
+          "chunk_index": 0,
+          "chunk_count": 1,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "empty archive",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 0,
+          "chunk_index": 0,
+          "chunk_count": 1,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "archive one byte over the cap",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 9437185,
+          "chunk_index": 0,
+          "chunk_count": 72,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "more chunks than the cap allows",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 9437184,
+          "chunk_index": 0,
+          "chunk_count": 73,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "negative chunk index",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 3,
+          "chunk_index": -1,
+          "chunk_count": 1,
+          "content_base64": "AAEC"
+        },
+        "valid": false
+      },
+      {
+        "name": "unpadded base64",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 2,
+          "chunk_index": 0,
+          "chunk_count": 1,
+          "content_base64": "AAE"
+        },
+        "valid": false
+      },
+      {
+        "name": "missing content",
+        "params": {
+          "upload_id": "u-1",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 3,
+          "chunk_index": 0,
+          "chunk_count": 1
+        },
+        "valid": false
+      }
+    ],
+    "results": [
+      {
+        "name": "continue with the next chunk",
+        "result": { "state": "continue", "next_chunk_index": 1 },
+        "valid": true
+      },
+      {
+        "name": "installed",
+        "result": { "state": "installed" },
+        "valid": true
+      },
+      {
+        "name": "busy with another upload or the sidecar's own download",
+        "result": { "state": "busy" },
+        "valid": true
+      },
+      {
+        "name": "refused because the calling Origin did not offer the digest",
+        "result": { "state": "refused", "reason": "not_offered" },
+        "valid": true
+      },
+      {
+        "name": "unknown future state, which a client treats as refused",
+        "result": { "state": "queued" },
+        "valid": true
+      },
+      {
+        "name": "no state",
+        "result": {},
+        "valid": false
+      },
+      {
+        "name": "next chunk index past the chunk cap",
+        "result": { "state": "continue", "next_chunk_index": 72 },
+        "valid": false
+      }
+    ]
+  }
+}

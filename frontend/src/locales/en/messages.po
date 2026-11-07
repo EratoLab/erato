@@ -6569,6 +6569,31 @@ msgid "profile.menu.preferences"
 msgstr "Settings"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.cancelled"
+msgstr "Cancelled"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.done"
+msgstr "Done"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.failed"
+msgstr "Failed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.scheduled"
+msgstr "Scheduled"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.snoozed"
+msgstr "Snoozed"
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr "Find conversations and messages across your chat history"
@@ -7302,6 +7327,61 @@ msgstr "System permissions"
 #: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
 msgid "sidecar.permissions.unknown"
 msgstr "Unknown"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Desktop app interface: up to date"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Desktop app interface: update failed ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Desktop app interface: updating…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "network error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "no package on the server"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "unexpected error"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "the proxy refused the connection"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "could not be saved on this device"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "certificate not trusted"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "access was refused"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "the package did not verify"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

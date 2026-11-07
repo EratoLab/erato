@@ -232,6 +232,23 @@ const schemaStringFieldFixes = [
     from: "preference_assistant_additional_information?: null | undefined;",
     to: "preference_assistant_additional_information?: string | null | undefined;",
   },
+  {
+    from: "linked_chat_id?: null | undefined;",
+    to: "linked_chat_id?: string | null | undefined;",
+  },
+  {
+    from: "acknowledged_at?: null | undefined;",
+    to: "acknowledged_at?: string | null | undefined;",
+  },
+  {
+    from: "delivered_at?: null | undefined;",
+    to: "delivered_at?: string | null | undefined;",
+  },
+  // Also widens ContentPartToolRejection.reason, which is a nullable string too.
+  {
+    from: "  reason?: null | undefined;",
+    to: "  reason?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {

@@ -30,9 +30,17 @@ Typical "Notable changes" categories to copy & paste:
 
 **Scheduled deliveries.** A shared table and executor for messages Erato owes a user at a due time (reminders, nudges, notifications): producers create rows, the executor claims each row once with a compare-and-set, delivers it through a channel and records the outcome, with retries for throttled or failed transport and crash recovery for claims a dying replica left behind. Off by default; enable with `[scheduled_deliveries] enabled = true`. This is the foundation for the Teams inactivity nudge and for user reminders; it ships no user-facing feature on its own.
 
-**Teams bot: inactivity nudge.** Users who have not used Erato for a while (`inactive_after`, default 7 days, on any surface) get one "Did you know…?" tip as a card in their personal chat with the bot, inside a configurable send window (Mon–Fri 08:00–18:00 Europe/Berlin by default), once per inactivity period. The card offers "Open <app>" and "Don't remind me"; `/reminders off` and `/reminders on` (German: `/erinnerungen aus|an`) do the same. The bot now records the personal conversation when it is added to a user's chat, so people the app was installed for by policy can be reached before they write. Enable with `[integrations.ms_office.teams.bot.inactivity_nudge] enabled = true`, `tips = [...]`, plus `[scheduled_deliveries] enabled = true`; `pilot_users` limits a rollout to listed addresses.
+**Teams bot: inactivity nudge.** Users who have not used Erato for a while (`inactive_after`, default 7 days, on any surface) get one "Did you know…?" tip as a card in their personal chat with the bot, inside a configurable send window (Mon–Fri 08:00–18:00 Europe/Berlin by default), once per inactivity period. The card offers "Open <app>" and "Don't remind me"; `/reminders off` and `/reminders on` (German: `/erinnerungen aus|an`) do the same. The bot now records the personal conversation when it is added to a user's chat, so people the app was installed for by policy can be reached before they write. Enable with `[integrations.ms_office.teams.bot.inactivity_nudge] enabled = true`, `tips = [...]`, plus `[scheduled_deliveries] enabled = true`; `pilot_users` limits a rollout to listed addresses. With `runtime_configuration.enabled`, the section reloads without a restart, so the admin panel's Inactivity tips page can change it (ERMAIN-1109).
 
 **MCP server display names.** `mcp_servers.<id>.display_name` sets the name people see for a server on approval cards (web, delegated tasks and Teams), in a response's tool steps and in the Servers & Tools preferences tab. Without it the id is shown tidied up (`web_access` as "Web access"); messages saved earlier keep showing the id.
+
+#### Security
+
+MCP servers that ask for the user's consent through a tool argument (such as Dataverse's `hasUserApproved` on `delete_record`) can name it in `mcp_servers.<id>.approval_argument`. Erato then hides the argument from the model, asks the user before every call of a tool that declares it (no "Always allow" for those), and fills it from the user's decision at dispatch, so the model can no longer claim a consent it was never given.
+
+#### Bug fixes
+
+MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
 
 ## [0.8.0] - 2026-11-03
 

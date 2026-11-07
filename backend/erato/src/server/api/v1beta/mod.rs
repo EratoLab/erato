@@ -16,6 +16,7 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod ms_office;
 pub mod policy_engine_middleware;
+pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
 pub mod sharepoint;
@@ -201,6 +202,28 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/mcp-tool-approval-settings/{setting_id}",
             axum::routing::delete(deactivate_user_tool_approval_setting),
+        )
+        .route(
+            "/scheduled-items",
+            get(scheduled_items::list_scheduled_items).post(scheduled_items::create_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}",
+            get(scheduled_items::get_scheduled_item)
+                .put(scheduled_items::update_scheduled_item)
+                .delete(scheduled_items::delete_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}/cancel",
+            post(scheduled_items::cancel_scheduled_item),
+        )
+        .route(
+            "/scheduled-items/{item_id}/snooze",
+            post(scheduled_items::snooze_scheduled_item),
+        )
+        .route(
+            "/scheduled-templates",
+            get(scheduled_items::list_scheduled_templates),
         )
         .route("/recent_chats", get(recent_chats))
         .route("/generating", get(generating_chats))
@@ -484,6 +507,14 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         create_user_tool_approval_setting,
         apply_user_tool_approval_settings_batch,
         deactivate_user_tool_approval_setting,
+        scheduled_items::list_scheduled_items,
+        scheduled_items::get_scheduled_item,
+        scheduled_items::create_scheduled_item,
+        scheduled_items::update_scheduled_item,
+        scheduled_items::cancel_scheduled_item,
+        scheduled_items::snooze_scheduled_item,
+        scheduled_items::delete_scheduled_item,
+        scheduled_items::list_scheduled_templates,
         create_chat,
         chat_detail,
         update_chat,
@@ -687,7 +718,30 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         entra_id::OrganizationGroupsResponse,
         starting_assistant::StartingAssistantResponse,
         starting_assistant::StartingAssistantInfo,
-        starting_assistant::StartingAssistantSource
+        starting_assistant::StartingAssistantSource,
+        scheduled_items::ScheduledItem,
+        scheduled_items::ScheduledItemType,
+        scheduled_items::ScheduledItemRequest,
+        scheduled_items::ScheduledItemsResponse,
+        scheduled_items::ScheduledItemsTab,
+        scheduled_items::SnoozeScheduledItemRequest,
+        scheduled_items::ScheduledItemError,
+        scheduled_items::ScheduledItemErrorCode,
+        scheduled_items::DeliveryChannelInfo,
+        scheduled_items::DeliveryChannelStatus,
+        scheduled_items::TimeZoneSource,
+        scheduled_items::OccurrenceTime,
+        scheduled_items::LastDelivery,
+        scheduled_items::LastDeliveryOutcome,
+        scheduled_items::LinkedChat,
+        scheduled_items::ScheduledTemplate,
+        scheduled_items::ScheduledTemplatesResponse,
+        crate::services::scheduled_items::DisplayStatus,
+        crate::services::scheduled_items::recurrence::Trigger,
+        crate::services::scheduled_items::recurrence::RepeatRule,
+        crate::services::scheduled_items::recurrence::RepeatEnd,
+        crate::services::scheduled_items::recurrence::Frequency,
+        crate::services::scheduled_items::recurrence::DayOfWeek
     ))
 )]
 pub struct ApiV1ApiDoc;
@@ -957,6 +1011,17 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_starting_assistant_cleared: Option<bool>,
+    /// The client's IANA time zone (the browser's
+    /// `Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it
+    /// when it differs from the profile's `preference_time_zone`; anything
+    /// that is not an IANA zone name is rejected with 422.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "Europe/Berlin")]
+    pub preference_time_zone: Option<String>,
+    /// The client's UI language as a BCP 47 tag, reported like the time zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, example = "de")]
+    pub preference_language: Option<String>,
 }
 
 fn deserialize_patch_optional_string<'de, D>(
@@ -1024,6 +1089,22 @@ pub async fn update_profile_preferences(
     {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
+    let time_zone = request
+        .preference_time_zone
+        .as_deref()
+        .map(|zone| {
+            models::user_preference::normalize_time_zone(zone)
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
+        })
+        .transpose()?;
+    let language = request
+        .preference_language
+        .as_deref()
+        .map(|language| {
+            models::user_preference::normalize_language(language)
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
+        })
+        .transpose()?;
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
@@ -1039,6 +1120,8 @@ pub async fn update_profile_preferences(
             starting_hub_assistant_id,
             starting_assistant_id,
             starting_assistant_cleared: request.preference_starting_assistant_cleared,
+            time_zone,
+            language,
         },
     )
     .await
@@ -1078,6 +1161,8 @@ pub async fn update_profile_preferences(
     profile.preference_starting_assistant_id =
         updated_prefs.starting_assistant_id.map(|id| id.to_string());
     profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
+    profile.preference_time_zone = updated_prefs.time_zone;
+    profile.preference_language = updated_prefs.language;
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );

@@ -16,7 +16,9 @@ anchor: bootstrap `allowed_origins` admits only canonical `http` or `https`
 origins without userinfo, path, query, fragment or default port, and the
 `--allow-origin` opt-in stays development-only. A strict sidecar refuses to
 start when its native review is unavailable and never falls back to normal
-mode.
+mode. A relayed desktop UI package (`sidecar.install_ui_package.v1`) comes from
+the frontend of the Origin that offered it and is verified like a downloaded
+one; this relies on the same trust in the frontend.
 
 ## Job envelope
 
@@ -35,8 +37,9 @@ operations, never by re-entering its RPC dispatcher, through the closed table in
 Administrative and operational methods are human-only and never tools:
 `sidecar.configure.v1`, `indexing.*` control and benchmarks,
 `sidecar.restart.v1`, `sidecar.request_permission.v1`,
-`sidecar.open_data_directory.v1`, `sidecar.status.v1`, diagnostics and
-`sidecar.progress.v1`. `outlook.list_emails.v1` and `outlook.search_emails.v1`
+`sidecar.open_data_directory.v1`, `sidecar.status.v1`,
+`sidecar.install_ui_package.v1`, diagnostics and `sidecar.progress.v1`.
+`outlook.list_emails.v1` and `outlook.search_emails.v1`
 are RPCs, not tools. Opening an item in Outlook stays a human-initiated action.
 
 States: `queued -> running -> completed -> read -> acked`. Under strict, a job
@@ -193,13 +196,15 @@ general case of the built-ins' items. Package 0.1.44 reserves `server`,
 Settings stay available through their fixed methods, behind the same Origin
 allowlist: `sidecar.configure.v1`, `indexing.status.v1`, `indexing.reset.v1`,
 `sources.list.v1`, `outlook.list_mailboxes.v1`, `sidecar.status.v1`,
-`sidecar.request_permission.v1` and `sidecar.open_data_directory.v1`. A strict
+`sidecar.request_permission.v1`, `sidecar.open_data_directory.v1` and
+`sidecar.install_ui_package.v1`, whose result carries codes only. A strict
 sidecar marks exactly these and `jobs.*` enabled in its live catalogue. Clients
 gate each settings view on that availability.
 
 Their results carry account-level data only: account and store names and
 addresses, Teams tenant and user identities, on/off, priority, indexing progress,
-coverage counts and dates, permission status and codes. Message subjects,
+coverage counts and dates, permission status and codes, and the desktop UI
+package's digest, state codes and attempt time. Message subjects,
 senders, bodies, folder names, search results, documents and conversations never
 appear. Local paths and free-text errors stay native: `indexing.status.v1` omits
 `indexingDirectory` and returns only the documented discovery fields;
