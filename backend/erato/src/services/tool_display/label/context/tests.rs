@@ -1260,7 +1260,9 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
             })
             .collect(),
     );
+    let mut checked = 0;
     for write in fixture.writes {
+        checked += 1;
         let mut label = resolve_label(&write.mapping, &write.arguments).unwrap();
         context.resolve(&mut label, &write.arguments, SERVER);
         let item = &label.items[0];
@@ -1281,6 +1283,7 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
             .collect();
         assert_eq!(fields, write.expect.fields, "{}", write.case);
     }
+    assert_eq!(checked, 8);
 }
 
 #[test]
