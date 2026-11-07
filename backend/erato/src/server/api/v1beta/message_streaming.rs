@@ -6485,6 +6485,7 @@ mod generation_event_wire_format_tests {
                                     rmcp::model::JsonObject::new(),
                                 ),
                                 &json!({ "query": "example" }),
+                                None,
                             )
                         }),
                         input: Some(json!({ "query": "example" })),
@@ -7417,6 +7418,7 @@ async fn stream_generate_chat_completion<'a>(
                         &managed.server_id,
                         &managed.tool,
                         &unfinished_tool_call.fn_arguments,
+                        managed.approval_argument.as_deref(),
                     ))
                 });
             // Emit event for tool call proposed
@@ -9094,6 +9096,7 @@ async fn stream_generate_chat_completion<'a>(
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &managed_tool_call.tool_call.fn_arguments,
+                managed_tool.approval_argument.as_deref(),
             );
             let row_display = tool_row_display(&display);
 
@@ -13282,6 +13285,7 @@ mod tests {
                 server_id,
                 tool,
                 &call.fn_arguments,
+                None,
             ),
             call,
             user_decision,
@@ -13350,7 +13354,8 @@ mod tests {
             }}
         }))
         .unwrap();
-        let display = mcp_tool_call_display(&servers, "new_server", &tool, &call.fn_arguments);
+        let display =
+            mcp_tool_call_display(&servers, "new_server", &tool, &call.fn_arguments, None);
         let ToolCallGate::Ask(request) =
             gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None, None)
         else {
@@ -14543,7 +14548,11 @@ mod tests {
         let call = ToolCall {
             call_id: "call-1".to_string(),
             fn_name: "publish".to_string(),
-            fn_arguments: json!({"title": "Quarterly plan", "parent_id": "page-1"}),
+            fn_arguments: json!({
+                "title": "Quarterly plan",
+                "parent_id": "page-1",
+                "hasUserApproved": true,
+            }),
             thought_signatures: None,
         };
         let read_only_closed = Tool::new("publish", "publish", Map::new()).with_annotations(
@@ -14596,6 +14605,7 @@ mod tests {
                         "server",
                         tool,
                         &call.fn_arguments,
+                        approval_argument,
                     );
                     let gates: Vec<_> = [None, generic.label.clone(), Some(delete.clone())]
                         .into_iter()
@@ -14659,6 +14669,7 @@ mod tests {
             "dv",
             &read_only,
             &call.fn_arguments,
+            None,
         );
         match gate_mcp_tool_call(
             &granting,
@@ -23678,6 +23689,7 @@ mod mcp_progress_event_tests {
                     "files",
                     &rmcp::model::Tool::new("read_file", "Reads.", rmcp::model::JsonObject::new()),
                     &json!({ "path": "notes.txt" }),
+                    None,
                 )),
                 input: None,
                 status: ToolCallStatus::InProgress,
