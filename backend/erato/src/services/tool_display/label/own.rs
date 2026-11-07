@@ -214,15 +214,14 @@ mod tests {
     #[test]
     fn an_own_table_never_shows_a_consent_flag_or_a_lookup_s_name() {
         let arguments = json!({
-            "hasUserApproved": true,
-            "options": {"user_confirmed": "yes"},
+            "options": {"Has_User-Approved": true, "user_confirmed": "yes"},
             "item": {
                 "statuscode": 2,
                 "customer": {"recordId": "c_1", "relatedTable": "account", "name": "Typed by the model"},
             },
         });
         let table = update_row(&[
-            "$.hasUserApproved",
+            "$.options.Has_User-Approved",
             "$.options.user_confirmed",
             "$.item.customer.name",
             "$.item.statuscode",
@@ -234,10 +233,10 @@ mod tests {
             .iter()
             .map(|field| field.pointer.as_str())
             .collect();
-        assert_eq!(shown, ["/item/statuscode"]);
+        assert_eq!(shown, ["/options/user_confirmed", "/item/statuscode"]);
         let stored = serde_json::to_string(&label).unwrap();
         assert!(!stored.contains("Typed by the model"), "{stored}");
-        assert!(!stored.contains("hasUserApproved"), "{stored}");
+        assert!(!stored.contains("Has_User-Approved"), "{stored}");
     }
 
     #[test]

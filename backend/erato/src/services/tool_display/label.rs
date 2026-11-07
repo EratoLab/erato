@@ -150,13 +150,7 @@ pub fn checked_label(
         );
         return generic_label(arguments);
     }
-    filtered_label(
-        server_id,
-        &tool.name,
-        arguments,
-        mapping,
-        approval_argument,
-    )
+    filtered_label(server_id, &tool.name, arguments, mapping, approval_argument)
 }
 
 // The server chose the name: logs get a short, cleaned copy.
