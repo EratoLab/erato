@@ -41,7 +41,6 @@ import type {
   ScheduledFormErrors,
   ScheduledFormValues,
 } from "@/components/ui/Scheduled/scheduledForm";
-import type { ScheduledItemRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const LINKABLE_CHATS = 20;
 const SAVE_TOAST_KEY = "scheduled-item-save";
@@ -174,10 +173,7 @@ export default function ScheduledItemFormPage() {
   const handleSubmit = async (values: ScheduledFormValues) => {
     setServerErrors(undefined);
     setFormError(null);
-    // The generated request type narrows `linked_chat_id` to null.
-    const body = scheduledItemRequestBody(
-      values,
-    ) as unknown as ScheduledItemRequest;
+    const body = scheduledItemRequestBody(values);
     try {
       if (mode === "edit" && itemId) {
         await save.mutateAsync({ pathParams: { itemId }, body });

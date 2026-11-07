@@ -182,18 +182,9 @@ export function scheduledFormValuesFromTemplate(
   };
 }
 
-/**
- * The create and edit body. The generated type narrows `linked_chat_id` to
- * null (a codegen gap for nullable uuids), so the id is typed here.
- */
-export type ScheduledItemRequestBody = Omit<
-  ScheduledItemRequest,
-  "linked_chat_id"
-> & { linked_chat_id: string | null };
-
 export function scheduledItemRequestBody(
   values: ScheduledFormValues,
-): ScheduledItemRequestBody {
+): ScheduledItemRequest {
   const base = {
     type: values.type,
     name: values.name.trim(),
