@@ -26,8 +26,8 @@ const ISOLATED = "[unicode-bidi:isolate]";
 
 /**
  * One value as inert, direction-isolated text that shows where it came from:
- * quoted as the call wrote it, underlined when an earlier result named it,
- * monospace when it is an ID.
+ * quoted as the call wrote it, underlined when an earlier result named or
+ * held it, monospace when it is an ID.
  */
 export const GistValueText = ({ value }: { value: GistValue }) => {
   const text = value.truncated ? `${value.text}…` : value.text;
@@ -39,14 +39,22 @@ export const GistValueText = ({ value }: { value: GistValue }) => {
         </q>
       );
     case "resolved":
+    case "earlier":
       return (
         <span
           dir="auto"
-          data-origin="resolved"
-          title={t({
-            id: "toolGist.value.resolved",
-            message: "Name from an earlier result in this chat",
-          })}
+          data-origin={value.origin}
+          title={
+            value.origin === "resolved"
+              ? t({
+                  id: "toolGist.value.resolved",
+                  message: "Name from an earlier result in this chat",
+                })
+              : t({
+                  id: "toolGist.value.earlier",
+                  message: "Value from an earlier result in this chat",
+                })
+          }
           className={clsx(
             "underline decoration-dotted underline-offset-2",
             ISOLATED,

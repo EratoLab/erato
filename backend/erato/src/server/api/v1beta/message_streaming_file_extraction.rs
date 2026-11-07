@@ -45,9 +45,12 @@ pub struct McpToolPostProcessResult {
     pub result_details: Option<ToolResultDetails>,
 }
 
-/// Structured content larger than this is not kept: the confirmation row reads
-/// a record's title and link, not a search result's hits.
+/// Structured content still larger than this once its members are bounded is
+/// not kept: the confirmation row reads a record's title and link, not a
+/// search result's hits.
 const MAX_RESULT_STRUCTURED_BYTES: usize = 8 * 1024;
+/// Structured content larger than this skips member bounding.
+const MAX_RESULT_STRUCTURED_SCAN_BYTES: usize = 1024 * 1024;
 /// Link blocks, and separately resource blocks, kept per result.
 const MAX_RESULT_BLOCKS: usize = 10;
 
@@ -555,10 +558,14 @@ fn mcp_result_details(
 
 fn bounded_structured(value: &Value) -> Value {
     let size = json_size(value);
-    if size > MAX_RESULT_STRUCTURED_BYTES {
+    if size > MAX_RESULT_STRUCTURED_SCAN_BYTES {
         return omitted(size);
     }
-    bounded_members(value)
+    let kept = bounded_members(value);
+    if json_size(&kept) > MAX_RESULT_STRUCTURED_BYTES {
+        return omitted(size);
+    }
+    kept
 }
 
 /// Keeps the shape, so a pointer into the content still reaches the small
@@ -1034,6 +1041,23 @@ mod tests {
             Some(json!({"structured": {"pages": [
                 {"url": "https://records.example.test/p/1", "body": marker}
             ]}}))
+        );
+
+        let long_body = "x".repeat(MAX_RESULT_STRUCTURED_BYTES);
+        let long_marker = format!("[omitted: {} bytes]", MAX_RESULT_STRUCTURED_BYTES + 2);
+        let (_, details) = details_of(json!({
+            "content": [],
+            "structuredContent": {"id": "row-1", "title": "Q3 plan", "url": "https://records.example.test/rows/1", "body": long_body},
+        }))
+        .await;
+        assert_eq!(
+            details,
+            Some(json!({"structured": {
+                "id": "row-1",
+                "title": "Q3 plan",
+                "url": "https://records.example.test/rows/1",
+                "body": long_marker,
+            }}))
         );
 
         let hits: Vec<Value> = (0..1_000)

@@ -105,9 +105,11 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// The bidi marks, embeddings, overrides and isolates that tool text from MCP
-/// servers is stripped of; the server name is shown right next to that text.
-fn is_bidi_control(c: char) -> bool {
+/// Bidi marks, embeddings, overrides and isolates: any of them can make the
+/// rendered order of a string differ from its logical order. Tool text from MCP
+/// servers is stripped of them and MCP server display names may not contain
+/// them, since the server name is shown right next to that text.
+pub fn is_bidi_control(c: char) -> bool {
     matches!(
         c,
         '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'

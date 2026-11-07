@@ -44,9 +44,10 @@ export const GIST_PHASES = ["ask", "done", "failed"] as const;
 
 /**
  * Where a value comes from, which decides how it looks: text the call wrote,
- * a name an earlier result in the chat gave the value, or an ID shown short.
+ * a name an earlier result in the chat gave the value, the value a field had
+ * in an earlier result, or an ID shown short.
  */
-export type GistValueOrigin = "written" | "resolved" | "id";
+export type GistValueOrigin = "written" | "resolved" | "earlier" | "id";
 
 export interface GistValue {
   text: string;
@@ -54,7 +55,7 @@ export interface GistValue {
   /** The value as the call wrote it, where `text` shows a name or a short ID. */
   written?: string;
   truncated: boolean;
-  /** The array positions a wildcard pointer reached it at, to line up a batch. */
+  /** The positions in the name's arrays it was reached at, to line up a batch. */
   row?: string;
 }
 
@@ -119,22 +120,37 @@ export const shortId = (text: string): string => {
     : text;
 };
 
-const rowOf = (pointer: string, path: string): string | undefined => {
-  const segments = path.split("/");
-  const keys = pointer
-    .split("/")
-    .flatMap((segment, index) =>
-      segment === "*" ? [segments[index] ?? ""] : [],
-    );
-  return keys.length > 0 ? keys.join("/") : undefined;
+/** The name slot's pointer up to its last wildcard: the arrays a batch's rows are in. */
+const rowPrefixOf = (pointer: string | undefined): string[] => {
+  const segments = pointer?.split("/") ?? [];
+  return segments.slice(0, segments.lastIndexOf("*") + 1);
+};
+
+// A value lines up with a name only under all of the name's arrays: an index
+// into another array, or into the outer one alone, counts something else.
+const rowOf = (
+  pointer: string,
+  path: string,
+  rowPrefix: readonly string[],
+): string | undefined => {
+  if (rowPrefix.length === 0) return undefined;
+  const segments = pointer.split("/");
+  if (rowPrefix.some((segment, index) => segments[index] !== segment)) {
+    return undefined;
+  }
+  const keys = path.split("/");
+  return rowPrefix
+    .flatMap((segment, index) => (segment === "*" ? [keys[index] ?? ""] : []))
+    .join("/");
 };
 
 const gistValue = (
   slot: ToolCallLabelSlot,
   value: ToolCallLabelValue,
   identifies: Identifies,
+  rowPrefix: readonly string[],
 ): GistValue => {
-  const row = rowOf(slot.pointer, value.path);
+  const row = rowOf(slot.pointer, value.path, rowPrefix);
   const truncated = value.truncated === true;
   if (value.resolved) {
     return {
@@ -163,11 +179,12 @@ const gistValue = (
 const valuesOf = (
   slot: ToolCallLabelSlot | undefined,
   identifies: Identifies,
+  rowPrefix: readonly string[],
 ): GistValue[] =>
   slot
     ? (slot.values ?? [])
         .filter((value) => value.text.length > 0)
-        .map((value) => gistValue(slot, value, identifies))
+        .map((value) => gistValue(slot, value, identifies, rowPrefix))
     : [];
 
 const WORKSPACE_VALUES = new Set([
@@ -239,16 +256,22 @@ const gistWarningsOf = (items: GistItem[], input: unknown): GistWarning[] => {
 const gistField = (
   slot: ToolCallLabelSlot,
   action: GistAction,
+  rowPrefix: readonly string[],
 ): GistField | undefined => {
   const values = (slot.values ?? [])
     .filter((value) => value.text.length > 0)
     .map((value) => ({
-      value: gistValue(slot, { ...value, resolved: undefined }, "maybe"),
+      value: gistValue(
+        slot,
+        { ...value, resolved: undefined },
+        "maybe",
+        rowPrefix,
+      ),
       earlier:
         action === "update" && value.resolved
           ? {
               text: value.resolved,
-              origin: "resolved" as const,
+              origin: "earlier" as const,
               truncated: false,
             }
           : undefined,
@@ -266,18 +289,21 @@ const gistItem = (
   item: ToolCallLabelItem,
   action: GistAction,
 ): GistItem | undefined => {
-  const titles = valuesOf(item.title, "never");
-  const nameSlot = titles.length > 0 ? item.title : item.id;
-  const names = titles.length > 0 ? titles : valuesOf(item.id, "always");
+  const hasTitle = (item.title?.values ?? []).some(
+    (value) => value.text.length > 0,
+  );
+  const nameSlot = hasTitle ? item.title : item.id;
+  const rowPrefix = rowPrefixOf(nameSlot?.pointer);
+  const names = valuesOf(nameSlot, hasTitle ? "never" : "always", rowPrefix);
   const gist: GistItem = {
     names,
     count: Math.max(names.length + (nameSlot?.omitted ?? 0), 1),
-    where: valuesOf(item.target, "maybe"),
+    where: valuesOf(item.target, "maybe", rowPrefix),
     whereOmitted: item.target?.omitted ?? 0,
-    before: valuesOf(item.before, "maybe"),
-    after: valuesOf(item.after, "never"),
+    before: valuesOf(item.before, "maybe", rowPrefix),
+    after: valuesOf(item.after, "never", rowPrefix),
     fields: (item.fields ?? []).flatMap((slot) => {
-      const field = gistField(slot, action);
+      const field = gistField(slot, action, rowPrefix);
       return field ? [field] : [];
     }),
   };
