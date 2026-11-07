@@ -101,6 +101,7 @@ async fn process_message(
     // verified at the route, and the sender is known by Entra object id.
     if let Some(tips_on) = nudge::reminders_command(&text) {
         if let Some(user) = known_user(bot, host, activity, target).await? {
+            remember_client_locale(host, user.id, activity).await;
             host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
             target.send_text(&reminders_text(bot, tips_on)).await?;
         }
@@ -110,6 +111,7 @@ async fn process_message(
     let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
         return Ok(());
     };
+    remember_client_locale(host, user.session.user_id(), activity).await;
     let (conversation_id, service_url, from_id) = routing(activity)?;
     let row = host
         .upsert_conversation(
@@ -1305,6 +1307,9 @@ pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activ
     {
         tracing::warn!(%error, "Could not record the personal Teams conversation on install");
     }
+    if let Some(user) = &known_user {
+        remember_client_locale(&host, user.id, &activity).await;
+    }
     let settings = &bot.settings;
     let card = cards::welcome_card(
         &settings.app_name,
@@ -1315,6 +1320,16 @@ pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activ
     let summary = format!("Hi, I'm {}.", settings.app_name);
     if let Err(error) = target.send(&render::card_message(card, &summary)).await {
         tracing::warn!(%error, "Could not send the Teams welcome message");
+    }
+}
+
+/// Best effort: a failed write must not cost the user their answer.
+async fn remember_client_locale(host: &Host, user_id: Uuid, activity: &Activity) {
+    if let Err(error) = host
+        .record_client_locale(user_id, &activity.client_locale())
+        .await
+    {
+        tracing::warn!(%error, "Could not store the Teams client's time zone and language");
     }
 }
 

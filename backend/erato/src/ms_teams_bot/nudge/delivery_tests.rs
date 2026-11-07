@@ -407,3 +407,38 @@ async fn opting_out_needs_no_sign_in(pool: sqlx::PgPool) {
         "This button was already used or has expired."
     );
 }
+
+/// The zone and language Teams reports with a message are kept for the
+/// sender, also on a command that needs no sign-in.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_teams_client_zone_and_language_are_stored(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "zoned", None)
+        .await
+        .unwrap();
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000beef";
+    record_entra_object_id(&state.db, &user, OID).await.unwrap();
+    let activity: Activity = serde_json::from_value(json!({
+        "type": "message", "id": "m1", "serviceUrl": base, "text": "/reminders off",
+        "locale": "en-US",
+        "from": {"id": "29:user", "aadObjectId": OID}, "recipient": {"id": "28:bot"},
+        "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"},
+        "entities": [{"type": "clientInfo", "locale": "de-DE", "country": "DE",
+                      "platform": "Windows", "timezone": "Europe/Berlin"}]
+    }))
+    .unwrap();
+
+    on_message(bot.clone(), host.clone(), activity).await;
+    replies(&shared, 1).await;
+
+    let prefs = crate::models::user_preference::get_user_preferences(&state.db, &user.id)
+        .await
+        .unwrap()
+        .expect("preferences row");
+    assert_eq!(prefs.time_zone.as_deref(), Some("Europe/Berlin"));
+    assert_eq!(prefs.language.as_deref(), Some("de-DE"));
+}

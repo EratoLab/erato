@@ -43,7 +43,17 @@ pub struct Activity {
     #[serde(default)]
     pub locale: Option<String>,
     #[serde(default)]
+    pub local_timezone: Option<String>,
+    #[serde(default)]
     pub members_added: Vec<ChannelAccount>,
+}
+
+/// The sender's client settings as Teams reports them; the zone is an IANA
+/// name, the locale a BCP 47 tag.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClientLocale {
+    pub time_zone: Option<String>,
+    pub locale: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -158,6 +168,34 @@ impl Activity {
                     .as_ref()
                     .and_then(|conversation| conversation.tenant_id.as_deref())
             })
+    }
+
+    /// From the `clientInfo` entity Teams adds to activities a user sends,
+    /// falling back to the activity's own `localTimezone` and `locale`.
+    pub fn client_locale(&self) -> ClientLocale {
+        let client_info = self
+            .entities
+            .iter()
+            .find(|entity| entity.get("type").and_then(Value::as_str) == Some("clientInfo"));
+        let field = |name: &str| {
+            client_info
+                .and_then(|info| info.get(name))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        let fallback = |value: &Option<String>| {
+            value
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        ClientLocale {
+            time_zone: field("timezone").or_else(|| fallback(&self.local_timezone)),
+            locale: field("locale").or_else(|| fallback(&self.locale)),
+        }
     }
 
     pub fn from_aad_object_id(&self) -> Option<&str> {
@@ -323,6 +361,44 @@ mod tests {
 
     fn parse(value: Value) -> Activity {
         serde_json::from_value(value).expect("activity parses")
+    }
+
+    #[test]
+    fn reads_the_client_zone_and_locale_with_fallbacks() {
+        let activity = parse(json!({
+            "type": "message",
+            "locale": "en-US",
+            "localTimezone": "America/New_York",
+            "entities": [
+                {"type": "mention", "text": "<at>Erato</at>"},
+                {"type": "clientInfo", "locale": "de-DE", "country": "DE",
+                 "platform": "Web", "timezone": "Europe/Berlin"}
+            ]
+        }));
+        assert_eq!(
+            activity.client_locale(),
+            ClientLocale {
+                time_zone: Some("Europe/Berlin".into()),
+                locale: Some("de-DE".into()),
+            }
+        );
+        let without_client_info = parse(json!({
+            "type": "message",
+            "locale": "en-US",
+            "localTimezone": "America/New_York",
+            "entities": [{"type": "clientInfo", "timezone": " "}]
+        }));
+        assert_eq!(
+            without_client_info.client_locale(),
+            ClientLocale {
+                time_zone: Some("America/New_York".into()),
+                locale: Some("en-US".into()),
+            }
+        );
+        assert_eq!(
+            parse(json!({"type": "message"})).client_locale(),
+            ClientLocale::default()
+        );
     }
 
     #[test]

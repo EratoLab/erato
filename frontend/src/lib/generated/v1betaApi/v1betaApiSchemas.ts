@@ -4369,6 +4369,12 @@ export type UpdateProfilePreferencesRequest = {
    */
   preference_job_title?: string | null | undefined;
   /**
+   * The client's UI language as a BCP 47 tag, reported like the time zone.
+   *
+   * @example de
+   */
+  preference_language?: string;
+  /**
    * Preferred name to address the user with.
    */
   preference_nickname?: string | null | undefined;
@@ -4391,6 +4397,15 @@ export type UpdateProfilePreferencesRequest = {
    * returns to inheriting any audience pin.
    */
   preference_starting_hub_assistant_id?: string | null | undefined;
+  /**
+   * The client's IANA time zone (the browser's
+   * `Intl.DateTimeFormat().resolvedOptions().timeZone`). Clients report it
+   * when it differs from the profile's `preference_time_zone`; anything
+   * that is not an IANA zone name is rejected with 422.
+   *
+   * @example Europe/Berlin
+   */
+  preference_time_zone?: string;
 };
 
 export type UsageBucket = {
@@ -4466,6 +4481,11 @@ export type UserProfile = {
    */
   preference_job_title?: string;
   /**
+   * The language (BCP 47) the user's client last reported, used for
+   * messages Erato sends later, such as reminders.
+   */
+  preference_language?: string;
+  /**
    * Preferred name to address the user with.
    */
   preference_nickname?: string;
@@ -4488,6 +4508,12 @@ export type UserProfile = {
    * resolved per request by `GET /me/starting-assistant`.
    */
   preference_starting_hub_assistant_id?: string;
+  /**
+   * The IANA time zone the user's client last reported (web app or
+   * Teams). Local times the user enters, such as a reminder's date and
+   * time, are resolved in it.
+   */
+  preference_time_zone?: string;
   /**
    * The user's preferred language.
    *
