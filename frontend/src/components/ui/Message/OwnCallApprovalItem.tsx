@@ -1,10 +1,7 @@
 import { t } from "@lingui/core/macro";
 
-import { ToolCallInput } from "@/components/ui/ToolCall";
-
-import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
-import { ApprovalToolHeading } from "./ApprovalToolHeading";
+import { ApprovalReferent, ApprovalTechnicalDetails } from "./ApprovalReferent";
 
 import type { ActionConfirmationStatus } from "./ActionConfirmationCard";
 import type {
@@ -13,8 +10,8 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
- * The turn's own gated call: the tool, where it runs and its input above the
- * consent card. Rendered as the whole card for a single call, and as one item
+ * The turn's own gated call: what it does, or the tool and its input, above
+ * the consent card. Rendered as the whole card for a single call, and as one item
  * of a queue when the turn's tasks asked in the same batch.
  */
 export const OwnCallApprovalItem = ({
@@ -46,31 +43,13 @@ export const OwnCallApprovalItem = ({
   onDecide: (decision: ToolApprovalDecision) => void;
 }) => (
   <>
-    <ApprovalToolHeading
+    <ApprovalReferent
       toolName={toolName}
       display={display}
-      icon={
-        isClientTool ? (
-          <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
-        ) : (
-          <ResolvedIcon
-            iconId="simpleicons-modelcontextprotocol"
-            className="size-4 shrink-0 text-theme-fg-secondary"
-          />
-        )
-      }
-      source={
-        isClientTool
-          ? t({
-              id: "clientToolApproval.thisDevice",
-              message: "This device",
-            })
-          : (display?.server_name ?? serverId)
-      }
+      input={input}
+      serverId={serverId}
+      isClientTool={isClientTool}
     />
-    <div className="mt-2 max-h-48 overflow-y-auto">
-      <ToolCallInput input={input} />
-    </div>
     <ActionConfirmationCard
       title={
         isClientTool
@@ -116,6 +95,13 @@ export const OwnCallApprovalItem = ({
       isBusy={isBusy}
       scrollIntoViewOnMount={scrollIntoViewOnMount}
       data-testid="mcp-tool-approval-card"
+    />
+    <ApprovalTechnicalDetails
+      toolName={toolName}
+      display={display}
+      input={input}
+      serverId={serverId}
+      isClientTool={isClientTool}
     />
   </>
 );

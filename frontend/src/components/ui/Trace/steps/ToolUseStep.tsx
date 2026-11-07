@@ -1,11 +1,19 @@
 import { t } from "@lingui/core/macro";
 
-import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
+import {
+  ToolCallGistLine,
+  ToolCallGistValues,
+  ToolCallInput,
+  ToolCallOutput,
+} from "@/components/ui/ToolCall";
 import {
   isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
+import { gistOf } from "@/lib/toolCallGist/gist";
+import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -16,12 +24,82 @@ import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
-import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ToolResultDetails,
+  ToolResultLink,
+  ToolUse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
+import type { CleanText } from "@/lib/toolCallGist/serverText";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
   decision?: ToolDecision;
 }
+
+/** Only a result's resource links may become anchors; the backend keeps https ones. */
+const resultLinkOf = (details: ToolResultDetails | undefined) =>
+  details?.links?.find((link) => link.uri.startsWith("https://"));
+
+const ResultLink = ({
+  link,
+  server,
+}: {
+  link: ToolResultLink;
+  server: string | undefined;
+}) => (
+  <a
+    href={link.uri}
+    target="_blank"
+    rel="noopener noreferrer"
+    title={link.title ?? link.name}
+    className="shrink-0 px-1 text-xs text-theme-fg-accent hover:underline"
+    data-testid="tool-result-link"
+  >
+    {server
+      ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
+      : t({ id: "trace.tool.openLink", message: "Open link" })}
+  </a>
+);
+
+const hasRowValues = (item: GistItem) =>
+  item.fields.length > 0 || item.before.length > 0 || item.count > 1;
+
+/**
+ * What stays visible under a gist row: the key values and old → new of each
+ * item, further items' own lines, and a failed call's message from its server.
+ */
+const GistRowDetails = ({
+  gist,
+  phase,
+  failure,
+}: {
+  gist: Gist;
+  phase: GistPhase;
+  failure: CleanText | undefined;
+}) => (
+  <div className="space-y-1">
+    {gist.items.map((item, index) => (
+      <div key={index} className="space-y-1">
+        {index > 0 && (
+          <p className="text-xs text-theme-fg-secondary">
+            <ToolCallGistLine gist={gist} item={item} phase={phase} />
+          </p>
+        )}
+        {hasRowValues(item) && <ToolCallGistValues item={item} variant="row" />}
+      </div>
+    ))}
+    {failure && (
+      <p
+        dir="auto"
+        className="whitespace-pre-wrap break-words text-xs text-theme-error-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]"
+        data-testid="tool-failure-message"
+      >
+        {failure.truncated ? `${failure.text}…` : failure.text}
+      </p>
+    )}
+  </div>
+);
 
 const PlainToolUseStep = ({
   part,
@@ -35,6 +113,27 @@ const PlainToolUseStep = ({
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
   const toolCallId = part.tool_call_id;
+  // A denied or refused call never ran: its decision row says so.
+  const notRun =
+    decision?.status === "denied" || refusedWithoutDecision(part, decision);
+  const gist = gistOf(part.display?.label);
+  const lead = gist?.items[0];
+  const phase: GistPhase = notRun
+    ? "ask"
+    : part.status === "success"
+      ? "done"
+      : part.status === "error"
+        ? "failed"
+        : "ask";
+  const failure =
+    gist && phase === "failed" ? serverFailureMessage(part.output) : undefined;
+  const showsDetails =
+    gist !== undefined &&
+    (failure !== undefined ||
+      gist.items.length > 1 ||
+      gist.items.some(hasRowValues));
+  const link =
+    part.status === "success" ? resultLinkOf(part.result_details) : undefined;
 
   // The sidecar's on-device steps are the step's body: rows like the main
   // line, each with its own toggle for its own details. This step's toggle
@@ -77,7 +176,16 @@ const PlainToolUseStep = ({
         hasTrailingRailLine={!isLastStep}
         title={
           <>
-            {toolName}
+            {gist && lead ? (
+              <span
+                title={gistPlainLine(gist, lead, phase)}
+                data-testid="tool-call-gist-line"
+              >
+                <ToolCallGistLine gist={gist} item={lead} phase={phase} />
+              </span>
+            ) : (
+              toolName
+            )}
             {part.display?.server_name && (
               <span
                 dir="auto"
@@ -98,9 +206,7 @@ const PlainToolUseStep = ({
           </>
         }
         titleSlot={
-          // A denied or refused call never ran: its decision row says so.
-          decision?.status === "denied" ||
-          refusedWithoutDecision(part, decision) ? undefined : (
+          notRun ? undefined : (
             <ToolStatusPill
               status={status}
               label={
@@ -110,6 +216,14 @@ const PlainToolUseStep = ({
               }
             />
           )
+        }
+        headerSlot={
+          link && <ResultLink link={link} server={part.display?.server_name} />
+        }
+        detailSlot={
+          gist && showsDetails ? (
+            <GistRowDetails gist={gist} phase={phase} failure={failure} />
+          ) : undefined
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}

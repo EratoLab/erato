@@ -34,6 +34,10 @@ vi.mock("@/auth/tokenStore", () => ({
   getIdToken: () => null,
 }));
 
+vi.mock("@/hooks/ui/useThemedIcon", () => ({
+  useThemedIcon: () => "icon-id",
+}));
+
 const archived: { value: boolean | undefined } = { value: false };
 vi.mock("@/hooks/chat/useChatArchived", () => ({
   useChatArchived: () => archived.value,
@@ -2726,5 +2730,364 @@ describe("document and response approvals", () => {
     } finally {
       pane.cleanup();
     }
+  });
+});
+
+describe("gist cards", () => {
+  const DATA_SOURCE_ID = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
+  const createRowInput = {
+    parent: { data_source_id: DATA_SOURCE_ID },
+    pages: [{ properties: { Name: "Northwind", Status: "Lead" } }],
+  };
+  const createRowLabel = {
+    action: "create" as const,
+    object_kind: "row" as const,
+    source: "rules" as const,
+    items: [
+      {
+        title: {
+          pointer: "/pages/*/properties/Name",
+          values: [{ path: "/pages/0/properties/Name", text: "Northwind" }],
+        },
+        target: {
+          pointer: "/parent/data_source_id",
+          values: [
+            {
+              path: "/parent/data_source_id",
+              text: DATA_SOURCE_ID,
+              resolved: "Companies",
+            },
+          ],
+        },
+        fields: [
+          {
+            pointer: "/pages/*/properties/Status",
+            name: "Status",
+            values: [{ path: "/pages/0/properties/Status", text: "Lead" }],
+          },
+        ],
+      },
+    ],
+  };
+  const createRowDisplay = {
+    title: "Create pages",
+    description: "Creates pages in a data source.",
+    description_truncated: false,
+    server_name: "Records",
+    label: createRowLabel,
+  };
+  const gistRequest = {
+    ...approvalRequest,
+    tool_name: "create_pages",
+    mcp_server_id: "records",
+    input: createRowInput,
+    display: createRowDisplay,
+  };
+
+  const openTechnicalDetails = (within: HTMLElement = document.body) =>
+    fireEvent.click(
+      Array.from(within.querySelectorAll("button")).find(
+        (button) => button.textContent === "Technical details",
+      )!,
+    );
+
+  it("reads a labelled call as one line with its key values and keeps the raw call one click away", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={gistRequest}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+
+    const line = screen.getByTestId("tool-call-gist-line");
+    expect(line).toHaveTextContent("Create row Northwind in Companies");
+    const written = line.querySelector('[data-origin="written"]');
+    expect(written?.tagName).toBe("Q");
+    expect(written).toHaveAttribute("dir", "auto");
+    const resolved = line.querySelector('[data-origin="resolved"]');
+    expect(resolved).toHaveTextContent("Companies");
+    expect(resolved).toHaveAttribute(
+      "title",
+      "Name from an earlier result in this chat",
+    );
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Lead")).toBeInTheDocument();
+    expect(screen.getByText("Records")).toBeInTheDocument();
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
+    expect(screen.queryByText("create_pages")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Creates pages in a data source."),
+    ).not.toBeInTheDocument();
+
+    openTechnicalDetails();
+    expect(screen.getByText("create_pages")).toBeInTheDocument();
+    expect(screen.getByText("records")).toBeInTheDocument();
+    expect(
+      screen.getByText("Creates pages in a data source."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText(`"${DATA_SOURCE_ID}"`)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: "create_pages",
+          mcpServerId: "records",
+          toolInput: createRowInput,
+        }),
+      ),
+    );
+  });
+
+  it("shows an ID no earlier result named as a short ID, apart from text as written", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          display: {
+            ...createRowDisplay,
+            label: {
+              ...createRowLabel,
+              items: [
+                {
+                  ...createRowLabel.items[0],
+                  target: {
+                    pointer: "/parent/data_source_id",
+                    values: [
+                      { path: "/parent/data_source_id", text: DATA_SOURCE_ID },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    const id = screen
+      .getByTestId("tool-call-gist-line")
+      .querySelector('[data-origin="id"]');
+    expect(id).toHaveTextContent("9b1d5f2e…");
+    expect(id).toHaveAttribute("title", DATA_SOURCE_ID);
+    expect(id).toHaveClass("font-mono");
+  });
+
+  it("warns when the call shares what it creates with the workspace", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          input: { title: "Hiring", visibility: "workspace" },
+          display: {
+            ...createRowDisplay,
+            label: {
+              action: "create",
+              object_kind: "folder",
+              source: "rules",
+              items: [
+                {
+                  title: {
+                    pointer: "/title",
+                    values: [{ path: "/title", text: "Hiring" }],
+                  },
+                  fields: [
+                    {
+                      pointer: "/visibility",
+                      name: "visibility",
+                      values: [{ path: "/visibility", text: "workspace" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Create folder Hiring",
+    );
+    expect(
+      screen.getByText(
+        "Shared with your workspace: everyone in it can see this.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a generic label's arguments as names and values, as inert text", () => {
+    const input = {
+      channel: "release",
+      "a/b": "escaped name",
+      hasUserApproved: true,
+      note: "[notes](https://example.com) <b>raw</b>\u202E",
+    };
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...approvalRequest,
+          input,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+            label: {
+              action: "other",
+              object_kind: "other",
+              source: "generic",
+              arguments: {
+                path: "",
+                kind: "group",
+                children: [
+                  { path: "/channel", kind: "value" },
+                  { path: "/a~1b", kind: "value" },
+                  { path: "/hasUserApproved", kind: "value" },
+                  { path: "/note", kind: "value" },
+                ],
+                omitted: 2,
+              },
+              warnings: ["arguments_truncated"],
+            },
+          },
+        }}
+      />,
+    );
+
+    const view = screen.getByTestId("tool-argument-view");
+    expect(view).toHaveTextContent("channel");
+    expect(view).toHaveTextContent("release");
+    expect(view).toHaveTextContent("a/b");
+    expect(view).not.toHaveTextContent("hasUserApproved");
+    expect(view).toHaveTextContent("2 more not shown");
+    const note = screen.getByText("[notes](https://example.com) <b>raw</b>");
+    expect(note).toHaveAttribute("dir", "auto");
+    expect(
+      screen.queryByRole("link", { name: "notes" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Publish approval demo")).toBeInTheDocument();
+    expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
+    expect(screen.getByText("Approval Probe")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Some arguments are not shown here. Technical details has all of them.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
+
+    openTechnicalDetails();
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText("hasUserApproved")).toBeInTheDocument();
+  });
+
+  it("renders a request saved before labels exactly as before", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...approvalRequest,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+          },
+        }}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText(/"release"/)).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("approval-technical-details"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reads a parked child's labelled call as its gist under the task", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...delegatedTaskRequest,
+          approvals: [
+            {
+              ...delegatedTaskRequest.approvals[0],
+              child: {
+                ...childApprovalRef,
+                tool_name: "create_pages",
+                mcp_server_id: "records",
+                input: createRowInput,
+                display: createRowDisplay,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const item = screen.getByTestId("delegated-task-approval-item");
+    expect(item).toHaveTextContent("Summarize the release notes");
+    expect(
+      item.querySelector('[data-testid="tool-call-gist-line"]'),
+    ).toHaveTextContent("Create row Northwind in Companies");
+    expect(item).not.toHaveTextContent("Input Parameters");
+    openTechnicalDetails(item);
+    expect(item).toHaveTextContent("create_pages");
+    expect(item).toHaveTextContent("Input Parameters");
+  });
+
+  it("reads the turn's own call in a queue by the label on its item", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          kind: "mcp_tool" as const,
+          requested_at: "2026-08-06T00:00:00Z",
+          approvals: [
+            {
+              approval_id: "tool-call-1",
+              tool_call_id: "tool-call-1",
+              tool_name: "create_pages",
+              input: createRowInput,
+              display: createRowDisplay,
+              child: null,
+            },
+            {
+              approval_id: "task-a",
+              tool_call_id: "task-a",
+              tool_name: "delegate_task",
+              input: { task: "Summarize the release notes" },
+              child: {
+                ...childApprovalRef,
+                requested_at: "2026-08-06T00:00:09Z",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const item = screen.getByTestId("mcp-tool-approval-item");
+    expect(item).toHaveAttribute("data-tool-name", "create_pages");
+    expect(
+      item.querySelector('[data-testid="tool-call-gist-line"]'),
+    ).toHaveTextContent("Create row Northwind in Companies");
   });
 });

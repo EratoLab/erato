@@ -1,0 +1,356 @@
+import { plural, t } from "@lingui/core/macro";
+import clsx from "clsx";
+import { Fragment } from "react";
+
+import { Alert } from "@/components/ui/Feedback/Alert";
+import {
+  GIST_SLOTS,
+  GIST_TITLE_SLOT,
+  GIST_WHERE_SLOT,
+  gistLineSentence,
+  gistWarningLabel,
+} from "@/lib/toolCallGist/gistLabels";
+
+import type {
+  Gist,
+  GistField,
+  GistItem,
+  GistPhase,
+  GistValue,
+} from "@/lib/toolCallGist/gist";
+
+/** Names a line or a value cell shows before it counts the rest. */
+const MAX_LISTED_VALUES = 3;
+
+const ISOLATED = "[unicode-bidi:isolate]";
+
+/**
+ * One value as inert, direction-isolated text that shows where it came from:
+ * quoted as the call wrote it, underlined when an earlier result named it,
+ * monospace when it is an ID.
+ */
+export const GistValueText = ({ value }: { value: GistValue }) => {
+  const text = value.truncated ? `${value.text}…` : value.text;
+  switch (value.origin) {
+    case "written":
+      return (
+        <q dir="auto" data-origin="written" className={ISOLATED}>
+          {text}
+        </q>
+      );
+    case "resolved":
+      return (
+        <span
+          dir="auto"
+          data-origin="resolved"
+          title={t({
+            id: "toolGist.value.resolved",
+            message: "Name from an earlier result in this chat",
+          })}
+          className={clsx(
+            "underline decoration-dotted underline-offset-2",
+            ISOLATED,
+          )}
+        >
+          {text}
+        </span>
+      );
+    case "id":
+      return (
+        <span
+          dir="auto"
+          data-origin="id"
+          title={value.written}
+          className={clsx("font-mono text-[0.9em]", ISOLATED)}
+        >
+          {text}
+        </span>
+      );
+  }
+};
+
+const moreLabel = (more: number) =>
+  t({
+    id: "toolGist.more",
+    message: plural(more, { one: "+# more", other: "+# more" }),
+  });
+
+const GistValueList = ({
+  values,
+  omitted = 0,
+}: {
+  values: GistValue[];
+  omitted?: number;
+}) => {
+  const shown = values.slice(0, MAX_LISTED_VALUES);
+  const more = values.length - shown.length + omitted;
+  return (
+    <>
+      {shown.map((value, index) => (
+        <Fragment key={index}>
+          {index > 0 && ", "}
+          <GistValueText value={value} />
+        </Fragment>
+      ))}
+      {more > 0 && (
+        <span className="text-theme-fg-muted"> {moreLabel(more)}</span>
+      )}
+    </>
+  );
+};
+
+/** What one item does to what, and where, as one sentence. */
+export const ToolCallGistLine = ({
+  gist,
+  item,
+  phase,
+}: {
+  gist: Gist;
+  item: GistItem;
+  phase: GistPhase;
+}) => (
+  <>
+    {gistLineSentence(gist, item, phase)
+      .split(GIST_SLOTS)
+      .map((part, index) =>
+        part === GIST_TITLE_SLOT ? (
+          <GistValueList key={index} values={item.names} />
+        ) : part === GIST_WHERE_SLOT ? (
+          <GistValueList
+            key={index}
+            values={item.where}
+            omitted={item.whereOmitted}
+          />
+        ) : (
+          <Fragment key={index}>{part}</Fragment>
+        ),
+      )}
+  </>
+);
+
+const FieldValues = ({
+  values,
+  omitted = 0,
+}: {
+  values: GistField["values"];
+  omitted?: number;
+}) => {
+  const shown = values.slice(0, MAX_LISTED_VALUES);
+  const more = values.length - shown.length + omitted;
+  return (
+    <>
+      {shown.map(({ value, earlier }, index) => (
+        <Fragment key={index}>
+          {index > 0 && ", "}
+          {earlier && (
+            <>
+              <span data-testid="tool-call-gist-earlier">
+                <GistValueText value={earlier} />
+              </span>
+              <span aria-hidden="true" className="px-1 text-theme-fg-muted">
+                →
+              </span>
+              <span className="sr-only">
+                {t({ id: "toolGist.changesTo", message: "changes to" })}
+              </span>
+            </>
+          )}
+          <GistValueText value={value} />
+        </Fragment>
+      ))}
+      {more > 0 && (
+        <span className="text-theme-fg-muted"> {moreLabel(more)}</span>
+      )}
+    </>
+  );
+};
+
+const FieldList = ({ fields }: { fields: GistField[] }) =>
+  fields.length === 0 ? null : (
+    <dl className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
+      {fields.map((field) => (
+        <Fragment key={field.pointer}>
+          <dt
+            dir="auto"
+            className={clsx("break-words text-theme-fg-muted", ISOLATED)}
+          >
+            {field.name}
+          </dt>
+          <dd className="min-w-0 break-words text-theme-fg-primary [overflow-wrap:anywhere]">
+            <FieldValues values={field.values} omitted={field.omitted} />
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+
+/** A batch's things, one per row, each with the fields read at its position. */
+const BatchRows = ({
+  item,
+  fields,
+}: {
+  item: GistItem;
+  fields: GistField[];
+}) => (
+  <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
+    {item.names.map((name, index) => {
+      const rowFields = fields.flatMap((field) => {
+        const values = field.values.filter(
+          ({ value }) => value.row === name.row,
+        );
+        return values.length > 0 ? [{ ...field, values, omitted: 0 }] : [];
+      });
+      return (
+        <li
+          key={name.row ?? index}
+          className="min-w-0 break-words [overflow-wrap:anywhere]"
+        >
+          <span className="text-sm text-theme-fg-primary">
+            <GistValueText value={name} />
+          </span>
+          {rowFields.length > 0 && (
+            <div className="mt-0.5 pl-3">
+              <FieldList fields={rowFields} />
+            </div>
+          )}
+        </li>
+      );
+    })}
+    {item.count > item.names.length && (
+      <li className="text-theme-fg-muted">
+        {moreLabel(item.count - item.names.length)}
+      </li>
+    )}
+  </ul>
+);
+
+const TextBlock = ({
+  values,
+  className,
+}: {
+  values: GistValue[];
+  className?: string;
+}) => (
+  <>
+    {values.map((value, index) => (
+      <p
+        key={index}
+        dir="auto"
+        className={clsx(
+          "max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-xs [overflow-wrap:anywhere]",
+          ISOLATED,
+          className,
+        )}
+      >
+        {value.truncated ? `${value.text}…` : value.text}
+      </p>
+    ))}
+  </>
+);
+
+const TextChange = ({ item }: { item: GistItem }) => {
+  if (item.before.length === 0 && item.after.length === 0) return null;
+  return (
+    <div className="space-y-1" data-testid="tool-call-gist-text">
+      <p className="text-xs text-theme-fg-muted">
+        {item.before.length > 0
+          ? t({ id: "toolGist.textChange", message: "Text change" })
+          : t({ id: "toolGist.content", message: "Content" })}
+      </p>
+      {item.before.length > 0 && (
+        <TextBlock
+          values={item.before}
+          className="text-theme-fg-muted line-through"
+        />
+      )}
+      <TextBlock values={item.after} className="text-theme-fg-primary" />
+    </div>
+  );
+};
+
+const textChangeCount = (item: GistItem) =>
+  item.before.length > 0 ? Math.max(item.before.length, item.after.length) : 0;
+
+/**
+ * The values under an item's line: its key values with old → new where an
+ * earlier result had the old one, a batch row by row, and on a card the text
+ * it writes. A trace row counts text changes instead of repeating them.
+ */
+export const ToolCallGistValues = ({
+  item,
+  variant,
+}: {
+  item: GistItem;
+  variant: "card" | "row";
+}) => {
+  const isBatch =
+    item.count > 1 && item.names.some((name) => name.row !== undefined);
+  const rowed = isBatch
+    ? item.fields.filter((field) =>
+        field.values.some(({ value }) => value.row !== undefined),
+      )
+    : [];
+  const shared = item.fields.filter((field) => !rowed.includes(field));
+  const changes = textChangeCount(item);
+  return (
+    <div className="space-y-2" data-testid="tool-call-gist-values">
+      {isBatch && <BatchRows item={item} fields={rowed} />}
+      <FieldList fields={shared} />
+      {variant === "card" ? (
+        <TextChange item={item} />
+      ) : (
+        changes > 0 && (
+          <p className="text-xs text-theme-fg-muted">
+            {t({
+              id: "toolGist.textChanges",
+              message: plural(changes, {
+                one: "# text change",
+                other: "# text changes",
+              }),
+            })}
+          </p>
+        )
+      )}
+    </div>
+  );
+};
+
+/**
+ * The gist a card shows before approval: each item's line and values, and
+ * the warnings its known fields call for.
+ */
+export const ToolCallGist = ({
+  gist,
+  phase,
+}: {
+  gist: Gist;
+  phase: GistPhase;
+}) => {
+  const warnings = [
+    ...new Set(
+      gist.items.flatMap((item) =>
+        item.fields.flatMap((field) => (field.warning ? [field.warning] : [])),
+      ),
+    ),
+  ];
+  return (
+    <div className="space-y-2" data-testid="tool-call-gist">
+      {gist.items.map((item, index) => (
+        <div key={index} className="space-y-1">
+          <p
+            className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+            data-testid="tool-call-gist-line"
+          >
+            <ToolCallGistLine gist={gist} item={item} phase={phase} />
+          </p>
+          <ToolCallGistValues item={item} variant="card" />
+        </div>
+      ))}
+      {warnings.map((warning) => (
+        <Alert key={warning} type="warning" role="none">
+          {gistWarningLabel(warning)}
+        </Alert>
+      ))}
+    </div>
+  );
+};

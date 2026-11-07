@@ -314,3 +314,157 @@ describe("ToolUseStep decision row", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("ToolUseStep gist row", () => {
+  const RECORD_ID = "7a2c9e10-5f6b-4d3e-8c7a-1b2c3d4e5f60";
+  const updateLabel = {
+    action: "update" as const,
+    object_kind: "page" as const,
+    source: "rules" as const,
+    items: [
+      {
+        id: {
+          pointer: "/page_id",
+          values: [
+            { path: "/page_id", text: RECORD_ID, resolved: "Northwind" },
+          ],
+        },
+        fields: [
+          {
+            pointer: "/properties/Status",
+            name: "Status",
+            values: [
+              {
+                path: "/properties/Status",
+                text: "Customer",
+                resolved: "Lead",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const labelled = (
+    overrides: Partial<ToolUse>,
+    status: "done" | "error" = "done",
+    decision?: ToolDecision,
+  ) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-update",
+          tool_name: "update_page",
+          status: status === "error" ? "error" : "success",
+          input: {
+            page_id: RECORD_ID,
+            properties: { Status: "Customer" },
+          } as unknown as ToolUse["input"],
+          output: { ok: true } as unknown as ToolUse["output"],
+          display: {
+            title: "Update page",
+            description_truncated: false,
+            server_name: "Records",
+            label: updateLabel,
+          },
+          ...overrides,
+        }}
+        status={status}
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+        decision={decision}
+      />,
+    );
+  const toggle = () => screen.getByRole("button", { name: /Northwind/ });
+
+  it("says what the run did, with old → new visible while the details are folded", () => {
+    labelled({});
+
+    expect(toggle()).toHaveTextContent("Updated page Northwind");
+    expect(toggle()).toHaveTextContent("Records");
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveAttribute(
+      "title",
+      "Updated page Northwind",
+    );
+    const values = screen.getByTestId("tool-call-gist-values");
+    expect(isFolded(values)).toBe(false);
+    expect(values).toHaveTextContent("Status");
+    expect(screen.getByTestId("tool-call-gist-earlier")).toHaveTextContent(
+      "Lead",
+    );
+    expect(values).toHaveTextContent("Customer");
+    expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(true);
+  });
+
+  it("says a failed run could not, with the server's own message", () => {
+    labelled(
+      {
+        output:
+          "The page changed since it was read.\u202E" as unknown as ToolUse["output"],
+      },
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+
+    expect(toggle()).toHaveTextContent("Could not update page Northwind");
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    const message = screen.getByTestId("tool-failure-message");
+    expect(message).toHaveTextContent("The page changed since it was read.");
+    expect(message.textContent).not.toContain("\u202E");
+    expect(message).toHaveAttribute("dir", "auto");
+    expect(isFolded(message)).toBe(false);
+  });
+
+  it("keeps the asked line on a call that never ran", () => {
+    labelled(
+      { output: { status: "rejected" } as unknown as ToolUse["output"] },
+      "error",
+      { status: "denied", neverAllow: false, withdrawn: false },
+    );
+
+    expect(toggle()).toHaveTextContent("Update page Northwind");
+    expect(screen.queryByTestId("tool-failure-message")).toBeNull();
+  });
+
+  it("links the result outside the toggle, and never a resource URI", () => {
+    labelled({
+      result_details: {
+        links: [
+          {
+            uri: "https://records.example/pages/northwind",
+            title: "Northwind",
+          },
+        ],
+        resources: [{ uri: "https://records.example/raw", text: "{}" }],
+      },
+    });
+
+    const link = screen.getByRole("link", { name: "Open in Records" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://records.example/pages/northwind",
+    );
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(toggle()).not.toContainElement(link);
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+  });
+
+  it("shows a generic label's call by its tool name, as before", () => {
+    labelled({
+      display: {
+        title: "Update page",
+        description_truncated: false,
+        server_name: "Records",
+        label: { action: "other", object_kind: "other", source: "generic" },
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: /update_page/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-gist-line")).toBeNull();
+    expect(screen.queryByTestId("tool-call-gist-values")).toBeNull();
+  });
+});
