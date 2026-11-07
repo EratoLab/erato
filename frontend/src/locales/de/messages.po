@@ -8122,6 +8122,11 @@ msgstr "Budget für Tool-Aufrufe"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr "Sie haben das erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "Sie haben das für dieses Dokument erlaubt"
 

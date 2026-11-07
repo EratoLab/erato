@@ -2131,6 +2131,43 @@ describe("decisions in the trace", () => {
 
     expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(text);
   });
+
+  it("keeps a decision recorded under the id __proto__ to that id", () => {
+    const refused = (id: string) =>
+      ({
+        ...(toolUseContent({}) as unknown as Record<string, unknown>),
+        tool_call_id: id,
+        tool_name: "create_record",
+        status: "error",
+        output: { status: "rejected" },
+      }) as unknown as ContentPart;
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          {
+            content_type: "tool_rejection",
+            tool_call_id: "__proto__",
+            never_allow: true,
+            rejected_at: "2026-11-07T00:00:00Z",
+          } as unknown as ContentPart,
+          refused("status"),
+          {
+            content_type: "tool_approval",
+            tool_call_id: "call-x",
+            always_allow: false,
+            approved_at: "2026-11-07T00:00:00Z",
+          } as unknown as ContentPart,
+          call,
+          ...textContent("Done."),
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getAllByTestId("tool-decision-row").map((row) => row.textContent),
+    ).toEqual(["Not run", "You allowed this once"]);
+  });
 });
 
 describe("tasks waiting in their own chat", () => {

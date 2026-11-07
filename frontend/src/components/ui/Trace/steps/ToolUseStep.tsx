@@ -102,6 +102,18 @@ const GistRowDetails = ({
   </div>
 );
 
+// The server's cap; rows and events from other writers get it here.
+const MAX_PROGRESS_CHARS = 200;
+
+const progressText = (message: unknown): string | undefined => {
+  if (typeof message !== "string") return undefined;
+  const text = Array.from(message.slice(0, MAX_PROGRESS_CHARS * 2))
+    .slice(0, MAX_PROGRESS_CHARS)
+    .join("")
+    .trim();
+  return text.length > 0 ? text : undefined;
+};
+
 const PlainToolUseStep = ({
   part,
   status,
@@ -135,6 +147,7 @@ const PlainToolUseStep = ({
       gist.items.some(hasRowValues));
   const link =
     part.status === "success" ? resultLinkOf(part.result_details) : undefined;
+  const progress = progressText(part.progress_message);
 
   // The sidecar's on-device steps are the step's body: rows like the main
   // line, each with its own toggle for its own details. This step's toggle
@@ -208,13 +221,13 @@ const PlainToolUseStep = ({
                 {part.display.server_name}
               </span>
             )}
-            {part.progress_message && (
+            {progress && (
               <span
                 dir="auto"
                 className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
-                title={part.progress_message}
+                title={progress}
               >
-                {part.progress_message}
+                {progress}
               </span>
             )}
           </>
