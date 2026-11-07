@@ -1630,7 +1630,7 @@ export type ContentPartToolRejection = {
    * Why the call was rejected when the user did not decide it directly.
    * The only value is `withdrawn`.
    */
-  reason?: null | undefined;
+  reason?: string | null | undefined;
   rejected_at: string;
   tool_call_id: string;
   /**
@@ -2472,13 +2472,13 @@ export type LastDelivery = {
   /**
    * @format date-time
    */
-  delivered_at?: null | undefined;
+  delivered_at?: string | null | undefined;
   due: OccurrenceTime;
   outcome: LastDeliveryOutcome;
   /**
    * Why it failed or was not sent.
    */
-  reason?: null | undefined;
+  reason?: string | null | undefined;
 };
 
 export type LastDeliveryOutcome = "delivered" | "failed" | "cancelled";
@@ -3718,7 +3718,7 @@ export type ScheduledItem = {
    *
    * @format date-time
    */
-  acknowledged_at?: null | undefined;
+  acknowledged_at?: string | null | undefined;
   channel: string;
   channel_status: DeliveryChannelStatus;
   /**
@@ -3798,7 +3798,7 @@ export type ScheduledItemRequest = {
    *
    * @format uuid
    */
-  linked_chat_id?: null | undefined;
+  linked_chat_id?: string | null | undefined;
   message: string;
   name: string;
   trigger: Trigger;
