@@ -60,6 +60,17 @@ pub fn mcp_tool_call_display(
     }
 }
 
+/// What a parent chat keeps of the display a delegated child's call carries:
+/// the label's pointers and values as written, without the names and old
+/// values the child chat's results gave them.
+pub fn child_approval_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
+    let mut display = display.clone();
+    if let Some(label) = display.label.as_mut() {
+        label::context::forget_resolved(label);
+    }
+    display
+}
+
 /// What a tool row and its live updates keep of a call's display. Only
 /// approval cards show the description, and a row would repeat it per call.
 pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
@@ -250,5 +261,67 @@ mod tests {
         );
         tool.description = Some("\u{202E}".into());
         assert_eq!(tool_display_metadata(&tool).description, None);
+    }
+
+    #[test]
+    fn a_childs_display_reaches_the_parent_with_its_values_as_written_only() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use label::{ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label};
+        let arguments = serde_json::json!({
+            "title": "Plan", "id": "rec-1", "parent": "p1", "from": "a", "to": "b", "status": "done",
+        });
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/title".into()),
+                id: Some("/id".into()),
+                target: Some("/parent".into()),
+                before: Some("/from".into()),
+                after: Some("/to".into()),
+                fields: vec!["/status".into()],
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        let item = &mut resolved.items[0];
+        let mut set = 0;
+        for slot in [
+            &mut item.title,
+            &mut item.id,
+            &mut item.target,
+            &mut item.before,
+            &mut item.after,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(&mut item.fields)
+        {
+            for value in &mut slot.values {
+                value.resolved = Some("From the child's results".into());
+                set += 1;
+            }
+        }
+        assert_eq!(set, 6);
+        let child = ToolDisplayMetadata {
+            title: "Update record".into(),
+            description: Some("Updates a record.".into()),
+            description_truncated: false,
+            server_name: Some("Dynamics 365".into()),
+            label: Some(resolved),
+        };
+        assert_eq!(
+            child_approval_display(&child),
+            ToolDisplayMetadata {
+                label: Some(written),
+                ..child.clone()
+            }
+        );
+        let unlabelled = ToolDisplayMetadata {
+            label: None,
+            ..child
+        };
+        assert_eq!(child_approval_display(&unlabelled), unlabelled);
     }
 }

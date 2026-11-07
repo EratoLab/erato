@@ -166,13 +166,20 @@ impl<'a, F: FnMut(Option<&str>, &'a Value) -> ControlFlow<()>> Walk<'_, F> {
 /// The last segment of `pointer` that names a member, unescaped: what a field
 /// is called on the card.
 pub fn last_name(pointer: &str) -> Option<Cow<'_, str>> {
-    member_names(pointer).pop()
+    pointer
+        .strip_prefix('/')?
+        .rsplit('/')
+        .find(|token| *token != "*" && array_index(token).is_none())
+        .map(unescape)
 }
 
-/// The segments of `pointer` that name members, unescaped, in order.
-pub fn member_names(pointer: &str) -> Vec<Cow<'_, str>> {
-    pointer
-        .strip_prefix('/')
+/// The segments of a value's path that name members, unescaped, in order;
+/// none for a path longer than [`MAX_PATH_BYTES`], which no value has.
+pub fn member_names(path: &str) -> Vec<Cow<'_, str>> {
+    if path.len() > MAX_PATH_BYTES {
+        return Vec::new();
+    }
+    path.strip_prefix('/')
         .map(|tokens| {
             tokens
                 .split('/')
@@ -357,5 +364,7 @@ mod tests {
             member_names("/item/a~1b/*/recordId/0"),
             ["item", "a/b", "recordId"]
         );
+        assert!(member_names("name").is_empty());
+        assert!(member_names(&"/a".repeat(MAX_PATH_BYTES)).is_empty());
     }
 }

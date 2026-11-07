@@ -5852,7 +5852,9 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 child_message_id: child.child_message_id,
                 child_tool_call_id,
                 tool_name: child_tool_name,
-                display: child_display,
+                display: child_display
+                    .as_ref()
+                    .map(crate::services::tool_display::child_approval_display),
                 mcp_server_id: request.mcp_server_id.clone(),
                 input: child_input,
                 annotations: request.annotations.clone(),
@@ -13554,6 +13556,52 @@ mod tests {
         assert_eq!(legacy.approvals.len(), 2);
         assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
         assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn a_parked_childs_label_reaches_the_parent_without_what_the_child_chat_resolved() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use crate::services::tool_display::label::{
+            ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label,
+        };
+        let arguments = json!({"recordId": "rec-1", "item": {"status": "done"}});
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/item/status".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        resolved.items[0].id.as_mut().unwrap().values[0].resolved =
+            Some("Named by the child's results".into());
+        resolved.items[0].fields[0].values[0].resolved = Some("open".into());
+
+        let mut child = parked_child("task-a", "2026-10-20T10:00:00Z");
+        let crate::services::delegation::ChildStop::Approval(request) = &mut child.stop else {
+            unreachable!()
+        };
+        request.input = arguments;
+        let display = request.display.as_mut().expect("an MCP call's display");
+        display.label = Some(resolved);
+        let child_display = display.clone();
+        for item in &mut request.approvals {
+            item.display = Some(child_display.clone());
+        }
+
+        let item = super::parked_child_approval_item(&child);
+        assert_eq!(
+            item.child.and_then(|child| child.display),
+            Some(crate::models::message::ToolDisplayMetadata {
+                label: Some(written),
+                ..child_display.clone()
+            })
+        );
+        assert_eq!(parked_request(&child).display, Some(child_display));
     }
 
     #[test]

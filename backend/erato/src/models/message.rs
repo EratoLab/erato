@@ -779,6 +779,8 @@ pub struct ChildApprovalRef {
     pub child_message_id: Uuid,
     pub child_tool_call_id: String,
     pub tool_name: String,
+    /// The child call's display. Its label carries no `resolved` values:
+    /// those come from the child chat's results, which stay in that chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<ToolDisplayMetadata>,
     pub mcp_server_id: String,
