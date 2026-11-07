@@ -66,7 +66,8 @@
     "deploy/0064_add_client_operation_claimant.sql",
     "deploy/0065_drop_local_evidence_exports.sql",
     "deploy/0066_add_scheduled_deliveries.sql",
-    "deploy/0067_add_teams_nudge_opt_out.sql"
+    "deploy/0067_add_teams_nudge_opt_out.sql",
+    "deploy/0068_add_user_time_zone_and_language.sql"
   ],
-  "latest_change": "7cf08865520cfd45cfe48f5cf303dff08b7b99c9"
+  "latest_change": "5ff60ec257804037563abe424d8453ee6d8a67bf"
 }
