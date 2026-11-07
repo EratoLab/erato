@@ -71,6 +71,32 @@ export const readPointer = (document: unknown, pointer: string): unknown => {
 };
 
 /**
+ * Every value a label pointer reaches, where `*` stands for every element of
+ * an array or member of an object, in document order.
+ */
+export const readPointerAll = (
+  document: unknown,
+  pointer: string,
+): unknown[] => {
+  if (!pointer.startsWith("/")) return [];
+  let reached: unknown[] = [document];
+  for (const raw of pointer.slice(1).split("/")) {
+    reached = reached.flatMap((value) => {
+      if (raw === "*") {
+        return Array.isArray(value)
+          ? value
+          : isRecord(value)
+            ? Object.values(value)
+            : [];
+      }
+      const next = readPointer(value, `/${raw}`);
+      return next === undefined ? [] : [next];
+    });
+  }
+  return reached;
+};
+
+/**
  * What a failed call's server said, in its own words: a text result, or the
  * `error` or `message` of a JSON one. `undefined` when the result holds no
  * such sentence; its raw form stays in the step's details.

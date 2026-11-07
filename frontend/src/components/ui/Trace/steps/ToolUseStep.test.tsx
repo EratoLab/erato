@@ -477,3 +477,146 @@ describe("ToolUseStep gist row", () => {
     expect(screen.queryByTestId("tool-call-identity")).toBeNull();
   });
 });
+
+describe("ToolUseStep proposal row", () => {
+  const commentChanges = (ops: string[]) => ({
+    changes: ops.map((op, index) => ({
+      op,
+      anchor: null,
+      thread: `t_${index}`,
+      target: null,
+      text: op === "reply" ? "Reply text A" : null,
+    })),
+  });
+  const proposal = (
+    overrides: Partial<ToolUse>,
+    status: "done" | "error" = "done",
+  ) =>
+    render(
+      <ToolUseStep
+        part={{
+          ...PART,
+          tool_call_id: "call-comments",
+          tool_name: "word_submit_comment_changes",
+          status: status === "error" ? "error" : "success",
+          input: commentChanges(["reply"]) as unknown as ToolUse["input"],
+          output: {
+            status: "success",
+            result: { rows: 1 },
+          } as unknown as ToolUse["output"],
+          display: {
+            title: "word_submit_comment_changes",
+            description_truncated: false,
+            label: {
+              action: "comment",
+              object_kind: "comment",
+              source: "own_mapping",
+              items: [
+                {
+                  fields: [
+                    {
+                      pointer: "/changes/*/op",
+                      name: "op",
+                      values: [{ path: "/changes/0/op", text: "reply" }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          ...overrides,
+        }}
+        status={status}
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+
+  it("names the proposal in one line and keeps the raw call behind the toggle", () => {
+    proposal({});
+
+    const toggle = screen.getByRole("button", { name: /Proposed/ });
+    expect(toggle).toHaveTextContent("Proposed a reply to a comment");
+    expect(toggle).not.toHaveTextContent("word_submit_comment_changes");
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveAttribute(
+      "title",
+      "Proposed a reply to a comment",
+    );
+    expect(screen.queryByTestId("tool-call-gist-values")).toBeNull();
+    expect(screen.queryByTestId("tool-call-proposal-changes")).toBeNull();
+    expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
+      "word_submit_comment_changes",
+    );
+    expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(false);
+  });
+
+  it("counts a mixed batch in the line and lists its changes without their text", () => {
+    proposal({
+      input: commentChanges([
+        "reply",
+        "resolve",
+        "resolve",
+      ]) as unknown as ToolUse["input"],
+    });
+
+    const toggle = screen.getByRole("button", { name: /Proposed/ });
+    expect(toggle).toHaveTextContent(
+      "Proposed 3 comment changes · 1 reply · 2 resolved",
+    );
+    const rows = screen.getByTestId("tool-call-proposal-changes");
+    expect(isFolded(rows)).toBe(true);
+    fireEvent.click(toggle);
+    expect(isFolded(rows)).toBe(false);
+    expect(
+      [...rows.querySelectorAll("li")].map((row) => row.textContent),
+    ).toEqual(["Reply", "Resolve", "Resolve"]);
+    expect(rows).not.toHaveTextContent("Reply text A");
+    expect(toggle).not.toHaveTextContent("Reply text A");
+  });
+
+  it("says a proposal the host refused could not be made", () => {
+    proposal(
+      {
+        output: {
+          status: "error",
+          error: "Submission validation failed",
+        } as unknown as ToolUse["output"],
+      },
+      "error",
+    );
+
+    expect(screen.getByRole("button", { name: /propose/ })).toHaveTextContent(
+      "Could not propose a reply to a comment",
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
+  it("names the action a client action call proposes", () => {
+    proposal({
+      tool_name: "propose_client_action",
+      input: { action: "outlook.reply" } as unknown as ToolUse["input"],
+      display: {
+        title: "propose_client_action",
+        description_truncated: false,
+        label: { action: "send", object_kind: "email", source: "own_mapping" },
+      },
+    });
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveTextContent(
+      "Proposed an email",
+    );
+  });
+
+  it("shows an old row without a label by its tool name, as before", () => {
+    proposal({ display: undefined });
+
+    expect(
+      screen.getByRole("button", { name: /word_submit_comment_changes/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-proposal-line")).toBeNull();
+    expect(screen.queryByTestId("tool-call-identity")).toBeNull();
+  });
+});

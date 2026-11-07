@@ -4,6 +4,7 @@ import {
   cleanServerText,
   lastPointerSegment,
   readPointer,
+  readPointerAll,
   serverFailureMessage,
 } from "./serverText";
 
@@ -32,6 +33,22 @@ describe("pointers", () => {
     expect(readPointer(input, "")).toBe(input);
     expect(readPointer(input, "/missing")).toBeUndefined();
     expect(readPointer(input, "/list/01")).toBeUndefined();
+  });
+
+  it("reads every element a wildcard stands for, and skips what is missing", () => {
+    const input = {
+      changes: [{ op: "reply" }, { op: null }, {}, { op: "resolve" }],
+      ids: { a: "x", b: "y" },
+    };
+    expect(readPointerAll(input, "/changes/*/op")).toEqual([
+      "reply",
+      null,
+      "resolve",
+    ]);
+    expect(readPointerAll(input, "/ids/*")).toEqual(["x", "y"]);
+    expect(readPointerAll(input, "/changes/3/op")).toEqual(["resolve"]);
+    expect(readPointerAll(input, "/missing/*")).toEqual([]);
+    expect(readPointerAll(input, "changes")).toEqual([]);
   });
 
   it("names the last segment unescaped", () => {
