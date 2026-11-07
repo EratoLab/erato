@@ -1,9 +1,29 @@
-import { render } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
+import { darkTheme, defaultTheme } from "@/config/theme";
 
 import { RadioCard } from "../RadioCard";
 
 import type { ReactNode } from "react";
+
+// WCAG 2 relative luminance of a #rrggbb colour.
+const luminance = (hex: string) => {
+  const [r, g, b] = [1, 3, 5].map((start) => {
+    const channel = parseInt(hex.slice(start, start + 2), 16) / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+const contrastRatio = (foreground: string, background: string) => {
+  const [lighter, darker] = [luminance(foreground), luminance(background)].sort(
+    (a, b) => b - a,
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+};
 
 const renderCard = (props: {
   checked: boolean;
@@ -83,6 +103,45 @@ describe("RadioCard", () => {
     expect(iconTile.className).not.toContain("card-nested");
     expect(iconTile.className).not.toContain("rounded");
   });
+
+  it("steps the helper text up a tone on the chosen card", () => {
+    const helperOf = (checked: boolean) =>
+      within(
+        render(
+          <RadioCard
+            name="channel"
+            value={String(checked)}
+            checked={checked}
+            onChange={vi.fn()}
+            label="Teams chat"
+            helper="Your chat with Erato in Microsoft Teams"
+          />,
+        ).container,
+      ).getByText("Your chat with Erato in Microsoft Teams");
+
+    const chosen = helperOf(true);
+    expect(chosen).toHaveClass("text-theme-fg-secondary");
+    expect(chosen).not.toHaveClass("text-theme-fg-muted");
+    expect(helperOf(false)).toHaveClass("text-theme-fg-muted");
+  });
+
+  it.each([
+    ["light", defaultTheme],
+    ["dark", darkTheme],
+  ])(
+    "keeps the chosen card's helper at 4.5:1 in the stock %s theme",
+    (_, theme) => {
+      const { background, foreground } = theme.colors;
+
+      expect(
+        contrastRatio(foreground.secondary, background.selected),
+      ).toBeGreaterThanOrEqual(4.5);
+      // The reason for the step: the muted token falls short on this fill.
+      expect(contrastRatio(foreground.muted, background.selected)).toBeLessThan(
+        4.5,
+      );
+    },
+  );
 
   it("bands the details under a checked card only", () => {
     const details = <p>Outlook opens the reply in a draft.</p>;
