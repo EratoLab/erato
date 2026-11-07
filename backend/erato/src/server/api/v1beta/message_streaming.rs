@@ -543,8 +543,9 @@ fn gate_mcp_tool_call(
     display: &crate::models::message::ToolDisplayMetadata,
     tool_call: &genai::chat::ToolCall,
     user_decision: Option<UserToolDecision>,
+    approval_argument: Option<&str>,
 ) -> ToolCallGate {
-    let verdict = evaluate_mcp_tool_approval(config, tool);
+    let verdict = evaluate_mcp_tool_approval(config, tool, approval_argument);
     match effective_mcp_tool_state(config, &verdict, user_decision) {
         McpToolEffectiveState::Allow => ToolCallGate::Run,
         McpToolEffectiveState::Denied => refuse_denied_tool_call(tool_call),
@@ -558,7 +559,9 @@ fn gate_mcp_tool_call(
                 McpToolApprovalPreset::Permissive => "permissive",
                 McpToolApprovalPreset::Restrictive => "restrictive",
             },
-            config.allow_always,
+            // A consent argument means the server wants the answer per call,
+            // so the card offers no standing grant.
+            config.allow_always && verdict.approval_argument.is_none(),
         ),
     }
 }
@@ -9077,6 +9080,14 @@ async fn stream_generate_chat_completion<'a>(
                 server_id: managed_tool.server_id.clone(),
                 tool_call: unfinished_tool_call.clone(),
                 tool: managed_tool.tool.clone(),
+                // A call reaches this dispatch only when the gate let it
+                // through without asking, so no user decision exists for it.
+                approval_argument: managed_tool.approval_argument.clone().map(|name| {
+                    crate::services::mcp_manager::ApprovalArgument {
+                        name,
+                        user_approved: false,
+                    }
+                }),
             };
             let display = crate::services::tool_display::mcp_tool_call_display(
                 &mcp.config,
@@ -9112,6 +9123,7 @@ async fn stream_generate_chat_completion<'a>(
                 &display,
                 &unfinished_tool_call,
                 user_decision,
+                managed_tool.approval_argument.as_deref(),
             ) {
                 ToolCallGate::Run => None,
                 ToolCallGate::Refuse(error_message) => Some(error_message),
@@ -12905,6 +12917,7 @@ mod tests {
         tool: Tool,
     ) -> crate::services::mcp_session_manager::ManagedTool {
         crate::services::mcp_session_manager::ManagedTool {
+            approval_argument: None,
             server_id: server_id.to_string(),
             tool,
         }
@@ -12978,7 +12991,8 @@ mod tests {
                         preset,
                         allow_always: false
                     },
-                    &tools[0].tool
+                    &tools[0].tool,
+                    None
                 )
                 .requires_approval
             );
@@ -13271,6 +13285,7 @@ mod tests {
             ),
             call,
             user_decision,
+            None,
         )
     }
 
@@ -13337,7 +13352,7 @@ mod tests {
         .unwrap();
         let display = mcp_tool_call_display(&servers, "new_server", &tool, &call.fn_arguments);
         let ToolCallGate::Ask(request) =
-            gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None)
+            gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None, None)
         else {
             panic!("expected approval");
         };
@@ -14478,7 +14493,7 @@ mod tests {
         ];
         for (config, tool, expected) in cases {
             let gate = gate_call(config, "server", tool, &call, None);
-            let verdict = evaluate_mcp_tool_approval(config, tool);
+            let verdict = evaluate_mcp_tool_approval(config, tool, None);
             let asks = matches!(gate, ToolCallGate::Ask(_));
             assert_eq!(asks, expected, "{:?} {}", config, tool.name);
             assert_eq!(verdict.requires_approval, asks);
@@ -14565,7 +14580,10 @@ mod tests {
             &call.fn_arguments,
         )
         .unwrap();
-        for config in &configs {
+        let cases = configs
+            .iter()
+            .flat_map(|config| [(config, None), (config, Some("hasUserApproved"))]);
+        for (config, approval_argument) in cases {
             for tool in [&read_only_closed, &unannotated] {
                 for decision in [
                     None,
@@ -14587,7 +14605,13 @@ mod tests {
                                 ..generic.clone()
                             };
                             let mut gate = gate_mcp_tool_call(
-                                config, "server", tool, &display, &call, decision,
+                                config,
+                                "server",
+                                tool,
+                                &display,
+                                &call,
+                                decision,
+                                approval_argument,
                             );
                             if let ToolCallGate::Ask(request) = &mut gate {
                                 assert_eq!(request.display.as_ref(), Some(&display));
@@ -14601,11 +14625,58 @@ mod tests {
                         .collect();
                     assert!(
                         gates.windows(2).all(|pair| pair[0] == pair[1]),
-                        "{config:?} {decision:?} {gates:?}"
+                        "{config:?} {approval_argument:?} {decision:?} {gates:?}"
                     );
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_consent_argument_asks_per_call_without_offering_a_standing_grant() {
+        let call = genai::chat::ToolCall {
+            call_id: "call_delete".to_string(),
+            fn_name: "delete_record".to_string(),
+            fn_arguments: serde_json::json!({"recordId": "r1"}),
+            thought_signatures: None,
+        };
+        let read_only = rmcp::model::Tool::new("delete_record", "delete", serde_json::Map::new())
+            .with_annotations(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                Some(true),
+                Some(false),
+                Some(true),
+                Some(false),
+            ));
+        let granting = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: true,
+        };
+        let grant = Some(crate::models::user_tool_approval_setting::UserToolDecision::AlwaysAllow);
+        let display = mcp_tool_call_display(
+            &crate::config::McpRuntimeConfig::default(),
+            "dv",
+            &read_only,
+            &call.fn_arguments,
+        );
+        match gate_mcp_tool_call(
+            &granting,
+            "dv",
+            &read_only,
+            &display,
+            &call,
+            grant,
+            Some("hasUserApproved"),
+        ) {
+            ToolCallGate::Ask(request) => assert!(!request.allow_always, "{request:?}"),
+            other => panic!("expected an ask, got {other:?}"),
+        }
+        // The same tool without a consent argument runs on the grant.
+        assert_eq!(
+            gate_mcp_tool_call(&granting, "dv", &read_only, &display, &call, grant, None),
+            ToolCallGate::Run
+        );
     }
 
     #[test]
@@ -21827,6 +21898,13 @@ pub(crate) async fn run_continuation(
                     server_id: managed_tool.server_id,
                     tool_call: call.clone(),
                     tool: managed_tool.tool,
+                    // The user just approved this call on the card.
+                    approval_argument: managed_tool.approval_argument.map(|name| {
+                        crate::services::mcp_manager::ApprovalArgument {
+                            name,
+                            user_approved: true,
+                        }
+                    }),
                 },
                 &mcp_auth_context,
                 Some(progress_tx),

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getFilePreviewUrl, isImageFileResource } from "./FilePreviewBase";
+import {
+  formatFileSize,
+  getFilePreviewUrl,
+  isImageFileResource,
+} from "./FilePreviewBase";
 
 import type { FileResource } from "./FilePreviewBase";
 import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -63,5 +67,23 @@ describe("attachment resource metadata", () => {
         upload({ filename: "report.pdf", preview_url: "/preview" }),
       ),
     ).toBe(false);
+  });
+});
+
+describe("formatFileSize", () => {
+  it.each([
+    [512, "512 B"],
+    [1023, "1023 B"],
+    [80_000, "78 KB"],
+    [1_258_291, "1.2 MB"],
+    [5_368_709_120, "5120 MB"],
+  ])("formats %d bytes as %s in the active English locale", (bytes, label) => {
+    expect(formatFileSize(bytes)).toBe(label);
+  });
+
+  it("takes the German decimal mark and keeps the unit labels", () => {
+    expect(formatFileSize(1_258_291, "de")).toBe("1,2 MB");
+    expect(formatFileSize(34_816, "de")).toBe("34 KB");
+    expect(formatFileSize(5_368_709_120, "de")).toBe("5120 MB");
   });
 });

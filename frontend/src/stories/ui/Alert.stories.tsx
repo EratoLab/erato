@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { Button } from "../../components/ui/Controls/Button";
 import { Alert } from "../../components/ui/Feedback/Alert";
 import { CheckCircleIcon } from "../../components/ui/icons";
 
@@ -216,6 +217,25 @@ export const CustomIcon: Story = {
     title: "Custom Icon",
     children: "This alert uses a custom icon instead of the default.",
     icon: <CheckCircleIcon className="size-5" />,
+  },
+};
+
+/**
+ * Alert with an action under the message, for a failure the user can follow up
+ */
+export const WithAction: Story = {
+  args: {
+    type: "error",
+    title: "1 item could not be carried out",
+    children:
+      "The reminder “Check the customs clearance status” was due Tue, 3 Nov, 09:00 and could not be delivered.",
+    action: (
+      <Button variant="secondary" size="sm">
+        Show it in Past
+      </Button>
+    ),
+    dismissible: true,
+    onDismiss: () => undefined,
   },
 };
 

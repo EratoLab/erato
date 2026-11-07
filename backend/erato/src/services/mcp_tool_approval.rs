@@ -20,6 +20,9 @@ pub struct McpToolApprovalVerdict {
     /// Whether the configured policy asks the user before running the tool.
     /// Always false while the approval gate is disabled.
     pub requires_approval: bool,
+    /// The server's consent argument on this tool. Such a tool asks on every
+    /// call while the gate is on, and a standing grant does not cover it.
+    pub approval_argument: Option<String>,
 }
 
 pub fn normalize_tool_annotations(tool: &Tool) -> ToolApprovalAnnotations {
@@ -35,21 +38,26 @@ pub fn normalize_tool_annotations(tool: &Tool) -> ToolApprovalAnnotations {
 pub fn evaluate_mcp_tool_approval(
     config: &McpToolApprovalConfig,
     tool: &Tool,
+    approval_argument: Option<&str>,
 ) -> McpToolApprovalVerdict {
     let annotations = normalize_tool_annotations(tool);
+    // A server that asks for consent per call gets it per call, whatever its
+    // hints say about the tool.
     let requires_approval = config.enabled
-        && match config.preset {
-            McpToolApprovalPreset::Permissive => annotations.destructive_hint,
-            McpToolApprovalPreset::Restrictive => {
-                !annotations.read_only_hint
-                    || annotations.destructive_hint
-                    || annotations.open_world_hint
-            }
-        };
+        && (approval_argument.is_some()
+            || match config.preset {
+                McpToolApprovalPreset::Permissive => annotations.destructive_hint,
+                McpToolApprovalPreset::Restrictive => {
+                    !annotations.read_only_hint
+                        || annotations.destructive_hint
+                        || annotations.open_world_hint
+                }
+            });
     McpToolApprovalVerdict {
         annotations,
         annotated: tool.annotations.is_some(),
         requires_approval,
+        approval_argument: approval_argument.map(str::to_string),
     }
 }
 
@@ -74,7 +82,11 @@ pub fn effective_mcp_tool_state(
 ) -> McpToolEffectiveState {
     match decision {
         Some(UserToolDecision::Denied) => McpToolEffectiveState::Denied,
-        Some(UserToolDecision::AlwaysAllow) if config.allow_always => McpToolEffectiveState::Allow,
+        Some(UserToolDecision::AlwaysAllow)
+            if config.allow_always && verdict.approval_argument.is_none() =>
+        {
+            McpToolEffectiveState::Allow
+        }
         Some(UserToolDecision::Ask) if config.enabled => McpToolEffectiveState::Ask,
         _ if verdict.requires_approval => McpToolEffectiveState::Ask,
         _ => McpToolEffectiveState::Allow,
@@ -123,18 +135,18 @@ mod tests {
     fn annotated_is_false_only_without_any_annotations() {
         let permissive = config(true, McpToolApprovalPreset::Permissive);
         let unannotated = Tool::new("unknown", "unknown", Map::new());
-        assert!(!evaluate_mcp_tool_approval(&permissive, &unannotated).annotated);
+        assert!(!evaluate_mcp_tool_approval(&permissive, &unannotated, None).annotated);
 
         let empty_annotations = Tool::new("empty", "empty", Map::new())
             .with_annotations(ToolAnnotations::from_raw(None, None, None, None, None));
-        assert!(evaluate_mcp_tool_approval(&permissive, &empty_annotations).annotated);
+        assert!(evaluate_mcp_tool_approval(&permissive, &empty_annotations, None).annotated);
     }
 
     #[test]
     fn disabled_gate_never_requires_approval() {
         let disabled = config(false, McpToolApprovalPreset::Restrictive);
         let unannotated = Tool::new("unknown", "unknown", Map::new());
-        assert!(!evaluate_mcp_tool_approval(&disabled, &unannotated).requires_approval);
+        assert!(!evaluate_mcp_tool_approval(&disabled, &unannotated, None).requires_approval);
     }
 
     #[test]
@@ -150,16 +162,22 @@ mod tests {
             );
         let unannotated = Tool::new("unknown", "unknown", Map::new());
 
-        assert!(!evaluate_mcp_tool_approval(&permissive, &read_only_closed).requires_approval);
-        assert!(!evaluate_mcp_tool_approval(&restrictive, &read_only_closed).requires_approval);
         assert!(
-            !evaluate_mcp_tool_approval(&permissive, &open_world_non_destructive).requires_approval
+            !evaluate_mcp_tool_approval(&permissive, &read_only_closed, None).requires_approval
         );
         assert!(
-            evaluate_mcp_tool_approval(&restrictive, &open_world_non_destructive).requires_approval
+            !evaluate_mcp_tool_approval(&restrictive, &read_only_closed, None).requires_approval
         );
-        assert!(evaluate_mcp_tool_approval(&permissive, &unannotated).requires_approval);
-        assert!(evaluate_mcp_tool_approval(&restrictive, &unannotated).requires_approval);
+        assert!(
+            !evaluate_mcp_tool_approval(&permissive, &open_world_non_destructive, None)
+                .requires_approval
+        );
+        assert!(
+            evaluate_mcp_tool_approval(&restrictive, &open_world_non_destructive, None)
+                .requires_approval
+        );
+        assert!(evaluate_mcp_tool_approval(&permissive, &unannotated, None).requires_approval);
+        assert!(evaluate_mcp_tool_approval(&restrictive, &unannotated, None).requires_approval);
     }
 
     #[test]
@@ -198,7 +216,7 @@ mod tests {
             (&disabled, &auto, Some(Decision::Denied), State::Denied),
         ];
         for (config, tool, decision, expected) in cases {
-            let verdict = evaluate_mcp_tool_approval(config, tool);
+            let verdict = evaluate_mcp_tool_approval(config, tool, None);
             assert_eq!(
                 effective_mcp_tool_state(config, &verdict, decision),
                 expected,
@@ -208,5 +226,46 @@ mod tests {
                 decision
             );
         }
+    }
+
+    #[test]
+    fn a_consent_argument_asks_per_call_and_ignores_standing_grants() {
+        use McpToolEffectiveState as State;
+        let read_only = Tool::new("delete_record", "delete", Map::new()).with_annotations(
+            ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
+        );
+        let full = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Permissive,
+            allow_always: true,
+        };
+        let verdict = evaluate_mcp_tool_approval(&full, &read_only, Some("hasUserApproved"));
+        assert!(verdict.requires_approval);
+        assert_eq!(
+            verdict.approval_argument.as_deref(),
+            Some("hasUserApproved")
+        );
+        assert_eq!(effective_mcp_tool_state(&full, &verdict, None), State::Ask);
+        assert_eq!(
+            effective_mcp_tool_state(&full, &verdict, Some(UserToolDecision::AlwaysAllow)),
+            State::Ask
+        );
+        assert_eq!(
+            effective_mcp_tool_state(&full, &verdict, Some(UserToolDecision::Denied)),
+            State::Denied
+        );
+
+        // Without the gate nobody can be asked; the call runs and the server
+        // receives `false`.
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..full
+        };
+        let verdict = evaluate_mcp_tool_approval(&disabled, &read_only, Some("hasUserApproved"));
+        assert!(!verdict.requires_approval);
+        assert_eq!(
+            effective_mcp_tool_state(&disabled, &verdict, None),
+            State::Allow
+        );
     }
 }

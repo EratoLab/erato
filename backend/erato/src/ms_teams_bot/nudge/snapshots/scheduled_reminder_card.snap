@@ -1,0 +1,6 @@
+---
+source: erato/src/ms_teams_bot/nudge/delivery_tests.rs
+expression: sample.into_bytes()
+extension: json
+snapshot_kind: binary
+---

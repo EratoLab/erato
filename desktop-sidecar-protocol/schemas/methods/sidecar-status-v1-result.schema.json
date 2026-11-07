@@ -16,6 +16,29 @@
         ]
       },
       "description": "Extensible permission keys. macos_full_disk_access is the first key. Status is best effort; unknown means the platform could not determine access."
+    },
+    "ui_package": {
+      "type": ["object", "null"],
+      "description": "The deployment's desktop UI package (package 0.1.47): whether the sidecar has installed the package the backend serves, is still checking, downloading or receiving it, or failed, and whether the calling client may relay it with sidecar.install_ui_package.v1. Null until a configure call delivered a valid ui_package in this sidecar process. Absent from sidecars that host no desktop UI and from sidecars built before 0.1.47.",
+      "required": ["state", "digest", "attempted_at", "relay"],
+      "properties": {
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "current, pending or failed (section 11 of SPEC.md); clients treat an unknown value as pending."
+        },
+        "digest": { "$ref": "../common.schema.json#/definitions/Sha256Hex" },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "With failed: network, proxy, tls, unauthorized, not_found, verification, storage or other; clients treat an unknown value as other."
+        },
+        "attempted_at": { "type": ["string", "null"], "format": "date-time" },
+        "relay": { "type": "boolean" }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true,
