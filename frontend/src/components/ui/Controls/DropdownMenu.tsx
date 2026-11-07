@@ -55,6 +55,11 @@ export interface DropdownMenuItem {
   keepOpenOnSelect?: boolean;
   /** Group label rendered above this row, opening a new section. */
   sectionHeader?: React.ReactNode;
+  /**
+   * Open a new section with a divider above this row and no label. Ignored on
+   * the first row; `sectionHeader` draws its own divider.
+   */
+  separatorBefore?: boolean;
 }
 
 export interface DropdownMenuProps {
@@ -268,7 +273,10 @@ export const DropdownMenu = memo(
         items: { item: DropdownMenuItem; index: number }[];
       }[] = [];
       items.forEach((item, index) => {
-        const isNewSection = grouped.length === 0 || item.sectionHeader != null;
+        const isNewSection =
+          grouped.length === 0 ||
+          item.sectionHeader != null ||
+          item.separatorBefore === true;
         if (isNewSection) {
           grouped.push({
             key: item.id ?? String(index),
@@ -360,7 +368,12 @@ export const DropdownMenu = memo(
               ));
 
               if (section.header == null) {
-                return <Fragment key={section.key}>{rows}</Fragment>;
+                return (
+                  <Fragment key={section.key}>
+                    {sectionIndex > 0 && <PopoverSeparator />}
+                    {rows}
+                  </Fragment>
+                );
               }
 
               // A labelled run is a group, not just a styled line: without the

@@ -281,6 +281,38 @@ describe("DropdownMenu", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
+  it("draws a divider without a label for a row that asks for one", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          {
+            id: "edit",
+            label: "Edit",
+            onClick: vi.fn(),
+            separatorBefore: true,
+          },
+          { id: "snooze", label: "Snooze", onClick: vi.fn() },
+          {
+            id: "cancel",
+            label: "Cancel",
+            onClick: vi.fn(),
+            variant: "danger",
+            separatorBefore: true,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const separator = await screen.findByRole("separator");
+    // The first row's request is moot: nothing sits above it to divide.
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(separator.previousElementSibling).toHaveTextContent("Snooze");
+    expect(separator.nextElementSibling).toHaveTextContent("Cancel");
+  });
+
   it("closes without the select delay for a row that opens a dialog", async () => {
     const onClick = vi.fn();
     render(

@@ -3,3 +3,4 @@ export * from "./Avatar";
 export * from "./CopyErrorButton";
 export * from "./LoadingIndicator";
 export * from "./SpinnerIcon";
+export * from "./StatusPill";

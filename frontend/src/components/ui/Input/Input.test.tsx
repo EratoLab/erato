@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Input } from "./Input";
+import { Select } from "./Select";
 import { Textarea } from "./Textarea";
 
 const originalOffsetHeightDescriptor = Object.getOwnPropertyDescriptor(
@@ -69,6 +70,45 @@ describe("Input tokens", () => {
     expect(textarea.className).toContain(
       "focus:border-[var(--theme-border-field-focus)]",
     );
+  });
+
+  it("takes a Select's control geometry so the two line up in one row", () => {
+    render(
+      <>
+        <Input aria-label="Date" type="date" geometry="control" />
+        <Select aria-label="Trigger">
+          <option>At a date and time</option>
+        </Select>
+      </>,
+    );
+
+    const input = screen.getByLabelText("Date");
+    const select = screen.getByRole("combobox", { name: "Trigger" });
+
+    expect(input).toHaveAttribute("type", "date");
+    for (const cls of [
+      "text-sm",
+      "[border-radius:var(--theme-radius-control)]",
+      "[min-height:var(--theme-spacing-control-min-height)]",
+      "[padding:var(--theme-spacing-control-padding-y)_var(--theme-spacing-control-padding-x)]",
+    ]) {
+      expect(input.className.split(/\s+/)).toContain(cls);
+      expect(select.className.split(/\s+/)).toContain(cls);
+    }
+    expect(input.className).not.toContain("--theme-radius-input");
+    expect(input.className).not.toContain("text-base");
+  });
+
+  it("keeps the roomy input geometry by default, also for a time field", () => {
+    render(<Input aria-label="Time" type="time" />);
+
+    const input = screen.getByLabelText("Time");
+
+    expect(input).toHaveAttribute("type", "time");
+    expect(input.className).toContain(
+      "[border-radius:var(--theme-radius-input)]",
+    );
+    expect(input.className.split(/\s+/)).toContain("text-base");
   });
 
   it("uses the themed error focus ring for Input", () => {
