@@ -68,6 +68,97 @@ pub struct UpdateUserPreferencesInput {
     /// and so has no stable hub id to point at. `Some(None)` removes the pick.
     pub starting_assistant_id: Option<Option<Uuid>>,
     pub starting_assistant_cleared: Option<bool>,
+    /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
+    pub time_zone: Option<String>,
+    /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
+    pub language: Option<String>,
+}
+
+/// The canonical IANA name, or `None` for anything the zone database does
+/// not know (Windows zone names, bare offsets, typos).
+pub fn normalize_time_zone(value: &str) -> Option<String> {
+    value
+        .trim()
+        .parse::<chrono_tz::Tz>()
+        .ok()
+        .map(|zone| zone.name().to_string())
+}
+
+/// A BCP 47 tag in its conventional casing (`de-DE`, `zh-Hant-TW`), or
+/// `None` when the value cannot be one. Accepts `_` as a separator, as some
+/// platforms report `de_DE`.
+pub fn normalize_language(value: &str) -> Option<String> {
+    let value = value.trim().replace('_', "-");
+    if value.len() > 35 {
+        return None;
+    }
+    let mut subtags = value.split('-');
+    let primary = subtags.next()?;
+    if !(2..=8).contains(&primary.len()) || !primary.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut normalized = primary.to_ascii_lowercase();
+    for subtag in subtags {
+        if !(1..=8).contains(&subtag.len()) || !subtag.bytes().all(|b| b.is_ascii_alphanumeric()) {
+            return None;
+        }
+        normalized.push('-');
+        let alphabetic = subtag.bytes().all(|b| b.is_ascii_alphabetic());
+        match subtag.len() {
+            2 if alphabetic => normalized.push_str(&subtag.to_ascii_uppercase()),
+            4 if alphabetic => {
+                normalized.push_str(&subtag[..1].to_ascii_uppercase());
+                normalized.push_str(&subtag[1..].to_ascii_lowercase());
+            }
+            _ => normalized.push_str(&subtag.to_ascii_lowercase()),
+        }
+    }
+    Some(normalized)
+}
+
+/// Store the zone and language a client reported, when either differs from
+/// what is stored. Values that do not normalize are ignored, as is a missing
+/// one, so one client's partial report cannot erase another's. Returns
+/// whether anything was written.
+pub async fn record_client_locale(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+    time_zone: Option<&str>,
+    language: Option<&str>,
+) -> Result<bool, Report> {
+    use sea_orm::ConnectionTrait;
+    let time_zone = time_zone.and_then(normalize_time_zone);
+    let language = language.and_then(normalize_language);
+    if time_zone.is_none() && language.is_none() {
+        return Ok(false);
+    }
+    let result = conn
+        .execute_raw(crate::query_metrics::named_statement_from_sql_and_values(
+            conn.get_database_backend(),
+            "user_preferences.record_client_locale",
+            r#"INSERT INTO user_preferences (user_id, time_zone, language)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (user_id) DO UPDATE
+               SET time_zone = COALESCE(EXCLUDED.time_zone, user_preferences.time_zone),
+                   language = COALESCE(EXCLUDED.language, user_preferences.language),
+                   updated_at = now()
+               WHERE user_preferences.time_zone IS DISTINCT FROM COALESCE(EXCLUDED.time_zone, user_preferences.time_zone)
+                  OR user_preferences.language IS DISTINCT FROM COALESCE(EXCLUDED.language, user_preferences.language)"#,
+            [(*user_id).into(), time_zone.into(), language.into()],
+        ))
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// The zone the user's client last reported, if it is still a known one.
+pub async fn user_time_zone(
+    conn: &DatabaseConnection,
+    user_id: &Uuid,
+) -> Result<Option<chrono_tz::Tz>, Report> {
+    Ok(get_user_preferences(conn, user_id)
+        .await?
+        .and_then(|prefs| prefs.time_zone)
+        .and_then(|zone| zone.parse().ok()))
 }
 
 /// The stored start-screen state: never set (inherit an audience pin),
@@ -253,6 +344,12 @@ async fn upsert_user_preferences_row(
             model.starting_assistant_id = ActiveValue::Set(state.assistant_id);
             model.starting_assistant_cleared = ActiveValue::Set(state.cleared);
         }
+        if let Some(value) = input.time_zone {
+            model.time_zone = ActiveValue::Set(Some(value));
+        }
+        if let Some(value) = input.language {
+            model.language = ActiveValue::Set(Some(value));
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -288,6 +385,8 @@ async fn upsert_user_preferences_row(
             client_tool_decisions: ActiveValue::Set(serde_json::to_value(
                 input.client_tool_decisions.unwrap_or_default(),
             )?),
+            time_zone: ActiveValue::Set(input.time_zone),
+            language: ActiveValue::Set(input.language),
             ..Default::default()
         };
 
@@ -371,6 +470,40 @@ mod tests {
             assistant_id: Some(id),
             ..StartingAssistantState::default()
         }
+    }
+
+    #[test]
+    fn time_zones_are_iana_names_only() {
+        use super::normalize_time_zone;
+        assert_eq!(
+            normalize_time_zone(" Europe/Berlin ").as_deref(),
+            Some("Europe/Berlin")
+        );
+        assert_eq!(
+            normalize_time_zone("America/Argentina/Buenos_Aires").as_deref(),
+            Some("America/Argentina/Buenos_Aires")
+        );
+        assert_eq!(normalize_time_zone("UTC").as_deref(), Some("UTC"));
+        assert_eq!(normalize_time_zone("W. Europe Standard Time"), None);
+        assert_eq!(normalize_time_zone("+01:00"), None);
+        assert_eq!(normalize_time_zone(""), None);
+    }
+
+    #[test]
+    fn languages_get_conventional_casing() {
+        use super::normalize_language;
+        assert_eq!(normalize_language("de").as_deref(), Some("de"));
+        assert_eq!(normalize_language("DE-de").as_deref(), Some("de-DE"));
+        assert_eq!(normalize_language("en_us").as_deref(), Some("en-US"));
+        assert_eq!(
+            normalize_language("zh-hant-tw").as_deref(),
+            Some("zh-Hant-TW")
+        );
+        assert_eq!(normalize_language("es-419").as_deref(), Some("es-419"));
+        assert_eq!(normalize_language("x"), None);
+        assert_eq!(normalize_language("de DE"), None);
+        assert_eq!(normalize_language("de--DE"), None);
+        assert_eq!(normalize_language(""), None);
     }
 
     #[test]

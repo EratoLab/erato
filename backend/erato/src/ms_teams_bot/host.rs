@@ -10,7 +10,7 @@ mod sign_in;
 
 pub use requests::{ActionKind, RequestState, TeamsRequest};
 
-use super::activity::ConversationKind;
+use super::activity::{ClientLocale, ConversationKind};
 use super::cards::{
     ApprovalChoice, ApprovalKind, PendingApprovalItem, PendingApprovalSet, ToolDisplay,
 };
@@ -215,6 +215,22 @@ impl Host {
 
     pub async fn find_user(&self, entra_object_id: &str) -> Result<Option<users::Model>, Report> {
         crate::models::user::find_user_by_entra_object_id(&self.app_state.db, entra_object_id).await
+    }
+
+    /// Keep the zone and language the user's Teams client reported, so
+    /// reminders and other later messages use them. Writes only on change.
+    pub async fn record_client_locale(
+        &self,
+        user_id: Uuid,
+        locale: &ClientLocale,
+    ) -> Result<bool, Report> {
+        crate::models::user_preference::record_client_locale(
+            &self.app_state.db,
+            &user_id,
+            locale.time_zone.as_deref(),
+            locale.locale.as_deref(),
+        )
+        .await
     }
 
     /// Whether any Teams message got through to Erato on any replica: it left
