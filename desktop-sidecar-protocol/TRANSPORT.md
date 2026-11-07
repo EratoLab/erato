@@ -86,7 +86,9 @@ NOT silently downgrade a configured HTTPS endpoint to HTTP on certificate errors
 The bytes that a result references — the message bodies and attachments of
 `outlook.get_conversation.v1` — are carried inline in the JSON-RPC response:
 bodies as decoded text, attachments as base64. Requests stay within the small
-262,144-byte cap; responses are bounded by the larger response cap in the table
+262,144-byte cap; `sidecar.install_ui_package.v1` relays the desktop UI
+archive in 131,072-byte chunks to stay within it. Responses are bounded by the
+larger response cap in the table
 above, which sizes the ceiling on a whole thread's inline bytes. A dedicated
 transfer channel for very large payloads may be added later behind the same
 request semantics, but is not part of the 1.0 profile.

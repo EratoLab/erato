@@ -38,21 +38,24 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 /// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
 /// the server's name from the live config and the call's label, with the IDs
 /// it names resolved from earlier results in the chat, stored with the call's
-/// parts.
+/// parts. `approval_argument` is the tool's consent argument, which the label
+/// leaves out.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
+    let arguments = without_approval_argument(arguments, approval_argument);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
-        let mut label = label::generic_label(arguments);
-        context.resolve(&mut label, arguments);
+        let mut label = label::generic_label(&arguments);
+        context.resolve(&mut label, &arguments);
         label
     })
-    .or_else(|| label::guarded(|| label::generic_label(arguments)));
+    .or_else(|| label::guarded(|| label::generic_label(&arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
@@ -69,6 +72,26 @@ pub fn child_approval_display(display: &ToolDisplayMetadata) -> ToolDisplayMetad
         label::context::forget_resolved(label);
     }
     display
+}
+
+/// Erato sets the consent argument from the user's decision at dispatch, so a
+/// value the model sent there is not what the call writes.
+fn without_approval_argument<'a>(
+    arguments: &'a serde_json::Value,
+    approval_argument: Option<&str>,
+) -> std::borrow::Cow<'a, serde_json::Value> {
+    match (arguments, approval_argument) {
+        (serde_json::Value::Object(members), Some(name)) if members.contains_key(name) => {
+            std::borrow::Cow::Owned(serde_json::Value::Object(
+                members
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != name)
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect(),
+            ))
+        }
+        _ => std::borrow::Cow::Borrowed(arguments),
+    }
 }
 
 /// What a tool row and its live updates keep of a call's display. Only
@@ -124,8 +147,14 @@ mod tests {
         .unwrap();
         let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
         let arguments = serde_json::json!({});
-        let display =
-            mcp_tool_call_display(&config, "dynamics", &tool, &arguments, &Default::default());
+        let display = mcp_tool_call_display(
+            &config,
+            "dynamics",
+            &tool,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
         assert_eq!(display.title, "create_record");
         assert_eq!(
@@ -134,6 +163,7 @@ mod tests {
                 "web_access",
                 &tool,
                 &arguments,
+                None,
                 &Default::default()
             )
             .server_name
@@ -146,6 +176,7 @@ mod tests {
                 "removed-since",
                 &tool,
                 &arguments,
+                None,
                 &Default::default()
             )
             .server_name
@@ -167,6 +198,7 @@ mod tests {
             "dynamics",
             &tool,
             &arguments,
+            None,
             &Default::default(),
         );
         assert_eq!(display.label, Some(label::generic_label(&arguments)));
@@ -197,12 +229,99 @@ mod tests {
     }
 
     #[test]
+    fn the_consent_argument_is_never_part_of_the_label() {
+        let tool = Tool::new("delete_record", "Deletes a record.", JsonObject::new());
+        let config = McpRuntimeConfig::default();
+        let arguments = serde_json::json!({
+            "recordId": "r1",
+            "hasUserApproved": true,
+            "item": {"hasUserApproved": "a member of the record"},
+            "zeta": 1,
+        });
+        let without = serde_json::json!({
+            "recordId": "r1",
+            "item": {"hasUserApproved": "a member of the record"},
+            "zeta": 1,
+        });
+        let display = mcp_tool_call_display(
+            &config,
+            "dv",
+            &tool,
+            &arguments,
+            Some("hasUserApproved"),
+            &Default::default(),
+        );
+        assert_eq!(display.label, Some(label::generic_label(&without)));
+        assert_eq!(
+            mcp_tool_call_display(&config, "dv", &tool, &arguments, None, &Default::default())
+                .label,
+            Some(label::generic_label(&arguments))
+        );
+        assert_ne!(
+            label::generic_label(&arguments),
+            label::generic_label(&without)
+        );
+        for unchanged in [
+            serde_json::json!({"recordId": "r1"}),
+            serde_json::json!("hasUserApproved"),
+            serde_json::json!([{"hasUserApproved": true}]),
+        ] {
+            assert_eq!(
+                mcp_tool_call_display(
+                    &config,
+                    "dv",
+                    &tool,
+                    &unchanged,
+                    Some("hasUserApproved"),
+                    &Default::default()
+                )
+                .label,
+                Some(label::generic_label(&unchanged))
+            );
+        }
+
+        let mapping = label::ToolCallLabelMapping {
+            action: crate::models::message::ToolCallAction::Delete,
+            object_kind: crate::models::message::ToolCallObjectKind::Row,
+            items: vec![label::ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/*".into()],
+                ..Default::default()
+            }],
+            source: crate::models::message::ToolCallLabelSource::Rules,
+        };
+        let shown = without_approval_argument(&arguments, Some("hasUserApproved"));
+        let label = label::resolve_label(&mapping, &shown).unwrap();
+        let paths: Vec<_> = label.items[0].fields[0]
+            .values
+            .iter()
+            .map(|value| value.path.as_str())
+            .collect();
+        assert_eq!(paths, ["/recordId", "/item", "/zeta"]);
+        let consent = label::ToolCallLabelMapping {
+            items: vec![label::ToolCallLabelItemMapping {
+                title: Some("/hasUserApproved".into()),
+                ..Default::default()
+            }],
+            ..mapping
+        };
+        assert!(label::resolve_label(&consent, &shown).is_err());
+    }
+
+    #[test]
     fn a_hostile_descriptor_changes_neither_the_label_nor_its_size() {
         let arguments = serde_json::json!({"title": "Plan", "parent_id": "p1"});
         let config = McpRuntimeConfig::default();
         let plain = Tool::new("publish", "Publishes.", JsonObject::new());
-        let expected =
-            mcp_tool_call_display(&config, "notion", &plain, &arguments, &Default::default()).label;
+        let expected = mcp_tool_call_display(
+            &config,
+            "notion",
+            &plain,
+            &arguments,
+            None,
+            &Default::default(),
+        )
+        .label;
         assert_eq!(expected, Some(label::generic_label(&arguments)));
 
         let mut schema = JsonObject::new();
@@ -221,8 +340,14 @@ mod tests {
         annotations.idempotent_hint = Some(false);
         hostile.annotations = Some(annotations);
         hostile.title = Some("\u{200B}\u{FEFF}".into());
-        let display =
-            mcp_tool_call_display(&config, "notion", &hostile, &arguments, &Default::default());
+        let display = mcp_tool_call_display(
+            &config,
+            "notion",
+            &hostile,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.label, expected);
         assert_eq!(display.title, "publish");
         assert!(display.description_truncated);
@@ -233,6 +358,7 @@ mod tests {
                 "notion",
                 &hostile,
                 &serde_json::json!("not json {"),
+                None,
                 &Default::default(),
             )
             .label

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -5,6 +6,14 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { DesktopSidecarRow } from "./DesktopSidecarTabContent";
 
 import type { ReactNode } from "react";
+
+function renderRow() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <DesktopSidecarRow />
+    </QueryClientProvider>,
+  );
+}
 
 vi.mock("./ClientToolFileApprovalSetting", () => ({
   ClientToolFileApprovalSetting: () => (
@@ -71,7 +80,7 @@ vi.mock("@/providers/DesktopSidecarProvider", () => ({
 }));
 
 it("keeps the details expanded across connection retries and still allows collapsing", () => {
-  render(<DesktopSidecarRow />);
+  renderRow();
   const toggle = () =>
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ });
   expect(toggle()).toHaveAttribute("aria-expanded", "false");
@@ -93,7 +102,7 @@ it("keeps the details expanded across connection retries and still allows collap
 
 it("retains the directory command for a legacy sidecar", () => {
   sidecar.state = "ready";
-  render(<DesktopSidecarRow />);
+  renderRow();
   fireEvent.click(
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
   );
@@ -109,7 +118,7 @@ function openStrictRow(supported: string[]) {
   sidecar.state = "ready";
   sidecar.strict = true;
   sidecar.supported = supported;
-  render(<DesktopSidecarRow />);
+  renderRow();
   fireEvent.click(
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
   );
@@ -176,7 +185,7 @@ it.each([
 ] as const)("lists per-tool decisions for %s", (_, state, strict, shown) => {
   sidecar.state = state;
   sidecar.strict = strict;
-  render(<DesktopSidecarRow />);
+  renderRow();
   fireEvent.click(
     screen.getByRole("button", { name: /Desktop Sidecar.*this device/ }),
   );
@@ -194,7 +203,7 @@ it.each([
 
 it("introduces the sidecar and distinguishes permission settings from connection actions", () => {
   sidecar.state = "ready";
-  render(<DesktopSidecarRow />);
+  renderRow();
   const toggle = screen.getByRole("button", {
     name: /Desktop Sidecar.*Connected · this device/,
   });

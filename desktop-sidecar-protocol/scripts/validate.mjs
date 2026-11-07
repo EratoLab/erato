@@ -194,6 +194,12 @@ const validators = {
   "sidecar.status.v1:result": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-status-v1-result.schema.json",
   ),
+  "sidecar.install_ui_package.v1:params": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-install-ui-package-v1-params.schema.json",
+  ),
+  "sidecar.install_ui_package.v1:result": ajv.getSchema(
+    "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-install-ui-package-v1-result.schema.json",
+  ),
   "sidecar.request_permission.v1:params": ajv.getSchema(
     "https://schemas.erato.ai/desktop-sidecar/v1/methods/sidecar-request-permission-v1-params.schema.json",
   ),
