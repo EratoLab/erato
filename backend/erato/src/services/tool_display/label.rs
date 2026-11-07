@@ -676,7 +676,7 @@ mod tests {
         let cache = cache::ToolLabelCache::default();
         let key = cache::ToolLabelCacheKey::new("user-a", "crm", &tool, &first);
         cache
-            .get_or_compute(key, &first, async { Some(model.clone()) })
+            .get_or_compute(key, &tool, &first, async { Some(model.clone()) })
             .await;
 
         let second = json!({"recordId": "rec-2", "stage": "lost"});
@@ -726,7 +726,7 @@ mod tests {
         };
         let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
         cache
-            .get_or_compute(key.clone(), &first, async { Some(create.clone()) })
+            .get_or_compute(key.clone(), &tool, &first, async { Some(create.clone()) })
             .await;
         tool.annotations = hints(None, Some(true));
         let rules_mapping =

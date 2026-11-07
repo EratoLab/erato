@@ -5744,6 +5744,7 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
         .tool_label_cache
         .get_or_compute(
             ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &earlier),
+            &update.tool,
             &earlier,
             async { Some(model) },
         )

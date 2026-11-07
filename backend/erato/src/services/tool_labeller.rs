@@ -231,6 +231,7 @@ async fn label(
         .tool_label_cache
         .get_or_compute(
             job.key.clone(),
+            &job.tool,
             &job.arguments,
             model_mapping(app_state, turn, provider, client, job),
         )

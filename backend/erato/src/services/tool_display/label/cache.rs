@@ -1,10 +1,10 @@
 //! Model label mappings per user, tool and argument shape. Entries and keys
-//! hold no argument value; `mcp_call_mapping` drops a mapping the
-//! cross-check rejects, so no hook invalidates entries when a tool's
-//! annotations change.
+//! hold no argument value. A mapping the cross-check rejects is not kept,
+//! and `mcp_call_mapping` drops one it rejects later, so no hook invalidates
+//! entries when a tool's annotations change.
 
 use super::pointer::escape;
-use super::rules::verb_fields;
+use super::rules::{cross_check, verb_fields};
 use super::{MAX_LABEL_ITEMS, ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label};
 use crate::metrics::owned::Cached;
 use crate::models::message::ToolCallLabelSource;
@@ -103,10 +103,13 @@ impl ToolLabelCache {
 
     /// The mapping for `key`, from `compute` on a miss; concurrent misses of
     /// one key wait for one computation. What `compute` returns is kept only
-    /// when it is a model's and fits the `arguments` it was made for.
+    /// when it is a model's, fits the `arguments` it was made for and passes
+    /// the cross-check against `tool`. One that fails the cross-check is
+    /// still returned, but only to this caller.
     pub async fn get_or_compute(
         &self,
         key: ToolLabelCacheKey,
+        tool: &rmcp::model::Tool,
         arguments: &Value,
         compute: impl Future<Output = Option<ToolCallLabelMapping>>,
     ) -> Option<ToolCallLabelMapping> {
@@ -114,23 +117,29 @@ impl ToolLabelCache {
             return Some(mapping);
         }
         let owner = key.clone();
+        let mut rejected = None;
+        let flagged = &mut rejected;
         let mapping = self
             .entries
             .optionally_get_with(key, async move {
-                compute
-                    .await
-                    .filter(|mapping| {
-                        mapping.source == ToolCallLabelSource::Model
-                            && resolve_label(mapping, arguments).is_ok()
-                    })
-                    .map(|mut mapping| {
-                        // No label shows an item past the cap.
-                        mapping.items.truncate(MAX_LABEL_ITEMS);
-                        mapping.items.shrink_to_fit();
-                        Cached::with_key(MEMORY_OWNER, mapping, &owner)
-                    })
+                let mut mapping = compute.await.filter(|mapping| {
+                    mapping.source == ToolCallLabelSource::Model
+                        && resolve_label(mapping, arguments).is_ok()
+                })?;
+                // Not kept, so the next call of this shape asks the model again.
+                if !cross_check(tool, arguments, mapping.action).is_empty() {
+                    *flagged = Some(mapping);
+                    return None;
+                }
+                // No label shows an item past the cap.
+                mapping.items.truncate(MAX_LABEL_ITEMS);
+                mapping.items.shrink_to_fit();
+                Some(Cached::with_key(MEMORY_OWNER, mapping, &owner))
             })
-            .await?;
+            .await;
+        let Some(mapping) = mapping else {
+            return rejected;
+        };
         // Filled meanwhile by a call of the same shape whose pointers this
         // call's arguments may not have.
         resolve_label(&mapping, arguments)
@@ -324,7 +333,9 @@ mod tests {
         arguments: &Value,
     ) -> Option<ToolCallLabelMapping> {
         let key = ToolLabelCacheKey::new(user_id, "crm", tool, arguments);
-        cache.get_or_compute(key, arguments, labeller.label()).await
+        cache
+            .get_or_compute(key, tool, arguments, labeller.label())
+            .await
     }
 
     #[tokio::test]
@@ -422,10 +433,27 @@ mod tests {
         let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
         assert_eq!(
             cache
-                .get_or_compute(key.clone(), &arguments, async { None })
+                .get_or_compute(key.clone(), &records, &arguments, async { None })
                 .await,
             None
         );
+        cache.entries.run_pending_tasks().await;
+        assert_eq!(cache.entries.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_mapping_the_cross_check_rejects_is_returned_but_not_kept() {
+        let cache = ToolLabelCache::default();
+        let records = tool(schema());
+        let deleting = call("delete", &["Acme"]);
+        let updating = Labeller::new(model("/records/*/recordId"));
+        for runs in 1..=2 {
+            assert_eq!(
+                label(&cache, &updating, "user-a", &records, &deleting).await,
+                Some(model("/records/*/recordId"))
+            );
+            assert_eq!(updating.runs(), runs);
+        }
         cache.entries.run_pending_tasks().await;
         assert_eq!(cache.entries.entry_count(), 0);
     }
@@ -450,7 +478,10 @@ mod tests {
     #[tokio::test]
     async fn stored_entries_hold_no_argument_values() {
         let cache = ToolLabelCache::default();
-        let labeller = Labeller::new(model("/records/*/recordId"));
+        let labeller = Labeller::new(ToolCallLabelMapping {
+            action: ToolCallAction::Delete,
+            ..model("/records/*/recordId")
+        });
         let records = tool(schema());
         let arguments = call("archive_quietly", &["Secret merger with Globex"]);
         label(&cache, &labeller, "user-a", &records, &arguments).await;

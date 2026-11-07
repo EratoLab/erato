@@ -99,10 +99,20 @@ async fn submit(app_state: &erato::state::AppState) -> (Uuid, Uuid, Vec<crate::t
 
 /// The key the gate keeps a model's mapping of the call under.
 async fn label_key(app_state: &erato::state::AppState) -> ToolLabelCacheKey {
-    use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
     let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .unwrap();
+    ToolLabelCacheKey::new(
+        &user.id.to_string(),
+        "records",
+        &update_record(app_state).await,
+        &arguments(),
+    )
+}
+
+/// The tool the gate labels the call with.
+async fn update_record(app_state: &erato::state::AppState) -> rmcp::model::Tool {
+    use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
     let tools = McpServers::new(&app_state.config)
         .list_tools_for_server_ids(
             Uuid::new_v4(),
@@ -116,11 +126,11 @@ async fn label_key(app_state: &erato::state::AppState) -> ToolLabelCacheKey {
         )
         .await
         .unwrap();
-    let update = tools
-        .iter()
+    tools
+        .into_iter()
         .find(|tool| tool.tool.name == "update_record")
-        .unwrap();
-    ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &arguments())
+        .unwrap()
+        .tool
 }
 
 async fn card(app_state: &erato::state::AppState, message_id: Uuid) -> Value {
@@ -371,7 +381,9 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
 
     let label = app_state
         .tool_label_cache
-        .get_or_compute(key, &arguments(), async { None })
+        .get_or_compute(key, &update_record(&app_state).await, &arguments(), async {
+            None
+        })
         .await
         .expect("the model's label");
     assert_eq!(label.source, ToolCallLabelSource::Model);
@@ -413,7 +425,12 @@ async fn the_card_keeps_the_rules_label(
     assert_eq!(
         app_state
             .tool_label_cache
-            .get_or_compute(key.clone(), &arguments(), async { None })
+            .get_or_compute(
+                key.clone(),
+                &update_record(&app_state).await,
+                &arguments(),
+                async { None }
+            )
             .await,
         None
     );
@@ -478,6 +495,44 @@ async fn a_reply_pointing_outside_the_calls_paths_leaves_the_rules_label(pool: P
         Duration::from_secs(10),
     )
     .await;
+}
+
+/// A model's mapping that fails the cross-check puts the generic label on
+/// the card, like any label that fails it, but is not kept: the next call of
+/// the same shape asks the model again.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_models_mapping_the_cross_check_rejects_shows_generic_and_is_not_kept(
+    pool: Pool<Postgres>,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    let deleting = REPLY.replace(r#""action":"update""#, r#""action":"delete""#);
+    labeller(&mut mocks, &recorder, Some(&deleting), Duration::ZERO);
+    calls_update_record(&mut mocks);
+    let app_state = labelled_records(pool, mocks, McpToolApprovalPreset::Restrictive, true).await;
+    let key = label_key(&app_state).await;
+    for asked in 1..=2 {
+        let (_chat_id, message_id, _events) = submit(&app_state).await;
+        let label = eventually("the generic card", || async {
+            let card = card(&app_state, message_id).await;
+            (card["display"]["label"]["source"] == "generic")
+                .then(|| card["display"]["label"].clone())
+        })
+        .await;
+        assert_eq!(label["action"], "other");
+        assert_eq!(recorder.bodies().len(), asked);
+        assert_eq!(
+            app_state.tool_label_cache.lookup(&key, &arguments()).await,
+            None
+        );
+    }
 }
 
 /// Off, nothing goes to the labeller and the card keeps the rules' label.
