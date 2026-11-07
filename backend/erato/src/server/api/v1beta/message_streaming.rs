@@ -23847,7 +23847,7 @@ mod mcp_progress_event_tests {
         let (sse_tx, mut sse_rx) = tokio::sync::mpsc::channel(8);
         let (ack_tx, mut ack_rx) = tokio::sync::mpsc::channel(1);
         let call = async move {
-            for step in 1..=3 {
+            for step in 1..=4 {
                 let mut progress = rmcp::model::ProgressNotificationParam::new(
                     rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1)),
                     f64::from(step),
@@ -23855,6 +23855,7 @@ mod mcp_progress_event_tests {
                 progress.message = match step {
                     2 => Some("\u{202E}<b>Reading</b>\u{0007} notes.txt".into()),
                     3 => Some("\u{200F}\u{2066}".into()),
+                    4 => Some(format!("\u{202E}<script>{}", "\u{0007}x".repeat(1_000_000))),
                     _ => None,
                 };
                 progress_tx.send(progress).unwrap();
@@ -23891,7 +23892,7 @@ mod mcp_progress_event_tests {
             sse_tx,
         );
         tokio::pin!(future);
-        for step in 1..=3 {
+        for step in 1..=4 {
             let event = tokio::select! {
                 event = events.recv() => event.unwrap(),
                 result = &mut future => panic!("result preceded progress: {result:?}"),
@@ -23907,15 +23908,21 @@ mod mcp_progress_event_tests {
                 (step == 1).then_some("generic")
             );
             assert_eq!(value["allowed_by"], "policy");
-            assert_eq!(
-                value["progress_message"].as_str(),
-                (step == 2).then_some("<b>Reading</b> notes.txt")
-            );
+            let shown = value["progress_message"].as_str();
+            match step {
+                2 => assert_eq!(shown, Some("<b>Reading</b> notes.txt")),
+                4 => {
+                    let shown = shown.unwrap();
+                    assert!(shown.starts_with("<script>xx"));
+                    assert_eq!(shown.chars().count(), MAX_DISPLAY_NAME_CHARS);
+                }
+                _ => assert_eq!(shown, None),
+            }
             assert!(sse_rx.try_recv().unwrap().is_ok());
             assert!(streaming_event_to_sse(&event).is_ok());
             ack_tx.send(()).await.unwrap();
         }
         assert!(future.await.is_ok());
-        assert_eq!(task.get_event_history().await.len(), 3);
+        assert_eq!(task.get_event_history().await.len(), 4);
     }
 }

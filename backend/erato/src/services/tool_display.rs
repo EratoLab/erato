@@ -58,10 +58,20 @@ pub fn mcp_tool_call_display(
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
-        read_only: crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
-            .read_only_hint,
+        read_only: shown_as_read_only(tool),
         ..tool_display_metadata(tool)
     }
+}
+
+/// A tool that says it is both read-only and destructive is shown as a write,
+/// so the trace keeps its "ran without asking" note.
+fn shown_as_read_only(tool: &rmcp::model::Tool) -> bool {
+    crate::services::mcp_tool_approval::normalize_tool_annotations(tool).read_only_hint
+        && tool
+            .annotations
+            .as_ref()
+            .and_then(|annotations| annotations.destructive_hint)
+            != Some(true)
 }
 
 /// What a parent chat keeps of the display a delegated child's call carries:
@@ -162,13 +172,13 @@ mod tests {
 
     #[test]
     fn a_call_is_read_only_only_when_its_annotations_say_so() {
-        let read_only = |hint: Option<bool>| {
+        let shown = |hint: Option<bool>, destructive: Option<bool>| {
             let mut tool = Tool::new("tool", "", JsonObject::new());
-            if let Some(hint) = hint {
+            if hint.is_some() || destructive.is_some() {
                 tool.annotations = Some(ToolAnnotations::from_raw(
                     None,
-                    Some(hint),
-                    None,
+                    hint,
+                    destructive,
                     None,
                     None,
                 ));
@@ -182,12 +192,20 @@ mod tests {
             );
             (display.read_only, serde_json::to_value(&display).unwrap())
         };
-        let (flag, json) = read_only(Some(true));
-        assert!(flag);
-        assert_eq!(json["read_only"], true);
-        for hint in [Some(false), None] {
-            let (flag, json) = read_only(hint);
-            assert!(!flag);
+        for destructive in [None, Some(false)] {
+            let (flag, json) = shown(Some(true), destructive);
+            assert!(flag);
+            assert_eq!(json["read_only"], true);
+        }
+        // Contradictory hints read as a write.
+        for (hint, destructive) in [
+            (Some(false), None),
+            (None, None),
+            (Some(true), Some(true)),
+            (None, Some(false)),
+        ] {
+            let (flag, json) = shown(hint, destructive);
+            assert!(!flag, "{hint:?} {destructive:?}");
             assert!(json.get("read_only").is_none());
         }
     }

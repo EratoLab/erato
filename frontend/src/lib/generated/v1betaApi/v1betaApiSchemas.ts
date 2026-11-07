@@ -4317,7 +4317,8 @@ export type ToolDisplayMetadata = {
   label?: ToolCallLabel;
   /**
    * Whether the tool is read-only by the annotations the approval policy
-   * read for this call. Set on MCP calls only.
+   * read for this call and does not also call itself destructive. Set on
+   * MCP calls only.
    */
   read_only?: boolean;
   /**

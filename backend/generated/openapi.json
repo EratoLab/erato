@@ -12639,7 +12639,7 @@
           },
           "read_only": {
             "type": "boolean",
-            "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call. Set on MCP calls only."
+            "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call and does not also call itself destructive. Set on\nMCP calls only."
           },
           "server_name": {
             "type": "string",
