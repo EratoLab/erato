@@ -244,6 +244,13 @@ impl AppState {
                 reloadable.clone(),
             );
         }
+        scheduled_deliveries.register_producer(Arc::new(
+            crate::services::scheduled_items::ReminderProducer::new(
+                ms_teams_bot
+                    .as_ref()
+                    .and_then(|bot| bot.settings.public_base_url.clone()),
+            ),
+        ));
         let scheduled_deliveries = Arc::new(scheduled_deliveries);
         let actor_manager =
             ActorManager::new(db.clone(), config.clone(), scheduled_deliveries.clone()).await;

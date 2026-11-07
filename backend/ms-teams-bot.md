@@ -45,6 +45,15 @@ With `integrations.ms_office.teams.bot.inactivity_nudge.enabled`, a user who has
 - **Reachability.** The welcome event (`conversationUpdate` with the bot in `membersAdded`) now also upserts the personal `ms_teams_conversations` row for users Erato knows by Entra object ID, so people the app was installed for by policy can be reached before they ever write. `installationUpdate` is still ignored.
 - **Channel.** `teams_personal` sends through the Connector to the user's personal conversation row, not to the current chat's conversation. 403 (`MessageWritesBlocked`, `ForbiddenOperationException`, roster) fails the row as unreachable; 429/412/5xx and transport errors retry per the executor's rules.
 
+## User reminders
+
+Reminders a user schedules (Scheduled page, later the chat tool) are `scheduled_items` rows (`services/scheduled_items.rs`): name, message, optional linked chat, channel (`teams_personal`), trigger and the IANA zone its local times were entered in. Each time an item is due, one `scheduled_deliveries` row of kind `reminder` (dedupe key = item id, so at most one open occurrence per item) goes through the same executor and channel as the nudge.
+
+- **Trigger.** `once` (local date and time) or `repeat`: daily, weekdays (Mon–Fri), weekly on chosen days, or monthly on the start date's day (the last day of shorter months for the 29th–31st); a start date; ends never, on a date, or after a number of times. Times resolve in the item's zone: 09:00 stays 09:00 across daylight-saving changes, a time in the spring gap moves to the first valid minute after it, a time in the repeated autumn hour happens once.
+- **Series.** After an occurrence is settled (delivered, failed or refused), the producer creates the next one on its next tick, computed from the item's regular time (`occurrence_at`) or now, whichever is later, so a snooze moves only the current occurrence and an outage does not catch up in a burst. The item's row lock makes replicas create one next occurrence between them. With no next occurrence the item is `ended`.
+- **Edit and cancel.** A changed trigger reschedules the open occurrence (dropping a snooze); cancelling marks the item `cancelled` and cancels its open occurrence. An occurrence already claimed is refused by the send-time guard if the item was cancelled meanwhile.
+- **Card.** The item's name as title, its message, and the linked chat (title, link to `public_base_url`) as a button. No action buttons yet (ERMAIN-1112). An unreachable user fails the occurrence through the channel (`no personal Teams conversation`), so the page can show it as failed.
+
 ## Setup
 
 Customer instructions: `site/content/docs/integrations/ms_teams.mdx`. Per environment:

@@ -42,6 +42,9 @@ use std::time::Duration;
 /// appends the links as text and leaves the actions out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryContent {
+    /// Shown above the text, such as a reminder's name.
+    #[serde(default)]
+    pub title: Option<String>,
     pub text: String,
     /// Short plain text for notification previews.
     #[serde(default)]
@@ -305,7 +308,10 @@ const INSERT_COLUMNS: &str =
 
 /// Create a pending row. `None` when an open row with the same dedupe key
 /// already exists, which is how a producer run stays idempotent.
-pub async fn schedule(db: &DatabaseConnection, new: NewDelivery) -> Result<Option<Model>, Report> {
+pub async fn schedule<C: ConnectionTrait>(
+    db: &C,
+    new: NewDelivery,
+) -> Result<Option<Model>, Report> {
     let sql = format!(
         "INSERT INTO scheduled_deliveries {INSERT_COLUMNS}
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
@@ -367,8 +373,8 @@ fn insert_values(new: &NewDelivery) -> Vec<sea_orm::Value> {
 /// Cancel the user's open rows, narrowed by kind and dedupe key when given.
 /// Rows in flight (`claimed`) are left to the executor, whose producer guard
 /// is the place to refuse them. Returns how many rows were cancelled.
-pub async fn cancel_open(
-    db: &DatabaseConnection,
+pub async fn cancel_open<C: ConnectionTrait>(
+    db: &C,
     user_id: Uuid,
     kind: Option<&str>,
     dedupe_key: Option<&str>,
