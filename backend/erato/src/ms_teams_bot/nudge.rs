@@ -16,6 +16,7 @@ use super::render;
 use crate::db::entity::prelude::MsTeamsConversations;
 use crate::db::entity::scheduled_deliveries::{CreatedBy, Model};
 use crate::db::entity::{ms_teams_conversations, users};
+use crate::distribution::runtime::ReloadableAppState;
 use crate::models::user_preference::set_teams_nudges_opt_out;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
@@ -27,9 +28,7 @@ use chrono::{
     DateTime, Datelike, Duration as ChronoDuration, FixedOffset, TimeZone, Timelike, Utc,
 };
 use chrono_tz::Tz;
-use erato_config::config::{
-    TeamsBotConfig, TeamsInactivityNudgeConfig, TeamsNudgeSendWindowConfig,
-};
+use erato_config::config::{TeamsInactivityNudgeConfig, TeamsNudgeSendWindowConfig};
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -40,6 +39,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 #[cfg(test)]
 mod delivery_tests;
@@ -59,21 +59,23 @@ fn statement(id: &'static str, sql: &str, values: Vec<sea_orm::Value>) -> Statem
     named_statement_from_sql_and_values(DbBackend::Postgres, id, sql, values)
 }
 
-/// Register the Teams channel and, when configured, the nudge producer.
+/// Register the Teams channel and the nudge producer. The producer comes
+/// with the bot rather than with `inactivity_nudge.enabled`: its settings are
+/// reloadable (`ReloadableAppState::teams_nudge`), so an admin can switch the
+/// nudge on without a restart, and a replica only claims the kinds it has a
+/// producer for, so rows created before the nudge was switched off are
+/// cancelled at send time rather than left pending.
 pub fn register(
     registry: &mut DeliveryRegistry,
     bot: &Arc<TeamsBot>,
-    config: &TeamsBotConfig,
-) -> Result<(), Report> {
+    reloadable: Arc<RwLock<ReloadableAppState>>,
+) {
     registry.register_channel(Arc::new(TeamsPersonalChannel { bot: bot.clone() }));
-    if config.inactivity_nudge.enabled {
-        registry.register_producer(Arc::new(InactivityNudgeProducer::from_config(
-            &config.inactivity_nudge,
-            &bot.settings.app_name,
-            bot.settings.public_base_url.as_deref(),
-        )?));
-    }
-    Ok(())
+    registry.register_producer(Arc::new(InactivityNudgeProducer::reloadable(
+        reloadable,
+        &bot.settings.app_name,
+        bot.settings.public_base_url.as_deref(),
+    )));
 }
 
 /// When tips may be sent, in the deployment's time zone.
@@ -128,7 +130,10 @@ impl SendWindow {
     }
 }
 
-pub struct InactivityNudgeProducer {
+/// The nudge's settings as the producer uses them, parsed from the section.
+#[derive(Debug, Clone)]
+pub struct NudgeSettings {
+    enabled: bool,
     inactive_after: Duration,
     repeat: bool,
     window: SendWindow,
@@ -136,6 +141,59 @@ pub struct InactivityNudgeProducer {
     /// Lower-cased; empty means everyone.
     pilot_users: Vec<String>,
     max_per_run: u32,
+}
+
+impl NudgeSettings {
+    pub fn from_config(config: &TeamsInactivityNudgeConfig) -> Result<Self, Report> {
+        Ok(Self {
+            enabled: config.enabled,
+            inactive_after: config.inactive_after_duration()?,
+            repeat: config.repeat,
+            window: SendWindow::from_config(&config.send_window)?,
+            tips: config
+                .tips
+                .iter()
+                .map(|tip| tip.trim().to_string())
+                .collect(),
+            pilot_users: config
+                .pilot_users
+                .iter()
+                .map(|email| email.trim().to_ascii_lowercase())
+                .filter(|email| !email.is_empty())
+                .collect(),
+            max_per_run: config.max_per_run.max(1),
+        })
+    }
+
+    pub fn window(&self) -> &SendWindow {
+        &self.window
+    }
+
+    /// The tip a user who has already received `delivered` tips gets next;
+    /// `None` without tips, which validation refuses for an enabled nudge.
+    pub fn tip_for(&self, delivered: u64) -> Option<&str> {
+        if self.tips.is_empty() {
+            return None;
+        }
+        Some(&self.tips[(delivered % self.tips.len() as u64) as usize])
+    }
+
+    fn pilot_filter(&self) -> String {
+        self.pilot_users.join(",")
+    }
+}
+
+/// Where the producer reads its settings, on every use.
+enum SettingsSource {
+    /// A running server: the section in the reloadable state, which a
+    /// configuration reload (an admin-panel change, say) replaces.
+    Reloadable(Arc<RwLock<ReloadableAppState>>),
+    /// Tests and tools: one fixed section.
+    Fixed(Arc<NudgeSettings>),
+}
+
+pub struct InactivityNudgeProducer {
+    settings: SettingsSource,
     app_name: String,
     public_base_url: Option<String>,
     last_run: Mutex<Option<Instant>>,
@@ -157,6 +215,8 @@ struct ActivityRow {
 }
 
 impl InactivityNudgeProducer {
+    /// A producer with one fixed section, for tests and tools; the section
+    /// must list at least one tip.
     pub fn from_config(
         config: &TeamsInactivityNudgeConfig,
         app_name: &str,
@@ -165,39 +225,53 @@ impl InactivityNudgeProducer {
         if config.tips.is_empty() {
             return Err(eyre!("the inactivity nudge needs at least one tip"));
         }
-        Ok(Self {
-            inactive_after: config.inactive_after_duration()?,
-            repeat: config.repeat,
-            window: SendWindow::from_config(&config.send_window)?,
-            tips: config
-                .tips
-                .iter()
-                .map(|tip| tip.trim().to_string())
-                .collect(),
-            pilot_users: config
-                .pilot_users
-                .iter()
-                .map(|email| email.trim().to_ascii_lowercase())
-                .filter(|email| !email.is_empty())
-                .collect(),
-            max_per_run: config.max_per_run.max(1),
+        Ok(Self::new(
+            SettingsSource::Fixed(Arc::new(NudgeSettings::from_config(config)?)),
+            app_name,
+            public_base_url,
+        ))
+    }
+
+    /// The running server's producer, which reads the section from the
+    /// reloadable state on every use.
+    pub fn reloadable(
+        reloadable: Arc<RwLock<ReloadableAppState>>,
+        app_name: &str,
+        public_base_url: Option<&str>,
+    ) -> Self {
+        Self::new(
+            SettingsSource::Reloadable(reloadable),
+            app_name,
+            public_base_url,
+        )
+    }
+
+    fn new(settings: SettingsSource, app_name: &str, public_base_url: Option<&str>) -> Self {
+        Self {
+            settings,
             app_name: app_name.to_string(),
             public_base_url: public_base_url.map(|url| url.trim_end_matches('/').to_string()),
             last_run: Mutex::new(None),
-        })
+        }
     }
 
-    pub fn window(&self) -> &SendWindow {
-        &self.window
+    /// The settings in force now. A reload validates the section before it
+    /// replaces the previous one, so a parse failure here is a bug rather
+    /// than a configuration error.
+    pub async fn settings(&self) -> Result<Arc<NudgeSettings>, Report> {
+        match &self.settings {
+            SettingsSource::Fixed(settings) => Ok(settings.clone()),
+            SettingsSource::Reloadable(reloadable) => {
+                let section = reloadable.read().await.teams_nudge.clone();
+                Ok(Arc::new(NudgeSettings::from_config(&section)?))
+            }
+        }
     }
 
-    /// The tip a user who has already received `delivered` tips gets next.
-    pub fn tip_for(&self, delivered: u64) -> &str {
-        &self.tips[(delivered % self.tips.len() as u64) as usize]
-    }
-
-    fn pilot_filter(&self) -> String {
-        self.pilot_users.join(",")
+    /// The rule with the settings in force now; see `schedule_with`.
+    pub async fn schedule_due(&self, db: &DatabaseConnection) -> Result<usize, Report> {
+        let settings = self.settings().await?;
+        self.schedule_with(&settings, db).await
     }
 
     /// The rule, without the hourly gate: one pending row per user whose last
@@ -214,7 +288,11 @@ impl InactivityNudgeProducer {
     /// Activity is the newest message in a chat the user owns, or the chat's
     /// creation when it has none: `chats.updated_at` also moves on
     /// housekeeping writes such as archiving, which must not reset a period.
-    pub async fn schedule_due(&self, db: &DatabaseConnection) -> Result<usize, Report> {
+    async fn schedule_with(
+        &self,
+        settings: &NudgeSettings,
+        db: &DatabaseConnection,
+    ) -> Result<usize, Report> {
         let candidates = Candidate::find_by_statement(statement(
             "teams_nudge.candidates",
             "WITH candidates AS (
@@ -257,17 +335,17 @@ impl InactivityNudgeProducer {
              ORDER BY last_activity ASC
              LIMIT $3",
             vec![
-                self.inactive_after.as_secs_f64().into(),
-                self.pilot_filter().into(),
-                i64::from(self.max_per_run).into(),
-                self.repeat.into(),
+                settings.inactive_after.as_secs_f64().into(),
+                settings.pilot_filter().into(),
+                i64::from(settings.max_per_run).into(),
+                settings.repeat.into(),
                 KIND.into(),
             ],
         ))
         .all(db)
         .await?;
 
-        let due_at = self.window.next_slot(Utc::now());
+        let due_at = settings.window.next_slot(Utc::now());
         let mut created = 0;
         for candidate in candidates {
             let last_activity = candidate.last_activity.to_rfc3339();
@@ -335,7 +413,13 @@ impl DeliveryProducer for InactivityNudgeProducer {
         {
             return Ok(0);
         }
-        let result = self.schedule_due(db).await;
+        let settings = self.settings().await?;
+        // Switched off: nothing is scheduled and the hourly gate is left as
+        // it is, so switching the nudge on takes effect on the next tick.
+        if !settings.enabled {
+            return Ok(0);
+        }
+        let result = self.schedule_with(&settings, db).await;
         // A failed run is retried on the next tick rather than in an hour.
         *self.last_run.lock().expect("nudge producer gate") = result.is_ok().then(Instant::now);
         result
@@ -352,6 +436,13 @@ impl DeliveryProducer for InactivityNudgeProducer {
         let no = |reason: &str| StillDue::No {
             reason: reason.to_string(),
         };
+        // The settings in force at send time, not at creation: a row created
+        // before the nudge was switched off, or before the pilot list or the
+        // window changed, follows the current settings.
+        let settings = self.settings().await?;
+        if !settings.enabled {
+            return Ok(no("inactivity nudge switched off"));
+        }
         let Some(activity) = self.activity(db, row.user_id).await? else {
             return Ok(no("user no longer exists"));
         };
@@ -364,16 +455,16 @@ impl DeliveryProducer for InactivityNudgeProducer {
         if activity.personal_conversations == 0 {
             return Ok(no("no personal Teams conversation"));
         }
-        if !self.pilot_users.is_empty()
+        if !settings.pilot_users.is_empty()
             && !activity
                 .email
                 .as_deref()
-                .is_some_and(|email| self.pilot_users.contains(&email.to_ascii_lowercase()))
+                .is_some_and(|email| settings.pilot_users.contains(&email.to_ascii_lowercase()))
         {
             return Ok(no("not a pilot user"));
         }
         let now = Utc::now();
-        let slot = self.window.next_slot(now);
+        let slot = settings.window.next_slot(now);
         if slot > now {
             // Retries, reclaims and a restart that straddled the window's end
             // all come through here: the tip waits for the next slot instead
@@ -388,7 +479,12 @@ impl DeliveryProducer for InactivityNudgeProducer {
         db: &DatabaseConnection,
         row: &Model,
     ) -> Result<ResolvedContent, Report> {
+        let settings = self.settings().await?;
         let delivered = count_delivered(db, row.user_id, KIND).await?;
+        let tip = settings
+            .tip_for(delivered)
+            .ok_or_else(|| eyre!("the inactivity nudge has no tips"))?
+            .to_string();
         let token = Uuid::new_v4();
         store_action_token(db, row, token).await?;
         let links = self
@@ -402,7 +498,8 @@ impl DeliveryProducer for InactivityNudgeProducer {
         Ok(ResolvedContent {
             channel: CHANNEL.to_string(),
             content: DeliveryContent {
-                text: self.tip_for(delivered).to_string(),
+                title: None,
+                text: tip,
                 summary: Some(format!("A tip from {}", self.app_name)),
                 links,
                 actions: vec![DeliveryAction {
@@ -500,7 +597,16 @@ pub fn reminders_command(text: &str) -> Option<bool> {
 /// The card a delivered message is rendered as: its text, link buttons and
 /// single-use action buttons that name the delivery row.
 pub fn delivery_card(content: &DeliveryContent, delivery_id: Uuid) -> Value {
-    let body = vec![json!({"type": "TextBlock", "text": content.text, "wrap": true})];
+    let mut body = Vec::new();
+    if let Some(title) = content.title.as_deref().filter(|title| !title.is_empty()) {
+        body.push(json!({
+            "type": "TextBlock", "text": title, "wrap": true,
+            "weight": "Bolder", "size": "Medium",
+        }));
+    }
+    if !content.text.is_empty() {
+        body.push(json!({"type": "TextBlock", "text": content.text, "wrap": true}));
+    }
     let mut actions: Vec<Value> = content
         .links
         .iter()
@@ -721,24 +827,33 @@ mod tests {
 
     #[test]
     fn tips_rotate_by_the_number_already_delivered() {
+        let config = TeamsInactivityNudgeConfig {
+            enabled: true,
+            tips: vec!["one".into(), " two ".into(), "three".into()],
+            ..TeamsInactivityNudgeConfig::default()
+        };
+        let settings = NudgeSettings::from_config(&config).unwrap();
+        assert_eq!(settings.tip_for(0), Some("one"));
+        assert_eq!(settings.tip_for(1), Some("two"));
+        assert_eq!(settings.tip_for(2), Some("three"));
+        assert_eq!(settings.tip_for(3), Some("one"));
         let producer = InactivityNudgeProducer::from_config(
-            &TeamsInactivityNudgeConfig {
-                enabled: true,
-                tips: vec!["one".into(), " two ".into(), "three".into()],
-                ..TeamsInactivityNudgeConfig::default()
-            },
+            &config,
             "Hugo",
             Some("https://hugo.example.com/"),
         )
         .unwrap();
-        assert_eq!(producer.tip_for(0), "one");
-        assert_eq!(producer.tip_for(1), "two");
-        assert_eq!(producer.tip_for(2), "three");
-        assert_eq!(producer.tip_for(3), "one");
         assert_eq!(
             producer.public_base_url.as_deref(),
             Some("https://hugo.example.com")
         );
+    }
+
+    #[test]
+    fn a_switched_off_section_parses_without_tips() {
+        let settings = NudgeSettings::from_config(&TeamsInactivityNudgeConfig::default()).unwrap();
+        assert!(!settings.enabled);
+        assert_eq!(settings.tip_for(0), None);
     }
 
     #[test]
@@ -757,6 +872,7 @@ mod tests {
         let delivery_id = Uuid::new_v4();
         let token = Uuid::new_v4();
         let content = DeliveryContent {
+            title: None,
             text: "Did you know?".into(),
             summary: Some("A tip from Hugo".into()),
             links: vec![DeliveryLink {
@@ -783,6 +899,27 @@ mod tests {
             DeliverySubmit::from_value(&json!({"action": "other", "delivery_id": delivery_id, "command": "x", "token": token}))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn delivery_card_puts_the_title_above_the_text() {
+        let card = |title: Option<&str>, text: &str| {
+            delivery_card(
+                &DeliveryContent {
+                    title: title.map(str::to_string),
+                    text: text.into(),
+                    ..Default::default()
+                },
+                Uuid::new_v4(),
+            )["attachments"][0]["content"]["body"]
+                .clone()
+        };
+        let body = card(Some("Call Ms Schulz"), "About the delivery date.");
+        assert_eq!(body[0]["text"], "Call Ms Schulz");
+        assert_eq!(body[0]["weight"], "Bolder");
+        assert_eq!(body[1]["text"], "About the delivery date.");
+        let title_only = card(Some("Call Ms Schulz"), "");
+        assert_eq!(title_only.as_array().unwrap().len(), 1);
     }
 
     #[test]

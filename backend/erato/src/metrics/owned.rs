@@ -314,6 +314,7 @@ impl HeapSize for crate::services::mcp_tool_annotations::ResolvedMcpTool {
         if let Some(a) = &self.server_annotations {
             a.title.heap_size(c);
         }
+        self.approval_argument.heap_size(c);
     }
 }
 

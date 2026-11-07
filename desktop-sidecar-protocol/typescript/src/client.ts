@@ -2,6 +2,8 @@ import { SidecarClientError, SidecarRpcError } from "./errors.js";
 import {
   validateSidecarStatusV1Params,
   validateSidecarStatusV1Result,
+  validateSidecarInstallUiPackageV1Params,
+  validateSidecarInstallUiPackageV1Result,
   validateSidecarRequestPermissionV1Params,
   validateSidecarRequestPermissionV1Result,
   validateCancelResult,
@@ -67,6 +69,8 @@ import {
 import type {
   SidecarStatusV1Params,
   SidecarStatusV1Result,
+  SidecarInstallUiPackageV1Params,
+  SidecarInstallUiPackageV1Result,
   SidecarRequestPermissionV1Params,
   SidecarRequestPermissionV1Result,
   CapabilityDescriptor,
@@ -143,6 +147,12 @@ export const MAX_BODY_BYTES = 262_144;
  */
 export const MAX_RESPONSE_BYTES = 67_108_864;
 
+/** Raw bytes per `sidecar.install_ui_package.v1` chunk; every chunk but the last carries exactly this many. */
+export const UI_PACKAGE_CHUNK_BYTES = 131_072;
+/** The largest desktop UI package archive a sidecar accepts, relayed or downloaded. */
+export const UI_PACKAGE_MAX_ARCHIVE_BYTES = 9_437_184;
+export const UI_PACKAGE_MAX_CHUNKS = 72;
+
 export interface SidecarClientInfo {
   name: string;
   version: string;
@@ -166,6 +176,11 @@ export type SidecarReadinessState =
   | "error";
 
 export type SidecarDesktopUi = NonNullable<DiscoverResult["ui"]>;
+
+/** The desktop UI package state `sidecar.status.v1` reports (package 0.1.47). */
+export type SidecarUiPackageStatus = NonNullable<
+  SidecarStatusV1Result["ui_package"]
+>;
 
 export interface SidecarCapability {
   id: string;
@@ -312,6 +327,10 @@ const builtInContracts: Readonly<Record<string, SidecarMethodContract>> = {
   "sidecar.status.v1": {
     validateParams: validateSidecarStatusV1Params,
     validateResult: validateSidecarStatusV1Result,
+  },
+  "sidecar.install_ui_package.v1": {
+    validateParams: validateSidecarInstallUiPackageV1Params,
+    validateResult: validateSidecarInstallUiPackageV1Result,
   },
   "sidecar.request_permission.v1": {
     validateParams: validateSidecarRequestPermissionV1Params,
@@ -615,6 +634,11 @@ export class DesktopSidecarClient {
     params: SidecarStatusV1Params,
     options?: InvokeOptions,
   ): Promise<SidecarStatusV1Result>;
+  async invoke(
+    method: "sidecar.install_ui_package.v1",
+    params: SidecarInstallUiPackageV1Params,
+    options?: InvokeOptions,
+  ): Promise<SidecarInstallUiPackageV1Result>;
   async invoke(
     method: "sidecar.request_permission.v1",
     params: SidecarRequestPermissionV1Params,

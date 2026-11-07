@@ -276,7 +276,7 @@ fn project_mcp_server_tool(
     is_wait_tool: bool,
 ) -> McpServerTool {
     let tool = &resolved.tool;
-    let verdict = evaluate_mcp_tool_approval(approval, tool);
+    let verdict = evaluate_mcp_tool_approval(approval, tool, resolved.approval_argument.as_deref());
     let name = tool.name.to_string();
     let display = crate::services::tool_display::tool_display_metadata(tool);
     McpServerTool {

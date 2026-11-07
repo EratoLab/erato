@@ -6568,6 +6568,31 @@ msgid "profile.menu.preferences"
 msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.cancelled"
+msgstr "Abgebrochen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.done"
+msgstr "Erledigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.failed"
+msgstr "Fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.scheduled"
+msgstr "Geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.snoozed"
+msgstr "Zurückgestellt"
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr "Finde Unterhaltungen und Nachrichten in deinem Chatverlauf"
@@ -7301,6 +7326,61 @@ msgstr "Systemberechtigungen"
 #: src/components/ui/DesktopSidecar/SidecarPermissions.tsx
 msgid "sidecar.permissions.unknown"
 msgstr "Unbekannt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Oberfläche der Desktop-App: aktuell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Oberfläche der Desktop-App: Aktualisierung fehlgeschlagen ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Oberfläche der Desktop-App: wird aktualisiert…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "Netzwerkfehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "kein Paket auf dem Server"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "unerwarteter Fehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "der Proxy hat die Verbindung abgelehnt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "konnte auf diesem Gerät nicht gespeichert werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "Zertifikat nicht vertrauenswürdig"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "Zugriff verweigert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "das Paket konnte nicht verifiziert werden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

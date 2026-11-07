@@ -1,3 +1,5 @@
+import { i18n } from "@lingui/core";
+
 import { isImageFile } from "@/utils/file/fileTypeUtils";
 import { FILE_TYPES } from "@/utils/fileTypes";
 
@@ -110,15 +112,23 @@ export function getFileSize(file: FileResource): string | null {
 }
 
 /**
- * Format a file size in bytes to a human-readable format
+ * Format a file size in bytes to a human-readable format. The unit labels are
+ * fixed; the number takes the locale's decimal mark ("1,2 MB" in `de`).
  */
-export function formatFileSize(bytes: number): string {
+export function formatFileSize(
+  bytes: number,
+  locale: string = i18n.locale,
+): string {
+  const number = new Intl.NumberFormat(locale || undefined, {
+    maximumFractionDigits: 1,
+    useGrouping: false,
+  });
   if (bytes < 1024) {
-    return `${bytes} B`;
+    return `${number.format(bytes)} B`;
   } else if (bytes < 1024 * 1024) {
-    return `${Math.round(bytes / 1024)} KB`;
+    return `${number.format(Math.round(bytes / 1024))} KB`;
   } else {
-    return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
+    return `${number.format(Math.round((bytes / (1024 * 1024)) * 10) / 10)} MB`;
   }
 }
 

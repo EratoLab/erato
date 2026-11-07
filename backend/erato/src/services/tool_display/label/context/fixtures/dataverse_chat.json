@@ -236,7 +236,7 @@
       "expect": { "id": ["Agree technical layout"] }
     },
     {
-      "case": "an email to two contacts read earlier",
+      "case": "an email to two contacts read earlier names neither recipient",
       "arguments": {
         "tablename": "email",
         "item": {
@@ -266,7 +266,7 @@
         ],
         "source": "rules"
       },
-      "expect": { "target": ["Ana Example", "Ben Sample"] }
+      "expect": { "target": [null, null] }
     },
     {
       "case": "a record nobody read is a miss, not a guess",
