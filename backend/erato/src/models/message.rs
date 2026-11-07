@@ -436,9 +436,13 @@ pub struct ToolUse {
     pub total: Option<f64>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
-    /// What an MCP result held besides the text in `output`. For the UI only:
-    /// replay drops it, so the model never sees it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// The links of an MCP result. For the UI only: replay drops it, so the
+    /// model never sees it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
     #[schema(nullable = false)]
     pub result_details: Option<ToolResultDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -447,53 +451,34 @@ pub struct ToolUse {
     pub ended_at: Option<String>,
 }
 
-/// The parts of an MCP result that `output` leaves out, bounded in size.
+/// What a tool row keeps of an MCP result besides `output`: at most ten of its
+/// links. Its structured content and embedded resources are not kept.
 #[derive(
     Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
 )]
 pub struct ToolResultDetails {
-    /// The result's structured content, kept only when it differs from
-    /// `output`. Values over the size cap read `[omitted: N bytes]`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    pub structured: Option<JsonValue>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<ToolResultLink>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub resources: Vec<ToolResultResource>,
 }
 
-/// A resource link from the result. Only `https` links without user info are
-/// kept; the name, title and MIME type are display-cleaned and capped like a
-/// tool title.
+/// A resource link from the result. Only `https` links with a host, without
+/// user info and at most 512 bytes long are kept; the name and title are
+/// display-cleaned and capped like a tool title.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultLink {
     pub uri: String,
+    /// The link's host as the URL parser reads it: lowercase, and punycode for
+    /// a non-ASCII name, so a lookalike host reads as `xn--…`.
+    pub host: String,
+    /// Whether `host` is the host of the MCP server's configured URL, ignoring
+    /// case and port. Never true for a server without a URL.
+    pub matches_server_host: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    pub mime_type: Option<String>,
-}
-
-/// A resource embedded in the result. `ui://`, `data:`, `javascript:` and
-/// `vbscript:` resources are not kept.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
-pub struct ToolResultResource {
-    /// The resource's own URI: an identifier, not a link to open.
-    pub uri: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    pub mime_type: Option<String>,
-    /// The text as the server sent it, or `[omitted: N bytes]`. Absent on a
-    /// blob, whose body is never kept.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    pub text: Option<String>,
 }
 
 /// Snapshot of the MCP annotations used to decide whether a tool call needs
@@ -527,19 +512,19 @@ pub struct ToolDisplayMetadata {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        deserialize_with = "label_or_none"
+        deserialize_with = "readable_or_none"
     )]
     #[schema(nullable = false)]
     pub label: Option<ToolCallLabel>,
 }
 
-/// A stored label this version cannot read is dropped, never the row: the
-/// call then renders as it did before labels.
-fn label_or_none<'de, D: serde::Deserializer<'de>>(
+/// A stored label or result detail this version cannot read is dropped, never
+/// the row: the call then renders as it did before them.
+pub(crate) fn readable_or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(
     deserializer: D,
-) -> Result<Option<ToolCallLabel>, D::Error> {
+) -> Result<Option<T>, D::Error> {
     let stored = Option::<JsonValue>::deserialize(deserializer)?;
-    Ok(stored.and_then(|label| serde_json::from_value(label).ok()))
+    Ok(stored.and_then(|value| serde_json::from_value(value).ok()))
 }
 
 /// What a tool call does to what, and where, read from its arguments by code.
@@ -2783,6 +2768,44 @@ mod tool_approval_part_tests {
             ("Create pages", &None)
         );
         assert_eq!(display.server_name.as_deref(), Some("Notion"));
+    }
+
+    #[test]
+    fn stored_result_details_this_version_cannot_read_never_fail_their_row() {
+        let link = json!({"uri": "https://records.example.test/rows/1",
+                          "host": "records.example.test", "matches_server_host": false});
+        let row = |details: serde_json::Value| {
+            let message = MessageSchema::validate(&json!({
+                "role": "assistant",
+                "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                             "status": "success", "tool_name": "create_row",
+                             "output": "Created.", "result_details": details}],
+            }))
+            .expect("details it cannot read leave the row readable");
+            let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+                panic!("expected one tool row");
+            };
+            assert_eq!(tool.output, Some(json!("Created.")));
+            tool.result_details.clone()
+        };
+
+        for unreadable in [
+            json!(5),
+            json!("links"),
+            json!([link]),
+            json!({"links": "https://records.example.test/rows/1"}),
+            json!({"links": [{"uri": "https://records.example.test/rows/1"}]}),
+            json!({"links": [link, {"uri": 1, "host": [], "matches_server_host": "yes"}]}),
+        ] {
+            assert_eq!(row(unreadable.clone()), None, "{unreadable}");
+        }
+        assert_eq!(row(json!(null)), None);
+        // An earlier build stored structured content and resources beside the links.
+        let earlier = row(json!({"structured": {"title": "Plan"}, "links": [link],
+                                 "resources": [{"uri": "records://rows/1", "text": "x"}]}))
+        .expect("the links of an earlier row still read");
+        assert_eq!(earlier.links.len(), 1);
+        assert_eq!(earlier.links[0].host, "records.example.test");
     }
 
     /// Approval rows are durable and predate every field this stop now carries,

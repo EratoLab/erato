@@ -1180,14 +1180,13 @@ mod tests {
     fn a_replayed_tool_result_drops_its_result_details() {
         let mut stored = part("create_row", serde_json::json!("Created row row-1."));
         stored.result_details = Some(ToolResultDetails {
-            structured: Some(serde_json::json!({"title": "SYNTHETIC-STRUCTURED-TITLE"})),
             links: vec![ToolResultLink {
                 uri: "https://records.example.test/rows/1".to_string(),
+                host: "records.example.test".to_string(),
+                matches_server_host: false,
                 name: Some("row-1".to_string()),
-                title: None,
-                mime_type: None,
+                title: Some("SYNTHETIC-LINK-TITLE".to_string()),
             }],
-            resources: Vec::new(),
         });
 
         let replayed = replay_assistant_content(
@@ -1203,10 +1202,7 @@ mod tests {
             assert_eq!(tool_use.output, stored.output);
         }
         let snapshot = serde_json::to_string(&replayed).unwrap();
-        assert!(
-            !snapshot.contains("SYNTHETIC-STRUCTURED-TITLE"),
-            "{snapshot}"
-        );
+        assert!(!snapshot.contains("SYNTHETIC-LINK-TITLE"), "{snapshot}");
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
     }
 

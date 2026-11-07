@@ -21,6 +21,8 @@ const MARKER: &str = "MCP-FILE-RESULT";
 const DETAILS_TITLE: &str = "SYNTHETIC-DETAILS-TITLE";
 const DETAILS_LINK: &str = "https://records.example.test/rows/row-1";
 const DETAILS_TEXT: &str = "SYNTHETIC-RESOURCE-TEXT";
+const DETAILS_STRUCTURED: &str = "SYNTHETIC-STRUCTURED-ONLY";
+const SERVER_LINK: &str = "https://127.0.0.1/rows/row-1";
 
 #[derive(Clone)]
 struct Fixture {
@@ -28,7 +30,7 @@ struct Fixture {
     protocol: erato::config::McpProtocolMode,
     structured: bool,
     /// No file fields; the result adds structured content that differs from
-    /// its text, links and resources.
+    /// its text, links and resources, of which only the links are kept.
     details: bool,
     is_error: bool,
     storage_failure: bool,
@@ -81,10 +83,11 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
             }
             if fixture.details {
                 result["structuredContent"] =
-                    json!({"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_TITLE}});
+                    json!({"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_STRUCTURED}});
                 result["content"].as_array_mut().unwrap().extend([
                     json!({"type": "resource_link", "uri": DETAILS_LINK, "name": "row-1",
-                           "title": DETAILS_TITLE}),
+                           "title": DETAILS_TITLE, "mimeType": "text/html"}),
+                    json!({"type": "resource_link", "uri": SERVER_LINK, "name": "row-1 here"}),
                     json!({"type": "resource_link", "uri": "http://records.example.test/rows/row-1",
                            "name": "plain"}),
                     json!({"type": "resource", "resource": {"uri": "records://rows/row-1",
@@ -445,14 +448,13 @@ async fn check_output_for_protocol(
     if fixture.details {
         assert_eq!(
             tool["result_details"],
-            json!({
-                "structured": {"stdout": MARKER, "row": {"id": "row-1", "title": DETAILS_TITLE}},
-                "links": [{"uri": DETAILS_LINK, "name": "row-1", "title": DETAILS_TITLE}],
-                "resources": [
-                    {"uri": "records://rows/row-1", "mime_type": "text/plain", "text": DETAILS_TEXT},
-                    {"uri": "records://rows/row-1/chart", "mime_type": "image/png"},
-                ],
-            }),
+            json!({"links": [
+                {"uri": DETAILS_LINK, "host": "records.example.test",
+                 "matches_server_host": false, "name": "row-1", "title": DETAILS_TITLE},
+                // The fixture's MCP server listens on 127.0.0.1.
+                {"uri": SERVER_LINK, "host": "127.0.0.1", "matches_server_host": true,
+                 "name": "row-1 here"},
+            ]}),
             "{tool}"
         );
         assert_eq!(tool["output"], fixture.output);
@@ -484,7 +486,13 @@ async fn check_output_for_protocol(
         let bodies = recorder.bodies();
         assert_eq!(bodies.len(), 2);
         for value in bodies.into_iter().chain([replayed]) {
-            for detail in [DETAILS_TITLE, DETAILS_LINK, DETAILS_TEXT] {
+            for detail in [
+                DETAILS_TITLE,
+                DETAILS_LINK,
+                DETAILS_TEXT,
+                DETAILS_STRUCTURED,
+                SERVER_LINK,
+            ] {
                 assert!(
                     !value.contains(detail),
                     "{detail} reached the model: {value}"
@@ -494,6 +502,9 @@ async fn check_output_for_protocol(
         for value in [row.raw_message.to_string(), response.text()] {
             assert!(!value.contains(PNG), "raw payload leaked: {value}");
             assert!(!value.contains("structuredContent"));
+            for left_out in [DETAILS_STRUCTURED, DETAILS_TEXT, "records://"] {
+                assert!(!value.contains(left_out), "{left_out} was kept: {value}");
+            }
         }
     }
     for pointer in &pointers {

@@ -6523,11 +6523,11 @@ mod generation_event_wire_format_tests {
                             crate::models::message::ToolResultDetails {
                                 links: vec![crate::models::message::ToolResultLink {
                                     uri: "https://records.example.test/rows/1".into(),
+                                    host: "records.example.test".into(),
+                                    matches_server_host: true,
                                     name: Some("row-1".into()),
                                     title: None,
-                                    mime_type: None,
                                 }],
-                                ..Default::default()
                             }
                         }),
                     }
@@ -9260,6 +9260,11 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
+            let server_url = mcp
+                .config
+                .mcp_servers
+                .get(&managed_tool_call.server_id)
+                .map(|server| server.url.clone());
             let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
@@ -9441,6 +9446,7 @@ async fn stream_generate_chat_completion<'a>(
                         &unfinished_tool_call,
                         output_schema.as_ref(),
                         &tool_call_result,
+                        server_url.as_deref(),
                     )
                     .await
                     {
@@ -22137,6 +22143,10 @@ pub(crate) async fn run_continuation(
                             &call,
                             output_schema.as_ref(),
                             &result,
+                            mcp.config
+                                .mcp_servers
+                                .get(&server_id)
+                                .map(|server| server.url.as_str()),
                         )
                         .await
                         {
