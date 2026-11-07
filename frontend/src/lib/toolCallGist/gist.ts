@@ -44,9 +44,10 @@ export const GIST_PHASES = ["ask", "done", "failed"] as const;
 
 /**
  * Where a value comes from, which decides how it looks: text the call wrote,
- * a name an earlier result in the chat gave the value, or an ID shown short.
+ * a name an earlier result in the chat gave the value, the value a field had
+ * in an earlier result, or an ID shown short.
  */
-export type GistValueOrigin = "written" | "resolved" | "id";
+export type GistValueOrigin = "written" | "resolved" | "earlier" | "id";
 
 export interface GistValue {
   text: string;
@@ -270,7 +271,7 @@ const gistField = (
         action === "update" && value.resolved
           ? {
               text: value.resolved,
-              origin: "resolved" as const,
+              origin: "earlier" as const,
               truncated: false,
             }
           : undefined,

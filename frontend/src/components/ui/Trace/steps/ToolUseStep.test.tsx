@@ -408,8 +408,11 @@ describe("ToolUseStep gist row", () => {
     const values = screen.getByTestId("tool-call-gist-values");
     expect(isFolded(values)).toBe(false);
     expect(values).toHaveTextContent("Status");
-    expect(screen.getByTestId("tool-call-gist-earlier")).toHaveTextContent(
-      "Lead",
+    const earlier = screen.getByTestId("tool-call-gist-earlier");
+    expect(earlier).toHaveTextContent("Lead");
+    expect(earlier.querySelector("[data-origin]")).toHaveAttribute(
+      "title",
+      "Value from an earlier result in this chat",
     );
     expect(values).toHaveTextContent("Customer");
     expect(isFolded(screen.getByText(/Input Parameters/i))).toBe(true);
