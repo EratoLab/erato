@@ -7918,6 +7918,11 @@ msgstr "Sie haben „Nie erlauben“ gewählt"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.notRun"
+msgstr "Nicht ausgeführt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.ranWithoutAsking"
 msgstr "Ohne Nachfrage ausgeführt"
 

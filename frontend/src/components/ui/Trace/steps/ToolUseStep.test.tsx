@@ -275,6 +275,16 @@ describe("ToolUseStep decision row", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
+  it("shows a call the gate refused without a card as not run, not Failed", () => {
+    settled(
+      { output: { status: "rejected" } as unknown as ToolUse["output"] },
+      "error",
+    );
+
+    expect(decisionRow()).toHaveTextContent("Not run");
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
   it.each([
     [{ status: "approved", alwaysAllow: true }, "You chose “Always allow”"],
     [

@@ -7918,6 +7918,11 @@ msgstr "You chose “Never allow”"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.notRun"
+msgstr "Not run"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.ranWithoutAsking"
 msgstr "Ran without asking"
 

@@ -20,6 +20,24 @@ interface DecisionLine {
   label: string;
 }
 
+/**
+ * Refused before it ran with no card answered, e.g. a saved "Never allow" or
+ * a child with nowhere to ask. Such rows store `{ status: "rejected" }`.
+ */
+export const refusedWithoutDecision = (
+  part: ToolUse,
+  decision: ToolDecision | undefined,
+): boolean => {
+  const output: unknown = part.output;
+  return (
+    decision === undefined &&
+    part.status === "error" &&
+    typeof output === "object" &&
+    output !== null &&
+    (output as { status?: unknown }).status === "rejected"
+  );
+};
+
 const decisionLine = (
   part: ToolUse,
   decision: ToolDecision | undefined,
@@ -83,6 +101,12 @@ const decisionLine = (
             message: "You denied this",
           }),
         };
+  }
+  if (refusedWithoutDecision(part, decision)) {
+    return {
+      icon: <ShieldXmarkIcon className={ICON_CLASS} />,
+      label: t({ id: "trace.tool.decision.notRun", message: "Not run" }),
+    };
   }
   if (part.allowed_by === "always_allow") {
     return {

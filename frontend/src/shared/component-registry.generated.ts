@@ -439,6 +439,7 @@ export { ReasoningStep } from "@/components/ui/Trace/steps/ReasoningStep";
 export { TaskResultCard } from "@/components/ui/Trace/steps/TaskResultStep";
 export { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 export { ToolDecisionRow } from "@/components/ui/Trace/steps/ToolDecisionRow";
+export { refusedWithoutDecision } from "@/components/ui/Trace/steps/ToolDecisionRow";
 export { SettledInfoPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolStatusPill } from "@/components/ui/Trace/steps/ToolStatusPill";
 export { ToolUseStep } from "@/components/ui/Trace/steps/ToolUseStep";

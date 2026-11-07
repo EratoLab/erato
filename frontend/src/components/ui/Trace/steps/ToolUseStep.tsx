@@ -11,7 +11,7 @@ import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 import { DelegationStep } from "./DelegationStep";
-import { ToolDecisionRow } from "./ToolDecisionRow";
+import { refusedWithoutDecision, ToolDecisionRow } from "./ToolDecisionRow";
 import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
@@ -98,8 +98,9 @@ const PlainToolUseStep = ({
           </>
         }
         titleSlot={
-          // A denied call never ran: its decision row says why it ended.
-          decision?.status === "denied" ? undefined : (
+          // A denied or refused call never ran: its decision row says so.
+          decision?.status === "denied" ||
+          refusedWithoutDecision(part, decision) ? undefined : (
             <ToolStatusPill
               status={status}
               label={
