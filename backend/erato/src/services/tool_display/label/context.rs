@@ -135,15 +135,25 @@ impl ToolResultContext {
         if !tool.tool_call_id.is_empty() {
             self.seen.insert(tool.tool_call_id.clone());
         }
+        if is_refused_by_erato(tool) {
+            return;
+        }
         // Whatever a call named may have changed, failed calls included, so
         // the values read before it no longer count as the earlier ones.
         if let Some(arguments) = &tool.input {
-            let mut keys = Vec::new();
-            let mut nodes = MAX_NODES_PER_VALUE;
-            changed_ids(arguments, &mut keys, &mut nodes, 0);
-            for key in keys {
-                if let Some(record) = self.records.get_mut(&key) {
-                    record.fields.clear();
+            match argument_ids(arguments, true) {
+                Some(keys) => {
+                    for key in keys {
+                        if let Some(record) = self.records.get_mut(&key) {
+                            record.fields.clear();
+                        }
+                    }
+                }
+                // Some IDs went unread, so any record may be among them.
+                None => {
+                    for record in self.records.values_mut() {
+                        record.fields.clear();
+                    }
                 }
             }
         }
@@ -199,14 +209,18 @@ impl ToolResultContext {
             return;
         }
         let mut ids = uuid_keys(text).collect::<HashSet<_>>().into_iter();
-        let (Some(key), None, Some(name)) = (
-            ids.next(),
-            ids.next(),
-            tool.input.as_ref().and_then(created_name),
-        ) else {
+        let (Some(key), None, Some(arguments)) = (ids.next(), ids.next(), tool.input.as_ref())
+        else {
             return;
         };
-        self.merge(key, Some(name), HashMap::new());
+        // A record that did not exist yet cannot be in its own create's
+        // arguments: an ID there is the parent's or a linked record's.
+        if argument_ids(arguments, false).is_none_or(|named| named.contains(&key)) {
+            return;
+        }
+        if let Some(name) = created_name(arguments) {
+            self.merge(key, Some(name), HashMap::new());
+        }
     }
 
     fn merge(&mut self, key: String, name: Option<String>, fields: HashMap<String, String>) {
@@ -475,32 +489,58 @@ fn is_reference_member(member: &str) -> bool {
     bare.eq_ignore_ascii_case("id") || bare.eq_ignore_ascii_case("recordid")
 }
 
-/// The IDs a call may have changed: every ID its arguments hold, UUIDs
-/// written inside text included (`WHERE opportunityid = '…'`), except those
-/// of links, which only point at their records.
-fn changed_ids(value: &Value, keys: &mut Vec<String>, nodes: &mut usize, depth: usize) {
-    if *nodes == 0 || depth > MAX_DEPTH {
-        return;
-    }
-    *nodes -= 1;
-    match value {
-        Value::Object(object) if depth > 0 && is_link(object) => {}
-        Value::Object(object) => {
-            for child in object.values() {
-                changed_ids(child, keys, nodes, depth + 1);
+/// Every ID a call's arguments hold, UUIDs written inside text included
+/// (`WHERE opportunityid = '…'`) and IDs used as member names. With
+/// `skip_links`, a link's ID is left out: it only points at its record, so
+/// the call did not change it. `None` when a cap left some unread.
+fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
+    fn collect(
+        value: &Value,
+        skip_links: bool,
+        keys: &mut Vec<String>,
+        nodes: &mut usize,
+        depth: usize,
+    ) -> bool {
+        if *nodes == 0 || depth > MAX_DEPTH {
+            return false;
+        }
+        *nodes -= 1;
+        match value {
+            Value::Object(object) if skip_links && depth > 0 && is_link(object) => true,
+            Value::Object(object) => object.iter().all(|(member, child)| {
+                keys.extend(text_key(member));
+                keys.extend(uuid_keys(member));
+                collect(child, skip_links, keys, nodes, depth + 1)
+            }),
+            Value::Array(entries) => entries
+                .iter()
+                .all(|entry| collect(entry, skip_links, keys, nodes, depth + 1)),
+            Value::String(text) => {
+                keys.extend(id_key(value));
+                keys.extend(uuid_keys(text));
+                true
+            }
+            value => {
+                keys.extend(id_key(value));
+                true
             }
         }
-        Value::Array(entries) => {
-            for entry in entries {
-                changed_ids(entry, keys, nodes, depth + 1);
-            }
-        }
-        Value::String(text) => {
-            keys.extend(id_key(value));
-            keys.extend(uuid_keys(text));
-        }
-        value => keys.extend(id_key(value)),
     }
+    let mut keys = Vec::new();
+    let mut nodes = MAX_NODES_PER_VALUE;
+    collect(arguments, skip_links, &mut keys, &mut nodes, 0).then_some(keys)
+}
+
+/// A call Erato itself turned down (the user denied it, a gate refused it,
+/// the budget ran out) never reached its server.
+fn is_refused_by_erato(tool: &ToolUse) -> bool {
+    tool.status == ToolCallStatus::Error
+        && tool
+            .output
+            .as_ref()
+            .and_then(|output| output.get("status"))
+            .and_then(Value::as_str)
+            == Some("rejected")
 }
 
 /// The UUIDs written anywhere in `text`, as lookup keys.
