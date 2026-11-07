@@ -4,6 +4,7 @@
 //! (by hand, by rules or a model) cannot put text of its own on the card.
 
 mod arguments;
+pub mod cache;
 pub mod context;
 pub mod own;
 pub mod pointer;
@@ -30,7 +31,7 @@ pub const MAX_LABEL_VALUE_CHARS: usize = 200;
 /// Where a label's parts sit in a call's arguments: pointers and closed-list
 /// choices, never values, so one mapping fits every call of the same shape
 /// and holds nothing of any one call.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, erato_memory::HeapSize)]
 pub struct ToolCallLabelMapping {
     pub action: ToolCallAction,
     pub object_kind: ToolCallObjectKind,
@@ -41,7 +42,7 @@ pub struct ToolCallLabelMapping {
 
 /// Pointers for one item. `title`, `id`, `target`, `before` and `after` are
 /// core: each one set must reach a value.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, erato_memory::HeapSize)]
 #[serde(default)]
 pub struct ToolCallLabelItemMapping {
     pub title: Option<String>,
@@ -76,15 +77,22 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
     }
 }
 
-/// The label an MCP call shows: the rules' when the cross-check agrees with
-/// it, else the generic one. `tool` carries the resolved annotations.
-pub fn mcp_call_label(
+/// The mapping an MCP call is labelled from: the rules', unless they are
+/// unsure and a model mapped a call of the same shape for this user before.
+/// `tool` carries the resolved annotations.
+pub async fn mcp_call_mapping(
+    cache: &cache::ToolLabelCache,
+    user_id: &str,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
-) -> ToolCallLabel {
+) -> ToolCallLabelMapping {
     let rules = rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
-    checked_label(server_id, tool, arguments, &rules.mapping)
+    if rules.unsure.is_none() {
+        return rules.mapping;
+    }
+    let key = cache::ToolLabelCacheKey::new(user_id, server_id, tool, arguments);
+    cache.lookup(&key, arguments).await.unwrap_or(rules.mapping)
 }
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
@@ -504,6 +512,11 @@ mod tests {
         tool
     }
 
+    fn rules_checked(tool: &rmcp::model::Tool, arguments: &Value) -> ToolCallLabel {
+        let rules = rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
+        checked_label("notion", tool, arguments, &rules.mapping)
+    }
+
     #[test]
     fn an_mcp_call_shows_the_rules_label_unless_its_resolved_hints_disagree() {
         let arguments = json!({"title": "Secret plan", "parent_id": "secret-parent"});
@@ -519,8 +532,7 @@ mod tests {
         // An absent destructive hint says nothing; normalized, it would read
         // as destructive and flag every create.
         for annotations in [None, hints(Some(false), None)] {
-            let (label, log) =
-                logged(|| mcp_call_label("notion", &create_page(annotations), &arguments));
+            let (label, log) = logged(|| rules_checked(&create_page(annotations), &arguments));
             assert_eq!(
                 (label.action, label.source),
                 (ToolCallAction::Create, ToolCallLabelSource::Rules)
@@ -533,7 +545,7 @@ mod tests {
         }
 
         let (label, log) =
-            logged(|| mcp_call_label("notion", &create_page(hints(Some(true), None)), &arguments));
+            logged(|| rules_checked(&create_page(hints(Some(true), None)), &arguments));
         assert_eq!(label, generic_label(&arguments));
         for expected in ["notion", "create_page", "read_only_annotation", "Create"] {
             assert!(log.contains(expected), "{expected}: {log}");
@@ -609,5 +621,81 @@ mod tests {
         let (label, log) = logged(|| checked_label("word", &word, &changes, &creating));
         assert_eq!(label, generic_label(&changes));
         assert!(log.contains("field_verb"), "{log}");
+    }
+
+    #[tokio::test]
+    async fn a_models_mapping_labels_a_call_only_where_the_rules_are_unsure_and_for_its_user() {
+        let mut tool = rmcp::model::Tool::new(
+            "crm_records",
+            "Works on CRM records.",
+            json!({"type": "object", "properties": {"recordId": {"type": "string"}}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        let first = json!({"recordId": "rec-1", "stage": "won"});
+        let rules = rules::rules_label(&tool.name, &first, None);
+        assert!(rules.unsure.is_some(), "{rules:?}");
+        let model = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/stage".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let cache = cache::ToolLabelCache::default();
+        let key = cache::ToolLabelCacheKey::new("user-a", "crm", &tool, &first);
+        cache
+            .get_or_compute(key, &first, async { Some(model.clone()) })
+            .await;
+
+        let second = json!({"recordId": "rec-2", "stage": "lost"});
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
+        assert_eq!(mapping, model);
+        let label = checked_label("crm", &tool, &second, &mapping);
+        assert_eq!(label.source, ToolCallLabelSource::Model);
+        assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
+        assert_eq!(
+            mcp_call_mapping(&cache, "user-b", "crm", &tool, &second).await,
+            rules::rules_label(&tool.name, &second, None).mapping
+        );
+
+        let hints = |read_only, destructive| {
+            Some(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                read_only,
+                destructive,
+                None,
+                None,
+            ))
+        };
+        tool.annotations = hints(Some(true), None);
+        let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
+        assert_eq!(read.source, ToolCallLabelSource::Rules);
+        tool.annotations = None;
+        assert_eq!(
+            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await,
+            model
+        );
+
+        // An operator's override needs no invalidation.
+        let create = ToolCallLabelMapping {
+            action: ToolCallAction::Create,
+            ..model.clone()
+        };
+        let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
+        cache
+            .get_or_compute(key, &first, async { Some(create.clone()) })
+            .await;
+        tool.annotations = hints(None, Some(true));
+        let cached = mcp_call_mapping(&cache, "user-c", "crm", &tool, &second).await;
+        assert_eq!(cached, create);
+        assert_eq!(
+            checked_label("crm", &tool, &second, &cached),
+            generic_label(&second)
+        );
     }
 }

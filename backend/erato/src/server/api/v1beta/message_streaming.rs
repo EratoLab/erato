@@ -9164,11 +9164,20 @@ async fn stream_generate_chat_completion<'a>(
                 tool: managed_tool.tool.clone(),
             };
             tool_result_context.observe(&current_message_content);
-            let display = crate::services::tool_display::mcp_tool_call_display(
+            let label_mapping = crate::services::tool_display::label::mcp_call_mapping(
+                &app_state.tool_label_cache,
+                &user_id,
+                &managed_tool_call.server_id,
+                &managed_tool_call.tool,
+                &managed_tool_call.tool_call.fn_arguments,
+            )
+            .await;
+            let display = crate::services::tool_display::mcp_tool_call_display_from(
                 &mcp.config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
                 &managed_tool_call.tool_call.fn_arguments,
+                &label_mapping,
                 &tool_result_context,
             );
             let row_display = tool_row_display(&display);

@@ -358,7 +358,7 @@ pub fn verb_field_values(arguments: &Value) -> Vec<&str> {
 }
 
 /// The verb fields with an identifier for a value, as (member, value).
-fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
+pub fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
     fn walk<'a>(
         value: &'a Value,
         depth: usize,

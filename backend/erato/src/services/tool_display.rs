@@ -36,10 +36,8 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
     }
 }
 
-/// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
-/// the server's name from the live config and the call's label, with the IDs
-/// it names resolved from earlier results in the chat, stored with the call's
-/// parts.
+/// What a call of an MCP tool shows wherever it appears, labelled by the rules
+/// alone; see [`mcp_tool_call_display_from`].
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -47,7 +45,23 @@ pub fn mcp_tool_call_display(
     arguments: &serde_json::Value,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
-    let mut label = label::mcp_call_label(server_id, tool, arguments);
+    let rules = label::rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
+    mcp_tool_call_display_from(config, server_id, tool, arguments, &rules.mapping, context)
+}
+
+/// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
+/// the server's name from the live config and the label `mapping` gives once
+/// the cross-check agrees with it, with the IDs it names resolved from earlier
+/// results in the chat, stored with the call's parts.
+pub fn mcp_tool_call_display_from(
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &serde_json::Value,
+    mapping: &label::ToolCallLabelMapping,
+    context: &label::ToolResultContext,
+) -> ToolDisplayMetadata {
+    let mut label = label::checked_label(server_id, tool, arguments, mapping);
     context.resolve(&mut label, arguments);
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
