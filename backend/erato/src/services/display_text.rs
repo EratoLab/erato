@@ -8,6 +8,8 @@
 
 use unicode_normalization::UnicodeNormalization;
 
+use crate::config::is_bidi_control;
+
 /// Cap for a tool's name or title.
 pub const MAX_DISPLAY_NAME_CHARS: usize = 200;
 /// Cap for a tool's description.
@@ -18,15 +20,6 @@ pub struct SanitizedDisplayText {
     pub text: String,
     /// Whether the cap cut the text short.
     pub truncated: bool,
-}
-
-/// Bidi overrides, embeddings, isolates and marks: any of them can make the
-/// rendered order of a string differ from its logical order.
-fn is_bidi_control(c: char) -> bool {
-    matches!(
-        c,
-        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
-    )
 }
 
 fn is_dropped(c: char) -> bool {
