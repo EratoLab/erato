@@ -44,6 +44,9 @@ fn map_key_placeholder(path: &[String]) -> String {
             "<policy-id>".to_string()
         }
         Some("rules") => "<rule-name>".to_string(),
+        Some("templates") if path.len() == 3 && path[0] == "scheduled" => {
+            "<template-id>".to_string()
+        }
         _ => "<key>".to_string(),
     }
 }

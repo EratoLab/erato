@@ -209,7 +209,9 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         )
         .route(
             "/scheduled-items/{item_id}",
-            get(scheduled_items::get_scheduled_item).put(scheduled_items::update_scheduled_item),
+            get(scheduled_items::get_scheduled_item)
+                .put(scheduled_items::update_scheduled_item)
+                .delete(scheduled_items::delete_scheduled_item),
         )
         .route(
             "/scheduled-items/{item_id}/cancel",
@@ -218,6 +220,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/scheduled-items/{item_id}/snooze",
             post(scheduled_items::snooze_scheduled_item),
+        )
+        .route(
+            "/scheduled-templates",
+            get(scheduled_items::list_scheduled_templates),
         )
         .route("/recent_chats", get(recent_chats))
         .route("/generating", get(generating_chats))
@@ -507,6 +513,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         scheduled_items::update_scheduled_item,
         scheduled_items::cancel_scheduled_item,
         scheduled_items::snooze_scheduled_item,
+        scheduled_items::delete_scheduled_item,
+        scheduled_items::list_scheduled_templates,
         create_chat,
         chat_detail,
         update_chat,
@@ -726,6 +734,8 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         scheduled_items::LastDelivery,
         scheduled_items::LastDeliveryOutcome,
         scheduled_items::LinkedChat,
+        scheduled_items::ScheduledTemplate,
+        scheduled_items::ScheduledTemplatesResponse,
         crate::services::scheduled_items::DisplayStatus,
         crate::services::scheduled_items::recurrence::Trigger,
         crate::services::scheduled_items::recurrence::RepeatRule,

@@ -4048,6 +4048,55 @@
             "bearer_auth": []
           }
         ]
+      },
+      "delete": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "Delete an item that is over (done, failed or cancelled), with its\ndelivery history.",
+        "operationId": "delete_scheduled_item",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "description": "The item",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The item is scheduled, snoozed or being delivered (`not_finished`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledItemError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
       }
     },
     "/api/v1beta/me/scheduled-items/{item_id}/cancel": {
@@ -4177,6 +4226,35 @@
                 }
               }
             }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/v1beta/me/scheduled-templates": {
+      "get": {
+        "tags": [
+          "scheduled_items"
+        ],
+        "summary": "The templates configured for the Scheduled page; empty when none are.",
+        "operationId": "list_scheduled_templates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTemplatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
           }
         },
         "security": [
@@ -12240,6 +12318,7 @@
           "finished",
           "in_flight",
           "nothing_to_snooze",
+          "not_finished",
           "internal"
         ]
       },
@@ -12342,6 +12421,55 @@
           "upcoming",
           "past"
         ]
+      },
+      "ScheduledTemplate": {
+        "type": "object",
+        "description": "A template on the Scheduled page's empty state; it opens the form\nprefilled with `name` and `message`.",
+        "required": [
+          "id",
+          "type",
+          "title",
+          "description",
+          "name",
+          "message"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "A short line shown with the button; may be empty."
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "description": "May be empty."
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "The label of the template's button."
+          },
+          "type": {
+            "$ref": "#/components/schemas/ScheduledItemType"
+          }
+        }
+      },
+      "ScheduledTemplatesResponse": {
+        "type": "object",
+        "required": [
+          "templates"
+        ],
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledTemplate"
+            }
+          }
+        }
       },
       "SearchFileHit": {
         "allOf": [

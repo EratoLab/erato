@@ -25,11 +25,12 @@ use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use chrono_tz::Tz;
+use erato_config::config::{ScheduledTemplateType, ScheduledTemplatesConfig};
 use eyre::Report;
 use sea_orm::prelude::Uuid;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use utoipa::{IntoParams, ToSchema};
 
 const MAX_NAME_CHARS: usize = 200;
@@ -222,6 +223,8 @@ pub enum ScheduledItemErrorCode {
     InFlight,
     /// The item has no occurrence waiting to be snoozed.
     NothingToSnooze,
+    /// Only done, failed or cancelled items can be deleted.
+    NotFinished,
     Internal,
 }
 
@@ -284,6 +287,11 @@ fn refusal(refusal: Refusal) -> ApiError {
             StatusCode::CONFLICT,
             Code::NothingToSnooze,
             "Nothing of this item is waiting to be delivered.",
+        ),
+        Refusal::NotFinished => refuse(
+            StatusCode::CONFLICT,
+            Code::NotFinished,
+            "Only items that are done, failed or cancelled can be deleted.",
         ),
     }
 }
@@ -743,6 +751,32 @@ pub async fn cancel_scheduled_item(
     Ok(Json(one_item(&app_state, user_id, item_id).await?))
 }
 
+/// Delete an item that is over (done, failed or cancelled), with its
+/// delivery history.
+#[utoipa::path(
+    delete,
+    path = "/me/scheduled-items/{item_id}",
+    params(("item_id" = Uuid, Path, description = "The item")),
+    responses(
+        (status = NO_CONTENT, description = "Deleted"),
+        (status = NOT_FOUND, body = ScheduledItemError),
+        (status = CONFLICT, body = ScheduledItemError, description = "The item is scheduled, snoozed or being delivered (`not_finished`)")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn delete_scheduled_item(
+    State(app_state): State<AppState>,
+    Extension(me_user): Extension<MeProfile>,
+    Path(item_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    let user_id = user_id_of(&me_user)?;
+    scheduled_items::delete(&app_state.db, user_id, item_id)
+        .await
+        .map_err(internal)?
+        .map_err(refusal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Move the item's coming occurrence to a later time; a repeating item's
 /// next occurrence keeps its regular time.
 #[utoipa::path(
@@ -773,4 +807,76 @@ pub async fn snooze_scheduled_item(
         .map_err(internal)?
         .map_err(refusal)?;
     Ok(Json(one_item(&app_state, user_id, item_id).await?))
+}
+
+/// A template on the Scheduled page's empty state; it opens the form
+/// prefilled with `name` and `message`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
+pub struct ScheduledTemplate {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub item_type: ScheduledItemType,
+    /// The label of the template's button.
+    pub title: String,
+    /// A short line shown with the button; may be empty.
+    pub description: String,
+    pub name: String,
+    /// May be empty.
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct ScheduledTemplatesResponse {
+    pub templates: Vec<ScheduledTemplate>,
+}
+
+/// Configured templates in `priority_order`, then the rest sorted by id.
+pub fn ordered_templates(config: &ScheduledTemplatesConfig) -> Vec<ScheduledTemplate> {
+    if !config.enabled {
+        return Vec::new();
+    }
+    let mut rest: Vec<&String> = config
+        .templates
+        .keys()
+        .filter(|id| !config.priority_order.contains(id))
+        .collect();
+    rest.sort();
+    let mut seen = HashSet::new();
+    config
+        .priority_order
+        .iter()
+        .chain(rest)
+        .filter(|id| seen.insert(id.as_str()))
+        .filter_map(|id| {
+            let template = config.templates.get(id)?;
+            Some(ScheduledTemplate {
+                id: id.clone(),
+                item_type: match template.r#type {
+                    ScheduledTemplateType::Reminder => ScheduledItemType::Reminder,
+                },
+                title: template.title.clone(),
+                description: template.description.clone(),
+                name: template.name.clone(),
+                message: template.message.clone(),
+            })
+        })
+        .collect()
+}
+
+/// The templates configured for the Scheduled page; empty when none are.
+#[utoipa::path(
+    get,
+    path = "/me/scheduled-templates",
+    responses(
+        (status = OK, body = ScheduledTemplatesResponse),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(("bearer_auth" = []))
+)]
+pub async fn list_scheduled_templates(
+    State(app_state): State<AppState>,
+) -> Json<ScheduledTemplatesResponse> {
+    Json(ScheduledTemplatesResponse {
+        templates: ordered_templates(&app_state.config.scheduled.templates),
+    })
 }

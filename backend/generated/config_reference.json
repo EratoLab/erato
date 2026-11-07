@@ -4401,6 +4401,48 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "scheduled.templates.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.priority_order.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.description": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.message": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.name": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.title": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.type": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "scheduled_deliveries.batch_size": {
     "default_value_security": "unknown",
     "introduced_in": "0.9.0",

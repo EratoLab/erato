@@ -56,6 +56,7 @@ const FRONTEND_ENV_KEY_DELEGATION_TASKS_ENABLED: &str = "DELEGATION_TASKS_ENABLE
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC: &str = "DELEGATION_TASKS_ALLOW_ASYNC";
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE: &str = "DELEGATION_TASKS_APPROVAL_MODE";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
+const FRONTEND_ENV_KEY_SCHEDULED_ENABLED: &str = "SCHEDULED_ENABLED";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
@@ -482,6 +483,11 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED.to_string(),
         Value::Bool(config.starter_prompts.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_SCHEDULED_ENABLED.to_string(),
+        // Reminders only arrive while the executor runs, so the page follows it.
+        Value::Bool(config.scheduled_deliveries.enabled),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED.to_string(),
@@ -1346,6 +1352,21 @@ impl erato_memory::HeapSize for FrontedEnvironment {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn scheduled_page_follows_the_delivery_executor() {
+        let mut config = AppConfig::default();
+        for enabled in [true, false] {
+            config.scheduled_deliveries.enabled = enabled;
+            let environment = build_frontend_environment(&config, FrontendKind::Web);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_SCHEDULED_ENABLED),
+                Some(&Value::Bool(enabled))
+            );
+        }
+    }
 
     #[test]
     fn sharepoint_file_search_toggle_is_exposed_to_frontends() {
