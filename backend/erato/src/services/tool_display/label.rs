@@ -6,6 +6,7 @@
 mod arguments;
 pub mod cache;
 pub mod context;
+pub mod model;
 pub mod own;
 pub mod pointer;
 pub mod rules;
@@ -77,6 +78,15 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
     }
 }
 
+/// What an MCP call is labelled from first.
+#[derive(Debug, Clone, PartialEq)]
+pub struct McpCallMapping {
+    pub mapping: ToolCallLabelMapping,
+    /// Set when the rules are unsure and no model mapping is kept for the
+    /// call's shape: the key a model's mapping of it would be kept under.
+    pub unlabelled: Option<cache::ToolLabelCacheKey>,
+}
+
 /// The mapping an MCP call is labelled from: the rules', unless they are
 /// unsure and a model mapped a call of the same shape for this user before.
 /// `tool` carries the resolved annotations.
@@ -86,21 +96,29 @@ pub async fn mcp_call_mapping(
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
-) -> ToolCallLabelMapping {
+) -> McpCallMapping {
     let rules = rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
     if rules.unsure.is_none() {
-        return rules.mapping;
+        return McpCallMapping {
+            mapping: rules.mapping,
+            unlabelled: None,
+        };
     }
     let key = cache::ToolLabelCacheKey::new(user_id, server_id, tool, arguments);
-    match cache.lookup(&key, arguments).await {
-        Some(mapping) if rules::cross_check(tool, arguments, mapping.action).is_empty() => mapping,
+    if let Some(mapping) = cache.lookup(&key, arguments).await {
+        if rules::cross_check(tool, arguments, mapping.action).is_empty() {
+            return McpCallMapping {
+                mapping,
+                unlabelled: None,
+            };
+        }
         // For one key only the annotations can change the verdict, so the
         // entry would be rejected on every later call too.
-        Some(_) => {
-            cache.forget(&key).await;
-            rules.mapping
-        }
-        None => rules.mapping,
+        cache.forget(&key).await;
+    }
+    McpCallMapping {
+        mapping: rules.mapping,
+        unlabelled: Some(key),
     }
 }
 
@@ -658,18 +676,26 @@ mod tests {
         let cache = cache::ToolLabelCache::default();
         let key = cache::ToolLabelCacheKey::new("user-a", "crm", &tool, &first);
         cache
-            .get_or_compute(key, &first, async { Some(model.clone()) })
+            .get_or_compute(key, &tool, &first, async { Some(model.clone()) })
             .await;
 
         let second = json!({"recordId": "rec-2", "stage": "lost"});
-        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
-        assert_eq!(mapping, model);
+        let McpCallMapping {
+            mapping,
+            unlabelled,
+        } = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
+        assert_eq!((&mapping, unlabelled), (&model, None));
         let label = checked_label("crm", &tool, &second, &mapping);
         assert_eq!(label.source, ToolCallLabelSource::Model);
         assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
         assert_eq!(
             mcp_call_mapping(&cache, "user-b", "crm", &tool, &second).await,
-            rules::rules_label(&tool.name, &second, None).mapping
+            McpCallMapping {
+                mapping: rules::rules_label(&tool.name, &second, None).mapping,
+                unlabelled: Some(cache::ToolLabelCacheKey::new(
+                    "user-b", "crm", &tool, &second
+                )),
+            }
         );
 
         let hints = |read_only, destructive| {
@@ -683,10 +709,13 @@ mod tests {
         };
         tool.annotations = hints(Some(true), None);
         let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
-        assert_eq!(read.source, ToolCallLabelSource::Rules);
+        assert_eq!(read.mapping.source, ToolCallLabelSource::Rules);
+        assert_eq!(read.unlabelled, None);
         tool.annotations = None;
         assert_eq!(
-            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await,
+            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second)
+                .await
+                .mapping,
             model
         );
 
@@ -697,14 +726,17 @@ mod tests {
         };
         let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
         cache
-            .get_or_compute(key.clone(), &first, async { Some(create.clone()) })
+            .get_or_compute(key.clone(), &tool, &first, async { Some(create.clone()) })
             .await;
         tool.annotations = hints(None, Some(true));
         let rules_mapping =
             rules::rules_label(&tool.name, &second, tool.annotations.as_ref()).mapping;
         assert_eq!(
             mcp_call_mapping(&cache, "user-c", "crm", &tool, &second).await,
-            rules_mapping
+            McpCallMapping {
+                mapping: rules_mapping.clone(),
+                unlabelled: Some(key.clone()),
+            }
         );
         assert!(cache.entries().get(&key).await.is_none());
         assert_eq!(

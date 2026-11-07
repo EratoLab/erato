@@ -685,6 +685,14 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub chat_history_compaction: ChatHistoryCompactionConfig,
 
+    /// A model that labels the MCP calls the generic rules cannot.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    #[facet(erato_config::security_relevance(level = "medium"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub tool_labels: ToolLabelsConfig,
+
     // User preferences feature configuration.
     #[serde(default)]
     pub user_preferences: UserPreferencesConfig,
@@ -1460,6 +1468,10 @@ impl AppConfig {
 
         if let Err(e) = config.validate_chat_history_compaction() {
             panic!("Invalid chat history compaction configuration: {}", e);
+        }
+
+        if let Err(e) = config.validate_tool_labels() {
+            panic!("Invalid tool labels configuration: {}", e);
         }
 
         // Validate model permissions configuration
@@ -2497,6 +2509,19 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn validate_tool_labels(&self) -> Result<(), eyre::Report> {
+        if self.tool_labels.enabled {
+            let id = self
+                .tool_labels
+                .chat_provider_id
+                .as_deref()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| eyre!("tool_labels.chat_provider_id is required when enabled"))?;
+            self.resolve_chat_provider_id(id)?;
+        }
+        Ok(())
+    }
+
     /// Returns the maximum configured file upload size in bytes, if any.
     pub fn max_upload_size_bytes(&self) -> Option<u64> {
         self.file_storage_providers
@@ -3389,6 +3414,16 @@ impl Default for ChatHistoryCompactionConfig {
             target_compaction_token_limit_percentage: 10,
         }
     }
+}
+
+/// Off by default. When enabled, the arguments of the calls the rules are
+/// unsure of go to the chosen provider; the operator chooses that provider.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ToolLabelsConfig {
+    pub enabled: bool,
+    /// Explicit provider, required when enabled.
+    pub chat_provider_id: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
