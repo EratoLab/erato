@@ -560,7 +560,7 @@ fn words(arguments: Option<&Value>) -> HashSet<String> {
 }
 
 /// At most the first `max_bytes` of `text`, cut at a character boundary.
-fn text_prefix(text: &str, max_bytes: usize) -> &str {
+pub(super) fn text_prefix(text: &str, max_bytes: usize) -> &str {
     let mut end = max_bytes.min(text.len());
     while !text.is_char_boundary(end) {
         end -= 1;
@@ -688,6 +688,11 @@ pub(super) fn link_id_member(object: &Map<String, Value>) -> Option<&str> {
         })
         .flatten()
         .map(|(member, _)| member.as_str())
+}
+
+/// A member that names the record a link points at, such as a lookup's `name`.
+pub(super) fn is_name_member(member: &str) -> bool {
+    NAME_KEYS.iter().any(|key| member.eq_ignore_ascii_case(key))
 }
 
 fn is_link_id(member: &str, value: &Value) -> bool {

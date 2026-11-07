@@ -18,6 +18,7 @@ use crate::models::message::{
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::ops::ControlFlow;
 
 pub const MAX_LABEL_ITEMS: usize = 3;
 pub const MAX_LABEL_FIELDS: usize = 4;
@@ -56,11 +57,13 @@ pub struct ToolCallLabelItemMapping {
     pub fields: Vec<String>,
 }
 
-/// The core pointer of a mapping that reached nothing in a call.
+/// The core pointer of a mapping that reached nothing in a call, or reached
+/// a value no card shows as a fact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnresolvedPointer {
     pub item: usize,
     pub part: &'static str,
+    pub claim: Option<rules::Claim>,
 }
 
 /// Runs a labeller so that a bug in it costs the call its label and never the
@@ -103,8 +106,10 @@ pub fn mcp_call_label(
 }
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
-/// its verb and its core pointers all reach a value; otherwise the generic
-/// label and a log line that names the reason and no argument value.
+/// its verb, its core pointers all reach a value that is no consent flag or
+/// lookup name, and it shows every recipient; otherwise the generic label and
+/// a log line that names the reason and no argument value. A field that
+/// reaches such a claim is only left out.
 pub fn checked_label(
     server_id: &str,
     tool: &rmcp::model::Tool,
@@ -114,6 +119,14 @@ pub fn checked_label(
     if mapping.source == ToolCallLabelSource::Generic {
         return generic_label(arguments);
     }
+    // The server chose the name: logs get a short, cleaned copy.
+    let tool_name = || {
+        sanitize_display_text(
+            context::text_prefix(&tool.name, MAX_DISPLAY_NAME_CHARS * 4),
+            MAX_DISPLAY_NAME_CHARS,
+        )
+        .text
+    };
     let flags = rules::cross_check(tool, arguments, mapping.action);
     if !flags.is_empty() {
         let reasons = flags
@@ -123,7 +136,7 @@ pub fn checked_label(
             .join(",");
         tracing::info!(
             server_id = %server_id,
-            tool_name = %tool.name,
+            tool_name = ?tool_name(),
             action = ?mapping.action,
             source = ?mapping.source,
             reasons = %reasons,
@@ -131,17 +144,52 @@ pub fn checked_label(
         );
         return generic_label(arguments);
     }
-    resolve_label(mapping, arguments).unwrap_or_else(|UnresolvedPointer { item, part }| {
-        tracing::info!(
-            server_id = %server_id,
-            tool_name = %tool.name,
-            source = ?mapping.source,
+    let recipients = rules::recipient_members(arguments);
+    let mapping = &rules::with_every_recipient(mapping, &recipients);
+    match resolve_label(mapping, arguments) {
+        Ok(label) if rules::shows_every_recipient(&label, &recipients) => label,
+        Ok(_) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                recipient_members = recipients.len(),
+                "Showing the generic label for a tool call: the label cannot show every recipient"
+            );
+            generic_label(arguments)
+        }
+        Err(UnresolvedPointer {
             item,
             part,
-            "Showing the generic label for a tool call: a label pointer reaches nothing in its arguments"
-        );
-        generic_label(arguments)
-    })
+            claim: Some(claim),
+        }) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                item,
+                part,
+                claim = claim.as_str(),
+                "Showing the generic label for a tool call: a label pointer reaches a value no card shows as a fact"
+            );
+            generic_label(arguments)
+        }
+        Err(UnresolvedPointer {
+            item,
+            part,
+            claim: None,
+        }) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                item,
+                part,
+                "Showing the generic label for a tool call: a label pointer reaches nothing in its arguments"
+            );
+            generic_label(arguments)
+        }
+    }
 }
 
 /// The mapping's label for one call. A core pointer that reaches nothing
@@ -158,8 +206,11 @@ pub fn resolve_label(
         .take(MAX_LABEL_ITEMS)
         .enumerate()
         .map(|(index, item)| {
-            resolve_item(item, arguments, &mut budget)
-                .map_err(|part| UnresolvedPointer { item: index, part })
+            resolve_item(item, arguments, &mut budget).map_err(|(part, claim)| UnresolvedPointer {
+                item: index,
+                part,
+                claim,
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(ToolCallLabel {
@@ -175,11 +226,15 @@ fn resolve_item(
     item: &ToolCallLabelItemMapping,
     arguments: &Value,
     budget: &mut usize,
-) -> Result<ToolCallLabelItem, &'static str> {
+) -> Result<ToolCallLabelItem, (&'static str, Option<rules::Claim>)> {
     let mut core = |part: &'static str, pointer: &Option<String>| {
         pointer
             .as_deref()
-            .map(|pointer| slot(arguments, pointer, false, budget).ok_or(part))
+            .map(|pointer| match slot(arguments, pointer, false, budget) {
+                Ok(Some(slot)) => Ok(slot),
+                Ok(None) => Err((part, None)),
+                Err(claim) => Err((part, Some(claim))),
+            })
             .transpose()
     };
     let title = core("title", &item.title)?;
@@ -191,7 +246,7 @@ fn resolve_item(
         .fields
         .iter()
         .take(MAX_FIELD_POINTERS)
-        .filter_map(|pointer| slot(arguments, pointer, true, budget))
+        .filter_map(|pointer| slot(arguments, pointer, true, budget).ok().flatten())
         .take(MAX_LABEL_FIELDS)
         .collect();
     Ok(ToolCallLabelItem {
@@ -205,28 +260,35 @@ fn resolve_item(
 }
 
 /// `None` when the pointer reaches nothing. A null it reaches counts as
-/// reached but shows no value.
+/// reached but shows no value. A value it would show that is a claim, such as
+/// a consent flag, costs the whole slot.
 fn slot(
     arguments: &Value,
     pointer: &str,
     field: bool,
     budget: &mut usize,
-) -> Option<ToolCallLabelSlot> {
+) -> Result<Option<ToolCallLabelSlot>, rules::Claim> {
+    let start = *budget;
     let mut values = Vec::new();
     let mut omitted = 0u32;
     let mut out_of_budget = false;
+    let mut claim = None;
     let mut keep = |path: Option<&str>, index: Option<usize>, value: &Value| {
         let room = values.len() < MAX_SLOT_VALUES && !out_of_budget;
         let Some(path) = path.filter(|_| room) else {
             omitted = omitted.saturating_add(1);
-            return;
+            return ControlFlow::Continue(());
         };
         let path = match index {
             Some(index) => format!("{path}/{index}"),
             None => path.to_string(),
         };
+        if let Some(found) = rules::claim(arguments, &path, value) {
+            claim = Some(found);
+            return ControlFlow::Break(());
+        }
         let Some(value) = label_value(path, value) else {
-            return;
+            return ControlFlow::Continue(());
         };
         match budget.checked_sub(value.text.len() + value.path.len()) {
             Some(left) => {
@@ -238,32 +300,68 @@ fn slot(
                 omitted = omitted.saturating_add(1);
             }
         }
+        ControlFlow::Continue(())
     };
     let reached = pointer::visit(arguments, pointer, |path, value| {
         // An array reached whole lists its entries, as `*` would.
         match value {
             Value::Array(entries) => {
                 for (index, entry) in entries.iter().enumerate() {
-                    keep(path, Some(index), entry);
+                    keep(path, Some(index), entry)?;
                 }
+                ControlFlow::Continue(())
             }
             value => keep(path, None, value),
         }
-        std::ops::ControlFlow::Continue(())
     });
-    if reached == 0 {
-        return None;
+    if let Some(claim) = claim {
+        *budget = start;
+        return Err(claim);
     }
-    Some(ToolCallLabelSlot {
+    if reached == 0 {
+        return Ok(None);
+    }
+    Ok(Some(ToolCallLabelSlot {
         pointer: pointer.to_string(),
         name: field
-            .then(|| pointer::last_name(pointer))
+            .then(|| field_name(pointer))
             .flatten()
             .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text)
             .filter(|name| !name.is_empty()),
         values,
         omitted,
-    })
+    }))
+}
+
+/// What a field is called on a card: its last member, unless that only holds
+/// the ID or address of what the member before it names, as in
+/// `/cc/*/emailAddress/address` or `/customer/recordId`.
+fn field_name(pointer: &str) -> Option<std::borrow::Cow<'_, str>> {
+    const HANDLES: [&str; 8] = [
+        "id",
+        "recordid",
+        "email",
+        "emailaddress",
+        "address",
+        "mail",
+        "userprincipalname",
+        "upn",
+    ];
+    let mut names = pointer::member_names(pointer);
+    let is_handle = |name: &str| {
+        let bare: String = name
+            .chars()
+            .take(32)
+            .filter(|c| !matches!(c, '_' | '-'))
+            .map(|c| c.to_ascii_lowercase())
+            .collect();
+        name.len() <= 32 && HANDLES.contains(&bare.as_str())
+    };
+    let at = names
+        .iter()
+        .rposition(|name| !is_handle(name))
+        .unwrap_or(names.len().checked_sub(1)?);
+    Some(names.swap_remove(at))
 }
 
 fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
@@ -421,7 +519,11 @@ mod tests {
             }
             assert_eq!(
                 resolve_label(&mapping, &arguments),
-                Err(UnresolvedPointer { item: 0, part })
+                Err(UnresolvedPointer {
+                    item: 0,
+                    part,
+                    claim: None
+                })
             );
         }
         let mut mapping = create_rows();
@@ -431,7 +533,8 @@ mod tests {
             resolve_label(&mapping, &arguments),
             Err(UnresolvedPointer {
                 item: 1,
-                part: "after"
+                part: "after",
+                claim: None
             })
         );
         let mut mapping = create_rows();
@@ -516,7 +619,7 @@ mod tests {
         assert_eq!(label.warnings, [ToolCallLabelWarning::ArgumentsTruncated]);
     }
 
-    fn hostile_arguments() -> Vec<Value> {
+    pub(super) fn hostile_arguments() -> Vec<Value> {
         let mut deep = json!("leaf");
         for _ in 0..120 {
             deep = json!({ "next": [deep] });
@@ -629,7 +732,8 @@ mod tests {
             label,
             Err(UnresolvedPointer {
                 item: 0,
-                part: "before"
+                part: "before",
+                claim: None
             })
         );
 
@@ -952,5 +1056,205 @@ mod tests {
         let (label, log) = logged(|| checked_label("word", &word, &changes, &creating));
         assert_eq!(label, generic_label(&changes));
         assert!(log.contains("field_verb"), "{log}");
+    }
+
+    fn update_record() -> rmcp::model::Tool {
+        rmcp::model::Tool::new(
+            "update_record",
+            "Updates a record.",
+            rmcp::model::JsonObject::new(),
+        )
+    }
+
+    fn consent_and_lookup() -> Value {
+        json!({
+            "recordId": "r_1",
+            "hasUserApproved": true,
+            "options": {"user_confirmed": "yes", "approved": true},
+            "item": {
+                "statuscode": 2,
+                "customer": {"recordId": "c_1", "relatedTable": "account", "name": "Typed by the model"},
+            },
+        })
+    }
+
+    #[test]
+    fn no_label_source_shows_a_consent_flag_or_a_lookup_s_name() {
+        let arguments = consent_and_lookup();
+        let tool = update_record();
+        for source in [
+            ToolCallLabelSource::Rules,
+            ToolCallLabelSource::Model,
+            ToolCallLabelSource::OwnMapping,
+        ] {
+            let mapping = |item: ToolCallLabelItemMapping| ToolCallLabelMapping {
+                action: ToolCallAction::Update,
+                object_kind: ToolCallObjectKind::Row,
+                items: vec![item],
+                source,
+            };
+            let fields = mapping(ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec![
+                    "/hasUserApproved".into(),
+                    "/options/user_confirmed".into(),
+                    "/item/customer/name".into(),
+                    "/item/customer/*".into(),
+                    "/*".into(),
+                    "/options/approved".into(),
+                    "/item/statuscode".into(),
+                ],
+                ..Default::default()
+            });
+            let (label, log) = logged(|| checked_label("crm", &tool, &arguments, &fields));
+            assert_eq!(label.source, source);
+            let shown: Vec<_> = label.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.as_str())
+                .collect();
+            assert_eq!(
+                shown,
+                ["/options/approved", "/item/statuscode"],
+                "{source:?}"
+            );
+            assert!(log.is_empty(), "{log}");
+
+            for (part, pointer, claim) in [
+                ("title", "/hasUserApproved", "consent_flag"),
+                ("title", "/item/customer/name", "lookup_name"),
+                ("target", "/item/customer/name", "lookup_name"),
+                ("before", "/options/user_confirmed", "consent_flag"),
+                ("after", "/item/customer/*", "lookup_name"),
+            ] {
+                let mut item = ToolCallLabelItemMapping {
+                    id: Some("/recordId".into()),
+                    ..Default::default()
+                };
+                let pointer = Some(pointer.to_string());
+                match part {
+                    "title" => item.title = pointer,
+                    "target" => item.target = pointer,
+                    "before" => item.before = pointer,
+                    _ => item.after = pointer,
+                }
+                let (label, log) =
+                    logged(|| checked_label("crm", &tool, &arguments, &mapping(item)));
+                assert_eq!(label, generic_label(&arguments), "{part}");
+                assert!(log.contains(claim) && log.contains(part), "{log}");
+                assert!(!log.contains("Typed by the model"), "{log}");
+            }
+        }
+        // The rules never point at a claim, so their label is unchanged.
+        let rules = mcp_call_label("crm", &tool, &arguments);
+        assert_eq!(rules.source, ToolCallLabelSource::Rules);
+        let fields: Vec<_> = rules.items[0]
+            .fields
+            .iter()
+            .map(|field| (field.pointer.as_str(), field.name.as_deref()))
+            .collect();
+        assert_eq!(
+            fields,
+            [
+                ("/options/approved", Some("approved")),
+                ("/item/statuscode", Some("statuscode")),
+                ("/item/customer/recordId", Some("customer")),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_label_from_any_source_names_every_recipient_or_is_generic() {
+        let arguments = json!({
+            "to": ["ann@example.com"],
+            "cc": [{"emailAddress": {"address": "bob@example.com", "name": "Bob"}}],
+            "bcc": ["cy@example.com"],
+            "subject": "Q3",
+        });
+        let tool = rmcp::model::Tool::new(
+            "send_email",
+            "Sends an email.",
+            rmcp::model::JsonObject::new(),
+        );
+        let only_to = ToolCallLabelMapping {
+            action: ToolCallAction::Send,
+            object_kind: ToolCallObjectKind::Email,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/subject".into()),
+                target: Some("/to".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        for mapping in [
+            only_to.clone(),
+            rules::rules_label("send_email", &arguments, None).mapping,
+        ] {
+            let label = checked_label("mail", &tool, &arguments, &mapping);
+            assert_eq!(label.action, ToolCallAction::Send);
+            let item = &label.items[0];
+            assert_eq!(texts(item.target.as_ref().unwrap()), ["ann@example.com"]);
+            let fields: Vec<_> = item
+                .fields
+                .iter()
+                .map(|field| (field.name.as_deref().unwrap(), texts(field)))
+                .collect();
+            assert_eq!(
+                fields,
+                [
+                    ("cc", vec!["bob@example.com"]),
+                    ("bcc", vec!["cy@example.com"])
+                ]
+            );
+        }
+
+        let crowded: serde_json::Map<String, Value> =
+            ["to", "cc", "bcc", "attendees", "invitees", "participants"]
+                .into_iter()
+                .map(|member| (member.to_string(), json!(["x@example.com"])))
+                .chain([("subject".to_string(), json!("Q3"))])
+                .collect();
+        let crowded = Value::Object(crowded);
+        let (label, log) = logged(|| checked_label("mail", &tool, &crowded, &only_to));
+        assert_eq!(label, generic_label(&crowded));
+        assert!(log.contains("every recipient"), "{log}");
+        assert_eq!(
+            mcp_call_label("mail", &tool, &crowded),
+            generic_label(&crowded)
+        );
+    }
+
+    #[test]
+    fn a_field_is_named_after_what_its_id_or_address_belongs_to() {
+        for (pointer, name) in [
+            ("/cc/*/emailAddress/address", Some("cc")),
+            ("/item/customer/recordId", Some("customer")),
+            ("/attendees/*/email", Some("attendees")),
+            ("/pages/*/properties/Name", Some("Name")),
+            ("/page_id", Some("page_id")),
+            ("/id", Some("id")),
+            ("/a/id/email", Some("a")),
+            ("/*", None),
+        ] {
+            assert_eq!(field_name(pointer).as_deref(), name, "{pointer}");
+        }
+    }
+
+    #[test]
+    fn hostile_tool_names_reach_the_log_short_and_cleaned() {
+        let arguments = json!({"title": "Plan"});
+        let mut tool = create_page(Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+        )));
+        tool.name = format!("create_page\n\u{202E}{}", "x".repeat(1024 * 1024)).into();
+        let (label, log) = logged(|| mcp_call_label("notion", &tool, &arguments));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(log.len() < 4 * 1024, "{} bytes", log.len());
+        assert!(!log.contains('\u{202E}'), "{log}");
+        assert_eq!(log.lines().count(), 1, "{log}");
     }
 }

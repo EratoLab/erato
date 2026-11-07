@@ -266,6 +266,47 @@ mod tests {
     }
 
     #[test]
+    fn a_mail_card_names_every_recipient_and_no_claim_the_model_made() {
+        let config = McpRuntimeConfig::default();
+        let tool = Tool::new("send_email", "Sends an email.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "to": ["ann@example.com"],
+            "cc": ["bob@example.com"],
+            "bcc": ["cy@example.com"],
+            "subject": "Q3",
+            "body": "Numbers attached.",
+            "hasUserApproved": true,
+            "account": {"recordId": "a_1", "relatedTable": "account", "name": "Typed name"},
+        });
+        let label = mcp_tool_call_display(&config, "mail", &tool, &arguments, &Default::default())
+            .label
+            .unwrap();
+        assert_eq!(
+            (label.action, label.source),
+            (ToolCallAction::Send, ToolCallLabelSource::Rules)
+        );
+        let item = &label.items[0];
+        let shown: Vec<_> = [&item.title, &item.target, &item.after]
+            .into_iter()
+            .flatten()
+            .chain(&item.fields)
+            .map(|slot| (slot.pointer.as_str(), slot.values[0].text.as_str()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("/subject", "Q3"),
+                ("/to", "ann@example.com"),
+                ("/body", "Numbers attached."),
+                ("/cc", "bob@example.com"),
+                ("/bcc", "cy@example.com"),
+            ]
+        );
+        let stored = serde_json::to_string(&label).unwrap();
+        assert!(!stored.contains("Typed name"), "{stored}");
+    }
+
+    #[test]
     fn descriptions_are_bounded_inert_and_honest_about_truncation() {
         let mut tool = Tool::new(
             "a_tool",
