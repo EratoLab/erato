@@ -322,6 +322,121 @@ describe("ToolUseStep decision row", () => {
     expect(decisionRow()).toHaveTextContent(text);
   });
 
+  it.each([["selection"], [{ scope: "turn" }], [7]])(
+    "words an approval for a scope it does not know (%o) plainly",
+    (covers) => {
+      settled({}, "done", {
+        status: "approved",
+        alwaysAllow: true,
+        covers: covers as unknown as "turn",
+      });
+
+      expect(decisionRow()).toHaveTextContent(/^You allowed this$/);
+    },
+  );
+
+  it("notes a write whose display carries a read_only that is not true", () => {
+    settled({
+      allowed_by: "policy",
+      display: { ...DISPLAY, read_only: "yes" as unknown as boolean },
+    });
+
+    expect(decisionRow()).toHaveTextContent("Ran without asking");
+  });
+
+  const STEP_STATUS = {
+    preparing: "running",
+    in_progress: "running",
+    success: "done",
+    error: "error",
+  } as const;
+  const DECISIONS: (ToolDecision | undefined)[] = [
+    undefined,
+    { status: "approved", alwaysAllow: false },
+    { status: "approved", alwaysAllow: true },
+    { status: "approved", alwaysAllow: false, covers: "turn" },
+    {
+      status: "approved",
+      alwaysAllow: true,
+      covers: { nested: [] } as unknown as "turn",
+    },
+    { status: "denied", neverAllow: false, withdrawn: false },
+    { status: "denied", neverAllow: true, withdrawn: false },
+    { status: "denied", neverAllow: true, withdrawn: true },
+  ];
+  const OUTPUTS: unknown[] = [
+    null,
+    { status: "rejected" },
+    { status: "rejected", error: "record locked" },
+    "\u202Eplain <b>text</b>",
+    [{ status: "rejected" }],
+    { status: { status: "rejected" } },
+    42,
+  ];
+  const DISPLAYS: unknown[] = [
+    undefined,
+    null,
+    DISPLAY,
+    { ...DISPLAY, read_only: true },
+  ];
+
+  it.each(
+    (Object.keys(STEP_STATUS) as (keyof typeof STEP_STATUS)[]).flatMap(
+      (rowStatus) =>
+        [undefined, null, "policy", "always_allow", "later_reason", 7].map(
+          (allowedBy) => [rowStatus, allowedBy] as const,
+        ),
+    ),
+  )(
+    "renders one call with at most one decision row for status %s and allowed_by %o",
+    (rowStatus, allowedBy) => {
+      const stepStatus = STEP_STATUS[rowStatus];
+      DECISIONS.forEach((decision, index) => {
+        OUTPUTS.forEach((output) => {
+          const { unmount } = render(
+            <ToolUseStep
+              part={{
+                ...PART,
+                tool_name: "create_record",
+                status: rowStatus,
+                output: output as ToolUse["output"],
+                allowed_by: allowedBy as ToolUse["allowed_by"],
+                display: DISPLAYS[
+                  index % DISPLAYS.length
+                ] as ToolUse["display"],
+              }}
+              status={stepStatus}
+              isStreaming={stepStatus === "running"}
+              isCollapsed={false}
+              isLastStep
+              decision={decision}
+            />,
+          );
+          const context = JSON.stringify({ decision, output, allowedBy });
+          expect(screen.getAllByTestId("tool-call-item"), context).toHaveLength(
+            1,
+          );
+          const rows = screen.queryAllByTestId("tool-decision-row");
+          expect(rows.length, context).toBeLessThanOrEqual(1);
+          if (rows[0]) expect(rows[0].textContent, context).not.toBe("");
+          const refused =
+            rowStatus === "error" &&
+            decision === undefined &&
+            allowedBy == null &&
+            (output as { status?: unknown } | null)?.status === "rejected";
+          expect(rows[0]?.textContent === "Not run", context).toBe(refused);
+          expect(screen.queryByText("Failed") !== null, context).toBe(
+            rowStatus === "error" && decision?.status !== "denied" && !refused,
+          );
+          if (decision === undefined && allowedBy === "always_allow") {
+            expect(rows[0], context).toHaveTextContent("Always allow");
+          }
+          unmount();
+        });
+      });
+    },
+  );
+
   it("gives an old row without a decision or allowed_by no decision row", () => {
     settled({ display: undefined });
 

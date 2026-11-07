@@ -41,26 +41,31 @@ export const refusedWithoutDecision = (
   );
 };
 
+const scopedApprovalLabel = (covers: unknown): string => {
+  if (covers === "turn") {
+    return t({
+      id: "trace.tool.decision.allowedForTurn",
+      message: "You allowed this for this response",
+    });
+  }
+  if (covers === "document") {
+    return t({
+      id: "trace.tool.decision.allowedForDocument",
+      message: "You allowed this for this document",
+    });
+  }
+  // A scope a later version records.
+  return t({ id: "trace.tool.decision.allowed", message: "You allowed this" });
+};
+
 const decisionLine = (
   part: ToolUse,
   decision: ToolDecision | undefined,
 ): DecisionLine | undefined => {
   if (decision?.status === "approved") {
     const icon = <ShieldCheckIcon className={ICON_CLASS} />;
-    if (decision.covers !== undefined) {
-      return {
-        icon,
-        label:
-          decision.covers === "turn"
-            ? t({
-                id: "trace.tool.decision.allowedForTurn",
-                message: "You allowed this for this response",
-              })
-            : t({
-                id: "trace.tool.decision.allowedForDocument",
-                message: "You allowed this for this document",
-              }),
-      };
+    if (decision.covers != null) {
+      return { icon, label: scopedApprovalLabel(decision.covers) };
     }
     return decision.alwaysAllow
       ? {
@@ -124,7 +129,7 @@ const decisionLine = (
   if (
     part.allowed_by === "policy" &&
     part.display != null &&
-    !part.display.read_only
+    part.display.read_only !== true
   ) {
     return {
       icon: <ShieldIcon className={ICON_CLASS} />,

@@ -349,12 +349,16 @@ const decisionForStep = (
   part: ToolUse & { content_type: "tool_use" },
   decisions: Record<string, ToolDecision | undefined>,
 ): ToolDecision | undefined => {
-  const byCall = part.tool_call_id ? decisions[part.tool_call_id] : undefined;
+  // Own keys only: a call id like `constructor` must not find Object's.
+  const decided = (key: string | null | undefined) =>
+    typeof key === "string" && Object.hasOwn(decisions, key)
+      ? decisions[key]
+      : undefined;
+  const byCall = decided(part.tool_call_id);
   if (byCall !== undefined || !isDelegationToolName(part.tool_name)) {
     return byCall;
   }
-  const childChatId = parseDelegationEnvelope(part.output)?.delegateChatId;
-  return childChatId ? decisions[childChatId] : undefined;
+  return decided(parseDelegationEnvelope(part.output)?.delegateChatId);
 };
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
