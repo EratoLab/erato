@@ -285,6 +285,23 @@ describe("ToolUseStep decision row", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
+  it("shows a call that ran and failed with a rejected-looking server result as Failed", () => {
+    settled(
+      {
+        allowed_by: "policy",
+        output: {
+          status: "rejected",
+          error: "record locked",
+        } as unknown as ToolUse["output"],
+      },
+      "error",
+    );
+
+    expect(decisionRow()).toHaveTextContent("Ran without asking");
+    expect(decisionRow()).not.toHaveTextContent("Not run");
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
   it.each([
     [{ status: "approved", alwaysAllow: true }, "You chose “Always allow”"],
     [

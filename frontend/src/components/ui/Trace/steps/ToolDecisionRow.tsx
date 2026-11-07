@@ -22,7 +22,9 @@ interface DecisionLine {
 
 /**
  * Refused before it ran with no card answered, e.g. a saved "Never allow" or
- * a child with nowhere to ask. Such rows store `{ status: "rejected" }`.
+ * a child with nowhere to ask. Such rows store `{ status: "rejected" }` and no
+ * `allowed_by`; a call that ran has `allowed_by`, and its server may answer in
+ * the same shape.
  */
 export const refusedWithoutDecision = (
   part: ToolUse,
@@ -31,6 +33,7 @@ export const refusedWithoutDecision = (
   const output: unknown = part.output;
   return (
     decision === undefined &&
+    part.allowed_by == null &&
     part.status === "error" &&
     typeof output === "object" &&
     output !== null &&
