@@ -7777,6 +7777,7 @@ msgstr "{count, plural, one {zadanie} few {# zadania} many {# zadań} other {# z
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# więcej} few {+# więcej} many {+# więcej} other {+# więcej}}"
 

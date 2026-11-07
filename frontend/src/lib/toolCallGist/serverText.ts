@@ -132,28 +132,38 @@ export const jsonPreview = (value: unknown, maxChars: number): string => {
   return out;
 };
 
+/** Values a label pointer may reach before it counts as reaching too many. */
+export const MAX_POINTER_VALUES = 10_000;
+
 /**
  * Every value a label pointer reaches, where `*` stands for every element of
- * an array or member of an object, in document order.
+ * an array or member of an object, in document order. `undefined` once more
+ * than `limit` would be reached, so wildcards over a wide input stay cheap.
  */
 export const readPointerAll = (
   document: unknown,
-  pointer: string,
-): unknown[] => {
-  if (!pointer.startsWith("/")) return [];
+  pointer: unknown,
+  limit: number = MAX_POINTER_VALUES,
+): unknown[] | undefined => {
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return [];
   let reached: unknown[] = [document];
   for (const raw of pointer.slice(1).split("/")) {
-    reached = reached.flatMap((value) => {
-      if (raw === "*") {
-        return Array.isArray(value)
-          ? value
-          : isRecord(value)
-            ? Object.values(value)
-            : [];
+    const next: unknown[] = [];
+    for (const value of reached) {
+      if (raw !== "*") {
+        const child = readPointer(value, `/${raw}`);
+        if (child !== undefined) next.push(child);
+        continue;
       }
-      const next = readPointer(value, `/${raw}`);
-      return next === undefined ? [] : [next];
-    });
+      const children = Array.isArray(value)
+        ? value
+        : isRecord(value)
+          ? Object.values(value)
+          : [];
+      if (next.length + children.length > limit) return undefined;
+      for (const child of children) next.push(child);
+    }
+    reached = next;
   }
   return reached;
 };

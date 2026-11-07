@@ -10,7 +10,10 @@ import { WORD_SUBMIT_COMMENT_CHANGES_TOOL } from "@/lib/wordReview/wordCommentCh
 import { ToolUseStep } from "./ToolUseStep";
 
 import type { ToolDecision } from "../Trace";
-import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ToolCallLabel,
+  ToolUse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 const PART = {
   content_type: "tool_use",
@@ -849,6 +852,41 @@ describe("ToolUseStep proposal row", () => {
     ).toEqual(["Reply", "Resolve", "Resolve"]);
     expect(rows).not.toHaveTextContent("Reply text A");
     expect(toggle).not.toHaveTextContent("Reply text A");
+  });
+
+  it("lists at most 50 changes of a long mixed batch and counts the rest", () => {
+    const ops = Array.from({ length: 120 }, (_, index) =>
+      index % 2 === 0 ? "reply" : "resolve",
+    );
+    proposal({ input: commentChanges(ops) as unknown as ToolUse["input"] });
+
+    expect(screen.getByRole("button", { name: /Proposed/ })).toHaveTextContent(
+      "Proposed 120 comment changes · 60 replies · 60 resolved",
+    );
+    const rows = screen.getByTestId("tool-call-proposal-changes");
+    expect(rows.querySelectorAll("li[data-op]")).toHaveLength(50);
+    expect(
+      screen.getByTestId("tool-call-proposal-changes-more"),
+    ).toHaveTextContent("+70 more");
+  });
+
+  it("shows a proposal whose stored label is malformed without breaking the row", () => {
+    proposal({
+      display: {
+        title: WORD_SUBMIT_COMMENT_CHANGES_TOOL,
+        description_truncated: false,
+        label: {
+          action: "comment",
+          object_kind: "comment",
+          source: "own_mapping",
+          items: [{ fields: [null, { name: "op", pointer: 42 }] }],
+        } as unknown as ToolCallLabel,
+      },
+    });
+
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveTextContent(
+      "Proposed comment changes",
+    );
   });
 
   it("says a proposal the host refused could not be made", () => {

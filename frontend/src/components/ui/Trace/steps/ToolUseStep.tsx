@@ -19,6 +19,7 @@ import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   commentChangeRow,
+  commentChangesMore,
   isMixedCommentProposal,
   ownProposalLine,
 } from "@/lib/toolCallGist/ownProposalLabels";
@@ -116,23 +117,37 @@ const GistRowDetails = ({
   </div>
 );
 
+/** Rows a mixed comment batch lists; the rest are counted. */
+const MAX_CHANGE_ROWS = 50;
+
 /** A mixed comment batch's changes, one row each, by operation only. */
 const CommentChangeRows = ({
   changes,
 }: {
   changes: readonly (WordCommentOp | "other")[];
-}) => (
-  <ol
-    className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
-    data-testid="tool-call-proposal-changes"
-  >
-    {changes.map((op, index) => (
-      <li key={index} data-op={op}>
-        {commentChangeRow(op)}
-      </li>
-    ))}
-  </ol>
-);
+}) => {
+  const more = changes.length - MAX_CHANGE_ROWS;
+  return (
+    <ol
+      className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
+      data-testid="tool-call-proposal-changes"
+    >
+      {changes.slice(0, MAX_CHANGE_ROWS).map((op, index) => (
+        <li key={index} data-op={op}>
+          {commentChangeRow(op)}
+        </li>
+      ))}
+      {more > 0 && (
+        <li
+          className="list-none text-theme-fg-muted"
+          data-testid="tool-call-proposal-changes-more"
+        >
+          {commentChangesMore(more)}
+        </li>
+      )}
+    </ol>
+  );
+};
 
 // The server's cap; rows and events from other writers get it here.
 const MAX_PROGRESS_CHARS = 200;

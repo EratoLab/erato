@@ -92,6 +92,25 @@ describe("pointers", () => {
     expect(readPointerAll(input, "changes")).toEqual([]);
   });
 
+  it("reads any pointer, and gives up on one that reaches too many values", () => {
+    for (const pointer of [undefined, null, 42, ["/a"], { "/": 1 }]) {
+      expect(readPointerAll({ a: 1 }, pointer)).toEqual([]);
+    }
+    const odd = { "a/b": { "~": ["x"] }, "": "empty", "\u202E": "bidi" };
+    expect(readPointerAll(odd, "/a~1b/~0/*")).toEqual(["x"]);
+    expect(readPointerAll(odd, "/")).toEqual(["empty"]);
+    expect(readPointerAll(odd, "/\u202E")).toEqual(["bidi"]);
+    const wide = {
+      rows: Array.from({ length: 200 }, () =>
+        Array.from({ length: 200 }, (_, index) => index),
+      ),
+    };
+    expect(readPointerAll(wide, "/rows/*")).toHaveLength(200);
+    expect(readPointerAll(wide, "/rows/*/*")).toBeUndefined();
+    expect(readPointerAll(wide, "/rows/*/*", 40_000)).toHaveLength(40_000);
+    expect(readPointerAll(wide, "/rows/*", 199)).toBeUndefined();
+  });
+
   it("names the last segment unescaped", () => {
     expect(lastPointerSegment("/a~1b/c~0d")).toBe("c~d");
     expect(lastPointerSegment("")).toBeUndefined();
