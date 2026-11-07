@@ -1818,6 +1818,7 @@ impl AppConfig {
         // assembly.
         let mut seen_qualified_names = std::collections::HashSet::new();
         let mut replay_by_name = HashMap::new();
+        let mut label_by_name = HashMap::new();
         let mut child_context_arg_by_host: HashMap<&str, (String, String)> = HashMap::new();
         for tool in config.client_tools.tools.values() {
             let name = tool.name.trim();
@@ -1898,6 +1899,30 @@ impl AppConfig {
             {
                 panic!(
                     "Client tools named '{}' in different namespaces must use the same replay settings.",
+                    name
+                );
+            }
+            if let Some(label) = &tool.label {
+                if label.fields.len() > MAX_CLIENT_TOOL_LABEL_FIELDS {
+                    panic!(
+                        "Client tool '{}' lists more than {} label fields.",
+                        qualified, MAX_CLIENT_TOOL_LABEL_FIELDS
+                    );
+                }
+                for path in &label.fields {
+                    if let Err(error) = parse_label_pointer(path) {
+                        panic!(
+                            "Client tool '{}' has an invalid label pointer: {}",
+                            qualified, error
+                        );
+                    }
+                }
+            }
+            if let Some(previous) = label_by_name.insert(name.to_string(), tool.label.clone())
+                && previous != tool.label
+            {
+                panic!(
+                    "Client tools named '{}' in different namespaces must use the same label.",
                     name
                 );
             }
@@ -6201,6 +6226,13 @@ pub struct ClientToolConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub replay: ClientToolReplayConfig,
 
+    /// How the chat names this tool's calls: what the call proposes, written
+    /// by hand for one of Erato's own proposal tools. Without the table, the
+    /// calls show the tool's name as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub label: Option<ClientToolLabelConfig>,
+
     /// Opt this tool into durable client operations. While
     /// `client_tools.durable_operations_enabled` is on, a call whose stream
     /// drops or times out parks durably for the same device and host context
@@ -6448,6 +6480,13 @@ pub enum ClientToolReplayMode {
 /// Upper bound on each receipt field list.
 pub const MAX_CLIENT_TOOL_RECEIPT_FIELDS: usize = 32;
 
+fn is_field_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 /// Parses a receipt field path (`$.a.b`) into its object keys. Only object
 /// member access is supported: no array indices, wildcards or quoting.
 pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
@@ -6456,11 +6495,7 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
     };
     rest.split('.')
         .map(|key| {
-            if !key.is_empty()
-                && key
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-            {
+            if is_field_key(key) {
                 Ok(key.to_string())
             } else {
                 Err(format!(
@@ -6469,6 +6504,90 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
             }
         })
         .collect()
+}
+
+/// `[client_tools.tools.<id>.label]`. What a call of the tool proposes, as a
+/// verb and a kind from closed lists, plus key values read from the call's
+/// arguments. Values are always read through the paths, never written here.
+/// Paths are `$.key` paths, where `key[*]` stands for every element of an
+/// array (`$.changes[*].op`).
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientToolLabelConfig {
+    pub action: ClientToolLabelAction,
+    pub object_kind: ClientToolLabelObjectKind,
+    /// Key values, at most 4. One that reaches nothing in a call is left out.
+    /// On a comment proposal, a field named `op` gives each change's operation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
+}
+
+/// `client_tools.tools.<id>.label.action`: what a call proposes. Erato's own
+/// tools only ever propose, so there is no verb for a read.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolLabelAction {
+    Create,
+    Update,
+    Delete,
+    Move,
+    Send,
+    Comment,
+}
+
+/// `client_tools.tools.<id>.label.object_kind`: what a call acts on.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolLabelObjectKind {
+    Page,
+    Row,
+    Database,
+    Folder,
+    Note,
+    Comment,
+    Paragraph,
+    Document,
+    Email,
+    Message,
+    Event,
+    File,
+    Task,
+    Other,
+}
+
+/// Upper bound on a client tool label's fields.
+pub const MAX_CLIENT_TOOL_LABEL_FIELDS: usize = 4;
+
+/// Parses a label pointer (`$.a.b`, with `key[*]` for every element of an
+/// array) into the JSON pointer the label resolver reads, e.g. `/a/*/b`.
+pub fn parse_label_pointer(path: &str) -> Result<String, String> {
+    let Some(rest) = path.strip_prefix("$.") else {
+        return Err(format!("'{path}' must start with '$.'"));
+    };
+    let mut pointer = String::new();
+    for segment in rest.split('.') {
+        let mut key = segment;
+        let mut arrays = 0;
+        while let Some(stripped) = key.strip_suffix("[*]") {
+            key = stripped;
+            arrays += 1;
+        }
+        if !is_field_key(key) {
+            return Err(format!(
+                "'{path}' has an invalid key '{segment}'; keys use [A-Za-z0-9_-], optionally followed by [*]"
+            ));
+        }
+        pointer.push('/');
+        pointer.push_str(key);
+        for _ in 0..arrays {
+            pointer.push_str("/*");
+        }
+    }
+    Ok(pointer)
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
@@ -10380,5 +10499,58 @@ mod client_tool_replay_serialization_tests {
             serde_json::from_value::<ClientToolReplayConfig>(serde_json::json!({})).unwrap(),
             ClientToolReplayConfig::default()
         );
+    }
+}
+
+#[cfg(test)]
+mod client_tool_label_tests {
+    use super::*;
+
+    #[test]
+    fn label_pointers_read_every_array_element_and_nothing_else() {
+        for (path, pointer) in [
+            ("$.snapshot", "/snapshot"),
+            ("$.changes[*].op", "/changes/*/op"),
+            ("$.entries[*].source[*]", "/entries/*/source/*"),
+            ("$.rows[*][*].cell", "/rows/*/*/cell"),
+        ] {
+            assert_eq!(parse_label_pointer(path).as_deref(), Ok(pointer), "{path}");
+        }
+        for path in [
+            "$",
+            "changes",
+            "$.changes[0].op",
+            "$.changes[*]op",
+            "$.[*]",
+            "$.a..b",
+            "$.a/b",
+        ] {
+            assert!(parse_label_pointer(path).is_err(), "{path}");
+        }
+        assert!(parse_receipt_field_path("$.changes[*].op").is_err());
+    }
+
+    #[test]
+    fn label_config_round_trips_and_refuses_what_the_chat_does_not_show() {
+        let label: ClientToolLabelConfig = serde_json::from_value(serde_json::json!({
+            "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
+        }))
+        .unwrap();
+        let json = serde_json::to_value(&label).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
+            })
+        );
+        for refused in [
+            serde_json::json!({"action": "read", "object_kind": "comment"}),
+            serde_json::json!({"action": "create", "object_kind": "row", "title": "$.name"}),
+        ] {
+            assert!(
+                serde_json::from_value::<ClientToolLabelConfig>(refused.clone()).is_err(),
+                "{refused}"
+            );
+        }
     }
 }

@@ -14,6 +14,12 @@ import {
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
+import {
+  commentChangeRow,
+  isMixedCommentProposal,
+  ownProposalLine,
+} from "@/lib/toolCallGist/ownProposalLabels";
 import { serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
@@ -32,6 +38,7 @@ import type {
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
 import type { CleanText } from "@/lib/toolCallGist/serverText";
+import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
@@ -102,6 +109,24 @@ const GistRowDetails = ({
   </div>
 );
 
+/** A mixed comment batch's changes, one row each, by operation only. */
+const CommentChangeRows = ({
+  changes,
+}: {
+  changes: readonly (WordCommentOp | "other")[];
+}) => (
+  <ol
+    className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
+    data-testid="tool-call-proposal-changes"
+  >
+    {changes.map((op, index) => (
+      <li key={index} data-op={op}>
+        {commentChangeRow(op)}
+      </li>
+    ))}
+  </ol>
+);
+
 const PlainToolUseStep = ({
   part,
   status,
@@ -117,7 +142,9 @@ const PlainToolUseStep = ({
   // A denied or refused call never ran: its decision row says so.
   const notRun =
     decision?.status === "denied" || refusedWithoutDecision(part, decision);
-  const gist = gistOf(part.display?.label, part.input);
+  // Erato's own proposals have cards of their own: the row only names them.
+  const proposal = ownProposalOf(part.display?.label, part.input);
+  const gist = proposal ? undefined : gistOf(part.display?.label, part.input);
   const lead = gist?.items[0];
   const phase: GistPhase = notRun
     ? "ask"
@@ -159,19 +186,24 @@ const PlainToolUseStep = ({
         )}
       </div>
     ) : undefined;
+  const proposalLine = proposal && ownProposalLine(proposal, phase);
   // A gist row's title is the line, so the tool it ran is named in the body.
-  const body = gist ? (
-    <>
-      <ToolCallIdentity
-        className="pt-2"
-        toolName={toolName}
-        server={part.display?.server_name}
-      />
-      {payload}
-    </>
-  ) : (
-    payload
-  );
+  const body =
+    proposal || gist ? (
+      <>
+        {proposal?.kind === "comments" && isMixedCommentProposal(proposal) && (
+          <CommentChangeRows changes={proposal.changes} />
+        )}
+        <ToolCallIdentity
+          className="pt-2"
+          toolName={toolName}
+          server={part.display?.server_name}
+        />
+        {payload}
+      </>
+    ) : (
+      payload
+    );
 
   return (
     // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the
@@ -190,7 +222,11 @@ const PlainToolUseStep = ({
         hasTrailingRailLine={!isLastStep}
         title={
           <>
-            {gist && lead ? (
+            {proposalLine ? (
+              <span title={proposalLine} data-testid="tool-call-proposal-line">
+                {proposalLine}
+              </span>
+            ) : gist && lead ? (
               <span
                 title={gistPlainLine(gist, lead, phase)}
                 data-testid="tool-call-gist-line"
