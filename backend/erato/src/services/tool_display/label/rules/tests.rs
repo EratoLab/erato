@@ -607,22 +607,31 @@ fn the_rules_say_when_a_model_should_label_the_call() {
 
 #[test]
 fn a_call_the_rules_have_nothing_to_say_about_gets_the_generic_mapping() {
-    for (tool, arguments) in [
-        ("read_file", json!({"path": "notes.txt"})),
-        ("list_meeting_folders", json!({"limit": 50})),
-        ("sign_out", json!(null)),
-        ("create_page", json!("not an object")),
+    use ToolCallAction::{Create, Other};
+    use ToolCallLabelSource::{Generic, Rules};
+    for (tool, arguments, expected) in [
+        (
+            "read_file",
+            json!({"path": "notes.txt"}),
+            (Other, Generic, true),
+        ),
+        (
+            "list_meeting_folders",
+            json!({"limit": 50}),
+            (Other, Generic, true),
+        ),
+        ("sign_out", json!(null), (Other, Generic, true)),
+        // The name still says what the call does, with nothing to point at.
+        ("create_page", json!("not an object"), (Create, Rules, true)),
     ] {
         let mapping = label(tool, arguments).mapping;
-        let says_nothing = mapping.action == ToolCallAction::Other;
         assert_eq!(
-            mapping.source == ToolCallLabelSource::Generic,
-            says_nothing,
+            (mapping.action, mapping.source, mapping.items.is_empty()),
+            expected,
             "{tool}"
         );
-        if says_nothing {
-            assert_eq!(mapping.object_kind, ToolCallObjectKind::Other);
-            assert!(mapping.items.is_empty());
+        if mapping.source == Generic {
+            assert_eq!(mapping.object_kind, ToolCallObjectKind::Other, "{tool}");
         }
     }
     let read = label(
@@ -1221,82 +1230,75 @@ struct Expected {
     items: Vec<ToolCallLabelItemMapping>,
 }
 
-/// `/pages/0/x` and `/pages/*/x` name the same part.
-fn normalized(pointer: &Option<String>) -> Option<String> {
-    pointer.as_ref().map(|pointer| {
-        pointer
-            .split('/')
-            .map(|token| {
-                if !token.is_empty() && token.bytes().all(|byte| byte.is_ascii_digit()) {
-                    "*"
-                } else {
-                    token
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("/")
-    })
-}
+/// The parts of a label the probe's expected labels are held against.
+const PARTS: [&str; 8] = [
+    "action", "kind", "title", "id", "target", "before", "after", "fields",
+];
 
 struct Score {
-    cases: usize,
-    action: usize,
-    title: usize,
+    /// Per part, the cases whose rules label differs from the expected one.
+    misses: HashMap<&'static str, Vec<String>>,
     unresolved: usize,
     flagged: Vec<String>,
 }
 
 /// Scores the rules' own output, before the cross-check, against the probe's
-/// expected labels, and prints every miss.
+/// expected labels, comparing pointers as written, and prints every miss.
 fn score(fixture: &str) -> Score {
     let mut score = Score {
-        cases: 0,
-        action: 0,
-        title: 0,
+        misses: PARTS.iter().map(|part| (*part, Vec::new())).collect(),
         unresolved: 0,
         flagged: Vec::new(),
     };
-    let mut parts = [0usize; 5];
     for line in fixture.lines().filter(|line| !line.trim().is_empty()) {
         let case: Case = serde_json::from_str(line).unwrap();
         let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref(), None);
         let mapping = &rules.mapping;
         let got = mapping.items.first().cloned().unwrap_or_default();
         let want = case.expected.items.first().cloned().unwrap_or_default();
-        score.cases += 1;
         let mut misses = Vec::new();
-        if mapping.action == case.expected.action {
-            score.action += 1;
-        } else {
-            misses.push(format!(
-                "action {:?}, expected {:?}",
-                mapping.action, case.expected.action
-            ));
-        }
-        if mapping.object_kind != case.expected.object_kind {
-            misses.push(format!(
-                "kind {:?}, expected {:?}",
-                mapping.object_kind, case.expected.object_kind
-            ));
-        }
-        for (index, (part, got, want)) in [
-            ("title", &got.title, &want.title),
-            ("id", &got.id, &want.id),
-            ("target", &got.target, &want.target),
-            ("before", &got.before, &want.before),
-            ("after", &got.after, &want.after),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            if normalized(got) == normalized(want) {
-                parts[index] += 1;
-            } else {
-                misses.push(format!("{part} {got:?}, expected {want:?}"));
+        for (part, got, want) in [
+            (
+                "action",
+                format!("{:?}", mapping.action),
+                format!("{:?}", case.expected.action),
+            ),
+            (
+                "kind",
+                format!("{:?}", mapping.object_kind),
+                format!("{:?}", case.expected.object_kind),
+            ),
+            (
+                "title",
+                format!("{:?}", got.title),
+                format!("{:?}", want.title),
+            ),
+            ("id", format!("{:?}", got.id), format!("{:?}", want.id)),
+            (
+                "target",
+                format!("{:?}", got.target),
+                format!("{:?}", want.target),
+            ),
+            (
+                "before",
+                format!("{:?}", got.before),
+                format!("{:?}", want.before),
+            ),
+            (
+                "after",
+                format!("{:?}", got.after),
+                format!("{:?}", want.after),
+            ),
+            (
+                "fields",
+                format!("{:?}", got.fields),
+                format!("{:?}", want.fields),
+            ),
+        ] {
+            if got != want {
+                score.misses.get_mut(part).unwrap().push(case.id.clone());
+                misses.push(format!("{part} {got}, expected {want}"));
             }
-        }
-        if normalized(&got.title) == normalized(&want.title) {
-            score.title += 1;
         }
         for item in &mapping.items {
             for pointer in [
@@ -1325,21 +1327,141 @@ fn score(fixture: &str) -> Score {
             println!("{} ({}): {}", case.id, case.tool, misses.join("; "));
         }
     }
-    let share = |hits: usize| hits as f64 / score.cases as f64;
-    println!(
-        "{} cases: action {:.2}, title {:.2}, id {:.2}, target {:.2}, before {:.2}, after {:.2}, unresolved {}, flagged {:?}",
-        score.cases,
-        share(score.action),
-        share(parts[0]),
-        share(parts[1]),
-        share(parts[2]),
-        share(parts[3]),
-        share(parts[4]),
-        score.unresolved,
-        score.flagged,
-    );
     score
 }
+
+/// Where the rules' label differs from the probe's expected one, per part.
+/// Most field misses are the rules showing more short members than the probe
+/// picked; a change in any list is a change in what cards show.
+const TESTSET_MISSES: [(&str, &[&str]); 8] = [
+    (
+        "action",
+        &[
+            "g05-add-note",
+            "g06-remove-note",
+            "w02-plan-insert",
+            "w04-scoped-insert-table",
+        ],
+    ),
+    (
+        "kind",
+        &[
+            "n01-crm-row",
+            "n03-batch-rows",
+            "n04-meeting-note",
+            "n07-inject-content",
+            "n21-comment-page",
+            "n23-comment-selection",
+            "n24-comment-inject",
+            "n26-suggest",
+            "n28-update-ds",
+            "n31-read-query",
+            "g09-read-folders",
+            "w08-comment-add-quote",
+            "w09-comment-add-selection",
+            "w15-comment-inject",
+            "w17-read-comments",
+            "w18-propose-edits-bare",
+            "w19-propose-edits-fence",
+            "w20-propose-reply",
+            "w21-propose-appointment",
+            "w22-propose-insert-fence",
+        ],
+    ),
+    ("title", &[]),
+    (
+        "id",
+        &[
+            "n19-duplicate",
+            "g05-add-note",
+            "w01-plan-full",
+            "w02-plan-insert",
+            "w03-plan-sections",
+            "w16-read-blocks",
+            "w19-propose-edits-fence",
+        ],
+    ),
+    (
+        "target",
+        &[
+            "n19-duplicate",
+            "n23-comment-selection",
+            "w04-scoped-insert-table",
+            "w16-read-blocks",
+            "x03-share-file",
+        ],
+    ),
+    ("before", &["w05-table-cell"]),
+    (
+        "after",
+        &[
+            "g01-create-folder",
+            "w03-plan-sections",
+            "w04-scoped-insert-table",
+            "w06-repair",
+            "w22-propose-insert-fence",
+        ],
+    ),
+    (
+        "fields",
+        &[
+            "n01-crm-row",
+            "n04-meeting-note",
+            "n09-update-status",
+            "n10-update-two-props",
+            "n11-replace-content",
+            "n12-update-content-single",
+            "n13-update-content-ops",
+            "n14-icon-only",
+            "n15-inject-old-str",
+            "n23-comment-selection",
+            "n26-suggest",
+            "n27-create-db",
+            "n28-update-ds",
+            "n30-calendar",
+            "g01-create-folder",
+            "w01-plan-full",
+            "w02-plan-insert",
+            "w03-plan-sections",
+            "w04-scoped-insert-table",
+            "w05-table-cell",
+            "w06-repair",
+            "w07-plan-inject",
+            "w13-comment-delete",
+            "w19-propose-edits-fence",
+            "w20-propose-reply",
+            "w21-propose-appointment",
+            "w22-propose-insert-fence",
+            "x03-share-file",
+            "x07-sync-delete",
+            "x10-deep-upsert-create",
+            "x11-deep-upsert-update",
+        ],
+    ),
+];
+
+const DYNAMICS_MISSES: [(&str, &[&str]); 8] = [
+    ("action", &[]),
+    ("kind", &[]),
+    ("title", &[]),
+    ("id", &[]),
+    ("target", &[]),
+    ("before", &[]),
+    ("after", &[]),
+    (
+        "fields",
+        &[
+            "d07-create-task",
+            "d08-create-appointment",
+            "d09-create-contact",
+            "d15-email-partylist",
+            "d16-email-retry-guid",
+            "d17-email-retry-obj",
+            "d18-email-bare-guid",
+            "d19-email-blocked",
+        ],
+    ),
+];
 
 /// The probe's test sets, cut to the call and the expected label, with every
 /// value the rules do not read replaced by a synthetic one of the same shape.
@@ -1354,9 +1476,15 @@ fn the_rules_reproduce_the_probe_baseline_on_its_test_sets() {
     ] {
         println!("{name}:");
         let score = score(fixture);
-        let share = |hits: usize| hits as f64 / score.cases as f64;
-        assert!(share(score.action) >= 0.85, "{name}: action");
-        assert!(share(score.title) >= 0.95, "{name}: title");
+        let expected = if name == "testset" {
+            TESTSET_MISSES
+        } else {
+            DYNAMICS_MISSES
+        };
+        assert_eq!(expected.map(|(part, _)| part), PARTS);
+        for (part, cases) in expected {
+            assert_eq!(score.misses[part], cases, "{name}: {part}");
+        }
         assert_eq!(score.unresolved, 0, "{name}: unresolved pointers");
         // The one flag is a right label next to a wrong read-only hint and a
         // read word in the name, the case the cross-check exists for.
