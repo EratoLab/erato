@@ -6541,7 +6541,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ToolDisplayMetadata"
+                "$ref": "#/components/schemas/ToolDisplayMetadata",
+                "description": "The child call's display. Its label carries no `resolved` values:\nthose come from the child chat's results, which stay in that chat."
               }
             ]
           },
@@ -12647,7 +12648,7 @@
           },
           "read_only": {
             "type": "boolean",
-            "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call. Set on MCP calls only."
+            "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call and does not also call itself destructive. Set on\nMCP calls only."
           },
           "server_name": {
             "type": "string",
@@ -12660,35 +12661,32 @@
       },
       "ToolResultDetails": {
         "type": "object",
-        "description": "The parts of an MCP result that `output` leaves out, bounded in size.",
+        "description": "What a tool row keeps of an MCP result besides `output`: at most ten of its\nlinks. Its structured content and embedded resources are not kept.",
         "properties": {
           "links": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ToolResultLink"
             }
-          },
-          "resources": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ToolResultResource"
-            }
-          },
-          "structured": {
-            "$ref": "#/components/schemas/Value",
-            "description": "The result's structured content, kept only when it differs from\n`output`. Values over the size cap read `[omitted: N bytes]`."
           }
         }
       },
       "ToolResultLink": {
         "type": "object",
-        "description": "A resource link from the result. Only `https` links without user info are\nkept; the name, title and MIME type are display-cleaned and capped like a\ntool title.",
+        "description": "A resource link from the result. Only `https` links with a host, without\nuser info and at most 512 bytes long are kept; the name and title are\ndisplay-cleaned and capped like a tool title.",
         "required": [
-          "uri"
+          "uri",
+          "host",
+          "matches_server_host"
         ],
         "properties": {
-          "mime_type": {
-            "type": "string"
+          "host": {
+            "type": "string",
+            "description": "The link's host as the URL parser reads it: lowercase, and punycode for\na non-ASCII name, so a lookalike host reads as `xn--…`."
+          },
+          "matches_server_host": {
+            "type": "boolean",
+            "description": "Whether `host` is the host of the MCP server's configured URL, ignoring\ncase and port. Never true for a server without a URL."
           },
           "name": {
             "type": "string"
@@ -12698,26 +12696,6 @@
           },
           "uri": {
             "type": "string"
-          }
-        }
-      },
-      "ToolResultResource": {
-        "type": "object",
-        "description": "A resource embedded in the result. `ui://`, `data:`, `javascript:` and\n`vbscript:` resources are not kept.",
-        "required": [
-          "uri"
-        ],
-        "properties": {
-          "mime_type": {
-            "type": "string"
-          },
-          "text": {
-            "type": "string",
-            "description": "The text as the server sent it, or `[omitted: N bytes]`. Absent on a\nblob, whose body is never kept."
-          },
-          "uri": {
-            "type": "string",
-            "description": "The resource's own URI: an identifier, not a link to open."
           }
         }
       },
@@ -12790,7 +12768,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/ToolResultDetails",
-                "description": "What an MCP result held besides the text in `output`. For the UI only:\nreplay drops it, so the model never sees it."
+                "description": "The links of an MCP result. For the UI only: replay drops it, so the\nmodel never sees it."
               }
             ],
             "default": null

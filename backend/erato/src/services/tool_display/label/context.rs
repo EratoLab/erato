@@ -4,9 +4,9 @@
 //! record, a lookup's `name` included; the one exception is the name a create
 //! call gave the record its result reports.
 
-use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
 use super::pointer;
+use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
     ToolCallStatus, ToolUse,
@@ -14,27 +14,51 @@ use crate::models::message::{
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::ops::ControlFlow;
 
 /// Records kept for one turn; the ones seen least recently go first.
 pub const MAX_RECORDS: usize = 500;
 pub const MAX_RECORDS_PER_RESULT: usize = 200;
 pub const MAX_FIELDS_PER_RECORD: usize = 32;
-/// JSON nodes read from one result or one call's arguments.
+/// JSON nodes read from one result or one call's arguments; in a result an
+/// object costs one per member and an array one per entry.
 pub const MAX_NODES_PER_VALUE: usize = 5_000;
 const MAX_DEPTH: usize = 8;
 /// Longer text is not the short confirmation the create rule reads.
 pub const MAX_CREATE_RESULT_CHARS: usize = 500;
+/// The most recent calls a turn starts from; older results are misses, as
+/// after a compaction.
+pub const MAX_CALLS_READ: usize = 200;
+/// What the index holds at most; the records seen least recently go first.
+pub const MAX_INDEX_BYTES: usize = 2 * 1024 * 1024;
+/// Resolved text one label carries; values past it stay unresolved.
+pub const MAX_RESOLVED_BYTES: usize = MAX_LABEL_VALUE_BYTES;
+/// IDs read from one call's arguments, and the longest string searched for
+/// them; more, or a longer string, count as a cap reached.
+const MAX_ARGUMENT_IDS: usize = 2 * MAX_NODES_PER_VALUE;
+const MAX_ID_SCAN_BYTES: usize = 64 * 1024;
+/// Text cleaned for one name or value: far more than its cap needs, so only
+/// a long run of dropped characters can leave it short.
+const MAX_CLEAN_BYTES: usize = 16 * 1024;
+/// Words a read's arguments give the ID tie-break, from the start of each
+/// string: a table name is a short word near the start of a query.
+const MAX_WORDS: usize = 1_000;
+const MAX_WORD_SCAN_BYTES: usize = 8 * 1024;
 const NAME_KEYS: [&str; 4] = ["name", "title", "subject", "fullname"];
 /// Where a link says its record lives.
 const LINK_TYPE_KEYS: [&str; 4] = ["relatedTable", "LogicalName", "type", "@odata.type"];
 
 /// Names and field values by ID, from the successful tool results of a chat.
+/// Reads only settled calls: a call still waiting, such as a client tool
+/// whose result is held for the user's review, has no output to read yet.
 #[derive(Debug, Clone, Default)]
 pub struct ToolResultContext {
     records: HashMap<String, Record>,
     order: VecDeque<String>,
     /// Calls already read, so the running turn's parts are read once.
     seen: HashSet<String>,
+    /// Estimated size of `records`, kept under [`MAX_INDEX_BYTES`].
+    bytes: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -46,15 +70,27 @@ struct Record {
 }
 
 impl ToolResultContext {
-    /// The tool results a turn's generation input replays. After a chat-history
-    /// compaction none are left, so names read before it are misses.
+    /// The tool results a turn's generation input replays, the most recent
+    /// [`MAX_CALLS_READ`] calls only. After a chat-history compaction none are
+    /// left, so names read before it are misses.
     pub fn from_messages(source: &GenerationInputMessages) -> Self {
         let mut context = Self::default();
-        for message in &source.messages {
-            if let (MessageRole::Tool, ContentPart::ToolUse(tool)) =
-                (&message.role, &message.content)
-            {
+        let calls: Vec<&ToolUse> = source
+            .messages
+            .iter()
+            .filter_map(|message| match (&message.role, &message.content) {
+                (MessageRole::Tool, ContentPart::ToolUse(tool)) => Some(tool),
+                _ => None,
+            })
+            .collect();
+        let first_read = calls.len().saturating_sub(MAX_CALLS_READ);
+        for (index, tool) in calls.into_iter().enumerate() {
+            if index >= first_read {
                 context.read(tool);
+            } else if is_settled(tool) && !tool.tool_call_id.is_empty() {
+                // Read later, after newer calls, an old read would bring back
+                // values a newer write retired.
+                context.seen.insert(tool.tool_call_id.clone());
             }
         }
         context
@@ -63,7 +99,11 @@ impl ToolResultContext {
     /// Reads the running turn's calls that have settled since the last look.
     pub fn observe(&mut self, content: &[ContentPart]) {
         for part in content {
-            if let ContentPart::ToolUse(tool) = part {
+            // A call without an ID cannot be told from one read before, and
+            // reading it again would bring back values a later write retired.
+            if let ContentPart::ToolUse(tool) = part
+                && !tool.tool_call_id.is_empty()
+            {
                 self.read(tool);
             }
         }
@@ -71,18 +111,26 @@ impl ToolResultContext {
 
     /// Fills `resolved` on the label's values: the record name for `id`,
     /// `target` and `before`, and on an update each field's earlier value,
-    /// read from the one record the item's `id` names. A miss stays `None`.
+    /// read from the one record the item's `id` names. A miss stays `None`,
+    /// and so does every value past [`MAX_RESOLVED_BYTES`] of resolved text.
     pub fn resolve(&self, label: &mut ToolCallLabel, arguments: &Value) {
         let update = label.action == ToolCallAction::Update;
+        let mut budget = MAX_RESOLVED_BYTES;
+        let mut kept = |found: Option<String>| {
+            let found = found?;
+            budget = budget.checked_sub(found.len())?;
+            Some(found)
+        };
         for item in &mut label.items {
             for slot in [&mut item.id, &mut item.target, &mut item.before]
                 .into_iter()
                 .flatten()
             {
                 for value in &mut slot.values {
-                    value.resolved = self
-                        .record_at(arguments, &value.path)
-                        .and_then(|record| record.name.clone());
+                    value.resolved = kept(
+                        self.record_at(arguments, &value.path)
+                            .and_then(|record| record.name.clone()),
+                    );
                 }
             }
             if !update {
@@ -101,7 +149,7 @@ impl ToolResultContext {
             };
             for field in &mut item.fields {
                 for value in &mut field.values {
-                    value.resolved = field_member(&value.path).and_then(|member| {
+                    value.resolved = kept(field_member(&value.path).and_then(|member| {
                         let earlier = record.fields.get(&member)?;
                         // A status `1` is a value; a link's earlier ID only
                         // shows as its record's name, never as the raw ID.
@@ -111,7 +159,7 @@ impl ToolResultContext {
                         } else {
                             Some(earlier.clone())
                         }
-                    });
+                    }));
                 }
             }
         }
@@ -122,20 +170,40 @@ impl ToolResultContext {
     }
 
     fn record_at(&self, arguments: &Value, path: &str) -> Option<&Record> {
-        let reached = pointer::resolve(arguments, path).into_iter().next()?;
-        self.record(&id_key(reached.value)?)
+        let mut reached = None;
+        pointer::visit(arguments, path, |_, value| {
+            reached = Some(value);
+            ControlFlow::Break(())
+        });
+        self.record(&id_key(reached?)?)
     }
 
     fn read(&mut self, tool: &ToolUse) {
-        if !matches!(tool.status, ToolCallStatus::Success | ToolCallStatus::Error)
-            || self.seen.contains(&tool.tool_call_id)
-        {
+        if !is_settled(tool) || self.seen.contains(&tool.tool_call_id) {
             return;
         }
         if !tool.tool_call_id.is_empty() {
             self.seen.insert(tool.tool_call_id.clone());
         }
+        // A bug in reading one result costs the names, never the turn.
+        let read =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.read_settled(tool)));
+        if read.is_err() {
+            tracing::error!("Dropping the names read from tool results: reading one panicked");
+            self.records.clear();
+            self.order.clear();
+            self.bytes = 0;
+        }
+    }
+
+    fn read_settled(&mut self, tool: &ToolUse) {
         if is_refused_by_erato(tool) {
+            return;
+        }
+        // A task's child may have changed any record, and what its tools
+        // returned stays in the child's chat.
+        if crate::services::delegation::is_delegation_tool_name(&tool.tool_name) {
+            self.retire_all();
             return;
         }
         // Whatever a call named may have changed, failed calls included, so
@@ -144,17 +212,11 @@ impl ToolResultContext {
             match argument_ids(arguments, true) {
                 Some(keys) => {
                     for key in keys {
-                        if let Some(record) = self.records.get_mut(&key) {
-                            record.fields.clear();
-                        }
+                        self.retire(&key);
                     }
                 }
                 // Some IDs went unread, so any record may be among them.
-                None => {
-                    for record in self.records.values_mut() {
-                        record.fields.clear();
-                    }
-                }
+                None => self.retire_all(),
             }
         }
         if tool.status != ToolCallStatus::Success {
@@ -175,31 +237,62 @@ impl ToolResultContext {
     }
 
     fn read_node(&mut self, value: &Value, words: &HashSet<String>, walk: &mut Walk, depth: usize) {
-        if walk.nodes == 0 || walk.records == 0 || depth > MAX_DEPTH {
+        if walk.records == 0 || depth > MAX_DEPTH {
             return;
         }
-        walk.nodes -= 1;
         match value {
             Value::Object(object) => {
+                // Every member is looked at below, so an object costs its width.
+                if !walk.take(object.len()) {
+                    return;
+                }
                 if let Some((member, key)) = own_id(object, words) {
                     let name = name_of(object);
-                    let fields = fields_of(object, member, words);
+                    let fields = fields_of(object, member, words, walk);
                     if name.is_some() || !fields.is_empty() {
                         walk.records -= 1;
                         self.merge(key, name, fields);
                     }
                 }
-                for child in object.values() {
+                for child in object.values().filter(|child| is_container(child)) {
+                    if walk.nodes == 0 || walk.records == 0 {
+                        break;
+                    }
                     self.read_node(child, words, walk, depth + 1);
                 }
             }
             Value::Array(entries) => {
                 for entry in entries {
-                    self.read_node(entry, words, walk, depth + 1);
+                    if walk.records == 0 || !walk.take(1) {
+                        break;
+                    }
+                    if is_container(entry) {
+                        self.read_node(entry, words, walk, depth + 1);
+                    }
                 }
             }
             _ => {}
         }
+    }
+
+    fn retire(&mut self, key: &str) {
+        if let Some(record) = self.records.get_mut(key) {
+            let before = record_bytes(key, record);
+            record.fields.clear();
+            let after = record_bytes(key, record);
+            self.bytes = self.bytes.saturating_sub(before - after);
+        }
+    }
+
+    fn retire_all(&mut self) {
+        for record in self.records.values_mut() {
+            record.fields.clear();
+        }
+        self.bytes = self
+            .records
+            .iter()
+            .map(|(key, record)| record_bytes(key, record))
+            .sum();
     }
 
     /// A create whose short text result holds exactly one ID: the record
@@ -229,58 +322,123 @@ impl ToolResultContext {
         if key.bytes().all(|byte| byte.is_ascii_digit()) {
             return;
         }
-        if let Some(record) = self.records.get_mut(&key) {
-            if let Some(at) = self.order.iter().position(|seen| *seen == key) {
-                let seen = self.order.remove(at);
-                self.order.extend(seen);
+        let record = match self.records.remove(&key) {
+            Some(mut record) => {
+                self.bytes = self.bytes.saturating_sub(record_bytes(&key, &record));
+                if let Some(at) = self.order.iter().position(|seen| *seen == key) {
+                    let seen = self.order.remove(at);
+                    self.order.extend(seen);
+                }
+                // A UUID names one thing everywhere, so a new name is a rename.
+                let named_twice = record.name.is_some()
+                    && name.is_some()
+                    && record.name != name
+                    && !looks_like_a_uuid(&key);
+                if named_twice {
+                    record = Record {
+                        ambiguous: true,
+                        ..Record::default()
+                    };
+                } else if !record.ambiguous {
+                    if name.is_some() {
+                        record.name = name;
+                    }
+                    for (member, value) in fields {
+                        if record.fields.len() < MAX_FIELDS_PER_RECORD
+                            || record.fields.contains_key(&member)
+                        {
+                            record.fields.insert(member, value);
+                        }
+                    }
+                }
+                record
             }
-            if record.ambiguous {
-                return;
-            }
-            // A UUID names one thing everywhere, so a new name is a rename.
-            if record.name.is_some()
-                && name.is_some()
-                && record.name != name
-                && !looks_like_a_uuid(&key)
-            {
-                *record = Record {
-                    ambiguous: true,
-                    ..Record::default()
-                };
-                return;
-            }
-            if name.is_some() {
-                record.name = name;
-            }
-            for (member, value) in fields {
-                if record.fields.len() < MAX_FIELDS_PER_RECORD
-                    || record.fields.contains_key(&member)
-                {
-                    record.fields.insert(member, value);
+            None => {
+                if self.order.len() >= MAX_RECORDS {
+                    self.evict_oldest();
+                }
+                self.order.push_back(key.clone());
+                Record {
+                    name,
+                    fields,
+                    ambiguous: false,
                 }
             }
-            return;
+        };
+        self.bytes = self.bytes.saturating_add(record_bytes(&key, &record));
+        self.records.insert(key, record);
+        while self.bytes > MAX_INDEX_BYTES && self.order.len() > 1 {
+            self.evict_oldest();
         }
-        if self.order.len() == MAX_RECORDS
-            && let Some(oldest) = self.order.pop_front()
-        {
-            self.records.remove(&oldest);
-        }
-        self.order.push_back(key.clone());
-        self.records.insert(
-            key,
-            Record {
-                name,
-                fields,
-                ambiguous: false,
-            },
-        );
     }
+
+    fn evict_oldest(&mut self) {
+        if let Some(oldest) = self.order.pop_front()
+            && let Some(record) = self.records.remove(&oldest)
+        {
+            self.bytes = self.bytes.saturating_sub(record_bytes(&oldest, &record));
+        }
+    }
+}
+
+/// What a record costs the index, roughly: its text plus a fixed overhead
+/// per entry.
+fn record_bytes(key: &str, record: &Record) -> usize {
+    const OVERHEAD: usize = 64;
+    let fields: usize = record
+        .fields
+        .iter()
+        .map(|(member, value)| OVERHEAD + member.len() + value.len())
+        .sum();
+    OVERHEAD + key.len() + record.name.as_ref().map_or(0, String::len) + fields
+}
+
+/// Drops what a chat's results said about a label's values, keeping the
+/// values as the call wrote them.
+pub fn forget_resolved(label: &mut ToolCallLabel) {
+    for item in &mut label.items {
+        let slots = [
+            &mut item.title,
+            &mut item.id,
+            &mut item.target,
+            &mut item.before,
+            &mut item.after,
+        ];
+        for slot in slots.into_iter().flatten().chain(&mut item.fields) {
+            for value in &mut slot.values {
+                value.resolved = None;
+            }
+        }
+    }
+}
+
+fn is_settled(tool: &ToolUse) -> bool {
+    matches!(tool.status, ToolCallStatus::Success | ToolCallStatus::Error)
+}
+
+fn is_container(value: &Value) -> bool {
+    matches!(value, Value::Object(_) | Value::Array(_))
 }
 
 struct Walk {
     nodes: usize,
     records: usize,
+}
+
+impl Walk {
+    /// Spends `cost` nodes, or ends the walk when fewer are left.
+    fn take(&mut self, cost: usize) -> bool {
+        match self.nodes.checked_sub(cost.max(1)) {
+            Some(left) => {
+                self.nodes = left;
+                true
+            }
+            None => {
+                self.nodes = 0;
+                false
+            }
+        }
+    }
 }
 
 /// How an ID is looked up: UUIDs in any spelling as bare lowercase hex,
@@ -364,16 +522,22 @@ fn stem(member: &str) -> String {
 /// query's `FROM`.
 fn words(arguments: Option<&Value>) -> HashSet<String> {
     fn collect(value: &Value, words: &mut HashSet<String>, nodes: &mut usize, depth: usize) {
-        if *nodes == 0 || depth > MAX_DEPTH {
+        if *nodes == 0 || depth > MAX_DEPTH || words.len() >= MAX_WORDS {
             return;
         }
         *nodes -= 1;
         match value {
-            Value::String(text) => words.extend(
-                text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
-                    .filter(|word| !word.is_empty())
-                    .map(str::to_lowercase),
-            ),
+            Value::String(text) => {
+                let scanned = text_prefix(text, MAX_WORD_SCAN_BYTES)
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .filter(|word| !word.is_empty() && word.len() <= MAX_ID_CHARS);
+                for word in scanned {
+                    if words.len() >= MAX_WORDS {
+                        break;
+                    }
+                    words.insert(word.to_lowercase());
+                }
+            }
             Value::Object(object) => {
                 for child in object.values() {
                     collect(child, words, nodes, depth + 1);
@@ -395,6 +559,15 @@ fn words(arguments: Option<&Value>) -> HashSet<String> {
     words
 }
 
+/// At most the first `max_bytes` of `text`, cut at a character boundary.
+pub(super) fn text_prefix(text: &str, max_bytes: usize) -> &str {
+    let mut end = max_bytes.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 fn name_of(object: &Map<String, Value>) -> Option<String> {
     NAME_KEYS.iter().find_map(|key| {
         object
@@ -408,10 +581,12 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
 
 /// A record's scalar members, the IDs of the records it links to, and the
 /// scalar members of plain objects one level down (such as `properties`).
+/// Each object member costs the walk its width, as it is read here too.
 fn fields_of(
     object: &Map<String, Value>,
     id_member: &str,
     words: &HashSet<String>,
+    walk: &mut Walk,
 ) -> HashMap<String, String> {
     let mut fields = HashMap::new();
     let mut nested = Vec::new();
@@ -423,13 +598,18 @@ fn fields_of(
             continue;
         }
         let text = match value {
-            Value::Object(inner) => match own_id(inner, words) {
-                Some((link, _)) => scalar_text(&inner[link]),
-                None => {
-                    nested.push(inner);
-                    None
+            Value::Object(inner) => {
+                if !walk.take(inner.len()) {
+                    break;
                 }
-            },
+                match own_id(inner, words) {
+                    Some((link, _)) => inner.get(link).and_then(scalar_text),
+                    None => {
+                        nested.push(inner);
+                        None
+                    }
+                }
+            }
             value => scalar_text(value),
         };
         if let Some(text) = text {
@@ -459,7 +639,7 @@ fn scalar_text(value: &Value) -> Option<String> {
 }
 
 fn clean(text: &str) -> String {
-    sanitize_display_text(text, MAX_LABEL_VALUE_CHARS).text
+    sanitize_display_text(text_prefix(text, MAX_CLEAN_BYTES), MAX_LABEL_VALUE_CHARS).text
 }
 
 /// An object that only points at a record: one ID member plus at most its
@@ -467,6 +647,9 @@ fn clean(text: &str) -> String {
 /// `{recordId, relatedTable, name}` or `{page_id}`. Its name is whatever the
 /// model typed. `{id, fields: {...}}` carries data: it is the record itself.
 pub(super) fn is_link(object: &Map<String, Value>) -> bool {
+    if object.len() > 1 + NAME_KEYS.len() + LINK_TYPE_KEYS.len() {
+        return false;
+    }
     let mut ids = 0;
     for (member, value) in object {
         if is_link_id(member, value) {
@@ -507,6 +690,11 @@ pub(super) fn link_id_member(object: &Map<String, Value>) -> Option<&str> {
         .map(|(member, _)| member.as_str())
 }
 
+/// A member that names the record a link points at, such as a lookup's `name`.
+pub(super) fn is_name_member(member: &str) -> bool {
+    NAME_KEYS.iter().any(|key| member.eq_ignore_ascii_case(key))
+}
+
 fn is_link_id(member: &str, value: &Value) -> bool {
     (member.eq_ignore_ascii_case("id") && id_key(value).is_some()) || is_id_member(member, value)
 }
@@ -521,6 +709,16 @@ fn is_reference_member(member: &str) -> bool {
 /// `skip_links`, a link's ID is left out: it only points at its record, so
 /// the call did not change it. `None` when a cap left some unread.
 fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
+    /// Adds `found` unless that passes [`MAX_ARGUMENT_IDS`].
+    fn add(keys: &mut Vec<String>, found: impl IntoIterator<Item = String>) -> bool {
+        for key in found {
+            if keys.len() == MAX_ARGUMENT_IDS {
+                return false;
+            }
+            keys.push(key);
+        }
+        true
+    }
     fn collect(
         value: &Value,
         skip_links: bool,
@@ -535,22 +733,20 @@ fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
         match value {
             Value::Object(object) if skip_links && depth > 0 && is_link(object) => true,
             Value::Object(object) => object.iter().all(|(member, child)| {
-                keys.extend(text_key(member));
-                keys.extend(uuid_keys(member));
-                collect(child, skip_links, keys, nodes, depth + 1)
+                member.len() <= MAX_ID_SCAN_BYTES
+                    && add(keys, text_key(member))
+                    && add(keys, uuid_keys(member))
+                    && collect(child, skip_links, keys, nodes, depth + 1)
             }),
             Value::Array(entries) => entries
                 .iter()
                 .all(|entry| collect(entry, skip_links, keys, nodes, depth + 1)),
             Value::String(text) => {
-                keys.extend(id_key(value));
-                keys.extend(uuid_keys(text));
-                true
+                text.len() <= MAX_ID_SCAN_BYTES
+                    && add(keys, id_key(value))
+                    && add(keys, uuid_keys(text))
             }
-            value => {
-                keys.extend(id_key(value));
-                true
-            }
+            value => add(keys, id_key(value)),
         }
     }
     let mut keys = Vec::new();
@@ -559,15 +755,19 @@ fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
 }
 
 /// A call Erato itself turned down (the user denied it, a gate refused it,
-/// the budget ran out) never reached its server.
+/// the budget ran out) never reached its server. Erato writes exactly
+/// `{status: "rejected", error: <text>}`.
 fn is_refused_by_erato(tool: &ToolUse) -> bool {
     tool.status == ToolCallStatus::Error
         && tool
             .output
             .as_ref()
-            .and_then(|output| output.get("status"))
-            .and_then(Value::as_str)
-            == Some("rejected")
+            .and_then(Value::as_object)
+            .is_some_and(|output| {
+                output.len() == 2
+                    && output.get("status").and_then(Value::as_str) == Some("rejected")
+                    && output.get("error").is_some_and(Value::is_string)
+            })
 }
 
 /// The UUIDs written anywhere in `text`, as lookup keys.
@@ -620,25 +820,35 @@ pub(super) fn name_words(name: &str) -> Vec<String> {
 /// The one name a create call gave its record. Lists (several records) and
 /// links to other records are left out; two candidates give none.
 fn created_name(arguments: &Value) -> Option<String> {
-    fn collect(value: &Value, names: &mut HashSet<String>, depth: usize) {
+    /// False once a second name turns up or the members read pass the cap.
+    fn collect(
+        value: &Value,
+        names: &mut HashSet<String>,
+        nodes: &mut usize,
+        depth: usize,
+    ) -> bool {
         let Value::Object(object) = value else {
-            return;
+            return true;
         };
         if depth > 3 || (depth > 0 && is_link(object)) {
-            return;
+            return true;
         }
+        let Some(left) = nodes.checked_sub(object.len()) else {
+            return false;
+        };
+        *nodes = left;
         names.extend(name_of(object));
-        for child in object.values() {
-            collect(child, names, depth + 1);
-        }
+        names.len() < 2
+            && object
+                .values()
+                .all(|child| collect(child, names, nodes, depth + 1))
     }
     let mut names = HashSet::new();
-    collect(arguments, &mut names, 0);
-    let mut names = names.into_iter();
-    match (names.next(), names.next()) {
-        (Some(name), None) => Some(name),
-        _ => None,
+    let mut nodes = MAX_NODES_PER_VALUE;
+    if !collect(arguments, &mut names, &mut nodes, 0) {
+        return None;
     }
+    names.into_iter().next()
 }
 
 #[cfg(test)]

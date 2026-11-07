@@ -1,13 +1,11 @@
 use crate::models::message::{
     ContentPart, ContentPartImageFilePointer, ContentPartTextFilePointer, GenerationErrorType,
-    ToolResultDetails, ToolResultLink, ToolResultResource,
+    ToolResultDetails, ToolResultLink,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
-use crate::services::prompt_composition::replay_policy::{
-    MAX_RECEIPT_FIELD_BYTES, bounded, json_size, omitted,
-};
+use crate::services::prompt_composition::replay_policy::MAX_RECEIPT_FIELD_BYTES;
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use genai::chat::{ToolCall, ToolResponse};
@@ -45,14 +43,11 @@ pub struct McpToolPostProcessResult {
     pub result_details: Option<ToolResultDetails>,
 }
 
-/// Structured content still larger than this once its members are bounded is
-/// not kept: the confirmation row reads a record's title and link, not a
-/// search result's hits.
-const MAX_RESULT_STRUCTURED_BYTES: usize = 8 * 1024;
-/// Structured content larger than this skips member bounding.
-const MAX_RESULT_STRUCTURED_SCAN_BYTES: usize = 1024 * 1024;
-/// Link blocks, and separately resource blocks, kept per result.
-const MAX_RESULT_BLOCKS: usize = 10;
+/// Links kept per result.
+const MAX_RESULT_LINKS: usize = 10;
+/// Link blocks read per result, kept or not, so thousands of them cost a
+/// bounded number of URL parses.
+const MAX_RESULT_LINK_CANDIDATES: usize = 100;
 
 fn json_pointer_escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
@@ -502,96 +497,40 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
-/// What a result holds besides the text that becomes `output`: `structured`
-/// as given, `https` links and embedded resources, each bounded.
+/// The result's `https` links, bounded. Structured content and embedded
+/// resources are not kept: nothing reads them, and a shared chat would hand
+/// them to its viewers.
 fn mcp_result_details(
-    structured: Option<&Value>,
     content: &[rmcp::model::ContentBlock],
+    server_url: Option<&str>,
 ) -> Option<ToolResultDetails> {
-    use rmcp::model::{ContentBlock, ResourceContents};
-
-    let links = content
+    let server_host = server_url.and_then(url_host);
+    let links: Vec<_> = content
         .iter()
         .filter_map(|block| match block {
-            ContentBlock::ResourceLink(resource) => https_link(resource),
+            rmcp::model::ContentBlock::ResourceLink(resource) => Some(resource),
             _ => None,
         })
-        .take(MAX_RESULT_BLOCKS)
+        .take(MAX_RESULT_LINK_CANDIDATES)
+        .filter_map(|resource| https_link(resource, server_host.as_deref()))
+        .take(MAX_RESULT_LINKS)
         .collect();
-    let resources = content
-        .iter()
-        .filter_map(|block| {
-            let ContentBlock::Resource(embedded) = block else {
-                return None;
-            };
-            let (uri, mime_type, text) = match &embedded.resource {
-                ResourceContents::TextResourceContents {
-                    uri,
-                    mime_type,
-                    text,
-                    ..
-                } => (uri, mime_type, Some(text)),
-                ResourceContents::BlobResourceContents { uri, mime_type, .. } => {
-                    (uri, mime_type, None)
-                }
-                _ => return None,
-            };
-            Some(ToolResultResource {
-                uri: resource_uri(uri)?,
-                mime_type: display_name(mime_type.as_deref()),
-                text: text.and_then(|text| {
-                    bounded(&Value::String(text.clone()))
-                        .as_str()
-                        .map(str::to_owned)
-                }),
-            })
-        })
-        .take(MAX_RESULT_BLOCKS)
-        .collect();
-    let details = ToolResultDetails {
-        structured: structured.map(bounded_structured),
-        links,
-        resources,
-    };
-    (details != ToolResultDetails::default()).then_some(details)
+    (!links.is_empty()).then_some(ToolResultDetails { links })
 }
 
-fn bounded_structured(value: &Value) -> Value {
-    let size = json_size(value);
-    if size > MAX_RESULT_STRUCTURED_SCAN_BYTES {
-        return omitted(size);
+fn https_link(
+    resource: &rmcp::model::Resource,
+    server_host: Option<&str>,
+) -> Option<ToolResultLink> {
+    // Before parsing, so a URI of any length costs nothing to drop.
+    if resource.uri.len() > MAX_RECEIPT_FIELD_BYTES {
+        return None;
     }
-    let kept = bounded_members(value);
-    if json_size(&kept) > MAX_RESULT_STRUCTURED_BYTES {
-        return omitted(size);
-    }
-    kept
-}
-
-/// Keeps the shape, so a pointer into the content still reaches the small
-/// values next to an oversize one.
-fn bounded_members(value: &Value) -> Value {
-    if json_size(value) <= MAX_RECEIPT_FIELD_BYTES {
-        return value.clone();
-    }
-    match value {
-        Value::Object(members) => Value::Object(
-            members
-                .iter()
-                .map(|(key, member)| (key.clone(), bounded_members(member)))
-                .collect(),
-        ),
-        Value::Array(entries) => Value::Array(entries.iter().map(bounded_members).collect()),
-        scalar => bounded(scalar),
-    }
-}
-
-fn https_link(resource: &rmcp::model::Resource) -> Option<ToolResultLink> {
     let url = url::Url::parse(&resource.uri).ok()?;
+    let host = url.host_str().filter(|host| !host.is_empty())?.to_owned();
     // Userinfo lets `https://trusted.example@other.example/` read as the
     // wrong host, and would store any credentials in it.
     let kept = url.scheme() == "https"
-        && url.host_str().is_some()
         && url.username().is_empty()
         && url.password().is_none()
         && url.as_str().len() <= MAX_RECEIPT_FIELD_BYTES;
@@ -599,25 +538,20 @@ fn https_link(resource: &rmcp::model::Resource) -> Option<ToolResultLink> {
         return None;
     }
     Some(ToolResultLink {
+        matches_server_host: server_host.is_some_and(|server| server.eq_ignore_ascii_case(&host)),
+        host,
         uri: url.into(),
         name: display_name(Some(&resource.name)),
         title: display_name(resource.title.as_deref()),
-        mime_type: display_name(resource.mime_type.as_deref()),
     })
 }
 
-/// A `ui://` resource is an MCP App's view, which nothing renders yet; a
-/// `data:` URI is a body rather than a name. The URI is shown as text, never
-/// linked; script schemes are dropped in case that changes.
-fn resource_uri(uri: &str) -> Option<String> {
-    let (scheme, _) = uri.split_once(':')?;
-    let kept = uri.len() <= MAX_RECEIPT_FIELD_BYTES
-        && !matches!(
-            scheme.to_ascii_lowercase().as_str(),
-            "ui" | "data" | "javascript" | "vbscript"
-        )
-        && sanitize_display_text(uri, MAX_RECEIPT_FIELD_BYTES).text == uri;
-    kept.then(|| uri.to_string())
+fn url_host(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()?
+        .host_str()
+        .filter(|host| !host.is_empty())
+        .map(str::to_owned)
 }
 
 fn display_name(text: Option<&str>) -> Option<String> {
@@ -719,6 +653,9 @@ pub fn parse_content_filter_error_from_mcp_tool_result(
     None
 }
 
+/// `server_url` is the MCP server's configured URL, if it has one; a result
+/// link on its host is marked as the server's own.
+#[allow(clippy::too_many_arguments)]
 pub async fn post_process_mcp_tool_result(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -727,21 +664,18 @@ pub async fn post_process_mcp_tool_result(
     unfinished_tool_call: &ToolCall,
     output_schema: Option<&std::sync::Arc<rmcp::model::JsonObject>>,
     tool_call_result: &rmcp::model::CallToolResult,
+    server_url: Option<&str>,
 ) -> Result<McpToolPostProcessResult, Report> {
     let mut tool_response_content = mcp_result_to_text(tool_call_result);
     let mut output_value = serde_json::from_str(&tool_response_content)
         .ok()
         .or(Some(JsonValue::String(tool_response_content.clone())));
     let mut file_content_parts: Vec<ContentPart> = Vec::new();
-    let mut structured = tool_call_result.structured_content.as_ref();
 
     if let Some(output_schema) = output_schema {
         let output_schema_value = Value::Object(output_schema.as_ref().clone());
         let schema_paths = collect_file_content_paths(&output_schema_value);
         if !schema_paths.is_empty() {
-            // `output` becomes the structured content with its files replaced;
-            // the raw copy still holds their base64.
-            structured = None;
             let mut output_json = mcp_tool_output_value(tool_call_result, &tool_response_content)?;
             file_content_parts = process_mcp_file_outputs(
                 app_state,
@@ -758,10 +692,7 @@ pub async fn post_process_mcp_tool_result(
         }
     }
 
-    let result_details = mcp_result_details(
-        structured.filter(|structured| Some(*structured) != output_value.as_ref()),
-        &tool_call_result.content,
-    );
+    let result_details = mcp_result_details(&tool_call_result.content, server_url);
     Ok(McpToolPostProcessResult {
         tool_response: ToolResponse {
             fn_name: Some(unfinished_tool_call.fn_name.clone()),
@@ -896,7 +827,7 @@ mod tests {
                 "timed_out": false,
                 "output_truncated": false
             }),
-            json!({ "success": true, "stdout": "x".repeat(MAX_RESULT_STRUCTURED_BYTES) }),
+            json!({ "success": true, "stdout": "x".repeat(64 * 1024) }),
         ] {
             for is_error in [false, true] {
                 for (structured, text) in [(false, true), (true, true), (true, false)] {
@@ -921,6 +852,7 @@ mod tests {
                             &tool_call,
                             Some(&schema),
                             &result,
+                            Some(SERVER_URL),
                         )
                         .await
                         .expect("omitted optional files are valid");
@@ -941,12 +873,14 @@ mod tests {
         }
     }
 
+    const SERVER_URL: &str = "https://Records.Example.Test:8443/mcp";
+
     fn blocks_beside_text() -> Vec<ContentBlock> {
         serde_json::from_value(json!([
             {"type": "resource_link", "uri": "https://records.example.test/rows/1", "name": "row-1",
              "title": "Synthetic\u{202E} row", "mimeType": "text/html"},
             {"type": "resource", "resource": {"uri": "records://rows/1",
-             "mimeType": "application/json", "text": "{\"title\":\"Synthetic row\"}"}},
+             "mimeType": "application/json", "text": "{\"title\":\"SYNTHETIC-RESOURCE\"}"}},
             {"type": "resource", "resource": {"uri": "records://rows/1/chart",
              "mimeType": "image/png", "blob": "iVBORw0KGgo="}},
             {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"},
@@ -956,29 +890,20 @@ mod tests {
 
     fn details_beside_text() -> ToolResultDetails {
         ToolResultDetails {
-            structured: None,
             links: vec![ToolResultLink {
                 uri: "https://records.example.test/rows/1".into(),
+                host: "records.example.test".into(),
+                matches_server_host: true,
                 name: Some("row-1".into()),
                 title: Some("Synthetic row".into()),
-                mime_type: Some("text/html".into()),
             }],
-            resources: vec![
-                ToolResultResource {
-                    uri: "records://rows/1".into(),
-                    mime_type: Some("application/json".into()),
-                    text: Some("{\"title\":\"Synthetic row\"}".into()),
-                },
-                ToolResultResource {
-                    uri: "records://rows/1/chart".into(),
-                    mime_type: Some("image/png".into()),
-                    text: None,
-                },
-            ],
         }
     }
 
-    async fn details_of(result: Value) -> (McpToolPostProcessResult, Option<Value>) {
+    async fn details_of(
+        result: Value,
+        server_url: Option<&str>,
+    ) -> (McpToolPostProcessResult, Option<Value>) {
         let result: CallToolResult = serde_json::from_value(result).unwrap();
         let tool_call = ToolCall {
             call_id: "create-call".into(),
@@ -994,6 +919,7 @@ mod tests {
             &tool_call,
             None,
             &result,
+            server_url,
         )
         .await
         .unwrap();
@@ -1004,119 +930,251 @@ mod tests {
         (processed, details)
     }
 
-    #[tokio::test]
-    async fn structured_content_is_kept_beside_output_only_when_it_differs() {
-        let row = json!({"id": "row-1", "title": "Synthetic row"});
-
-        let (same, details) =
-            details_of(json!({"content": [{"type": "text", "text": row.to_string()}], "structuredContent": row})).await;
-        assert_eq!(same.output_value, Some(row.clone()));
-        assert_eq!(details, None);
-
-        let (different, details) = details_of(json!({
-            "content": [{"type": "text", "text": "Created row row-1."}],
-            "structuredContent": row,
-        }))
-        .await;
-        assert_eq!(different.output_value, Some(json!("Created row row-1.")));
-        assert_eq!(different.tool_response.content, "Created row row-1.");
-        assert_eq!(details, Some(json!({"structured": row})));
-
-        let (only, details) = details_of(json!({"content": [], "structuredContent": row})).await;
-        assert_eq!(only.output_value, Some(json!("")));
-        assert_eq!(only.tool_response.content, "");
-        assert_eq!(details, Some(json!({"structured": row})));
+    fn link(uri: impl Into<String>, name: impl Into<String>) -> Value {
+        json!({"type": "resource_link", "uri": uri.into(), "name": name.into()})
     }
 
     #[tokio::test]
-    async fn oversize_structured_values_read_as_markers_and_keep_the_shape() {
-        let body = "x".repeat(MAX_RECEIPT_FIELD_BYTES);
-        let marker = format!("[omitted: {} bytes]", MAX_RECEIPT_FIELD_BYTES + 2);
-        let (processed, details) = details_of(json!({
-            "content": [],
-            "structuredContent": {"pages": [{"url": "https://records.example.test/p/1", "body": body}]},
-        }))
+    async fn only_the_links_of_a_result_are_kept_beside_its_output() {
+        let row = json!({"id": "row-1", "title": "SYNTHETIC-STRUCTURED"});
+        let mut content = vec![json!({"type": "text", "text": "Created row row-1."})];
+        content.extend(
+            serde_json::to_value(blocks_beside_text())
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .clone(),
+        );
+        let (processed, details) = details_of(
+            json!({"content": content, "structuredContent": row}),
+            Some(SERVER_URL),
+        )
         .await;
-        assert_eq!(processed.output_value, Some(json!("")));
+        assert_eq!(processed.output_value, Some(json!("Created row row-1.")));
+        assert_eq!(processed.tool_response.content, "Created row row-1.");
         assert_eq!(
             details,
-            Some(json!({"structured": {"pages": [
-                {"url": "https://records.example.test/p/1", "body": marker}
-            ]}}))
+            Some(serde_json::to_value(details_beside_text()).unwrap())
         );
+        let stored = details.unwrap().to_string();
+        for left_out in [
+            "SYNTHETIC-STRUCTURED",
+            "SYNTHETIC-RESOURCE",
+            "records://",
+            "iVBOR",
+            "mime",
+        ] {
+            assert!(!stored.contains(left_out), "{left_out} was kept: {stored}");
+        }
 
-        let long_body = "x".repeat(MAX_RESULT_STRUCTURED_BYTES);
-        let long_marker = format!("[omitted: {} bytes]", MAX_RESULT_STRUCTURED_BYTES + 2);
-        let (_, details) = details_of(json!({
-            "content": [],
-            "structuredContent": {"id": "row-1", "title": "Q3 plan", "url": "https://records.example.test/rows/1", "body": long_body},
-        }))
-        .await;
-        assert_eq!(
-            details,
-            Some(json!({"structured": {
-                "id": "row-1",
-                "title": "Q3 plan",
-                "url": "https://records.example.test/rows/1",
-                "body": long_marker,
-            }}))
-        );
-
-        let hits: Vec<Value> = (0..1_000)
-            .map(|i| json!({"id": format!("row-{i}")}))
-            .collect();
-        let size = json_size(&json!({"hits": hits}));
-        assert!(size > MAX_RESULT_STRUCTURED_BYTES);
-        let (_, details) =
-            details_of(json!({"content": [], "structuredContent": {"hits": hits}})).await;
-        assert_eq!(
-            details,
-            Some(json!({"structured": format!("[omitted: {size} bytes]")}))
-        );
+        for result in [
+            json!({"content": [], "structuredContent": row}),
+            json!({"content": [{"type": "text", "text": row.to_string()}], "structuredContent": row}),
+            json!({"content": [{"type": "text", "text": "Done."}]}),
+        ] {
+            let (_, details) = details_of(result.clone(), Some(SERVER_URL)).await;
+            assert_eq!(details, None, "{result}");
+        }
     }
 
     #[tokio::test]
-    async fn only_https_links_and_named_resources_without_bodies_are_kept() {
+    async fn only_https_links_with_a_host_and_no_user_info_are_kept() {
         let long_path = "a".repeat(MAX_RECEIPT_FIELD_BYTES);
-        let long_text = "y".repeat(MAX_RECEIPT_FIELD_BYTES);
-        let (processed, details) = details_of(json!({"content": [
-            {"type": "text", "text": "Done."},
-            {"type": "resource_link", "uri": "http://records.example.test/rows/1", "name": "plain"},
-            {"type": "resource_link", "uri": "javascript:alert(1)", "name": "script"},
-            {"type": "resource_link", "uri": "https://records.example.test@other.example.test/rows/1", "name": "lookalike"},
-            {"type": "resource_link", "uri": "https://user:token@records.example.test/rows/1", "name": "credentials"},
-            {"type": "resource_link", "uri": "ui://records/view", "name": "app"},
-            {"type": "resource_link", "uri": format!("https://records.example.test/{long_path}"), "name": "long"},
-            {"type": "resource_link", "uri": "HTTPS://Records.Example.Test/rows/2", "name": "\u{2066}row-2\u{2069}", "title": "  "},
-            {"type": "resource", "resource": {"uri": "ui://records/view", "mimeType": "text/html;profile=mcp-app", "text": "<html></html>"}},
-            {"type": "resource", "resource": {"uri": "data:text/plain;base64,eA==", "text": "x"}},
-            {"type": "resource", "resource": {"uri": "JavaScript:alert(1)", "text": "x"}},
-            {"type": "resource", "resource": {"uri": "records://rows/2\u{202E}", "text": "x"}},
-            {"type": "resource", "resource": {"uri": "records://rows/2", "text": long_text}},
-        ]}))
+        let (processed, details) = details_of(
+            json!({"content": [
+                {"type": "text", "text": "Done."},
+                link("http://records.example.test/rows/1", "plain"),
+                link("javascript:alert(1)", "script"),
+                link("JavaScript://records.example.test/%0Aalert(1)", "script host"),
+                link("https://records.example.test@other.example.test/rows/1", "lookalike"),
+                link("https://user:token@records.example.test/rows/1", "credentials"),
+                link("ui://records/view", "app"),
+                link("data:text/html,<p>x</p>", "data"),
+                link(format!("https://records.example.test/{long_path}"), "long"),
+                link("https://", "empty"),
+                link("https:", "no host"),
+                link("https://[::1", "malformed"),
+                link("https://exa mple.test/", "space"),
+                link("https://records.example.test:99999/", "port"),
+                link("//records.example.test/rows/1", "relative"),
+                link("", "blank"),
+                link("HTTPS://Records.Example.Test/rows/2", "\u{2066}row-2\u{2069}"),
+                link("https://records.example.test/rows/\u{202E}3", "row-3"),
+                link("https://records.example.test/rows/\n4", "\u{0}\u{7}\u{202E}"),
+            ]}),
+            None,
+        )
         .await;
         assert_eq!(processed.output_value, Some(json!("Done.")));
         assert_eq!(processed.tool_response.content, "Done.");
+        let host = "records.example.test";
         assert_eq!(
             details,
-            Some(json!({
-                "links": [{"uri": "https://records.example.test/rows/2", "name": "row-2"}],
-                "resources": [{"uri": "records://rows/2", "text": format!("[omitted: {} bytes]", MAX_RECEIPT_FIELD_BYTES + 2)}],
-            }))
+            Some(json!({"links": [
+                {"uri": "https://records.example.test/rows/2", "host": host,
+                 "matches_server_host": false, "name": "row-2"},
+                {"uri": "https://records.example.test/rows/%E2%80%AE3", "host": host,
+                 "matches_server_host": false, "name": "row-3"},
+                {"uri": "https://records.example.test/rows/4", "host": host,
+                 "matches_server_host": false},
+            ]}))
         );
+    }
 
-        let links: Vec<Value> = (0..MAX_RESULT_BLOCKS + 5)
-            .map(|i| json!({"type": "resource_link", "uri": format!("https://records.example.test/rows/{i}"), "name": format!("row-{i}")}))
-            .collect();
-        let (_, details) = details_of(json!({"content": links})).await;
+    #[test]
+    fn a_link_matches_the_server_host_by_host_alone_ignoring_case() {
+        let content: Vec<ContentBlock> = serde_json::from_value(json!([
+            link("https://records.example.test/rows/1", "same"),
+            link(
+                "https://RECORDS.example.test:8443/rows/2",
+                "same, other port"
+            ),
+            link("https://api.records.example.test/rows/3", "subdomain"),
+            link("https://records.example.test.other.test/rows/4", "suffix"),
+            link("https://r\u{0435}cords.example.test/rows/5", "lookalike"),
+        ]))
+        .unwrap();
+        let matches = |server_url: Option<&str>| {
+            mcp_result_details(&content, server_url)
+                .unwrap()
+                .links
+                .iter()
+                .map(|link| link.matches_server_host)
+                .collect::<Vec<_>>()
+        };
+        for server_url in [SERVER_URL, "http://records.example.test:8080/sse"] {
+            assert_eq!(
+                matches(Some(server_url)),
+                [true, true, false, false, false],
+                "{server_url}"
+            );
+        }
+        for server_url in [
+            None,
+            Some(""),
+            Some("not a url"),
+            Some("records.example.test/mcp"),
+            Some("file:///records.example.test"),
+            Some("mailto:ops@records.example.test"),
+        ] {
+            assert_eq!(matches(server_url), [false; 5], "{server_url:?}");
+        }
+
+        let links = mcp_result_details(&content, None).unwrap().links;
+        let lookalike = &links[4].host;
+        assert!(
+            lookalike.starts_with("xn--") && lookalike.is_ascii(),
+            "{lookalike}"
+        );
+        assert_eq!(links[1].host, "records.example.test");
+
+        let content: Vec<ContentBlock> = serde_json::from_value(json!([
+            link("https://127.0.0.1/rows/1", "loopback"),
+            link("https://127.0.0.2/rows/1", "other address"),
+            link("https://B\u{00DC}CHER.example/rows/1", "idn"),
+        ]))
+        .unwrap();
+        let links = |server_url| {
+            mcp_result_details(&content, Some(server_url))
+                .unwrap()
+                .links
+        };
+        let by_address = links("http://127.0.0.1:44321/mcp");
         assert_eq!(
-            details.unwrap()["links"].as_array().unwrap().len(),
-            MAX_RESULT_BLOCKS
+            by_address
+                .iter()
+                .map(|link| link.matches_server_host)
+                .collect::<Vec<_>>(),
+            [true, false, false]
         );
+        let by_name = links("https://b\u{00FC}cher.example/mcp");
+        assert_eq!(by_name[2].host, "xn--bcher-kva.example");
+        assert!(by_name[2].matches_server_host);
+    }
 
-        let (_, details) =
-            details_of(json!({"content": [{"type": "text", "text": "Done."}]})).await;
-        assert_eq!(details, None);
+    #[tokio::test]
+    async fn hostile_results_keep_their_output_and_at_most_bounded_links() {
+        let nested: Value =
+            serde_json::from_str(&format!("{}{}", "[".repeat(120), "]".repeat(120))).unwrap();
+        for structured in [
+            json!(true),
+            json!(1.5),
+            json!("not an object"),
+            json!([]),
+            json!({}),
+            json!({"a/b": 1, "~0": 2, "~1/": 3, "\u{202E}": 4, "\u{0}\u{7}": 5, "": 6}),
+            nested,
+            json!({"body": "x".repeat(2 * 1024 * 1024)}),
+        ] {
+            let (processed, details) = details_of(
+                json!({"content": [{"type": "text", "text": "not json {"}],
+                       "structuredContent": structured}),
+                Some(SERVER_URL),
+            )
+            .await;
+            assert_eq!(processed.output_value, Some(json!("not json {")));
+            assert_eq!(processed.tool_response.content, "not json {");
+            assert_eq!(details, None);
+        }
+
+        let many: Vec<Value> = (0..5_000)
+            .map(|i| {
+                link(
+                    format!("https://records.example.test/rows/{i}"),
+                    format!("row-{i}"),
+                )
+            })
+            .collect();
+        let (_, details) = details_of(json!({"content": many}), Some(SERVER_URL)).await;
+        let links = details.unwrap()["links"].as_array().unwrap().clone();
+        assert_eq!(links.len(), MAX_RESULT_LINKS);
+        assert_eq!(links[0]["uri"], "https://records.example.test/rows/0");
+
+        for skipped in [
+            MAX_RESULT_LINK_CANDIDATES - 1,
+            MAX_RESULT_LINK_CANDIDATES,
+            5_000,
+        ] {
+            let mut content: Vec<Value> = (0..skipped)
+                .map(|i| link(format!("http://records.example.test/rows/{i}"), "plain"))
+                .collect();
+            content.push(link("https://records.example.test/rows/last", "last"));
+            let (_, details) = details_of(json!({"content": content}), None).await;
+            assert_eq!(
+                details.is_some(),
+                skipped < MAX_RESULT_LINK_CANDIDATES,
+                "{skipped} links before"
+            );
+        }
+
+        let huge = "x".repeat(1024 * 1024);
+        let full: Vec<Value> = (0..MAX_RESULT_LINKS + 1)
+            .flat_map(|i| {
+                [
+                    link(format!("https://records.example.test/{huge}"), "huge"),
+                    json!({"type": "resource_link",
+                           "uri": format!("https://records.example.test/{i}/{}", "a".repeat(MAX_RECEIPT_FIELD_BYTES - 40)),
+                           "name": huge, "title": "\u{1F600}".repeat(MAX_DISPLAY_NAME_CHARS * 2)}),
+                ]
+            })
+            .collect();
+        let (_, details) = details_of(json!({"content": full}), Some(SERVER_URL)).await;
+        let details = details.unwrap();
+        let links = details["links"].as_array().unwrap();
+        assert_eq!(links.len(), MAX_RESULT_LINKS);
+        for link in links {
+            assert!(link["uri"].as_str().unwrap().len() <= MAX_RECEIPT_FIELD_BYTES);
+            assert_eq!(
+                link["name"].as_str().unwrap().chars().count(),
+                MAX_DISPLAY_NAME_CHARS
+            );
+            assert_eq!(
+                link["title"].as_str().unwrap().chars().count(),
+                MAX_DISPLAY_NAME_CHARS
+            );
+        }
+        let per_link = 2 * MAX_RECEIPT_FIELD_BYTES + 2 * 4 * MAX_DISPLAY_NAME_CHARS + 128;
+        assert!(details.to_string().len() <= MAX_RESULT_LINKS * per_link);
     }
 
     #[test]
@@ -1224,6 +1282,7 @@ mod tests {
                 &tool_call,
                 Some(&schema),
                 &result,
+                None,
             )
             .await
             .err()

@@ -170,7 +170,14 @@ describe("applyToolUseUpdate", () => {
 
   it("keeps a result's links from the final update until the refetch", () => {
     const resultDetails = {
-      links: [{ uri: "https://records.example/row-1", title: "Northwind" }],
+      links: [
+        {
+          uri: "https://records.example/row-1",
+          host: "records.example",
+          matches_server_host: true,
+          title: "Northwind",
+        },
+      ],
     };
     let content = insertProposedToolUse([], proposed("call-a", 0));
     content = applyToolUseUpdate(content, {

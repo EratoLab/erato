@@ -7777,6 +7777,7 @@ msgstr "{count, plural, one {Aufgabe} other {# Aufgaben}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# weiteres} other {+# weitere}}"
 
@@ -7794,6 +7795,11 @@ msgstr "{shape, select, full {{kind} {title} nach {where} verschoben} titled {{k
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.move.failed"
 msgstr "{shape, select, full {Verschieben fehlgeschlagen: {kind} {title} nach {where}} titled {Verschieben fehlgeschlagen: {kind} {title}} placed {Verschieben fehlgeschlagen: {kind} nach {where}} other {Verschieben fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Weitere Argumente"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/ownProposalLabels.ts
@@ -8262,6 +8268,11 @@ msgstr "Budget für Tool-Aufrufe"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr "Sie haben das erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "Sie haben das für dieses Dokument erlaubt"
 
@@ -8335,8 +8346,13 @@ msgstr "In {server} öffnen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Link öffnen"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Link öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Link öffnen - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

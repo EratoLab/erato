@@ -219,6 +219,35 @@ describe("Word chats shown outside Word", () => {
     );
   });
 
+  it("renders the chat when a stored proposal label is malformed", async () => {
+    const messages = messagesOf(retryAccepted);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      isAcceptedWordSubmission(part) && part.content_type === "tool_use"
+        ? ({
+            ...part,
+            display: {
+              title: "Proposal",
+              description_truncated: false,
+              label: {
+                action: "comment",
+                object_kind: "comment",
+                source: "own_mapping",
+                items: [null, { fields: { name: "op" } }],
+              },
+            },
+          } as unknown as ContentPart)
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual(["submit_document_plan"]);
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveTextContent(
+      "Proposed comment changes",
+    );
+  });
+
   it("folds an accepted submission whose display has no proposal label", async () => {
     const messages = messagesOf(retryAccepted);
     const answer = messages[messages.length - 1];

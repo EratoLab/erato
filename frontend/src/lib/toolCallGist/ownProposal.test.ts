@@ -172,6 +172,93 @@ describe("Erato's own proposals", () => {
     }
   });
 
+  it("reads a stored label of any shape without failing the row", () => {
+    const odd = (extra: Record<string, unknown>): ToolCallLabel => ({
+      ...own("comment", "comment"),
+      ...extra,
+    });
+    const input = changes(["reply", "resolve"]);
+    for (const items of [
+      "items",
+      42,
+      { fields: [] },
+      [null],
+      [1, "op", []],
+      [{ fields: "op" }],
+      [{ fields: { name: "op" } }],
+      [{ fields: [null, 7, { name: "op" }] }],
+      [{ fields: [{ name: "op", pointer: 42 }] }],
+      [{ fields: [{ name: "op", pointer: { "/changes": 1 } }] }],
+      [{ fields: [{ name: "op", pointer: "changes/*/op" }] }],
+    ]) {
+      expect(ownProposalOf(odd({ items }), input)).toEqual({
+        kind: "comments",
+        changes: [],
+      });
+    }
+    for (const stored of ["own_mapping", 42, [own("update", "document")]]) {
+      expect(
+        ownProposalOf(stored as unknown as ToolCallLabel, input),
+      ).toBeUndefined();
+    }
+    for (const [action, kind] of [
+      [42, "comment"],
+      ["update", null],
+      ["share", "spreadsheet"],
+      [["update"], "document"],
+    ]) {
+      expect(
+        ownProposalOf(odd({ action, object_kind: kind, items: [] }), input),
+      ).toEqual({ kind: "action" });
+    }
+  });
+
+  it("counts operations of any shape and input of any shape", () => {
+    const label = commentLabel([]);
+    const oddOps = {
+      changes: [
+        { op: { op: "reply" } },
+        { op: ["resolve"] },
+        { op: 7 },
+        { op: "RESOLVE" },
+        { op: "reply\u202E" },
+        { op: "x".repeat(1_000_000) },
+        null,
+        "reply",
+      ],
+    };
+    expect(ownProposalOf(label, oddOps)).toEqual({
+      kind: "comments",
+      changes: ["other", "other", "other", "other", "other", "other"],
+    });
+    let deep: unknown = { changes: [{ op: "reply" }] };
+    for (let depth = 0; depth < 10_000; depth++) deep = { next: deep };
+    for (const input of [
+      undefined,
+      null,
+      "not json {",
+      42,
+      [],
+      { changes: "reply" },
+      { changes: { a: { op: "reply" } } },
+      deep,
+    ]) {
+      const proposal = ownProposalOf(label, input);
+      expect(proposal?.kind).toBe("comments");
+      expect(() => ownProposalLine(proposal!, "done")).not.toThrow();
+    }
+  });
+
+  it("names a batch too large to count without a number", () => {
+    const ops = Array.from({ length: 10_001 }, () => "resolve");
+    const proposal = proposalOf(ops);
+    expect(proposal).toEqual({ kind: "comments", changes: [] });
+    expect(ownProposalLine(proposal, "done")).toBe("Proposed comment changes");
+    expect(proposalOf(ops.slice(1))).toMatchObject({
+      changes: { length: 10_000 },
+    });
+  });
+
   it("lets a language word the proposal its own way", () => {
     activate("de");
     expect(ownProposalLine({ kind: "document" }, "done")).toBe(

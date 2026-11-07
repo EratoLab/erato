@@ -45,7 +45,7 @@ pub fn mcp_tool_call_display(
     arguments: &serde_json::Value,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
-    let rules = label::rules::rules_label(&tool.name, arguments, tool.annotations.as_ref());
+    let rules = label::guarded_rules(tool, arguments);
     mcp_tool_call_display_from(config, server_id, tool, arguments, &rules.mapping, context)
 }
 
@@ -61,13 +61,18 @@ pub fn mcp_tool_call_display_from(
     mapping: &label::ToolCallLabelMapping,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
-    let mut label = label::checked_label(server_id, tool, arguments, mapping);
-    context.resolve(&mut label, arguments);
+    // Names only add to a label, so a resolver bug costs the names, not the label.
+    let label = label::guarded(|| {
+        let mut label = label::checked_label(server_id, tool, arguments, mapping);
+        context.resolve(&mut label, arguments);
+        label
+    })
+    .or_else(|| label::guarded(|| label::checked_label(server_id, tool, arguments, mapping)))
+    .or_else(|| label::guarded(|| label::generic_label(arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
-        label: Some(label),
-        read_only: crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
-            .read_only_hint,
+        label,
+        read_only: shown_as_read_only(tool),
         ..tool_display_metadata(tool)
     }
 }
@@ -79,35 +84,68 @@ pub fn client_tool_call_display(
     config: &erato_config::config::ClientToolConfig,
     arguments: &serde_json::Value,
 ) -> Option<ToolDisplayMetadata> {
-    let mapping = label::own::client_tool_mapping(config.label.as_ref()?);
-    Some(own_tool_display(
-        &config.name,
-        label::own::own_label(&mapping, arguments),
-    ))
+    let table = config.label.as_ref()?;
+    own_tool_display(&config.name, arguments, || {
+        label::own::own_label(
+            &config.name,
+            &label::own::client_tool_mapping(table),
+            arguments,
+        )
+    })
 }
 
 /// What a `propose_client_action` call shows: the label of the action it
 /// proposes, whose card carries the rest.
-pub fn client_action_call_display(arguments: &serde_json::Value) -> ToolDisplayMetadata {
-    let mapping = crate::services::client_actions::client_action_label_mapping(arguments);
-    own_tool_display(
-        crate::services::client_actions::CLIENT_ACTION_TOOL_NAME,
-        label::own::own_label(&mapping, arguments),
-    )
+pub fn client_action_call_display(arguments: &serde_json::Value) -> Option<ToolDisplayMetadata> {
+    use crate::services::client_actions::{CLIENT_ACTION_TOOL_NAME, client_action_label_mapping};
+    own_tool_display(CLIENT_ACTION_TOOL_NAME, arguments, || {
+        label::own::own_label(
+            CLIENT_ACTION_TOOL_NAME,
+            &client_action_label_mapping(arguments),
+            arguments,
+        )
+    })
 }
 
+/// A labeller bug costs the call its label: the generic one, else the row as
+/// it was before labels.
 fn own_tool_display(
     name: &str,
-    label: crate::models::message::ToolCallLabel,
-) -> ToolDisplayMetadata {
-    ToolDisplayMetadata {
+    arguments: &serde_json::Value,
+    labeller: impl FnOnce() -> crate::models::message::ToolCallLabel,
+) -> Option<ToolDisplayMetadata> {
+    let label =
+        label::guarded(labeller).or_else(|| label::guarded(|| label::generic_label(arguments)))?;
+    Some(ToolDisplayMetadata {
         title: name.to_string(),
         description: None,
         description_truncated: false,
         server_name: None,
         label: Some(label),
         read_only: false,
+    })
+}
+
+/// A tool that says it is both read-only and destructive is shown as a write,
+/// so the trace keeps its "ran without asking" note.
+fn shown_as_read_only(tool: &rmcp::model::Tool) -> bool {
+    crate::services::mcp_tool_approval::normalize_tool_annotations(tool).read_only_hint
+        && tool
+            .annotations
+            .as_ref()
+            .and_then(|annotations| annotations.destructive_hint)
+            != Some(true)
+}
+
+/// What a parent chat keeps of the display a delegated child's call carries:
+/// the label's pointers and values as written, without the names and old
+/// values the child chat's results gave them.
+pub fn child_approval_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
+    let mut display = display.clone();
+    if let Some(label) = display.label.as_mut() {
+        label::context::forget_resolved(label);
     }
+    display
 }
 
 /// What a tool row and its live updates keep of a call's display. Only
@@ -197,13 +235,13 @@ mod tests {
 
     #[test]
     fn a_call_is_read_only_only_when_its_annotations_say_so() {
-        let read_only = |hint: Option<bool>| {
+        let shown = |hint: Option<bool>, destructive: Option<bool>| {
             let mut tool = Tool::new("tool", "", JsonObject::new());
-            if let Some(hint) = hint {
+            if hint.is_some() || destructive.is_some() {
                 tool.annotations = Some(ToolAnnotations::from_raw(
                     None,
-                    Some(hint),
-                    None,
+                    hint,
+                    destructive,
                     None,
                     None,
                 ));
@@ -217,12 +255,20 @@ mod tests {
             );
             (display.read_only, serde_json::to_value(&display).unwrap())
         };
-        let (flag, json) = read_only(Some(true));
-        assert!(flag);
-        assert_eq!(json["read_only"], true);
-        for hint in [Some(false), None] {
-            let (flag, json) = read_only(hint);
-            assert!(!flag);
+        for destructive in [None, Some(false)] {
+            let (flag, json) = shown(Some(true), destructive);
+            assert!(flag);
+            assert_eq!(json["read_only"], true);
+        }
+        // Contradictory hints read as a write.
+        for (hint, destructive) in [
+            (Some(false), None),
+            (None, None),
+            (Some(true), Some(true)),
+            (None, Some(false)),
+        ] {
+            let (flag, json) = shown(hint, destructive);
+            assert!(!flag, "{hint:?} {destructive:?}");
             assert!(json.get("read_only").is_none());
         }
     }
@@ -313,7 +359,8 @@ mod tests {
         );
         assert_eq!(label.items[0].fields[0].values[0].text, "resolve");
 
-        let proposal = client_action_call_display(&serde_json::json!({"action": "outlook.reply"}));
+        let proposal =
+            client_action_call_display(&serde_json::json!({"action": "outlook.reply"})).unwrap();
         assert_eq!(proposal.title, "propose_client_action");
         let label = proposal.label.unwrap();
         assert_eq!(
@@ -324,6 +371,138 @@ mod tests {
                 ToolCallLabelSource::OwnMapping
             )
         );
+    }
+
+    #[test]
+    fn an_own_labeller_that_panics_costs_the_call_only_its_label() {
+        let arguments = serde_json::json!({"action": "outlook.reply", "body": "Hi"});
+        let display = own_tool_display("propose_client_action", &arguments, || {
+            panic!("labeller bug")
+        })
+        .unwrap();
+        assert_eq!(display.title, "propose_client_action");
+        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+
+        let config: erato_config::config::ClientToolConfig =
+            serde_json::from_value(serde_json::json!({
+                "name": "word_submit_document_plan",
+                "namespace": "word",
+                "description": "Stage a plan.",
+                "parameters": "{}",
+                "label": {"action": "update", "object_kind": "document"},
+            }))
+            .unwrap();
+        for arguments in [
+            serde_json::json!(null),
+            serde_json::json!("not json {"),
+            serde_json::json!([{"action": "outlook.reply"}]),
+            serde_json::json!({"action": {"nested": [1, 2, 3]}, "to": "x".repeat(1024 * 1024)}),
+        ] {
+            for display in [
+                client_tool_call_display(&config, &arguments),
+                client_action_call_display(&arguments),
+            ] {
+                let display = display.expect("an own tool always keeps a display");
+                assert_eq!(
+                    display.label.as_ref().map(|label| label.source),
+                    Some(ToolCallLabelSource::OwnMapping)
+                );
+                assert!(serde_json::to_string(&display).unwrap().len() < 4 * 1024);
+            }
+        }
+    }
+
+    #[test]
+    fn a_hostile_descriptor_changes_neither_the_label_nor_its_size() {
+        let arguments = serde_json::json!({"title": "Plan", "parent_id": "p1"});
+        let config = McpRuntimeConfig::default();
+        let plain = Tool::new("publish", "Publishes.", JsonObject::new());
+        let expected =
+            mcp_tool_call_display(&config, "notion", &plain, &arguments, &Default::default()).label;
+        assert_eq!(
+            expected.as_ref().map(|label| label.source),
+            Some(crate::models::message::ToolCallLabelSource::Rules)
+        );
+
+        let mut schema = JsonObject::new();
+        schema.insert("type".into(), serde_json::json!(42));
+        schema.insert(
+            "properties".into(),
+            serde_json::json!(["not", "an", "object"]),
+        );
+        schema.insert("required".into(), serde_json::json!({"title": true}));
+        schema.insert("blob".into(), serde_json::json!("s".repeat(1024 * 1024)));
+        let mut hostile = Tool::new("publish\u{202E}\u{200B}", "x".repeat(1024 * 1024), schema);
+        let mut annotations = ToolAnnotations::default();
+        annotations.title = Some("\u{E0041}".repeat(1_000));
+        annotations.idempotent_hint = Some(false);
+        hostile.annotations = Some(annotations.clone());
+        hostile.title = Some("\u{200B}\u{FEFF}".into());
+        let display =
+            mcp_tool_call_display(&config, "notion", &hostile, &arguments, &Default::default());
+        assert_eq!(display.label, expected);
+        annotations.read_only_hint = Some(true);
+        annotations.destructive_hint = Some(true);
+        hostile.annotations = Some(annotations);
+        let display =
+            mcp_tool_call_display(&config, "notion", &hostile, &arguments, &Default::default());
+        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+        assert_eq!(display.title, "publish");
+        assert!(display.description_truncated);
+        assert!(serde_json::to_string(&display).unwrap().len() < 32 * 1024);
+        assert_eq!(
+            mcp_tool_call_display(
+                &config,
+                "notion",
+                &hostile,
+                &serde_json::json!("not json {"),
+                &Default::default(),
+            )
+            .label
+            .map(|label| label.source),
+            Some(crate::models::message::ToolCallLabelSource::Generic)
+        );
+    }
+
+    #[test]
+    fn a_mail_card_names_every_recipient_and_no_claim_the_model_made() {
+        let config = McpRuntimeConfig::default();
+        let tool = Tool::new("send_email", "Sends an email.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "to": ["ann@example.com"],
+            "cc": ["bob@example.com"],
+            "bcc": ["cy@example.com"],
+            "subject": "Q3",
+            "body": "Numbers attached.",
+            "hasUserApproved": true,
+            "account": {"recordId": "a_1", "relatedTable": "account", "name": "Typed name"},
+        });
+        let label = mcp_tool_call_display(&config, "mail", &tool, &arguments, &Default::default())
+            .label
+            .unwrap();
+        assert_eq!(
+            (label.action, label.source),
+            (ToolCallAction::Send, ToolCallLabelSource::Rules)
+        );
+        let item = &label.items[0];
+        let shown: Vec<_> = [&item.title, &item.target, &item.after]
+            .into_iter()
+            .flatten()
+            .chain(&item.fields)
+            .map(|slot| (slot.pointer.as_str(), slot.values[0].text.as_str()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("/subject", "Q3"),
+                ("/to", "ann@example.com"),
+                ("/body", "Numbers attached."),
+                ("/cc", "bob@example.com"),
+                ("/bcc", "cy@example.com"),
+            ]
+        );
+        let stored = serde_json::to_string(&label).unwrap();
+        assert!(!stored.contains("Typed name"), "{stored}");
     }
 
     #[test]
@@ -346,5 +525,68 @@ mod tests {
         );
         tool.description = Some("\u{202E}".into());
         assert_eq!(tool_display_metadata(&tool).description, None);
+    }
+
+    #[test]
+    fn a_childs_display_reaches_the_parent_with_its_values_as_written_only() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use label::{ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label};
+        let arguments = serde_json::json!({
+            "title": "Plan", "id": "rec-1", "parent": "p1", "from": "a", "to": "b", "status": "done",
+        });
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/title".into()),
+                id: Some("/id".into()),
+                target: Some("/parent".into()),
+                before: Some("/from".into()),
+                after: Some("/to".into()),
+                fields: vec!["/status".into()],
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        let item = &mut resolved.items[0];
+        let mut set = 0;
+        for slot in [
+            &mut item.title,
+            &mut item.id,
+            &mut item.target,
+            &mut item.before,
+            &mut item.after,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(&mut item.fields)
+        {
+            for value in &mut slot.values {
+                value.resolved = Some("From the child's results".into());
+                set += 1;
+            }
+        }
+        assert_eq!(set, 6);
+        let child = ToolDisplayMetadata {
+            title: "Update record".into(),
+            description: Some("Updates a record.".into()),
+            description_truncated: false,
+            server_name: Some("Dynamics 365".into()),
+            label: Some(resolved),
+            read_only: false,
+        };
+        assert_eq!(
+            child_approval_display(&child),
+            ToolDisplayMetadata {
+                label: Some(written),
+                ..child.clone()
+            }
+        );
+        let unlabelled = ToolDisplayMetadata {
+            label: None,
+            ..child
+        };
+        assert_eq!(child_approval_display(&unlabelled), unlabelled);
     }
 }

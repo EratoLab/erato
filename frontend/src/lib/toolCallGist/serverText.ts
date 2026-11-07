@@ -24,12 +24,21 @@ const isDropped = (code: number): boolean =>
   (code >= 0x202a && code <= 0x202e) ||
   (code >= 0x2066 && code <= 0x2069);
 
+// Enough room for the dropped characters and line breaks a capped text may
+// lose, without walking a megabyte-long string a server sent.
+const SCAN_FACTOR = 4;
+
 export const cleanServerText = (
-  raw: string,
+  raw: unknown,
   maxChars: number = MAX_SERVER_TEXT_CHARS,
 ): CleanText => {
-  const kept = Array.from(raw)
-    .filter((char) => !isDropped(char.codePointAt(0) ?? 0))
+  if (typeof raw !== "string") return { text: "", truncated: false };
+  const scanned = raw.slice(0, maxChars * SCAN_FACTOR);
+  const kept = Array.from(scanned)
+    .filter((char) => {
+      const code = char.codePointAt(0) ?? 0;
+      return !isDropped(code) && !(code >= 0xd800 && code <= 0xdfff);
+    })
     .join("")
     .normalize("NFC")
     .replace(/\n{3,}/g, "\n\n")
@@ -37,7 +46,7 @@ export const cleanServerText = (
   const chars = Array.from(kept);
   return chars.length > maxChars
     ? { text: chars.slice(0, maxChars).join("").trimEnd(), truncated: true }
-    : { text: kept, truncated: false };
+    : { text: kept, truncated: scanned.length < raw.length };
 };
 
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -46,19 +55,24 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
 const unescapeSegment = (segment: string): string =>
   segment.replace(/~1/g, "/").replace(/~0/g, "~");
 
+/** The member names and list indices of a JSON pointer, unescaped. */
+export const pointerSegments = (pointer: unknown): string[] =>
+  typeof pointer === "string" && pointer.startsWith("/")
+    ? pointer.slice(1).split("/").map(unescapeSegment)
+    : [];
+
 /** The member name or list index a JSON pointer ends in, unescaped. */
-export const lastPointerSegment = (pointer: string): string | undefined => {
-  if (!pointer.startsWith("/")) return undefined;
+export const lastPointerSegment = (pointer: unknown): string | undefined => {
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return undefined;
   return unescapeSegment(pointer.slice(pointer.lastIndexOf("/") + 1));
 };
 
 /** The value a JSON pointer (RFC 6901) reaches; the empty pointer is the whole document. */
-export const readPointer = (document: unknown, pointer: string): unknown => {
+export const readPointer = (document: unknown, pointer: unknown): unknown => {
   if (pointer === "") return document;
-  if (!pointer.startsWith("/")) return undefined;
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return undefined;
   let current: unknown = document;
-  for (const raw of pointer.slice(1).split("/")) {
-    const segment = unescapeSegment(raw);
+  for (const segment of pointerSegments(pointer)) {
     if (Array.isArray(current) && /^(0|[1-9]\d*)$/.test(segment)) {
       current = current[Number(segment)];
     } else if (isRecord(current) && Object.hasOwn(current, segment)) {
@@ -70,28 +84,86 @@ export const readPointer = (document: unknown, pointer: string): unknown => {
   return current;
 };
 
+const MAX_PREVIEW_DEPTH = 32;
+
+/**
+ * Compact JSON of a value, cut after about `maxChars` characters without
+ * serialising the rest of a large one.
+ */
+export const jsonPreview = (value: unknown, maxChars: number): string => {
+  let out = "";
+  const write = (current: unknown, depth: number): boolean => {
+    if (out.length > maxChars) return false;
+    if (typeof current === "string") {
+      out += JSON.stringify(current.slice(0, maxChars));
+    } else if (Array.isArray(current)) {
+      if (depth >= MAX_PREVIEW_DEPTH) {
+        out += "[…]";
+        return true;
+      }
+      out += "[";
+      for (let index = 0; index < current.length; index++) {
+        if (index > 0) out += ",";
+        if (!write(current[index], depth + 1)) return false;
+      }
+      out += "]";
+    } else if (isRecord(current)) {
+      if (depth >= MAX_PREVIEW_DEPTH) {
+        out += "{…}";
+        return true;
+      }
+      out += "{";
+      let first = true;
+      for (const key in current) {
+        if (!Object.hasOwn(current, key)) continue;
+        out += `${first ? "" : ","}${JSON.stringify(key.slice(0, maxChars))}:`;
+        first = false;
+        if (!write(current[key], depth + 1)) return false;
+      }
+      out += "}";
+    } else if (typeof current === "bigint") {
+      out += String(current);
+    } else {
+      out += current === undefined ? "null" : JSON.stringify(current);
+    }
+    return out.length <= maxChars;
+  };
+  write(value, 0);
+  return out;
+};
+
+/** Values a label pointer may reach before it counts as reaching too many. */
+export const MAX_POINTER_VALUES = 10_000;
+
 /**
  * Every value a label pointer reaches, where `*` stands for every element of
- * an array or member of an object, in document order.
+ * an array or member of an object, in document order. `undefined` once more
+ * than `limit` would be reached, so wildcards over a wide input stay cheap.
  */
 export const readPointerAll = (
   document: unknown,
-  pointer: string,
-): unknown[] => {
-  if (!pointer.startsWith("/")) return [];
+  pointer: unknown,
+  limit: number = MAX_POINTER_VALUES,
+): unknown[] | undefined => {
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return [];
   let reached: unknown[] = [document];
   for (const raw of pointer.slice(1).split("/")) {
-    reached = reached.flatMap((value) => {
-      if (raw === "*") {
-        return Array.isArray(value)
-          ? value
-          : isRecord(value)
-            ? Object.values(value)
-            : [];
+    const next: unknown[] = [];
+    for (const value of reached) {
+      if (raw !== "*") {
+        const child = readPointer(value, `/${raw}`);
+        if (child !== undefined) next.push(child);
+        continue;
       }
-      const next = readPointer(value, `/${raw}`);
-      return next === undefined ? [] : [next];
-    });
+      const children = Array.isArray(value)
+        ? value
+        : isRecord(value)
+          ? Object.values(value)
+          : [];
+      if (next.length + children.length > limit) return undefined;
+      for (const child of children) next.push(child);
+    }
+    reached = next;
   }
   return reached;
 };
@@ -111,11 +183,9 @@ export const serverFailureMessage = (
     isRecord(error) ? error.message : undefined,
     isRecord(output) ? output.message : undefined,
   ];
-  const text = candidates.find(
-    (candidate): candidate is string =>
-      typeof candidate === "string" && candidate.trim().length > 0,
-  );
-  if (text === undefined) return undefined;
-  const cleaned = cleanServerText(text, MAX_FAILURE_MESSAGE_CHARS);
-  return cleaned.text.length > 0 ? cleaned : undefined;
+  for (const candidate of candidates) {
+    const cleaned = cleanServerText(candidate, MAX_FAILURE_MESSAGE_CHARS);
+    if (cleaned.text.length > 0) return cleaned;
+  }
+  return undefined;
 };

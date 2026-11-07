@@ -7777,6 +7777,7 @@ msgstr "{count, plural, one {task} other {# tasks}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# more} other {+# more}}"
 
@@ -7794,6 +7795,11 @@ msgstr "{shape, select, full {Moved {kind} {title} to {where}} titled {Moved {ki
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.move.failed"
 msgstr "{shape, select, full {Could not move {kind} {title} to {where}} titled {Could not move {kind} {title}} placed {Could not move {kind} to {where}} other {Could not move {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Other arguments"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/ownProposalLabels.ts
@@ -8262,6 +8268,11 @@ msgstr "Tool-call budget"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr "You allowed this"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "You allowed this for this document"
 
@@ -8335,8 +8346,13 @@ msgstr "Open in {server}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Open link"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Open link"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Open link - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

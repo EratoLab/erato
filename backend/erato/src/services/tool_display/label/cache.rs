@@ -1,23 +1,37 @@
 //! Model label mappings per user, tool and argument shape. Entries and keys
 //! hold no argument value. A mapping the cross-check rejects is not kept,
 //! and `mcp_call_mapping` drops one it rejects later, so no hook invalidates
-//! entries when a tool's annotations change.
+//! entries when a tool's annotations change. An entry is only ever a hint:
+//! every label is checked again on the call it is shown for.
 
-use super::pointer::escape;
+use super::pointer::{MAX_POINTER_BYTES, escape};
 use super::rules::{cross_check, verb_fields};
-use super::{MAX_LABEL_ITEMS, ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label};
+use super::{
+    MAX_FIELD_POINTERS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping, ToolCallLabelMapping,
+    resolve_label,
+};
 use crate::metrics::owned::Cached;
 use crate::models::message::ToolCallLabelSource;
+use futures::FutureExt;
 use moka::future::Cache;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
 const TIME_TO_IDLE: Duration = Duration::from_hours(12);
+/// However often it is used, a mapping a model was misled into ages out.
+const TIME_TO_LIVE: Duration = Duration::from_hours(24);
 const MEMORY_OWNER: &str = "app_state.tool_label_cache.values";
+/// How long a call waits for its cached mapping before going on without it.
+pub const MAX_LOOKUP_TIME: Duration = Duration::from_secs(1);
+/// Bytes of a tool's serialized input schema its digest covers; tools that
+/// differ only further on share entries, which the checks on every hit
+/// still hold to the call.
+const MAX_SCHEMA_DIGEST_BYTES: usize = 1024 * 1024;
 /// Values one shape walk visits and bytes of the paths it keeps; past either,
 /// calls that differ only further on share a key, and the pointer check on
 /// every hit still drops a mapping that does not fit.
@@ -25,17 +39,17 @@ const MAX_SHAPE_VALUES: usize = 5_000;
 const MAX_SHAPE_PATH_BYTES: usize = 64 * 1024;
 const MAX_SHAPE_DEPTH: usize = 16;
 
-/// What one model mapping is kept under.
+/// What one model mapping is kept under. Whatever the server or the model
+/// sends, a key is the same few bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, erato_memory::HeapSize)]
 pub struct ToolLabelCacheKey {
     user_id: String,
     server_id: String,
-    tool_name: String,
-    /// The tool's input schema, so a changed tool misses; a key reorder in
-    /// it only costs a miss.
-    schema: [u8; 32],
-    /// The arguments' member paths, with array indices as `*` and the kind of
-    /// value each holds, and their verb fields with their values.
+    /// The tool's name and input schema, so a changed tool misses; a key
+    /// reorder in the schema only costs a miss.
+    tool: [u8; 32],
+    /// The arguments' kind and member paths, with array indices as `*` and the
+    /// kind of value each holds, and their verb fields with their values.
     shape: [u8; 32],
 }
 
@@ -51,9 +65,7 @@ impl ToolLabelCacheKey {
         Self {
             user_id: user_id.to_string(),
             server_id: server_id.to_string(),
-            tool_name: tool.name.to_string(),
-            schema: Sha256::digest(serde_json::to_vec(&*tool.input_schema).unwrap_or_default())
-                .into(),
+            tool: tool_digest(tool),
             shape: shape_digest(arguments),
         }
     }
@@ -72,6 +84,7 @@ impl Default for ToolLabelCache {
                 .weigher(weight)
                 .max_capacity(MAX_BYTES)
                 .time_to_idle(TIME_TO_IDLE)
+                .time_to_live(TIME_TO_LIVE)
                 .build(),
         }
     }
@@ -82,15 +95,16 @@ impl ToolLabelCache {
         &self.entries
     }
 
-    /// The mapping kept for `key` when its core pointers all reach a value
-    /// in `arguments`. One that no longer fits is dropped.
+    /// The mapping kept for `key` when it is a model's within the caps and its
+    /// core pointers all reach a value in `arguments`. One that does not is
+    /// dropped.
     pub async fn lookup(
         &self,
         key: &ToolLabelCacheKey,
         arguments: &Value,
     ) -> Option<ToolCallLabelMapping> {
         let mapping = self.entries.get(key).await?;
-        if resolve_label(&mapping, arguments).is_ok() {
+        if keepable(&mapping) && resolve_label(&mapping, arguments).is_ok() {
             return Some((*mapping).clone());
         }
         self.entries.invalidate(key).await;
@@ -103,10 +117,29 @@ impl ToolLabelCache {
 
     /// The mapping for `key`, from `compute` on a miss; concurrent misses of
     /// one key wait for one computation. What `compute` returns is kept only
-    /// when it is a model's, fits the `arguments` it was made for and passes
-    /// the cross-check against `tool`. One that fails the cross-check is
-    /// still returned, but only to this caller.
+    /// when it is a model's, within the caps, fits the `arguments` it was made
+    /// for and passes the cross-check against `tool`. One that fails the
+    /// cross-check is still returned, but only to this caller. A panic in
+    /// `compute` or the cache gives `None`.
     pub async fn get_or_compute(
+        &self,
+        key: ToolLabelCacheKey,
+        tool: &rmcp::model::Tool,
+        arguments: &Value,
+        compute: impl Future<Output = Option<ToolCallLabelMapping>>,
+    ) -> Option<ToolCallLabelMapping> {
+        AssertUnwindSafe(self.fill(key, tool, arguments, compute))
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|_| {
+                tracing::error!(
+                    "Keeping no model mapping for a tool call: computing or caching it panicked"
+                );
+                None
+            })
+    }
+
+    async fn fill(
         &self,
         key: ToolLabelCacheKey,
         tool: &rmcp::model::Tool,
@@ -122,18 +155,22 @@ impl ToolLabelCache {
         let mapping = self
             .entries
             .optionally_get_with(key, async move {
-                let mut mapping = compute.await.filter(|mapping| {
-                    mapping.source == ToolCallLabelSource::Model
-                        && resolve_label(mapping, arguments).is_ok()
-                })?;
+                let mut mapping = compute.await?;
+                // No label shows an item or tries a field past the caps.
+                mapping.items.truncate(MAX_LABEL_ITEMS);
+                mapping.items.shrink_to_fit();
+                for item in &mut mapping.items {
+                    item.fields.truncate(MAX_FIELD_POINTERS);
+                    item.fields.shrink_to_fit();
+                }
+                if !(keepable(&mapping) && resolve_label(&mapping, arguments).is_ok()) {
+                    return None;
+                }
                 // Not kept, so the next call of this shape asks the model again.
                 if !cross_check(tool, arguments, mapping.action).is_empty() {
                     *flagged = Some(mapping);
                     return None;
                 }
-                // No label shows an item past the cap.
-                mapping.items.truncate(MAX_LABEL_ITEMS);
-                mapping.items.shrink_to_fit();
                 Some(Cached::with_key(MEMORY_OWNER, mapping, &owner))
             })
             .await;
@@ -148,35 +185,93 @@ impl ToolLabelCache {
     }
 }
 
+/// What `lookup` gives within [`MAX_LOOKUP_TIME`], or whether it panicked
+/// or timed out instead.
+pub async fn bounded<T>(
+    lookup: impl Future<Output = Option<T>>,
+) -> Result<Option<T>, &'static str> {
+    match tokio::time::timeout(MAX_LOOKUP_TIME, AssertUnwindSafe(lookup).catch_unwind()).await {
+        Ok(Ok(found)) => Ok(found),
+        Ok(Err(_)) => Err("panicked"),
+        Err(_) => Err("timed_out"),
+    }
+}
+
+/// A model's mapping with no more than a label reads and no pointer too long
+/// to reach anything, so an entry stays small whatever the model wrote.
+fn keepable(mapping: &ToolCallLabelMapping) -> bool {
+    mapping.source == ToolCallLabelSource::Model
+        && mapping.items.len() <= MAX_LABEL_ITEMS
+        && mapping.items.iter().all(|item| {
+            item.fields.len() <= MAX_FIELD_POINTERS
+                && pointers(item).all(|pointer| pointer.len() <= MAX_POINTER_BYTES)
+        })
+}
+
+fn pointers(item: &ToolCallLabelItemMapping) -> impl Iterator<Item = &String> {
+    [
+        &item.title,
+        &item.id,
+        &item.target,
+        &item.before,
+        &item.after,
+    ]
+    .into_iter()
+    .flatten()
+    .chain(&item.fields)
+}
+
 fn weight(key: &ToolLabelCacheKey, mapping: &Cached<ToolCallLabelMapping>) -> u32 {
     let items: usize = mapping
         .items
         .iter()
         .map(|item| {
-            let pointers: usize = [
-                &item.title,
-                &item.id,
-                &item.target,
-                &item.before,
-                &item.after,
-            ]
-            .into_iter()
-            .flatten()
-            .chain(&item.fields)
-            .map(String::len)
-            .sum();
+            let pointers: usize = pointers(item).map(String::capacity).sum();
             item.fields.capacity() * size_of::<String>() + pointers
         })
         .sum();
     (size_of::<ToolLabelCacheKey>()
-        + key.user_id.len()
-        + key.server_id.len()
-        + key.tool_name.len()
+        + key.user_id.capacity()
+        + key.server_id.capacity()
         + size_of::<ToolCallLabelMapping>()
         + mapping.items.capacity() * size_of::<ToolCallLabelItemMapping>()
         + items)
         .try_into()
         .unwrap_or(u32::MAX)
+}
+
+fn tool_digest(tool: &rmcp::model::Tool) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update((tool.name.len() as u64).to_le_bytes());
+    hasher.update(tool.name.as_bytes());
+    let mut schema = CappedDigest {
+        hasher,
+        left: MAX_SCHEMA_DIGEST_BYTES,
+    };
+    // Streamed, so a huge schema costs no copy; an error only means the cap.
+    let _ = serde_json::to_writer(&mut schema, &*tool.input_schema);
+    schema.hasher.finalize().into()
+}
+
+struct CappedDigest {
+    hasher: Sha256,
+    left: usize,
+}
+
+impl std::io::Write for CappedDigest {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let taken = bytes.len().min(self.left);
+        self.hasher.update(&bytes[..taken]);
+        self.left -= taken;
+        if taken < bytes.len() {
+            return Err(std::io::Error::other("schema digest cap reached"));
+        }
+        Ok(taken)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 fn shape_digest(arguments: &Value) -> [u8; 32] {
@@ -185,6 +280,7 @@ fn shape_digest(arguments: &Value) -> [u8; 32] {
         values: MAX_SHAPE_VALUES,
         path_bytes: MAX_SHAPE_PATH_BYTES,
     };
+    shape.paths.insert(kind(arguments).to_string());
     shape.walk(arguments, "", 0);
     let verbs: BTreeSet<(&str, &str)> = verb_fields(arguments).into_iter().collect();
     let mut hasher = Sha256::new();
@@ -283,7 +379,7 @@ mod tests {
         let records: Vec<_> = names
             .iter()
             .enumerate()
-            .map(|(index, name)| json!({"recordId": format!("rec-{index}"), "name": name}))
+            .map(|(index, name)| json!({"recordId": format!("rec-{index}"), "company": name}))
             .collect();
         json!({"mode": mode, "records": records})
     }
@@ -294,7 +390,7 @@ mod tests {
             object_kind: ToolCallObjectKind::Row,
             items: vec![ToolCallLabelItemMapping {
                 id: Some(id.into()),
-                title: Some("/records/*/name".into()),
+                title: Some("/records/*/company".into()),
                 ..Default::default()
             }],
             source: ToolCallLabelSource::Model,
@@ -351,7 +447,7 @@ mod tests {
         for arguments in [
             call("upsert", &["Globex"]),
             call("upsert", &["Initech", "Umbrella"]),
-            json!({"records": [{"name": "Hooli", "recordId": "rec-9"}], "mode": "upsert"}),
+            json!({"records": [{"company": "Hooli", "recordId": "rec-9"}], "mode": "upsert"}),
         ] {
             label(&cache, &labeller, "user-a", &records, &arguments).await;
         }
@@ -542,5 +638,231 @@ mod tests {
         let capped = digest(Value::Object(wide.clone()));
         wide.insert("m9999".into(), json!(0));
         assert_eq!(capped, digest(Value::Object(wide)));
+    }
+
+    fn nested(depth: usize) -> Value {
+        (0..depth).fold(json!("leaf"), |inner, _| json!({"next": inner}))
+    }
+
+    #[test]
+    fn a_key_stays_small_and_distinct_whatever_the_server_or_model_sends() {
+        let huge = "\u{202E}x\u{0}".repeat(256 * 1024);
+        let mut hostile = tool(
+            json!({"type": "object", "description": huge.clone(), "properties": {
+                "deep": nested(100),
+            }}),
+        );
+        hostile.name = format!("records\n{huge}").into();
+        let arguments = json!({
+            huge.clone(): {"a/b": "~1", "~0": null},
+            "list": (0..10_000).collect::<Vec<_>>(),
+            "deep": nested(1_000),
+            "\u{202E}": "\u{0}",
+        });
+        let key = ToolLabelCacheKey::new("user-a", "crm", &hostile, &arguments);
+        let shown = format!("{key:?}");
+        assert!(shown.len() < 1024, "{} bytes", shown.len());
+        assert!(!shown.contains('\u{202E}'), "{shown}");
+
+        let mut renamed = hostile.clone();
+        renamed.name = "records".into();
+        assert_ne!(
+            key,
+            ToolLabelCacheKey::new("user-a", "crm", &renamed, &arguments)
+        );
+        for (one, other) in [
+            (json!({"a/b": 1}), json!({"a": {"b": 1}})),
+            (json!({"~1": 1}), json!({"/": 1})),
+            (json!({"*": [1]}), json!([[1]])),
+            (json!({}), json!([])),
+            (json!({"a": "s"}), json!("{\"a\": \"s\"}")),
+        ] {
+            assert_ne!(shape_digest(&one), shape_digest(&other), "{one} {other}");
+        }
+        // Past the depth cap, calls share a key and the pointer check decides.
+        assert_eq!(shape_digest(&nested(100)), shape_digest(&nested(1_000)));
+        for scalar in [json!("not json {"), json!(7), json!(null), json!([])] {
+            ToolLabelCacheKey::new("user-a", "crm", &hostile, &scalar);
+        }
+    }
+
+    #[test]
+    fn a_schema_counts_toward_its_key_up_to_the_digest_cap() {
+        let padded = |tail: &str| {
+            let mut schema = schema();
+            schema["description"] = json!("x".repeat(MAX_SCHEMA_DIGEST_BYTES));
+            schema["zz"] = json!(tail);
+            tool(schema)
+        };
+        let arguments = call("upsert", &["Acme"]);
+        let key =
+            |tool: &rmcp::model::Tool| ToolLabelCacheKey::new("user-a", "crm", tool, &arguments);
+        assert_eq!(key(&padded("one")), key(&padded("two")));
+        let mut early = schema();
+        early["properties"]["note"] = json!({"type": "string"});
+        assert_ne!(key(&tool(schema())), key(&tool(early)));
+    }
+
+    #[tokio::test]
+    async fn a_kept_entry_stays_small_whatever_the_model_wrote() {
+        let cache = ToolLabelCache::default();
+        let records = tool(schema());
+        let arguments = call("upsert", &["Acme"]);
+        let long = format!("/{}", "x".repeat(MAX_POINTER_BYTES));
+        let mut wide = model("/records/*/recordId");
+        wide.items[0].fields = (0..MAX_FIELD_POINTERS)
+            .map(|_| "/records/*/company".to_string())
+            .chain(std::iter::repeat_n(long.clone(), 1_000))
+            .collect();
+        wide.items = vec![wide.items[0].clone(); 10];
+        let kept = label(
+            &cache,
+            &Labeller::new(wide.clone()),
+            "user-a",
+            &records,
+            &arguments,
+        )
+        .await
+        .unwrap();
+        assert_eq!(kept.items.len(), MAX_LABEL_ITEMS);
+        assert!(
+            kept.items
+                .iter()
+                .all(|item| item.fields.len() == MAX_FIELD_POINTERS)
+        );
+        // Cutting what no label tries changes no label.
+        assert_eq!(
+            resolve_label(&kept, &arguments),
+            resolve_label(&wide, &arguments)
+        );
+
+        let mut tried = model("/records/*/recordId");
+        tried.items[0].fields = vec!["/records/*/company".into(), long.clone()];
+        let other = call("merge", &["Acme"]);
+        assert_eq!(
+            label(&cache, &Labeller::new(tried), "user-a", &records, &other).await,
+            None
+        );
+        let key = ToolLabelCacheKey::new("user-a", "crm", &records, &other);
+        assert!(cache.entries.get(&key).await.is_none());
+
+        let member = "k".repeat(MAX_POINTER_BYTES - 1);
+        let pointer = format!("/{member}");
+        let item = ToolCallLabelItemMapping {
+            title: Some(pointer.clone()),
+            id: Some(pointer.clone()),
+            target: Some(pointer.clone()),
+            before: Some(pointer.clone()),
+            after: Some(pointer.clone()),
+            fields: vec![pointer.clone(); MAX_FIELD_POINTERS],
+        };
+        let largest = ToolCallLabelMapping {
+            items: vec![item; MAX_LABEL_ITEMS],
+            ..model("/records/*/recordId")
+        };
+        let arguments = json!({member: "Acme"});
+        let key = ToolLabelCacheKey::new(&"u".repeat(36), "crm", &records, &arguments);
+        let kept = cache
+            .get_or_compute(key.clone(), &records, &arguments, async { Some(largest) })
+            .await;
+        assert!(kept.is_some());
+        let entry = cache.entries.get(&key).await.unwrap();
+        assert!(weight(&key, &entry) < 48 * 1024, "{}", weight(&key, &entry));
+    }
+
+    #[tokio::test]
+    async fn an_entry_no_model_wrote_or_past_the_caps_is_dropped_on_lookup() {
+        let cache = ToolLabelCache::default();
+        let records = tool(schema());
+        let arguments = json!({"mode": "upsert", "hasUserApproved": true, "records": [
+            {"recordId": "rec-0", "company": "Acme"},
+        ]});
+        let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
+        let fitting = model("/records/*/recordId");
+        let mut poisoned = Vec::new();
+        for source in [
+            ToolCallLabelSource::Rules,
+            ToolCallLabelSource::OwnMapping,
+            ToolCallLabelSource::Generic,
+        ] {
+            poisoned.push(ToolCallLabelMapping {
+                source,
+                ..fitting.clone()
+            });
+        }
+        let mut items = fitting.clone();
+        items.items = vec![items.items[0].clone(); MAX_LABEL_ITEMS + 1];
+        let mut fields = fitting.clone();
+        fields.items[0].fields = vec!["/mode".into(); MAX_FIELD_POINTERS + 1];
+        let mut long = fitting.clone();
+        long.items[0].fields = vec![format!("/{}", "x".repeat(MAX_POINTER_BYTES))];
+        let mut consent = fitting.clone();
+        consent.items[0].title = Some("/hasUserApproved".into());
+        poisoned.extend([items, fields, long, consent]);
+        for mapping in poisoned {
+            cache
+                .entries
+                .insert(
+                    key.clone(),
+                    Cached::with_key(MEMORY_OWNER, mapping.clone(), &key),
+                )
+                .await;
+            assert_eq!(cache.lookup(&key, &arguments).await, None, "{mapping:?}");
+            assert!(cache.entries.get(&key).await.is_none(), "{mapping:?}");
+        }
+        cache
+            .entries
+            .insert(
+                key.clone(),
+                Cached::with_key(MEMORY_OWNER, fitting.clone(), &key),
+            )
+            .await;
+        assert_eq!(cache.lookup(&key, &arguments).await, Some(fitting));
+    }
+
+    #[tokio::test]
+    async fn a_panicking_labeller_keeps_nothing_and_leaves_the_cache_working() {
+        let cache = ToolLabelCache::default();
+        let records = tool(schema());
+        let arguments = call("upsert", &["Acme"]);
+        let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
+        let panicking = async {
+            tokio::task::yield_now().await;
+            panic!("a labeller bug")
+        };
+        let labeller = Labeller::new(model("/records/*/recordId"));
+        let (failed, labelled) = tokio::join!(
+            cache.get_or_compute(key.clone(), &records, &arguments, panicking),
+            cache.get_or_compute(key.clone(), &records, &arguments, labeller.label()),
+        );
+        assert_eq!(failed, None);
+        assert_eq!(labelled, Some(model("/records/*/recordId")));
+        assert_eq!(labeller.runs(), 1);
+        assert_eq!(
+            cache.lookup(&key, &arguments).await,
+            Some(model("/records/*/recordId"))
+        );
+        cache.forget(&key).await;
+        assert_eq!(
+            cache
+                .get_or_compute(key.clone(), &records, &arguments, async { panic!("again") })
+                .await,
+            None
+        );
+        assert!(cache.entries.get(&key).await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn bounded_gives_a_lookup_its_answer_or_why_it_has_none() {
+        assert_eq!(bounded(async { Some(1) }).await, Ok(Some(1)));
+        assert_eq!(bounded(async { None::<u8> }).await, Ok(None));
+        assert_eq!(
+            bounded(async { panic!("a cache bug") as Option<u8> }).await,
+            Err("panicked")
+        );
+        assert_eq!(
+            bounded(std::future::pending::<Option<u8>>()).await,
+            Err("timed_out")
+        );
     }
 }

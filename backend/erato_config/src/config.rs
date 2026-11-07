@@ -87,13 +87,11 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': stateless protocol requires streamable_http"
             ));
         }
-        if server
-            .display_name
-            .as_deref()
-            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
-        {
+        if server.display_name.as_deref().is_some_and(|name| {
+            !is_valid_display_name(name) || name.chars().any(is_invisible_format_char)
+        }) {
             return Err(eyre!(
-                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
     }
@@ -105,14 +103,19 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// Bidi marks, embeddings, overrides and isolates: any of them can make the
-/// rendered order of a string differ from its logical order. Tool text from MCP
-/// servers is stripped of them and MCP server display names may not contain
-/// them, since the server name is shown right next to that text.
-pub fn is_bidi_control(c: char) -> bool {
+/// Bidi controls, which can reorder a string, and zero-width, byte order mark
+/// and tag characters, which can hide text in it. MCP tool text is stripped of
+/// them and MCP server display names, shown next to that text, may not hold them.
+pub fn is_invisible_format_char(c: char) -> bool {
     matches!(
         c,
-        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        '\u{061C}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{FEFF}'
+            | '\u{E0000}'..='\u{E007F}'
     )
 }
 
@@ -1828,9 +1831,9 @@ impl AppConfig {
         // schema. The collision check against runtime MCP tool names cannot run
         // here (MCP servers are not known at config load) and stays at request
         // assembly.
+        drop_unusable_client_tool_labels(&mut config.client_tools.tools);
         let mut seen_qualified_names = std::collections::HashSet::new();
         let mut replay_by_name = HashMap::new();
-        let mut label_by_name = HashMap::new();
         let mut child_context_arg_by_host: HashMap<&str, (String, String)> = HashMap::new();
         for tool in config.client_tools.tools.values() {
             let name = tool.name.trim();
@@ -1911,30 +1914,6 @@ impl AppConfig {
             {
                 panic!(
                     "Client tools named '{}' in different namespaces must use the same replay settings.",
-                    name
-                );
-            }
-            if let Some(label) = &tool.label {
-                if label.fields.len() > MAX_CLIENT_TOOL_LABEL_FIELDS {
-                    panic!(
-                        "Client tool '{}' lists more than {} label fields.",
-                        qualified, MAX_CLIENT_TOOL_LABEL_FIELDS
-                    );
-                }
-                for path in &label.fields {
-                    if let Err(error) = parse_label_pointer(path) {
-                        panic!(
-                            "Client tool '{}' has an invalid label pointer: {}",
-                            qualified, error
-                        );
-                    }
-                }
-            }
-            if let Some(previous) = label_by_name.insert(name.to_string(), tool.label.clone())
-                && previous != tool.label
-            {
-                panic!(
-                    "Client tools named '{}' in different namespaces must use the same label.",
                     name
                 );
             }
@@ -3888,9 +3867,9 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
-    /// Name shown to users for this server, at most 128 bytes without control
-    /// or bidi formatting characters. When omitted, the server id is shown
-    /// tidied up.
+    /// Name shown to users for this server, at most 128 bytes without control,
+    /// bidi or invisible formatting characters. When omitted, the server id is
+    /// shown tidied up.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub display_name: Option<String>,
@@ -6263,8 +6242,13 @@ pub struct ClientToolConfig {
 
     /// How the chat names this tool's calls: what the call proposes, written
     /// by hand for one of Erato's own proposal tools. Without the table, the
-    /// calls show the tool's name as before.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// calls show the tool's name as before. A table that cannot be used is
+    /// left out with a startup warning, and the tool loads without it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_client_tool_label"
+    )]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub label: Option<ClientToolLabelConfig>,
 
@@ -6596,6 +6580,87 @@ pub enum ClientToolLabelObjectKind {
 
 /// Upper bound on a client tool label's fields.
 pub const MAX_CLIENT_TOOL_LABEL_FIELDS: usize = 4;
+
+/// Characters of an unreadable label table a startup warning quotes.
+const MAX_LOGGED_LABEL_TABLE_CHARS: usize = 200;
+
+// A label only names a tool's calls in the chat, so a table this version
+// cannot read, such as one written for a newer release, costs only the label.
+fn deserialize_client_tool_label<'de, D: de::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ClientToolLabelConfig>, D::Error> {
+    let Some(table) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    match ClientToolLabelConfig::deserialize(&table) {
+        Ok(label) => Ok(Some(label)),
+        Err(error) => {
+            let quoted: String = table
+                .to_string()
+                .chars()
+                .take(MAX_LOGGED_LABEL_TABLE_CHARS)
+                .collect();
+            startup_log::warn_preinit(format!(
+                "Ignoring a client tool label table that cannot be read ({error}): {quoted}. \
+                 The tool loads, and its calls show its name."
+            ));
+            Ok(None)
+        }
+    }
+}
+
+/// Leaves out, with a startup warning, each label table the chat cannot use:
+/// one with more than [`MAX_CLIENT_TOOL_LABEL_FIELDS`] fields or a path that
+/// does not parse, and the tables of tools that share a model-facing name
+/// across namespaces without agreeing on one label.
+fn drop_unusable_client_tool_labels(tools: &mut HashMap<String, ClientToolConfig>) {
+    for tool in tools.values_mut() {
+        let Some(label) = &tool.label else {
+            continue;
+        };
+        let problem = if label.fields.len() > MAX_CLIENT_TOOL_LABEL_FIELDS {
+            Some(format!(
+                "it lists more than {MAX_CLIENT_TOOL_LABEL_FIELDS} fields"
+            ))
+        } else {
+            label
+                .fields
+                .iter()
+                .find_map(|path| parse_label_pointer(path).err())
+        };
+        if let Some(problem) = problem {
+            startup_log::warn_preinit(format!(
+                "Ignoring the label of client tool '{}/{}': {problem}. The tool loads, and its \
+                 calls show its name.",
+                tool.namespace_or_default(),
+                tool.name
+            ));
+            tool.label = None;
+        }
+    }
+    let mut label_by_name: HashMap<&str, &Option<ClientToolLabelConfig>> = HashMap::new();
+    let mut disagreeing = std::collections::BTreeSet::new();
+    for tool in tools.values() {
+        let name = tool.name.trim();
+        if let Some(previous) = label_by_name.insert(name, &tool.label)
+            && *previous != tool.label
+        {
+            disagreeing.insert(name.to_string());
+        }
+    }
+    for name in &disagreeing {
+        startup_log::warn_preinit(format!(
+            "Ignoring the labels of the client tools named '{name}': tools that share the name \
+             across namespaces must use the same label. The tools load, and their calls show \
+             their name."
+        ));
+    }
+    for tool in tools.values_mut() {
+        if disagreeing.contains(tool.name.trim()) {
+            tool.label = None;
+        }
+    }
+}
 
 /// Parses a label pointer (`$.a.b`, with `key[*]` for every element of an
 /// array) into the JSON pointer the label resolver reads, e.g. `/a/*/b`.
@@ -10587,5 +10652,101 @@ mod client_tool_label_tests {
                 "{refused}"
             );
         }
+    }
+
+    fn client_tool(id: &str, namespace: &str, label: serde_json::Value) -> ClientToolConfig {
+        serde_json::from_value(serde_json::json!({
+            "name": id,
+            "namespace": namespace,
+            "description": "d",
+            "parameters": "{}",
+            "label": label,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_label_table_that_cannot_be_read_costs_only_the_label() {
+        for unreadable in [
+            serde_json::json!("update the document"),
+            serde_json::json!(42),
+            serde_json::json!([]),
+            serde_json::json!({}),
+            serde_json::json!({"action": "share", "object_kind": "document"}),
+            serde_json::json!({"action": "update", "object_kind": "spreadsheet"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "title": "$.t"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "fields": "$.a"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "fields": [1]}),
+            serde_json::json!({"action": ["update"], "object_kind": "document"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "x".repeat(100_000): 1}),
+        ] {
+            let tool = client_tool("plan", "word", unreadable.clone());
+            assert_eq!(tool.label, None, "{unreadable}");
+            assert_eq!(tool.name, "plan");
+        }
+        let tool = client_tool("plan", "word", serde_json::Value::Null);
+        assert_eq!(tool.label, None);
+        let tool = client_tool(
+            "plan",
+            "word",
+            serde_json::json!({"action": "update", "object_kind": "document"}),
+        );
+        assert_eq!(
+            tool.label.map(|label| (label.action, label.object_kind)),
+            Some((
+                ClientToolLabelAction::Update,
+                ClientToolLabelObjectKind::Document
+            ))
+        );
+    }
+
+    #[test]
+    fn unusable_label_tables_are_left_out_and_every_tool_stays() {
+        let fields = |fields: &[&str]| serde_json::json!({"action": "comment", "object_kind": "comment", "fields": fields});
+        let mut tools: HashMap<String, ClientToolConfig> = [
+            (
+                "indexed",
+                client_tool("indexed", "word", fields(&["$.changes[0].op"])),
+            ),
+            (
+                "five",
+                client_tool("five", "word", fields(&["$.a", "$.b", "$.c", "$.d", "$.e"])),
+            ),
+            (
+                "bidi",
+                client_tool("bidi", "word", fields(&["$.\u{202E}op"])),
+            ),
+            (
+                "slash",
+                client_tool("slash", "word", fields(&["$.a/b", "$.~1"])),
+            ),
+            (
+                "huge",
+                client_tool(
+                    "huge",
+                    "word",
+                    fields(&[&format!("$.{}", "a.".repeat(50_000))]),
+                ),
+            ),
+            (
+                "kept",
+                client_tool("kept", "word", fields(&["$.changes[*].op"])),
+            ),
+            ("a", client_tool("shared", "word", fields(&["$.x"]))),
+            ("b", client_tool("shared", "outlook", fields(&["$.y"]))),
+            ("c", client_tool("alike", "word", fields(&["$.x"]))),
+            ("d", client_tool("alike", "outlook", fields(&["$.x"]))),
+        ]
+        .into_iter()
+        .map(|(id, tool)| (id.to_string(), tool))
+        .collect();
+        drop_unusable_client_tool_labels(&mut tools);
+        assert_eq!(tools.len(), 10);
+        let labelled: std::collections::BTreeSet<_> = tools
+            .iter()
+            .filter(|(_, tool)| tool.label.is_some())
+            .map(|(id, _)| id.as_str())
+            .collect();
+        assert_eq!(labelled, ["c", "d", "kept"].into());
     }
 }

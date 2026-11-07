@@ -4330,7 +4330,8 @@ export type ToolDisplayMetadata = {
   label?: ToolCallLabel;
   /**
    * Whether the tool is read-only by the annotations the approval policy
-   * read for this call. Set on MCP calls only.
+   * read for this call and does not also call itself destructive. Set on
+   * MCP calls only.
    */
   read_only?: boolean;
   /**
@@ -4342,40 +4343,31 @@ export type ToolDisplayMetadata = {
 };
 
 /**
- * The parts of an MCP result that `output` leaves out, bounded in size.
+ * What a tool row keeps of an MCP result besides `output`: at most ten of its
+ * links. Its structured content and embedded resources are not kept.
  */
 export type ToolResultDetails = {
   links?: ToolResultLink[];
-  resources?: ToolResultResource[];
-  structured?: Value;
 };
 
 /**
- * A resource link from the result. Only `https` links without user info are
- * kept; the name, title and MIME type are display-cleaned and capped like a
- * tool title.
+ * A resource link from the result. Only `https` links with a host, without
+ * user info and at most 512 bytes long are kept; the name and title are
+ * display-cleaned and capped like a tool title.
  */
 export type ToolResultLink = {
-  mime_type?: string;
+  /**
+   * The link's host as the URL parser reads it: lowercase, and punycode for
+   * a non-ASCII name, so a lookalike host reads as `xn--…`.
+   */
+  host: string;
+  /**
+   * Whether `host` is the host of the MCP server's configured URL, ignoring
+   * case and port. Never true for a server without a URL.
+   */
+  matches_server_host: boolean;
   name?: string;
   title?: string;
-  uri: string;
-};
-
-/**
- * A resource embedded in the result. `ui://`, `data:`, `javascript:` and
- * `vbscript:` resources are not kept.
- */
-export type ToolResultResource = {
-  mime_type?: string;
-  /**
-   * The text as the server sent it, or `[omitted: N bytes]`. Absent on a
-   * blob, whose body is never kept.
-   */
-  text?: string;
-  /**
-   * The resource's own URI: an identifier, not a link to open.
-   */
   uri: string;
 };
 

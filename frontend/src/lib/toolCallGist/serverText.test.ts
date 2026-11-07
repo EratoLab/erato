@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cleanServerText,
+  jsonPreview,
   lastPointerSegment,
   readPointer,
   readPointerAll,
@@ -21,6 +22,46 @@ describe("cleanServerText", () => {
       truncated: true,
     });
     expect(cleanServerText("abc", 3).truncated).toBe(false);
+  });
+
+  it("reads anything but text as empty", () => {
+    for (const raw of [undefined, null, 42, { text: "x" }, ["x"], true]) {
+      expect(cleanServerText(raw)).toEqual({ text: "", truncated: false });
+    }
+  });
+
+  it("reads only the start of a megabyte-long text, and says it was cut", () => {
+    const cleaned = cleanServerText("a".repeat(5_000_000), 10);
+    expect(cleaned).toEqual({ text: "a".repeat(10), truncated: true });
+    const mostlyDropped = cleanServerText(
+      `${"\u202E".repeat(1_000)}visible`,
+      10,
+    );
+    expect(mostlyDropped.truncated).toBe(true);
+    expect(mostlyDropped.text).not.toContain("\u202E");
+  });
+
+  it("drops half a character pair cut at the end", () => {
+    const text = cleanServerText("x".repeat(7) + "😀", 2).text;
+    expect(text).toBe("xx");
+    expect(cleanServerText("a\uD800b").text).toBe("ab");
+  });
+});
+
+describe("jsonPreview", () => {
+  it("writes compact JSON like JSON.stringify for small values", () => {
+    const value = { a: [1, "two", null, true], "b/c": { d: 1.5 } };
+    expect(jsonPreview(value, 1_000)).toBe(JSON.stringify(value));
+  });
+
+  it("stops early on a huge or deeply nested value", () => {
+    const huge = Array.from({ length: 200_000 }, (_, index) => ({ index }));
+    expect(jsonPreview(huge, 50).length).toBeLessThan(80);
+    let deep: unknown = "end";
+    for (let depth = 0; depth < 10_000; depth++) deep = [deep];
+    expect(jsonPreview(deep, 1_000)).toContain("[…]");
+    expect(jsonPreview("x".repeat(1_000_000), 10).length).toBeLessThan(20);
+    expect(jsonPreview(BigInt(7), 10)).toBe("7");
   });
 });
 
@@ -51,9 +92,35 @@ describe("pointers", () => {
     expect(readPointerAll(input, "changes")).toEqual([]);
   });
 
+  it("reads any pointer, and gives up on one that reaches too many values", () => {
+    for (const pointer of [undefined, null, 42, ["/a"], { "/": 1 }]) {
+      expect(readPointerAll({ a: 1 }, pointer)).toEqual([]);
+    }
+    const odd = { "a/b": { "~": ["x"] }, "": "empty", "\u202E": "bidi" };
+    expect(readPointerAll(odd, "/a~1b/~0/*")).toEqual(["x"]);
+    expect(readPointerAll(odd, "/")).toEqual(["empty"]);
+    expect(readPointerAll(odd, "/\u202E")).toEqual(["bidi"]);
+    const wide = {
+      rows: Array.from({ length: 200 }, () =>
+        Array.from({ length: 200 }, (_, index) => index),
+      ),
+    };
+    expect(readPointerAll(wide, "/rows/*")).toHaveLength(200);
+    expect(readPointerAll(wide, "/rows/*/*")).toBeUndefined();
+    expect(readPointerAll(wide, "/rows/*/*", 40_000)).toHaveLength(40_000);
+    expect(readPointerAll(wide, "/rows/*", 199)).toBeUndefined();
+  });
+
   it("names the last segment unescaped", () => {
     expect(lastPointerSegment("/a~1b/c~0d")).toBe("c~d");
     expect(lastPointerSegment("")).toBeUndefined();
+  });
+
+  it("reads a pointer that is not text as reaching nothing", () => {
+    expect(readPointer(input, 5)).toBeUndefined();
+    expect(readPointer(input, { path: "/list" })).toBeUndefined();
+    expect(readPointer(input, "list")).toBeUndefined();
+    expect(lastPointerSegment(null)).toBeUndefined();
   });
 });
 
@@ -79,5 +146,15 @@ describe("serverFailureMessage", () => {
     const message = serverFailureMessage("x".repeat(1_000));
     expect(message?.truncated).toBe(true);
     expect(message?.text).toHaveLength(300);
+  });
+});
+
+describe("serverFailureMessage on odd results", () => {
+  it("passes over a candidate with nothing left to show", () => {
+    expect(
+      serverFailureMessage({ error: "\u202E\u0007", message: "Not found." })
+        ?.text,
+    ).toBe("Not found.");
+    expect(serverFailureMessage({ error: { message: 42 } })).toBeUndefined();
   });
 });
