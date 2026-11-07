@@ -34,8 +34,16 @@ pub const FORMAT: u64 = 1;
 pub const HOST_API: u64 = 1;
 /// The assembled package's budget on `totalBytes`: the sidecar's acceptance
 /// budget (`MAX_TOTAL_BYTES` in `crates/erato-desktop-sidecar-ui`) governs,
-/// so raise that first.
-pub const PACKAGE_BUDGET_BYTES: u64 = 8 * 1024 * 1024;
+/// so raise that first. The generic bundle keeps to the sidecar's 8 MiB seed
+/// budget (`desktop-ui/scripts/package.mjs`), so a deployment always has at
+/// least 8 MiB for its catalogs, theme and component kits.
+pub const PACKAGE_BUDGET_BYTES: u64 = 16 * 1024 * 1024;
+/// The most the assembled package's archive may hold compressed: what a
+/// client can relay with `sidecar.install_ui_package.v1` (protocol 0.1.47),
+/// `RELAY_MAX_CHUNKS` chunks of `RELAY_CHUNK_BYTES`, which is also the most
+/// the sidecar downloads (`MAX_ARCHIVE_BYTES`). A larger archive is not
+/// served.
+pub const PACKAGE_MAX_ARCHIVE_BYTES: u64 = RELAY_CHUNK_BYTES * RELAY_MAX_CHUNKS;
 pub const APP_MOUNT_PATH: &str = "/public/platform-desktop-ui";
 pub const FRONTEND_PLATFORM: &str = "platform-desktop-ui";
 pub const HEAD_MARKER: &str = "<!--erato:head-->";
@@ -52,6 +60,11 @@ const KITS_PATH: &str = "public/component-kits";
 const TOKEN_PURPOSE: &str = "desktop-ui-package";
 const TOKEN_KEY_LABEL: &[u8] = b"erato-desktop-ui-package-token";
 const MAX_UNPACKED_BYTES: u64 = 64 * 1024 * 1024;
+/// Raw archive bytes per relayed chunk (`sidecar.install_ui_package.v1`
+/// `content_base64`, decoded).
+const RELAY_CHUNK_BYTES: u64 = 131_072;
+/// The most chunks one relayed archive has (`chunk_count` maximum).
+const RELAY_MAX_CHUNKS: u64 = 72;
 
 /// The `ui` artifact of a distribution: the generic bundle at its version.
 #[derive(Debug)]
@@ -510,6 +523,7 @@ pub fn assemble_for_state(
         distribution,
         overrides,
         PACKAGE_BUDGET_BYTES,
+        PACKAGE_MAX_ARCHIVE_BYTES,
     ) {
         Ok(package) => {
             tracing::info!(
@@ -533,6 +547,7 @@ pub fn assemble(
     distribution: &Distribution,
     overrides: &DistributionBundle,
     budget: u64,
+    max_archive_bytes: u64,
 ) -> Result<DesktopUiPackage> {
     let bundle = &artifact.bundle;
     let mut assembly = Assembly {
@@ -676,6 +691,11 @@ pub fn assemble(
     let manifest = serde_json::to_vec_pretty(&Value::Object(manifest))?;
 
     let archive = pack(&bundle.package_json, &manifest, &assembly.files)?;
+    let archive_bytes = archive.len() as u64;
+    ensure!(
+        archive_bytes <= max_archive_bytes,
+        "the desktop UI package archive is {archive_bytes} bytes compressed; the archive cap is {max_archive_bytes}"
+    );
     Ok(DesktopUiPackage {
         archive: archive.into(),
         manifest: manifest.into(),
@@ -1218,6 +1238,7 @@ pub(crate) mod tests {
             &distribution,
             &overrides,
             PACKAGE_BUDGET_BYTES,
+            PACKAGE_MAX_ARCHIVE_BYTES,
         )
         .unwrap();
 
@@ -1361,6 +1382,7 @@ pub(crate) mod tests {
             &distribution,
             &DistributionBundle::default(),
             PACKAGE_BUDGET_BYTES,
+            PACKAGE_MAX_ARCHIVE_BYTES,
         )
         .unwrap();
         let manifest = manifest_of(&package);
@@ -1415,6 +1437,7 @@ pub(crate) mod tests {
             &distribution,
             &DistributionBundle::default(),
             PACKAGE_BUDGET_BYTES,
+            PACKAGE_MAX_ARCHIVE_BYTES,
         )
         .unwrap();
         let served = DesktopUiBundle::from_archive(&package.archive).unwrap();
@@ -1438,7 +1461,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_package_over_budget_is_an_error() {
-        assert_eq!(PACKAGE_BUDGET_BYTES, 8_388_608);
+        assert_eq!(PACKAGE_BUDGET_BYTES, 16_777_216);
         let dir = tempfile::tempdir().unwrap();
         let (config, distribution) = deployment(dir.path());
         let error = assemble(
@@ -1447,10 +1470,29 @@ pub(crate) mod tests {
             &distribution,
             &DistributionBundle::default(),
             64,
+            PACKAGE_MAX_ARCHIVE_BYTES,
         )
         .unwrap_err()
         .to_string();
         assert!(error.contains("the budget is 64"), "{error}");
+    }
+
+    #[test]
+    fn a_package_archive_over_the_relay_cap_is_an_error() {
+        assert_eq!(PACKAGE_MAX_ARCHIVE_BYTES, 9_437_184);
+        let dir = tempfile::tempdir().unwrap();
+        let (config, distribution) = deployment(dir.path());
+        let error = assemble(
+            &fixture_artifact(),
+            &config,
+            &distribution,
+            &DistributionBundle::default(),
+            PACKAGE_BUDGET_BYTES,
+            64,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("the archive cap is 64"), "{error}");
     }
 
     #[test]

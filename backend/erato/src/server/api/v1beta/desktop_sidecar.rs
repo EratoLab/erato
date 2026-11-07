@@ -558,6 +558,7 @@ mod tests {
             &distribution,
             &Default::default(),
             crate::distribution::desktop_ui::PACKAGE_BUDGET_BYTES,
+            crate::distribution::desktop_ui::PACKAGE_MAX_ARCHIVE_BYTES,
         )
         .unwrap()
     }
