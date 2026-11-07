@@ -115,12 +115,14 @@ export function ScheduledItemForm({
     name: `${baseId}-name`,
     nameHelp: `${baseId}-name-help`,
     type: `${baseId}-type`,
+    typeHelp: `${baseId}-type-help`,
     trigger: `${baseId}-trigger`,
     triggerError: `${baseId}-trigger-error`,
     weekdaysError: `${baseId}-weekdays-error`,
     repeatError: `${baseId}-repeat-error`,
     message: `${baseId}-message`,
     chat: `${baseId}-chat`,
+    chatHelp: `${baseId}-chat-help`,
   };
   /* eslint-enable lingui/no-unlocalized-strings */
 
@@ -224,27 +226,33 @@ export function ScheduledItemForm({
         />
       </FormField>
 
-      <div className="max-w-sm">
-        <Select
-          id={ids.type}
-          label={t({ id: "scheduled.form.type", message: "Type" })}
-          description={t({
-            id: "scheduled.form.type.help",
-            message: "A reminder sends you a message. It never runs anything.",
-          })}
-          value={values.type}
-          onChange={() => update("type", "reminder")}
-          disabled={isSubmitting}
-        >
-          <option value="reminder">{scheduledTypeLabel("reminder")}</option>
-          <option value="scheduled_task" disabled>
-            {t({
-              id: "scheduled.form.type.scheduledTaskLater",
-              message: "Scheduled task (coming later)",
-            })}
-          </option>
-        </Select>
-      </div>
+      <FormField
+        label={t({ id: "scheduled.form.type", message: "Type" })}
+        htmlFor={ids.type}
+        helpText={t({
+          id: "scheduled.form.type.help",
+          message: "A reminder sends you a message. It never runs anything.",
+        })}
+        helpTextId={ids.typeHelp}
+      >
+        <div className="max-w-sm">
+          <Select
+            id={ids.type}
+            aria-describedby={ids.typeHelp}
+            value={values.type}
+            onChange={() => update("type", "reminder")}
+            disabled={isSubmitting}
+          >
+            <option value="reminder">{scheduledTypeLabel("reminder")}</option>
+            <option value="scheduled_task" disabled>
+              {t({
+                id: "scheduled.form.type.scheduledTaskLater",
+                message: "Scheduled task (coming later)",
+              })}
+            </option>
+          </Select>
+        </div>
+      </FormField>
 
       <SectionHeading
         id={ids.trigger}
@@ -593,38 +601,45 @@ export function ScheduledItemForm({
         />
       </FormField>
 
-      <div className="max-w-md">
-        <Select
-          id={ids.chat}
-          label={t({ id: "scheduled.form.linkedChat", message: "Linked chat" })}
-          description={t({
-            id: "scheduled.form.linkedChat.help",
-            message:
-              "Optional: the message links back to this chat, so you can continue where you left off.",
-          })}
-          error={errors.linkedChatId}
-          value={values.linkedChatId}
-          onChange={(event) => update("linkedChatId", event.target.value)}
-          disabled={isSubmitting}
-        >
-          <option value="">
-            {t({ id: "scheduled.form.linkedChat.none", message: "No chat" })}
-          </option>
-          {linkedChatMissing && (
-            <option value={values.linkedChatId}>
-              {t({
-                id: "scheduled.form.linkedChat.current",
-                message: "The chat linked now",
-              })}
+      <FormField
+        label={t({ id: "scheduled.form.linkedChat", message: "Linked chat" })}
+        htmlFor={ids.chat}
+        helpText={t({
+          id: "scheduled.form.linkedChat.help",
+          message:
+            "Optional: the message links back to this chat, so you can continue where you left off.",
+        })}
+        helpTextId={ids.chatHelp}
+        error={errors.linkedChatId}
+      >
+        <div className="max-w-md">
+          <Select
+            id={ids.chat}
+            aria-describedby={errors.linkedChatId ? undefined : ids.chatHelp}
+            error={errors.linkedChatId}
+            value={values.linkedChatId}
+            onChange={(event) => update("linkedChatId", event.target.value)}
+            disabled={isSubmitting}
+          >
+            <option value="">
+              {t({ id: "scheduled.form.linkedChat.none", message: "No chat" })}
             </option>
-          )}
-          {chats.map((chat) => (
-            <option key={chat.id} value={chat.id}>
-              {chat.title}
-            </option>
-          ))}
-        </Select>
-      </div>
+            {linkedChatMissing && (
+              <option value={values.linkedChatId}>
+                {t({
+                  id: "scheduled.form.linkedChat.current",
+                  message: "The chat linked now",
+                })}
+              </option>
+            )}
+            {chats.map((chat) => (
+              <option key={chat.id} value={chat.id}>
+                {chat.title}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </FormField>
 
       <ScheduledDeliverySettings
         channel={values.channel}

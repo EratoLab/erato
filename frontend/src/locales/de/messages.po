@@ -6904,7 +6904,7 @@ msgstr "Nicht nach {last}."
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
 msgid "scheduled.form.summary.incomplete"
-msgstr "Wählen Sie ein Datum und eine Uhrzeit, um zu sehen, wann es stattfindet."
+msgstr "Vervollständigen Sie den Zeitplan, um zu sehen, wann es stattfindet."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx

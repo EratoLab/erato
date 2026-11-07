@@ -119,6 +119,21 @@ function endSentence(values: ScheduledFormValues, locale: string | undefined) {
   return null;
 }
 
+/** Whether a field the schedule needs is still missing or unusable. */
+function isIncomplete(values: ScheduledFormValues) {
+  if (!values.date || !values.time) return true;
+  if (values.triggerKind === "once") return false;
+  if (values.frequency === "weekly" && values.weekdays.length === 0) {
+    return true;
+  }
+  if (values.endKind === "on_date") return !values.endDate;
+  if (values.endKind === "after_count") {
+    const count = Number(values.endCount);
+    return !Number.isInteger(count) || count < 1;
+  }
+  return false;
+}
+
 interface ScheduledTriggerSummaryProps {
   values: ScheduledFormValues;
   now: Date;
@@ -137,10 +152,10 @@ export function ScheduledTriggerSummary({
   const first = scheduledFirstOccurrence(values, now, timeZone);
 
   let content: React.ReactNode;
-  if (!values.date || !values.time) {
+  if (isIncomplete(values)) {
     content = t({
       id: "scheduled.form.summary.incomplete",
-      message: "Pick a date and a time to see when it happens.",
+      message: "Complete the schedule to see when it happens.",
     });
   } else if (first === null) {
     content = t({
