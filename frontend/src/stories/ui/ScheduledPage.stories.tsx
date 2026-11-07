@@ -19,7 +19,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "The Scheduled page shell, fed by sample data until the scheduled items API is wired. Page-level copy stays generic; the type and the channel only appear in a row's meta line.",
+          "The Scheduled page view with sample data; the route page feeds it from the scheduled items API. Page-level copy stays generic; the type and the channel only appear in a row's meta line.",
       },
     },
   },
@@ -40,6 +40,7 @@ const meta = {
     onCancel: action("Cancel"),
     onOpenLinkedChat: action("Open linked chat"),
     onScheduleAgain: action("Schedule again"),
+    onDelete: action("Delete"),
   },
 } satisfies Meta<typeof ScheduledPageView>;
 
@@ -95,6 +96,46 @@ export const RowMenuOpen: Story = {
       ),
     );
   },
+};
+
+/** A past row's menu: schedule the same again, or delete it for good. */
+export const PastRowMenuOpen: Story = {
+  args: { initialTab: "past" },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole(
+        "button",
+        { name: "Actions for Call Ms Schulz back about the delivery date" },
+        { timeout: 5000 },
+      ),
+    );
+  },
+};
+
+/** Counts from the API, where Past lists only the latest items. */
+export const WithApiCounts: Story = {
+  args: { counts: { upcoming: 4, past: 128 } },
+};
+
+/** No delivery channel reaches the user yet. */
+export const DeliveryNotSetUp: Story = {
+  args: { notice: { kind: "delivery_not_set_up" } },
+};
+
+/** Nothing set up yet, on an empty page. */
+export const DeliveryNotSetUpEmpty: Story = {
+  args: { items: [], notice: { kind: "delivery_not_set_up" } },
+};
+
+/** The deployment delivers through no channel. */
+export const DeliveryUnavailable: Story = {
+  args: { notice: { kind: "delivery_unavailable" } },
+};
+
+/** The user has the maximum number of upcoming items. */
+export const LimitReached: Story = {
+  args: { notice: { kind: "limit_reached", max: 10 } },
 };
 
 export const Loading: Story = {

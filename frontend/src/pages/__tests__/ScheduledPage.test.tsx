@@ -46,6 +46,7 @@ const renderView = (overrides: Partial<ScheduledPageViewProps> = {}) => {
     onCancel: vi.fn(),
     onOpenLinkedChat: vi.fn(),
     onScheduleAgain: vi.fn(),
+    onDelete: vi.fn(),
     ...overrides,
   };
   render(
@@ -142,5 +143,72 @@ describe("ScheduledPageView", () => {
     expect(props.onCancel).toHaveBeenCalledWith(
       expect.objectContaining({ name }),
     );
+  });
+
+  it("deletes a past item only after the confirmation", async () => {
+    const props = renderView({ initialTab: "past" });
+    const name = "Call Ms Schulz back about the delivery date";
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Actions for ${name}` }),
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Confirm action" }),
+    );
+    expect(props.onDelete).toHaveBeenCalledWith(
+      expect.objectContaining({ name }),
+    );
+  });
+
+  it("takes the tab counts from the API when it sends them", () => {
+    renderView({ counts: { upcoming: 4, past: 128 } });
+
+    expect(
+      screen.getByRole("tab", { name: "Upcoming (4)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Past (128)" })).toBeInTheDocument();
+  });
+
+  it("shows the empty state from the counts, not from the loaded items", () => {
+    renderView({ items: [], counts: { upcoming: 0, past: 3 } });
+
+    expect(
+      screen.queryByRole("heading", { name: "Nothing scheduled yet" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Nothing upcoming" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps an old failure out of the alert", () => {
+    const now = new Date("2026-11-07T12:00:00Z");
+    renderView({
+      now,
+      items: [
+        {
+          id: "old-failure",
+          type: "reminder",
+          name: "Old failure",
+          status: "failed",
+          dueAt: "2026-10-20T08:00:00Z",
+          channel: "teams_chat",
+        },
+      ],
+    });
+
+    expect(
+      screen.queryByTestId("scheduled-failure-alert"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains a missing delivery channel without naming it", () => {
+    renderView({ notice: { kind: "delivery_not_set_up" } });
+
+    const notice = screen.getByTestId("scheduled-notice");
+    expect(notice).toHaveTextContent("Set up delivery first");
+    expect(notice.textContent).not.toMatch(/Teams|reminder/i);
   });
 });

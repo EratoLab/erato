@@ -6570,9 +6570,19 @@ msgid "profile.menu.preferences"
 msgstr "Settings"
 
 #. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.cancel.failed"
+msgstr "“{name}” could not be cancelled"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledItems.ts
 msgid "scheduled.channel.teamsChat"
 msgstr "Teams chat"
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.delete.failed"
+msgstr "“{name}” could not be deleted"
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -6661,6 +6671,11 @@ msgstr "Cancel"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.delete"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.action.edit"
 msgstr "Edit"
 
@@ -6703,6 +6718,21 @@ msgstr "Cancel “{name}”?"
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
 msgstr "Keep it"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirm"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmMessage"
+msgstr "It is removed from your list for good."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmTitle"
+msgstr "Delete “{name}”?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
@@ -6790,6 +6820,26 @@ msgid "scheduled.new.trigger"
 msgstr "New"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.limitReached"
+msgstr "You have the maximum of {max} upcoming items. Cancel one to schedule another."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.body"
+msgstr "Erato can't reach you on any delivery channel yet, so nothing new can be scheduled. The form's advanced settings show how to set one up."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.title"
+msgstr "Set up delivery first"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.unavailable"
+msgstr "Delivery is not available here yet, so nothing new can be scheduled."
+
+#. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.subtitle"
 msgstr "Everything Erato does for you at a time you choose."
@@ -6798,6 +6848,81 @@ msgstr "Everything Erato does for you at a time you choose."
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.title"
 msgstr "Scheduled"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelNotSetUp"
+msgstr "Erato can't reach you on this delivery channel yet. Set it up first."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelUnavailable"
+msgstr "This delivery channel is not available here."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.finished"
+msgstr "This item is already over."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.inFlight"
+msgstr "This item is being delivered right now. Try again in a moment."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidRequest"
+msgstr "Check the name and the message: both are required."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidTrigger"
+msgstr "This schedule does not work. Check the days and dates."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.limitReached"
+msgstr "You have the maximum number of upcoming items. Cancel one first."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.linkedChatNotFound"
+msgstr "The linked chat no longer exists. Pick another one."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFinished"
+msgstr "Only items that are over can be deleted."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFound"
+msgstr "This item no longer exists."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nothingToSnooze"
+msgstr "Nothing of this item is waiting to be delivered."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.triggerInPast"
+msgstr "This time is in the past. Pick a time in the future."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.typeNotAvailable"
+msgstr "This type is not available yet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.unknown"
+msgstr "Something went wrong. Please try again."
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.snooze.failed"
+msgstr "“{name}” could not be snoozed"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledStatusPill.tsx

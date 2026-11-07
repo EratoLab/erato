@@ -1,5 +1,7 @@
 import { t } from "@lingui/core/macro";
 
+import { daysBetweenDateKeys, localDateKey } from "./scheduledTime";
+
 import type { ScheduledItemStatus } from "./ScheduledStatusPill";
 
 /**
@@ -30,6 +32,11 @@ export interface ScheduledItem {
   linkedChat?: { id: string; title: string } | null;
   /** Why a failed item failed, in the user's language. */
   failureReason?: string | null;
+  /**
+   * The tab the API listed it under. Without it the status decides, which is
+   * what an item that is still active always agrees with.
+   */
+  tab?: ScheduledTab;
 }
 
 export interface ScheduledTemplate {
@@ -42,6 +49,7 @@ export interface ScheduledTemplate {
 export type ScheduledTab = "upcoming" | "past";
 
 export function scheduledItemTab(item: ScheduledItem): ScheduledTab {
+  if (item.tab) return item.tab;
   return item.status === "scheduled" || item.status === "snoozed"
     ? "upcoming"
     : "past";
@@ -72,8 +80,8 @@ export interface ScheduledDateFormat {
   /** BCP 47 tag for day and time labels. */
   locale: string | undefined;
   /**
-   * IANA zone the days are cut in and the times shown in; the browser's zone
-   * when omitted. The user's stored zone goes here once it exists (ERMAIN-1111).
+   * IANA zone the days are cut in and the times shown in: the user's stored
+   * zone, or the browser's when omitted.
    */
   timeZone?: string;
 }
@@ -97,23 +105,6 @@ export function formatScheduledDateTime(
   }).format(new Date(iso));
 }
 
-// en-CA formats a date as YYYY-MM-DD, which doubles as a sortable day key.
-// eslint-disable-next-line lingui/no-unlocalized-strings -- format locale, not copy
-const DAY_KEY_LOCALE = "en-CA";
-
-const dayKey = (date: Date, timeZone: string | undefined) =>
-  new Intl.DateTimeFormat(DAY_KEY_LOCALE, {
-    year: "numeric",
-    month: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
-    day: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
-    timeZone,
-  }).format(date);
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-const daysBetween = (fromKey: string, toKey: string) =>
-  Math.round((Date.parse(toKey) - Date.parse(fromKey)) / MS_PER_DAY);
-
 /** Days ahead (upcoming) or back (past) that get their own dated group. */
 const DATED_GROUP_DAYS = 7;
 
@@ -134,7 +125,7 @@ export function groupScheduledItemsByDay(
   context: ScheduledDateContext,
 ): ScheduledDayGroup[] {
   const { now, locale, timeZone } = context;
-  const todayKey = dayKey(now, timeZone);
+  const todayKey = localDateKey(now, timeZone);
   const direction = tab === "upcoming" ? 1 : -1;
   const dayLabel = new Intl.DateTimeFormat(locale, {
     weekday: "long",
@@ -154,10 +145,13 @@ export function groupScheduledItemsByDay(
 
   for (const item of sorted) {
     const due = new Date(item.dueAt);
-    const key = dayKey(due, timeZone);
+    const key = localDateKey(due, timeZone);
     // An overdue upcoming item or a past one dated ahead still belongs on
     // today's group rather than out of order at the far end.
-    const distance = Math.max(0, direction * daysBetween(todayKey, key));
+    const distance = Math.max(
+      0,
+      direction * daysBetweenDateKeys(todayKey, key),
+    );
     if (distance >= DATED_GROUP_DAYS) {
       beyond.push(item);
       continue;

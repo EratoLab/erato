@@ -6570,8 +6570,18 @@ msgid "profile.menu.preferences"
 msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.cancel.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledItems.ts
 msgid "scheduled.channel.teamsChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.delete.failed"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -6661,6 +6671,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.delete"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.action.edit"
 msgstr ""
 
@@ -6702,6 +6717,21 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirm"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmMessage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -6790,6 +6820,26 @@ msgid "scheduled.new.trigger"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.limitReached"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.body"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.subtitle"
 msgstr ""
@@ -6797,6 +6847,81 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelNotSetUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelUnavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.finished"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.inFlight"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidRequest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidTrigger"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.limitReached"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.linkedChatNotFound"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFinished"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFound"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nothingToSnooze"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.triggerInPast"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.typeNotAvailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.unknown"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.snooze.failed"
 msgstr ""
 
 #. js-lingui-explicit-id
