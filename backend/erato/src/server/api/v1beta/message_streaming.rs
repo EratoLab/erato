@@ -14,8 +14,8 @@ use crate::models::message::{
     ApprovalItem, ContentPart, ContentPartImage, ContentPartReasoning, ContentPartText,
     ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
     DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
-    GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolApprovalKind,
-    ToolCallStatus as MessageToolCallStatus, ToolUse,
+    GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolAllowedBy,
+    ToolApprovalKind, ToolCallStatus as MessageToolCallStatus, ToolUse,
     get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
@@ -522,7 +522,8 @@ const MCP_TOOL_REPORTED_ERROR: &str = "MCP tool reported an error";
 /// policy and the user's own decision are combined.
 #[derive(Debug, PartialEq)]
 enum ToolCallGate {
-    Run,
+    /// Runs without a card. Set on an MCP call, which records why.
+    Run(Option<ToolAllowedBy>),
     /// Boxed: the request carries the whole decision list, and every call that
     /// simply runs would otherwise pay for it.
     Ask(Box<ContentPartToolApprovalRequest>),
@@ -546,9 +547,9 @@ fn gate_mcp_tool_call(
 ) -> ToolCallGate {
     let verdict = evaluate_mcp_tool_approval(config, tool);
     match effective_mcp_tool_state(config, &verdict, user_decision) {
-        McpToolEffectiveState::Allow => ToolCallGate::Run,
-        McpToolEffectiveState::Denied => refuse_denied_tool_call(tool_call),
-        McpToolEffectiveState::Ask => ask_for_tool_call(
+        (McpToolEffectiveState::Allow, allowed_by) => ToolCallGate::Run(allowed_by),
+        (McpToolEffectiveState::Denied, _) => refuse_denied_tool_call(tool_call),
+        (McpToolEffectiveState::Ask, _) => ask_for_tool_call(
             tool_call,
             ToolApprovalKind::McpTool,
             server_id,
@@ -685,7 +686,7 @@ fn gate_client_tool_call(
 ) -> ToolCallGate {
     use crate::models::user_preference::ClientToolDecision;
     match decision {
-        None | Some(ClientToolDecision::AlwaysAllow) => ToolCallGate::Run,
+        None | Some(ClientToolDecision::AlwaysAllow) => ToolCallGate::Run(None),
         Some(ClientToolDecision::NeverAllow) => refuse_denied_tool_call(tool_call),
         Some(ClientToolDecision::Ask) => ask_for_tool_call(
             tool_call,
@@ -1150,6 +1151,10 @@ pub struct MessageSubmitStreamingResponseToolCallUpdate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     result_details: Option<crate::models::message::ToolResultDetails>,
+    /// The stored part's `allowed_by`, on every update of the call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    allowed_by: Option<ToolAllowedBy>,
 }
 
 #[derive(Serialize, ToSchema, Clone, Debug)]
@@ -1220,7 +1225,10 @@ async fn await_mcp_tool_with_progress<
                 }
             }
         };
-        update.progress_message = progress.message;
+        update.progress_message = progress
+            .message
+            .map(|message| sanitize_display_text(&message, MAX_DISPLAY_NAME_CHARS).text)
+            .filter(|message| !message.is_empty());
         update.progress = Some(progress.progress);
         update.total = progress.total;
         if let Some(task) = task {
@@ -1239,6 +1247,7 @@ async fn await_mcp_tool_with_progress<
                     total: update.total,
                     output: None,
                     result_details: None,
+                    allowed_by: update.allowed_by,
                 },
                 "broadcast MCP progress",
             )
@@ -2072,6 +2081,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
             total,
             output,
             result_details,
+            allowed_by,
         } => {
             let status = match status {
                 BgToolCallStatus::Preparing => ToolCallStatus::Preparing,
@@ -2093,6 +2103,7 @@ fn streaming_event_to_sse(event: &StreamingEvent) -> Result<Event, Report> {
                     total: *total,
                     output: output.clone(),
                     result_details: result_details.clone(),
+                    allowed_by: *allowed_by,
                 },
             )
             .data_json()?;
@@ -5730,6 +5741,7 @@ async fn settle_delegation_slot<
         total: None,
         output: Some(output_value.clone()),
         result_details: None,
+        allowed_by: None,
         started_at: Some(tool_call_started),
         ended_at: Some(now_timestamp()),
     });
@@ -5765,6 +5777,7 @@ async fn settle_delegation_slot<
         total: None,
         output: Some(output_value.clone()),
         result_details: None,
+        allowed_by: None,
     };
     if let Some(task) = streaming_task {
         send_background_event(
@@ -5782,6 +5795,7 @@ async fn settle_delegation_slot<
                 total: None,
                 output: Some(output_value.clone()),
                 result_details: None,
+                allowed_by: None,
             },
             "broadcast delegation tool update",
         )
@@ -6075,6 +6089,7 @@ async fn settle_or_park_delegation_slot<
                         total: None,
                         output: Some(output.clone()),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(meta.tool_call_started.clone()),
                         ended_at: None,
                     }));
@@ -6167,6 +6182,7 @@ async fn send_tool_generation_update<
                 total: None,
                 output: None,
                 result_details: None,
+                allowed_by: None,
             },
             "broadcast tool generation progress",
         )
@@ -6185,6 +6201,7 @@ async fn send_tool_generation_update<
         total: None,
         output: None,
         result_details: None,
+        allowed_by: None,
     }
     .into();
     send_generation_event(&message, tx.clone()).await
@@ -6223,6 +6240,7 @@ async fn announce_reserved_task_slot<
                 total: None,
                 output: Some(output.clone()),
                 result_details: None,
+                allowed_by: None,
             },
             "broadcast reserved task slot",
         )
@@ -6241,6 +6259,7 @@ async fn announce_reserved_task_slot<
         total: None,
         output: Some(output),
         result_details: None,
+        allowed_by: None,
     }
     .into();
     send_generation_event(&message, tx.clone()).await
@@ -6523,6 +6542,7 @@ mod generation_event_wire_format_tests {
                                 ..Default::default()
                             }
                         }),
+                        allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
                     }
                 });
             }
@@ -7537,6 +7557,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(json!({ "status": "rejected", "error": error_message })),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -7588,6 +7609,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(json!({ "status": "error", "error": error_message })),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -7889,6 +7911,7 @@ async fn stream_generate_chat_completion<'a>(
                     total: None,
                     output: Some(output_value.clone()),
                     result_details: None,
+                    allowed_by: None,
                 };
                 if let Some(task) = streaming_task {
                     send_background_event(
@@ -7906,6 +7929,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: Some(output_value.clone()),
                             result_details: None,
+                            allowed_by: None,
                         },
                         "broadcast client-action tool update",
                     )
@@ -7926,6 +7950,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(output_value.clone()),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -8042,6 +8067,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: Some(crate::services::delegation::queued_placeholder_output()),
                             result_details: None,
+                            allowed_by: None,
                             started_at: Some(tool_call_started),
                             ended_at: None,
                         },
@@ -8219,7 +8245,7 @@ async fn stream_generate_chat_completion<'a>(
                                     ContextScopeGate::Covered { lineage, scoped } => {
                                         scope_lineage = lineage;
                                         scoped_call = scoped;
-                                        ToolCallGate::Run
+                                        ToolCallGate::Run(None)
                                     }
                                     ContextScopeGate::Ask(scope) => {
                                         let mut request = request;
@@ -8231,7 +8257,7 @@ async fn stream_generate_chat_completion<'a>(
                             (gate, _) => gate,
                         };
                         match gate {
-                            ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run,
+                            ToolCallGate::Ask(_) if registered_kind => ToolCallGate::Run(None),
                             // The MCP arm's rule: a child with nowhere to ask
                             // finishes without the call instead of parking.
                             ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
@@ -8242,7 +8268,7 @@ async fn stream_generate_chat_completion<'a>(
                             gate => gate,
                         }
                     }
-                    _ => ToolCallGate::Run,
+                    _ => ToolCallGate::Run(None),
                 };
                 if let ToolCallGate::Ask(approval_request) = gate {
                     let mut approval_request = *approval_request;
@@ -8314,6 +8340,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: Some(json!({ "status": status, "error": response_text })),
                             result_details: None,
+                            allowed_by: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -8763,6 +8790,7 @@ async fn stream_generate_chat_completion<'a>(
                                     input: Some(tool_input.clone()),
                                     output: Some(json!({"status":"input_required"})),
                                     result_details: None,
+                                    allowed_by: None,
                                     progress_message: None,
                                     progress: None,
                                     total: None,
@@ -9028,6 +9056,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(output_value.clone()),
                         result_details: None,
+                        allowed_by: None,
                     },
                     "broadcast client tool result",
                 )
@@ -9045,6 +9074,7 @@ async fn stream_generate_chat_completion<'a>(
                     total: None,
                     output: Some(output_value.clone()),
                     result_details: None,
+                    allowed_by: None,
                 };
                 let update_message: GenerationStreamingMessage = update_event.into();
                 // Best-effort (see the call event above): a dropped SSE
@@ -9067,6 +9097,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(output_value.clone()),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -9152,7 +9183,7 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(_) => None,
             };
-            let refusal = match gate_mcp_tool_call(
+            let (refusal, allowed_by) = match gate_mcp_tool_call(
                 approval_config,
                 &managed_tool_call.server_id,
                 &managed_tool_call.tool,
@@ -9160,8 +9191,8 @@ async fn stream_generate_chat_completion<'a>(
                 &unfinished_tool_call,
                 user_decision,
             ) {
-                ToolCallGate::Run => None,
-                ToolCallGate::Refuse(error_message) => Some(error_message),
+                ToolCallGate::Run(allowed_by) => (None, allowed_by),
+                ToolCallGate::Refuse(error_message) => (Some(error_message), None),
                 ToolCallGate::Ask(_) if is_delegated_run && !child_may_park => {
                     // A delegated run with nowhere to ask must not park: the
                     // durable stop would surface a half-done
@@ -9171,9 +9202,12 @@ async fn stream_generate_chat_completion<'a>(
                     // awaited one its slot on the origin turn, an `async` one
                     // its own card, announced to the origin by an
                     // `input_required` delivery.
-                    Some(approval_unavailable_in_delegated_run(
-                        &unfinished_tool_call.fn_name,
-                    ))
+                    (
+                        Some(approval_unavailable_in_delegated_run(
+                            &unfinished_tool_call.fn_name,
+                        )),
+                        None,
+                    )
                 }
                 ToolCallGate::Ask(approval_request) => {
                     let mut approval_request = *approval_request;
@@ -9231,6 +9265,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(json!({ "status": "rejected", "error": error_message })),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -9276,6 +9311,7 @@ async fn stream_generate_chat_completion<'a>(
                     total: None,
                     output: None,
                     result_details: None,
+                    allowed_by,
                 },
                 streaming_task,
                 tx.clone(),
@@ -9465,6 +9501,7 @@ async fn stream_generate_chat_completion<'a>(
                                 total: None,
                                 output: Some(output_value.clone()),
                                 result_details: None,
+                                allowed_by,
                             };
                             if let Some(task) = streaming_task {
                                 send_background_event(
@@ -9482,6 +9519,7 @@ async fn stream_generate_chat_completion<'a>(
                                         total: None,
                                         output: Some(output_value.clone()),
                                         result_details: None,
+                                        allowed_by,
                                     },
                                     "broadcast failed MCP tool output processing",
                                 )
@@ -9505,6 +9543,7 @@ async fn stream_generate_chat_completion<'a>(
                                     total: None,
                                     output: Some(output_value),
                                     result_details: None,
+                                    allowed_by,
                                     started_at: Some(tool_call_started),
                                     ended_at: Some(now_timestamp()),
                                 },
@@ -9563,6 +9602,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: output_value_for_event.clone(),
                             result_details: result_details.clone(),
+                            allowed_by,
                         };
                         // Forward to streaming_task if present
                         if let Some(task) = streaming_task {
@@ -9585,6 +9625,7 @@ async fn stream_generate_chat_completion<'a>(
                                     total: None,
                                     output: output_value_for_event,
                                     result_details: result_details.clone(),
+                                    allowed_by,
                                 },
                                 "broadcast completed MCP tool call",
                             )
@@ -9613,6 +9654,7 @@ async fn stream_generate_chat_completion<'a>(
                                 total: None,
                                 output: output_value.clone(),
                                 result_details,
+                                allowed_by,
                                 started_at: Some(tool_call_started.clone()),
                                 ended_at: Some(now_timestamp()),
                             },
@@ -9655,6 +9697,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(output_value.clone()),
                         result_details: None,
+                        allowed_by,
                     };
                     if let Some(task) = streaming_task {
                         send_background_event(
@@ -9672,6 +9715,7 @@ async fn stream_generate_chat_completion<'a>(
                                 total: None,
                                 output: Some(output_value.clone()),
                                 result_details: None,
+                                allowed_by,
                             },
                             "broadcast failed MCP tool call",
                         )
@@ -9695,6 +9739,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: Some(output_value),
                             result_details: None,
+                            allowed_by,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
                         },
@@ -10152,6 +10197,7 @@ async fn stream_generate_chat_completion<'a>(
                     total: None,
                     output: Some(output_value.clone()),
                     result_details: None,
+                    allowed_by: None,
                 };
                 if let Some(task) = streaming_task {
                     send_background_event(
@@ -10172,6 +10218,7 @@ async fn stream_generate_chat_completion<'a>(
                             total: None,
                             output: Some(output_value.clone()),
                             result_details: None,
+                            allowed_by: None,
                         },
                         "broadcast completed wait tool call",
                     )
@@ -10192,6 +10239,7 @@ async fn stream_generate_chat_completion<'a>(
                         total: None,
                         output: Some(output_value.clone()),
                         result_details: None,
+                        allowed_by: None,
                         started_at: Some(pending_wait.tool_call_started),
                         ended_at: Some(now_timestamp()),
                     },
@@ -12943,11 +12991,12 @@ fn merge_action_facet_into_mcp_allowlist(
 mod tests {
     use super::{
         ApprovalDecisionItem, ContinueStreamRequest, MAX_DISPLAY_NAME_CHARS, ReservedSelection,
-        StreamRouteError, ToolApprovalDecision, ToolCallGate, apply_assistant_server_filter,
-        derive_requested_server_ids_from_allowlist, detached_generation_event_sink,
-        effective_client_tool_allowlist, expand_tool_patterns_with_discovered_tools,
-        filter_mcp_tools_by_allowlist, filter_mcp_tools_by_disabled_patterns,
-        filter_mcp_tools_by_disabled_servers, filter_mcp_tools_by_write_access, gate_mcp_tool_call,
+        StreamRouteError, ToolAllowedBy, ToolApprovalDecision, ToolCallGate,
+        apply_assistant_server_filter, derive_requested_server_ids_from_allowlist,
+        detached_generation_event_sink, effective_client_tool_allowlist,
+        expand_tool_patterns_with_discovered_tools, filter_mcp_tools_by_allowlist,
+        filter_mcp_tools_by_disabled_patterns, filter_mcp_tools_by_disabled_servers,
+        filter_mcp_tools_by_write_access, gate_mcp_tool_call,
         merge_action_facet_into_mcp_allowlist, reserved_tool_selected, resolve_submitted_decisions,
     };
     use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
@@ -14553,7 +14602,7 @@ mod tests {
                 ToolCallGate::Ask(request) => {
                     assert_eq!(request.annotations, verdict.annotations)
                 }
-                other => assert_eq!(other, ToolCallGate::Run),
+                other => assert_eq!(other, ToolCallGate::Run(Some(ToolAllowedBy::Policy))),
             }
         }
 
@@ -14569,7 +14618,7 @@ mod tests {
         ));
         assert_eq!(
             gate_call(&disabled, "server", &read_only_closed, &call, ask),
-            ToolCallGate::Run
+            ToolCallGate::Run(Some(ToolAllowedBy::Policy))
         );
         let granting = McpToolApprovalConfig {
             allow_always: true,
@@ -14578,7 +14627,12 @@ mod tests {
         let grant = Some(UserToolDecision::AlwaysAllow);
         assert_eq!(
             gate_call(&granting, "server", &unannotated, &call, grant),
-            ToolCallGate::Run
+            ToolCallGate::Run(Some(ToolAllowedBy::AlwaysAllow))
+        );
+        // A grant on a tool the policy runs anyway skipped no prompt.
+        assert_eq!(
+            gate_call(&granting, "server", &read_only_closed, &call, grant),
+            ToolCallGate::Run(Some(ToolAllowedBy::Policy))
         );
         assert!(matches!(
             gate_call(&restrictive, "server", &unannotated, &call, grant),
@@ -21001,6 +21055,7 @@ async fn update_resumed_child_slot(
             total: None,
             output: Some(output.clone()),
             result_details: None,
+            allowed_by: None,
         },
         "broadcast resumed delegated task slot",
     )
@@ -21019,6 +21074,7 @@ async fn update_resumed_child_slot(
             total: None,
             output: Some(output),
             result_details: None,
+            allowed_by: None,
         }
         .into();
     send_generation_event(&event, tx.clone()).await
@@ -21935,6 +21991,7 @@ pub(crate) async fn run_continuation(
                     json!({"status": "rejected", "error": "The user denied this tool call."}),
                 ),
                 result_details: None,
+                allowed_by: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -21974,6 +22031,7 @@ pub(crate) async fn run_continuation(
                     total: None,
                     output: None,
                     result_details: None,
+                    allowed_by: None,
                 },
                 Some(task),
                 tx.clone(),
@@ -22036,6 +22094,7 @@ pub(crate) async fn run_continuation(
                         total: None,
                         output,
                         result_details,
+                        allowed_by: None,
                         started_at: Some(started_at),
                         ended_at: Some(now_timestamp()),
                     }
@@ -22054,6 +22113,7 @@ pub(crate) async fn run_continuation(
                         "error": format!("Failed to call MCP tool: {error}"),
                     })),
                     result_details: None,
+                    allowed_by: None,
                     started_at: Some(now_timestamp()),
                     ended_at: Some(now_timestamp()),
                 },
@@ -22081,6 +22141,7 @@ pub(crate) async fn run_continuation(
                 total: None,
                 output: Some(json!({ "status": "rejected", "error": error_message })),
                 result_details: None,
+                allowed_by: None,
                 started_at: Some(now_timestamp()),
                 ended_at: Some(now_timestamp()),
             }
@@ -22108,6 +22169,7 @@ pub(crate) async fn run_continuation(
             total: None,
             output: tool_use.output.clone(),
             result_details: tool_use.result_details.clone(),
+            allowed_by: tool_use.allowed_by,
         };
         send_background_event(
             task,
@@ -22128,6 +22190,7 @@ pub(crate) async fn run_continuation(
                 total: None,
                 output: tool_use.output.clone(),
                 result_details: tool_use.result_details.clone(),
+                allowed_by: tool_use.allowed_by,
             },
             "broadcast continued MCP tool call",
         )
@@ -22265,6 +22328,7 @@ pub(crate) async fn run_continuation(
                 })
             }),
             result_details: None,
+            allowed_by: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         };
@@ -22281,6 +22345,7 @@ pub(crate) async fn run_continuation(
             total: None,
             output: tool_use.output.clone(),
             result_details: None,
+            allowed_by: None,
         };
         send_background_event(
             task,
@@ -22297,6 +22362,7 @@ pub(crate) async fn run_continuation(
                 total: None,
                 output: tool_use.output.clone(),
                 result_details: None,
+                allowed_by: None,
             },
             "broadcast declined task plan item",
         )
@@ -23121,6 +23187,7 @@ async fn resume_parked_generation(
                 "error": refusal_for_abandoned_call(&call.fn_name),
             })),
             result_details: None,
+            allowed_by: None,
             started_at: Some(now_timestamp()),
             ended_at: Some(now_timestamp()),
         }));
@@ -23689,6 +23756,7 @@ mod mcp_progress_event_tests {
                 total: None,
                 output: None,
                 result_details: None,
+                allowed_by: None,
             },
             Some(&task),
             tx,
@@ -23718,12 +23786,16 @@ mod mcp_progress_event_tests {
         let (ack_tx, mut ack_rx) = tokio::sync::mpsc::channel(1);
         let call = async move {
             for step in 1..=3 {
-                progress_tx
-                    .send(rmcp::model::ProgressNotificationParam::new(
-                        rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1)),
-                        f64::from(step),
-                    ))
-                    .unwrap();
+                let mut progress = rmcp::model::ProgressNotificationParam::new(
+                    rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1)),
+                    f64::from(step),
+                );
+                progress.message = match step {
+                    2 => Some("\u{202E}<b>Reading</b>\u{0007} notes.txt".into()),
+                    3 => Some("\u{200F}\u{2066}".into()),
+                    _ => None,
+                };
+                progress_tx.send(progress).unwrap();
                 // The result cannot complete until the consumer observes each update.
                 ack_rx.recv().await.unwrap();
             }
@@ -23751,6 +23823,7 @@ mod mcp_progress_event_tests {
                 total: None,
                 output: None,
                 result_details: None,
+                allowed_by: Some(ToolAllowedBy::Policy),
             },
             Some(&task),
             sse_tx,
@@ -23770,6 +23843,11 @@ mod mcp_progress_event_tests {
             assert_eq!(
                 value["display"]["label"]["source"].as_str(),
                 (step == 1).then_some("generic")
+            );
+            assert_eq!(value["allowed_by"], "policy");
+            assert_eq!(
+                value["progress_message"].as_str(),
+                (step == 2).then_some("<b>Reading</b> notes.txt")
             );
             assert!(sse_rx.try_recv().unwrap().is_ok());
             assert!(streaming_event_to_sse(&event).is_ok());

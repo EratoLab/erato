@@ -441,6 +441,11 @@ pub struct ToolUse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub result_details: Option<ToolResultDetails>,
+    /// Why an MCP call ran without an approval card. Absent when the user
+    /// decided on a card, the call was refused, on other tools and old rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub allowed_by: Option<ToolAllowedBy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -527,6 +532,10 @@ pub struct ToolDisplayMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub label: Option<ToolCallLabel>,
+    /// Whether the tool is read-only by the annotations the approval policy
+    /// read for this call. Set on MCP calls only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
 }
 
 /// What a tool call does to what, and where, read from its arguments by code.
@@ -784,6 +793,18 @@ pub enum ToolApprovalKind {
     /// A client tool the user set to ask. `mcp_server_id` carries the tool's
     /// namespace, so `namespace/tool_name` is the key its decision is saved under.
     ClientTool,
+}
+
+/// What let an MCP call run without asking the user.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolAllowedBy {
+    /// The approval policy needed no prompt, or the approval gate is off.
+    Policy,
+    /// The user's saved "always allow" skipped a prompt the policy would ask.
+    AlwaysAllow,
 }
 
 /// What a context approval covers besides the call it was given on.

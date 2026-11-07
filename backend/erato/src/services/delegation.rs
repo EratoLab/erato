@@ -1731,6 +1731,7 @@ impl DelegationProgressEmitter<'_> {
                 total: None,
                 output: Some(self.frame_output(trace)),
                 result_details: None,
+                allowed_by: None,
             },
             "broadcast delegation progress",
         )
