@@ -6569,6 +6569,31 @@ msgid "profile.menu.preferences"
 msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.cancelled"
+msgstr "Abgebrochen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.done"
+msgstr "Erledigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.failed"
+msgstr "Fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.scheduled"
+msgstr "Geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.snoozed"
+msgstr "Zurückgestellt"
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr "Finde Unterhaltungen und Nachrichten in deinem Chatverlauf"

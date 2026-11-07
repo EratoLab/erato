@@ -40,6 +40,12 @@ export interface DropdownMenuItem {
   confirmTitle?: string;
   confirmMessage?: string;
   confirmButtonVariant?: ButtonVariant;
+  /**
+   * Button labels of the confirmation. Needed when the row's own action is
+   * itself "Cancel", which the dialog's default dismiss label would echo.
+   */
+  confirmButtonText?: string;
+  confirmCancelButtonText?: string;
   checked?: boolean;
   testId?: string;
   /** Optional secondary muted line under the label. */
@@ -55,6 +61,11 @@ export interface DropdownMenuItem {
   keepOpenOnSelect?: boolean;
   /** Group label rendered above this row, opening a new section. */
   sectionHeader?: React.ReactNode;
+  /**
+   * Open a new section with a divider above this row and no label. Ignored on
+   * the first row; `sectionHeader` draws its own divider.
+   */
+  separatorBefore?: boolean;
 }
 
 export interface DropdownMenuProps {
@@ -268,7 +279,10 @@ export const DropdownMenu = memo(
         items: { item: DropdownMenuItem; index: number }[];
       }[] = [];
       items.forEach((item, index) => {
-        const isNewSection = grouped.length === 0 || item.sectionHeader != null;
+        const isNewSection =
+          grouped.length === 0 ||
+          item.sectionHeader != null ||
+          item.separatorBefore === true;
         if (isNewSection) {
           grouped.push({
             key: item.id ?? String(index),
@@ -360,7 +374,12 @@ export const DropdownMenu = memo(
               ));
 
               if (section.header == null) {
-                return <Fragment key={section.key}>{rows}</Fragment>;
+                return (
+                  <Fragment key={section.key}>
+                    {sectionIndex > 0 && <PopoverSeparator />}
+                    {rows}
+                  </Fragment>
+                );
               }
 
               // A labelled run is a group, not just a styled line: without the
@@ -397,6 +416,8 @@ export const DropdownMenu = memo(
               confirmingItem.confirmButtonVariant ??
               (confirmingItem.variant === "danger" ? "danger" : "primary")
             }
+            confirmButtonText={confirmingItem.confirmButtonText}
+            cancelButtonText={confirmingItem.confirmCancelButtonText}
           />
         )}
       </>

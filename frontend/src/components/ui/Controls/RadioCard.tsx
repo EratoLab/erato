@@ -75,8 +75,11 @@ export function RadioCard({
     size === "md" ? "" : "text-sm",
   );
 
+  // The muted token is tuned for the resting fill; on the selected fill it
+  // drops below 4.5:1 in both stock themes, so a chosen card steps up a tone.
   const helperClasses = clsx(
-    "mt-1 text-theme-fg-muted",
+    "mt-1",
+    checked ? "text-theme-fg-secondary" : "text-theme-fg-muted",
     size === "md" ? "text-sm" : "text-xs",
   );
 

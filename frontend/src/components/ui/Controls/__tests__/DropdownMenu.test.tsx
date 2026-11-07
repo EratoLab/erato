@@ -281,6 +281,70 @@ describe("DropdownMenu", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
+  it("labels the confirmation buttons for a row whose action is Cancel", async () => {
+    const onCancel = vi.fn();
+    render(
+      <DropdownMenu
+        items={[
+          {
+            id: "cancel",
+            label: "Cancel",
+            onClick: onCancel,
+            variant: "danger",
+            confirmAction: true,
+            confirmTitle: "Cancel this item?",
+            confirmButtonText: "Cancel it",
+            confirmCancelButtonText: "Keep it",
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel" }));
+
+    const keep = await screen.findByRole("button", { name: "Cancel action" });
+    const confirm = screen.getByRole("button", { name: "Confirm action" });
+    expect(keep).toHaveTextContent("Keep it");
+    expect(confirm).toHaveTextContent("Cancel it");
+    expect(onCancel).not.toHaveBeenCalled();
+
+    fireEvent.click(confirm);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws a divider without a label for a row that asks for one", async () => {
+    render(
+      <DropdownMenu
+        items={[
+          {
+            id: "edit",
+            label: "Edit",
+            onClick: vi.fn(),
+            separatorBefore: true,
+          },
+          { id: "snooze", label: "Snooze", onClick: vi.fn() },
+          {
+            id: "cancel",
+            label: "Cancel",
+            onClick: vi.fn(),
+            variant: "danger",
+            separatorBefore: true,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+
+    const separator = await screen.findByRole("separator");
+    // The first row's request is moot: nothing sits above it to divide.
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(separator.previousElementSibling).toHaveTextContent("Snooze");
+    expect(separator.nextElementSibling).toHaveTextContent("Cancel");
+  });
+
   it("closes without the select delay for a row that opens a dialog", async () => {
     const onClick = vi.fn();
     render(
