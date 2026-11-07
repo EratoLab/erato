@@ -246,6 +246,11 @@ export interface TraceFeatureConfig {
   maskReasoningText: boolean;
 }
 
+/** The Scheduled page: its sidebar entry and its route. */
+export interface ScheduledFeatureConfig {
+  enabled: boolean;
+}
+
 /**
  * Complete feature configuration interface
  */
@@ -284,6 +289,8 @@ export interface FeatureConfig {
   chatSharing: ChatSharingFeatureConfig;
   /** Trace/reasoning display feature flags */
   trace: TraceFeatureConfig;
+  /** Scheduled page feature flags */
+  scheduled: ScheduledFeatureConfig;
 }
 
 type FeatureConfigOverrides = {
@@ -385,6 +392,9 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   trace: {
     maskReasoningText: false,
+  },
+  scheduled: {
+    enabled: false,
   },
 };
 
@@ -528,6 +538,9 @@ function createFeatureConfig(
     trace: {
       maskReasoningText: environment.maskReasoningTraceText,
     },
+    scheduled: {
+      enabled: environment.scheduledEnabled,
+    },
   };
 }
 
@@ -595,6 +608,10 @@ function mergeFeatureConfig(
     trace: {
       ...baseConfig.trace,
       ...overrides.trace,
+    },
+    scheduled: {
+      ...baseConfig.scheduled,
+      ...overrides.scheduled,
     },
   };
 }
@@ -887,4 +904,9 @@ export function useChatSharingFeature(): ChatSharingFeatureConfig {
 export function useTraceFeature(): TraceFeatureConfig {
   const config = useFeatureConfig();
   return config.trace;
+}
+
+export function useScheduledFeature(): ScheduledFeatureConfig {
+  const config = useFeatureConfig();
+  return config.scheduled;
 }

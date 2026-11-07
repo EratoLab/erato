@@ -33,6 +33,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import {
   useAssistantsFeature,
+  useScheduledFeature,
   useSidebarFeature,
 } from "@/providers/FeatureConfigProvider";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
@@ -63,6 +64,7 @@ import {
   SearchIcon,
   EditIcon,
   PlusIcon,
+  CalendarIcon,
   ResolvedIcon,
 } from "../icons";
 
@@ -366,6 +368,36 @@ const AssistantsNavigationItem = memo<{
 // eslint-disable-next-line lingui/no-unlocalized-strings
 AssistantsNavigationItem.displayName = "AssistantsNavigationItem";
 
+const ScheduledNavigationItem = memo<{
+  onScheduled?: () => void;
+  isOnScheduledPage?: boolean;
+  isSlimMode?: boolean;
+}>(({ onScheduled, isOnScheduledPage, isSlimMode = false }) => {
+  const scheduledIconId = useThemedIcon("navigation", "scheduled");
+
+  return (
+    <SidebarNavigationItem
+      label={t({ id: "scheduled.navigation.label", message: "Scheduled" })}
+      icon={
+        <ResolvedIcon
+          iconId={scheduledIconId}
+          fallbackIcon={CalendarIcon}
+          className={sidebarNavigationIconClassName}
+        />
+      }
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+      href="/scheduled"
+      active={isOnScheduledPage}
+      isSlimMode={isSlimMode}
+      onClick={() => onScheduled?.()}
+      data-ui="sidebar-scheduled-item"
+    />
+  );
+});
+
+// eslint-disable-next-line lingui/no-unlocalized-strings
+ScheduledNavigationItem.displayName = "ScheduledNavigationItem";
+
 const ChatHistoryFooter = memo<{
   userProfile?: UserProfile;
   onSignOut: () => void;
@@ -442,6 +474,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
     const isOnAssistantsPage =
       location.pathname.startsWith(assistantsRoute) ||
       location.pathname.startsWith(assistantHubRoute);
+    // eslint-disable-next-line lingui/no-unlocalized-strings -- Internal route path
+    const scheduledRoute = "/scheduled";
+    const isOnScheduledPage = location.pathname.startsWith(scheduledRoute);
+    const { enabled: scheduledEnabled } = useScheduledFeature();
 
     // Get sidebar configuration
     // Logo env overrides are resolved by ThemeProvider, which also decides
@@ -699,6 +735,10 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
       navigate(assistantsLandingRoute);
     }, [assistantsLandingRoute, navigate]);
 
+    const handleScheduledClick = useCallback(() => {
+      navigate(scheduledRoute);
+    }, [navigate]);
+
     // Width is runtime state (slim vs expanded); the surface lives in
     // .sidebar-skin so [data-ui="sidebar"] stays themeable. The override
     // variable carries a user-dragged width; the theme token stays untouched
@@ -784,6 +824,14 @@ export const ChatHistorySidebar = memo<ChatHistorySidebarProps>(
                   href={assistantsLandingRoute}
                   onAssistants={handleAssistantsClick}
                   isOnAssistantsPage={isOnAssistantsPage}
+                  isSlimMode={isSlimMode}
+                />
+              )}
+
+              {scheduledEnabled && (
+                <ScheduledNavigationItem
+                  onScheduled={handleScheduledClick}
+                  isOnScheduledPage={isOnScheduledPage}
                   isSlimMode={isSlimMode}
                 />
               )}
