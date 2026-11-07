@@ -794,12 +794,14 @@ pub(crate) fn replay_assistant_content(
             | ContentPart::ToolApproval(_)
             | ContentPart::ToolRejection(_)
             | ContentPart::CompactionMarker(_) => {}
-            ContentPart::ToolUse(tool_use) => {
+            ContentPart::ToolUse(mut tool_use) => {
                 // Synthetic client-action proposals never replay
                 // — see is_client_action_tool_use_message.
                 if is_synthetic_client_action_tool_use(&tool_use) {
                     continue;
                 }
+                // For the UI only; the snapshot stores both copies, so both drop it.
+                tool_use.result_details = None;
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
                     content: ContentPart::ToolUse(crate::models::message::ToolUse {
@@ -1083,7 +1085,7 @@ pub fn to_concrete_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::message::{ToolCallStatus, ToolUse};
+    use crate::models::message::{ToolCallStatus, ToolResultDetails, ToolResultLink, ToolUse};
     use crate::services::delegation::{
         DELEGATE_TO_ASSISTANT_TOOL_NAME, DelegationResultEnvelope, DelegationRunStatus,
     };
@@ -1117,6 +1119,7 @@ mod tests {
             total: None,
             input: None,
             output: Some(output),
+            result_details: None,
             started_at: None,
             ended_at: None,
         }
@@ -1171,6 +1174,40 @@ mod tests {
                 .get(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_replayed_tool_result_drops_its_result_details() {
+        let mut stored = part("create_row", serde_json::json!("Created row row-1."));
+        stored.result_details = Some(ToolResultDetails {
+            structured: Some(serde_json::json!({"title": "SYNTHETIC-STRUCTURED-TITLE"})),
+            links: vec![ToolResultLink {
+                uri: "https://records.example.test/rows/1".to_string(),
+                name: Some("row-1".to_string()),
+                title: None,
+                mime_type: None,
+            }],
+            resources: Vec::new(),
+        });
+
+        let replayed = replay_assistant_content(
+            &MessageRole::Assistant,
+            vec![ContentPart::ToolUse(stored.clone())],
+        );
+        assert_eq!(replayed.len(), 2);
+        for message in &replayed {
+            let ContentPart::ToolUse(tool_use) = &message.content else {
+                panic!("not a tool use: {message:?}");
+            };
+            assert_eq!(tool_use.result_details, None);
+            assert_eq!(tool_use.output, stored.output);
+        }
+        let snapshot = serde_json::to_string(&replayed).unwrap();
+        assert!(
+            !snapshot.contains("SYNTHETIC-STRUCTURED-TITLE"),
+            "{snapshot}"
+        );
+        assert!(!snapshot.contains("records.example.test"), "{snapshot}");
     }
 
     /// Framing keys on the tool that produced the part. Another tool's output

@@ -10851,6 +10851,10 @@
           "progress_message": {
             "type": "string"
           },
+          "result_details": {
+            "$ref": "#/components/schemas/ToolResultDetails",
+            "description": "The stored part's `result_details`; set on the terminal update only."
+          },
           "status": {
             "$ref": "#/components/schemas/ToolCallStatus"
           },
@@ -13591,6 +13595,69 @@
           }
         }
       },
+      "ToolResultDetails": {
+        "type": "object",
+        "description": "The parts of an MCP result that `output` leaves out, bounded in size.",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolResultLink"
+            }
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolResultResource"
+            }
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Value",
+            "description": "The result's structured content, kept only when it differs from\n`output`. Values over the size cap read `[omitted: N bytes]`."
+          }
+        }
+      },
+      "ToolResultLink": {
+        "type": "object",
+        "description": "A resource link from the result. Only `https` links are kept; the name,\ntitle and MIME type are display-cleaned and capped like a tool title.",
+        "required": [
+          "uri"
+        ],
+        "properties": {
+          "mime_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        }
+      },
+      "ToolResultResource": {
+        "type": "object",
+        "description": "A resource embedded in the result. `ui://` and `data:` resources are not\nkept.",
+        "required": [
+          "uri"
+        ],
+        "properties": {
+          "mime_type": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "The text as the server sent it, or `[omitted: N bytes]`. Absent on a\nblob, whose body is never kept."
+          },
+          "uri": {
+            "type": "string",
+            "description": "The resource's own URI: an identifier, not a link to open."
+          }
+        }
+      },
       "ToolUse": {
         "type": "object",
         "properties": {
@@ -13644,6 +13711,15 @@
             "type": [
               "string",
               "null"
+            ],
+            "default": null
+          },
+          "result_details": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolResultDetails",
+                "description": "What an MCP result held besides the text in `output`. For the UI only:\nreplay drops it, so the model never sees it."
+              }
             ],
             "default": null
           },

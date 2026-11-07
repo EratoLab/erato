@@ -2028,6 +2028,8 @@ pub enum StreamingEvent {
         total: Option<f64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         output: Option<JsonValue>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        result_details: Option<crate::models::message::ToolResultDetails>,
     },
     /// The model called a facet `client_tool`: the loop is now SUSPENDED
     /// awaiting the client to execute it and POST the result back. Distinct
