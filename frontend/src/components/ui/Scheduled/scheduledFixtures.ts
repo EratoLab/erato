@@ -1,4 +1,4 @@
-/* eslint-disable lingui/no-unlocalized-strings -- sample data standing in for the API and the template config */
+/* eslint-disable lingui/no-unlocalized-strings -- sample data for stories and tests */
 import type { ScheduledItem, ScheduledTemplate } from "./scheduledItems";
 
 const HOUR = 60 * 60 * 1000;
@@ -12,9 +12,8 @@ const at = (now: Date, days: number, hours: number, minutes = 0) => {
 };
 
 /**
- * Sample items for the Scheduled page until the scheduled items API
- * (ERMAIN-1137) is wired: every status, linked and unlinked chats, and one
- * failure, dated around `now` so the day groups fill.
+ * Sample items for stories and tests: every status, linked and unlinked
+ * chats, and one failure, dated around `now` so the day groups fill.
  */
 export function createScheduledItemFixtures(now: Date): ScheduledItem[] {
   return [
@@ -99,7 +98,7 @@ export function createScheduledItemFixtures(now: Date): ScheduledItem[] {
   ];
 }
 
-/** Sample templates until the template config (ERMAIN-1141) exists. */
+/** Sample templates for stories and tests. */
 export const SCHEDULED_TEMPLATE_FIXTURES: ScheduledTemplate[] = [
   {
     id: "follow-up-offer",

@@ -11,6 +11,7 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { ScheduledFailureAlert } from "@/components/ui/Scheduled/ScheduledFailureAlert";
 import { ScheduledItemGroups } from "@/components/ui/Scheduled/ScheduledItemGroups";
 import { ScheduledNewMenu } from "@/components/ui/Scheduled/ScheduledNewMenu";
+import { ScheduledPageNoticeAlert } from "@/components/ui/Scheduled/ScheduledPageNoticeAlert";
 import { ScheduledTemplates } from "@/components/ui/Scheduled/ScheduledTemplates";
 import {
   groupScheduledItemsByDay,
@@ -25,14 +26,24 @@ import { usePageAlignment } from "@/hooks/ui";
 import { EmptyAssistantHubState } from "./assistantHubUtils";
 
 import type { ScheduledItemActions } from "@/components/ui/Scheduled/ScheduledItemRow";
+import type { ScheduledPageNotice } from "@/components/ui/Scheduled/scheduledApi";
 import type {
   ScheduledItem,
   ScheduledTab,
   ScheduledTemplate,
 } from "@/components/ui/Scheduled/scheduledItems";
 
+const FAILURE_ALERT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 export interface ScheduledPageViewProps extends ScheduledItemActions {
   items: ScheduledItem[];
+  /**
+   * Item counts per tab when they can exceed what `items` holds (the API
+   * lists only the latest past items); counted from `items` when omitted.
+   */
+  counts?: Record<ScheduledTab, number>;
+  /** Whether anything new can be scheduled, shown above the list. */
+  notice?: ScheduledPageNotice | null;
   templates: ScheduledTemplate[];
   isLoading?: boolean;
   error?: Error | null;
@@ -53,6 +64,8 @@ export interface ScheduledPageViewProps extends ScheduledItemActions {
  */
 export function ScheduledPageView({
   items,
+  counts,
+  notice = null,
   templates,
   isLoading = false,
   error = null,
@@ -92,13 +105,17 @@ export function ScheduledPageView({
     [byTab, tab, dateContext, now],
   );
 
-  const failedItems = useMemo(
-    () => items.filter((item) => item.status === "failed"),
-    [items],
-  );
+  // Past keeps failures for good, so only the recent ones still call for the
+  // alert; older ones stay in the list.
+  const failedItems = useMemo(() => {
+    const since = (now ?? new Date()).getTime() - FAILURE_ALERT_WINDOW_MS;
+    return items.filter(
+      (item) => item.status === "failed" && Date.parse(item.dueAt) >= since,
+    );
+  }, [items, now]);
 
   const tabLabel = (value: ScheduledTab) => {
-    const count = byTab[value].length;
+    const count = counts?.[value] ?? byTab[value].length;
     if (value === "upcoming") {
       return count > 0
         ? t({
@@ -120,7 +137,9 @@ export function ScheduledPageView({
     })}`;
   }, [pageTitle]);
 
-  const hasNoItems = items.length === 0;
+  const hasNoItems = counts
+    ? counts.upcoming + counts.past === 0
+    : items.length === 0;
 
   let content: React.ReactNode;
   if (isLoading) {
@@ -147,6 +166,7 @@ export function ScheduledPageView({
   } else if (hasNoItems) {
     content = (
       <>
+        {notice && <ScheduledPageNoticeAlert notice={notice} />}
         <EmptyAssistantHubState
           title={t({
             id: "scheduled.empty.title",
@@ -164,6 +184,7 @@ export function ScheduledPageView({
   } else {
     content = (
       <>
+        {notice && <ScheduledPageNoticeAlert notice={notice} />}
         {!failureDismissed && (
           <ScheduledFailureAlert
             failedItems={failedItems}
@@ -260,17 +281,29 @@ export function ScheduledPageView({
 }
 
 /**
- * Route page. The form routes (`/scheduled/new`, `/scheduled/:id/edit`) come
- * with ERMAIN-1140 and the facet-preselected chat with ERMAIN-1143.
+ * Route page. The facet-preselected chat comes with ERMAIN-1143.
  */
 export default function ScheduledPage() {
   const navigate = useNavigate();
-  const { items, isLoading, error, snooze, cancel } = useScheduledItems();
+  const {
+    items,
+    counts,
+    timeZone,
+    notice,
+    isLoading,
+    error,
+    snooze,
+    cancel,
+    remove,
+  } = useScheduledItems();
   const templates = useScheduledTemplates();
 
   return (
     <ScheduledPageView
       items={items}
+      counts={counts}
+      notice={notice}
+      timeZone={timeZone}
       templates={templates}
       isLoading={isLoading}
       error={error}
@@ -288,6 +321,7 @@ export default function ScheduledPage() {
       }
       onSnooze={snooze}
       onCancel={cancel}
+      onDelete={remove}
       onOpenLinkedChat={(item) => {
         if (item.linkedChat) navigate(`/chat/${item.linkedChat.id}`);
       }}

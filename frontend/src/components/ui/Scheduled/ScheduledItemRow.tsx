@@ -9,6 +9,7 @@ import {
   scheduledItemTab,
   scheduledTypeLabel,
 } from "./scheduledItems";
+import { SCHEDULED_SNOOZE_HOUR } from "./scheduledTime";
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
 import { DropdownMenu } from "../Controls/DropdownMenu";
@@ -19,6 +20,7 @@ import {
   ClockIcon,
   CloseIcon,
   EditIcon,
+  Trash,
 } from "../icons";
 
 import type { ScheduledDateFormat, ScheduledItem } from "./scheduledItems";
@@ -31,6 +33,8 @@ export interface ScheduledItemActions {
   onCancel: (item: ScheduledItem) => void;
   onOpenLinkedChat: (item: ScheduledItem) => void;
   onScheduleAgain: (item: ScheduledItem) => void;
+  /** Past items only. */
+  onDelete: (item: ScheduledItem) => void;
 }
 
 interface ScheduledItemRowProps extends ScheduledItemActions {
@@ -38,9 +42,6 @@ interface ScheduledItemRowProps extends ScheduledItemActions {
   /** Zone and locale the times are shown in. */
   dateContext: ScheduledDateFormat;
 }
-
-/** The hour a snooze moves an item to, the next morning. */
-const SNOOZE_HOUR = 9;
 
 /**
  * The parts of the meta line: type first, then when and how it went out. The
@@ -131,6 +132,7 @@ export function ScheduledItemRow({
   onCancel,
   onOpenLinkedChat,
   onScheduleAgain,
+  onDelete,
 }: ScheduledItemRowProps) {
   const { i18n } = useLingui();
   const name = item.name;
@@ -138,7 +140,7 @@ export function ScheduledItemRow({
   const snoozeTime = new Intl.DateTimeFormat(i18n.locale || undefined, {
     hour: "numeric",
     minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
-  }).format(new Date(2000, 0, 1, SNOOZE_HOUR));
+  }).format(new Date(2000, 0, 1, SCHEDULED_SNOOZE_HOUR));
 
   const openLinkedChat: DropdownMenuItem[] = item.linkedChat
     ? [
@@ -208,6 +210,27 @@ export function ScheduledItemRow({
           }),
           icon: <CalendarIcon className="size-4" />,
           onClick: () => onScheduleAgain(item),
+        },
+        {
+          id: "delete",
+          label: t({ id: "scheduled.item.action.delete", message: "Delete" }),
+          icon: <Trash className="size-4" />,
+          variant: "danger",
+          separatorBefore: true,
+          onClick: () => onDelete(item),
+          confirmAction: true,
+          confirmTitle: t({
+            id: "scheduled.item.delete.confirmTitle",
+            message: `Delete “${name}”?`,
+          }),
+          confirmMessage: t({
+            id: "scheduled.item.delete.confirmMessage",
+            message: "It is removed from your list for good.",
+          }),
+          confirmButtonText: t({
+            id: "scheduled.item.delete.confirm",
+            message: "Delete",
+          }),
         },
       ];
 
