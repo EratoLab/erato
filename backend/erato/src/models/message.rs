@@ -436,10 +436,63 @@ pub struct ToolUse {
     pub total: Option<f64>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
+    /// What an MCP result held besides the text in `output`. For the UI only:
+    /// replay drops it, so the model never sees it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub result_details: Option<ToolResultDetails>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
+}
+
+/// The parts of an MCP result that `output` leaves out, bounded in size.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolResultDetails {
+    /// The result's structured content, kept only when it differs from
+    /// `output`. Values over the size cap read `[omitted: N bytes]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub structured: Option<JsonValue>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<ToolResultLink>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<ToolResultResource>,
+}
+
+/// A resource link from the result. Only `https` links are kept; the name,
+/// title and MIME type are display-cleaned and capped like a tool title.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolResultLink {
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub mime_type: Option<String>,
+}
+
+/// A resource embedded in the result. `ui://` and `data:` resources are not
+/// kept.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolResultResource {
+    /// The resource's own URI: an identifier, not a link to open.
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub mime_type: Option<String>,
+    /// The text as the server sent it, or `[omitted: N bytes]`. Absent on a
+    /// blob, whose body is never kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub text: Option<String>,
 }
 
 /// Snapshot of the MCP annotations used to decide whether a tool call needs

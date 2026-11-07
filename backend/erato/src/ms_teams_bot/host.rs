@@ -1001,6 +1001,7 @@ mod tests {
                 progress: Some(2.0),
                 total: Some(3.0),
                 output: None,
+                result_details: None,
             })
             .unwrap();
         sender
@@ -1016,6 +1017,7 @@ mod tests {
                 progress: None,
                 total: None,
                 output: None,
+                result_details: None,
             })
             .unwrap();
         sender
@@ -1355,6 +1357,7 @@ mod tests {
                 status: ToolCallStatus::Success,
                 input: None,
                 output: None,
+                result_details: None,
                 progress_message: None,
                 progress: None,
                 total: None,

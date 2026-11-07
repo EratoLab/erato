@@ -1,8 +1,13 @@
 use crate::models::message::{
     ContentPart, ContentPartImageFilePointer, ContentPartTextFilePointer, GenerationErrorType,
+    ToolResultDetails, ToolResultLink, ToolResultResource,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
+use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
+use crate::services::prompt_composition::replay_policy::{
+    MAX_RECEIPT_FIELD_BYTES, bounded, json_size, omitted,
+};
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use genai::chat::{ToolCall, ToolResponse};
@@ -37,7 +42,14 @@ pub struct McpToolPostProcessResult {
     pub tool_response: ToolResponse,
     pub output_value: Option<JsonValue>,
     pub file_content_parts: Vec<ContentPart>,
+    pub result_details: Option<ToolResultDetails>,
 }
+
+/// Structured content larger than this is not kept: the confirmation row reads
+/// a record's title and link, not a search result's hits.
+const MAX_RESULT_STRUCTURED_BYTES: usize = 8 * 1024;
+/// Link blocks, and separately resource blocks, kept per result.
+const MAX_RESULT_BLOCKS: usize = 10;
 
 fn json_pointer_escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
@@ -487,6 +499,114 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+/// What a result holds besides the text that becomes `output`: `structured`
+/// as given, `https` links and embedded resources, each bounded.
+fn mcp_result_details(
+    structured: Option<&Value>,
+    content: &[rmcp::model::ContentBlock],
+) -> Option<ToolResultDetails> {
+    use rmcp::model::{ContentBlock, ResourceContents};
+
+    let links = content
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::ResourceLink(resource) => https_link(resource),
+            _ => None,
+        })
+        .take(MAX_RESULT_BLOCKS)
+        .collect();
+    let resources = content
+        .iter()
+        .filter_map(|block| {
+            let ContentBlock::Resource(embedded) = block else {
+                return None;
+            };
+            let (uri, mime_type, text) = match &embedded.resource {
+                ResourceContents::TextResourceContents {
+                    uri,
+                    mime_type,
+                    text,
+                    ..
+                } => (uri, mime_type, Some(text)),
+                ResourceContents::BlobResourceContents { uri, mime_type, .. } => {
+                    (uri, mime_type, None)
+                }
+                _ => return None,
+            };
+            Some(ToolResultResource {
+                uri: resource_uri(uri)?,
+                mime_type: display_name(mime_type.as_deref()),
+                text: text.and_then(|text| {
+                    bounded(&Value::String(text.clone()))
+                        .as_str()
+                        .map(str::to_owned)
+                }),
+            })
+        })
+        .take(MAX_RESULT_BLOCKS)
+        .collect();
+    let details = ToolResultDetails {
+        structured: structured.map(bounded_structured),
+        links,
+        resources,
+    };
+    (details != ToolResultDetails::default()).then_some(details)
+}
+
+fn bounded_structured(value: &Value) -> Value {
+    let size = json_size(value);
+    if size > MAX_RESULT_STRUCTURED_BYTES {
+        return omitted(size);
+    }
+    bounded_members(value)
+}
+
+/// Keeps the shape, so a pointer into the content still reaches the small
+/// values next to an oversize one.
+fn bounded_members(value: &Value) -> Value {
+    if json_size(value) <= MAX_RECEIPT_FIELD_BYTES {
+        return value.clone();
+    }
+    match value {
+        Value::Object(members) => Value::Object(
+            members
+                .iter()
+                .map(|(key, member)| (key.clone(), bounded_members(member)))
+                .collect(),
+        ),
+        Value::Array(entries) => Value::Array(entries.iter().map(bounded_members).collect()),
+        scalar => bounded(scalar),
+    }
+}
+
+fn https_link(resource: &rmcp::model::Resource) -> Option<ToolResultLink> {
+    let url = url::Url::parse(&resource.uri).ok()?;
+    if url.scheme() != "https" || url.as_str().len() > MAX_RECEIPT_FIELD_BYTES {
+        return None;
+    }
+    Some(ToolResultLink {
+        uri: url.into(),
+        name: display_name(Some(&resource.name)),
+        title: display_name(resource.title.as_deref()),
+        mime_type: display_name(resource.mime_type.as_deref()),
+    })
+}
+
+/// A `ui://` resource is an MCP App's view, which nothing renders yet; a
+/// `data:` URI is a body rather than a name.
+fn resource_uri(uri: &str) -> Option<String> {
+    let (scheme, _) = uri.split_once(':')?;
+    let kept = uri.len() <= MAX_RECEIPT_FIELD_BYTES
+        && !matches!(scheme.to_ascii_lowercase().as_str(), "ui" | "data")
+        && sanitize_display_text(uri, MAX_RECEIPT_FIELD_BYTES).text == uri;
+    kept.then(|| uri.to_string())
+}
+
+fn display_name(text: Option<&str>) -> Option<String> {
+    text.map(|text| sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS).text)
+        .filter(|text| !text.is_empty())
+}
+
 fn mcp_tool_output_value(
     tool_call_result: &rmcp::model::CallToolResult,
     tool_response_content: &str,
@@ -595,11 +715,15 @@ pub async fn post_process_mcp_tool_result(
         .ok()
         .or(Some(JsonValue::String(tool_response_content.clone())));
     let mut file_content_parts: Vec<ContentPart> = Vec::new();
+    let mut structured = tool_call_result.structured_content.as_ref();
 
     if let Some(output_schema) = output_schema {
         let output_schema_value = Value::Object(output_schema.as_ref().clone());
         let schema_paths = collect_file_content_paths(&output_schema_value);
         if !schema_paths.is_empty() {
+            // `output` becomes the structured content with its files replaced;
+            // the raw copy still holds their base64.
+            structured = None;
             let mut output_json = mcp_tool_output_value(tool_call_result, &tool_response_content)?;
             file_content_parts = process_mcp_file_outputs(
                 app_state,
@@ -616,6 +740,10 @@ pub async fn post_process_mcp_tool_result(
         }
     }
 
+    let result_details = mcp_result_details(
+        structured.filter(|structured| Some(*structured) != output_value.as_ref()),
+        &tool_call_result.content,
+    );
     Ok(McpToolPostProcessResult {
         tool_response: ToolResponse {
             fn_name: Some(unfinished_tool_call.fn_name.clone()),
@@ -624,6 +752,7 @@ pub async fn post_process_mcp_tool_result(
         },
         output_value,
         file_content_parts,
+        result_details,
     })
 }
 
@@ -747,36 +876,208 @@ mod tests {
                 "timed_out": false,
                 "output_truncated": false
             }),
+            json!({ "success": true, "stdout": "x".repeat(MAX_RESULT_STRUCTURED_BYTES) }),
         ] {
             for is_error in [false, true] {
-                for structured in [false, true] {
-                    let mut result = if structured {
-                        CallToolResult::structured(original.clone())
-                    } else {
-                        CallToolResult::success(vec![ContentBlock::text(original.to_string())])
-                    };
-                    result.is_error = Some(is_error);
-                    let processed = post_process_mcp_tool_result(
-                        &app_state,
-                        &policy,
-                        &subject,
-                        Uuid::new_v4(),
-                        &tool_call,
-                        Some(&schema),
-                        &result,
-                    )
-                    .await
-                    .expect("omitted optional files are valid");
-                    assert!(processed.file_content_parts.is_empty());
-                    assert_eq!(processed.output_value, Some(original.clone()));
-                    assert_eq!(processed.tool_response.call_id, tool_call.call_id);
-                    let output: Value =
-                        serde_json::from_str(&processed.tool_response.content).unwrap();
-                    assert_eq!(output, original);
-                    assert!(output.get("files").is_none());
+                for (structured, text) in [(false, true), (true, true), (true, false)] {
+                    for beside_text in [false, true] {
+                        let mut result = if structured {
+                            CallToolResult::structured(original.clone())
+                        } else {
+                            CallToolResult::success(vec![ContentBlock::text(original.to_string())])
+                        };
+                        if !text {
+                            result.content.clear();
+                        }
+                        if beside_text {
+                            result.content.extend(blocks_beside_text());
+                        }
+                        result.is_error = Some(is_error);
+                        let processed = post_process_mcp_tool_result(
+                            &app_state,
+                            &policy,
+                            &subject,
+                            Uuid::new_v4(),
+                            &tool_call,
+                            Some(&schema),
+                            &result,
+                        )
+                        .await
+                        .expect("omitted optional files are valid");
+                        assert!(processed.file_content_parts.is_empty());
+                        assert_eq!(processed.output_value, Some(original.clone()));
+                        assert_eq!(processed.tool_response.call_id, tool_call.call_id);
+                        let output: Value =
+                            serde_json::from_str(&processed.tool_response.content).unwrap();
+                        assert_eq!(output, original);
+                        assert!(output.get("files").is_none());
+                        // With file fields, `output` already is the structured content.
+                        assert_eq!(
+                            processed.result_details,
+                            beside_text.then(details_beside_text)
+                        );
+                    }
                 }
             }
         }
+    }
+
+    fn blocks_beside_text() -> Vec<ContentBlock> {
+        serde_json::from_value(json!([
+            {"type": "resource_link", "uri": "https://records.example.test/rows/1", "name": "row-1",
+             "title": "Synthetic\u{202E} row", "mimeType": "text/html"},
+            {"type": "resource", "resource": {"uri": "records://rows/1",
+             "mimeType": "application/json", "text": "{\"title\":\"Synthetic row\"}"}},
+            {"type": "resource", "resource": {"uri": "records://rows/1/chart",
+             "mimeType": "image/png", "blob": "iVBORw0KGgo="}},
+            {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"},
+        ]))
+        .unwrap()
+    }
+
+    fn details_beside_text() -> ToolResultDetails {
+        ToolResultDetails {
+            structured: None,
+            links: vec![ToolResultLink {
+                uri: "https://records.example.test/rows/1".into(),
+                name: Some("row-1".into()),
+                title: Some("Synthetic row".into()),
+                mime_type: Some("text/html".into()),
+            }],
+            resources: vec![
+                ToolResultResource {
+                    uri: "records://rows/1".into(),
+                    mime_type: Some("application/json".into()),
+                    text: Some("{\"title\":\"Synthetic row\"}".into()),
+                },
+                ToolResultResource {
+                    uri: "records://rows/1/chart".into(),
+                    mime_type: Some("image/png".into()),
+                    text: None,
+                },
+            ],
+        }
+    }
+
+    async fn details_of(result: Value) -> (McpToolPostProcessResult, Option<Value>) {
+        let result: CallToolResult = serde_json::from_value(result).unwrap();
+        let tool_call = ToolCall {
+            call_id: "create-call".into(),
+            fn_name: "create_row".into(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let processed = post_process_mcp_tool_result(
+            &app_state_without_storage(),
+            &PolicyEngine::new(),
+            &Subject::User(Uuid::new_v4().to_string()),
+            Uuid::new_v4(),
+            &tool_call,
+            None,
+            &result,
+        )
+        .await
+        .unwrap();
+        let details = processed
+            .result_details
+            .as_ref()
+            .map(|details| serde_json::to_value(details).unwrap());
+        (processed, details)
+    }
+
+    #[tokio::test]
+    async fn structured_content_is_kept_beside_output_only_when_it_differs() {
+        let row = json!({"id": "row-1", "title": "Synthetic row"});
+
+        let (same, details) =
+            details_of(json!({"content": [{"type": "text", "text": row.to_string()}], "structuredContent": row})).await;
+        assert_eq!(same.output_value, Some(row.clone()));
+        assert_eq!(details, None);
+
+        let (different, details) = details_of(json!({
+            "content": [{"type": "text", "text": "Created row row-1."}],
+            "structuredContent": row,
+        }))
+        .await;
+        assert_eq!(different.output_value, Some(json!("Created row row-1.")));
+        assert_eq!(different.tool_response.content, "Created row row-1.");
+        assert_eq!(details, Some(json!({"structured": row})));
+
+        let (only, details) = details_of(json!({"content": [], "structuredContent": row})).await;
+        assert_eq!(only.output_value, Some(json!("")));
+        assert_eq!(only.tool_response.content, "");
+        assert_eq!(details, Some(json!({"structured": row})));
+    }
+
+    #[tokio::test]
+    async fn oversize_structured_values_read_as_markers_and_keep_the_shape() {
+        let body = "x".repeat(MAX_RECEIPT_FIELD_BYTES);
+        let marker = format!("[omitted: {} bytes]", MAX_RECEIPT_FIELD_BYTES + 2);
+        let (processed, details) = details_of(json!({
+            "content": [],
+            "structuredContent": {"pages": [{"url": "https://records.example.test/p/1", "body": body}]},
+        }))
+        .await;
+        assert_eq!(processed.output_value, Some(json!("")));
+        assert_eq!(
+            details,
+            Some(json!({"structured": {"pages": [
+                {"url": "https://records.example.test/p/1", "body": marker}
+            ]}}))
+        );
+
+        let hits: Vec<Value> = (0..1_000)
+            .map(|i| json!({"id": format!("row-{i}")}))
+            .collect();
+        let size = json_size(&json!({"hits": hits}));
+        assert!(size > MAX_RESULT_STRUCTURED_BYTES);
+        let (_, details) =
+            details_of(json!({"content": [], "structuredContent": {"hits": hits}})).await;
+        assert_eq!(
+            details,
+            Some(json!({"structured": format!("[omitted: {size} bytes]")}))
+        );
+    }
+
+    #[tokio::test]
+    async fn only_https_links_and_named_resources_without_bodies_are_kept() {
+        let long_path = "a".repeat(MAX_RECEIPT_FIELD_BYTES);
+        let long_text = "y".repeat(MAX_RECEIPT_FIELD_BYTES);
+        let (processed, details) = details_of(json!({"content": [
+            {"type": "text", "text": "Done."},
+            {"type": "resource_link", "uri": "http://records.example.test/rows/1", "name": "plain"},
+            {"type": "resource_link", "uri": "javascript:alert(1)", "name": "script"},
+            {"type": "resource_link", "uri": "ui://records/view", "name": "app"},
+            {"type": "resource_link", "uri": format!("https://records.example.test/{long_path}"), "name": "long"},
+            {"type": "resource_link", "uri": "HTTPS://Records.Example.Test/rows/2", "name": "\u{2066}row-2\u{2069}", "title": "  "},
+            {"type": "resource", "resource": {"uri": "ui://records/view", "mimeType": "text/html;profile=mcp-app", "text": "<html></html>"}},
+            {"type": "resource", "resource": {"uri": "data:text/plain;base64,eA==", "text": "x"}},
+            {"type": "resource", "resource": {"uri": "records://rows/2\u{202E}", "text": "x"}},
+            {"type": "resource", "resource": {"uri": "records://rows/2", "text": long_text}},
+        ]}))
+        .await;
+        assert_eq!(processed.output_value, Some(json!("Done.")));
+        assert_eq!(processed.tool_response.content, "Done.");
+        assert_eq!(
+            details,
+            Some(json!({
+                "links": [{"uri": "https://records.example.test/rows/2", "name": "row-2"}],
+                "resources": [{"uri": "records://rows/2", "text": format!("[omitted: {} bytes]", MAX_RECEIPT_FIELD_BYTES + 2)}],
+            }))
+        );
+
+        let links: Vec<Value> = (0..MAX_RESULT_BLOCKS + 5)
+            .map(|i| json!({"type": "resource_link", "uri": format!("https://records.example.test/rows/{i}"), "name": format!("row-{i}")}))
+            .collect();
+        let (_, details) = details_of(json!({"content": links})).await;
+        assert_eq!(
+            details.unwrap()["links"].as_array().unwrap().len(),
+            MAX_RESULT_BLOCKS
+        );
+
+        let (_, details) =
+            details_of(json!({"content": [{"type": "text", "text": "Done."}]})).await;
+        assert_eq!(details, None);
     }
 
     #[test]

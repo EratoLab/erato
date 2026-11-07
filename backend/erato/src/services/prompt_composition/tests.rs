@@ -3604,6 +3604,7 @@ mod test_cases {
                 total: None,
                 input: Some(input),
                 output: Some(output),
+                result_details: None,
                 started_at: None,
                 ended_at: None,
             })
