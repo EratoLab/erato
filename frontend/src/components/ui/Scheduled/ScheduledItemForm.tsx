@@ -141,12 +141,15 @@ export function ScheduledItemForm({
   }, [serverErrors]);
 
   const reference = now ?? new Date();
+  const loaded = mode === "edit" ? initialValues : undefined;
   const clientErrors = useMemo(
     () =>
-      showErrors ? validateScheduledForm(values, reference, timeZone) : {},
+      showErrors
+        ? validateScheduledForm(values, reference, timeZone, loaded)
+        : {},
     // `reference` is a fresh Date per render when `now` is omitted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showErrors, values, now, timeZone],
+    [showErrors, values, now, timeZone, loaded],
   );
   const errors: ScheduledFormErrors = { ...apiErrors, ...clientErrors };
 
@@ -168,7 +171,7 @@ export function ScheduledItemForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     setShowErrors(true);
-    const found = validateScheduledForm(values, new Date(), timeZone);
+    const found = validateScheduledForm(values, new Date(), timeZone, loaded);
     if (Object.keys(found).length > 0) return;
     onSubmit(values);
   };

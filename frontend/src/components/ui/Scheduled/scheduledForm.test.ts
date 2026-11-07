@@ -196,6 +196,22 @@ describe("scheduledForm", () => {
     expect(validateScheduledForm(values(), NOW, ZONE)).toEqual({});
   });
 
+  it("lets an edit keep a schedule whose time is over, as a snooze leaves it", () => {
+    const loaded = values({ date: "2026-11-07", time: "11:00" });
+
+    expect(
+      validateScheduledForm({ ...loaded, name: "Renamed" }, NOW, ZONE, loaded),
+    ).toEqual({});
+    expect(
+      validateScheduledForm({ ...loaded, time: "11:30" }, NOW, ZONE, loaded),
+    ).toEqual({
+      date: "This time is in the past. Pick a time in the future.",
+    });
+    expect(validateScheduledForm(loaded, NOW, ZONE)).toEqual({
+      date: "This time is in the past. Pick a time in the future.",
+    });
+  });
+
   it("checks a repeating rule's days, end and whether it ever happens", () => {
     expect(
       validateScheduledForm(

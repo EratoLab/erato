@@ -207,4 +207,25 @@ describe("ScheduledItemForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(props.onCancel).toHaveBeenCalled();
   });
+
+  it("saves an edit of a snoozed item whose trigger time is already over", () => {
+    const props = renderForm({
+      mode: "edit",
+      initialValues: {
+        ...emptyScheduledFormValues(NOW, ZONE),
+        name: "Call back Hafen Logistik",
+        message: "Body",
+        date: "2026-11-01",
+        time: "10:00",
+      },
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: /^Name/ }), {
+      target: { value: "Call back Hafen Logistik today" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Call back Hafen Logistik today" }),
+    );
+  });
 });

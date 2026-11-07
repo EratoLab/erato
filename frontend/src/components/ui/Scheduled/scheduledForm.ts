@@ -219,11 +219,36 @@ export function scheduledItemRequestBody(
   };
 }
 
-/** Field errors before anything is sent; empty when the form can go. */
+/** Whether two form states describe the same schedule, as the API compares it. */
+export function scheduledTriggerUnchanged(
+  values: ScheduledFormValues,
+  initial: ScheduledFormValues,
+): boolean {
+  const trigger = (form: ScheduledFormValues) => {
+    const { trigger } = scheduledItemRequestBody(form);
+    return trigger.kind === "repeat"
+      ? {
+          ...trigger,
+          weekdays: SCHEDULED_WEEKDAYS.filter((day) =>
+            trigger.weekdays?.includes(day),
+          ),
+        }
+      : trigger;
+  };
+  return JSON.stringify(trigger(values)) === JSON.stringify(trigger(initial));
+}
+
+/**
+ * Field errors before anything is sent; empty when the form can go. With
+ * `unchangedFrom` (edit), a schedule left as loaded skips the time-ahead
+ * check: the API keeps its coming occurrence, which a snooze may have moved
+ * past a trigger time that is already over.
+ */
 export function validateScheduledForm(
   values: ScheduledFormValues,
   now: Date,
   timeZone: string | undefined,
+  unchangedFrom?: ScheduledFormValues,
 ): ScheduledFormErrors {
   const errors: ScheduledFormErrors = {};
   if (!values.name.trim()) {
@@ -296,7 +321,11 @@ export function validateScheduledForm(
     !errors.weekdays &&
     !errors.endDate &&
     !errors.endCount;
-  if (complete && scheduledFirstOccurrence(values, now, timeZone) === null) {
+  if (
+    complete &&
+    !(unchangedFrom && scheduledTriggerUnchanged(values, unchangedFrom)) &&
+    scheduledFirstOccurrence(values, now, timeZone) === null
+  ) {
     errors.date =
       values.triggerKind === "once"
         ? t({
