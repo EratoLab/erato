@@ -47,6 +47,7 @@ const LAST_CHUNK_TIMEOUT_MS = 120_000;
 const RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 const BUSY_DELAY_MS = 5_000;
 const MAX_BUSY_DELAY_MS = 60_000;
+const DECLINED = Symbol("declined");
 
 // A relay restarted in this page (the configure effect re-ran) resumes this
 // upload, which the sidecar keeps for 120 s after its last chunk.
@@ -101,13 +102,19 @@ export async function installUiPackageWhenRefused(
     const offered = status.digest === reference.digest;
     if (status.state === "failed") {
       if (status.relay !== true || !offered) return "failed";
-    } else if (!offered || !resumableUpload(reference.digest, now)) {
+    } else if (
+      status.state !== "pending" ||
+      !offered ||
+      !resumableUpload(reference.digest, now)
+    ) {
       // An upload this page started shows as pending; anything else waits.
       continue;
     }
-    return exclusively(signal, deps, () =>
+    const outcome = await exclusively(signal, deps, () =>
       relay(client, reference, signal, { ...deps, now, sleep }),
     );
+    // Another relay runs; a later poll shows its result or its abandoned upload.
+    if (outcome !== DECLINED) return outcome;
   }
 }
 
@@ -115,9 +122,9 @@ async function exclusively(
   signal: AbortSignal,
   deps: UiPackageRelayDeps,
   run: () => Promise<UiPackageRelayOutcome>,
-): Promise<UiPackageRelayOutcome> {
+): Promise<UiPackageRelayOutcome | typeof DECLINED> {
   const previous = activeRelay;
-  if (previous && !previous.signal.aborted) return "skipped";
+  if (previous && !previous.signal.aborted) return DECLINED;
   let settle = (): void => undefined;
   const entry = {
     signal,
@@ -135,8 +142,8 @@ async function exclusively(
     return (await locks.request(
       UI_PACKAGE_RELAY_LOCK,
       { ifAvailable: true },
-      (lock) => (lock ? run() : "skipped"),
-    )) as UiPackageRelayOutcome;
+      (lock) => (lock ? run() : DECLINED),
+    )) as UiPackageRelayOutcome | typeof DECLINED;
   } finally {
     if (activeRelay === entry) activeRelay = undefined;
     settle();

@@ -441,7 +441,9 @@ its download failed for a `network`, `proxy` or `tls` reason,
 and that client MAY relay the archive with `sidecar.install_ui_package.v1`. A
 client relays only when discovery reports `ui`, both methods are enabled, and
 the status reports `failed` with `relay: true` and the digest the client
-offered.
+offered. A client that holds an upload in flight for the digest it offered MAY
+continue it, with the same `upload_id`, while the status reports `pending`, but
+not while it reports an unknown state.
 
 The client fetches the archive from the offered `url` with
 `Authorization: Bearer <token>`. It MUST NOT follow redirects, and it MUST NOT

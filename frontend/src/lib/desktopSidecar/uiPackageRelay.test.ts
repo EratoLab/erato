@@ -63,8 +63,10 @@ const pending: SidecarUiPackageStatus = {
 
 /** A client whose status replies run out into the last one. */
 function fakeClient(
-  statuses: StatusReply[],
-  install: (params: SidecarInstallUiPackageV1Params) => InstallReply = () => ({
+  statuses: StatusReply[] | (() => StatusReply),
+  install: (
+    params: SidecarInstallUiPackageV1Params,
+  ) => InstallReply | Promise<SidecarInstallUiPackageV1Result> = () => ({
     state: "installed",
   }),
 ) {
@@ -79,7 +81,11 @@ function fakeClient(
     ) => {
       options.signal?.throwIfAborted();
       if (method === "sidecar.status.v1") {
-        const reply = statuses[Math.min(polls++, statuses.length - 1)];
+        const reply =
+          typeof statuses === "function"
+            ? statuses()
+            : statuses[Math.min(polls, statuses.length - 1)];
+        polls += 1;
         if (reply instanceof Error) throw reply;
         return {
           permissions: {},
@@ -115,19 +121,62 @@ function archiveResponse(
 function run(
   client: DesktopSidecarClient,
   deps: Partial<UiPackageRelay.UiPackageRelayDeps> = {},
+  signal: AbortSignal = controller.signal,
 ) {
-  return relay.installUiPackageWhenRefused(
-    client,
-    reference,
-    controller.signal,
-    {
-      fetch: vi.fn(async () => archiveResponse()),
-      locks: null,
-      sleep,
-      now: () => clock,
-      ...deps,
+  return relay.installUiPackageWhenRefused(client, reference, signal, {
+    fetch: vi.fn(async () => archiveResponse()),
+    locks: null,
+    sleep,
+    now: () => clock,
+    ...deps,
+  });
+}
+
+function nextChunk(
+  chunk: SidecarInstallUiPackageV1Params,
+): SidecarInstallUiPackageV1Result {
+  return chunk.chunk_index < chunk.chunk_count - 1
+    ? { state: "continue", next_chunk_index: chunk.chunk_index + 1 }
+    : { state: "installed" };
+}
+
+/** Reports failed/proxy until the first chunk, pending during the upload, current once installed. */
+function relayingSidecar(
+  interrupt: (
+    chunk: SidecarInstallUiPackageV1Params,
+  ) => Error | undefined = () => undefined,
+) {
+  let started = false;
+  let installed = false;
+  return fakeClient(
+    () => (installed ? current : started ? pending : failed()),
+    (chunk) => {
+      started = true;
+      const reply = interrupt(chunk) ?? nextChunk(chunk);
+      if (!(reply instanceof Error) && reply.state === "installed")
+        installed = true;
+      return reply;
     },
   );
+}
+
+/** Lets concurrent calls interleave without moving the clock. */
+async function yieldingSleep(_delayMs: number, signal: AbortSignal) {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  signal.throwIfAborted();
+}
+
+/** A relay aborted after chunk 0, which leaves its upload resumable in this page. */
+async function abortAfterFirstChunk(fetch: typeof globalThis.fetch) {
+  const first = fakeClient([failed()], (chunk) => {
+    if (chunk.chunk_index === 0)
+      return { state: "continue", next_chunk_index: 1 };
+    controller.abort();
+    return new SidecarClientError("aborted", "aborted");
+  });
+  await expect(run(first.client, { fetch })).rejects.toThrow();
+  controller = new AbortController();
+  return first;
 }
 
 function decode(chunk: SidecarInstallUiPackageV1Params): Uint8Array {
@@ -323,8 +372,8 @@ describe("installUiPackageWhenRefused", () => {
     expect(installs).toHaveLength(1);
   });
 
-  it("leaves the relay to the window that holds the lock", async () => {
-    const { client } = fakeClient([failed()]);
+  it("leaves the relay to the window that holds the lock and waits for its result", async () => {
+    const { client } = fakeClient([failed(), pending, current]);
     const fetch = vi.fn();
     const request = vi.fn(
       async (
@@ -334,13 +383,131 @@ describe("installUiPackageWhenRefused", () => {
       ) => callback(null),
     );
     const locks = { request } as unknown as LockManager;
-    await expect(run(client, { fetch, locks })).resolves.toBe("skipped");
+    await expect(run(client, { fetch, locks })).resolves.toBe("current");
+    expect(request).toHaveBeenCalledOnce();
     expect(request).toHaveBeenCalledWith(
       relay.UI_PACKAGE_RELAY_LOCK,
       { ifAvailable: true },
       expect.any(Function),
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("relays once the window that held the lock abandoned its upload", async () => {
+    const { client, installs } = fakeClient([failed(), pending, failed()]);
+    let granted = false;
+    const request = vi.fn(
+      async (
+        name: string,
+        _options: LockOptions,
+        callback: (lock: Lock | null) => unknown,
+      ) => {
+        const lock = granted ? ({ name, mode: "exclusive" } as Lock) : null;
+        granted = true;
+        return callback(lock);
+      },
+    );
+    const locks = { request } as unknown as LockManager;
+    await expect(run(client, { locks })).resolves.toBe("relayed");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(installs).toHaveLength(1);
+  });
+
+  it("fetches and uploads inside the granted lock and releases it when done", async () => {
+    let held = false;
+    let heldAtFetch: boolean | undefined;
+    const heldPerChunk: boolean[] = [];
+    const { client } = fakeClient([failed()], (chunk) => {
+      heldPerChunk.push(held);
+      return nextChunk(chunk);
+    });
+    const fetch = vi.fn(async () => {
+      heldAtFetch = held;
+      return archiveResponse();
+    });
+    const request = vi.fn(
+      async (
+        name: string,
+        _options: LockOptions,
+        callback: (lock: Lock | null) => Promise<unknown>,
+      ) => {
+        held = true;
+        try {
+          return await callback({ name, mode: "exclusive" });
+        } finally {
+          held = false;
+        }
+      },
+    );
+    const locks = { request } as unknown as LockManager;
+    await expect(run(client, { fetch, locks })).resolves.toBe("relayed");
+    expect(heldAtFetch).toBe(true);
+    expect(heldPerChunk).toEqual([true, true, true]);
+    expect(held).toBe(false);
+  });
+
+  it("runs one relay per page while another call keeps polling until the package is current", async () => {
+    const { client, installs } = relayingSidecar();
+    const fetch = vi.fn(async () => archiveResponse());
+    const deps = { fetch, sleep: yieldingSleep };
+    await expect(
+      Promise.all([run(client, deps), run(client, deps)]),
+    ).resolves.toEqual(["relayed", "current"]);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(installs.map((chunk) => chunk.chunk_index)).toEqual([0, 1, 2]);
+  });
+
+  it("lets a polling call of the page finish an upload whose relay was aborted", async () => {
+    const first = new AbortController();
+    const { client, installs } = relayingSidecar((chunk) => {
+      if (chunk.chunk_index !== 1 || first.signal.aborted) return undefined;
+      first.abort();
+      return new SidecarClientError("aborted", "aborted");
+    });
+    const fetch = vi.fn(async () => archiveResponse());
+    const deps = { fetch, sleep: yieldingSleep };
+    const [aborted, finished] = await Promise.allSettled([
+      run(client, deps, first.signal),
+      run(client, deps),
+    ]);
+    expect(aborted.status).toBe("rejected");
+    expect(finished).toEqual({ status: "fulfilled", value: "relayed" });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(installs.map((chunk) => chunk.chunk_index)).toEqual([0, 1, 1, 2]);
+    expect(new Set(installs.map((chunk) => chunk.upload_id)).size).toBe(1);
+  });
+
+  it("waits for an aborted relay of the page to unwind before resuming its upload", async () => {
+    let release = (_reply: SidecarInstallUiPackageV1Result): void => undefined;
+    const late = new Promise<SidecarInstallUiPackageV1Result>(
+      (resolve) => (release = resolve),
+    );
+    const first = fakeClient([failed()], (chunk) =>
+      chunk.chunk_index === 0 ? nextChunk(chunk) : late,
+    );
+    const fetch = vi.fn(async () => archiveResponse());
+    const unwinding = run(first.client, { fetch });
+    await vi.waitFor(() => expect(first.installs).toHaveLength(2));
+    controller.abort();
+
+    controller = new AbortController();
+    const second = fakeClient([pending], nextChunk);
+    const resumed = run(second.client, { fetch });
+    await vi.waitFor(() => expect(second.statusPolls()).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(second.installs).toHaveLength(0);
+
+    // The sidecar answers the aborted call's chunk 1 after all.
+    release({ state: "continue", next_chunk_index: 2 });
+    await expect(unwinding).rejects.toThrow();
+    await expect(resumed).resolves.toBe("relayed");
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(second.installs.map((chunk) => chunk.chunk_index)).toEqual([2]);
+    expect(
+      new Set(
+        [...first.installs, ...second.installs].map((chunk) => chunk.upload_id),
+      ).size,
+    ).toBe(1);
   });
 
   it("stops polling and uploading when aborted", async () => {
@@ -364,21 +531,9 @@ describe("installUiPackageWhenRefused", () => {
   });
 
   it("resumes the upload of a relay restarted in the same page", async () => {
-    const first = fakeClient([failed()], (chunk) => {
-      if (chunk.chunk_index === 0)
-        return { state: "continue", next_chunk_index: 1 };
-      controller.abort();
-      return new SidecarClientError("aborted", "aborted");
-    });
     const fetch = vi.fn(async () => archiveResponse());
-    await expect(run(first.client, { fetch })).rejects.toThrow();
-
-    controller = new AbortController();
-    const second = fakeClient([pending], (chunk) =>
-      chunk.chunk_index < 2
-        ? { state: "continue", next_chunk_index: chunk.chunk_index + 1 }
-        : { state: "installed" },
-    );
+    const first = await abortAfterFirstChunk(fetch);
+    const second = fakeClient([pending], nextChunk);
     await expect(run(second.client, { fetch })).resolves.toBe("relayed");
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(second.installs.map((chunk) => chunk.chunk_index)).toEqual([1, 2]);
@@ -387,6 +542,17 @@ describe("installUiPackageWhenRefused", () => {
         [...first.installs, ...second.installs].map((chunk) => chunk.upload_id),
       ).size,
     ).toBe(1);
+  });
+
+  it("does not continue its upload while the sidecar reports an unknown state", async () => {
+    const fetch = vi.fn(async () => archiveResponse());
+    await abortAfterFirstChunk(fetch);
+    const second = fakeClient([
+      { ...pending, state: "receiving", relay: true },
+      current,
+    ]);
+    await expect(run(second.client, { fetch })).resolves.toBe("current");
+    expect(second.installs).toHaveLength(0);
   });
 });
 
