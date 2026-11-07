@@ -92,7 +92,16 @@ pub async fn mcp_call_mapping(
         return rules.mapping;
     }
     let key = cache::ToolLabelCacheKey::new(user_id, server_id, tool, arguments);
-    cache.lookup(&key, arguments).await.unwrap_or(rules.mapping)
+    match cache.lookup(&key, arguments).await {
+        Some(mapping) if rules::cross_check(tool, arguments, mapping.action).is_empty() => mapping,
+        // For one key only the annotations can change the verdict, so the
+        // entry would be rejected on every later call too.
+        Some(_) => {
+            cache.forget(&key).await;
+            rules.mapping
+        }
+        None => rules.mapping,
+    }
 }
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
@@ -681,21 +690,26 @@ mod tests {
             model
         );
 
-        // An operator's override needs no invalidation.
+        // An operator's later override drops a mapping it rules out.
         let create = ToolCallLabelMapping {
             action: ToolCallAction::Create,
             ..model.clone()
         };
         let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
         cache
-            .get_or_compute(key, &first, async { Some(create.clone()) })
+            .get_or_compute(key.clone(), &first, async { Some(create.clone()) })
             .await;
         tool.annotations = hints(None, Some(true));
-        let cached = mcp_call_mapping(&cache, "user-c", "crm", &tool, &second).await;
-        assert_eq!(cached, create);
+        let rules_mapping =
+            rules::rules_label(&tool.name, &second, tool.annotations.as_ref()).mapping;
         assert_eq!(
-            checked_label("crm", &tool, &second, &cached),
-            generic_label(&second)
+            mcp_call_mapping(&cache, "user-c", "crm", &tool, &second).await,
+            rules_mapping
+        );
+        assert!(cache.entries().get(&key).await.is_none());
+        assert_eq!(
+            checked_label("crm", &tool, &second, &rules_mapping).source,
+            ToolCallLabelSource::Rules
         );
     }
 }

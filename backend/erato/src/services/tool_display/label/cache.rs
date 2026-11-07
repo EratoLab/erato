@@ -1,6 +1,7 @@
 //! Model label mappings per user, tool and argument shape. Entries and keys
-//! hold no argument value; the cross-check runs on every label, so nothing
-//! here is invalidated when a tool's annotations change.
+//! hold no argument value; `mcp_call_mapping` drops a mapping the
+//! cross-check rejects, so no hook invalidates entries when a tool's
+//! annotations change.
 
 use super::pointer::escape;
 use super::rules::verb_fields;
@@ -94,6 +95,10 @@ impl ToolLabelCache {
         }
         self.entries.invalidate(key).await;
         None
+    }
+
+    pub async fn forget(&self, key: &ToolLabelCacheKey) {
+        self.entries.invalidate(key).await;
     }
 
     /// The mapping for `key`, from `compute` on a miss; concurrent misses of
