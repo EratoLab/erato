@@ -1005,6 +1005,44 @@
       }
     },
     {
+      "name": "sidecar.install_ui_package.v1",
+      "summary": "Install the deployment's desktop UI package from archive chunks the client relays after the sidecar's own download failed; idempotent per upload chunk and per digest.",
+      "params": [
+        {
+          "name": "params",
+          "required": true,
+          "schema": {
+            "$ref": "./schemas/methods/sidecar-install-ui-package-v1-params.schema.json"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "./schemas/methods/sidecar-install-ui-package-v1-result.schema.json"
+        }
+      },
+      "errors": [
+        {
+          "$ref": "#/components/errors/CapabilityUnavailable"
+        },
+        {
+          "$ref": "#/components/errors/InvalidParams"
+        },
+        {
+          "$ref": "#/components/errors/SidecarInternal"
+        }
+      ],
+      "x-erato-capability": {
+        "id": "sidecar.install_ui_package",
+        "major": 1,
+        "method": "sidecar.install_ui_package.v1",
+        "availability": {
+          "state": "enabled"
+        }
+      }
+    },
+    {
       "name": "sidecar.request_permission.v1",
       "summary": "Open the platform permission flow for a supported permission. Full Disk Access opens macOS System Settings; the user must grant access and restart the sidecar. Unknown keys and inapplicable permissions return InvalidParams.",
       "params": [
@@ -1322,7 +1360,7 @@
     }
   },
   "x-erato-catalogue": {
-    "revision": "15",
-    "digest": "sha256:a07cdf3d7045420765a022b278c0401fc6bc27bc1dea54a0341c6a98e63ac025"
+    "revision": "16",
+    "digest": "sha256:425628035ee762440fcc5f062c595a2a37f2617c9518495e3a886764e60b8f34"
   }
 }

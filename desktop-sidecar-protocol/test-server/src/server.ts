@@ -10,6 +10,7 @@ import {
   MAX_BODY_BYTES,
   MAX_RESPONSE_BYTES,
   SIDECAR_PROVIDER,
+  UI_PACKAGE_CHUNK_BYTES,
   type CapabilityDescriptor,
   type DiscoverParams,
   type DiscoverResult,
@@ -23,6 +24,9 @@ import {
   type SearchQueryV1Params,
   type ToolProviderTable,
   type SidecarConfigureV1Params,
+  type SidecarInstallUiPackageV1Params,
+  type SidecarInstallUiPackageV1Result,
+  type SidecarUiPackageStatus,
   type DiscoveryDocument,
 } from "../../typescript/src/index.js";
 import {
@@ -48,6 +52,7 @@ import {
   validateOutlookListMailboxesV1Params,
   validateOutlookSearchEmailsV1Params,
   validateSidecarConfigureV1Params,
+  validateSidecarInstallUiPackageV1Params,
   validateSidecarProgressV1Params,
   validateSidecarStatusV1Params,
   validateSidecarRequestPermissionV1Params,
@@ -91,6 +96,16 @@ export interface MockSidecarOptions {
    * 0.1.46 or one hosting no desktop UI does.
    */
   ui?: DiscoverResult["ui"] | null;
+  /**
+   * How the sidecar's own download of an offered desktop UI package ends
+   * (default `"current"`: installed); `{ failed: reason }` reports that
+   * failure, relayable for `network`, `proxy` and `tls`. `null` omits
+   * `ui_package` from `sidecar.status.v1`, as a sidecar built before package
+   * 0.1.47 does.
+   */
+  uiPackageDownload?: "current" | "pending" | { failed: string } | null;
+  /** Whether a fully relayed archive verifies (default: every archive does). */
+  acceptRelayedArchive?: (bytes: Uint8Array) => boolean;
   /** How long a job runs before it completes, to exercise `wait_ms`. */
   jobDelayMs?: number;
   /** Size of the mock document in bytes (default: a short text). */
@@ -142,6 +157,20 @@ interface MockJob {
   waiters: Set<() => void>;
 }
 
+interface MockUiPackageOffer {
+  origin: string;
+  digest: string;
+  attemptedAt: string;
+}
+
+interface MockUiPackageUpload {
+  uploadId: string;
+  digest: string;
+  totalBytes: number;
+  chunkCount: number;
+  chunks: Buffer[];
+}
+
 type MethodOutcome =
   | { result: Record<string, unknown> }
   | { error: { code: number; message: string; data?: unknown } };
@@ -166,6 +195,7 @@ const TERMINAL_JOB_STATES = new Set<JobStatus["state"]>([
   "failed",
 ]);
 
+const RELAY_REASONS = new Set(["network", "proxy", "tls"]);
 const INSTANCE_ID = "mock-sidecar-instance";
 const INSTALLATION_ID = "mock-sidecar-installation-id-0123456789";
 const MOCK_UI: NonNullable<DiscoverResult["ui"]> = {
@@ -315,6 +345,11 @@ export class MockSidecar {
   #restartRequests = 0;
   #indexingStopped = false;
   #indexingResetCompletedAt: string | undefined;
+  #uiPackageOffer: MockUiPackageOffer | undefined;
+  #uiPackageDownload: "current" | "pending" | { failed: string } = "current";
+  #installedUiPackage: string | undefined;
+  #uiPackageUpload: MockUiPackageUpload | undefined;
+  #relayedArchive: Uint8Array | undefined;
 
   constructor(options: MockSidecarOptions) {
     if (options.allowedOrigins.length === 0) {
@@ -348,6 +383,11 @@ export class MockSidecar {
 
   get configuration(): unknown {
     return this.#configuration;
+  }
+
+  /** The last archive a client relayed completely, verified or not. */
+  get relayedArchive(): Uint8Array | undefined {
+    return this.#relayedArchive;
   }
 
   /**
@@ -645,7 +685,13 @@ export class MockSidecar {
         return rpcError(message.id, -32602, "Invalid method parameters.");
       return rpcResult(message.id, {
         permissions: { macos_full_disk_access: "unknown" },
+        ...(this.#hostsDesktopUi() && this.#options.uiPackageDownload !== null
+          ? { ui_package: this.#uiPackageStatus(origin) }
+          : {}),
       });
+    }
+    if (message.method === "sidecar.install_ui_package.v1") {
+      return this.#installUiPackage(origin, message);
     }
     if (message.method === "sidecar.request_permission.v1") {
       if (
@@ -817,6 +863,8 @@ export class MockSidecar {
       this.#configuration = structuredClone(
         message.params,
       ) as SidecarConfigureV1Params;
+      if (configuration.ui_package && this.#hostsDesktopUi())
+        this.#offerUiPackage(origin, configuration.ui_package.digest);
       return rpcResult(message.id, {});
     }
 
@@ -1370,12 +1418,156 @@ export class MockSidecar {
     }
   }
 
+  #hostsDesktopUi(): boolean {
+    return this.#options.ui !== null;
+  }
+
+  #offerUiPackage(origin: string, digest: string): void {
+    if (this.#uiPackageOffer?.digest !== digest) {
+      this.#uiPackageUpload = undefined;
+      this.#uiPackageDownload = this.#options.uiPackageDownload ?? "current";
+      if (this.#uiPackageDownload === "current")
+        this.#installedUiPackage = digest;
+    }
+    this.#uiPackageOffer = {
+      origin,
+      digest,
+      attemptedAt: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+    };
+  }
+
+  #uiPackageRelayable(origin: string): boolean {
+    const offer = this.#uiPackageOffer;
+    const download = this.#uiPackageDownload;
+    return (
+      offer !== undefined &&
+      offer.origin === origin &&
+      offer.digest !== this.#installedUiPackage &&
+      this.#uiPackageUpload === undefined &&
+      typeof download === "object" &&
+      RELAY_REASONS.has(download.failed)
+    );
+  }
+
+  #uiPackageStatus(origin: string): SidecarUiPackageStatus | null {
+    const offer = this.#uiPackageOffer;
+    if (!offer) return null;
+    const report = {
+      digest: offer.digest,
+      attempted_at: offer.attemptedAt,
+      relay: this.#uiPackageRelayable(origin),
+    };
+    if (offer.digest === this.#installedUiPackage)
+      return { ...report, state: "current" };
+    const download = this.#uiPackageDownload;
+    return this.#uiPackageUpload || typeof download !== "object"
+      ? { ...report, state: "pending" }
+      : { ...report, state: "failed", reason: download.failed };
+  }
+
+  /** The relay session rules of SPEC.md §11 for one upload in memory. */
+  #installUiPackage(
+    origin: string,
+    message: RequestMessage & { id: string | number },
+  ): unknown {
+    if (!this.#hostsDesktopUi())
+      return rpcError(
+        message.id,
+        -32011,
+        "The requested capability is unavailable.",
+        {
+          kind: "capability_unavailable",
+          method: message.method,
+          reasonCode: "desktop_ui_not_hosted",
+        },
+      );
+    if (!validateSidecarInstallUiPackageV1Params(message.params))
+      return rpcError(message.id, -32602, "Invalid method parameters.");
+    const params = message.params as SidecarInstallUiPackageV1Params;
+    const content = Buffer.from(params.content_base64, "base64");
+    const lastIndex = params.chunk_count - 1;
+    const upload = this.#uiPackageUpload;
+    if (
+      params.chunk_count !==
+        Math.ceil(params.total_bytes / UI_PACKAGE_CHUNK_BYTES) ||
+      params.chunk_index > lastIndex ||
+      content.byteLength !==
+        (params.chunk_index < lastIndex
+          ? UI_PACKAGE_CHUNK_BYTES
+          : params.total_bytes - UI_PACKAGE_CHUNK_BYTES * lastIndex) ||
+      (upload?.uploadId === params.upload_id &&
+        (upload.digest !== params.digest ||
+          upload.totalBytes !== params.total_bytes ||
+          upload.chunkCount !== params.chunk_count))
+    )
+      return rpcError(message.id, -32602, "Invalid method parameters.");
+
+    const answer = (result: SidecarInstallUiPackageV1Result) =>
+      rpcResult(message.id, result);
+    if (params.digest === this.#installedUiPackage) {
+      if (upload?.digest === params.digest) this.#uiPackageUpload = undefined;
+      return answer({ state: "installed" });
+    }
+    if (upload?.uploadId === params.upload_id) {
+      if (params.chunk_index === upload.chunks.length) {
+        upload.chunks.push(content);
+        if (upload.chunks.length === upload.chunkCount)
+          return answer(this.#finishUiPackageUpload(upload));
+      }
+      return answer({
+        state: "continue",
+        next_chunk_index: upload.chunks.length,
+      });
+    }
+    if (upload) return answer({ state: "busy" });
+    const offer = this.#uiPackageOffer;
+    if (offer?.origin !== origin || offer.digest !== params.digest)
+      return answer({ state: "refused", reason: "not_offered" });
+    if (this.#uiPackageDownload === "pending") return answer({ state: "busy" });
+    if (!this.#uiPackageRelayable(origin))
+      return answer({ state: "refused", reason: "not_eligible" });
+    if (params.chunk_index !== 0)
+      return answer({ state: "continue", next_chunk_index: 0 });
+    const started: MockUiPackageUpload = {
+      uploadId: params.upload_id,
+      digest: params.digest,
+      totalBytes: params.total_bytes,
+      chunkCount: params.chunk_count,
+      chunks: [content],
+    };
+    if (started.chunkCount === 1)
+      return answer(this.#finishUiPackageUpload(started));
+    this.#uiPackageUpload = started;
+    return answer({ state: "continue", next_chunk_index: 1 });
+  }
+
+  #finishUiPackageUpload(
+    upload: MockUiPackageUpload,
+  ): SidecarInstallUiPackageV1Result {
+    this.#uiPackageUpload = undefined;
+    const bytes = new Uint8Array(Buffer.concat(upload.chunks));
+    this.#relayedArchive = bytes;
+    if (this.#options.acceptRelayedArchive?.(bytes) === false) {
+      this.#uiPackageDownload = { failed: "verification" };
+      return { state: "refused", reason: "verification" };
+    }
+    this.#installedUiPackage = upload.digest;
+    return { state: "installed" };
+  }
+
   #discoveryDocument(): DiscoveryDocument {
     const document = structuredClone(canonicalOpenRpc);
     if (this.#options.omitMethods?.length) {
       document.methods = document.methods.filter(
         (method) => !this.#options.omitMethods?.includes(method.name),
       );
+    }
+    const relayMethod = document.methods.find(
+      (method) => method.name === "sidecar.install_ui_package.v1",
+    );
+    if (relayMethod?.["x-erato-capability"] && !this.#hostsDesktopUi()) {
+      (relayMethod["x-erato-capability"] as CapabilityDescriptor).availability =
+        { state: "disabled", reasonCode: "desktop_ui_not_hosted" };
     }
     const echoMethod = document.methods.find(
       (method) => method.name === "diagnostics.echo.v1",

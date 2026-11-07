@@ -3,6 +3,9 @@ export {
   MAX_BODY_BYTES,
   MAX_RESPONSE_BYTES,
   PROTOCOL_VERSIONS,
+  UI_PACKAGE_CHUNK_BYTES,
+  UI_PACKAGE_MAX_ARCHIVE_BYTES,
+  UI_PACKAGE_MAX_CHUNKS,
   checkMethodParams,
   checkMethodResult,
   createBrowserClientInfo,
@@ -15,6 +18,7 @@ export {
   type SidecarReadinessState,
   type SidecarMethodContract,
   type SidecarSnapshot,
+  type SidecarUiPackageStatus,
 } from "./client.js";
 export {
   SidecarClientError,
@@ -31,6 +35,8 @@ export {
 export type {
   SidecarStatusV1Params,
   SidecarStatusV1Result,
+  SidecarInstallUiPackageV1Params,
+  SidecarInstallUiPackageV1Result,
   SidecarRequestPermissionV1Params,
   SidecarRequestPermissionV1Result,
   CapabilityDescriptor,

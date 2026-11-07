@@ -621,3 +621,12 @@ and passes the four values on as `ui_package` of `sidecar.configure.v1`
 A deployment that fronts the backend with an authenticating proxy MUST route
 the two package paths past it, because such proxies strip the `Authorization`
 header; the Helm chart's `desktopSidecar.uiPackage.directRoute` does this.
+
+### Client relay
+
+The endpoints are unchanged by the relay (package 0.1.47). A client whose
+sidecar reports a relay-eligible failure fetches
+`GET /api/v1beta/desktop-sidecar/ui-package` from its own origin with the same
+token, compares the `ETag` with the offered digest, and relays the bytes to
+the sidecar ([SPEC.md](./SPEC.md#desktop-ui-package)). The
+authenticating-proxy rule above applies to the browser's request too.
