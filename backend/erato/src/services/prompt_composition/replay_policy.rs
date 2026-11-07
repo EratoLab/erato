@@ -154,22 +154,13 @@ fn lookup<'a>(value: &'a Value, path: &[String]) -> Option<&'a Value> {
     path.iter().try_fold(value, |current, key| current.get(key))
 }
 
-pub(crate) fn bounded(value: &Value) -> Value {
-    let size = json_size(value);
+fn bounded(value: &Value) -> Value {
+    let size = serde_json::to_string(value).map_or(usize::MAX, |json| json.len());
     if size <= MAX_RECEIPT_FIELD_BYTES {
         value.clone()
     } else {
-        omitted(size)
+        Value::String(format!("[omitted: {size} bytes]"))
     }
-}
-
-pub(crate) fn json_size(value: &Value) -> usize {
-    serde_json::to_string(value).map_or(usize::MAX, |json| json.len())
-}
-
-/// The marker that stands in for a value of `size` bytes of JSON.
-pub(crate) fn omitted(size: usize) -> Value {
-    Value::String(format!("[omitted: {size} bytes]"))
 }
 
 /// Rebuilds the kept value at the same nesting as in the source. A path that

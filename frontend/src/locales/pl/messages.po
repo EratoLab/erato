@@ -7796,6 +7796,11 @@ msgid "toolGist.move.failed"
 msgstr "{shape, select, full {Nie udało się przenieść: {kind} {title} do {where}} titled {Nie udało się przenieść: {kind} {title}} placed {Nie udało się przenieść: {kind} do {where}} other {Nie udało się przenieść: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Pozostałe argumenty"
+
+#. js-lingui-explicit-id
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.action"
 msgstr "akcja"
@@ -8262,6 +8267,11 @@ msgstr "Limit wywołań narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr ""
 
@@ -8335,8 +8345,13 @@ msgstr "Otwórz w {server}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Otwórz link"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Otwórz link"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Otwórz link - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

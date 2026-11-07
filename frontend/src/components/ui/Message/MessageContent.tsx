@@ -819,6 +819,10 @@ const decisionKeys = (part: ContentPart): string[] => {
   ].filter((key): key is string => typeof key === "string" && key.length > 0);
 };
 
+/** A map in which an id like `__proto__` or `constructor` is just a key. */
+const noPrototype = <T,>(): Record<string, T> =>
+  Object.create(null) as Record<string, T>;
+
 /** The decision a decision part records, or nothing for any other part. */
 const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
   if (part.content_type === "tool_approval") {
@@ -1352,7 +1356,7 @@ export const MessageContent = memo(function MessageContent({
           decisions[key] = decision;
         });
         return decisions;
-      }, {}),
+      }, noPrototype<ToolDecision>()),
     [content],
   );
 
