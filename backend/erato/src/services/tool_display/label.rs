@@ -107,10 +107,8 @@ pub fn mcp_call_label(
 }
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
-/// its verb, its core pointers all reach a value that is no consent flag or
-/// lookup name, and it shows every recipient; otherwise the generic label and
-/// a log line that names the reason and no argument value. A field that
-/// reaches such a claim is only left out.
+/// its verb and [`filtered_label`] keeps it; otherwise the generic label and a
+/// log line that names the reason and no argument value.
 pub fn checked_label(
     server_id: &str,
     tool: &rmcp::model::Tool,
@@ -120,14 +118,6 @@ pub fn checked_label(
     if mapping.source == ToolCallLabelSource::Generic {
         return generic_label(arguments);
     }
-    // The server chose the name: logs get a short, cleaned copy.
-    let tool_name = || {
-        sanitize_display_text(
-            context::text_prefix(&tool.name, MAX_DISPLAY_NAME_CHARS * 4),
-            MAX_DISPLAY_NAME_CHARS,
-        )
-        .text
-    };
     let flags = rules::cross_check(tool, arguments, mapping.action);
     if !flags.is_empty() {
         let reasons = flags
@@ -137,7 +127,7 @@ pub fn checked_label(
             .join(",");
         tracing::info!(
             server_id = %server_id,
-            tool_name = ?tool_name(),
+            tool_name = ?logged_tool_name(&tool.name),
             action = ?mapping.action,
             source = ?mapping.source,
             reasons = %reasons,
@@ -145,6 +135,32 @@ pub fn checked_label(
         );
         return generic_label(arguments);
     }
+    filtered_label(server_id, &tool.name, arguments, mapping)
+}
+
+// The server chose the name: logs get a short, cleaned copy.
+fn logged_tool_name(tool_name: &str) -> String {
+    sanitize_display_text(
+        context::text_prefix(tool_name, MAX_DISPLAY_NAME_CHARS * 4),
+        MAX_DISPLAY_NAME_CHARS,
+    )
+    .text
+}
+
+/// The checks every label passes, Erato's own included: its core pointers all
+/// reach a value that is no consent flag or lookup name, and it shows every
+/// recipient; otherwise the generic label and a log line. A field that
+/// reaches such a claim is only left out.
+pub fn filtered_label(
+    server_id: &str,
+    tool_name: &str,
+    arguments: &Value,
+    mapping: &ToolCallLabelMapping,
+) -> ToolCallLabel {
+    if mapping.source == ToolCallLabelSource::Generic {
+        return generic_label(arguments);
+    }
+    let tool_name = || logged_tool_name(tool_name);
     let recipients = rules::recipient_members(arguments);
     let mapping = &rules::with_every_recipient(mapping, &recipients);
     match resolve_label(mapping, arguments) {

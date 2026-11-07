@@ -3,7 +3,7 @@
 //! name what a call proposes; nothing is written until the user confirms it
 //! on the tool's own card.
 
-use super::{ToolCallLabelItemMapping, ToolCallLabelMapping, generic_label, resolve_label};
+use super::{ToolCallLabelItemMapping, ToolCallLabelMapping, filtered_label};
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelSource, ToolCallObjectKind,
 };
@@ -70,25 +70,35 @@ pub fn client_tool_mapping(config: &ClientToolLabelConfig) -> ToolCallLabelMappi
     }
 }
 
+/// What log lines about an own label name in place of an MCP server.
+const OWN_ORIGIN: &str = "erato";
+
 /// The label of a call of one of Erato's own tools. No rule second-guesses a
-/// verb written by hand next to the tool, and nothing shows a proposal's
-/// readable arguments, so its rows do not carry them.
-pub fn own_label(mapping: &ToolCallLabelMapping, arguments: &Value) -> ToolCallLabel {
-    match resolve_label(mapping, arguments) {
-        Ok(label) => ToolCallLabel {
-            arguments: None,
-            warnings: Vec::new(),
-            ..label
-        },
-        // Not reached: own mappings set only fields, and a field that reaches
-        // nothing is left out.
-        Err(_) => generic_label(arguments),
+/// verb written by hand next to the tool, but the checks every label passes
+/// still apply: a consent flag or lookup name is never a field, and a call
+/// that names recipients the label cannot all show gets the generic label.
+/// Nothing shows a proposal's readable arguments, so its rows do not carry
+/// them.
+pub fn own_label(
+    tool_name: &str,
+    mapping: &ToolCallLabelMapping,
+    arguments: &Value,
+) -> ToolCallLabel {
+    let label = filtered_label(OWN_ORIGIN, tool_name, arguments, mapping);
+    if label.source == ToolCallLabelSource::Generic {
+        return label;
+    }
+    ToolCallLabel {
+        arguments: None,
+        warnings: Vec::new(),
+        ..label
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::tool_display::label::generic_label;
     use serde_json::json;
 
     fn comment_changes() -> ClientToolLabelConfig {
@@ -131,7 +141,7 @@ mod tests {
         let mapping = client_tool_mapping(&comment_changes());
         assert_eq!(mapping.items[0].fields, ["/changes/*/op"]);
         for arguments in comment_change_calls() {
-            let label = own_label(&mapping, &arguments);
+            let label = own_label("word_submit_comment_changes", &mapping, &arguments);
             assert_eq!(
                 (label.action, label.object_kind, label.source),
                 (
@@ -160,6 +170,7 @@ mod tests {
             fields: Vec::new(),
         };
         let label = own_label(
+            "word_submit_document_plan",
             &client_tool_mapping(&plan),
             &json!({"version": 1, "snapshot": "s_1", "entries": []}),
         );
@@ -186,9 +197,117 @@ mod tests {
             (comment_changes(), json!({"changes": []})),
             (unparsed, json!({"changes": [{"op": "reply"}]})),
         ] {
-            let label = own_label(&client_tool_mapping(&config), &arguments);
+            let label = own_label("submit_comments", &client_tool_mapping(&config), &arguments);
             assert_eq!(label.source, ToolCallLabelSource::OwnMapping);
             assert!(label.items[0].fields.is_empty(), "{arguments}");
+        }
+    }
+
+    fn update_row(fields: &[&str]) -> ClientToolLabelConfig {
+        ClientToolLabelConfig {
+            action: ClientToolLabelAction::Update,
+            object_kind: ClientToolLabelObjectKind::Row,
+            fields: fields.iter().map(|field| field.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn an_own_table_never_shows_a_consent_flag_or_a_lookup_s_name() {
+        let arguments = json!({
+            "hasUserApproved": true,
+            "options": {"user_confirmed": "yes"},
+            "item": {
+                "statuscode": 2,
+                "customer": {"recordId": "c_1", "relatedTable": "account", "name": "Typed by the model"},
+            },
+        });
+        let table = update_row(&[
+            "$.hasUserApproved",
+            "$.options.user_confirmed",
+            "$.item.customer.name",
+            "$.item.statuscode",
+        ]);
+        let label = own_label("update_row", &client_tool_mapping(&table), &arguments);
+        assert_eq!(label.source, ToolCallLabelSource::OwnMapping);
+        let shown: Vec<_> = label.items[0]
+            .fields
+            .iter()
+            .map(|field| field.pointer.as_str())
+            .collect();
+        assert_eq!(shown, ["/item/statuscode"]);
+        let stored = serde_json::to_string(&label).unwrap();
+        assert!(!stored.contains("Typed by the model"), "{stored}");
+        assert!(!stored.contains("hasUserApproved"), "{stored}");
+    }
+
+    #[test]
+    fn an_own_table_names_every_recipient_or_gives_the_generic_label() {
+        let table = ClientToolLabelConfig {
+            action: ClientToolLabelAction::Send,
+            object_kind: ClientToolLabelObjectKind::Email,
+            fields: vec!["$.subject".into()],
+        };
+        let mapping = client_tool_mapping(&table);
+        let arguments =
+            json!({"to": ["ann@example.com"], "cc": ["bob@example.com"], "subject": "Q3"});
+        let label = own_label("stage_email", &mapping, &arguments);
+        assert_eq!(label.source, ToolCallLabelSource::OwnMapping);
+        let shown: Vec<_> = label.items[0]
+            .fields
+            .iter()
+            .map(|field| field.pointer.as_str())
+            .collect();
+        for pointer in ["/to", "/cc", "/subject"] {
+            assert!(shown.contains(&pointer), "{shown:?}");
+        }
+        assert_eq!(label.arguments, None);
+
+        let crowded = json!({
+            "to": ["a@example.com"],
+            "cc": ["b@example.com"],
+            "bcc": ["c@example.com"],
+            "attendees": ["d@example.com"],
+            "share_with": ["e@example.com"],
+            "subject": "Q3",
+        });
+        let label = own_label("stage_email", &mapping, &crowded);
+        assert_eq!(label, generic_label(&crowded));
+
+        // A proposal line shows no values, so recipients leave it as it is.
+        let proposal = own_label(
+            "stage_email",
+            &client_tool_mapping(&ClientToolLabelConfig {
+                fields: Vec::new(),
+                ..table
+            }),
+            &crowded,
+        );
+        assert_eq!(
+            (proposal.source, proposal.items.len(), proposal.arguments),
+            (ToolCallLabelSource::OwnMapping, 0, None)
+        );
+    }
+
+    #[test]
+    fn any_arguments_give_an_own_label_that_is_small_or_the_generic_one() {
+        let mappings = [
+            client_tool_mapping(&comment_changes()),
+            client_tool_mapping(&update_row(&["$.rows[*].name", "$.next[*].next", "$.body"])),
+            crate::services::client_actions::client_action_label_mapping(&json!({
+                "action": "outlook.reply"
+            })),
+        ];
+        for arguments in super::super::tests::hostile_arguments() {
+            for mapping in &mappings {
+                let label = super::super::guarded(|| own_label("tool", mapping, &arguments))
+                    .expect("labelling never panics");
+                let stored = serde_json::to_string(&label).unwrap().len();
+                assert!(stored < 64 * 1024, "label of {stored} bytes");
+                match label.source {
+                    ToolCallLabelSource::OwnMapping => assert_eq!(label.arguments, None),
+                    source => assert_eq!(source, ToolCallLabelSource::Generic),
+                }
+            }
         }
     }
 }

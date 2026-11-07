@@ -70,35 +70,46 @@ pub fn client_tool_call_display(
     config: &erato_config::config::ClientToolConfig,
     arguments: &serde_json::Value,
 ) -> Option<ToolDisplayMetadata> {
-    let mapping = label::own::client_tool_mapping(config.label.as_ref()?);
-    Some(own_tool_display(
-        &config.name,
-        label::own::own_label(&mapping, arguments),
-    ))
+    let table = config.label.as_ref()?;
+    own_tool_display(&config.name, arguments, || {
+        label::own::own_label(
+            &config.name,
+            &label::own::client_tool_mapping(table),
+            arguments,
+        )
+    })
 }
 
 /// What a `propose_client_action` call shows: the label of the action it
 /// proposes, whose card carries the rest.
-pub fn client_action_call_display(arguments: &serde_json::Value) -> ToolDisplayMetadata {
-    let mapping = crate::services::client_actions::client_action_label_mapping(arguments);
-    own_tool_display(
-        crate::services::client_actions::CLIENT_ACTION_TOOL_NAME,
-        label::own::own_label(&mapping, arguments),
-    )
+pub fn client_action_call_display(arguments: &serde_json::Value) -> Option<ToolDisplayMetadata> {
+    use crate::services::client_actions::{CLIENT_ACTION_TOOL_NAME, client_action_label_mapping};
+    own_tool_display(CLIENT_ACTION_TOOL_NAME, arguments, || {
+        label::own::own_label(
+            CLIENT_ACTION_TOOL_NAME,
+            &client_action_label_mapping(arguments),
+            arguments,
+        )
+    })
 }
 
+/// A labeller bug costs the call its label: the generic one, else the row as
+/// it was before labels.
 fn own_tool_display(
     name: &str,
-    label: crate::models::message::ToolCallLabel,
-) -> ToolDisplayMetadata {
-    ToolDisplayMetadata {
+    arguments: &serde_json::Value,
+    labeller: impl FnOnce() -> crate::models::message::ToolCallLabel,
+) -> Option<ToolDisplayMetadata> {
+    let label =
+        label::guarded(labeller).or_else(|| label::guarded(|| label::generic_label(arguments)))?;
+    Some(ToolDisplayMetadata {
         title: name.to_string(),
         description: None,
         description_truncated: false,
         server_name: None,
         label: Some(label),
         read_only: false,
-    }
+    })
 }
 
 /// A tool that says it is both read-only and destructive is shown as a write,
@@ -334,7 +345,8 @@ mod tests {
         );
         assert_eq!(label.items[0].fields[0].values[0].text, "resolve");
 
-        let proposal = client_action_call_display(&serde_json::json!({"action": "outlook.reply"}));
+        let proposal =
+            client_action_call_display(&serde_json::json!({"action": "outlook.reply"})).unwrap();
         assert_eq!(proposal.title, "propose_client_action");
         let label = proposal.label.unwrap();
         assert_eq!(
@@ -345,6 +357,45 @@ mod tests {
                 ToolCallLabelSource::OwnMapping
             )
         );
+    }
+
+    #[test]
+    fn an_own_labeller_that_panics_costs_the_call_only_its_label() {
+        let arguments = serde_json::json!({"action": "outlook.reply", "body": "Hi"});
+        let display = own_tool_display("propose_client_action", &arguments, || {
+            panic!("labeller bug")
+        })
+        .unwrap();
+        assert_eq!(display.title, "propose_client_action");
+        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+
+        let config: erato_config::config::ClientToolConfig =
+            serde_json::from_value(serde_json::json!({
+                "name": "word_submit_document_plan",
+                "namespace": "word",
+                "description": "Stage a plan.",
+                "parameters": "{}",
+                "label": {"action": "update", "object_kind": "document"},
+            }))
+            .unwrap();
+        for arguments in [
+            serde_json::json!(null),
+            serde_json::json!("not json {"),
+            serde_json::json!([{"action": "outlook.reply"}]),
+            serde_json::json!({"action": {"nested": [1, 2, 3]}, "to": "x".repeat(1024 * 1024)}),
+        ] {
+            for display in [
+                client_tool_call_display(&config, &arguments),
+                client_action_call_display(&arguments),
+            ] {
+                let display = display.expect("an own tool always keeps a display");
+                assert_eq!(
+                    display.label.as_ref().map(|label| label.source),
+                    Some(ToolCallLabelSource::OwnMapping)
+                );
+                assert!(serde_json::to_string(&display).unwrap().len() < 4 * 1024);
+            }
+        }
     }
 
     #[test]
