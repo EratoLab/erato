@@ -7,7 +7,7 @@ const ACCOUNT: &str = "5f0c2a10-0000-4000-8000-00000000c001";
 const CONTACT: &str = "5f0c2a10-0000-4000-8000-00000000b001";
 
 fn label(tool: &str, arguments: Value) -> RulesLabel {
-    rules_label(tool, &arguments, None)
+    rules_label(tool, &arguments, None, None)
 }
 
 fn item(tool: &str, arguments: Value) -> ToolCallLabelItemMapping {
@@ -63,7 +63,7 @@ fn a_declared_verb_field_wins_over_the_tool_name() {
             ToolCallAction::Send,
         ),
     ] {
-        let rules = rules_label(name, &arguments, None);
+        let rules = rules_label(name, &arguments, None, None);
         assert_eq!(rules.mapping.action, action, "{name}");
         assert_eq!(rules.mapping.source, ToolCallLabelSource::Rules);
         let field = verb_fields(&arguments)[0].0;
@@ -481,7 +481,7 @@ fn fields_leave_out_shown_parts_the_table_long_text_and_consent_flags() {
         "create_record",
         json!({"tablename": "task", "hasUserApproved": true, "item": {
             "subject": "Call back",
-            "user_confirmed": true,
+            "Has_User_Approved": true,
             "description": "Line one.\nLine two.",
             "scheduledend": "2030-01-15",
             "a": 1, "b": 2, "c": 3, "d": 4,
@@ -508,9 +508,63 @@ fn fields_leave_out_shown_parts_the_table_long_text_and_consent_flags() {
 }
 
 #[test]
+fn consent_is_the_configured_argument_or_has_user_approved_and_no_other_member() {
+    let arguments = json!({
+        "id": CONTACT,
+        "userConfirmed": true,
+        "contact": {
+            "hasUserApproved": "yes",
+            "marketing_consent": true,
+            "cookieConsent": "yes",
+            "user_approved": true,
+        },
+    });
+    let fields = |approval_argument| {
+        rules_label("update_contact", &arguments, None, approval_argument)
+            .mapping
+            .items[0]
+            .fields
+            .clone()
+    };
+    assert_eq!(
+        fields(None),
+        [
+            "/userConfirmed",
+            "/contact/marketing_consent",
+            "/contact/cookieConsent",
+            "/contact/user_approved",
+        ]
+    );
+    assert_eq!(
+        fields(Some("userConfirmed")),
+        [
+            "/contact/marketing_consent",
+            "/contact/cookieConsent",
+            "/contact/user_approved",
+        ]
+    );
+    let created = rules_label(
+        "create_contact",
+        &json!({"contact": {
+            "name": "Ann",
+            "marketing_consent": true,
+            "consent": "granted",
+            "has-user-approved": true,
+            "userConfirmed": true,
+        }}),
+        None,
+        Some("userConfirmed"),
+    );
+    assert_eq!(
+        created.mapping.items[0].fields,
+        ["/contact/marketing_consent", "/contact/consent"]
+    );
+}
+
+#[test]
 fn the_rules_say_when_a_model_should_label_the_call() {
     let unsure = |tool: &str, arguments: Value, annotations: Option<ToolAnnotations>| {
-        rules_label(tool, &arguments, annotations.as_ref()).unsure
+        rules_label(tool, &arguments, annotations.as_ref(), None).unsure
     };
     assert_eq!(
         unsure("sign_out", json!({}), None),
@@ -949,7 +1003,18 @@ fn claims_are_consent_flags_and_lookup_names_wherever_they_sit() {
     let arguments = json!({
         "name": "The record's own name",
         "hasUserApproved": true,
-        "options": {"user_confirmed": "Yes", "approved": true, "userConsent": false},
+        "options": {
+            "has_user_approved": "pending",
+            "HasUserApproved": {"by": "the model"},
+            "has-user-approved": ["yes"],
+            "HAS_USER_APPROVED": false,
+            "user_confirmed": "Yes",
+            "approved": true,
+            "userConsent": false,
+            "hasUserApprovedAt": "2030-01-15",
+        },
+        "contact": {"marketing_consent": true, "cookieConsent": "yes", "consent": "no"},
+        "confirmedByUser": {"note": "a record's field"},
         "customer": lookup(ACCOUNT, "account"),
         "parent": {"name": "Parent", "parentaccountid": ACCOUNT},
         "to": [{"recordId": CONTACT, "name": ["Typed", "names"], "relatedTable": "contact"}],
@@ -957,14 +1022,49 @@ fn claims_are_consent_flags_and_lookup_names_wherever_they_sit() {
         "user_confirmation_note": "Called on Monday",
     });
     let at = |path: &str| {
-        let value = arguments.pointer(path).unwrap();
-        claim(&arguments, path, value)
+        assert!(arguments.pointer(path).is_some(), "{path}");
+        claim(&arguments, path, None)
     };
-    assert_eq!(at("/hasUserApproved"), Some(Claim::Consent));
-    assert_eq!(at("/options/user_confirmed"), Some(Claim::Consent));
-    assert_eq!(at("/options/userConsent"), Some(Claim::Consent));
-    assert_eq!(at("/options/approved"), None);
-    assert_eq!(at("/user_confirmation_note"), None);
+    for consent in [
+        "/hasUserApproved",
+        "/options/has_user_approved",
+        "/options/HasUserApproved",
+        "/options/HasUserApproved/by",
+        "/options/has-user-approved/0",
+        "/options/HAS_USER_APPROVED",
+    ] {
+        assert_eq!(at(consent), Some(Claim::Consent), "{consent}");
+    }
+    for data in [
+        "/options/user_confirmed",
+        "/options/userConsent",
+        "/options/approved",
+        "/options/hasUserApprovedAt",
+        "/contact/marketing_consent",
+        "/contact/cookieConsent",
+        "/contact/consent",
+        "/confirmedByUser/note",
+        "/user_confirmation_note",
+    ] {
+        assert_eq!(at(data), None, "{data}");
+    }
+    // The server's configured approval argument, exactly as configured.
+    let configured = |path: &str| claim(&arguments, path, Some("confirmedByUser"));
+    assert_eq!(configured("/confirmedByUser/note"), Some(Claim::Consent));
+    assert_eq!(configured("/hasUserApproved"), Some(Claim::Consent));
+    assert_eq!(configured("/contact/marketing_consent"), None);
+    assert_eq!(
+        claim(
+            &arguments,
+            "/contact/marketing_consent",
+            Some("marketing_consent")
+        ),
+        Some(Claim::Consent)
+    );
+    assert_eq!(
+        claim(&arguments, "/contact/cookieConsent", Some("cookieconsent")),
+        None
+    );
     assert_eq!(at("/customer/name"), Some(Claim::LookupName));
     assert_eq!(at("/customer/recordId"), None);
     assert_eq!(at("/to/0/name/1"), Some(Claim::LookupName));
@@ -976,7 +1076,7 @@ fn claims_are_consent_flags_and_lookup_names_wherever_they_sit() {
     );
     assert_eq!(at("/name"), None, "the call itself is never a lookup");
     assert_eq!(
-        claim(&arguments, "/missing/name", &json!("x")),
+        claim(&arguments, "/missing/name", None),
         None,
         "a path the arguments do not hold"
     );
@@ -1062,7 +1162,7 @@ fn the_rules_and_the_cross_check_are_total_and_bounded_on_hostile_input() {
         assert!(recipients.len() <= MAX_RECIPIENT_MEMBERS);
         assert!(verb_fields(arguments).len() <= MAX_VERB_FIELDS);
         for name in names {
-            let rules = rules_label(name, arguments, contradicting.as_ref());
+            let rules = rules_label(name, arguments, contradicting.as_ref(), None);
             for item in &rules.mapping.items {
                 for pointer in [
                     &item.title,
@@ -1159,7 +1259,7 @@ fn score(fixture: &str) -> Score {
     let mut parts = [0usize; 5];
     for line in fixture.lines().filter(|line| !line.trim().is_empty()) {
         let case: Case = serde_json::from_str(line).unwrap();
-        let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref());
+        let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref(), None);
         let mapping = &rules.mapping;
         let got = mapping.items.first().cloned().unwrap_or_default();
         let want = case.expected.items.first().cloned().unwrap_or_default();

@@ -13594,7 +13594,7 @@ mod tests {
             }],
             source: ToolCallLabelSource::Rules,
         };
-        let written = resolve_label(&mapping, &arguments).unwrap();
+        let written = resolve_label(&mapping, &arguments, None).unwrap();
         let mut resolved = written.clone();
         resolved.items[0].id.as_mut().unwrap().values[0].resolved =
             Some("Named by the child's results".into());
@@ -14654,6 +14654,7 @@ mod tests {
                 source: ToolCallLabelSource::Model,
             },
             &call.fn_arguments,
+            None,
         )
         .unwrap();
         let cases = configs

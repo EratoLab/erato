@@ -39,7 +39,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 /// the server's name from the live config and the call's label, with the IDs
 /// it names resolved from earlier results in the chat, stored with the call's
 /// parts. `approval_argument` is the tool's consent argument, which the label
-/// leaves out.
+/// leaves out; the server's configured one is a consent flag on any tool.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -49,16 +49,22 @@ pub fn mcp_tool_call_display(
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
     let arguments = without_approval_argument(arguments, approval_argument);
+    let consent = approval_argument.or_else(|| {
+        config
+            .mcp_servers
+            .get(server_id)
+            .and_then(|server| server.approval_argument.as_deref())
+    });
     let scope = names_scope(config, server_id);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
-        let mut label = label::mcp_call_label(server_id, tool, &arguments);
+        let mut label = label::mcp_call_label(server_id, tool, &arguments, consent);
         if let Some(server) = &scope {
             context.resolve(&mut label, &arguments, server);
         }
         label
     })
-    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, &arguments)))
+    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, &arguments, consent)))
     .or_else(|| label::guarded(|| label::generic_label(&arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
@@ -370,7 +376,7 @@ mod tests {
             source: crate::models::message::ToolCallLabelSource::Rules,
         };
         let shown = without_approval_argument(&arguments, Some("hasUserApproved"));
-        let label = label::resolve_label(&mapping, &shown).unwrap();
+        let label = label::resolve_label(&mapping, &shown, None).unwrap();
         let paths: Vec<_> = label.items[0].fields[0]
             .values
             .iter()
@@ -384,7 +390,59 @@ mod tests {
             }],
             ..mapping
         };
-        assert!(label::resolve_label(&consent, &shown).is_err());
+        assert!(label::resolve_label(&consent, &shown, None).is_err());
+    }
+
+    #[test]
+    fn the_server_s_approval_argument_is_a_consent_flag_on_every_tool() {
+        let server = |approval_argument: Option<&str>| {
+            let mut server = serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            });
+            if let Some(name) = approval_argument {
+                server["approval_argument"] = name.into();
+            }
+            server
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dv": server(Some("userConfirmed")),
+                "crm": server(None),
+            }
+        }))
+        .unwrap();
+        // The tool does not declare the argument, so the call keeps it.
+        let tool = Tool::new("update_record", "Updates a record.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "recordId": "r1",
+            "userConfirmed": true,
+            "marketing_consent": true,
+            "statuscode": 2,
+        });
+        let fields = |server_id: &str| {
+            let label = mcp_tool_call_display(
+                &config,
+                server_id,
+                &tool,
+                &arguments,
+                None,
+                &Default::default(),
+            )
+            .label
+            .unwrap();
+            assert_eq!(label.arguments, label::generic_label(&arguments).arguments);
+            label.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(fields("dv"), ["/marketing_consent", "/statuscode"]);
+        assert_eq!(
+            fields("crm"),
+            ["/userConfirmed", "/marketing_consent", "/statuscode"]
+        );
     }
 
     #[test]
@@ -549,7 +607,7 @@ mod tests {
             }],
             source: ToolCallLabelSource::Rules,
         };
-        let written = resolve_label(&mapping, &arguments).unwrap();
+        let written = resolve_label(&mapping, &arguments, None).unwrap();
         let mut resolved = written.clone();
         let item = &mut resolved.items[0];
         let mut set = 0;
