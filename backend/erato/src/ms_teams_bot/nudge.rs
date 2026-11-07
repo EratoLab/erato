@@ -498,6 +498,7 @@ impl DeliveryProducer for InactivityNudgeProducer {
         Ok(ResolvedContent {
             channel: CHANNEL.to_string(),
             content: DeliveryContent {
+                title: None,
                 text: tip,
                 summary: Some(format!("A tip from {}", self.app_name)),
                 links,
@@ -596,7 +597,16 @@ pub fn reminders_command(text: &str) -> Option<bool> {
 /// The card a delivered message is rendered as: its text, link buttons and
 /// single-use action buttons that name the delivery row.
 pub fn delivery_card(content: &DeliveryContent, delivery_id: Uuid) -> Value {
-    let body = vec![json!({"type": "TextBlock", "text": content.text, "wrap": true})];
+    let mut body = Vec::new();
+    if let Some(title) = content.title.as_deref().filter(|title| !title.is_empty()) {
+        body.push(json!({
+            "type": "TextBlock", "text": title, "wrap": true,
+            "weight": "Bolder", "size": "Medium",
+        }));
+    }
+    if !content.text.is_empty() {
+        body.push(json!({"type": "TextBlock", "text": content.text, "wrap": true}));
+    }
     let mut actions: Vec<Value> = content
         .links
         .iter()
@@ -862,6 +872,7 @@ mod tests {
         let delivery_id = Uuid::new_v4();
         let token = Uuid::new_v4();
         let content = DeliveryContent {
+            title: None,
             text: "Did you know?".into(),
             summary: Some("A tip from Hugo".into()),
             links: vec![DeliveryLink {
@@ -888,6 +899,27 @@ mod tests {
             DeliverySubmit::from_value(&json!({"action": "other", "delivery_id": delivery_id, "command": "x", "token": token}))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn delivery_card_puts_the_title_above_the_text() {
+        let card = |title: Option<&str>, text: &str| {
+            delivery_card(
+                &DeliveryContent {
+                    title: title.map(str::to_string),
+                    text: text.into(),
+                    ..Default::default()
+                },
+                Uuid::new_v4(),
+            )["attachments"][0]["content"]["body"]
+                .clone()
+        };
+        let body = card(Some("Call Ms Schulz"), "About the delivery date.");
+        assert_eq!(body[0]["text"], "Call Ms Schulz");
+        assert_eq!(body[0]["weight"], "Bolder");
+        assert_eq!(body[1]["text"], "About the delivery date.");
+        let title_only = card(Some("Call Ms Schulz"), "");
+        assert_eq!(title_only.as_array().unwrap().len(), 1);
     }
 
     #[test]

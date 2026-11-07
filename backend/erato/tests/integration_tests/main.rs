@@ -28,6 +28,7 @@ mod db;
 mod llm;
 mod ms_teams_bot;
 mod scheduled_deliveries;
+mod scheduled_items;
 mod test_utils;
 
 // Using a (possibly brittle?) life-before-main method to set the DATABASE_URL before any tests run.

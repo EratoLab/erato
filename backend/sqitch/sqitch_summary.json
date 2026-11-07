@@ -67,7 +67,8 @@
     "deploy/0065_drop_local_evidence_exports.sql",
     "deploy/0066_add_scheduled_deliveries.sql",
     "deploy/0067_add_teams_nudge_opt_out.sql",
-    "deploy/0068_add_user_time_zone_and_language.sql"
+    "deploy/0068_add_user_time_zone_and_language.sql",
+    "deploy/0069_add_scheduled_items.sql"
   ],
-  "latest_change": "5ff60ec257804037563abe424d8453ee6d8a67bf"
+  "latest_change": "5c6db87480af1d5158cfb80e58dec30f59e95fa4"
 }

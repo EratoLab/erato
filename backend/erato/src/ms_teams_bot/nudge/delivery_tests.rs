@@ -75,6 +75,7 @@ async fn harness(pool: sqlx::PgPool) -> (AppState, Arc<TeamsBot>, Shared, String
 
 fn content(token: Uuid) -> DeliveryContent {
     DeliveryContent {
+        title: None,
         text: "Did you know you can attach files?".into(),
         summary: Some("A tip from Erato".into()),
         links: vec![DeliveryLink {
