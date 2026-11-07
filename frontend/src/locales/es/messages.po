@@ -7777,6 +7777,7 @@ msgstr "{count, plural, one {tarea} other {# tareas}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# más} other {+# más}}"
 
@@ -7794,6 +7795,11 @@ msgstr "{shape, select, full {Movimiento completado: {kind} {title} a {where}} t
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.move.failed"
 msgstr "{shape, select, full {No se pudo mover: {kind} {title} a {where}} titled {No se pudo mover: {kind} {title}} placed {No se pudo mover: {kind} a {where}} other {No se pudo mover: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Otros argumentos"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/ownProposalLabels.ts
@@ -8262,6 +8268,11 @@ msgstr "Presupuesto de llamadas a herramientas"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr ""
 
@@ -8335,8 +8346,13 @@ msgstr "Abrir en {server}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Abrir enlace"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Abrir enlace"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Abrir enlace - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

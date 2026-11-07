@@ -70,7 +70,7 @@ fn name(context: &ToolResultContext, id: Value) -> Option<String> {
         ..Default::default()
     };
     let item = item(context, ToolCallAction::Delete, mapping, &arguments);
-    item.id.unwrap().values[0].resolved.clone()
+    item.id?.values.first()?.resolved.clone()
 }
 
 /// What an update shows as the old value of `field` on record `id`.
@@ -781,6 +781,400 @@ fn names_are_cleaned_and_results_and_the_index_are_capped() {
         .collect();
     let context = after(vec![call("wide", "fetch", json!({}), Value::Object(wide))]);
     assert_eq!(context.records["w"].fields.len(), MAX_FIELDS_PER_RECORD);
+}
+
+/// A strict-mode desktop sidecar call parks while the user reviews its
+/// result; the row stays in progress and holds nothing the index reads.
+#[test]
+fn a_result_still_held_for_review_is_never_read() {
+    let search = |status, output| ToolUse {
+        status,
+        ..call(
+            "sidecar-search",
+            "search_sidecar_index",
+            json!({ "query": "Line 4" }),
+            output,
+        )
+    };
+    let held = json!({ "results": [{ "id": "doc-1", "title": "Held for review" }] });
+    let parked = vec![
+        ContentPart::ToolUse(search(ToolCallStatus::InProgress, held.clone())),
+        ContentPart::ClientToolPending(crate::services::client_operations::ClientToolPending {
+            attempt_id: uuid::Uuid::nil(),
+            tool_call_id: "sidecar-search".into(),
+            pending_tool_calls: Vec::new(),
+        }),
+    ];
+    let messages = replay_assistant_content(&MessageRole::Assistant, parked.clone());
+    let mut context = ToolResultContext::from_messages(&GenerationInputMessages { messages });
+    context.observe(&parked);
+    for status in [ToolCallStatus::Preparing, ToolCallStatus::InProgress] {
+        context.observe(&[ContentPart::ToolUse(search(status, held.clone()))]);
+    }
+    assert_eq!(name(&context, json!("doc-1")), None);
+
+    // Declined in the review window: the call ends failed and names nothing.
+    let mut declined = context.clone();
+    declined.observe(&[ContentPart::ToolUse(search(
+        ToolCallStatus::Error,
+        json!({ "error": "The user declined to share this result." }),
+    ))]);
+    assert_eq!(name(&declined, json!("doc-1")), None);
+
+    context.observe(&[ContentPart::ToolUse(search(ToolCallStatus::Success, held))]);
+    assert_eq!(
+        name(&context, json!("doc-1")).as_deref(),
+        Some("Held for review")
+    );
+}
+
+#[test]
+fn a_delegated_task_retires_every_old_value_and_its_output_names_nothing() {
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    let task = |status, output| ToolUse {
+        status,
+        ..call(
+            "task",
+            erato_config::config::DELEGATE_TASK_TOOL_NAME,
+            json!({ "task": "Tidy the pipeline" }),
+            output,
+        )
+    };
+    let mut envelope = json!({
+        "status": "completed",
+        "delegate_chat_id": CONTACT,
+        "child_run_id": CONTACT,
+        "parent_tool_call_id": "task",
+        "result": "Done.",
+        "truncated": false,
+        "records": [{ "id": "child-row", "name": "Read by the child" }],
+    });
+    envelope[crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY] = json!({
+        "steps": [{ "sequence": 1, "id": "search_records", "status": "ok", "name": "Step" }],
+    });
+    for status in [ToolCallStatus::Success, ToolCallStatus::Error] {
+        let context = after(vec![read.clone(), task(status, envelope.clone())]);
+        assert_eq!(earlier(&context, OPPORTUNITY, "risklevel", json!(3)), None);
+        assert_eq!(
+            name(&context, json!(OPPORTUNITY)).as_deref(),
+            Some("Line 4 retrofit")
+        );
+        for unread in ["child-row", "search_records"] {
+            assert_eq!(name(&context, json!(unread)), None, "{unread}");
+        }
+    }
+    let declined = task(
+        ToolCallStatus::Error,
+        json!({ "status": "rejected", "error": "The user declined this task." }),
+    );
+    let context = after(vec![read, declined]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+}
+
+#[test]
+fn only_erato_s_own_refusal_keeps_old_values_not_a_server_error_shaped_like_it() {
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    for output in [
+        json!({ "status": "rejected", "error": "Partly written.", "written": 1 }),
+        json!({ "status": "rejected", "error": { "code": 3 } }),
+        json!({ "status": "rejected" }),
+    ] {
+        let write = ToolUse {
+            status: ToolCallStatus::Error,
+            ..call(
+                "write",
+                "update_record",
+                json!({ "recordId": OPPORTUNITY, "item": { "risklevel": 2 } }),
+                output.clone(),
+            )
+        };
+        let context = after(vec![read.clone(), write]);
+        assert_eq!(
+            earlier(&context, OPPORTUNITY, "risklevel", json!(3)),
+            None,
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn calls_without_an_id_or_past_the_turns_window_are_never_read_twice() {
+    let read = |id: &str| {
+        read_query(
+            id,
+            "SELECT name, opportunityid, risklevel FROM opportunity",
+            json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+        )
+    };
+    let update = call(
+        "update",
+        "update_record",
+        json!({ "recordId": OPPORTUNITY, "item": { "risklevel": 2 } }),
+        json!("Record updated successfully."),
+    );
+    let mut context = after(vec![read("")]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+    let running = [ContentPart::ToolUse(read("")), ContentPart::ToolUse(update)];
+    context.observe(&running);
+    context.observe(&running);
+    assert_eq!(earlier(&context, OPPORTUNITY, "risklevel", json!(3)), None);
+
+    let mut calls = vec![read("old-read")];
+    calls.extend(
+        (0..MAX_CALLS_READ).map(|i| call(&format!("c{i}"), "ping", json!({}), json!("pong"))),
+    );
+    let mut context = after(calls);
+    assert_eq!(name(&context, json!(OPPORTUNITY)), None);
+    // A resumed turn's own parts are in its generation input too.
+    context.observe(&[ContentPart::ToolUse(read("old-read"))]);
+    assert_eq!(name(&context, json!(OPPORTUNITY)), None);
+}
+
+#[test]
+fn hostile_results_and_arguments_are_read_without_panicking_and_name_nothing_odd() {
+    let mut deep = json!({ "id": "deep", "name": "Too deep" });
+    for _ in 0..500 {
+        deep = json!({ "id": "level", "name": "Level", "inner": [deep] });
+    }
+    let wide: Map<String, Value> = (0..MAX_NODES_PER_VALUE + 1)
+        .map(|i| {
+            (
+                format!("5f0c2a10-0000-4000-8000-{i:012}"),
+                json!({ "name": "Row" }),
+            )
+        })
+        .collect();
+    let hostile_outputs = [
+        json!(null),
+        json!(true),
+        json!(42.5),
+        json!([1, "two", null, [], {}]),
+        json!("not json {"),
+        json!("x".repeat(256 * 1024)),
+        json!(format!("Created record with ID {TASK}.").repeat(100)),
+        json!({ "id": {}, "name": ["not", "text"] }),
+        json!({ "id": null, "title": 7 }),
+        json!({ "id": "", "name": "Empty ID" }),
+        json!({ "id": "has space", "name": "Spaced ID" }),
+        json!({ "id": "x".repeat(MAX_ID_CHARS + 1), "name": "Long ID" }),
+        json!({ "id": -3, "name": "Negative" }),
+        json!({ "id": 1.5, "name": "Fraction" }),
+        deep.clone(),
+        Value::Object(wide),
+        json!((0..MAX_NODES_PER_VALUE + 1).collect::<Vec<_>>()),
+    ];
+    let hostile_inputs = [
+        json!(null),
+        json!("not an object"),
+        json!([OPPORTUNITY]),
+        json!({ "querytext": "word ".repeat(20_000) }),
+        json!({ "ids": format!("{OPPORTUNITY} ").repeat(1_000) }),
+        deep,
+    ];
+    let mut calls = Vec::new();
+    for (i, output) in hostile_outputs.iter().enumerate() {
+        for (j, input) in hostile_inputs.iter().enumerate() {
+            let mut tool = call(
+                &format!("{i}-{j}"),
+                "create_record",
+                input.clone(),
+                output.clone(),
+            );
+            tool.input = (j > 0).then(|| input.clone());
+            calls.push(tool);
+        }
+    }
+    let context = after(calls);
+    for missed in [
+        json!("deep"),
+        json!(""),
+        json!("has space"),
+        json!(-3),
+        json!(1.5),
+        json!(TASK),
+        json!("5f0c2a10-0000-4000-8000-000000000000"),
+    ] {
+        assert_eq!(name(&context, missed.clone()), None, "{missed}");
+    }
+    assert!(context.records.len() <= MAX_RECORDS);
+    assert!(context.bytes <= MAX_INDEX_BYTES);
+
+    // Thousands of UUIDs in one call, or text too long to search, pass the
+    // caps: no old value counts.
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    let per_text = MAX_ID_SCAN_BYTES / 40;
+    let texts: Vec<String> = (0..MAX_ARGUMENT_IDS / per_text + 1)
+        .map(|text| {
+            (0..per_text)
+                .map(|i| format!("5f0c2a10-0000-4000-{text:04}-{i:012} "))
+                .collect()
+        })
+        .collect();
+    assert!(texts.iter().all(|text| text.len() <= MAX_ID_SCAN_BYTES));
+    let long = format!("{}{OPPORTUNITY}", " ".repeat(MAX_ID_SCAN_BYTES));
+    for arguments in [json!({ "texts": texts }), json!({ "text": long })] {
+        let bulk = call("bulk", "notify", arguments, json!("Sent."));
+        let context = after(vec![read.clone(), bulk]);
+        assert_eq!(earlier(&context, OPPORTUNITY, "risklevel", json!(3)), None);
+        assert_eq!(
+            name(&context, json!(OPPORTUNITY)).as_deref(),
+            Some("Line 4 retrofit")
+        );
+    }
+    let short = call(
+        "short",
+        "notify",
+        json!({ "text": "Hello" }),
+        json!("Sent."),
+    );
+    let context = after(vec![read, short]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+
+    let padded = format!("{}Acme", "\u{200B}".repeat(MAX_CLEAN_BYTES));
+    let context = after(vec![call(
+        "padded",
+        "fetch",
+        json!({}),
+        json!([{ "id": "p1", "name": padded }, { "id": "p2", "name": format!("\u{200B}{}Globex", " ".repeat(10)) }]),
+    )]);
+    assert_eq!(name(&context, json!("p1")), None);
+    assert_eq!(name(&context, json!("p2")).as_deref(), Some("Globex"));
+}
+
+#[test]
+fn odd_member_names_and_ids_resolve_as_written_and_names_are_cleaned() {
+    let context = after(vec![call(
+        "read",
+        "fetch",
+        json!({}),
+        json!({
+            "id": "id/with~odd\u{7}",
+            "name": "\u{202E}Acme\u{200B}\u{0}",
+            "a/b": "slash",
+            "m~n": "tilde",
+            "\u{202E}x": "bidi",
+            "": "empty member",
+        }),
+    )]);
+    assert_eq!(
+        name(&context, json!("id/with~odd\u{7}")).as_deref(),
+        Some("Acme")
+    );
+    for (member, old) in [("a/b", "slash"), ("m~n", "tilde"), ("\u{202E}x", "bidi")] {
+        let arguments = json!({ "recordId": "id/with~odd\u{7}", "item": { member: "new" } });
+        let mapping = ToolCallLabelItemMapping {
+            id: Some("/recordId".into()),
+            fields: vec![format!("/item/{}", pointer::escape(member))],
+            ..Default::default()
+        };
+        let field = item(&context, ToolCallAction::Update, mapping, &arguments).fields;
+        assert_eq!(resolved(&field[0]), [Some(old)], "{member}");
+    }
+}
+
+#[test]
+fn the_index_and_each_labels_resolved_text_stay_within_their_byte_caps() {
+    let wide_name = "\u{1D538}".repeat(MAX_LABEL_VALUE_CHARS);
+    let rows: Vec<_> = (0..MAX_RECORDS_PER_RESULT)
+        .map(|i| {
+            let mut row: Map<String, Value> = (0..20)
+                .map(|f| (format!("field_{f}"), json!(wide_name)))
+                .collect();
+            row.insert("id".into(), json!(format!("row-{i}")));
+            row.insert("name".into(), json!(wide_name));
+            Value::Object(row)
+        })
+        .collect();
+    let calls = (0..3)
+        .map(|page| {
+            let rows: Vec<_> = rows
+                .iter()
+                .map(|row| {
+                    let mut row = row.clone();
+                    row["id"] = json!(format!("p{page}-{}", row["id"].as_str().unwrap()));
+                    row
+                })
+                .collect();
+            call(&format!("page{page}"), "list_rows", json!({}), json!(rows))
+        })
+        .collect();
+    let context = after(calls);
+    assert!(context.bytes <= MAX_INDEX_BYTES, "{}", context.bytes);
+    assert!(context.records.len() < MAX_RECORDS);
+    assert_eq!(
+        context.bytes,
+        context
+            .records
+            .iter()
+            .map(|(key, record)| record_bytes(key, record))
+            .sum::<usize>()
+    );
+    assert!(name(&context, json!("p2-row-199")).is_some());
+    assert_eq!(name(&context, json!("p0-row-0")), None);
+
+    let ids: Vec<_> = (190..200).map(|i| format!("p2-row-{i}")).collect();
+    let arguments = json!({ "ids": ids });
+    let pointers = || ToolCallLabelItemMapping {
+        id: Some("/ids/*".into()),
+        target: Some("/ids/*".into()),
+        before: Some("/ids/*".into()),
+        ..Default::default()
+    };
+    let mapping = ToolCallLabelMapping {
+        action: ToolCallAction::Move,
+        object_kind: ToolCallObjectKind::Row,
+        items: vec![pointers(), pointers(), pointers()],
+        source: ToolCallLabelSource::Rules,
+    };
+    let mut label = resolve_label(&mapping, &arguments).unwrap();
+    context.resolve(&mut label, &arguments);
+    let resolved: Vec<_> = label
+        .items
+        .iter()
+        .flat_map(|item| [&item.id, &item.target, &item.before])
+        .flatten()
+        .flat_map(|slot| &slot.values)
+        .map(|value| value.resolved.as_ref())
+        .collect();
+    assert_eq!(resolved.len(), 90);
+    let bytes: usize = resolved.iter().flatten().map(|name| name.len()).sum();
+    assert!(bytes <= MAX_RESOLVED_BYTES, "{bytes}");
+    assert!(resolved.iter().any(Option::is_some));
+    assert!(resolved.iter().any(Option::is_none));
+
+    let mut forgotten = label.clone();
+    forget_resolved(&mut forgotten);
+    assert!(
+        forgotten
+            .items
+            .iter()
+            .flat_map(|item| [&item.id, &item.target, &item.before])
+            .flatten()
+            .flat_map(|slot| &slot.values)
+            .all(|value| value.resolved.is_none())
+    );
+    assert_eq!(forgotten.items.len(), label.items.len());
 }
 
 #[derive(serde::Deserialize)]

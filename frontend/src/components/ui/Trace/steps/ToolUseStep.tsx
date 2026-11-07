@@ -1,4 +1,6 @@
 import { t } from "@lingui/core/macro";
+import { useMemo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 
 import {
   ToolCallGistLine,
@@ -17,10 +19,12 @@ import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   commentChangeRow,
+  commentChangesMore,
   isMixedCommentProposal,
   ownProposalLine,
 } from "@/lib/toolCallGist/ownProposalLabels";
-import { serverFailureMessage } from "@/lib/toolCallGist/serverText";
+import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
+import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -31,12 +35,9 @@ import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
-import type {
-  ToolResultDetails,
-  ToolResultLink,
-  ToolUse,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
+import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
 import type { CleanText } from "@/lib/toolCallGist/serverText";
 import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
@@ -45,30 +46,37 @@ interface ToolUseStepProps extends BaseStepProps {
   decision?: ToolDecision;
 }
 
-/** Only a result's resource links may become anchors; the backend keeps https ones. */
-const resultLinkOf = (details: ToolResultDetails | undefined) =>
-  details?.links?.find((link) => link.uri.startsWith("https://"));
-
+/**
+ * A result's link, named after the server only when it points at the
+ * server's own host; any other link says where it goes.
+ */
 const ResultLink = ({
   link,
   server,
 }: {
-  link: ToolResultLink;
+  link: ResultLinkData;
   server: string | undefined;
-}) => (
-  <a
-    href={link.uri}
-    target="_blank"
-    rel="noopener noreferrer"
-    title={link.title ?? link.name}
-    className="shrink-0 px-1 text-xs text-theme-fg-accent hover:underline"
-    data-testid="tool-result-link"
-  >
-    {server
-      ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
-      : t({ id: "trace.tool.openLink", message: "Open link" })}
-  </a>
-);
+}) => {
+  const host = link.host;
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={link.title}
+      dir="auto"
+      className="shrink-0 px-1 text-xs text-theme-fg-accent [unicode-bidi:isolate] hover:underline"
+      data-testid="tool-result-link"
+    >
+      {link.onServer && server
+        ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
+        : t({ id: "trace.tool.openLinkHost", message: `Open link - ${host}` })}
+    </a>
+  );
+};
+
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
 
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
@@ -109,23 +117,49 @@ const GistRowDetails = ({
   </div>
 );
 
+/** Rows a mixed comment batch lists; the rest are counted. */
+const MAX_CHANGE_ROWS = 50;
+
 /** A mixed comment batch's changes, one row each, by operation only. */
 const CommentChangeRows = ({
   changes,
 }: {
   changes: readonly (WordCommentOp | "other")[];
-}) => (
-  <ol
-    className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
-    data-testid="tool-call-proposal-changes"
-  >
-    {changes.map((op, index) => (
-      <li key={index} data-op={op}>
-        {commentChangeRow(op)}
-      </li>
-    ))}
-  </ol>
-);
+}) => {
+  const more = changes.length - MAX_CHANGE_ROWS;
+  return (
+    <ol
+      className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
+      data-testid="tool-call-proposal-changes"
+    >
+      {changes.slice(0, MAX_CHANGE_ROWS).map((op, index) => (
+        <li key={index} data-op={op}>
+          {commentChangeRow(op)}
+        </li>
+      ))}
+      {more > 0 && (
+        <li
+          className="list-none text-theme-fg-muted"
+          data-testid="tool-call-proposal-changes-more"
+        >
+          {commentChangesMore(more)}
+        </li>
+      )}
+    </ol>
+  );
+};
+
+// The server's cap; rows and events from other writers get it here.
+const MAX_PROGRESS_CHARS = 200;
+
+const progressText = (message: unknown): string | undefined => {
+  if (typeof message !== "string") return undefined;
+  const text = Array.from(message.slice(0, MAX_PROGRESS_CHARS * 2))
+    .slice(0, MAX_PROGRESS_CHARS)
+    .join("")
+    .trim();
+  return text.length > 0 ? text : undefined;
+};
 
 const PlainToolUseStep = ({
   part,
@@ -142,9 +176,17 @@ const PlainToolUseStep = ({
   // A denied or refused call never ran: its decision row says so.
   const notRun =
     decision?.status === "denied" || refusedWithoutDecision(part, decision);
+  const label = part.display?.label;
   // Erato's own proposals have cards of their own: the row only names them.
-  const proposal = ownProposalOf(part.display?.label, part.input);
-  const gist = proposal ? undefined : gistOf(part.display?.label, part.input);
+  const proposal = useMemo(
+    () => ownProposalOf(label, part.input),
+    [label, part.input],
+  );
+  const gist = useMemo(
+    () => (proposal ? undefined : gistOf(label, part.input)),
+    [proposal, label, part.input],
+  );
+  const serverName = textOf(part.display?.server_name);
   const lead = gist?.items[0];
   const phase: GistPhase = notRun
     ? "ask"
@@ -160,8 +202,12 @@ const PlainToolUseStep = ({
     (failure !== undefined ||
       gist.items.length > 1 ||
       gist.items.some(hasRowValues));
-  const link =
-    part.status === "success" ? resultLinkOf(part.result_details) : undefined;
+  const link = useMemo(
+    () =>
+      part.status === "success" ? resultLinkOf(part.result_details) : undefined,
+    [part.status, part.result_details],
+  );
+  const progress = progressText(part.progress_message);
 
   // The sidecar's on-device steps are the step's body: rows like the main
   // line, each with its own toggle for its own details. This step's toggle
@@ -197,7 +243,7 @@ const PlainToolUseStep = ({
         <ToolCallIdentity
           className="pt-2"
           toolName={toolName}
-          server={part.display?.server_name}
+          server={serverName}
         />
         {payload}
       </>
@@ -244,13 +290,13 @@ const PlainToolUseStep = ({
                 {part.display.server_name}
               </span>
             )}
-            {part.progress_message && (
+            {progress && (
               <span
                 dir="auto"
                 className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
-                title={part.progress_message}
+                title={progress}
               >
-                {part.progress_message}
+                {progress}
               </span>
             )}
           </>
@@ -267,9 +313,7 @@ const PlainToolUseStep = ({
             />
           )
         }
-        headerSlot={
-          link && <ResultLink link={link} server={part.display?.server_name} />
-        }
+        headerSlot={link && <ResultLink link={link} server={serverName} />}
         detailSlot={
           gist && showsDetails ? (
             <GistRowDetails gist={gist} phase={phase} failure={failure} />
@@ -286,6 +330,28 @@ const PlainToolUseStep = ({
   );
 };
 
+/** The call as rows saved before labels show it: no gist and no result link. */
+const withoutLabel = (
+  part: ToolUseStepProps["part"],
+): ToolUseStepProps["part"] => {
+  const display: unknown = part.display;
+  return {
+    ...part,
+    display: isRecord(display)
+      ? {
+          title: textOf(display.title) ?? part.tool_name ?? "",
+          description_truncated: false,
+          server_name: textOf(display.server_name),
+          read_only:
+            typeof display.read_only === "boolean"
+              ? display.read_only
+              : undefined,
+        }
+      : undefined,
+    result_details: undefined,
+  };
+};
+
 // A refusal, and every frame before the first progress update, has no run to
 // show — those render as the plain tool call. Branching at this level rather
 // than inside keeps each rendering free to hold its own hooks.
@@ -296,6 +362,13 @@ export const ToolUseStep = (props: ToolUseStepProps) => {
   return envelope ? (
     <DelegationStep {...props} envelope={envelope} />
   ) : (
-    <PlainToolUseStep {...props} />
+    // A label or result this build cannot render leaves the row as it was
+    // before labels, never a broken message.
+    <ErrorBoundary
+      resetKeys={[props.part]}
+      fallback={<PlainToolUseStep {...props} part={withoutLabel(props.part)} />}
+    >
+      <PlainToolUseStep {...props} />
+    </ErrorBoundary>
   );
 };

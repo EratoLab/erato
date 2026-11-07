@@ -274,7 +274,7 @@ mod tests {
         let records: Vec<_> = names
             .iter()
             .enumerate()
-            .map(|(index, name)| json!({"recordId": format!("rec-{index}"), "name": name}))
+            .map(|(index, name)| json!({"recordId": format!("rec-{index}"), "company": name}))
             .collect();
         json!({"mode": mode, "records": records})
     }
@@ -285,7 +285,7 @@ mod tests {
             object_kind: ToolCallObjectKind::Row,
             items: vec![ToolCallLabelItemMapping {
                 id: Some(id.into()),
-                title: Some("/records/*/name".into()),
+                title: Some("/records/*/company".into()),
                 ..Default::default()
             }],
             source: ToolCallLabelSource::Model,
@@ -340,7 +340,7 @@ mod tests {
         for arguments in [
             call("upsert", &["Globex"]),
             call("upsert", &["Initech", "Umbrella"]),
-            json!({"records": [{"name": "Hooli", "recordId": "rec-9"}], "mode": "upsert"}),
+            json!({"records": [{"company": "Hooli", "recordId": "rec-9"}], "mode": "upsert"}),
         ] {
             label(&cache, &labeller, "user-a", &records, &arguments).await;
         }

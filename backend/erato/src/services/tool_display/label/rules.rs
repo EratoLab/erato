@@ -8,10 +8,17 @@
 //! its resolved annotations.
 
 use super::arguments::{MAX_INLINE_CHARS, MAX_LIST_ENTRIES, names_an_id};
-use super::context::{is_id_member, is_link, is_lookup, link_id_member, name_words};
-use super::pointer::{self, escape};
-use super::{MAX_LABEL_FIELDS, ToolCallLabelItemMapping, ToolCallLabelMapping};
-use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+use super::context::{
+    is_id_member, is_link, is_lookup, is_name_member, link_id_member, name_words, text_prefix,
+};
+use super::pointer::{self, MAX_POINTER_BYTES, escape};
+use super::{
+    MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
+    ToolCallLabelMapping,
+};
+use crate::models::message::{
+    ToolCallAction, ToolCallLabel, ToolCallLabelSource, ToolCallObjectKind,
+};
 use rmcp::model::{JsonObject, Tool, ToolAnnotations};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
@@ -25,8 +32,14 @@ const VERB_FIELD_DEPTH: usize = 3;
 /// A verb field's value counts only when it reads as an identifier, such as
 /// `update_content` or `word.apply_edits`, never as free text.
 const MAX_VERB_VALUE_CHARS: usize = 40;
-/// Values one search visits, so a large batch costs no more than this.
+/// Values and members one search visits, so a large batch or a huge object
+/// costs no more than this.
 const MAX_SEARCH_VALUES: usize = 5_000;
+/// The start of a tool name or table name that is read for words; MCP names
+/// are far shorter, and a server can send any length.
+const MAX_NAME_BYTES: usize = 256;
+/// Verb fields read from one call's arguments.
+const MAX_VERB_FIELDS: usize = 32;
 const MAX_SEARCH_DEPTH: usize = 6;
 const MAX_FIELD_DEPTH: usize = 4;
 
@@ -121,6 +134,47 @@ const BEFORE_MEMBERS: [&str; 4] = ["old_str", "old_text", "old", "before"];
 const AFTER_MEMBERS: [&str; 9] = [
     "new_str", "new_text", "new", "after", "text", "content", "body", "markdown", "message",
 ];
+/// Members naming who a message, invite or share is for, compared without
+/// `_` and `-`: first who it is addressed to, then who gets a copy.
+const RECIPIENT_MEMBERS: [&str; 15] = [
+    "to",
+    "torecipients",
+    "recipient",
+    "recipients",
+    "attendee",
+    "attendees",
+    "requiredattendees",
+    "invitee",
+    "invitees",
+    "guests",
+    "participants",
+    "sharewith",
+    "sharedwith",
+    "shareto",
+    "sendto",
+];
+const COPY_RECIPIENT_MEMBERS: [&str; 5] = [
+    "cc",
+    "ccrecipients",
+    "bcc",
+    "bccrecipients",
+    "optionalattendees",
+];
+/// Members of a recipient object holding its address, compared the same way,
+/// as in `{"email": ...}` or Graph's `{"emailAddress": {"address": ...}}`.
+const ADDRESS_MEMBERS: [&str; 6] = [
+    "email",
+    "emailaddress",
+    "address",
+    "mail",
+    "userprincipalname",
+    "upn",
+];
+/// Recipient members read from one call: more than a card can show already
+/// means the generic label.
+const MAX_RECIPIENT_MEMBERS: usize = MAX_LABEL_FIELDS + 2;
+/// Members of one recipient object searched for its address.
+const MAX_RECIPIENT_OBJECT_MEMBERS: usize = 64;
 /// Where a created item's text sits when none of the above holds it.
 const CREATED_TEXT_MEMBER: &str = "description";
 /// Members naming the table or type a record lives in: its kind.
@@ -230,6 +284,33 @@ impl CrossCheckFlag {
     }
 }
 
+/// What a card never shows as a fact, whoever chose the label's pointers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Claim {
+    /// A flag such as `hasUserApproved` states what the model says the user
+    /// decided; only Erato's own approval says that.
+    Consent,
+    /// The name the model typed into a lookup next to the record's ID.
+    LookupName,
+}
+
+impl Claim {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Consent => "consent_flag",
+            Self::LookupName => "lookup_name",
+        }
+    }
+}
+
+/// A member of the arguments that names recipients: `member` is where it
+/// sits, `shown_at` the pointer a label shows it through.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipientMember {
+    pub member: String,
+    pub shown_at: String,
+}
+
 /// The rules' label for one call. `annotations` are the resolved hints, with
 /// absent ones left absent; a read-only hint only tells a read apart from a
 /// call with no verb.
@@ -238,7 +319,7 @@ pub fn rules_label(
     arguments: &Value,
     annotations: Option<&ToolAnnotations>,
 ) -> RulesLabel {
-    let name = name_words(tool_name);
+    let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
     let action = verb.action;
     let (object_kind, table) = kind(&name, arguments);
@@ -311,7 +392,7 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     let hint = |get: fn(&ToolAnnotations) -> Option<bool>| {
         tool.annotations.as_ref().and_then(get) == Some(true)
     };
-    let name = name_words(&tool.name);
+    let name = name_words(text_prefix(&tool.name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
     let mut flags = Vec::new();
     if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other {
@@ -357,7 +438,8 @@ pub fn verb_field_values(arguments: &Value) -> Vec<&str> {
         .collect()
 }
 
-/// The verb fields with an identifier for a value, as (member, value).
+/// The verb fields with an identifier for a value, as (member, value), at
+/// most [`MAX_VERB_FIELDS`] of them.
 pub fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
     fn walk<'a>(
         value: &'a Value,
@@ -365,20 +447,30 @@ pub fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
         budget: &mut usize,
         out: &mut Vec<(&'a str, &'a str)>,
     ) {
-        if depth > VERB_FIELD_DEPTH || *budget == 0 {
+        if depth > VERB_FIELD_DEPTH || *budget == 0 || out.len() == MAX_VERB_FIELDS {
             return;
         }
         *budget -= 1;
         match value {
             Value::Object(members) => {
-                out.extend(
-                    members
-                        .iter()
-                        .filter(|(member, _)| is_one_of(member, &VERB_FIELDS))
-                        .filter_map(|(member, value)| Some((member.as_str(), value.as_str()?)))
-                        .filter(|(_, value)| is_identifier(value)),
-                );
-                for child in members.values().filter(|child| is_container(child)) {
+                let mut scanned = 0;
+                for (member, value) in members {
+                    if *budget == 0 || out.len() == MAX_VERB_FIELDS {
+                        break;
+                    }
+                    *budget -= 1;
+                    scanned += 1;
+                    if is_one_of(member, &VERB_FIELDS)
+                        && let Some(value) = value.as_str().filter(|value| is_identifier(value))
+                    {
+                        out.push((member.as_str(), value));
+                    }
+                }
+                for child in members
+                    .values()
+                    .take(scanned)
+                    .filter(|child| is_container(child))
+                {
                     walk(child, depth + 1, budget, out);
                 }
             }
@@ -420,7 +512,13 @@ fn declares(schema: &JsonObject, member: &str) -> bool {
             match value {
                 Value::Object(inner) => objects.push(inner),
                 Value::Array(entries) => {
-                    objects.extend(entries.iter().filter_map(Value::as_object))
+                    for inner in entries.iter().filter_map(Value::as_object) {
+                        if budget == 0 {
+                            return false;
+                        }
+                        budget -= 1;
+                        objects.push(inner);
+                    }
                 }
                 _ => {}
             }
@@ -550,19 +648,29 @@ fn holds_an_id(arguments: &Value) -> bool {
 /// the table member's pointer.
 fn kind(name: &[String], arguments: &Value) -> (ToolCallObjectKind, Option<String>) {
     if let Value::Object(top) = arguments {
+        let mut budget = MAX_SEARCH_VALUES;
         let nested = top.iter().filter_map(|(member, value)| match value {
             Value::Object(members) if !is_lookup(members) => {
-                Some((format!("/{}", escape(member)), members))
+                Some((child_pointer("", member)?, members))
             }
             _ => None,
         });
         for (base, members) in std::iter::once((String::new(), top)).chain(nested) {
+            if budget == 0 {
+                break;
+            }
             for (member, value) in members {
+                if budget == 0 {
+                    break;
+                }
+                budget -= 1;
                 if is_one_of(member, &TABLE_MEMBERS)
                     && let Some(table) = value.as_str()
+                    && let Some(pointer) = child_pointer(&base, member)
                 {
-                    let kind = kind_of(&name_words(table)).unwrap_or(ToolCallObjectKind::Row);
-                    return (kind, Some(format!("{base}/{}", escape(member))));
+                    let words = name_words(text_prefix(table, MAX_NAME_BYTES));
+                    let kind = kind_of(&words).unwrap_or(ToolCallObjectKind::Row);
+                    return (kind, Some(pointer));
                 }
             }
         }
@@ -644,17 +752,31 @@ fn id_member(named: fn(&str) -> bool) -> impl FnMut(&str, &str, &[&Value]) -> Op
     }
 }
 
-/// Where the item goes or lives: a parent, folder, channel or recipient, then
-/// on a create the first record it links to, since a record being created
-/// has no ID of its own yet. On an update a link is a changed field.
+/// Where the item goes or lives: a parent, folder, channel or recipient
+/// (copies only when no one else is named), then on a create the first record
+/// it links to, since a record being created has no ID of its own yet. On an
+/// update a link is a changed field.
 fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -> Option<String> {
     let not_the_id = |pointer: &str| {
         id.is_none_or(|id| id != pointer && !id.starts_with(&format!("{pointer}/")))
     };
     let found = find(arguments, Skip::Nothing, |pointer, member, values| {
-        (is_one_of(member, &TARGET_MEMBERS) && not_the_id(pointer))
-            .then(|| target_at(pointer, values))
-            .flatten()
+        if !not_the_id(pointer) {
+            return None;
+        }
+        match recipients_in(member) {
+            Some(Recipients::To) => recipient_at(pointer, values),
+            Some(Recipients::Copy) => None,
+            None if is_one_of(member, &TARGET_MEMBERS) => target_at(pointer, values),
+            None => None,
+        }
+    })
+    .or_else(|| {
+        find(arguments, Skip::Nothing, |pointer, member, values| {
+            (recipients_in(member) == Some(Recipients::Copy) && not_the_id(pointer))
+                .then(|| recipient_at(pointer, values))
+                .flatten()
+        })
     });
     if found.is_some() || action != ToolCallAction::Create {
         return found;
@@ -687,25 +809,255 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
 /// A link points at its ID member, a list of links at theirs; anything else
 /// is shown whole. The first value that is not null decides.
 fn target_at(pointer: &str, values: &[&Value]) -> Option<String> {
+    let inside = |suffix: String| Some(fitting(format!("{pointer}{suffix}"), pointer));
     match values.iter().find(|value| !value.is_null())? {
-        Value::Object(members) => Some(match link_id_member(members) {
-            Some(id) => format!("{pointer}/{}", escape(id)),
-            None => pointer.to_string(),
-        }),
+        Value::Object(members) => match link_id_member(members) {
+            Some(id) => inside(format!("/{}", escape(id))),
+            None => Some(pointer.to_string()),
+        },
         Value::Array(entries) if entries.is_empty() => None,
-        Value::Array(entries) => Some(
-            match entries
-                .first()
-                .and_then(Value::as_object)
-                .and_then(link_id_member)
-                .filter(|_| all_links(entries))
-            {
-                Some(id) => format!("{pointer}/*/{}", escape(id)),
-                None => pointer.to_string(),
-            },
-        ),
+        Value::Array(entries) => match entries
+            .first()
+            .and_then(Value::as_object)
+            .and_then(link_id_member)
+            .filter(|_| all_links(entries))
+        {
+            Some(id) => inside(format!("/*/{}", escape(id))),
+            None => Some(pointer.to_string()),
+        },
         _ => Some(pointer.to_string()),
     }
+}
+
+/// `pointer` when it fits the resolver's cap, else `whole`, which does.
+fn fitting(pointer: String, whole: &str) -> String {
+    if pointer.len() <= MAX_POINTER_BYTES {
+        pointer
+    } else {
+        whole.to_string()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Recipients {
+    /// Who a message, invite or share is addressed to.
+    To,
+    /// Who gets a copy.
+    Copy,
+}
+
+fn recipients_in(member: &str) -> Option<Recipients> {
+    let bare = bare_member(member)?;
+    if RECIPIENT_MEMBERS.contains(&bare.as_str()) {
+        Some(Recipients::To)
+    } else if COPY_RECIPIENT_MEMBERS.contains(&bare.as_str()) {
+        Some(Recipients::Copy)
+    } else {
+        None
+    }
+}
+
+/// `share_with`, `shareWith` and `Share-With` alike; `None` for a key longer
+/// than any member these lists name.
+fn bare_member(member: &str) -> Option<String> {
+    (member.len() <= 32).then(|| {
+        member
+            .chars()
+            .filter(|c| !matches!(c, '_' | '-'))
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
+    })
+}
+
+/// Whether a recipient member's value names anyone: not null, empty text,
+/// an empty list or a list of nothing.
+fn names_someone(value: &Value) -> bool {
+    let one = |value: &Value| match value {
+        Value::String(text) => !text.trim().is_empty(),
+        Value::Number(_) => true,
+        Value::Object(members) => !members.is_empty(),
+        _ => false,
+    };
+    match value {
+        Value::Array(entries) => entries.iter().take(MAX_SEARCH_VALUES).any(one),
+        value => one(value),
+    }
+}
+
+/// How a recipient member is shown: a list's every entry, each user by the
+/// ID of the record it links to or the address it holds; anything else
+/// whole. Every entry must hold it the same way, so none is left out.
+fn recipient_at(pointer: &str, values: &[&Value]) -> Option<String> {
+    let values: Vec<&Value> = values
+        .iter()
+        .copied()
+        .filter(|value| names_someone(value))
+        .collect();
+    let list = values.first()?.is_array();
+    if values.iter().any(|value| value.is_array() != list) {
+        return Some(pointer.to_string());
+    }
+    let mut entries: Vec<&Value> = Vec::new();
+    for value in &values {
+        match value {
+            Value::Array(list) => {
+                let room = MAX_SEARCH_VALUES + 1 - entries.len();
+                entries.extend(list.iter().filter(|entry| !entry.is_null()).take(room));
+            }
+            value => entries.push(value),
+        }
+        if entries.len() > MAX_SEARCH_VALUES {
+            return Some(pointer.to_string());
+        }
+    }
+    let inside = |entry: &&Value| {
+        let object = entry.as_object()?;
+        match link_id_member(object) {
+            Some(id) => Some(format!("/{}", escape(id))),
+            None => address_in(object),
+        }
+    };
+    let mut each = entries.iter().map(inside);
+    if let Some(Some(first)) = each.next()
+        && each.all(|other| other.as_ref() == Some(&first))
+    {
+        let wildcard = if list { "/*" } else { "" };
+        return Some(fitting(format!("{pointer}{wildcard}{first}"), pointer));
+    }
+    Some(pointer.to_string())
+}
+
+/// Where a recipient object holds its address, below it.
+fn address_in(object: &serde_json::Map<String, Value>) -> Option<String> {
+    let is_address = |member: &str| {
+        bare_member(member).is_some_and(|bare| ADDRESS_MEMBERS.contains(&bare.as_str()))
+    };
+    let text = |value: &Value| value.as_str().is_some_and(|text| !text.trim().is_empty());
+    for (member, value) in object.iter().take(MAX_RECIPIENT_OBJECT_MEMBERS) {
+        if !is_address(member) {
+            continue;
+        }
+        if text(value) {
+            return Some(format!("/{}", escape(member)));
+        }
+        if let Value::Object(inner) = value
+            && let Some((address, _)) = inner
+                .iter()
+                .take(MAX_RECIPIENT_OBJECT_MEMBERS)
+                .find(|(inner, value)| is_address(inner) && text(value))
+        {
+            return Some(format!("/{}/{}", escape(member), escape(address)));
+        }
+    }
+    None
+}
+
+/// Every member naming recipients, shallowest first, at most
+/// [`MAX_RECIPIENT_MEMBERS`] of them.
+pub fn recipient_members(arguments: &Value) -> Vec<RecipientMember> {
+    let mut found = Vec::new();
+    find(arguments, Skip::Targets, |pointer, member, values| {
+        if found.len() < MAX_RECIPIENT_MEMBERS
+            && recipients_in(member).is_some()
+            && let Some(shown_at) = recipient_at(pointer, values)
+        {
+            found.push(RecipientMember {
+                member: pointer.to_string(),
+                shown_at,
+            });
+        }
+        None
+    });
+    found
+}
+
+/// Whether one of `pointers` shows the whole of `member`: the member itself,
+/// a link or address inside every entry, never a single entry such as `/to/0`.
+fn shows_whole(pointers: &[&str], member: &str) -> bool {
+    pointers.iter().any(|pointer| {
+        pointer == &member
+            || pointer
+                .strip_prefix(member)
+                .and_then(|rest| rest.strip_prefix('/'))
+                .is_some_and(|rest| {
+                    let next = rest.split('/').next().unwrap_or_default();
+                    next.is_empty() || !next.bytes().all(|byte| byte.is_ascii_digit())
+                })
+    })
+}
+
+/// The pointers of a mapping that a label reads; later items and fields are
+/// never shown.
+fn mapping_pointers(mapping: &ToolCallLabelMapping) -> Vec<&str> {
+    mapping
+        .items
+        .iter()
+        .take(MAX_LABEL_ITEMS)
+        .flat_map(|item| {
+            [
+                &item.title,
+                &item.id,
+                &item.target,
+                &item.before,
+                &item.after,
+            ]
+            .into_iter()
+            .flatten()
+            .chain(item.fields.iter().take(MAX_FIELD_POINTERS))
+        })
+        .map(String::as_str)
+        .collect()
+}
+
+/// The mapping with every recipient member shown: those its own pointers
+/// leave out go first among the first item's fields, so a label never names
+/// only `to` while copies go to others.
+pub fn with_every_recipient(
+    mapping: &ToolCallLabelMapping,
+    recipients: &[RecipientMember],
+) -> ToolCallLabelMapping {
+    let mut mapping = mapping.clone();
+    let shown = mapping_pointers(&mapping);
+    let missing: Vec<String> = recipients
+        .iter()
+        .filter(|recipient| !shows_whole(&shown, &recipient.member))
+        .map(|recipient| recipient.shown_at.clone())
+        .collect();
+    if let Some(item) = mapping.items.first_mut()
+        && !missing.is_empty()
+    {
+        item.fields.splice(0..0, missing);
+    }
+    mapping
+}
+
+/// Whether a label with items shows every recipient member, so a cap that
+/// cut one off means the generic label.
+pub fn shows_every_recipient(label: &ToolCallLabel, recipients: &[RecipientMember]) -> bool {
+    if label.items.is_empty() {
+        return true;
+    }
+    let shown: Vec<&str> = label
+        .items
+        .iter()
+        .flat_map(|item| {
+            [
+                &item.title,
+                &item.id,
+                &item.target,
+                &item.before,
+                &item.after,
+            ]
+            .into_iter()
+            .flatten()
+            .chain(&item.fields)
+        })
+        .map(|slot| slot.pointer.as_str())
+        .collect();
+    recipients.len() < MAX_RECIPIENT_MEMBERS
+        && recipients
+            .iter()
+            .all(|recipient| shows_whole(&shown, &recipient.member))
 }
 
 fn all_links(entries: &[Value]) -> bool {
@@ -715,17 +1067,18 @@ fn all_links(entries: &[Value]) -> bool {
             .all(|entry| entry.as_object().is_some_and(is_link))
 }
 
-/// Values worth showing next to the item: on a create or send the short
-/// members beside its title, on an update or comment the members it changes,
-/// a link as its ID. Never the parts the item already shows, the table, or a
-/// consent flag such as `hasUserApproved`.
+/// Values worth showing next to the item: first every recipient the target
+/// leaves out, then on a create or send the short members beside its title,
+/// on an update or comment the members it changes, a link as its ID. Never
+/// the parts the item already shows, the table, or a consent flag such as
+/// `hasUserApproved`.
 fn fields(
     arguments: &Value,
     action: ToolCallAction,
     item: &ToolCallLabelItemMapping,
     table: Option<&str>,
 ) -> Vec<String> {
-    let used: Vec<&str> = [
+    let mut used: Vec<&str> = [
         &item.title,
         &item.id,
         &item.target,
@@ -737,7 +1090,14 @@ fn fields(
     .map(String::as_str)
     .chain(table)
     .collect();
-    let mut out = Vec::new();
+    let recipients = recipient_members(arguments);
+    let mut out: Vec<String> = recipients
+        .iter()
+        .filter(|recipient| !shows_whole(&used, &recipient.member))
+        .map(|recipient| recipient.shown_at.clone())
+        .collect();
+    used.extend(recipients.iter().map(|recipient| recipient.member.as_str()));
+    let mut budget = MAX_SEARCH_VALUES;
     match action {
         ToolCallAction::Create | ToolCallAction::Send => {
             let Some((parent, _)) = item
@@ -755,46 +1115,59 @@ fn fields(
                     .map(|reached| reached.value)
                     .collect()
             };
-            for (member, values) in members(&objects) {
-                let pointer = format!("{parent}/{}", escape(member));
-                let inside_used = used.iter().any(|used| {
-                    used.strip_prefix(pointer.as_str())
-                        .is_some_and(|rest| rest.starts_with('/'))
-                });
-                if used.contains(&pointer.as_str()) || inside_used || is_consent(member, &values) {
+            for (member, values) in members(&objects, &mut budget) {
+                if out.len() >= MAX_LABEL_FIELDS {
+                    break;
+                }
+                let Some(pointer) = child_pointer(parent, member) else {
+                    continue;
+                };
+                // Recipients that name no one are no field beside the title.
+                if covers(&used, &pointer)
+                    || is_consent(member, &values)
+                    || recipients_in(member).is_some()
+                {
                     continue;
                 }
                 if values.iter().copied().any(is_short_scalar) {
                     out.push(pointer);
-                    if out.len() == MAX_LABEL_FIELDS {
-                        break;
-                    }
                 }
             }
         }
         ToolCallAction::Update | ToolCallAction::Comment => {
-            changed_members(String::new(), &[arguments], 0, &used, &mut out);
+            changed_members("", &[arguments], 0, &used, &mut budget, &mut out);
         }
         _ => {}
     }
     out
 }
 
+/// Whether a part already shown is `pointer` or lies inside it.
+fn covers(used: &[&str], pointer: &str) -> bool {
+    used.iter().any(|used| {
+        used.strip_prefix(pointer)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    })
+}
+
 fn changed_members(
-    pointer: String,
+    pointer: &str,
     values: &[&Value],
     depth: usize,
     used: &[&str],
+    budget: &mut usize,
     out: &mut Vec<String>,
 ) {
     if depth > MAX_FIELD_DEPTH {
         return;
     }
-    for (member, values) in members(values) {
-        if out.len() == MAX_LABEL_FIELDS {
+    for (member, values) in members(values, budget) {
+        if out.len() >= MAX_LABEL_FIELDS {
             return;
         }
-        let path = format!("{pointer}/{}", escape(member));
+        let Some(path) = child_pointer(pointer, member) else {
+            continue;
+        };
         if used.contains(&path.as_str()) || is_consent(member, &values) {
             continue;
         }
@@ -804,8 +1177,9 @@ fn changed_members(
                 .filter(|members| is_lookup(members))
                 .and_then(link_id_member)
         }) {
-            let link = format!("{path}/{}", escape(id));
-            if !used.contains(&link.as_str()) {
+            if let Some(link) = child_pointer(&path, id)
+                && !used.contains(&link.as_str())
+            {
                 out.push(link);
             }
             continue;
@@ -825,10 +1199,12 @@ fn changed_members(
             .flat_map(|entries| entries.iter().take(MAX_LIST_ENTRIES))
             .collect();
         if !objects.is_empty() {
-            changed_members(path.clone(), &objects, depth + 1, used, out);
+            changed_members(&path, &objects, depth + 1, used, budget, out);
         }
-        if !entries.is_empty() {
-            changed_members(format!("{path}/*"), &entries, depth + 1, used, out);
+        if !entries.is_empty()
+            && let Some(each) = child_pointer(&path, "*")
+        {
+            changed_members(&each, &entries, depth + 1, used, budget, out);
         }
     }
 }
@@ -845,15 +1221,30 @@ struct Level<'a> {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Skip {
     Nothing,
-    /// Lookups, whose members only describe another record.
+    /// Lookups, whose members only describe another record, and recipients,
+    /// whose names and texts describe people.
     Lookups,
     /// Parents, folders and recipients, whose IDs are where an item goes.
     Targets,
 }
 
+impl Skip {
+    fn skips_member(self, member: &str) -> bool {
+        match self {
+            Skip::Nothing => false,
+            Skip::Lookups => recipients_in(member).is_some(),
+            Skip::Targets => is_one_of(member, &TARGET_MEMBERS) || recipients_in(member).is_some(),
+        }
+    }
+
+    fn skips_value(self, value: &Value) -> bool {
+        self == Skip::Lookups && value.as_object().is_some_and(is_lookup)
+    }
+}
+
 /// The first member, breadth first, that `accept` takes, given its pointer,
 /// its name and the values it holds across a batch; `accept` returns the
-/// pointer to use.
+/// pointer to use. Members whose pointer would not resolve are passed over.
 fn find<'a>(
     arguments: &'a Value,
     skip: Skip,
@@ -867,31 +1258,31 @@ fn find<'a>(
     let mut budget = MAX_SEARCH_VALUES;
     while let Some(level) = queue.pop_front() {
         budget = budget.checked_sub(level.values.len())?;
-        let members = members(&level.values);
-        for (member, values) in &members {
-            let pointer = format!("{}/{}", level.pointer, escape(member));
-            if let Some(found) = accept(&pointer, member, values) {
+        let members: Vec<_> = members(&level.values, &mut budget)
+            .into_iter()
+            .filter_map(|(member, values)| {
+                Some((child_pointer(&level.pointer, member)?, member, values))
+            })
+            .collect();
+        for (pointer, member, values) in &members {
+            if let Some(found) = accept(pointer, member, values) {
                 return Some(found);
             }
         }
         if level.depth == MAX_SEARCH_DEPTH {
             continue;
         }
-        for (member, values) in members {
-            if skip == Skip::Targets && is_one_of(member, &TARGET_MEMBERS) {
+        for (pointer, member, values) in members {
+            if skip.skips_member(member) {
                 continue;
             }
             let nested: Vec<&Value> = values
                 .into_iter()
-                .filter(|value| match value {
-                    Value::Object(members) => skip != Skip::Lookups || !is_lookup(members),
-                    Value::Array(_) => true,
-                    _ => false,
-                })
+                .filter(|value| is_container(value) && !skip.skips_value(value))
                 .collect();
             if !nested.is_empty() {
                 queue.push_back(Level {
-                    pointer: format!("{}/{}", level.pointer, escape(member)),
+                    pointer,
                     values: nested,
                     depth: level.depth + 1,
                 });
@@ -902,10 +1293,13 @@ fn find<'a>(
             .iter()
             .filter_map(|value| value.as_array())
             .flat_map(|entries| entries.iter().take(MAX_LIST_ENTRIES))
+            .filter(|entry| !skip.skips_value(entry))
             .collect();
-        if !entries.is_empty() {
+        if !entries.is_empty()
+            && let Some(pointer) = child_pointer(&level.pointer, "*")
+        {
             queue.push_back(Level {
-                pointer: format!("{}/*", level.pointer),
+                pointer,
                 values: entries,
                 depth: level.depth + 1,
             });
@@ -914,13 +1308,27 @@ fn find<'a>(
     None
 }
 
+/// `base` with `member` appended, or `None` when the pointer would pass the
+/// resolver's cap and so reach nothing.
+fn child_pointer(base: &str, member: &str) -> Option<String> {
+    if base.len() + 1 + member.len() > MAX_POINTER_BYTES {
+        return None;
+    }
+    let pointer = format!("{base}/{}", escape(member));
+    (pointer.len() <= MAX_POINTER_BYTES).then_some(pointer)
+}
+
 /// The members of the objects among `values`, in the order first seen, each
-/// with the values it holds.
-fn members<'a>(values: &[&'a Value]) -> Vec<(&'a str, Vec<&'a Value>)> {
+/// with the values it holds; each member read costs one of `budget`.
+fn members<'a>(values: &[&'a Value], budget: &mut usize) -> Vec<(&'a str, Vec<&'a Value>)> {
     let mut members: Vec<(&'a str, Vec<&'a Value>)> = Vec::new();
     let mut index: HashMap<&str, usize> = HashMap::new();
     for object in values.iter().filter_map(|value| value.as_object()) {
         for (member, value) in object {
+            if *budget == 0 {
+                return members;
+            }
+            *budget -= 1;
             match index.get(member.as_str()) {
                 Some(&at) => members[at].1.push(value),
                 None => {
@@ -964,14 +1372,66 @@ fn is_short_scalar(value: &Value) -> bool {
     }
 }
 
-/// `hasUserApproved: true` or `user_confirmed: true` says what the model
+/// `hasUserApproved: true` or `user_confirmed: "yes"` says what the model
 /// claims about the user, never what the call does. `approved: true` on an
 /// expense is the change itself.
 fn is_consent(member: &str, values: &[&Value]) -> bool {
+    is_consent_member(member) && values.iter().copied().any(is_yes_or_no)
+}
+
+fn is_consent_member(member: &str) -> bool {
+    if member.len() > MAX_NAME_BYTES {
+        return false;
+    }
     let lower = member.to_ascii_lowercase();
-    lower.contains("user")
-        && (lower.contains("approv") || lower.contains("confirm"))
-        && values.iter().any(|value| value.is_boolean())
+    lower.contains("consent")
+        || (lower.contains("user")
+            && ["approv", "confirm", "agree"]
+                .iter()
+                .any(|word| lower.contains(word)))
+}
+
+fn is_yes_or_no(value: &Value) -> bool {
+    match value {
+        Value::Bool(_) => true,
+        Value::String(text) => ["true", "false", "yes", "no"]
+            .iter()
+            .any(|word| text.trim().eq_ignore_ascii_case(word)),
+        _ => false,
+    }
+}
+
+/// The claim the value at `path` in the arguments would make on a card: a
+/// consent flag at or above it, or a lookup's name. The arguments' top is the
+/// call itself and never a lookup.
+pub fn claim(arguments: &Value, path: &str, value: &Value) -> Option<Claim> {
+    if path.len() > pointer::MAX_PATH_BYTES {
+        return None;
+    }
+    if is_yes_or_no(value)
+        && pointer::member_names(path)
+            .iter()
+            .any(|member| is_consent_member(member))
+    {
+        return Some(Claim::Consent);
+    }
+    let mut rest = path;
+    let (holder, member) = loop {
+        let (head, token) = rest.rsplit_once('/')?;
+        if token.is_empty() || !token.bytes().all(|byte| byte.is_ascii_digit()) {
+            break (head, token);
+        }
+        rest = head;
+    };
+    if holder.is_empty() || !is_name_member(member) {
+        return None;
+    }
+    // A literal JSON pointer: `*` here is a key, not a wildcard.
+    arguments
+        .pointer(holder)
+        .and_then(Value::as_object)
+        .is_some_and(is_lookup)
+        .then_some(Claim::LookupName)
 }
 
 #[cfg(test)]

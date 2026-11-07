@@ -7777,6 +7777,7 @@ msgstr "{count, plural, one {zadanie} few {# zadania} many {# zadań} other {# z
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# więcej} few {+# więcej} many {+# więcej} other {+# więcej}}"
 
@@ -7794,6 +7795,11 @@ msgstr "{shape, select, full {Przeniesiono: {kind} {title} do {where}} titled {P
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.move.failed"
 msgstr "{shape, select, full {Nie udało się przenieść: {kind} {title} do {where}} titled {Nie udało się przenieść: {kind} {title}} placed {Nie udało się przenieść: {kind} do {where}} other {Nie udało się przenieść: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Pozostałe argumenty"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/ownProposalLabels.ts
@@ -8262,6 +8268,11 @@ msgstr "Limit wywołań narzędzi"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
 msgid "trace.tool.decision.allowedForDocument"
 msgstr ""
 
@@ -8335,8 +8346,13 @@ msgstr "Otwórz w {server}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
-msgid "trace.tool.openLink"
-msgstr "Otwórz link"
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Otwórz link"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Otwórz link - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

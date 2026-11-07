@@ -1,6 +1,6 @@
 import { WORD_COMMENT_OPS } from "@/lib/wordReview/wordCommentChanges";
 
-import { readPointerAll } from "./serverText";
+import { isRecord, readPointerAll } from "./serverText";
 
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
@@ -29,19 +29,22 @@ export const OWN_PROPOSAL_KINDS = [
 const isCommentOp = (value: unknown): value is WordCommentOp =>
   (WORD_COMMENT_OPS as readonly unknown[]).includes(value);
 
-// Counted from the input, not the label's values, which stop at ten.
+// Counted from the input, not the label's values, which stop at ten. A
+// stored label of any shape reads as no count rather than failing the row.
 const commentChangesOf = (
-  label: ToolCallLabel,
+  label: Record<string, unknown>,
   input: unknown,
 ): (WordCommentOp | "other")[] => {
-  const ops = label.items
-    ?.flatMap((item) => item.fields ?? [])
-    .find((field) => field.name === "op");
-  return ops
-    ? readPointerAll(input, ops.pointer).map((op) =>
-        isCommentOp(op) ? op : "other",
-      )
-    : [];
+  const items = Array.isArray(label.items) ? (label.items as unknown[]) : [];
+  const ops = items
+    .flatMap((item) =>
+      isRecord(item) && Array.isArray(item.fields)
+        ? (item.fields as unknown[])
+        : [],
+    )
+    .find((field) => isRecord(field) && field.name === "op");
+  const values = isRecord(ops) ? readPointerAll(input, ops.pointer) : [];
+  return (values ?? []).map((op) => (isCommentOp(op) ? op : "other"));
 };
 
 /**
@@ -52,14 +55,15 @@ export const ownProposalOf = (
   label: ToolCallLabel | null | undefined,
   input: unknown,
 ): OwnProposal | undefined => {
-  if (label?.source !== "own_mapping") return undefined;
-  const { action, object_kind: kind } = label;
+  const stored: unknown = label;
+  if (!isRecord(stored) || stored.source !== "own_mapping") return undefined;
+  const { action, object_kind: kind } = stored;
   if (kind === "document" && action === "update") return { kind: "document" };
   if (
     kind === "comment" &&
     (action === "comment" || action === "update" || action === "delete")
   ) {
-    return { kind: "comments", changes: commentChangesOf(label, input) };
+    return { kind: "comments", changes: commentChangesOf(stored, input) };
   }
   if (kind === "email" && action === "send") return { kind: "email" };
   if (kind === "event" && action === "create") return { kind: "event" };

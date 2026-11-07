@@ -26,7 +26,10 @@ import { FrontendRequestError } from "@/utils/errorReport";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
-import type { ApprovalScope } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ApprovalScope,
+  ToolArgumentNode,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { ReactNode } from "react";
 
@@ -2734,6 +2737,29 @@ describe("document and response approvals", () => {
 });
 
 describe("gist cards", () => {
+  /** The readable view the backend sends for an input, member by member. */
+  const viewOf = (value: unknown, path = ""): ToolArgumentNode =>
+    Array.isArray(value)
+      ? {
+          path,
+          kind: "list",
+          children: value.map((entry, index) =>
+            viewOf(entry, `${path}/${index}`),
+          ),
+        }
+      : typeof value === "object" && value !== null
+        ? {
+            path,
+            kind: "group",
+            children: Object.entries(value).map(([name, member]) =>
+              viewOf(
+                member,
+                `${path}/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`,
+              ),
+            ),
+          }
+        : { path, kind: "value" };
+
   const DATA_SOURCE_ID = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
   const createRowInput = {
     parent: { data_source_id: DATA_SOURCE_ID },
@@ -2743,6 +2769,7 @@ describe("gist cards", () => {
     action: "create" as const,
     object_kind: "row" as const,
     source: "rules" as const,
+    arguments: viewOf(createRowInput),
     items: [
       {
         title: {
@@ -3185,5 +3212,443 @@ describe("gist cards", () => {
     expect(
       item.querySelector('[data-testid="tool-call-gist-line"]'),
     ).toHaveTextContent("Create row Northwind in Companies");
+  });
+
+  describe("arguments the summary does not show", () => {
+    const emailInput = {
+      to: ["ana@example.com"],
+      bcc: ["leak@example.net"],
+      subject: "Q3 numbers",
+      body: "Attached.",
+    };
+    const sendEmailLabel = {
+      action: "send" as const,
+      object_kind: "email" as const,
+      source: "model" as const,
+      arguments: viewOf(emailInput),
+      items: [
+        {
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: "Q3 numbers" }],
+          },
+          target: {
+            pointer: "/to/*",
+            values: [{ path: "/to/0", text: "ana@example.com" }],
+          },
+          after: {
+            pointer: "/body",
+            values: [{ path: "/body", text: "Attached." }],
+          },
+        },
+      ],
+    };
+    const emailRequest = {
+      ...approvalRequest,
+      tool_name: "send_email",
+      mcp_server_id: "mail",
+      input: emailInput,
+      display: {
+        title: "Send email",
+        description_truncated: false,
+        server_name: "Mail",
+        label: sendEmailLabel,
+      },
+    };
+
+    const otherArguments = () =>
+      screen.queryByTestId("tool-call-other-arguments");
+
+    /** Whether `node` comes before the card's first decision button. */
+    const isAboveButtons = (node: HTMLElement) =>
+      Boolean(
+        node.compareDocumentPosition(
+          screen.getByRole("button", { name: "Allow once" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+    it("lists a bcc the summary leaves out under the gist, above the buttons and without a click", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={emailRequest}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+        "Send email Q3 numbers to ana@example.com",
+      );
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("Other arguments");
+      expect(rest).toHaveTextContent("bcc");
+      expect(rest).toHaveTextContent("leak@example.net");
+      expect(rest).not.toHaveTextContent("subject");
+      expect(rest).not.toHaveTextContent("ana@example.com");
+      expect(rest).not.toHaveTextContent("Attached.");
+      expect(isAboveButtons(rest)).toBe(true);
+      expect(rest.closest('div[style*="0fr"]')).toBeNull();
+    });
+
+    it("lists recipients past the values a field shows, arrays included", () => {
+      const input = {
+        subject: "Offsite",
+        to: ["a@x.example"],
+        cc: ["b@x.example", "c@x.example", "d@x.example", "e@x.example"],
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    title: sendEmailLabel.items[0].title,
+                    target: {
+                      pointer: "/to/*",
+                      values: [{ path: "/to/0", text: "a@x.example" }],
+                    },
+                    fields: [
+                      {
+                        pointer: "/cc/*",
+                        name: "cc",
+                        values: input.cc.map((text, index) => ({
+                          path: `/cc/${index}`,
+                          text,
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("e@x.example");
+      expect(rest).not.toHaveTextContent("b@x.example");
+      expect(rest.querySelector("ul")).not.toBeNull();
+    });
+
+    it("shows no list when the summary shows every argument", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={gistRequest}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist")).toBeInTheDocument();
+      expect(otherArguments()).toBeNull();
+    });
+
+    it("keeps every argument in view when a generic card turns into a gist", async () => {
+      const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+      const card = (label: unknown) =>
+        withChatContext(
+          <McpToolApprovalCard
+            messageId="message-1"
+            resolution={null}
+            request={{
+              ...emailRequest,
+              display: {
+                ...emailRequest.display,
+                label: label as typeof sendEmailLabel,
+              },
+            }}
+          />,
+          "chat-1",
+          { continueToolApproval },
+        );
+      const { rerender, queryClient } = renderCard(
+        card({
+          action: "other",
+          object_kind: "other",
+          source: "generic",
+          arguments: viewOf(emailInput),
+        }),
+      );
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "leak@example.net",
+      );
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {card(sendEmailLabel)}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(otherArguments()).toHaveTextContent("leak@example.net");
+      fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+      await waitFor(() =>
+        expect(continueToolApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ toolInput: emailInput }),
+        ),
+      );
+    });
+
+    it("shows the raw arguments under a gist whose label has no readable view", () => {
+      const { arguments: _view, ...withoutView } = sendEmailLabel;
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            display: { ...emailRequest.display, label: withoutView },
+          }}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+      expect(screen.getByText(/leak@example\.net/)).toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Technical details" }),
+      );
+      expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    });
+
+    it("never shows a consent flag as a key value or another argument", () => {
+      const input = { ...emailInput, bcc: [], hasUserApproved: true };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    ...sendEmailLabel.items[0],
+                    fields: [
+                      {
+                        pointer: "/hasUserApproved",
+                        name: "hasUserApproved",
+                        values: [{ path: "/hasUserApproved", text: "true" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const gist = screen.getByTestId("tool-call-gist");
+      expect(gist).not.toHaveTextContent("hasUserApproved");
+      expect(screen.queryByText("hasUserApproved")).not.toBeInTheDocument();
+    });
+
+    it("lists names, values and odd member names as inert, isolated text", () => {
+      const input = {
+        subject: "Plan",
+        to: ["a@x.example"],
+        "a/b~c": "slash and tilde",
+        "\u202Eevil": "<img src=x onerror=alert(1)>",
+        nested: { deeper: { deepest: "x".repeat(5_000) } },
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    title: {
+                      pointer: "/subject",
+                      values: [{ path: "/subject", text: "Plan" }],
+                    },
+                    target: {
+                      pointer: "/to/*",
+                      values: [{ path: "/to/0", text: "a@x.example" }],
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("a/b~c");
+      expect(rest).toHaveTextContent("slash and tilde");
+      expect(rest.textContent).not.toContain("\u202E");
+      expect(rest).toHaveTextContent("evil");
+      expect(rest.querySelector("img")).toBeNull();
+      expect(rest).toHaveTextContent("<img src=x onerror=alert(1)>");
+      const long = screen.getByText(/^x+…$/);
+      expect(long.textContent!.length).toBeLessThan(300);
+      for (const name of rest.querySelectorAll("dt")) {
+        expect(name).toHaveAttribute("dir", "auto");
+      }
+    });
+  });
+
+  describe("labels this build cannot read", () => {
+    it.each<[string, unknown]>([
+      ["a label that is text", "create row"],
+      ["a label whose verb is a number", { ...createRowLabel, action: 5 }],
+      [
+        "a label whose items are not a list",
+        { ...createRowLabel, items: "Northwind" },
+      ],
+      [
+        "items of the wrong types",
+        {
+          ...createRowLabel,
+          items: [null, 7, "x", { title: 5, fields: { a: 1 } }],
+        },
+      ],
+      [
+        "values of the wrong types",
+        {
+          ...createRowLabel,
+          items: [
+            {
+              title: {
+                pointer: "/pages/*/properties/Name",
+                values: [
+                  null,
+                  { path: 3, text: "x" },
+                  { path: "/pages/0/properties/Name", text: { a: 1 } },
+                  {
+                    path: "/pages/0/properties/Name",
+                    text: "Northwind",
+                    resolved: { name: "x" },
+                  },
+                ],
+                omitted: "lots",
+              },
+              fields: [{ pointer: {}, values: "x" }],
+            },
+          ],
+        },
+      ],
+      [
+        "a readable view of the wrong shape",
+        {
+          ...createRowLabel,
+          arguments: {
+            path: "",
+            kind: "group",
+            children: [null, { path: 7 }, { path: "/x", kind: "table" }],
+            omitted: -3,
+          },
+        },
+      ],
+      [
+        "a source from a newer server",
+        { ...createRowLabel, source: "adapter" },
+      ],
+      [
+        "a warning from a newer server",
+        { ...createRowLabel, warnings: ["lookup_name"] },
+      ],
+      [
+        "warnings that are not a list",
+        { ...createRowLabel, warnings: "other" },
+      ],
+    ])(
+      "renders %s without breaking the card or its buttons",
+      async (_name, label) => {
+        const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+        renderCard(
+          withChatContext(
+            <McpToolApprovalCard
+              messageId="message-1"
+              resolution={null}
+              request={{
+                ...gistRequest,
+                display: {
+                  ...createRowDisplay,
+                  label: label as typeof createRowLabel,
+                },
+              }}
+            />,
+            "chat-1",
+            { continueToolApproval },
+          ),
+        );
+
+        expect(screen.getByText("Records")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+        await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
+      },
+    );
+
+    it("gives a label with a verb or kind this build has no words for the generic card", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            display: {
+              ...createRowDisplay,
+              label: {
+                ...createRowLabel,
+                object_kind: "invoice" as typeof createRowLabel.object_kind,
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "Northwind",
+      );
+    });
+
+    it("shows a label that throws when read as a row saved before labels", () => {
+      const label = { ...createRowLabel };
+      Object.defineProperty(label, "items", {
+        get() {
+          throw new Error("unreadable");
+        },
+      });
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            display: { ...createRowDisplay, label },
+          }}
+        />,
+      );
+
+      expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+      expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Allow once" }),
+      ).toBeInTheDocument();
+    });
   });
 });

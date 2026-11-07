@@ -260,6 +260,30 @@ describe("Trace — masked mode (cold-load / done state)", () => {
     );
     expect(screen.queryByText("You allowed this once")).not.toBeInTheDocument();
   });
+
+  it.each(["status", "neverAllow"])(
+    "reads only a decision recorded under the call's own id %s",
+    (id) => {
+      const decisions: Record<string, ToolDecision> = {};
+      // How a plain map takes a decision recorded under the id `__proto__`.
+      decisions["__proto__"] = DENIED_ONCE;
+      renderTrace(
+        [
+          {
+            ...toolUsePart("error"),
+            tool_call_id: id,
+            output: { status: "rejected" },
+          } as unknown as ContentPart,
+        ],
+        { toolDecisions: decisions },
+      );
+
+      expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+        /^Not run$/,
+      );
+      expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    },
+  );
 });
 
 const budgetRequest = (): ContentPart =>

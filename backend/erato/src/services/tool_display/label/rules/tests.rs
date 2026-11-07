@@ -712,6 +712,396 @@ fn the_cross_check_holds_any_label_against_the_tool_s_name() {
     );
 }
 
+#[test]
+fn every_recipient_is_the_target_or_a_field() {
+    let mail = json!({
+        "to": ["ann@example.com"],
+        "cc": ["bob@example.com", "cy@example.com"],
+        "bcc": ["dee@example.com"],
+        "subject": "Q3 numbers",
+        "body": "Attached.",
+        "importance": "high",
+    });
+    let sent = label("send_email", mail.clone());
+    assert_eq!(sent.mapping.action, ToolCallAction::Send);
+    let sent = &sent.mapping.items[0];
+    assert_eq!(
+        (
+            sent.title.as_deref(),
+            sent.target.as_deref(),
+            sent.after.as_deref()
+        ),
+        (Some("/subject"), Some("/to"), Some("/body"))
+    );
+    assert_eq!(sent.fields, ["/cc", "/bcc", "/importance"]);
+    assert_eq!(
+        recipient_members(&mail)
+            .into_iter()
+            .map(|recipient| recipient.member)
+            .collect::<Vec<_>>(),
+        ["/to", "/cc", "/bcc"]
+    );
+
+    // Graph's shape: every address, never a recipient's name as the title.
+    let graph = item(
+        "send_mail",
+        json!({"message": {
+            "toRecipients": [{"emailAddress": {"name": "Ann", "address": "ann@example.com"}}],
+            "ccRecipients": [
+                {"emailAddress": {"name": "Bob", "address": "bob@example.com"}},
+                {"emailAddress": {"address": "cy@example.com"}},
+            ],
+            "body": {"contentType": "Text", "content": "Hi"},
+        }}),
+    );
+    assert_eq!(
+        graph.target.as_deref(),
+        Some("/message/toRecipients/*/emailAddress/address")
+    );
+    assert_eq!(
+        graph.fields,
+        ["/message/ccRecipients/*/emailAddress/address"]
+    );
+    assert_eq!(graph.title, None);
+
+    let only_copies = item(
+        "send_email",
+        json!({"bcc": [{"email": "ann@example.com"}], "subject": "Hi"}),
+    );
+    assert_eq!(only_copies.target.as_deref(), Some("/bcc/*/email"));
+    assert!(only_copies.fields.is_empty());
+
+    let event = item(
+        "calendar_create_event",
+        json!({"calendar_id": "primary", "summary": "Sync", "attendees": [
+            {"email": "ann@example.com", "displayName": "Ann"},
+            {"email": "bob@example.com"},
+        ], "optional_attendees": ["cy@example.com"]}),
+    );
+    assert_eq!(event.target.as_deref(), Some("/calendar_id"));
+    assert_eq!(
+        event.fields[..2],
+        ["/attendees/*/email", "/optional_attendees"]
+    );
+
+    let shared = label(
+        "share_file",
+        json!({"file_id": "f_1", "share_with": ["ann@example.com"], "role": "writer"}),
+    );
+    assert_eq!(shared.mapping.action, ToolCallAction::Send);
+    let shared = &shared.mapping.items[0];
+    assert_eq!(
+        (shared.id.as_deref(), shared.target.as_deref()),
+        (Some("/file_id"), Some("/share_with"))
+    );
+    assert!(
+        shared.fields.is_empty(),
+        "no title, so nothing stands beside it"
+    );
+
+    // Linked records point at their IDs, so names come only from results.
+    let dataverse = item(
+        "create_record",
+        json!({"tablename": "email", "item": {
+            "subject": "Hi",
+            "to": [lookup(CONTACT, "contact")],
+            "cc": [lookup(ACCOUNT, "account")],
+        }}),
+    );
+    assert_eq!(dataverse.target.as_deref(), Some("/item/to/*/recordId"));
+    assert_eq!(dataverse.fields[0], "/item/cc/*/recordId");
+
+    let updated = item(
+        "update_event",
+        json!({"event_id": "e_1", "attendees": ["ann@example.com"], "location": "Room 2"}),
+    );
+    assert_eq!(updated.target.as_deref(), Some("/attendees"));
+    assert_eq!(updated.fields, ["/location"]);
+}
+
+#[test]
+fn recipients_go_by_their_usual_spellings_and_only_when_they_name_someone() {
+    for member in [
+        "cc",
+        "CC",
+        "Bcc",
+        "cc_recipients",
+        "ccRecipients",
+        "bcc-recipients",
+        "optionalAttendees",
+    ] {
+        let arguments =
+            json!({"to": "ann@example.com", "subject": "Hi", member: ["b@example.com"]});
+        assert_eq!(
+            item("send_email", arguments).fields,
+            [format!("/{member}")],
+            "{member}"
+        );
+    }
+    for member in [
+        "recipients",
+        "Recipient",
+        "toRecipients",
+        "attendees",
+        "invitees",
+        "participants",
+        "share_with",
+        "shareWith",
+        "sharedWith",
+        "Share-With",
+    ] {
+        let arguments = json!({"subject": "Hi", member: ["b@example.com"]});
+        assert_eq!(
+            item("send_message", arguments).target,
+            Some(format!("/{member}")),
+            "{member}"
+        );
+    }
+    for nobody in [
+        json!(null),
+        json!(""),
+        json!("  "),
+        json!([]),
+        json!([null, ""]),
+        json!({}),
+    ] {
+        let arguments = json!({"to": "ann@example.com", "subject": "Hi", "cc": nobody});
+        assert!(item("send_email", arguments).fields.is_empty(), "{nobody}");
+    }
+    // Entries that hold their address differently are shown whole.
+    let mixed = item(
+        "send_email",
+        json!({"subject": "Hi", "to": [{"email": "a@example.com"}, "b@example.com"]}),
+    );
+    assert_eq!(mixed.target.as_deref(), Some("/to"));
+    let named = item(
+        "send_message",
+        json!({"recipients": [{"name": "Ann", "email": "a@example.com"}], "text": "Hi"}),
+    );
+    assert_eq!(named.title, None);
+    assert_eq!(named.target.as_deref(), Some("/recipients/*/email"));
+    let keyed = item(
+        "send_email",
+        json!({"subject": "Hi", "to": "a", "cc/bcc": ["b"]}),
+    );
+    assert!(keyed.fields.is_empty());
+}
+
+#[test]
+fn a_label_shows_every_recipient_or_none() {
+    let mail = json!({"to": ["a@example.com"], "cc": ["b@example.com"], "bcc": ["c@example.com"], "subject": "Hi"});
+    let recipients = recipient_members(&mail);
+    let only_to = ToolCallLabelMapping {
+        action: ToolCallAction::Send,
+        object_kind: ToolCallObjectKind::Email,
+        items: vec![ToolCallLabelItemMapping {
+            title: Some("/subject".into()),
+            target: Some("/to".into()),
+            fields: vec!["/subject".into()],
+            ..Default::default()
+        }],
+        source: ToolCallLabelSource::Model,
+    };
+    let completed = with_every_recipient(&only_to, &recipients);
+    assert_eq!(completed.items[0].fields, ["/cc", "/bcc", "/subject"]);
+    assert_eq!(with_every_recipient(&completed, &recipients), completed);
+    // A single entry such as `/to/0` does not show the others.
+    let mut first_only = only_to.clone();
+    first_only.items[0].target = Some("/to/0".into());
+    assert_eq!(
+        with_every_recipient(&first_only, &recipients).items[0].fields[..3],
+        ["/to", "/cc", "/bcc"]
+    );
+    // A field past the ones a label reads shows nothing.
+    let mut late = only_to.clone();
+    late.items[0].fields = vec!["/missing".to_string(); MAX_FIELD_POINTERS];
+    late.items[0]
+        .fields
+        .extend(["/cc".to_string(), "/bcc".to_string()]);
+    assert_eq!(
+        with_every_recipient(&late, &recipients).items[0].fields[..2],
+        ["/cc", "/bcc"]
+    );
+    let nothing = ToolCallLabelMapping {
+        items: Vec::new(),
+        ..only_to
+    };
+    assert_eq!(with_every_recipient(&nothing, &recipients), nothing);
+
+    let crowded: serde_json::Map<String, Value> = [
+        "to",
+        "cc",
+        "bcc",
+        "attendees",
+        "invitees",
+        "participants",
+        "share_with",
+    ]
+    .into_iter()
+    .map(|member| (member.to_string(), json!(["x@example.com"])))
+    .collect();
+    let crowded = Value::Object(crowded);
+    assert_eq!(recipient_members(&crowded).len(), MAX_RECIPIENT_MEMBERS);
+}
+
+#[test]
+fn claims_are_consent_flags_and_lookup_names_wherever_they_sit() {
+    let arguments = json!({
+        "name": "The record's own name",
+        "hasUserApproved": true,
+        "options": {"user_confirmed": "Yes", "approved": true, "userConsent": false},
+        "customer": lookup(ACCOUNT, "account"),
+        "parent": {"name": "Parent", "parentaccountid": ACCOUNT},
+        "to": [{"recordId": CONTACT, "name": ["Typed", "names"], "relatedTable": "contact"}],
+        "*": {"recordId": CONTACT, "type": "contact", "title": "Starred"},
+        "user_confirmation_note": "Called on Monday",
+    });
+    let at = |path: &str| {
+        let value = arguments.pointer(path).unwrap();
+        claim(&arguments, path, value)
+    };
+    assert_eq!(at("/hasUserApproved"), Some(Claim::Consent));
+    assert_eq!(at("/options/user_confirmed"), Some(Claim::Consent));
+    assert_eq!(at("/options/userConsent"), Some(Claim::Consent));
+    assert_eq!(at("/options/approved"), None);
+    assert_eq!(at("/user_confirmation_note"), None);
+    assert_eq!(at("/customer/name"), Some(Claim::LookupName));
+    assert_eq!(at("/customer/recordId"), None);
+    assert_eq!(at("/to/0/name/1"), Some(Claim::LookupName));
+    assert_eq!(at("/*/title"), Some(Claim::LookupName));
+    assert_eq!(
+        at("/parent/name"),
+        None,
+        "not a lookup: no table, no bare ID"
+    );
+    assert_eq!(at("/name"), None, "the call itself is never a lookup");
+    assert_eq!(
+        claim(&arguments, "/missing/name", &json!("x")),
+        None,
+        "a path the arguments do not hold"
+    );
+    assert_eq!(Claim::LookupName.as_str(), "lookup_name");
+}
+
+#[test]
+fn the_rules_and_the_cross_check_are_total_and_bounded_on_hostile_input() {
+    let mut cases = super::super::tests::hostile_arguments();
+    let wide: serde_json::Map<String, Value> = (0..200_000)
+        .map(|i| (format!("k{i}"), json!(i)))
+        .chain([("title".to_string(), json!("past the budget"))])
+        .collect();
+    cases.push(Value::Object(wide));
+    let verbs: serde_json::Map<String, Value> = (0..512u32)
+        .map(|bits| {
+            let member: String = "operation"
+                .chars()
+                .enumerate()
+                .map(|(at, c)| {
+                    if bits >> at & 1 == 1 {
+                        c.to_ascii_uppercase()
+                    } else {
+                        c
+                    }
+                })
+                .collect();
+            (
+                member,
+                json!(if bits % 2 == 0 { "delete" } else { "create" }),
+            )
+        })
+        .collect();
+    cases.push(Value::Object(verbs.clone()));
+    cases.push(
+        json!({"title": "x", "a/b~c": {"page_id": "p"}, "\u{202E}to\u{0}": ["x@example.com"]}),
+    );
+    cases.push(json!({ format!("{}_id", "k".repeat(100_000)): RECORD, "title": "x" }));
+    cases.push(
+        json!({"to": [{"emailAddress": {"address": "a".repeat(1024 * 1024)}}], "subject": "x"}),
+    );
+
+    // Deeper than this, serde_json refuses a server's tool list.
+    let mut deep_schema = json!({"type": "object"});
+    for _ in 0..120 {
+        deep_schema = json!({"properties": {"x": deep_schema, "operation": {}}});
+    }
+    let wide_schema = json!({"anyOf": (0..100_000).map(|i| json!({"i": i})).collect::<Vec<_>>()});
+    let schemas = [
+        json!({}),
+        json!({"properties": ["not", "an", "object"], "type": 42}),
+        json!({"properties": {"operation": "not a schema"}}),
+        deep_schema,
+        wide_schema,
+    ];
+    let huge_name = format!("create_{}", "delete_".repeat(150_000));
+    let names = [
+        "",
+        "create_page",
+        "list\u{202E}_pages\u{0}",
+        "\u{1F600}\u{0301}\u{E0041}",
+        &huge_name,
+    ];
+    let contradicting = Some(hints(Some(true), Some(true)));
+
+    let tools: Vec<Tool> = names
+        .iter()
+        .flat_map(|name| {
+            schemas.iter().map(|schema| {
+                let mut tool = Tool::new(
+                    name.to_string(),
+                    "",
+                    schema.as_object().cloned().unwrap_or_default(),
+                );
+                tool.annotations = contradicting.clone();
+                tool
+            })
+        })
+        .collect();
+
+    for arguments in &cases {
+        let recipients = recipient_members(arguments);
+        assert!(recipients.len() <= MAX_RECIPIENT_MEMBERS);
+        assert!(verb_fields(arguments).len() <= MAX_VERB_FIELDS);
+        for name in names {
+            let rules = rules_label(name, arguments, contradicting.as_ref());
+            for item in &rules.mapping.items {
+                for pointer in [
+                    &item.title,
+                    &item.id,
+                    &item.target,
+                    &item.before,
+                    &item.after,
+                ]
+                .into_iter()
+                .flatten()
+                .chain(&item.fields)
+                {
+                    assert!(pointer.len() <= MAX_POINTER_BYTES, "{name}");
+                    assert!(
+                        !pointer::resolve(arguments, pointer).is_empty(),
+                        "{name}: {pointer} reaches nothing"
+                    );
+                }
+            }
+            let _ = with_every_recipient(&rules.mapping, &recipients);
+            for tool in tools.iter().filter(|tool| tool.name == name) {
+                let flags = cross_check(tool, arguments, rules.mapping.action);
+                if rules.mapping.action != ToolCallAction::Other {
+                    assert!(flags.contains(&CrossCheckFlag::ReadOnlyAnnotation));
+                }
+            }
+        }
+    }
+    assert_eq!(
+        label(&huge_name, json!({"title": "x"})).mapping.action,
+        ToolCallAction::Create,
+        "only the start of a long name is read"
+    );
+    assert_eq!(
+        label("update_record", Value::Object(verbs)).mapping.action,
+        ToolCallAction::Update
+    );
+}
+
 #[derive(Debug, Deserialize)]
 struct Case {
     id: String,

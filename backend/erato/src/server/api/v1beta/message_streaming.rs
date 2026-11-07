@@ -5876,7 +5876,9 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 child_message_id: child.child_message_id,
                 child_tool_call_id,
                 tool_name: child_tool_name,
-                display: child_display,
+                display: child_display
+                    .as_ref()
+                    .map(crate::services::tool_display::child_approval_display),
                 mcp_server_id: request.mcp_server_id.clone(),
                 input: child_input,
                 annotations: request.annotations.clone(),
@@ -6536,11 +6538,11 @@ mod generation_event_wire_format_tests {
                             crate::models::message::ToolResultDetails {
                                 links: vec![crate::models::message::ToolResultLink {
                                     uri: "https://records.example.test/rows/1".into(),
+                                    host: "records.example.test".into(),
+                                    matches_server_host: true,
                                     name: Some("row-1".into()),
                                     title: None,
-                                    mime_type: None,
                                 }],
-                                ..Default::default()
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -7909,7 +7911,7 @@ async fn stream_generate_chat_completion<'a>(
                     content_index: tool_index,
                     tool_call_id: unfinished_tool_call.call_id.clone(),
                     tool_name: unfinished_tool_call.fn_name.clone(),
-                    display: Some(display.clone()),
+                    display: display.clone(),
                     input: Some(unfinished_tool_call.fn_arguments.clone()),
                     status,
                     progress_message: None,
@@ -7927,7 +7929,7 @@ async fn stream_generate_chat_completion<'a>(
                             content_index: tool_index,
                             tool_call_id: unfinished_tool_call.call_id.clone(),
                             tool_name: unfinished_tool_call.fn_name.clone(),
-                            display: Some(display.clone()),
+                            display: display.clone(),
                             input: Some(unfinished_tool_call.fn_arguments.clone()),
                             status: bg_status,
                             progress_message: None,
@@ -7949,7 +7951,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: message_status,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: Some(display),
+                        display,
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -9302,6 +9304,11 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
+            let server_url = mcp
+                .config
+                .mcp_servers
+                .get(&managed_tool_call.server_id)
+                .map(|server| server.url.clone());
             let tool_call_span_start_time = if langfuse_enabled {
                 Some(SystemTime::now())
             } else {
@@ -9484,6 +9491,7 @@ async fn stream_generate_chat_completion<'a>(
                         &unfinished_tool_call,
                         output_schema.as_ref(),
                         &tool_call_result,
+                        server_url.as_deref(),
                     )
                     .await
                     {
@@ -13672,6 +13680,52 @@ mod tests {
         assert_eq!(legacy.approvals.len(), 2);
         assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
         assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn a_parked_childs_label_reaches_the_parent_without_what_the_child_chat_resolved() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use crate::services::tool_display::label::{
+            ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label,
+        };
+        let arguments = json!({"recordId": "rec-1", "item": {"status": "done"}});
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/item/status".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        resolved.items[0].id.as_mut().unwrap().values[0].resolved =
+            Some("Named by the child's results".into());
+        resolved.items[0].fields[0].values[0].resolved = Some("open".into());
+
+        let mut child = parked_child("task-a", "2026-10-20T10:00:00Z");
+        let crate::services::delegation::ChildStop::Approval(request) = &mut child.stop else {
+            unreachable!()
+        };
+        request.input = arguments;
+        let display = request.display.as_mut().expect("an MCP call's display");
+        display.label = Some(resolved);
+        let child_display = display.clone();
+        for item in &mut request.approvals {
+            item.display = Some(child_display.clone());
+        }
+
+        let item = super::parked_child_approval_item(&child);
+        assert_eq!(
+            item.child.and_then(|child| child.display),
+            Some(crate::models::message::ToolDisplayMetadata {
+                label: Some(written),
+                ..child_display.clone()
+            })
+        );
+        assert_eq!(parked_request(&child).display, Some(child_display));
     }
 
     #[test]
@@ -22080,6 +22134,10 @@ pub(crate) async fn run_continuation(
                             &call,
                             output_schema.as_ref(),
                             &result,
+                            mcp.config
+                                .mcp_servers
+                                .get(&server_id)
+                                .map(|server| server.url.as_str()),
                         )
                         .await
                         {
@@ -23807,7 +23865,7 @@ mod mcp_progress_event_tests {
         let (sse_tx, mut sse_rx) = tokio::sync::mpsc::channel(8);
         let (ack_tx, mut ack_rx) = tokio::sync::mpsc::channel(1);
         let call = async move {
-            for step in 1..=3 {
+            for step in 1..=4 {
                 let mut progress = rmcp::model::ProgressNotificationParam::new(
                     rmcp::model::ProgressToken(rmcp::model::NumberOrString::Number(1)),
                     f64::from(step),
@@ -23815,6 +23873,7 @@ mod mcp_progress_event_tests {
                 progress.message = match step {
                     2 => Some("\u{202E}<b>Reading</b>\u{0007} notes.txt".into()),
                     3 => Some("\u{200F}\u{2066}".into()),
+                    4 => Some(format!("\u{202E}<script>{}", "\u{0007}x".repeat(1_000_000))),
                     _ => None,
                 };
                 progress_tx.send(progress).unwrap();
@@ -23851,7 +23910,7 @@ mod mcp_progress_event_tests {
             sse_tx,
         );
         tokio::pin!(future);
-        for step in 1..=3 {
+        for step in 1..=4 {
             let event = tokio::select! {
                 event = events.recv() => event.unwrap(),
                 result = &mut future => panic!("result preceded progress: {result:?}"),
@@ -23867,15 +23926,21 @@ mod mcp_progress_event_tests {
                 (step == 1).then_some("generic")
             );
             assert_eq!(value["allowed_by"], "policy");
-            assert_eq!(
-                value["progress_message"].as_str(),
-                (step == 2).then_some("<b>Reading</b> notes.txt")
-            );
+            let shown = value["progress_message"].as_str();
+            match step {
+                2 => assert_eq!(shown, Some("<b>Reading</b> notes.txt")),
+                4 => {
+                    let shown = shown.unwrap();
+                    assert!(shown.starts_with("<script>xx"));
+                    assert_eq!(shown.chars().count(), MAX_DISPLAY_NAME_CHARS);
+                }
+                _ => assert_eq!(shown, None),
+            }
             assert!(sse_rx.try_recv().unwrap().is_ok());
             assert!(streaming_event_to_sse(&event).is_ok());
             ack_tx.send(()).await.unwrap();
         }
         assert!(future.await.is_ok());
-        assert_eq!(task.get_event_history().await.len(), 3);
+        assert_eq!(task.get_event_history().await.len(), 4);
     }
 }

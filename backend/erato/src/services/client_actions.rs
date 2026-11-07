@@ -197,5 +197,21 @@ mod tests {
         }
         assert_eq!(label(json!({})), (Other, Kind::Other));
         assert_eq!(label(json!({"action": 42})), (Other, Kind::Other));
+        for odd in [
+            json!(null),
+            json!("outlook.reply"),
+            json!(["outlook.reply"]),
+            json!({"action": null}),
+            json!({"action": ["outlook.reply"]}),
+            json!({"action": {"id": "outlook.reply"}}),
+            json!({"action": " outlook.reply"}),
+            json!({"action": "OUTLOOK.REPLY"}),
+            json!({"action": "outlook.reply\u{202E}"}),
+            json!({"action": "outlook/reply"}),
+            json!({"action": "x".repeat(1024 * 1024)}),
+            json!({"Action": "outlook.reply"}),
+        ] {
+            assert_eq!(label(odd.clone()), (Other, Kind::Other), "{odd}");
+        }
     }
 }

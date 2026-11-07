@@ -4293,7 +4293,7 @@ To show chat connectors while hiding preferences, set `show_frontend_tab = false
 
 The name users see for this server on approval cards (in the web app, for delegated tasks and in Microsoft Teams), in the tool steps of a response and in the Servers & Tools preferences tab. The name always comes from this configuration, never from the MCP server itself.
 
-**Type:** optional `string`, not blank, at most 128 bytes, without control or bidi formatting characters
+**Type:** optional `string`, not blank, at most 128 bytes, without control, bidi or invisible formatting characters (such as zero-width spaces and joiners, the byte order mark or tag characters)
 
 **Default:** the server ID tidied up: underscores and hyphens become spaces and the first letter is capitalized, so `web_access` is shown as "Web access". Messages saved before this setting existed keep showing the server ID.
 
@@ -6979,9 +6979,11 @@ the call but not shown.
 
 Paths are `$.key.key` paths into the call's arguments, like the replay fields,
 where `key[*]` stands for every element of an array. The backend reads every value
-through them; the label never holds text of its own. Startup fails on an invalid
-path, on more than 4 fields and on any other key in the table. Client tools that
-share a model-facing name across namespaces must use the same `label`. Calls stored
+through them; the label never holds text of its own. A table the backend cannot
+use is left out with a startup warning, and the tool loads and shows its name as
+before: an invalid path, more than 4 fields, any other key or value in the table
+(such as one written for a newer release), and the tables of client tools that
+share a model-facing name across namespaces but not the same `label`. Calls stored
 before a tool had a label show as before.
 
 ### `budget`

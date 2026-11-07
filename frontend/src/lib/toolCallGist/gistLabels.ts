@@ -1,9 +1,12 @@
 import { plural, select, t } from "@lingui/core/macro";
 
+import { listedValues, namesInLine } from "./gist";
+
 import type {
   Gist,
   GistAction,
   GistItem,
+  GistLineSlots,
   GistKind,
   GistPhase,
   GistValue,
@@ -324,8 +327,6 @@ export const GIST_TITLE_SLOT = "\uE000";
 export const GIST_WHERE_SLOT = "\uE001";
 export const GIST_SLOTS = /([\uE000\uE001])/;
 
-const MAX_LINE_VALUES = 3;
-
 /** One item's line with the slots still in it. */
 export const gistLineSentence = (
   gist: Gist,
@@ -336,22 +337,30 @@ export const gistLineSentence = (
     action: gist.action,
     phase,
     // A batch is counted in the line and named in its rows.
-    shape: gistShape(
-      item.count === 1 && item.names.length > 0,
-      item.where.length > 0,
-    ),
+    shape: gistShape(namesInLine(item), item.where.length > 0),
     kind: gistKindLabel(gist.kind, item.count),
     title: GIST_TITLE_SLOT,
     where: GIST_WHERE_SLOT,
   });
 
 const plainValues = (values: GistValue[]) =>
-  values
-    .slice(0, MAX_LINE_VALUES)
+  listedValues(values)
     .map((value) =>
       value.origin === "written" ? `“${value.text}”` : value.text,
     )
     .join(", ");
+
+/**
+ * Which values an approval card's line names in the language shown, so a
+ * translation that leaves one out does not hide it.
+ */
+export const gistAskLineSlots: GistLineSlots = (gist, item) => {
+  const sentence = gistLineSentence(gist, item, "ask");
+  return {
+    title: sentence.includes(GIST_TITLE_SLOT),
+    where: sentence.includes(GIST_WHERE_SLOT),
+  };
+};
 
 /** The line as plain text, for a tooltip on a row that truncates it. */
 export const gistPlainLine = (

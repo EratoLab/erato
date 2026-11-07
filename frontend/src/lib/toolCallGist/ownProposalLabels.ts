@@ -161,6 +161,13 @@ export const commentChangeRow = (op: WordCommentOp | "other"): string => {
   }
 };
 
+/** The changes of a long mixed batch past the rows its toggle lists. */
+export const commentChangesMore = (more: number): string =>
+  t({
+    id: "toolGist.more",
+    message: plural(more, { one: "+# more", other: "+# more" }),
+  });
+
 /** Whether a comment proposal mixes operations, so it lists one row per change. */
 export const isMixedCommentProposal = (proposal: OwnProposal): boolean =>
   proposal.kind === "comments" && commentOpCounts(proposal.changes).length > 1;
