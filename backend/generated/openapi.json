@@ -6541,7 +6541,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ToolDisplayMetadata"
+                "$ref": "#/components/schemas/ToolDisplayMetadata",
+                "description": "The child call's display. Its label carries no `resolved` values:\nthose come from the child chat's results, which stay in that chat."
               }
             ]
           },
