@@ -6678,7 +6678,12 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
-msgid "scheduled.failure.many"
+#~ msgid "scheduled.failure.many"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.manyUnderPast"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -6928,6 +6933,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.snoozed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
 msgid "scheduled.form.summary.weekdays"
 msgstr ""
 
@@ -7153,6 +7163,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.meta.cancelled"
 msgstr ""
 
@@ -7168,8 +7188,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
-msgid "scheduled.item.meta.notDeliveredVia"
-msgstr ""
+#~ msgid "scheduled.item.meta.notDeliveredVia"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
@@ -7184,6 +7204,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.meta.wasDue"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasPlannedFor"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -7237,7 +7262,7 @@ msgid "scheduled.new.trigger"
 msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+#: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.notice.limitReached"
 msgstr ""
 
@@ -9420,8 +9445,8 @@ msgid "Cancel"
 msgstr "Cancelar"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Cancel action"
-msgstr "Cancelar acción"
+#~ msgid "Cancel action"
+#~ msgstr "Cancelar acción"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cancel queued message"
@@ -9548,8 +9573,8 @@ msgid "Confirm"
 msgstr "Confirmar"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Confirm action"
-msgstr "Confirmar acción"
+#~ msgid "Confirm action"
+#~ msgstr "Confirmar acción"
 
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx

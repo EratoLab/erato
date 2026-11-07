@@ -8,12 +8,15 @@ import type { ScheduledDateFormat, ScheduledDayGroup } from "./scheduledItems";
 interface ScheduledItemGroupsProps extends ScheduledItemActions {
   groups: ScheduledDayGroup[];
   dateContext: ScheduledDateFormat;
+  /** Reference time for the rows; the current time when omitted. */
+  now?: Date;
 }
 
 /** One tab's items, a labelled section per day. */
 export function ScheduledItemGroups({
   groups,
   dateContext,
+  now,
   ...actions
 }: ScheduledItemGroupsProps) {
   const baseId = useId();
@@ -40,6 +43,7 @@ export function ScheduledItemGroups({
                   key={item.id}
                   item={item}
                   dateContext={dateContext}
+                  now={now}
                   {...actions}
                 />
               ))}

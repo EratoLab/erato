@@ -15,6 +15,11 @@ export interface ScheduledNewMenuProps {
   onNewReminder: () => void;
   /** Omitted until a chat can open with the schedule facet (ERMAIN-1143). */
   onCreateWithChat?: () => void;
+  /**
+   * Set at the limit of upcoming items: Reminder is disabled and says why
+   * instead of opening a form the API would refuse.
+   */
+  limitNotice?: string | null;
 }
 
 /**
@@ -25,6 +30,7 @@ export interface ScheduledNewMenuProps {
 export function ScheduledNewMenu({
   onNewReminder,
   onCreateWithChat,
+  limitNotice,
 }: ScheduledNewMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const newLabel = t({ id: "scheduled.new.trigger", message: "New" });
@@ -52,12 +58,15 @@ export function ScheduledNewMenu({
         {
           id: "reminder",
           label: t({ id: "scheduled.new.reminder", message: "Reminder" }),
-          description: t({
-            id: "scheduled.new.reminder.description",
-            message: "Get a message at a time you choose",
-          }),
+          description:
+            limitNotice ??
+            t({
+              id: "scheduled.new.reminder.description",
+              message: "Get a message at a time you choose",
+            }),
           icon: <BellIcon className="size-4" />,
           onClick: onNewReminder,
+          disabled: Boolean(limitNotice),
           closesImmediately: true,
         },
         {

@@ -1,11 +1,11 @@
 import { t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { Fragment } from "react";
 
 import { ScheduledStatusPill } from "./ScheduledStatusPill";
 import {
   formatScheduledDateTime,
   scheduledChannelLabel,
+  scheduledHourStyle,
   scheduledItemTab,
   scheduledTypeLabel,
 } from "./scheduledItems";
@@ -23,7 +23,11 @@ import {
   Trash,
 } from "../icons";
 
-import type { ScheduledDateFormat, ScheduledItem } from "./scheduledItems";
+import type {
+  ScheduledDateFormat,
+  ScheduledItem,
+  ScheduledItemChannel,
+} from "./scheduledItems";
 import type { DropdownMenuItem } from "../Controls/DropdownMenu";
 import type { ReactNode } from "react";
 
@@ -41,15 +45,39 @@ interface ScheduledItemRowProps extends ScheduledItemActions {
   item: ScheduledItem;
   /** Zone and locale the times are shown in. */
   dateContext: ScheduledDateFormat;
+  /** Reference time; the current time when omitted. */
+  now?: Date;
+}
+
+/**
+ * What a failed delivery means for the user, with the channel's own setup
+ * hint. Row copy: the page-level alert names no channel.
+ */
+function failedDeliveryText(channel: ScheduledItemChannel | null | undefined) {
+  switch (channel) {
+    case "teams_chat": {
+      const channelName = scheduledChannelLabel(channel);
+      return t({
+        id: "scheduled.item.failed.teamsChat",
+        message: `Could not be delivered via ${channelName}. Check that Erato is set up in Teams, then schedule it again.`,
+      });
+    }
+    default:
+      return t({
+        id: "scheduled.item.failed",
+        message: "Could not be delivered. You can schedule it again.",
+      });
+  }
 }
 
 /**
  * The parts of the meta line: type first, then when and how it went out. The
- * channel is named here and nowhere at page level.
+ * channel is named in the row and nowhere at page level.
  */
 function metaParts(
   item: ScheduledItem,
   dateContext: ScheduledDateFormat,
+  now: Date,
 ): ReactNode[] {
   const when = formatScheduledDateTime(item.dueAt, dateContext);
   const relative = (
@@ -97,22 +125,17 @@ function metaParts(
       );
       break;
     case "failed":
-      parts.push(
-        channel
-          ? t({
-              id: "scheduled.item.meta.notDeliveredVia",
-              message: `Could not be delivered via ${channel}`,
-            })
-          : null,
-        when,
-        relative,
-        linkedChat,
-      );
+      parts.push(when, relative, linkedChat);
       break;
     case "cancelled":
       parts.push(
         t({ id: "scheduled.item.meta.cancelled", message: "Cancelled" }),
-        t({ id: "scheduled.item.meta.wasDue", message: `Was due ${when}` }),
+        Date.parse(item.dueAt) > now.getTime()
+          ? t({
+              id: "scheduled.item.meta.wasPlannedFor",
+              message: `Was planned for ${when}`,
+            })
+          : t({ id: "scheduled.item.meta.wasDue", message: `Was due ${when}` }),
       );
       break;
   }
@@ -127,6 +150,7 @@ function metaParts(
 export function ScheduledItemRow({
   item,
   dateContext,
+  now,
   onEdit,
   onSnooze,
   onCancel,
@@ -135,10 +159,11 @@ export function ScheduledItemRow({
   onDelete,
 }: ScheduledItemRowProps) {
   const { i18n } = useLingui();
+  const locale = i18n.locale || undefined;
   const name = item.name;
   const isUpcoming = scheduledItemTab(item) === "upcoming";
-  const snoozeTime = new Intl.DateTimeFormat(i18n.locale || undefined, {
-    hour: "numeric",
+  const snoozeTime = new Intl.DateTimeFormat(locale, {
+    hour: scheduledHourStyle(locale),
     minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
   }).format(new Date(2000, 0, 1, SCHEDULED_SNOOZE_HOUR));
 
@@ -257,21 +282,30 @@ export function ScheduledItemRow({
             {item.message}
           </p>
         )}
-        {item.status === "failed" && item.failureReason && (
+        {item.status === "failed" && (
           <p className="mt-2 text-sm text-theme-error-fg">
-            {item.failureReason}
+            {failedDeliveryText(item.channel)}
           </p>
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-muted">
-          {metaParts(item, dateContext).map((part, index) => (
-            <Fragment key={index}>
-              {index > 0 && <span aria-hidden="true">·</span>}
-              <span className="inline-flex min-h-6 items-center">{part}</span>
-            </Fragment>
-          ))}
+        {/* Every part leads with its dot and the line is pulled back by one
+            dot, so the dot that would open a wrapped line is clipped instead
+            of one dangling at the end of the line before. */}
+        <div className="mt-3 overflow-hidden text-xs text-theme-fg-muted">
+          <div className="-ms-4 flex flex-wrap items-center gap-y-1">
+            {metaParts(item, dateContext, now ?? new Date()).map(
+              (part, index) => (
+                <span key={index} className="inline-flex min-h-6 items-center">
+                  <span aria-hidden="true" className="w-4 shrink-0 text-center">
+                    ·
+                  </span>
+                  {part}
+                </span>
+              ),
+            )}
+          </div>
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap justify-end gap-2">
         <DropdownMenu
           items={menuItems}
           noWrapItems

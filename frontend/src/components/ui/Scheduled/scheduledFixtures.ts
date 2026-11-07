@@ -85,7 +85,6 @@ export function createScheduledItemFixtures(now: Date): ScheduledItem[] {
       status: "failed",
       dueAt: at(now, -4, 9),
       channel: "teams_chat",
-      failureReason: "Erato could not reach your Teams chat at that time.",
     },
     {
       id: "fixture-framework-contract",

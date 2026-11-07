@@ -104,6 +104,24 @@ export const Edit: Story = {
   },
 };
 
+/**
+ * A snoozed item: the fields keep its schedule, the summary says the snooze
+ * until the schedule is changed.
+ */
+export const EditSnoozed: Story = {
+  args: {
+    title: "Edit reminder",
+    subtitle: "Changes apply to what has not happened yet.",
+    mode: "edit",
+    initialValues: {
+      ...fromTemplate,
+      date: "2026-11-07",
+      time: "10:00",
+    },
+    snoozedUntil: "2026-11-08T08:00:00Z",
+  },
+};
+
 export const RepeatingWeekly: Story = {
   args: {
     initialValues: {
@@ -133,7 +151,10 @@ export const RepeatingMonthlyUntilADate: Story = {
   },
 };
 
-/** The channel cannot reach the user yet: how to set it up. */
+/**
+ * No channel reaches the user yet: the route opens the delivery settings up
+ * front, so the setup hint shows before the first try.
+ */
 export const ChannelNotSetUp: Story = {
   args: {
     initialValues: fromTemplate,
@@ -142,7 +163,10 @@ export const ChannelNotSetUp: Story = {
   },
 };
 
-/** The API refused the channel; the delivery settings open on the error. */
+/**
+ * The API refused the channel; the delivery settings open on the error and
+ * the channel takes focus.
+ */
 export const ChannelRefused: Story = {
   args: {
     initialValues: fromTemplate,
@@ -178,7 +202,7 @@ export const RepeatingValidationErrors: Story = {
   },
 };
 
-/** A refusal for the form as a whole, next to the button. */
+/** A refusal for the form as a whole, next to the button, scrolled to and focused. */
 export const LimitReached: Story = {
   args: {
     initialValues: fromTemplate,

@@ -82,27 +82,46 @@ export type ScheduledPageNotice =
   | { kind: "delivery_unavailable" }
   | { kind: "limit_reached"; max: number };
 
+/** Whether no delivery channel reaches the user. */
+export function scheduledNoChannelConnected(
+  channels: DeliveryChannelInfo[],
+): boolean {
+  return !channels.some((channel) => channel.status === "connected");
+}
+
+/** Whether the user has as many upcoming items as they may; 0 sets no limit. */
+export function scheduledLimitReached(
+  upcomingCount: number,
+  maxUpcoming: number | undefined,
+): boolean {
+  return maxUpcoming != null && maxUpcoming > 0 && upcomingCount >= maxUpcoming;
+}
+
 export function scheduledPageNotice(
   response: Pick<
     ScheduledItemsResponse,
     "channels" | "upcoming_count" | "max_upcoming"
   >,
 ): ScheduledPageNotice | null {
-  const statuses = response.channels.map((channel) => channel.status);
-  if (!statuses.includes("connected")) {
-    return statuses.includes("not_set_up")
+  if (scheduledNoChannelConnected(response.channels)) {
+    return response.channels.some((channel) => channel.status === "not_set_up")
       ? { kind: "delivery_not_set_up" }
       : { kind: "delivery_unavailable" };
   }
-  if (
-    response.max_upcoming > 0 &&
-    response.upcoming_count >= response.max_upcoming
-  ) {
+  if (scheduledLimitReached(response.upcoming_count, response.max_upcoming)) {
     return { kind: "limit_reached", max: response.max_upcoming };
   }
   return null;
 }
 /* eslint-enable lingui/no-unlocalized-strings */
+
+/** Why nothing new can be scheduled at the limit; names no item type. */
+export function scheduledLimitMessage(max: number): string {
+  return t({
+    id: "scheduled.notice.limitReached",
+    message: `You have the maximum of ${max} upcoming items. Cancel one to schedule another.`,
+  });
+}
 
 export type ScheduledRefusalCode = ScheduledItemErrorCode;
 

@@ -13,7 +13,7 @@ import type { StatusPillTone } from "../Feedback/StatusPill";
 import type { DeliveryChannelStatus } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /* eslint-disable lingui/no-unlocalized-strings -- radio name and values */
-const RADIO_NAME = "scheduled-channel";
+export const SCHEDULED_CHANNEL_INPUT_NAME = "scheduled-channel";
 const DESKTOP_NOTIFICATION = "desktop_notification";
 const BROWSER_NOTIFICATION = "browser_notification";
 /* eslint-enable lingui/no-unlocalized-strings */
@@ -127,7 +127,7 @@ export function ScheduledDeliverySettings({
         </legend>
         <div className="grid gap-3">
           <RadioCard
-            name={RADIO_NAME}
+            name={SCHEDULED_CHANNEL_INPUT_NAME}
             value={channel}
             // The only channel so far, so always the chosen one.
             checked
@@ -163,7 +163,7 @@ export function ScheduledDeliverySettings({
             ) : null}
           </RadioCard>
           <RadioCard
-            name={RADIO_NAME}
+            name={SCHEDULED_CHANNEL_INPUT_NAME}
             value={DESKTOP_NOTIFICATION}
             checked={false}
             onChange={() => undefined}
@@ -181,7 +181,7 @@ export function ScheduledDeliverySettings({
             trailing={comingLater()}
           />
           <RadioCard
-            name={RADIO_NAME}
+            name={SCHEDULED_CHANNEL_INPUT_NAME}
             value={BROWSER_NOTIFICATION}
             checked={false}
             onChange={() => undefined}

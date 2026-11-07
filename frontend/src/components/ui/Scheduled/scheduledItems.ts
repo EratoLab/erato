@@ -30,8 +30,6 @@ export interface ScheduledItem {
   dueAt: string;
   channel?: ScheduledItemChannel | null;
   linkedChat?: { id: string; title: string } | null;
-  /** Why a failed item failed, in the user's language. */
-  failureReason?: string | null;
   /**
    * The tab the API listed it under. Without it the status decides, which is
    * what an item that is still active always agrees with.
@@ -94,7 +92,20 @@ export interface ScheduledDateContext extends ScheduledDateFormat {
   now: Date;
 }
 
-/** "Mon, 9 Nov, 08:30" in the given locale and zone. */
+/**
+ * How to write the hour: unpadded on a 12-hour clock ("9:00 AM"), padded on a
+ * 24-hour one ("09:00"), where `numeric` alone would drop the zero too.
+ */
+export function scheduledHourStyle(
+  locale: string | undefined,
+): "numeric" | "2-digit" {
+  const { hourCycle } = new Intl.DateTimeFormat(locale, {
+    hour: "numeric",
+  }).resolvedOptions();
+  return hourCycle === "h11" || hourCycle === "h12" ? "numeric" : "2-digit"; // eslint-disable-line lingui/no-unlocalized-strings
+}
+
+/** "Sun, Nov 8, 9:00 AM" or "So., 8. Nov., 09:00" in the given locale and zone. */
 export function formatScheduledDateTime(
   iso: string,
   { locale, timeZone }: ScheduledDateFormat,
@@ -103,7 +114,7 @@ export function formatScheduledDateTime(
     weekday: "short",
     day: "numeric",
     month: "short",
-    hour: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
+    hour: scheduledHourStyle(locale),
     minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
     timeZone,
   }).format(new Date(iso));

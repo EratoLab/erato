@@ -6678,8 +6678,13 @@ msgstr "Ihre geplanten Einträge konnten nicht geladen werden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
-msgid "scheduled.failure.many"
-msgstr "Sie finden sie unter „Vergangen“, jeweils mit dem Grund."
+#~ msgid "scheduled.failure.many"
+#~ msgstr "Sie finden sie unter „Vergangen“, jeweils mit dem Grund."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.manyUnderPast"
+msgstr "Sie finden sie unter „Vergangen“."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
@@ -6928,6 +6933,11 @@ msgstr "Findet <0>{pattern}</0> statt, zum ersten Mal am {firstDay}."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.snoozed"
+msgstr "Zurückgestellt bis <0>{until}</0>. Wenn Sie den Zeitplan ändern, entfällt die Zurückstellung."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
 msgid "scheduled.form.summary.weekdays"
 msgstr "jeden Werktag um {time}"
 
@@ -7153,6 +7163,16 @@ msgstr "„{name}“ löschen?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed"
+msgstr "Konnte nicht zugestellt werden. Sie können es erneut planen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat"
+msgstr "Konnte nicht über {channelName} zugestellt werden. Prüfen Sie, ob Erato in Teams eingerichtet ist, und planen Sie es dann erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.meta.cancelled"
 msgstr "Abgebrochen"
 
@@ -7168,8 +7188,8 @@ msgstr "Verknüpfter Chat: {chatTitle}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
-msgid "scheduled.item.meta.notDeliveredVia"
-msgstr "Konnte nicht über {channel} zugestellt werden"
+#~ msgid "scheduled.item.meta.notDeliveredVia"
+#~ msgstr "Konnte nicht über {channel} zugestellt werden"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
@@ -7185,6 +7205,11 @@ msgstr "über {channel}"
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.meta.wasDue"
 msgstr "War fällig am {when}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasPlannedFor"
+msgstr "War geplant für {when}"
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -7237,7 +7262,7 @@ msgid "scheduled.new.trigger"
 msgstr "Neu"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+#: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.notice.limitReached"
 msgstr "Sie haben die Höchstzahl von {max} anstehenden Einträgen erreicht. Brechen Sie einen ab, um einen neuen zu planen."
 
@@ -9420,8 +9445,8 @@ msgid "Cancel"
 msgstr "Abbrechen"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Cancel action"
-msgstr "Aktion abbrechen"
+#~ msgid "Cancel action"
+#~ msgstr "Aktion abbrechen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cancel queued message"
@@ -9548,8 +9573,8 @@ msgid "Confirm"
 msgstr "Bestätigen"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Confirm action"
-msgstr "Aktion bestätigen"
+#~ msgid "Confirm action"
+#~ msgstr "Aktion bestätigen"
 
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx

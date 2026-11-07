@@ -110,6 +110,7 @@ describe("useScheduledItems", () => {
     expect(result.current.counts).toEqual({ upcoming: 1, past: 140 });
     expect(result.current.timeZone).toBe("Europe/Berlin");
     expect(result.current.notice).toBeNull();
+    expect(result.current.maxUpcoming).toBe(10);
   });
 
   it("snoozes to tomorrow morning in the user's zone", async () => {

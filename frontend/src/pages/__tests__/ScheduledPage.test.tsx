@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ScheduledTemplates } from "@/components/ui/Scheduled/ScheduledTemplates";
 import {
   createScheduledItemFixtures,
   SCHEDULED_TEMPLATE_FIXTURES,
@@ -117,7 +118,9 @@ describe("ScheduledPageView", () => {
       name: "Check the customs clearance status",
     });
     expect(within(failed).getByText("Failed")).toBeInTheDocument();
-    expect(failed).toHaveTextContent("Could not be delivered via Teams chat");
+    expect(failed).toHaveTextContent(
+      "Could not be delivered via Teams chat. Check that Erato is set up in Teams, then schedule it again.",
+    );
     // The rows already say it on Past, so the alert drops its action there.
     expect(
       screen.queryByRole("button", { name: "Show in Past" }),
@@ -134,11 +137,10 @@ describe("ScheduledPageView", () => {
     fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel" }));
     expect(props.onCancel).not.toHaveBeenCalled();
 
-    const confirm = await screen.findByRole("button", {
-      name: "Confirm action",
-    });
-    expect(confirm).toHaveTextContent("Cancel it");
-    fireEvent.click(confirm);
+    expect(
+      await screen.findByRole("button", { name: "Keep it" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel it" }));
 
     expect(props.onCancel).toHaveBeenCalledWith(
       expect.objectContaining({ name }),
@@ -156,7 +158,9 @@ describe("ScheduledPageView", () => {
     expect(props.onDelete).not.toHaveBeenCalled();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Confirm action" }),
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Delete",
+      }),
     );
     expect(props.onDelete).toHaveBeenCalledWith(
       expect.objectContaining({ name }),
@@ -210,5 +214,99 @@ describe("ScheduledPageView", () => {
     const notice = screen.getByTestId("scheduled-notice");
     expect(notice).toHaveTextContent("Set up delivery first");
     expect(notice.textContent).not.toMatch(/Teams|reminder/i);
+  });
+
+  it("promises no reason for several failures", () => {
+    const now = new Date("2026-11-07T12:00:00Z");
+    const failure = (id: string) => ({
+      id,
+      type: "reminder" as const,
+      name: id,
+      status: "failed" as const,
+      dueAt: "2026-11-06T08:00:00Z",
+      channel: "teams_chat" as const,
+    });
+    renderView({ now, items: [failure("first"), failure("second")] });
+
+    expect(screen.getByTestId("scheduled-failure-alert")).toHaveTextContent(
+      "2 items could not be carried outThey are listed under Past.",
+    );
+  });
+
+  it("says a cancelled item was planned for a time still ahead", () => {
+    const now = new Date("2026-11-07T12:00:00Z");
+    const cancelled = (id: string, dueAt: string) => ({
+      id,
+      type: "reminder" as const,
+      name: id,
+      status: "cancelled" as const,
+      dueAt,
+      channel: "teams_chat" as const,
+    });
+    renderView({
+      now,
+      initialTab: "past",
+      items: [
+        cancelled("ahead", "2026-11-08T13:00:00Z"),
+        cancelled("over", "2026-11-06T13:00:00Z"),
+      ],
+      timeZone: "Europe/Berlin",
+    });
+
+    expect(screen.getByRole("article", { name: "ahead" })).toHaveTextContent(
+      "Was planned for Sun, Nov 8, 2:00 PM",
+    );
+    expect(screen.getByRole("article", { name: "over" })).toHaveTextContent(
+      "Was due Fri, Nov 6, 2:00 PM",
+    );
+  });
+
+  it("disables a new reminder at the limit and says why", async () => {
+    const props = renderView({ maxUpcoming: 4 });
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const reminder = await screen.findByRole("menuitem", { name: /Reminder/ });
+
+    expect(reminder).toBeDisabled();
+    expect(reminder).toHaveTextContent(
+      "You have the maximum of 4 upcoming items. Cancel one to schedule another.",
+    );
+    fireEvent.click(reminder);
+    expect(props.onNewReminder).not.toHaveBeenCalled();
+  });
+
+  it("keeps a new reminder available below the limit", async () => {
+    renderView({ maxUpcoming: 5 });
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+
+    expect(
+      await screen.findByRole("menuitem", { name: /Reminder/ }),
+    ).toBeEnabled();
+  });
+
+  it("disables the templates with the reason in place of their notes", () => {
+    const onSelect = vi.fn();
+    render(
+      <I18nProvider i18n={i18n}>
+        <ScheduledTemplates
+          templates={SCHEDULED_TEMPLATE_FIXTURES}
+          onSelect={onSelect}
+          disabledReason="You have the maximum of 10 upcoming items."
+        />
+      </I18nProvider>,
+    );
+
+    const template = screen.getByTestId("starter-prompt-follow-up-offer");
+    expect(template).toBeDisabled();
+    expect(template).toHaveAttribute(
+      "title",
+      "You have the maximum of 10 upcoming items.",
+    );
+    fireEvent.click(template);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("A template opens the form with the text filled in."),
+    ).not.toBeInTheDocument();
   });
 });

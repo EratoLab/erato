@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react";
 import { Trans } from "@lingui/react/macro";
 
 import { scheduledFirstOccurrence } from "./scheduledForm";
+import { formatScheduledDateTime, scheduledHourStyle } from "./scheduledItems";
 import { daysBetweenDateKeys, localDateKey } from "./scheduledTime";
 import { Alert } from "../Feedback/Alert";
 
@@ -37,11 +38,11 @@ export function formatWallDate(key: string, locale: string | undefined) {
   }).format(utcNoon(key));
 }
 
-/** "10:00" for an `HH:MM`, in the locale's clock. */
+/** "9:00 AM" or "09:00" for an `HH:MM`, in the locale's clock. */
 export function formatWallTime(time: string, locale: string | undefined) {
   const [hour, minute] = time.split(":").map(Number);
   return new Intl.DateTimeFormat(locale, {
-    hour: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
+    hour: scheduledHourStyle(locale),
     minute: "2-digit", // eslint-disable-line lingui/no-unlocalized-strings
     timeZone: UTC,
   }).format(new Date(Date.UTC(2000, 0, 1, hour, minute)));
@@ -139,6 +140,11 @@ interface ScheduledTriggerSummaryProps {
   now: Date;
   /** The zone the times are read in; never named in the line. */
   timeZone: string | undefined;
+  /**
+   * ISO time a snooze moved the item to, while its schedule is as loaded:
+   * the line says the snooze instead of the schedule's own times.
+   */
+  snoozedUntil?: string | null;
 }
 
 /** The info line under the trigger: when it happens, in plain words. */
@@ -146,13 +152,22 @@ export function ScheduledTriggerSummary({
   values,
   now,
   timeZone,
+  snoozedUntil,
 }: ScheduledTriggerSummaryProps) {
   const { i18n } = useLingui();
   const locale = i18n.locale || undefined;
   const first = scheduledFirstOccurrence(values, now, timeZone);
 
   let content: React.ReactNode;
-  if (isIncomplete(values)) {
+  if (snoozedUntil) {
+    const until = formatScheduledDateTime(snoozedUntil, { locale, timeZone });
+    content = (
+      <Trans id="scheduled.form.summary.snoozed">
+        Snoozed until <strong className="font-semibold">{until}</strong>.
+        Changing the schedule replaces the snooze.
+      </Trans>
+    );
+  } else if (isIncomplete(values)) {
     content = t({
       id: "scheduled.form.summary.incomplete",
       message: "Complete the schedule to see when it happens.",

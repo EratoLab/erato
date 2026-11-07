@@ -55,8 +55,25 @@ export const Empty: Story = {
 /** Upcoming items by day, with the failed item as an alert above them. */
 export const WithItems: Story = {};
 
+/**
+ * Past with a failed delivery, whose row says what to check, and an item
+ * cancelled before its time, which was planned for it rather than due.
+ */
 export const PastTab: Story = {
-  args: { initialTab: "past" },
+  args: {
+    initialTab: "past",
+    items: [
+      ...createScheduledItemFixtures(new Date()),
+      {
+        id: "fixture-cancelled-ahead",
+        type: "reminder",
+        name: "Remind the team about the stocktake",
+        status: "cancelled",
+        dueAt: new Date(Date.now() + 26 * 60 * 60 * 1000).toISOString(),
+        channel: "teams_chat",
+      },
+    ],
+  },
 };
 
 /** Only upcoming items, so no failure alert. */
@@ -133,9 +150,15 @@ export const DeliveryUnavailable: Story = {
   args: { notice: { kind: "delivery_unavailable" } },
 };
 
-/** The user has the maximum number of upcoming items. */
+/** The user has the maximum number of upcoming items (4 in the sample). */
 export const LimitReached: Story = {
-  args: { notice: { kind: "limit_reached", max: 10 } },
+  args: { notice: { kind: "limit_reached", max: 4 }, maxUpcoming: 4 },
+};
+
+/** At the limit, New → Reminder is disabled and says why. */
+export const LimitReachedNewMenu: Story = {
+  args: LimitReached.args,
+  play: NewMenuOpen.play,
 };
 
 export const Loading: Story = {

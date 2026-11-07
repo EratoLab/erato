@@ -1,20 +1,25 @@
 import { t } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { ScheduledDeliverySettings } from "./ScheduledDeliverySettings";
+import {
+  SCHEDULED_CHANNEL_INPUT_NAME,
+  ScheduledDeliverySettings,
+} from "./ScheduledDeliverySettings";
 import {
   ScheduledTriggerSummary,
   weekdayName,
 } from "./ScheduledTriggerSummary";
 import {
   SCHEDULED_WEEKDAYS,
+  scheduledTriggerUnchanged,
   validateScheduledForm,
   weekdayOfDateKey,
 } from "./scheduledForm";
 import { scheduledTypeLabel } from "./scheduledItems";
 import { localDateKey } from "./scheduledTime";
 import { Button } from "../Controls/Button";
+import { COLLAPSE_DURATION_MS } from "../Controls/Collapse";
 import { Alert } from "../Feedback/Alert";
 import { FormField } from "../Input/FormField";
 import { Input } from "../Input/Input";
@@ -53,6 +58,12 @@ export interface ScheduledItemFormProps {
   serverErrors?: ScheduledFormErrors;
   /** An API refusal for the form as a whole. */
   formError?: string | null;
+  /**
+   * Edit of a snoozed item: the ISO time the snooze moved it to. The fields
+   * keep the item's own schedule; the summary says the snooze until the
+   * schedule is changed.
+   */
+  snoozedUntil?: string | null;
   /** Show the field errors from the start, as after a submit. */
   initialShowErrors?: boolean;
   initialAdvancedOpen?: boolean;
@@ -79,6 +90,38 @@ function SectionHeading({
   );
 }
 
+/* eslint-disable lingui/no-unlocalized-strings -- selectors */
+/**
+ * Scrolls a refusal into view and focuses it: the channel when the delivery
+ * settings were refused, else the first invalid field, else the form's alert.
+ */
+function revealRefusal(
+  form: HTMLFormElement,
+  formAlert: HTMLElement | null,
+  channelRefused: boolean,
+) {
+  let target: HTMLElement | null;
+  let shown: HTMLElement | null;
+  if (channelRefused) {
+    const settings = form.querySelector<HTMLElement>(
+      '[data-ui="scheduled-delivery-settings"]',
+    );
+    target =
+      settings?.querySelector<HTMLElement>(
+        `input[name="${SCHEDULED_CHANNEL_INPUT_NAME}"]:checked`,
+      ) ?? null;
+    shown = settings?.querySelector<HTMLElement>('[role="alert"]') ?? target;
+  } else {
+    target =
+      form.querySelector<HTMLElement>('[aria-invalid="true"]') ?? formAlert;
+    shown = target;
+  }
+  if (!target || !shown) return;
+  shown.scrollIntoView({ block: "center" });
+  target.focus({ preventScroll: true });
+}
+/* eslint-enable lingui/no-unlocalized-strings */
+
 function RowError({ id, children }: { id: string; children: ReactNode }) {
   return (
     <p id={id} role="alert" className="-mt-3 text-sm text-theme-error-fg">
@@ -102,6 +145,7 @@ export function ScheduledItemForm({
   isSubmitting = false,
   serverErrors,
   formError,
+  snoozedUntil,
   initialShowErrors = false,
   initialAdvancedOpen = false,
   onSubmit,
@@ -135,10 +179,40 @@ export function ScheduledItemForm({
     initialAdvancedOpen || Boolean(serverErrors?.channel),
   );
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const formAlertRef = useRef<HTMLDivElement>(null);
+  // A refusal comes back while the busy submit button had focus, so focus is
+  // lost and the error can sit below the fold.
+  const refusalToReveal = useRef(false);
+
   useEffect(() => {
     setApiErrors(serverErrors ?? {});
     if (serverErrors?.channel) setAdvancedOpen(true);
+    if (serverErrors && Object.keys(serverErrors).length > 0) {
+      refusalToReveal.current = true;
+    }
   }, [serverErrors]);
+
+  useEffect(() => {
+    if (formError) refusalToReveal.current = true;
+  }, [formError]);
+
+  const channelRefused = Boolean(serverErrors?.channel);
+  useEffect(() => {
+    if (!refusalToReveal.current || isSubmitting) return;
+    // Disabled fields cannot take focus, and the delivery settings unfold
+    // first, so wait for both.
+    const timer = window.setTimeout(
+      () => {
+        const form = formRef.current;
+        if (!form) return;
+        refusalToReveal.current = false;
+        revealRefusal(form, formAlertRef.current, channelRefused);
+      },
+      channelRefused ? COLLAPSE_DURATION_MS : 0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [serverErrors, formError, isSubmitting, channelRefused]);
 
   const reference = now ?? new Date();
   const loaded = mode === "edit" ? initialValues : undefined;
@@ -206,7 +280,12 @@ export function ScheduledItemForm({
     !chats.some((chat) => chat.id === values.linkedChatId);
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-6">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      noValidate
+      className="space-y-6"
+    >
       <FormField
         label={t({ id: "scheduled.form.name", message: "Name" })}
         required
@@ -577,6 +656,11 @@ export function ScheduledItemForm({
         values={values}
         now={reference}
         timeZone={timeZone}
+        snoozedUntil={
+          snoozedUntil && scheduledTriggerUnchanged(values, initialValues)
+            ? snoozedUntil
+            : null
+        }
       />
 
       <SectionHeading
@@ -656,9 +740,11 @@ export function ScheduledItemForm({
 
       <div className="space-y-4 border-t border-theme-border pt-5">
         {formError && (
-          <Alert type="error" data-testid="scheduled-form-error">
-            {formError}
-          </Alert>
+          <div ref={formAlertRef} tabIndex={-1} className="outline-none">
+            <Alert type="error" data-testid="scheduled-form-error">
+              {formError}
+            </Alert>
+          </div>
         )}
         <div className="flex flex-wrap justify-end gap-3">
           <Button

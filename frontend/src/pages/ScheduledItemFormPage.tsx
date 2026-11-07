@@ -13,6 +13,7 @@ import { ScheduledItemForm } from "@/components/ui/Scheduled/ScheduledItemForm";
 import {
   SCHEDULED_ITEMS_QUERY_KEY,
   scheduledChannelStatus,
+  scheduledNoChannelConnected,
   scheduledRefusalCode,
   scheduledRefusalMessage,
 } from "@/components/ui/Scheduled/scheduledApi";
@@ -236,19 +237,27 @@ export default function ScheduledItemFormPage() {
       </div>
     );
   } else {
+    const channelStatus = list.data
+      ? scheduledChannelStatus(list.data.channels, initialValues.channel)
+      : (source.data?.channel_status ?? "connected");
     content = (
       <Card variant="surface" size="xl">
         <ScheduledItemForm
           mode={mode}
           initialValues={initialValues}
           timeZone={timeZone}
-          channelStatus={
+          channelStatus={channelStatus}
+          // Without a channel nothing can be scheduled, so the setup hint in
+          // the delivery settings shows before the first try.
+          initialAdvancedOpen={
             list.data
-              ? scheduledChannelStatus(
-                  list.data.channels,
-                  initialValues.channel,
-                )
-              : (source.data?.channel_status ?? "connected")
+              ? scheduledNoChannelConnected(list.data.channels)
+              : channelStatus !== "connected"
+          }
+          snoozedUntil={
+            mode === "edit" && source.data?.status === "snoozed"
+              ? source.data.next_occurrence?.at
+              : null
           }
           chats={chats}
           isSubmitting={isSubmitting}

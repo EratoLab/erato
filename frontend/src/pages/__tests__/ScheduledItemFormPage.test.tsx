@@ -28,7 +28,8 @@ vi.mock("@/hooks/ui/useThemedIcon", () => ({
   useThemedIcon: () => null,
 }));
 
-const list: ScheduledItemsResponse = {
+let list: ScheduledItemsResponse;
+const connectedList: ScheduledItemsResponse = {
   items: [],
   upcoming_count: 0,
   past_count: 0,
@@ -51,7 +52,8 @@ const templates: ScheduledTemplatesResponse = {
   ],
 };
 
-const existing: ScheduledItem = {
+let existing: ScheduledItem;
+const scheduledItem: ScheduledItem = {
   id: "item-1",
   type: "reminder",
   name: "Prepare the rate call",
@@ -109,6 +111,8 @@ describe("ScheduledItemFormPage", () => {
   beforeEach(() => {
     i18n.load("en", enMessages as unknown as Messages);
     i18n.activate("en");
+    list = connectedList;
+    existing = scheduledItem;
     writeResponse = () => json(existing, 201);
     fetchMock = vi.fn((url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -191,6 +195,7 @@ describe("ScheduledItemFormPage", () => {
       "aria-invalid",
       "true",
     );
+    await waitFor(() => expect(screen.getByLabelText("Date")).toHaveFocus());
     expect(screen.queryByText("Scheduled list")).not.toBeInTheDocument();
   });
 
@@ -202,8 +207,53 @@ describe("ScheduledItemFormPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Schedule reminder" }));
 
-    expect(await screen.findByTestId("scheduled-form-error")).toHaveTextContent(
+    const alert = await screen.findByTestId("scheduled-form-error");
+    expect(alert).toHaveTextContent(
       "You have the maximum number of upcoming items. Cancel one first.",
+    );
+    await waitFor(() => expect(alert.parentElement).toHaveFocus());
+  });
+
+  it("opens the delivery settings up front when no channel is connected", async () => {
+    list = {
+      ...connectedList,
+      channels: [{ channel: "teams_personal", status: "not_set_up" }],
+    };
+    renderAt("/scheduled/new?template=follow-up-offer");
+    await screen.findByDisplayValue("Follow up on the offer");
+
+    expect(
+      screen.getByRole("button", { name: "Advanced settings" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByText(/Erato can't reach you in Teams yet/),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the delivery settings closed while a channel is connected", async () => {
+    renderAt("/scheduled/new?template=follow-up-offer");
+    await screen.findByDisplayValue("Follow up on the offer");
+
+    expect(
+      screen.getByRole("button", { name: "Advanced settings" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("edits a snoozed item with its own schedule and says the snooze", async () => {
+    existing = {
+      ...scheduledItem,
+      status: "snoozed",
+      next_occurrence: {
+        at: "2099-01-16T08:00:00Z",
+        local: "2099-01-16T09:00:00",
+      },
+    };
+    renderAt("/scheduled/item-1/edit");
+    await screen.findByDisplayValue("Prepare the rate call");
+
+    expect(screen.getByLabelText("Date")).toHaveValue("2099-01-15");
+    expect(screen.getByTestId("scheduled-trigger-summary")).toHaveTextContent(
+      "Snoozed until Fri, Jan 16, 9:00 AM. Changing the schedule replaces the snooze.",
     );
   });
 

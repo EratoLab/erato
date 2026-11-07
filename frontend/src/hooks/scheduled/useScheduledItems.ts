@@ -33,6 +33,8 @@ export interface ScheduledItemsState {
   /** The zone the user's times are entered and shown in. */
   timeZone: string | undefined;
   notice: ScheduledPageNotice | null;
+  /** How many upcoming items the user may have. */
+  maxUpcoming: number | undefined;
   isLoading: boolean;
   error: Error | null;
   snooze: (item: ScheduledItem) => void;
@@ -170,6 +172,7 @@ export function useScheduledItems(): ScheduledItemsState {
       : undefined,
     timeZone,
     notice: latest ? scheduledPageNotice(latest) : null,
+    maxUpcoming: latest?.max_upcoming,
     isLoading: upcoming.isLoading || past.isLoading,
     error: asError(upcoming.error ?? past.error),
     snooze,

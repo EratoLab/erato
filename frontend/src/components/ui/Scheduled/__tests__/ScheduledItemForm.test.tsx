@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
@@ -34,12 +40,18 @@ const renderForm = (overrides: Partial<ScheduledItemFormProps> = {}) => {
     onCancel: vi.fn(),
     ...overrides,
   };
-  render(
+  const view = render(
     <I18nProvider i18n={i18n}>
       <ScheduledItemForm {...props} />
     </I18nProvider>,
   );
-  return props;
+  const rerender = (next: Partial<ScheduledItemFormProps>) =>
+    view.rerender(
+      <I18nProvider i18n={i18n}>
+        <ScheduledItemForm {...props} {...next} />
+      </I18nProvider>,
+    );
+  return { ...props, rerender };
 };
 
 describe("ScheduledItemForm", () => {
@@ -139,7 +151,7 @@ describe("ScheduledItemForm", () => {
     });
 
     expect(screen.getByTestId("scheduled-trigger-summary")).toHaveTextContent(
-      "Happens every week on Monday and Sunday at 09:00 AM, first on Monday, November 9, 2026. 4 times in all.",
+      "Happens every week on Monday and Sunday at 9:00 AM, first on Monday, November 9, 2026. 4 times in all.",
     );
     fireEvent.click(screen.getByRole("button", { name: "Schedule reminder" }));
     expect(props.onSubmit).toHaveBeenCalledWith(
@@ -227,5 +239,74 @@ describe("ScheduledItemForm", () => {
     expect(props.onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Call back Hafen Logistik today" }),
     );
+  });
+
+  it("says a snoozed item's snooze until its schedule changes", () => {
+    renderForm({
+      mode: "edit",
+      initialValues: {
+        ...emptyScheduledFormValues(NOW, ZONE),
+        name: "Call back Hafen Logistik",
+        message: "Body",
+        date: "2026-11-07",
+        time: "10:00",
+      },
+      snoozedUntil: "2026-11-08T08:00:00Z",
+    });
+
+    const summary = screen.getByTestId("scheduled-trigger-summary");
+    expect(summary).toHaveTextContent(
+      "Snoozed until Sun, Nov 8, 9:00 AM. Changing the schedule replaces the snooze.",
+    );
+    expect(screen.getByLabelText("Time")).toHaveValue("10:00");
+
+    fireEvent.change(screen.getByLabelText("Time"), {
+      target: { value: "15:00" },
+    });
+    expect(summary).toHaveTextContent(
+      "Happens on Saturday, November 7, 2026, 3:00 PM, today.",
+    );
+  });
+
+  it("focuses a refused field once the form is enabled again", async () => {
+    const view = renderForm({ isSubmitting: true });
+
+    view.rerender({
+      isSubmitting: true,
+      serverErrors: { date: "This time is in the past." },
+    });
+    const date = screen.getByLabelText("Date");
+    expect(date).not.toHaveFocus();
+
+    view.rerender({
+      isSubmitting: false,
+      serverErrors: { date: "This time is in the past." },
+    });
+    await waitFor(() => expect(date).toHaveFocus());
+  });
+
+  it("focuses the channel in the opened delivery settings on its refusal", async () => {
+    const view = renderForm({ channelStatus: "not_set_up" });
+
+    view.rerender({
+      channelStatus: "not_set_up",
+      serverErrors: { channel: "Set it up first." },
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Advanced settings" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: /Teams chat/ })).toHaveFocus(),
+    );
+  });
+
+  it("focuses a refusal of the whole form", async () => {
+    const view = renderForm();
+
+    view.rerender({ formError: "You have the maximum number." });
+
+    const alert = screen.getByTestId("scheduled-form-error");
+    await waitFor(() => expect(alert.parentElement).toHaveFocus());
   });
 });
