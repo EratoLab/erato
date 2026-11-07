@@ -256,44 +256,86 @@ mod tests {
     fn a_consent_argument_asks_per_call_and_ignores_standing_grants() {
         use crate::models::message::ToolAllowedBy as AllowedBy;
         use McpToolEffectiveState as State;
-        let read_only = Tool::new("delete_record", "delete", Map::new()).with_annotations(
+        use UserToolDecision as Decision;
+        // Read-only and closed: without a consent argument the permissive
+        // preset runs it unasked.
+        let read_only = Tool::new("read_only", "delete", Map::new()).with_annotations(
             ToolAnnotations::from_raw(None, Some(true), Some(false), Some(true), Some(false)),
         );
+        let unannotated = Tool::new("unannotated", "delete", Map::new());
         let full = McpToolApprovalConfig {
             enabled: true,
             preset: McpToolApprovalPreset::Permissive,
             allow_always: true,
         };
+        let no_grants = McpToolApprovalConfig {
+            allow_always: false,
+            ..full.clone()
+        };
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..full.clone()
+        };
+
         let verdict = evaluate_mcp_tool_approval(&full, &read_only, Some("hasUserApproved"));
         assert!(verdict.requires_approval);
         assert_eq!(
             verdict.approval_argument.as_deref(),
             Some("hasUserApproved")
         );
-        assert_eq!(
-            effective_mcp_tool_state(&full, &verdict, None),
-            (State::Ask, None)
-        );
-        assert_eq!(
-            effective_mcp_tool_state(&full, &verdict, Some(UserToolDecision::AlwaysAllow)),
-            (State::Ask, None)
-        );
-        assert_eq!(
-            effective_mcp_tool_state(&full, &verdict, Some(UserToolDecision::Denied)),
-            (State::Denied, None)
-        );
-
-        // Without the gate nobody can be asked; the call runs and the server
-        // receives `false`.
-        let disabled = McpToolApprovalConfig {
-            enabled: false,
-            ..full
-        };
         let verdict = evaluate_mcp_tool_approval(&disabled, &read_only, Some("hasUserApproved"));
         assert!(!verdict.requires_approval);
-        assert_eq!(
-            effective_mcp_tool_state(&disabled, &verdict, None),
-            (State::Allow, Some(AllowedBy::Policy))
-        );
+
+        let consent = Some("hasUserApproved");
+        let grant = Some(Decision::AlwaysAllow);
+        let ask = (State::Ask, None);
+        let policy = (State::Allow, Some(AllowedBy::Policy));
+        let denied = (State::Denied, None);
+        let cases = [
+            (&full, &read_only, consent, None, ask),
+            (&full, &read_only, consent, grant, ask),
+            (&full, &unannotated, consent, grant, ask),
+            (&full, &read_only, consent, Some(Decision::Ask), ask),
+            (&no_grants, &unannotated, consent, grant, ask),
+            (&full, &unannotated, consent, Some(Decision::Denied), denied),
+            // Without the gate nobody can be asked: the call runs on the
+            // policy alone, a grant or not, and the server receives `false`.
+            (&disabled, &read_only, consent, None, policy),
+            (&disabled, &unannotated, consent, grant, policy),
+            (
+                &disabled,
+                &unannotated,
+                consent,
+                Some(Decision::Ask),
+                policy,
+            ),
+            (
+                &disabled,
+                &unannotated,
+                consent,
+                Some(Decision::Denied),
+                denied,
+            ),
+            // The same tools without one.
+            (
+                &full,
+                &unannotated,
+                None,
+                grant,
+                (State::Allow, Some(AllowedBy::AlwaysAllow)),
+            ),
+            (&full, &read_only, None, grant, policy),
+            (&no_grants, &unannotated, None, grant, ask),
+            (&disabled, &unannotated, None, grant, policy),
+        ];
+        for (config, tool, argument, decision, expected) in cases {
+            let verdict = evaluate_mcp_tool_approval(config, tool, argument);
+            assert_eq!(
+                effective_mcp_tool_state(config, &verdict, decision),
+                expected,
+                "{config:?} {} {argument:?} {decision:?}",
+                tool.name
+            );
+        }
     }
 }

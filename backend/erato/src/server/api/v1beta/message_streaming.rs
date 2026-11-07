@@ -14903,24 +14903,55 @@ mod tests {
             None,
             &Default::default(),
         );
-        match gate_mcp_tool_call(
-            &granting,
-            "dv",
-            &read_only,
-            &display,
-            &call,
-            grant,
-            Some("hasUserApproved"),
-        ) {
-            ToolCallGate::Ask(request) => assert!(!request.allow_always, "{request:?}"),
-            other => panic!("expected an ask, got {other:?}"),
+        let unannotated = rmcp::model::Tool::new("delete_record", "delete", serde_json::Map::new());
+        for tool in [&read_only, &unannotated] {
+            match gate_mcp_tool_call(
+                &granting,
+                "dv",
+                tool,
+                &display,
+                &call,
+                grant,
+                Some("hasUserApproved"),
+            ) {
+                ToolCallGate::Ask(request) => assert!(!request.allow_always, "{request:?}"),
+                other => panic!("expected an ask, got {other:?}"),
+            }
         }
-        // The same tool without a consent argument runs: the policy needs no
-        // prompt for it.
+        // Without a consent argument the grant counts only where it skipped a
+        // prompt: the policy runs the read-only tool unasked anyway.
+        assert_eq!(
+            gate_mcp_tool_call(&granting, "dv", &unannotated, &display, &call, grant, None),
+            ToolCallGate::Run(Some(ToolAllowedBy::AlwaysAllow))
+        );
         assert_eq!(
             gate_mcp_tool_call(&granting, "dv", &read_only, &display, &call, grant, None),
             ToolCallGate::Run(Some(ToolAllowedBy::Policy))
         );
+        match gate_mcp_tool_call(&granting, "dv", &unannotated, &display, &call, None, None) {
+            ToolCallGate::Ask(request) => assert!(request.allow_always, "{request:?}"),
+            other => panic!("expected an ask, got {other:?}"),
+        }
+        // With the gate off the call runs on the policy alone, grant or not.
+        let disabled = McpToolApprovalConfig {
+            enabled: false,
+            ..granting.clone()
+        };
+        for decision in [None, grant] {
+            assert_eq!(
+                gate_mcp_tool_call(
+                    &disabled,
+                    "dv",
+                    &unannotated,
+                    &display,
+                    &call,
+                    decision,
+                    Some("hasUserApproved"),
+                ),
+                ToolCallGate::Run(Some(ToolAllowedBy::Policy)),
+                "{decision:?}"
+            );
+        }
     }
 
     #[test]
