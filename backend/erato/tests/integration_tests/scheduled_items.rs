@@ -1,7 +1,8 @@
 //! Scheduled items on the delivery executor: a repeating item gets its next
 //! occurrence after each one, until its end; snoozing, editing and cancelling
 //! act on the series as the Scheduled page expects; several replicas deliver
-//! each occurrence once.
+//! each occurrence once; the buttons on a delivered reminder close it or
+//! bring it back without touching the regular schedule.
 
 use crate::MIGRATOR;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -18,7 +19,9 @@ use erato::services::scheduled_items::recurrence::{
     Frequency, LocalTime, RepeatEnd, RepeatRule, Trigger,
 };
 use erato::services::scheduled_items::{
-    ItemInput, REMINDER, Refusal, ReminderProducer, cancel, create, current_occurrence, update,
+    DONE_COMMAND, DisplayStatus, ItemInput, REMINDER, Refusal, ReminderProducer, SNOOZE_COMMAND,
+    SnoozeChoice, acknowledge, cancel, create, current_occurrence, delete, display_status, get,
+    list, next_occurrence, snooze_choices, snooze_delivered, update,
 };
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -166,7 +169,18 @@ async fn a_repeating_reminder_gets_its_next_occurrence_after_each_delivery(pool:
         "Bring the numbers for the Q4 call."
     );
     assert!(delivered[0].content.links.is_empty());
-    assert!(delivered[0].content.actions.is_empty());
+    let actions = &delivered[0].content.actions;
+    assert_eq!(actions[0].title, "Done");
+    assert_eq!(actions[0].command, DONE_COMMAND);
+    assert_eq!(actions[1].command, SNOOZE_COMMAND);
+    let token = actions[0].token.expect("a token");
+    assert!(actions.iter().all(|action| action.token == Some(token)));
+    let stored = ScheduledDeliveries::find_by_id(first.id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.outcome["action_token"], token.to_string());
 
     let tick = run_delivery_tick(&db, &settings(), &registry).await;
     assert_eq!(tick.produced, 1, "{tick:?}");
@@ -509,4 +523,328 @@ async fn the_reminder_links_its_chat(pool: Pool<Postgres>) {
     assert_eq!(links.len(), 1);
     assert_eq!(links[0].title, "Q4 rate comparison");
     assert_eq!(links[0].url, format!("{BASE_URL}/chat/{chat_id}"));
+}
+
+async fn deliveries(db: &DatabaseConnection, item: &Model) -> Vec<scheduled_deliveries::Model> {
+    use sea_orm::QueryOrder;
+    ScheduledDeliveries::find()
+        .filter(
+            scheduled_deliveries::Column::DedupeKey
+                .is_in([item.id.to_string(), format!("{}:snooze", item.id)]),
+        )
+        .order_by_asc(scheduled_deliveries::Column::CreatedAt)
+        .all(db)
+        .await
+        .unwrap()
+}
+
+async fn set_due(db: &DatabaseConnection, id: Uuid, at: DateTime<Utc>) {
+    db.execute_raw(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "UPDATE scheduled_deliveries SET due_at = $2 WHERE id = $1",
+        [id.into(), at.fixed_offset().into()],
+    ))
+    .await
+    .expect("due time set");
+}
+
+async fn status(db: &DatabaseConnection, user: &users::Model, item: &Model) -> DisplayStatus {
+    let view = get(db, user.id, item.id).await.unwrap().unwrap();
+    display_status(&view, Utc::now())
+}
+
+fn tomorrow_at_nine() -> Trigger {
+    Trigger::Once {
+        date: today() + Duration::days(1),
+        time: nine(),
+    }
+}
+
+/// Done on the card only stores `acknowledged_at` on that delivery: the item
+/// still ends as Done (it happened as planned) and nothing else changes.
+/// Only the recipient's delivered rows can be acknowledged.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn done_closes_the_card_and_leaves_the_schedule(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let other = get_or_create_user(&db, "https://issuer.example", "someone-else", None)
+        .await
+        .unwrap();
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry(&channel);
+    let item = create_item(&db, user.id, input(tomorrow_at_nine())).await;
+    let row = open(&db, &item).await.unwrap();
+    assert_eq!(
+        acknowledge(&db, user.id, row.id).await.unwrap(),
+        Err(Refusal::NotFound),
+        "nothing to close before it arrived"
+    );
+    make_due(&db, row.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+
+    assert_eq!(
+        acknowledge(&db, other.id, row.id).await.unwrap(),
+        Err(Refusal::NotFound)
+    );
+    let acknowledged = acknowledge(&db, user.id, row.id).await.unwrap().unwrap();
+    assert_eq!(acknowledged.status, ItemStatus::Active);
+    assert_eq!(acknowledged.occurrence_count, 1);
+    let stored = &deliveries(&db, &item).await[0];
+    assert_eq!(stored.state, DeliveryState::Delivered);
+    let at = stored.outcome["acknowledged_at"].as_str().unwrap();
+    assert!(DateTime::parse_from_rfc3339(at).is_ok(), "{at}");
+
+    run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(reload(&db, &item).await.status, ItemStatus::Ended);
+    assert_eq!(status(&db, &user, &item).await, DisplayStatus::Done);
+    let view = get(&db, user.id, item.id).await.unwrap().unwrap();
+    assert_eq!(view.last.unwrap().outcome["acknowledged_at"], at);
+}
+
+/// Snoozing a delivered one-off brings that reminder back as a row of its
+/// own: the delivered row stays as it was, the item is upcoming again and
+/// shows as snoozed until then, the producer does not end it meanwhile, and
+/// the re-delivery arrives with buttons of its own. Once it is settled the
+/// item ends and can be deleted with both rows.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn snoozing_after_delivery_brings_back_this_one_reminder(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry(&channel);
+    let item = create_item(&db, user.id, input(tomorrow_at_nine())).await;
+    let row = open(&db, &item).await.unwrap();
+    make_due(&db, row.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(reload(&db, &item).await.status, ItemStatus::Ended);
+    let delivered_row = deliveries(&db, &item).await.remove(0);
+
+    let before = Utc::now();
+    let (snoozed, until) = snooze_delivered(&db, user.id, row.id, SnoozeChoice::HalfAnHour)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snoozed.status, ItemStatus::Active);
+    assert!(until >= before + Duration::minutes(30) && until <= Utc::now() + Duration::minutes(30));
+    let rows = deliveries(&db, &item).await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0], delivered_row, "the delivered row is left alone");
+    let redelivery = &rows[1];
+    assert_eq!(
+        redelivery.dedupe_key.as_deref(),
+        Some(format!("{}:snooze", item.id).as_str())
+    );
+    assert_eq!(redelivery.state, DeliveryState::Snoozed);
+    assert_eq!(utc(redelivery.due_at), until);
+    assert_eq!(redelivery.payload["item_id"], item.id.to_string());
+    assert_eq!(redelivery.payload["occurrence"], 1);
+
+    let upcoming = list(&db, user.id, false, 100).await.unwrap();
+    assert_eq!(upcoming.len(), 1);
+    assert_eq!(
+        display_status(&upcoming[0], Utc::now()),
+        DisplayStatus::Snoozed
+    );
+    assert_eq!(next_occurrence(&upcoming[0], Utc::now()), Some(until));
+    assert_eq!(
+        delete(&db, user.id, item.id).await.unwrap(),
+        Err(Refusal::NotFinished)
+    );
+
+    let tick = run_delivery_tick(&db, &settings(), &registry).await;
+    assert!(!tick.touched(), "{tick:?}");
+    assert_eq!(reload(&db, &item).await.status, ItemStatus::Active);
+
+    make_due(&db, redelivery.id).await;
+    let tick = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(tick.delivered, 1, "{tick:?}");
+    let cards = channel.deliveries();
+    assert_eq!(cards[1].delivery_id, redelivery.id);
+    assert_eq!(cards[1].content.title.as_deref(), Some("Stand-up notes"));
+    assert_eq!(cards[1].content.actions.len(), 3);
+    assert_ne!(
+        cards[1].content.actions[0].token,
+        cards[0].content.actions[0].token
+    );
+
+    run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(reload(&db, &item).await.status, ItemStatus::Ended);
+    assert_eq!(status(&db, &user, &item).await, DisplayStatus::Done);
+    let view = get(&db, user.id, item.id).await.unwrap().unwrap();
+    assert_eq!(view.last.unwrap().id, redelivery.id);
+    delete(&db, user.id, item.id).await.unwrap().unwrap();
+    assert!(deliveries(&db, &item).await.is_empty());
+}
+
+/// A card offers, and the service accepts, only snoozes that come back
+/// before the item's next regular occurrence; a card whose next occurrence
+/// already arrived cannot be snoozed. A snooze of a repeating item sits next
+/// to its next occurrence and goes when the item is cancelled.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_snooze_after_delivery_comes_before_the_next_occurrence(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry(&channel);
+    let item = create_item(&db, user.id, input(daily(nine(), RepeatEnd::Never))).await;
+    let first = open(&db, &item).await.unwrap();
+    make_due(&db, first.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    let second = open(&db, &item).await.expect("next occurrence");
+    let first = ScheduledDeliveries::find_by_id(first.id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+
+    set_due(&db, second.id, Utc::now() + Duration::minutes(20)).await;
+    let item = reload(&db, &item).await;
+    assert!(
+        snooze_choices(&db, &item, &first, Utc::now())
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    for choice in SnoozeChoice::ALL {
+        assert_eq!(
+            snooze_delivered(&db, user.id, first.id, choice)
+                .await
+                .unwrap(),
+            Err(Refusal::NothingToSnooze)
+        );
+    }
+
+    set_due(&db, second.id, Utc::now() + Duration::days(2)).await;
+    assert_eq!(
+        snooze_choices(&db, &item, &first, Utc::now())
+            .await
+            .unwrap(),
+        SnoozeChoice::ALL
+    );
+    let (_, until) = snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
+        .await
+        .unwrap()
+        .unwrap();
+    let current = open(&db, &item).await.unwrap();
+    assert_ne!(current.id, second.id, "the snooze arrives first");
+    assert_eq!(utc(current.due_at), until);
+    assert_eq!(status(&db, &user, &item).await, DisplayStatus::Snoozed);
+    let tick = run_delivery_tick(&db, &settings(), &registry).await;
+    assert!(!tick.touched(), "{tick:?}");
+
+    cancel(&db, user.id, item.id).await.unwrap().unwrap();
+    assert!(
+        deliveries(&db, &item)
+            .await
+            .iter()
+            .skip(1)
+            .all(|row| row.state == DeliveryState::Cancelled)
+    );
+    assert_eq!(
+        snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
+            .await
+            .unwrap(),
+        Err(Refusal::Finished)
+    );
+
+    // A card two occurrences old cannot come back.
+    let item = create_item(&db, user.id, input(daily(nine(), RepeatEnd::Never))).await;
+    let old = open(&db, &item).await.unwrap();
+    for _ in 0..2 {
+        let row = open(&db, &item).await.unwrap();
+        make_due(&db, row.id).await;
+        run_delivery_tick(&db, &settings(), &registry).await;
+        run_delivery_tick(&db, &settings(), &registry).await;
+    }
+    assert_eq!(
+        snooze_delivered(&db, user.id, old.id, SnoozeChoice::HalfAnHour)
+            .await
+            .unwrap(),
+        Err(Refusal::NothingToSnooze)
+    );
+}
+
+/// A new schedule replaces a snooze after delivery: a repeating item drops
+/// it and keeps its series, a snoozed one-off moves to the new time.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_new_schedule_replaces_a_snooze_after_delivery(pool: Pool<Postgres>) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry(&channel);
+
+    let daily_item = create_item(&db, user.id, input(daily(nine(), RepeatEnd::Never))).await;
+    let first = open(&db, &daily_item).await.unwrap();
+    make_due(&db, first.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
+        .await
+        .unwrap()
+        .unwrap();
+    let ten = LocalTime::new(10, 0).unwrap();
+    update(
+        &db,
+        user.id,
+        daily_item.id,
+        input(daily(ten, RepeatEnd::Never)),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(open(&db, &daily_item).await.is_none());
+    assert_eq!(
+        deliveries(&db, &daily_item).await[1].state,
+        DeliveryState::Cancelled
+    );
+    run_delivery_tick(&db, &settings(), &registry).await;
+    let next = open(&db, &daily_item).await.expect("the series goes on");
+    assert_eq!(next.dedupe_key, Some(daily_item.id.to_string()));
+    assert_eq!(
+        utc(next.due_at).time(),
+        chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap()
+    );
+    let view = get(&db, user.id, daily_item.id).await.unwrap().unwrap();
+    assert_eq!(
+        view.last.unwrap().id,
+        first.id,
+        "the dropped snooze is not the last delivery"
+    );
+
+    let once = create_item(&db, user.id, input(tomorrow_at_nine())).await;
+    let row = open(&db, &once).await.unwrap();
+    make_due(&db, row.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    snooze_delivered(&db, user.id, row.id, SnoozeChoice::TomorrowMorning)
+        .await
+        .unwrap()
+        .unwrap();
+    let later = Trigger::Once {
+        date: today() + Duration::days(3),
+        time: ten,
+    };
+    let moved = update(&db, user.id, once.id, input(later))
+        .await
+        .unwrap()
+        .unwrap();
+    let redelivery = open(&db, &once).await.unwrap();
+    assert_eq!(redelivery.state, DeliveryState::Pending);
+    assert_eq!(
+        utc(redelivery.due_at),
+        (today() + Duration::days(3))
+            .and_hms_opt(10, 0, 0)
+            .unwrap()
+            .and_utc()
+    );
+    assert_eq!(moved.occurrence_at, Some(redelivery.due_at));
 }
