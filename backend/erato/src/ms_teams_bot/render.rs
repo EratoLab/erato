@@ -1,6 +1,7 @@
 //! Turning answers into Teams message activities.
 
 use super::cards;
+use super::texts::{Lang, Msg};
 use serde_json::{Value, json};
 
 /// Teams rejects messages above roughly 28 KB; stay well below it.
@@ -8,7 +9,6 @@ pub const MAX_MESSAGE_CHARS: usize = 20_000;
 /// Serialized size of a card, leaving room below the same limit for the
 /// activity's metadata and summary.
 const MAX_CARD_BYTES: usize = 24_000;
-pub const EARLIER_STEPS: &str = "Earlier steps";
 
 /// A markdown message activity. In group chats and channels the requester is
 /// @mentioned so the answer is attributable in a busy thread.
@@ -44,35 +44,39 @@ pub fn card_message(attachment: Value, summary: &str) -> Value {
 /// Disclose earlier assistant text without mixing it into the final answer.
 /// Large details stay in normal text chunks instead of overflowing a card or
 /// silently truncating potentially useful content.
-pub fn answer_with_details(text: &str, earlier_text: &str) -> (String, Option<Value>) {
+pub fn answer_with_details(text: &str, earlier_text: &str, lang: Lang) -> (String, Option<Value>) {
     if earlier_text.trim().is_empty() {
         return (text.to_string(), None);
     }
+    let earlier_steps = Msg::EarlierSteps.text(lang);
     let mut attachment = cards::adaptive_card(
         Vec::new(),
         vec![json!({
-            "type": "Action.ShowCard", "title": EARLIER_STEPS,
+            "type": "Action.ShowCard", "title": earlier_steps,
             "card": {
                 "type": "AdaptiveCard",
                 "body": [{"type": "TextBlock", "text": earlier_text, "wrap": true}],
             },
         })],
     );
-    attachment["content"]["fallbackText"] = json!(format!("{EARLIER_STEPS}:\n\n{earlier_text}"));
+    attachment["content"]["fallbackText"] = json!(format!("{earlier_steps}:\n\n{earlier_text}"));
     // The card is sent separately from the answer. Include JSON escaping and
     // fallback text in its budget.
     if card_fits(&attachment) {
         (text.to_string(), Some(attachment))
     } else {
         (
-            format!("{text}\n\n---\n\n{}", earlier_steps_markdown(earlier_text)),
+            format!(
+                "{text}\n\n---\n\n{}",
+                earlier_steps_markdown(earlier_text, lang)
+            ),
             None,
         )
     }
 }
 
-pub fn earlier_steps_markdown(earlier_text: &str) -> String {
-    format!("**{EARLIER_STEPS}**\n\n{earlier_text}")
+pub fn earlier_steps_markdown(earlier_text: &str, lang: Lang) -> String {
+    format!("**{}**\n\n{earlier_text}", Msg::EarlierSteps.text(lang))
 }
 
 /// Whether a card attachment, measured after JSON escaping, fits one activity.
@@ -164,12 +168,12 @@ mod tests {
     #[test]
     fn oversized_details_are_preserved_as_separate_text_instead_of_truncated() {
         let earlier = "Useful earlier finding 界".repeat(2_000);
-        let (text, attachment) = answer_with_details("Final answer", &earlier);
+        let (text, attachment) = answer_with_details("Final answer", &earlier, Lang::En);
         assert!(attachment.is_none());
         assert!(text.starts_with("Final answer\n\n---\n\n**Earlier steps**"));
         assert!(text.ends_with(&earlier));
         assert_eq!(
-            answer_with_details("Plain answer", ""),
+            answer_with_details("Plain answer", "", Lang::En),
             ("Plain answer".into(), None)
         );
     }

@@ -1,6 +1,7 @@
 //! Translate backend phases into short Teams progress, retaining concurrent
 //! tools until each finishes. Never put tool inputs/outputs in the status.
 
+use super::super::texts::{Lang, Msg};
 use crate::services::background_tasks::ToolCallStatus;
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
@@ -10,9 +11,17 @@ use std::collections::BTreeMap;
 #[derive(Default)]
 pub(super) struct Progress {
     active: BTreeMap<String, String>,
+    lang: Lang,
 }
 
 impl Progress {
+    pub fn new(lang: Lang) -> Self {
+        Self {
+            active: BTreeMap::new(),
+            lang,
+        }
+    }
+
     pub fn current(&self) -> Option<String> {
         (!self.active.is_empty())
             .then(|| self.active.values().cloned().collect::<Vec<_>>().join("\n"))
@@ -30,11 +39,12 @@ impl Progress {
         // MCP servers author tool names and progress text; show them inert.
         let name = sanitize_display_text(name, MAX_DISPLAY_NAME_CHARS).text;
         let label = match status {
-            ToolCallStatus::Preparing => format!("Preparing {name}…"),
-            ToolCallStatus::InProgress => format!("Using {name}…"),
-            ToolCallStatus::Success => format!("Finished {name}. Preparing the response…"),
-            ToolCallStatus::Error => format!("{name} failed. Preparing the response…"),
-        };
+            ToolCallStatus::Preparing => Msg::ToolPreparing,
+            ToolCallStatus::InProgress => Msg::ToolRunning,
+            ToolCallStatus::Success => Msg::ToolFinished,
+            ToolCallStatus::Error => Msg::ToolFailed,
+        }
+        .fill(self.lang, &[("tool", &name)]);
         if matches!(status, ToolCallStatus::Success | ToolCallStatus::Error) {
             self.active.remove(&id);
             return self.current().unwrap_or(label);
@@ -102,5 +112,19 @@ mod tests {
         );
         assert!(status.contains("failed"));
         assert!(progress.current().is_none());
+    }
+
+    #[test]
+    fn german_progress_names_the_tool_in_german() {
+        let mut progress = Progress::new(Lang::De);
+        let status = progress.tool(
+            "a".into(),
+            "search_docs",
+            ToolCallStatus::InProgress,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(status, "search_docs wird verwendet…");
     }
 }

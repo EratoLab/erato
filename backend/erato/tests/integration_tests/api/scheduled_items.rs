@@ -45,7 +45,7 @@ async fn setup(pool: Pool<Postgres>, reachable: bool, zone: Option<&str>) -> Set
     let mut app_state: AppState = test_app_state(config, pool).await;
     let channel = Arc::new(RecordingChannel::new(CHANNEL));
     let mut registry = DeliveryRegistry::new();
-    registry.register_producer(Arc::new(ReminderProducer::new(None)));
+    registry.register_producer(Arc::new(ReminderProducer::new(None, "en")));
     registry.register_channel(channel.clone());
     let registry = Arc::new(registry);
     app_state.scheduled_deliveries = registry.clone();

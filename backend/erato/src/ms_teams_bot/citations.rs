@@ -2,6 +2,7 @@
 //! by Host; assistant-written URLs alone never establish a source.
 
 use super::render::{self, Mention};
+use super::texts::{Lang, Msg};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use regex::Regex;
 use serde_json::{Value, json};
@@ -173,12 +174,18 @@ pub fn render(
     text: &str,
     sources: &[FileSource],
     public_base_url: Option<&str>,
+    lang: Lang,
 ) -> (String, Vec<Citation>) {
-    render_with_limit(text, sources, public_base_url, MAX_CITATIONS)
+    render_with_limit(text, sources, public_base_url, MAX_CITATIONS, lang)
 }
 
-pub fn details(text: &str, sources: &[FileSource], public_base_url: Option<&str>) -> String {
-    render_with_limit(text, sources, public_base_url, 0).0
+pub fn details(
+    text: &str,
+    sources: &[FileSource],
+    public_base_url: Option<&str>,
+    lang: Lang,
+) -> String {
+    render_with_limit(text, sources, public_base_url, 0, lang).0
 }
 
 fn render_with_limit(
@@ -186,6 +193,7 @@ fn render_with_limit(
     sources: &[FileSource],
     public_base_url: Option<&str>,
     limit: usize,
+    lang: Lang,
 ) -> (String, Vec<Citation>) {
     let references = references(text);
     let files: HashMap<_, _> = sources
@@ -220,7 +228,7 @@ fn render_with_limit(
         let url = file_url(&reference.uri).unwrap();
         let Some(file) = files.get(url.host_str().unwrap().to_ascii_lowercase().as_str()) else {
             output.push_str(&escape_label(if reference.label.is_empty() {
-                "Unavailable file"
+                Msg::UnavailableFile.text(lang)
             } else {
                 &reference.label
             }));
@@ -246,16 +254,18 @@ fn render_with_limit(
             next_position += 1;
             positions.insert(key, position);
             let mut appearance =
-                json!({"@type": "DigitalDocument", "name": short_name(&file.name)});
+                json!({"@type": "DigitalDocument", "name": short_name(&file.name, lang)});
             if let Some(url) = &source_url {
                 appearance["url"] = json!(url);
             }
             if let Some(location) = &location {
                 let (kind, value) = location.split_once('=').unwrap();
-                appearance["abstract"] = json!(format!(
-                    "{} {value}",
-                    if kind == "page" { "Page" } else { "Message" }
-                ));
+                let label = if kind == "page" {
+                    Msg::PageNumber
+                } else {
+                    Msg::MessageNumber
+                };
+                appearance["abstract"] = json!(label.fill(lang, &[("number", value)]));
             }
             citations.push(Citation {
                 position,
@@ -334,10 +344,10 @@ fn escape_label(label: &str) -> String {
     escaped
 }
 
-fn short_name(name: &str) -> String {
+fn short_name(name: &str, lang: Lang) -> String {
     let clean: String = name.chars().filter(|c| !c.is_control()).collect();
     if clean.is_empty() {
-        return "File".into();
+        return Msg::File.text(lang).into();
     }
     if clean.chars().count() <= 80 {
         clean

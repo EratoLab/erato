@@ -16,7 +16,7 @@ use super::cards::{
 };
 use super::citations::{self, FileSource};
 use super::graph::{GraphIdentity, SharedItem};
-use super::streaming::WORKING_STATUS;
+use super::texts::{Lang, Msg};
 use crate::db::entity::prelude::{
     Chats, Messages, MsTeamsConversations, MsTeamsPendingSignIns, MsTeamsRequests,
     MsTeamsTokenExchanges,
@@ -31,8 +31,8 @@ use crate::server::api::v1beta::me_profile_middleware::{
     MeProfile, UserProfile, complete_user_profile,
 };
 use crate::server::api::v1beta::message_streaming::{
-    ContinueStreamRequest, MessageSubmitRequest, StreamRouteError, ToolApprovalDecision,
-    detached_generation_event_sink, start_continuation, start_message_submit,
+    ContinueStreamRequest, MessageSubmitRequest, STALE_REVISION_MESSAGE, StreamRouteError,
+    ToolApprovalDecision, detached_generation_event_sink, start_continuation, start_message_submit,
 };
 use crate::services::background_tasks::{ClientStreamGuard, StreamingEvent, ToolCallStatus};
 use crate::state::AppState;
@@ -78,8 +78,11 @@ pub struct Completion {
 pub enum StartError {
     /// The chat is already generating.
     Busy,
-    /// Erato refused the request (validation, archived chat, foreign chat, …).
+    /// Erato refused the request (validation, archived chat, foreign chat, …),
+    /// in Erato's words.
     Rejected(String),
+    /// The bot refused it, in its own words.
+    Refused(Msg),
     /// The decisions do not cover exactly the approvals that are open now.
     DecisionsMismatch,
     /// Every approval of the message was already decided.
@@ -102,18 +105,15 @@ impl From<StreamRouteError> for StartError {
             StreamRouteError::PlainText(status, message) if status.is_server_error() => {
                 StartError::internal("start the generation", message)
             }
+            StreamRouteError::PlainText(_, message) if message == STALE_REVISION_MESSAGE => {
+                StartError::Refused(Msg::NotLatestQuestion)
+            }
             StreamRouteError::PlainText(_, message) => StartError::Rejected(message),
             StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
-            StreamRouteError::CoveredByParent(_) => StartError::Rejected(
-                "This approval is answered in the chat that started the task.".to_string(),
-            ),
-            StreamRouteError::ChildrenWaiting(_) => StartError::Rejected(
-                "This response continues on its own once its tasks finish.".to_string(),
-            ),
-            StreamRouteError::NothingToReact(_) => {
-                StartError::Rejected("The request could not be processed.".to_string())
-            }
+            StreamRouteError::CoveredByParent(_) => StartError::Refused(Msg::ApprovalInParentChat),
+            StreamRouteError::ChildrenWaiting(_) => StartError::Refused(Msg::ContinuesOnItsOwn),
+            StreamRouteError::NothingToReact(_) => StartError::Refused(Msg::RequestNotProcessed),
         }
     }
 }
@@ -124,11 +124,18 @@ pub struct Session {
     me: MeProfile,
     policy: PolicyEngine,
     user_id: Uuid,
+    /// What the bot writes in while working for this user.
+    lang: Lang,
 }
 
 impl Session {
     pub fn user_id(&self) -> Uuid {
         self.user_id
+    }
+
+    /// The same session, with the bot writing in `lang` (English otherwise).
+    pub fn in_language(self, lang: Lang) -> Self {
+        Self { lang, ..self }
     }
 }
 
@@ -233,6 +240,35 @@ impl Host {
         .await
     }
 
+    /// The language to answer in: the user's stored language, else the one
+    /// their client reports, else the deployment's default.
+    pub async fn reply_language(
+        &self,
+        user_id: Option<Uuid>,
+        client: Option<&str>,
+        default: &str,
+    ) -> Lang {
+        let stored = match user_id {
+            Some(user_id) => crate::models::user_preference::get_user_preferences(
+                &self.app_state.db,
+                &user_id,
+            )
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "Could not read the stored language of a Teams user");
+                None
+            })
+            .and_then(|prefs| prefs.language),
+            None => None,
+        };
+        Lang::resolve(stored.as_deref(), client, default)
+    }
+
+    /// The language for a message nobody asked for, such as a task result.
+    pub async fn stored_language(&self, user_id: Uuid, default: &str) -> Lang {
+        self.reply_language(Some(user_id), None, default).await
+    }
+
     /// Whether any Teams message got through to Erato on any replica: it left
     /// a conversation, a pending sign-in or a request behind.
     pub async fn teams_activity_recorded(&self) -> Result<bool, Report> {
@@ -309,6 +345,7 @@ impl Host {
             me,
             policy,
             user_id: user.id,
+            lang: Lang::En,
         })
     }
 
@@ -531,6 +568,7 @@ impl Host {
             started.chat_id,
             started.events,
             Some(started.client_stream_guard),
+            session.lang,
         ))
     }
 
@@ -561,7 +599,12 @@ impl Host {
             detached_generation_event_sink(),
         )
         .await?;
-        Ok(translate(started.chat_id, started.events, None))
+        Ok(translate(
+            started.chat_id,
+            started.events,
+            None,
+            session.lang,
+        ))
     }
 
     pub async fn conversations_for_chat(
@@ -655,6 +698,7 @@ fn translate(
     chat_id: Uuid,
     mut events: broadcast::Receiver<StreamingEvent>,
     guard: Option<ClientStreamGuard>,
+    lang: Lang,
 ) -> mpsc::Receiver<GenerationUpdate> {
     let (tx, rx) = mpsc::channel(64);
     tokio::spawn(async move {
@@ -662,7 +706,7 @@ fn translate(
         let mut text = String::new();
         let mut text_index: Option<usize> = None;
         let mut tool_index: Option<usize> = None;
-        let mut progress = progress::Progress::default();
+        let mut progress = progress::Progress::new(lang);
         let mut announced_message = None;
         let mut last_status = None;
         let mut tool_announced = false;
@@ -739,10 +783,12 @@ fn translate(
                     GenerationUpdate::UserMessageSaved(message_id)
                 }
                 Ok(StreamingEvent::AssistantMessageStarted { .. }) => {
-                    GenerationUpdate::Status(WORKING_STATUS.into())
+                    GenerationUpdate::Status(Msg::Working.text(lang).into())
                 }
                 Ok(StreamingEvent::ReasoningDelta { .. }) => GenerationUpdate::Status(
-                    progress.current().unwrap_or_else(|| "Thinking…".into()),
+                    progress
+                        .current()
+                        .unwrap_or_else(|| Msg::Thinking.text(lang).into()),
                 ),
                 Ok(StreamingEvent::TextDelta {
                     content_index,
@@ -788,7 +834,7 @@ fn translate(
                     total,
                 )),
                 Ok(StreamingEvent::ClientToolCall { .. }) => {
-                    GenerationUpdate::Status("This step needs the Erato app…".into())
+                    GenerationUpdate::Status(Msg::NeedsAppProgress.text(lang).into())
                 }
                 Ok(StreamingEvent::AssistantMessageCompleted {
                     message_id,
@@ -798,7 +844,7 @@ fn translate(
                     chat_id, message_id, &content,
                 )),
                 Ok(StreamingEvent::Error { error }) => {
-                    GenerationUpdate::Failed(error_message(error.as_ref()))
+                    GenerationUpdate::Failed(error_message(error.as_ref(), lang))
                 }
                 Ok(StreamingEvent::StreamEnd) => break,
                 Ok(_) => continue,
@@ -956,14 +1002,14 @@ fn answer_text(content: &[ContentPart]) -> (String, String) {
     (join(content), String::new())
 }
 
-fn error_message(error: Option<&Value>) -> String {
+fn error_message(error: Option<&Value>, lang: Lang) -> String {
     error
         .and_then(|error| {
             ["error_description", "message", "error"]
                 .iter()
                 .find_map(|key| error.get(*key).and_then(Value::as_str))
         })
-        .unwrap_or("The answer could not be generated.")
+        .unwrap_or(Msg::AnswerNotGenerated.text(lang))
         .to_string()
 }
 
@@ -984,9 +1030,16 @@ mod tests {
         assert!(matches!(
             StartError::from(StreamRouteError::PlainText(
                 axum::http::StatusCode::CONFLICT,
-                "This question is no longer the latest question in this chat.".into(),
+                STALE_REVISION_MESSAGE.into(),
             )),
-            StartError::Rejected(reason) if reason.contains("latest question")
+            StartError::Refused(Msg::NotLatestQuestion)
+        ));
+        assert!(matches!(
+            StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::BAD_REQUEST,
+                "Chat is archived".into(),
+            )),
+            StartError::Rejected(reason) if reason == "Chat is archived"
         ));
     }
 
@@ -995,7 +1048,7 @@ mod tests {
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(chat_id, receiver, None);
+        let mut updates = translate(chat_id, receiver, None, Lang::En);
         // A continuation need not repeat AssistantMessageStarted.
         sender
             .send(StreamingEvent::ReasoningDelta {
@@ -1340,7 +1393,7 @@ mod tests {
     async fn tool_boundary_replaces_narration_and_late_progress_keeps_the_answer() {
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(Uuid::new_v4(), receiver, None);
+        let mut updates = translate(Uuid::new_v4(), receiver, None, Lang::En);
         let text = |index, text: &str| StreamingEvent::TextDelta {
             message_id,
             content_index: index,

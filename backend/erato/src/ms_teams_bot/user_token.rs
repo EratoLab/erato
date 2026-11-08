@@ -4,6 +4,7 @@
 
 use super::activity::Activity;
 use super::connector::Connector;
+use super::texts::{Lang, Msg};
 use base64::Engine as _;
 use eyre::{Report, eyre};
 use serde::Deserialize;
@@ -184,7 +185,12 @@ impl UserTokenClient {
 /// The OAuth card Teams renders as a sign-in button, or completes silently
 /// through SSO when the manifest's `webApplicationInfo` matches the
 /// connection's token exchange URL.
-pub fn oauth_card(connection_name: &str, resource: &SignInResource, text: &str) -> Value {
+pub fn oauth_card(
+    connection_name: &str,
+    resource: &SignInResource,
+    text: &str,
+    lang: Lang,
+) -> Value {
     json!({
         "contentType": "application/vnd.microsoft.card.oauth",
         "content": {
@@ -193,7 +199,7 @@ pub fn oauth_card(connection_name: &str, resource: &SignInResource, text: &str) 
             "tokenExchangeResource": resource.token_exchange_resource,
             "buttons": [{
                 "type": "signin",
-                "title": "Sign in",
+                "title": Msg::SignIn.text(lang),
                 "value": resource.sign_in_link,
             }],
         },
@@ -207,6 +213,7 @@ pub fn sign_in_activity(
     activity: &Activity,
     connection_name: &str,
     resource: &SignInResource,
+    lang: Lang,
 ) -> Result<Value, Report> {
     let recipient = activity
         .from
@@ -216,8 +223,7 @@ pub fn sign_in_activity(
     Ok(json!({
         "type": "message",
         "recipient": recipient,
-        "attachments": [oauth_card(connection_name, resource,
-            "Sign in to let Erato access your Microsoft 365 data.")],
+        "attachments": [oauth_card(connection_name, resource, Msg::SignInText.text(lang), lang)],
     }))
 }
 
@@ -243,7 +249,7 @@ mod tests {
                 sign_in_link: "https://token.botframework.com/signin".into(),
                 token_exchange_resource: Some(json!({"id": "exchange-1", "uri": "api://bot"})),
             };
-            let outgoing = sign_in_activity(&activity, "graph-sso", &resource).unwrap();
+            let outgoing = sign_in_activity(&activity, "graph-sso", &resource, Lang::En).unwrap();
             assert_eq!(outgoing["recipient"]["id"], "29:user");
             assert_ne!(
                 outgoing["recipient"]["id"],
@@ -264,8 +270,16 @@ mod tests {
             sign_in_link: "https://token.botframework.com/signin".into(),
             token_exchange_resource: None,
         };
-        let outgoing = sign_in_activity(&incoming(), "graph", &resource).unwrap();
+        let outgoing = sign_in_activity(&incoming(), "graph", &resource, Lang::De).unwrap();
         assert!(outgoing["attachments"][0]["content"]["tokenExchangeResource"].is_null());
+        assert_eq!(
+            outgoing["attachments"][0]["content"]["buttons"][0]["title"],
+            "Anmelden"
+        );
+        assert_eq!(
+            outgoing["attachments"][0]["content"]["text"],
+            "Melden Sie sich an, damit Erato auf Ihre Microsoft-365-Daten zugreifen kann."
+        );
         assert_eq!(
             outgoing["attachments"][0]["content"]["buttons"][0]["value"],
             resource.sign_in_link
@@ -289,7 +303,8 @@ mod tests {
                 &SignInResource {
                     sign_in_link: "link".into(),
                     token_exchange_resource: None,
-                }
+                },
+                Lang::En,
             )
             .is_err()
         );

@@ -11,6 +11,7 @@
 //! inputs — in personal chats, group chats and channels alike.
 
 use super::render::{bounded_text, card_fits};
+use super::texts::{Lang, Msg};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -22,7 +23,6 @@ const MAX_NAME_BYTES: usize = 1_600;
 const MAX_DESCRIPTION_BYTES: usize = 4_000;
 const MAX_INPUT_PREVIEW_BYTES: usize = 6_000;
 const MAX_ITEM_PREVIEW_BYTES: usize = 1_500;
-const OMITTED_DETAILS: &str = "Some details are not shown because Teams limits card size. Open the chat in Erato to see them.";
 
 /// What the turn is waiting on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,12 +74,13 @@ pub enum ApprovalChoice {
 }
 
 impl ApprovalChoice {
-    fn past_tense(self) -> &'static str {
-        match self {
-            ApprovalChoice::Approve => "approved",
-            ApprovalChoice::Reject => "denied",
-            ApprovalChoice::Withdraw => "stopped",
-        }
+    fn decided(self, name: &str, decided_by: &str, lang: Lang) -> String {
+        let msg = match self {
+            ApprovalChoice::Approve => Msg::ApprovedBy,
+            ApprovalChoice::Reject => Msg::DeniedBy,
+            ApprovalChoice::Withdraw => Msg::StoppedBy,
+        };
+        msg.fill(lang, &[("tool", name), ("person", decided_by)])
     }
 }
 
@@ -126,15 +127,16 @@ impl ApprovalSubmit {
     }
 }
 
-fn heading(set: &PendingApprovalSet) -> String {
-    let count = set.items.len();
-    match set.kind {
-        ApprovalKind::McpTool if count == 1 => "Approval needed".to_string(),
-        ApprovalKind::McpTool => format!("{count} tool calls need approval"),
-        ApprovalKind::TaskPlan => format!("Erato wants to start {count} task(s)"),
-        ApprovalKind::DelegatedTask => "Sub-tasks are waiting for approval".to_string(),
-        ApprovalKind::ToolCallLimit => "Tool-call limit reached".to_string(),
-    }
+fn heading(set: &PendingApprovalSet, lang: Lang) -> String {
+    let count = set.items.len().to_string();
+    let msg = match set.kind {
+        ApprovalKind::McpTool if set.items.len() == 1 => Msg::ApprovalNeeded,
+        ApprovalKind::McpTool => Msg::ToolCallsNeedApproval,
+        ApprovalKind::TaskPlan => Msg::TasksToStart,
+        ApprovalKind::DelegatedTask => Msg::SubTasksWaiting,
+        ApprovalKind::ToolCallLimit => Msg::ToolCallLimitReached,
+    };
+    msg.fill(lang, &[("count", &count)])
 }
 
 /// How much of each item a card shows. Later levels give up details to fit
@@ -148,17 +150,17 @@ enum Detail {
     Minimal,
 }
 
-pub fn approval_card(set: &PendingApprovalSet) -> Value {
+pub fn approval_card(set: &PendingApprovalSet, lang: Lang) -> Value {
     [Detail::Full, Detail::NoDescriptions, Detail::NoArguments]
         .into_iter()
-        .map(|detail| build_approval_card(set, detail))
+        .map(|detail| build_approval_card(set, detail, lang))
         .find(card_fits)
-        .unwrap_or_else(|| build_approval_card(set, Detail::Minimal))
+        .unwrap_or_else(|| build_approval_card(set, Detail::Minimal, lang))
 }
 
-fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
+fn build_approval_card(set: &PendingApprovalSet, detail: Detail, lang: Lang) -> Value {
     let count = set.items.len();
-    let heading = heading(set);
+    let heading = heading(set, lang);
     let item_budget = (MAX_INPUT_PREVIEW_BYTES / count.max(1)).min(MAX_ITEM_PREVIEW_BYTES);
     // Display names also travel in each button's data for the decided card.
     let names: Vec<String> = set
@@ -171,7 +173,7 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
     })];
     if set.kind == ApprovalKind::ToolCallLimit {
         body.push(json!({"type": "TextBlock", "wrap": true,
-            "text": "Continue with twice the tool-call budget, generate an answer using the information collected so far, or stop this response."}));
+            "text": Msg::ToolCallLimitChoice.text(lang)}));
     }
     for (index, item) in set
         .items
@@ -180,7 +182,7 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
         .filter(|_| set.kind != ApprovalKind::ToolCallLimit)
     {
         let mut title = plain_text(
-            &format!("Run {}?", names[index]),
+            &Msg::RunTool.fill(lang, &[("tool", &names[index])]),
             json!({"weight": "Bolder"}),
         );
         title["separator"] = json!(index > 0);
@@ -217,18 +219,17 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
                 "id": input_id(index),
                 "style": "expanded",
                 "isRequired": true,
-                "errorMessage": "Choose approve or deny",
+                "errorMessage": Msg::ChooseApproveOrDeny.text(lang),
                 "choices": [
-                    {"title": "Approve", "value": "approve"},
-                    {"title": "Deny", "value": "reject"},
+                    {"title": Msg::Approve.text(lang), "value": "approve"},
+                    {"title": Msg::Deny.text(lang), "value": "reject"},
                 ],
             }));
         }
     }
     if detail > Detail::Full {
-        body.push(
-            json!({"type": "TextBlock", "wrap": true, "isSubtle": true, "text": OMITTED_DETAILS}),
-        );
+        body.push(json!({"type": "TextBlock", "wrap": true, "isSubtle": true,
+            "text": Msg::OmittedDetails.text(lang)}));
     }
 
     let data = |all: Option<ApprovalChoice>| {
@@ -245,10 +246,10 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
         }
         data
     };
-    let button = |title: &str, style: &str, all: Option<ApprovalChoice>| {
+    let button = |title: Msg, style: &str, all: Option<ApprovalChoice>| {
         json!({
             "type": "Action.Submit",
-            "title": title,
+            "title": title.text(lang),
             "style": style,
             // Per-item choices only travel (and are required) on the submit button.
             "associatedInputs": if all.is_some() { "none" } else { "auto" },
@@ -258,27 +259,23 @@ fn build_approval_card(set: &PendingApprovalSet, detail: Detail) -> Value {
     let actions = if set.kind == ApprovalKind::ToolCallLimit {
         vec![
             button(
-                "Continue tool calls",
+                Msg::ContinueToolCalls,
                 "positive",
                 Some(ApprovalChoice::Approve),
             ),
-            button(
-                "Generate answer now",
-                "default",
-                Some(ApprovalChoice::Reject),
-            ),
-            button("Stop", "destructive", Some(ApprovalChoice::Withdraw)),
+            button(Msg::AnswerNow, "default", Some(ApprovalChoice::Reject)),
+            button(Msg::Stop, "destructive", Some(ApprovalChoice::Withdraw)),
         ]
     } else if count > 1 {
         vec![
-            button("Submit decisions", "default", None),
-            button("Approve all", "positive", Some(ApprovalChoice::Approve)),
-            button("Deny all", "destructive", Some(ApprovalChoice::Reject)),
+            button(Msg::SubmitDecisions, "default", None),
+            button(Msg::ApproveAll, "positive", Some(ApprovalChoice::Approve)),
+            button(Msg::DenyAll, "destructive", Some(ApprovalChoice::Reject)),
         ]
     } else {
         vec![
-            button("Approve", "positive", Some(ApprovalChoice::Approve)),
-            button("Deny", "destructive", Some(ApprovalChoice::Reject)),
+            button(Msg::Approve, "positive", Some(ApprovalChoice::Approve)),
+            button(Msg::Deny, "destructive", Some(ApprovalChoice::Reject)),
         ]
     };
     adaptive_card(body, actions)
@@ -291,40 +288,29 @@ pub fn welcome_card(
     known_user: bool,
     tab_name: Option<&str>,
     open_url: Option<&str>,
+    lang: Lang,
 ) -> Value {
-    let mut body = vec![plain_text(
-        &format!(
-            "Hi, I'm {app_name}. Ask me anything here, attach files, or @mention me in group chats and channels. Send /new to start a fresh chat."
-        ),
-        json!({}),
-    )];
+    let app = ("app", app_name);
+    let mut body = vec![plain_text(&Msg::Welcome.fill(lang, &[app]), json!({}))];
     if !known_user {
         let where_to = match tab_name {
-            Some(tab) => format!("Open the {tab} tab at the top of this chat once"),
-            None => format!("Open {app_name} once"),
+            Some(tab) => Msg::WelcomeOpenTab.fill(lang, &[("tab", tab)]),
+            None => Msg::WelcomeOpenApp.fill(lang, &[app]),
         };
-        body.push(plain_text(
-            &format!("{where_to} so I know your account, then send me your first question."),
-            json!({}),
-        ));
+        body.push(plain_text(&where_to, json!({})));
     }
     let actions = open_url
-        .map(|url| json!({"type": "Action.OpenUrl", "title": format!("Open {app_name}"), "url": url}))
+        .map(|url| json!({"type": "Action.OpenUrl", "title": Msg::OpenApp.fill(lang, &[app]), "url": url}))
         .into_iter()
         .collect();
     adaptive_card(body, actions)
 }
 
 /// What replaces the card once decided, so it cannot be answered twice.
-pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) -> Value {
+pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str, lang: Lang) -> Value {
     let body = decisions
         .iter()
-        .map(|(name, choice)| {
-            plain_text(
-                &format!("{name} was {} by {decided_by}.", choice.past_tense()),
-                json!({}),
-            )
-        })
+        .map(|(name, choice)| plain_text(&choice.decided(name, decided_by, lang), json!({})))
         .collect();
     adaptive_card(body, Vec::new())
 }
@@ -332,23 +318,26 @@ pub fn decided_card(decisions: &[(String, ApprovalChoice)], decided_by: &str) ->
 /// Notification and preview text: the card heading, plus what the card body
 /// would otherwise have said. A task plan's items are all `delegate_task`, so
 /// only tool approvals name their tool.
-pub fn approval_summary(set: &PendingApprovalSet) -> String {
+pub fn approval_summary(set: &PendingApprovalSet, lang: Lang) -> String {
     match (set.kind, set.items.as_slice()) {
-        (ApprovalKind::ToolCallLimit, _) => format!(
-            "{}. Choose whether to continue, answer now, or stop.",
-            heading(set)
-        ),
-        (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
-            format!("Approval needed to run {}.", item.display_name())
+        (ApprovalKind::ToolCallLimit, _) => {
+            Msg::ToolCallLimitSummary.fill(lang, &[("heading", &heading(set, lang))])
         }
-        _ => format!("{}.", heading(set)),
+        (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
+            Msg::ApprovalSummary.fill(lang, &[("tool", item.display_name())])
+        }
+        _ => format!("{}.", heading(set, lang)),
     }
 }
 
-pub fn decided_summary(decisions: &[(String, ApprovalChoice)], decided_by: &str) -> String {
+pub fn decided_summary(
+    decisions: &[(String, ApprovalChoice)],
+    decided_by: &str,
+    lang: Lang,
+) -> String {
     decisions
         .iter()
-        .map(|(name, choice)| format!("{name} was {} by {decided_by}.", choice.past_tense()))
+        .map(|(name, choice)| choice.decided(name, decided_by, lang))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -395,6 +384,7 @@ mod tests {
             false,
             Some("Hugo"),
             Some("https://hugo.example.com"),
+            Lang::En,
         );
         let text = card.to_string();
         assert!(text.contains("Hi, I'm Hugo."));
@@ -403,9 +393,49 @@ mod tests {
             card["content"]["actions"][0]["url"],
             "https://hugo.example.com"
         );
-        let known = welcome_card("Hugo", true, Some("Hugo"), None);
+        let known = welcome_card("Hugo", true, Some("Hugo"), None, Lang::En);
         assert!(!known.to_string().contains("so I know your account"));
         assert_eq!(known["content"]["actions"], json!([]));
+    }
+
+    #[test]
+    fn a_german_user_gets_the_welcome_and_approval_cards_in_german() {
+        let card = welcome_card(
+            "Hugo",
+            false,
+            Some("Hugo"),
+            Some("https://hugo.example.com"),
+            Lang::De,
+        );
+        let text = card.to_string();
+        assert!(text.contains("Hallo, ich bin Hugo."));
+        assert!(text.contains("Öffnen Sie einmal den Tab Hugo oben in diesem Chat"));
+        assert_eq!(card["content"]["actions"][0]["title"], "Hugo öffnen");
+
+        let card = approval_card(&set(2), Lang::De);
+        assert_eq!(
+            card["content"]["body"][0]["text"],
+            "Erato möchte 2 Aufgabe(n) starten"
+        );
+        let titles: Vec<_> = card["content"]["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|action| action["title"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            titles,
+            ["Entscheidungen senden", "Alle genehmigen", "Alle ablehnen"]
+        );
+        assert_eq!(
+            approval_summary(&set(1), Lang::De),
+            "Genehmigung erforderlich, um tool_0 auszuführen."
+        );
+        let decided = [("tool_0".to_string(), ApprovalChoice::Reject)];
+        assert_eq!(
+            decided_summary(&decided, "Ihnen", Lang::De),
+            "tool_0 wurde von Ihnen abgelehnt."
+        );
     }
 
     fn set(count: usize) -> PendingApprovalSet {
@@ -439,13 +469,19 @@ mod tests {
 
     #[test]
     fn summaries_follow_the_card_heading() {
-        assert_eq!(approval_summary(&set(1)), "Approval needed to run tool_0.");
-        assert_eq!(approval_summary(&set(3)), "Erato wants to start 3 task(s).");
+        assert_eq!(
+            approval_summary(&set(1), Lang::En),
+            "Approval needed to run tool_0."
+        );
+        assert_eq!(
+            approval_summary(&set(3), Lang::En),
+            "Erato wants to start 3 task(s)."
+        );
     }
 
     #[test]
     fn a_single_item_card_submits_its_decision() {
-        let card = approval_card(&set(1));
+        let card = approval_card(&set(1), Lang::En);
         assert!(
             card["content"]["body"]
                 .as_array()
@@ -462,7 +498,7 @@ mod tests {
 
     #[test]
     fn a_multi_item_card_submits_every_decision_together() {
-        let card = approval_card(&set(2));
+        let card = approval_card(&set(2), Lang::En);
         let per_item = ApprovalSubmit::from_value(&submitted(
             &card,
             0,
@@ -496,7 +532,7 @@ mod tests {
 
     #[test]
     fn cards_posted_before_the_rename_keep_their_names() {
-        let mut value = submitted(&approval_card(&set(1)), 0, json!({}));
+        let mut value = submitted(&approval_card(&set(1), Lang::En), 0, json!({}));
         let names = value
             .as_object_mut()
             .unwrap()
@@ -517,7 +553,7 @@ mod tests {
         });
         approvals.items[0].source = Some("new_server".into());
         approvals.items[0].input = json!({});
-        let card = approval_card(&approvals);
+        let card = approval_card(&approvals, Lang::En);
         let body = card["content"]["body"].as_array().unwrap();
         assert_eq!(body.len(), 4, "empty argument objects are omitted");
         assert_eq!(body[1]["type"], "RichTextBlock");
@@ -536,7 +572,7 @@ mod tests {
             submit.display_names,
             vec!["Friendly [title](https://example.com)"]
         );
-        assert!(approval_summary(&approvals).contains("Friendly [title]"));
+        assert!(approval_summary(&approvals, Lang::En).contains("Friendly [title]"));
     }
 
     #[test]
@@ -549,9 +585,13 @@ mod tests {
             });
             item.input = json!({"text": "😀".repeat(5_000)});
         }
-        let card = approval_card(&approvals);
+        let card = approval_card(&approvals, Lang::En);
         assert!(card_fits(&card));
-        assert!(!card.to_string().contains(OMITTED_DETAILS));
+        assert!(
+            !card
+                .to_string()
+                .contains(Msg::OmittedDetails.text(Lang::En))
+        );
         let submit = ApprovalSubmit::from_value(&submitted(&card, 1, json!({}))).unwrap();
         assert_eq!(submit.decisions().unwrap().len(), 8);
     }
@@ -573,9 +613,12 @@ mod tests {
                 });
                 item.input = json!({"text": escaped(5_000)});
             }
-            let card = approval_card(&approvals);
+            let card = approval_card(&approvals, Lang::En);
             assert!(card_fits(&card), "{count} items");
-            assert!(card.to_string().contains(OMITTED_DETAILS));
+            assert!(
+                card.to_string()
+                    .contains(Msg::OmittedDetails.text(Lang::En))
+            );
             let submit = ApprovalSubmit::from_value(&submitted(&card, 1, json!({}))).unwrap();
             assert_eq!(submit.decisions().unwrap().len(), count);
         }
