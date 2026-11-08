@@ -78,6 +78,24 @@ export function scheduledChannelLabel(channel: ScheduledItemChannel): string {
   return CHANNEL_LABEL[channel]();
 }
 
+/** How long a failure stays in the Scheduled page's alert. */
+export const SCHEDULED_FAILURE_ALERT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * The failures the Scheduled page's alert names, which is also when the
+ * sidebar entry carries its warning dot. Past keeps failures for good, so only
+ * the recent ones still call for attention; older ones stay in the list.
+ */
+export function scheduledFailureAlertItems(
+  items: ScheduledItem[],
+  now: Date,
+): ScheduledItem[] {
+  const since = now.getTime() - SCHEDULED_FAILURE_ALERT_WINDOW_MS;
+  return items.filter(
+    (item) => item.status === "failed" && Date.parse(item.dueAt) >= since,
+  );
+}
+
 export interface ScheduledDateFormat {
   /** BCP 47 tag for day and time labels. */
   locale: string | undefined;

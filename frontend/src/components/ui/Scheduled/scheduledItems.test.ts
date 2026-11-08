@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatScheduledDateTime,
   groupScheduledItemsByDay,
+  scheduledFailureAlertItems,
   scheduledItemTab,
 } from "./scheduledItems";
 
@@ -139,5 +140,20 @@ describe("formatScheduledDateTime", () => {
         timeZone: "Europe/Berlin",
       }),
     ).toBe("So., 8. Nov., 09:00");
+  });
+});
+
+describe("scheduledFailureAlertItems", () => {
+  it("keeps the failures of the last seven days, up to the hour", () => {
+    const items = [
+      item("failed-now", "2026-11-07T11:00:00Z", "failed"),
+      item("failed-at-the-edge", "2026-10-31T12:00:00Z", "failed"),
+      item("failed-before", "2026-10-31T11:59:00Z", "failed"),
+      item("done-now", "2026-11-07T11:00:00Z", "done"),
+    ];
+
+    expect(
+      scheduledFailureAlertItems(items, context.now).map((entry) => entry.id),
+    ).toEqual(["failed-now", "failed-at-the-edge"]);
   });
 });
