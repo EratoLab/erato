@@ -1574,6 +1574,8 @@ msgstr "Assistent"
 #: src/pages/AssistantsPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
+#: src/pages/ScheduledItemFormPage.tsx
+#: src/pages/ScheduledPage.tsx
 #: src/pages/SharedChatPage.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
@@ -2965,6 +2967,7 @@ msgstr "Senden"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
+#: src/pages/ScheduledItemFormPage.tsx
 #: src/utils/chat/recentChatSession.ts
 msgid "chat.newChat.title"
 msgstr "Neuer Chat"
@@ -6569,6 +6572,801 @@ msgid "profile.menu.preferences"
 msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.cancel.failed"
+msgstr "„{name}“ konnte nicht abgebrochen werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.browser"
+msgstr "Browser-Benachrichtigung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.browser.helper"
+msgstr "Eine Benachrichtigung Ihres Browsers, solange Erato geöffnet ist"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.comingLater"
+msgstr "Folgt später"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.desktop"
+msgstr "Desktop-Benachrichtigung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.desktop.helper"
+msgstr "Eine Benachrichtigung auf Ihrem Computer über die Erato-Desktop-App"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.connected"
+msgstr "Verbunden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.notSetUp"
+msgstr "Nicht eingerichtet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.unavailable"
+msgstr "Nicht verfügbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.channel.teamsChat"
+msgstr "Teams-Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.helper"
+msgstr "Ihr Chat mit Erato in Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.notSetUp"
+msgstr "Erato kann Sie in Teams noch nicht erreichen. Öffnen Sie Erato einmal in Microsoft Teams: Suchen Sie unter „Apps“ nach Erato und öffnen Sie es. Danach funktioniert dieser Zustellweg."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.unavailable"
+msgstr "Die Zustellung per Teams-Chat ist hier nicht verfügbar. Wenden Sie sich an Ihre Administration."
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.delete.failed"
+msgstr "„{name}“ konnte nicht gelöscht werden"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.description"
+msgstr "Lassen Sie sich zu einem Zeitpunkt Ihrer Wahl erinnern, oder beschreiben Sie es in einem Chat, und Erato richtet es ein."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.past.description"
+msgstr "Einträge erscheinen hier, sobald sie erledigt, fehlgeschlagen oder abgebrochen sind."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.past.title"
+msgstr "Noch keine vergangenen Einträge"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.title"
+msgstr "Noch nichts geplant"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.upcoming.description"
+msgstr "Was Sie als Nächstes planen, erscheint hier."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.upcoming.title"
+msgstr "Keine anstehenden Einträge"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.error.load"
+msgstr "Ihre geplanten Einträge konnten nicht geladen werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+#~ msgid "scheduled.failure.many"
+#~ msgstr "Sie finden sie unter „Vergangen“, jeweils mit dem Grund."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.manyUnderPast"
+msgstr "Sie finden sie unter „Vergangen“."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.one"
+msgstr "„{name}“ war für {when} geplant und konnte nicht ausgeführt werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.showPast"
+msgstr "Unter „Vergangen“ anzeigen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.title"
+msgstr "{count, plural, one {# Eintrag konnte nicht ausgeführt werden} other {# Einträge konnten nicht ausgeführt werden}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.advanced.summary"
+msgstr "Zustellung per {channelName}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.advanced.title"
+msgstr "Erweiterte Einstellungen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.at"
+msgstr "um"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.backToList"
+msgstr "Zurück zur Liste"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.cancel"
+msgstr "Abbrechen"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.created"
+msgstr "„{name}“ ist geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.date"
+msgstr "Datum"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.deliverVia"
+msgstr "Zustellen per"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends"
+msgstr "Endet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.afterCount"
+msgstr "Nach einer Anzahl von Malen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.count"
+msgstr "Anzahl der Male"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.lastDay"
+msgstr "Letzter Tag"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.never"
+msgstr "Nie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.onDate"
+msgstr "An einem Datum"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.times"
+msgstr "Mal"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency"
+msgstr "Wiederholung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.daily"
+msgstr "Jeden Tag"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.monthly"
+msgstr "Jeden Monat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.weekdays"
+msgstr "Jeden Werktag (Montag bis Freitag)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.weekly"
+msgstr "Jede Woche"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat"
+msgstr "Verknüpfter Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.current"
+msgstr "Der aktuell verknüpfte Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.help"
+msgstr "Optional: Die Nachricht verweist auf diesen Chat, damit Sie dort weitermachen können, wo Sie aufgehört haben."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.none"
+msgstr "Kein Chat"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.loading"
+msgstr "Wird geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.message"
+msgstr "Nachricht"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.name.help"
+msgstr "Erscheint in Ihrer Liste und als Titel, wenn sie ankommt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.reminder"
+msgstr "Erinnerung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.reminder.description"
+msgstr "Was Erato Ihnen sendet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.save"
+msgstr "Änderungen speichern"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.saved"
+msgstr "Änderungen an „{name}“ gespeichert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.schedule.reminder"
+msgstr "Erinnerung planen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.starts"
+msgstr "Beginnt"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.again"
+msgstr "Aus „{name}“ übernommen. Wählen Sie, wann es erneut stattfinden soll."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.edit"
+msgstr "Änderungen gelten für alles, was noch nicht stattgefunden hat."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.new"
+msgstr "Wählen Sie, wann es stattfindet und was Erato Ihnen sendet."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.template"
+msgstr "Aus der Vorlage „{templateTitle}“ übernommen. Ändern Sie, was Sie möchten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.daily"
+msgstr "jeden Tag um {time}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.endsAfter"
+msgstr "{count, plural, one {Nur einmal.} other {Insgesamt # Mal.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.endsOn"
+msgstr "Nicht nach {last}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.incomplete"
+msgstr "Vervollständigen Sie den Zeitplan, um zu sehen, wann es stattfindet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.monthly"
+msgstr "jeden Monat am {day}. um {time}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.noTimeAhead"
+msgstr "Dieser Zeitplan hat keinen Zeitpunkt in der Zukunft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.once"
+msgstr "Findet statt am <0>{when}</0>, {relative}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.repeat"
+msgstr "Findet <0>{pattern}</0> statt, zum ersten Mal am {firstDay}."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.snoozed"
+msgstr "Zurückgestellt bis <0>{until}</0>. Wenn Sie den Zeitplan ändern, entfällt die Zurückstellung."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.weekdays"
+msgstr "jeden Werktag um {time}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.weekly"
+msgstr "jede Woche am {days} um {time}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.time"
+msgstr "Uhrzeit"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.title.edit"
+msgstr "Erinnerung bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.title.new"
+msgstr "Neue Erinnerung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger"
+msgstr "Auslöser"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.description"
+msgstr "Was es auslöst."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.once"
+msgstr "An einem Datum und zu einer Uhrzeit"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.repeat"
+msgstr "Nach einem wiederkehrenden Zeitplan"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type"
+msgstr "Art"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type.help"
+msgstr "Eine Erinnerung sendet Ihnen eine Nachricht. Sie führt nie etwas aus."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type.scheduledTaskLater"
+msgstr "Geplante Aufgabe (folgt später)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.date.past"
+msgstr "Dieser Zeitpunkt liegt in der Vergangenheit. Wählen Sie einen Zeitpunkt in der Zukunft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.date.required"
+msgstr "Wählen Sie ein Datum."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endCount.invalid"
+msgstr "Geben Sie eine ganze Zahl von mindestens 1 ein."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endDate.beforeStart"
+msgstr "Der letzte Tag kann nicht vor dem ersten liegen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endDate.required"
+msgstr "Wählen Sie den letzten Tag."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.message.required"
+msgstr "Geben Sie die Nachricht ein, die Erato Ihnen sendet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.message.tooLong"
+msgstr "Verwenden Sie höchstens {SCHEDULED_MESSAGE_MAX} Zeichen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.name.required"
+msgstr "Geben Sie einen Namen ein."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.name.tooLong"
+msgstr "Verwenden Sie höchstens {SCHEDULED_NAME_MAX} Zeichen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.repeat.noTimeAhead"
+msgstr "Dieser Zeitplan hat keinen Zeitpunkt in der Zukunft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.time.required"
+msgstr "Wählen Sie eine Uhrzeit."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.weekdays.required"
+msgstr "Wählen Sie mindestens einen Tag."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.weekdays"
+msgstr "An diesen Tagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.weekdays.on"
+msgstr "Am"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.earlier"
+msgstr "Früher"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.later"
+msgstr "Später"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.today"
+msgstr "Heute"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.tomorrow"
+msgstr "Morgen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.yesterday"
+msgstr "Gestern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.cancel"
+msgstr "Abbrechen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.delete"
+msgstr "Löschen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.edit"
+msgstr "Bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.openLinkedChat"
+msgstr "Verknüpften Chat öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.scheduleAgain"
+msgstr "Erneut planen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.snoozeUntilTomorrow"
+msgstr "Auf morgen, {snoozeTime} zurückstellen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.actions.aria"
+msgstr "Aktionen für {name}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirm"
+msgstr "Ja, abbrechen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirmMessage"
+msgstr "Es wird nicht ausgeführt. Sie finden es weiterhin unter „Vergangen“."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirmTitle"
+msgstr "„{name}“ abbrechen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.keep"
+msgstr "Behalten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirm"
+msgstr "Löschen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmMessage"
+msgstr "Der Eintrag wird endgültig aus Ihrer Liste entfernt."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmTitle"
+msgstr "„{name}“ löschen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed"
+msgstr "Konnte nicht zugestellt werden. Sie können es erneut planen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat"
+msgstr "Konnte nicht über {channelName} zugestellt werden. Prüfen Sie, ob Erato in Teams eingerichtet ist, und planen Sie es dann erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.cancelled"
+msgstr "Abgebrochen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.deliveredVia"
+msgstr "Zugestellt über {channel}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.linkedChat"
+msgstr "Verknüpfter Chat: {chatTitle}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+#~ msgid "scheduled.item.meta.notDeliveredVia"
+#~ msgstr "Konnte nicht über {channel} zugestellt werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.snoozedUntil"
+msgstr "Zurückgestellt bis {when}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.via"
+msgstr "über {channel}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasDue"
+msgstr "War fällig am {when}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasPlannedFor"
+msgstr "War geplant für {when}"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.loading"
+msgstr "Geplante Einträge werden geladen..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.label"
+msgstr "Geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.createWithChat"
+msgstr "Im Chat erstellen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.createWithChat.description"
+msgstr "Beschreiben Sie es, und Erato richtet es ein"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.reminder"
+msgstr "Erinnerung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.reminder.description"
+msgstr "Eine Nachricht zu einem Zeitpunkt Ihrer Wahl"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.scheduledTask"
+msgstr "Geplante Aufgabe"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.scheduledTask.description"
+msgstr "Erato führt einen Prompt oder eine Prüfung für Sie aus. Folgt später"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.section.inChat"
+msgstr "Im Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.trigger"
+msgstr "Neu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.notice.limitReached"
+msgstr "Sie haben die Höchstzahl von {max} anstehenden Einträgen erreicht. Brechen Sie einen ab, um einen neuen zu planen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.body"
+msgstr "Erato kann Sie noch über keinen Zustellweg erreichen, daher lässt sich nichts Neues planen. Die erweiterten Einstellungen im Formular zeigen, wie Sie einen einrichten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.title"
+msgstr "Zuerst die Zustellung einrichten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.unavailable"
+msgstr "Die Zustellung ist hier noch nicht verfügbar, daher lässt sich nichts Neues planen."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.page.subtitle"
+msgstr "Alles, was Erato zu einem Zeitpunkt Ihrer Wahl für Sie erledigt."
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.page.title"
+msgstr "Geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelNotSetUp"
+msgstr "Erato kann Sie über diesen Zustellweg noch nicht erreichen. Richten Sie ihn zuerst ein."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelUnavailable"
+msgstr "Dieser Zustellweg ist hier nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.finished"
+msgstr "Dieser Eintrag ist bereits vorbei."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.inFlight"
+msgstr "Dieser Eintrag wird gerade zugestellt. Versuchen Sie es gleich noch einmal."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidRequest"
+msgstr "Prüfen Sie Name und Nachricht: Beides ist erforderlich."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidTrigger"
+msgstr "Dieser Zeitplan funktioniert nicht. Prüfen Sie die Tage und Daten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.limitReached"
+msgstr "Sie haben die Höchstzahl anstehender Einträge erreicht. Brechen Sie zuerst einen ab."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.linkedChatNotFound"
+msgstr "Der verknüpfte Chat existiert nicht mehr. Wählen Sie einen anderen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFinished"
+msgstr "Nur Einträge, die vorbei sind, können gelöscht werden."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFound"
+msgstr "Dieser Eintrag existiert nicht mehr."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nothingToSnooze"
+msgstr "Von diesem Eintrag wartet nichts auf die Zustellung."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.triggerInPast"
+msgstr "Dieser Zeitpunkt liegt in der Vergangenheit. Wählen Sie einen Zeitpunkt in der Zukunft."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.typeNotAvailable"
+msgstr "Diese Art ist noch nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.unknown"
+msgstr "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.snooze.failed"
+msgstr "„{name}“ konnte nicht zurückgestellt werden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledStatusPill.tsx
 msgid "scheduled.status.cancelled"
 msgstr "Abgebrochen"
@@ -6592,6 +7390,51 @@ msgstr "Geplant"
 #: src/components/ui/Scheduled/ScheduledStatusPill.tsx
 msgid "scheduled.status.snoozed"
 msgstr "Zurückgestellt"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.aria"
+msgstr "Geplante Einträge filtern"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.past"
+msgstr "Vergangen"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.past.count"
+msgstr "Vergangen ({count})"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.upcoming"
+msgstr "Anstehend"
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.upcoming.count"
+msgstr "Anstehend ({count})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTemplates.tsx
+msgid "scheduled.templates.note"
+msgstr "Eine Vorlage öffnet das Formular mit vorausgefülltem Text."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTemplates.tsx
+msgid "scheduled.templates.title"
+msgstr "Mit einer Vorlage beginnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.type.reminder"
+msgstr "Erinnerung"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.type.scheduledTask"
+msgstr "Geplante Aufgabe"
 
 #. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
@@ -8602,8 +9445,8 @@ msgid "Cancel"
 msgstr "Abbrechen"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Cancel action"
-msgstr "Aktion abbrechen"
+#~ msgid "Cancel action"
+#~ msgstr "Aktion abbrechen"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cancel queued message"
@@ -8730,8 +9573,8 @@ msgid "Confirm"
 msgstr "Bestätigen"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Confirm action"
-msgstr "Aktion bestätigen"
+#~ msgid "Confirm action"
+#~ msgstr "Aktion bestätigen"
 
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx

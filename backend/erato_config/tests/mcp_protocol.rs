@@ -1,6 +1,6 @@
 use erato_config::config::{
-    McpProtocolMode, McpRuntimeConfig, McpServerConfig, is_invisible_format_char,
-    validate_mcp_server_ids,
+    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_hidden_char,
+    is_invisible_format_char, validate_mcp_server_ids,
 };
 use std::collections::HashMap;
 
@@ -60,6 +60,18 @@ fn display_names_are_optional_validated_and_fall_back_to_the_tidied_id() {
         "display_name = \"\u{FEFF}CRM\"".to_string(),
         "display_name = \"CRM\u{E0001}\u{E0065}\u{E0076}\u{E0069}\u{E006C}\u{E007F}\"".to_string(),
         "display_name = \"\u{200B}\"".to_string(),
+        "display_name = \"CRM\u{00AD}\"".to_string(),
+        "display_name = \"C\u{034F}RM\"".to_string(),
+        "display_name = \"\u{3164}\"".to_string(),
+        "display_name = \"CRM\u{115F}\"".to_string(),
+        "display_name = \"CRM\u{180E}\"".to_string(),
+        "display_name = \"CRM\u{2064}\"".to_string(),
+        "display_name = \"CRM\u{1D173}\"".to_string(),
+        "display_name = \"CRM\u{FE00}\"".to_string(),
+        "display_name = \"CRM\u{E0100}\"".to_string(),
+        "display_name = \"\u{FE0F}CRM\"".to_string(),
+        "display_name = \"CRM \u{FE0F}\"".to_string(),
+        "display_name = \"CRM \u{2600}\u{FE0F}\u{FE0F}\"".to_string(),
     ] {
         let server = parse(&invalid).unwrap();
         assert!(
@@ -69,48 +81,73 @@ fn display_names_are_optional_validated_and_fall_back_to_the_tidied_id() {
     }
 }
 
+/// Default_Ignorable_Code_Point in Unicode 16's DerivedCoreProperties.txt.
+const DEFAULT_IGNORABLE: [(u32, u32); 17] = [
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+];
+
 #[test]
-fn invisible_formatting_characters_are_named_one_by_one() {
-    for c in [
-        '\u{061C}',
-        '\u{200B}',
-        '\u{200C}',
-        '\u{200D}',
-        '\u{200E}',
-        '\u{200F}',
-        '\u{202A}',
-        '\u{202E}',
-        '\u{2060}',
-        '\u{2066}',
-        '\u{2069}',
-        '\u{FEFF}',
-        '\u{E0000}',
-        '\u{E0041}',
-        '\u{E007F}',
-    ] {
-        assert!(is_invisible_format_char(c), "U+{:04X}", c as u32);
-    }
-    for c in [
-        'a',
-        ' ',
-        '\u{00AD}',
-        '\u{061B}',
-        '\u{061D}',
-        '\u{200A}',
-        '\u{2010}',
-        '\u{2029}',
-        '\u{202F}',
-        '\u{2061}',
-        '\u{206A}',
-        '\u{FEFE}',
-        '\u{FF0D}',
-        '\u{DFFFF}',
-        '\u{E0080}',
-        '\u{E0100}',
-        '\u{1F600}',
-    ] {
-        assert!(!is_invisible_format_char(c), "U+{:04X}", c as u32);
+fn invisible_formatting_characters_are_exactly_the_default_ignorable_ones() {
+    for c in (0..=0x10FFFF).filter_map(char::from_u32) {
+        let listed = DEFAULT_IGNORABLE
+            .iter()
+            .any(|(start, end)| (*start..=*end).contains(&u32::from(c)));
+        assert_eq!(
+            is_invisible_format_char(c),
+            listed,
+            "U+{:04X}",
+            u32::from(c)
+        );
     }
     let named = parse("display_name = \"Café 365 \u{1F600}\"").unwrap();
     assert!(validate_mcp_server_ids(&HashMap::from([("crm".into(), named)])).is_ok());
+}
+
+#[test]
+fn a_presentation_selector_is_hidden_only_where_it_styles_no_character() {
+    for (previous, c) in [
+        (Some('\u{2764}'), '\u{FE0F}'),
+        (Some('\u{2764}'), '\u{FE0E}'),
+        (Some('1'), '\u{FE0F}'),
+        (Some('a'), 'b'),
+        (None, 'a'),
+    ] {
+        assert!(!is_hidden_char(previous, c), "{previous:?} {c:?}");
+    }
+    for (previous, c) in [
+        (None, '\u{FE0F}'),
+        (Some(' '), '\u{FE0F}'),
+        (Some('\n'), '\u{FE0E}'),
+        (Some('\u{7}'), '\u{FE0F}'),
+        (Some('\u{FE0F}'), '\u{FE0F}'),
+        (Some('\u{200B}'), '\u{FE0E}'),
+        (Some('\u{2764}'), '\u{FE00}'),
+        (Some('\u{2764}'), '\u{E0100}'),
+        (Some('\u{2764}'), '\u{200B}'),
+    ] {
+        assert!(is_hidden_char(previous, c), "{previous:?} {c:?}");
+    }
+
+    assert!(!has_hidden_chars(
+        "I \u{2764}\u{FE0F} it, 1\u{FE0F}\u{20E3}"
+    ));
+    assert!(has_hidden_chars("\u{2764}\u{FE0F}\u{FE0E}"));
+    let named = parse("display_name = \"Weather \u{2600}\u{FE0F}\"").unwrap();
+    assert!(validate_mcp_server_ids(&HashMap::from([("weather".into(), named)])).is_ok());
 }
