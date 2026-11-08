@@ -105,7 +105,7 @@ pub fn is_contact_number_member(member: &str) -> bool {
 /// Digits and phone punctuation only (`+49 170 1234567`, `(030) 1234567`,
 /// `0170/1234567`, `+1-555-0100`): 7 to 15 digits and at least one other
 /// character. A digit-only value is left to the caller. Read as NFKC, with
-/// any dash, so full-width forms count too.
+/// any dash and digits of any script, so full-width forms count too.
 pub fn is_phone_shaped(value: &str) -> bool {
     use unicode_normalization::UnicodeNormalization;
     let mut digits = 0usize;
@@ -216,11 +216,15 @@ mod tests {
             "+1\u{2011}555\u{2011}0100",
             "\u{FF0B}\u{FF14}\u{FF19}\u{FF0D}170\u{FF0D}1234567",
             "+123456789012345",
+            // NFKC leaves Arabic-Indic and Devanagari digits as they are.
+            "+\u{0664}\u{0669}-\u{0661}\u{0667}\u{0660}-\u{0661}\u{0662}\u{0663}\u{0664}\u{0665}\u{0666}\u{0667}",
+            "(\u{0966}\u{0969}\u{0966}) \u{0967}\u{0968}\u{0969}\u{096A}\u{096B}\u{096C}\u{096D}",
         ] {
             assert!(is_phone_shaped(value), "{value}");
         }
         for value in [
             "4917012345678",
+            "\u{0664}\u{0669}\u{0661}\u{0667}\u{0660}\u{0661}\u{0662}\u{0663}\u{0664}\u{0665}\u{0666}\u{0667}",
             "+12345",
             "555-010",
             "+1234567890123456",

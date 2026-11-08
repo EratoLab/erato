@@ -1636,7 +1636,7 @@ fn a_hostile_result_never_names_a_phone_mobile_or_fax_number() {
 #[test]
 fn a_hostile_result_never_names_a_phone_shaped_id_under_any_member() {
     const USER: &str = "5f0c2a10-0000-4000-8000-00000000e001";
-    const PHONES: [&str; 8] = [
+    const PHONES: [&str; 14] = [
         "+49 170 1234567",
         "+1-555-0100",
         "(030) 1234567",
@@ -1645,6 +1645,13 @@ fn a_hostile_result_never_names_a_phone_shaped_id_under_any_member() {
         "(030)1234567",
         "+49.170.1234567",
         "\u{FF0B}49\u{FF0D}170\u{FF0D}1234567",
+        // Digits of other scripts, alone and with phone punctuation.
+        "\u{FF14}\u{FF19}\u{FF11}\u{FF17}\u{FF10}\u{FF11}\u{FF12}\u{FF13}\u{FF14}\u{FF15}\u{FF16}\u{FF17}",
+        "\u{0664}\u{0669}\u{0661}\u{0667}\u{0660}\u{0661}\u{0662}\u{0663}\u{0664}\u{0665}\u{0666}\u{0667}",
+        "\u{096A}\u{096F}\u{0967}\u{096D}\u{0966}\u{0967}\u{0968}\u{0969}\u{096A}\u{096B}\u{096C}\u{096D}",
+        "+\u{FF14}\u{FF19} \u{FF11}\u{FF17}\u{FF10} \u{FF11}\u{FF12}\u{FF13}\u{FF14}\u{FF15}\u{FF16}\u{FF17}",
+        "+\u{0664}\u{0669}-\u{0661}\u{0667}\u{0660}-\u{0661}\u{0662}\u{0663}\u{0664}\u{0665}\u{0666}\u{0667}",
+        "(\u{0966}\u{0969}\u{0966}) \u{0967}\u{0968}\u{0969}\u{096A}\u{096B}\u{096C}\u{096D}",
     ];
     let mut people: Vec<Value> = PHONES
         .iter()
