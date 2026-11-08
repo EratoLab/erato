@@ -998,6 +998,52 @@ describe("what a card notes about values it leaves out or changes", () => {
     expect(notesOf(card)?.hiddenCharacters).toBe(true);
   });
 
+  it("names a field without a name after its member, and notes what that lost", () => {
+    const withField = (pointer: string): ToolCallLabel => ({
+      ...createRow,
+      items: [
+        {
+          ...createRow.items![0],
+          fields: [
+            {
+              pointer,
+              values: [{ path: pointer.replace("*", "0"), text: "Lead" }],
+            },
+          ],
+        },
+      ],
+    });
+    const hidden = toolCallCardOf(
+      withField("/pages/*/properties/Sta\u200Btus"),
+      undefined,
+    );
+    expect(hidden.kind === "gist" && hidden.gist.items[0].fields[0].name).toBe(
+      "Status",
+    );
+    expect(notesOf(hidden)?.hiddenCharacters).toBe(true);
+    const clean = toolCallCardOf(
+      withField("/pages/*/properties/Status"),
+      undefined,
+    );
+    expect(clean.kind === "gist" && clean.gist.items[0].fields[0].name).toBe(
+      "Status",
+    );
+    expect(notesOf(clean)?.hiddenCharacters).toBe(false);
+  });
+
+  it("notes nothing for emoji text, and data smuggled in selectors after it", () => {
+    const emoji = { note: "Sunny \u2600\uFE0F", status: "I \u2764\uFE0F it" };
+    expect(notesOf(generic(viewOf(emoji), emoji))?.hiddenCharacters).toBe(
+      false,
+    );
+    const smuggled = { note: "Hi \u{1F600}\uFE01\u{E0110}\u{E0120}" };
+    expect(notesOf(generic(viewOf(smuggled), smuggled))?.hiddenCharacters).toBe(
+      true,
+    );
+    const soft = { "soft\u00ADhyphen": "x" };
+    expect(notesOf(generic(viewOf(soft), soft))?.hiddenCharacters).toBe(true);
+  });
+
   it("notes nothing for clean values, and nothing on a row saved before labels", () => {
     const input = { note: "plain", count: 3 };
     expect(notesOf(generic(viewOf(input), input))).toEqual({

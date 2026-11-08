@@ -23,14 +23,22 @@ import type {
 
 const ISOLATED = "[unicode-bidi:isolate]";
 
-/** What the call writes where a name stands for it: the value, or its ID short. */
-const WrittenBeside = ({ value }: { value: GistValue }) => {
+const cutText = (text: string, truncated: boolean) =>
+  truncated ? `${text}…` : text;
+
+/** What the call writes where a name stands for it; an ID short unless `wholeId`. */
+const WrittenBeside = ({
+  value,
+  wholeId,
+}: {
+  value: GistValue;
+  wholeId: boolean;
+}) => {
   if (value.written === undefined) return null;
-  const written = value.writtenId
+  const short = value.writtenId === true && !wholeId;
+  const written = short
     ? shortId(value.written)
-    : value.truncated
-      ? `${value.written}…`
-      : value.written;
+    : cutText(value.written, value.truncated);
   return (
     <span className="text-theme-fg-muted" data-testid="tool-call-gist-written">
       {" "}
@@ -40,7 +48,7 @@ const WrittenBeside = ({ value }: { value: GistValue }) => {
       <span aria-hidden="true">&lt;</span>
       <span
         dir="auto"
-        title={value.writtenId ? value.written : undefined}
+        title={short ? value.written : undefined}
         className={clsx(value.writtenId && "font-mono text-[0.9em]", ISOLATED)}
       >
         {written}
@@ -55,14 +63,17 @@ const WrittenBeside = ({ value }: { value: GistValue }) => {
  * quoted as the call wrote it, underlined when an earlier result named or
  * held it, monospace when it is an ID. With `showWritten`, as on an approval
  * card, a name has the value the call writes beside it, so a name from an
- * earlier result never stands in for it.
+ * earlier result never stands in for it. With `wholeId`, also on an approval
+ * card, an ID shows whole: two IDs that start alike never look the same.
  */
 export const GistValueText = ({
   value,
   showWritten = false,
+  wholeId = false,
 }: {
   value: GistValue;
   showWritten?: boolean;
+  wholeId?: boolean;
 }) => {
   const text =
     value.truncated && value.origin !== "resolved"
@@ -101,21 +112,23 @@ export const GistValueText = ({
             {text}
           </span>
           {showWritten && value.origin === "resolved" && (
-            <WrittenBeside value={value} />
+            <WrittenBeside value={value} wholeId={wholeId} />
           )}
         </>
       );
-    case "id":
+    case "id": {
+      const whole = wholeId ? value.written : undefined;
       return (
         <span
           dir="auto"
           data-origin="id"
-          title={value.written}
+          title={whole === undefined ? value.written : undefined}
           className={clsx("font-mono text-[0.9em]", ISOLATED)}
         >
-          {text}
+          {whole === undefined ? text : cutText(whole, value.truncated)}
         </span>
       );
+    }
   }
 };
 
@@ -129,10 +142,12 @@ const GistValueList = ({
   values,
   omitted = 0,
   showWritten,
+  wholeId,
 }: {
   values: GistValue[];
   omitted?: number;
   showWritten: boolean;
+  wholeId: boolean;
 }) => {
   const shown = listedValues(values);
   const more = values.length - shown.length + omitted;
@@ -141,7 +156,11 @@ const GistValueList = ({
       {shown.map((value, index) => (
         <Fragment key={index}>
           {index > 0 && ", "}
-          <GistValueText value={value} showWritten={showWritten} />
+          <GistValueText
+            value={value}
+            showWritten={showWritten}
+            wholeId={wholeId}
+          />
         </Fragment>
       ))}
       {more > 0 && (
@@ -153,16 +172,18 @@ const GistValueList = ({
 
 /**
  * What one item does to what, and where, as one sentence. Before approval a
- * name has the value the call writes beside it.
+ * name has the value the call writes beside it; on a card IDs show whole.
  */
 export const ToolCallGistLine = ({
   gist,
   item,
   phase,
+  variant = "row",
 }: {
   gist: Gist;
   item: GistItem;
   phase: GistPhase;
+  variant?: "card" | "row";
 }) => (
   <>
     {gistLineSentence(gist, item, phase)
@@ -173,6 +194,7 @@ export const ToolCallGistLine = ({
             key={index}
             values={item.names}
             showWritten={phase === "ask"}
+            wholeId={variant === "card"}
           />
         ) : part === GIST_WHERE_SLOT ? (
           <GistValueList
@@ -180,6 +202,7 @@ export const ToolCallGistLine = ({
             values={item.where}
             omitted={item.whereOmitted}
             showWritten={phase === "ask"}
+            wholeId={variant === "card"}
           />
         ) : (
           <Fragment key={index}>{part}</Fragment>
@@ -191,9 +214,11 @@ export const ToolCallGistLine = ({
 const FieldValues = ({
   values,
   omitted = 0,
+  wholeId,
 }: {
   values: GistField["values"];
   omitted?: number;
+  wholeId: boolean;
 }) => {
   const shown = listedValues(values);
   const more = values.length - shown.length + omitted;
@@ -215,7 +240,7 @@ const FieldValues = ({
               </span>
             </>
           )}
-          <GistValueText value={value} />
+          <GistValueText value={value} wholeId={wholeId} />
         </Fragment>
       ))}
       {more > 0 && (
@@ -225,7 +250,13 @@ const FieldValues = ({
   );
 };
 
-const FieldList = ({ fields }: { fields: GistField[] }) =>
+const FieldList = ({
+  fields,
+  wholeId,
+}: {
+  fields: GistField[];
+  wholeId: boolean;
+}) =>
   fields.length === 0 ? null : (
     <dl className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
       {fields.map((field, index) => (
@@ -237,7 +268,11 @@ const FieldList = ({ fields }: { fields: GistField[] }) =>
             {field.name}
           </dt>
           <dd className="min-w-0 break-words text-theme-fg-primary [overflow-wrap:anywhere]">
-            <FieldValues values={field.values} omitted={field.omitted} />
+            <FieldValues
+              values={field.values}
+              omitted={field.omitted}
+              wholeId={wholeId}
+            />
           </dd>
         </Fragment>
       ))}
@@ -248,21 +283,21 @@ const FieldList = ({ fields }: { fields: GistField[] }) =>
 const BatchRows = ({
   item,
   rows,
-  showWritten,
+  onCard,
 }: {
   item: GistItem;
   rows: GistBatchRow[];
-  showWritten: boolean;
+  onCard: boolean;
 }) => (
   <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
     {rows.map(({ name, fields }, index) => (
       <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
         <span className="text-sm text-theme-fg-primary">
-          <GistValueText value={name} showWritten={showWritten} />
+          <GistValueText value={name} showWritten={onCard} wholeId={onCard} />
         </span>
         {fields.length > 0 && (
           <div className="mt-0.5 pl-3">
-            <FieldList fields={fields} />
+            <FieldList fields={fields} wholeId={onCard} />
           </div>
         )}
       </li>
@@ -294,13 +329,9 @@ const TextBlock = ({
         )}
       >
         {value.origin === "written" ? (
-          value.truncated ? (
-            `${value.text}…`
-          ) : (
-            value.text
-          )
+          cutText(value.text, value.truncated)
         ) : (
-          <GistValueText value={value} showWritten />
+          <GistValueText value={value} showWritten wholeId />
         )}
       </p>
     ))}
@@ -345,13 +376,12 @@ export const ToolCallGistValues = ({
 }) => {
   const { rows, shared } = gistItemLayout(item);
   const changes = textChangeCount(item);
+  const onCard = variant === "card";
   return (
     <div className="space-y-2" data-testid="tool-call-gist-values">
-      {rows && (
-        <BatchRows item={item} rows={rows} showWritten={variant === "card"} />
-      )}
-      <FieldList fields={shared} />
-      {variant === "card" ? (
+      {rows && <BatchRows item={item} rows={rows} onCard={onCard} />}
+      <FieldList fields={shared} wholeId={onCard} />
+      {onCard ? (
         <TextChange item={item} />
       ) : (
         changes > 0 && (
@@ -388,7 +418,12 @@ export const ToolCallGist = ({
           className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
           data-testid="tool-call-gist-line"
         >
-          <ToolCallGistLine gist={gist} item={item} phase={phase} />
+          <ToolCallGistLine
+            gist={gist}
+            item={item}
+            phase={phase}
+            variant="card"
+          />
         </p>
         <ToolCallGistValues item={item} variant="card" />
       </div>

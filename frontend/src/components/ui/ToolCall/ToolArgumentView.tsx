@@ -2,7 +2,6 @@ import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { isConsentClaim } from "@/lib/toolCallGist/consent";
-import { shortId } from "@/lib/toolCallGist/gist";
 import {
   cleanServerText,
   lastPointerSegment,
@@ -40,26 +39,18 @@ const NO_TEXT: CleanText = {
 const isLongText = (kind: string, text: string) =>
   kind === "text" || text.includes("\n") || text.length > MAX_SERVER_TEXT_CHARS;
 
+// IDs show whole, so two that start alike never look the same.
 const Scalar = ({ node, values, compact }: NodeProps) => {
   const { text, truncated } = values.get(node.path) ?? NO_TEXT;
   const shown = truncated ? `${text}…` : text;
-  if (node.kind === "id") {
-    return (
-      <span
-        dir="auto"
-        title={shown}
-        className={clsx("font-mono text-xs", ISOLATED)}
-      >
-        {shortId(shown)}
-      </span>
-    );
-  }
+  const isId = node.kind === "id";
   return isLongText(node.kind, shown) ? (
     <p
       dir="auto"
       className={clsx(
         "overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
         compact ? "max-h-24" : "max-h-32",
+        isId && "font-mono",
         ISOLATED,
       )}
       data-testid="tool-argument-text"
@@ -67,7 +58,10 @@ const Scalar = ({ node, values, compact }: NodeProps) => {
       {shown}
     </p>
   ) : (
-    <span dir="auto" className={clsx("break-words", ISOLATED)}>
+    <span
+      dir="auto"
+      className={clsx("break-words", isId && "font-mono", ISOLATED)}
+    >
       {shown}
     </span>
   );
