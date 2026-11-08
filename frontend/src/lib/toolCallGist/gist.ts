@@ -1,12 +1,21 @@
-import { isConsentClaim, isConsentMember, isYesOrNo } from "./consent";
+import {
+  holdsConsentFlag,
+  readArgumentValues,
+  valueBudget,
+  viewLeavesOutMembers,
+  wholeValue,
+} from "./argumentValues";
+import { isConsentClaim, isConsentMember } from "./consent";
 import {
   cleanServerText,
+  countOf,
   isRecord,
   lastPointerSegment,
   MAX_SERVER_DESCRIPTION_CHARS,
   readPointer,
 } from "./serverText";
 
+import type { ArgumentTexts, ValueBudget } from "./argumentValues";
 import type {
   ToolArgumentNode,
   ToolCallAction,
@@ -53,11 +62,13 @@ const GIST_SOURCES = [
 ] as const satisfies readonly ToolCallLabelSource[];
 
 const ARGUMENTS_TRUNCATED = "arguments_truncated";
+const HIDDEN_CHARACTERS = "hidden_characters";
 /* eslint-enable lingui/no-unlocalized-strings */
 
 /** The label warnings a gist card can show; any other sends a call to the generic card. */
 const GIST_LABEL_WARNINGS = [
   ARGUMENTS_TRUNCATED,
+  HIDDEN_CHARACTERS,
 ] as const satisfies readonly ToolCallLabelWarning[];
 
 /** Before approval, after a run the server reported as done, after one it reported as failed. */
@@ -78,6 +89,9 @@ export interface GistValue {
   path: string;
   /** The value as the call wrote it, where `text` shows a name or a short ID. */
   written?: string;
+  /** Whether `written` is an ID, which a card shows short. */
+  writtenId?: boolean;
+  /** Whether the value as written is cut; on a name, the written value beside it. */
   truncated: boolean;
   /** The positions in the name's arrays it was reached at, to line up a batch. */
   row?: string;
@@ -110,6 +124,10 @@ export interface Gist {
   kind: GistKind;
   items: GistItem[];
   warnings: GistWarning[];
+  /** Whether cleaning removed hidden characters from a value or name the label holds. */
+  hiddenCharacters: boolean;
+  /** Whether a key value was left out because it is a consent flag. */
+  leavesOutConsent: boolean;
 }
 
 const isOneOf = <T extends string>(
@@ -122,11 +140,6 @@ const isOneOf = <T extends string>(
 const listOf = (value: unknown): readonly unknown[] =>
   Array.isArray(value) ? value : [];
 
-const countOf = (value: unknown): number =>
-  typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : 0;
-
 const MAX_GIST_ITEMS = 10;
 const MAX_GIST_FIELDS = 16;
 const MAX_SLOT_VALUES = 50;
@@ -138,6 +151,7 @@ interface LabelValue {
   text: string;
   resolved?: string;
   truncated: boolean;
+  hidden: boolean;
 }
 
 interface LabelSlot {
@@ -145,6 +159,8 @@ interface LabelSlot {
   name?: string;
   values: LabelValue[];
   omitted: number;
+  /** Whether cleaning removed hidden characters from its name or a value. */
+  hidden: boolean;
 }
 
 interface LabelItem {
@@ -161,12 +177,13 @@ const readValue = (raw: unknown): LabelValue | undefined => {
   if (raw.path.length > MAX_PATH_CHARS) return undefined;
   const text = cleanServerText(raw.text, MAX_SERVER_DESCRIPTION_CHARS);
   if (text.text.length === 0) return undefined;
-  const resolved = cleanServerText(raw.resolved).text;
+  const resolved = cleanServerText(raw.resolved);
   return {
     path: raw.path,
     text: text.text,
-    resolved: resolved.length > 0 ? resolved : undefined,
+    resolved: resolved.text.length > 0 ? resolved.text : undefined,
     truncated: raw.truncated === true || text.truncated,
+    hidden: text.hiddenCharacters || resolved.hiddenCharacters,
   };
 };
 
@@ -175,15 +192,17 @@ const readSlot = (raw: unknown): LabelSlot | undefined => {
   if (raw.pointer.length > MAX_PATH_CHARS) return undefined;
   const all = listOf(raw.values);
   const kept = all.slice(0, MAX_SLOT_VALUES);
-  const name = cleanServerText(raw.name).text;
+  const name = cleanServerText(raw.name);
+  const values = kept.flatMap((value) => {
+    const read = readValue(value);
+    return read ? [read] : [];
+  });
   return {
     pointer: raw.pointer,
-    name: name.length > 0 ? name : undefined,
-    values: kept.flatMap((value) => {
-      const read = readValue(value);
-      return read ? [read] : [];
-    }),
+    name: name.text.length > 0 ? name.text : undefined,
+    values,
     omitted: countOf(raw.omitted) + (all.length - kept.length),
+    hidden: name.hiddenCharacters || values.some((value) => value.hidden),
   };
 };
 
@@ -262,20 +281,21 @@ const gistValue = (
 ): GistValue => {
   const row = rowOf(slot.pointer, value.path, rowPrefix);
   const { path, truncated } = value;
+  const isId =
+    identifies === "always" ||
+    (identifies === "maybe" && looksLikeAnId(value.text, slot.pointer));
   if (value.resolved) {
     return {
       text: value.resolved,
       origin: "resolved",
       path,
       written: value.text,
-      truncated: false,
+      writtenId: isId,
+      truncated,
       row,
     };
   }
-  if (
-    identifies === "always" ||
-    (identifies === "maybe" && looksLikeAnId(value.text, slot.pointer))
-  ) {
+  if (isId) {
     return {
       text: shortId(value.text),
       origin: "id",
@@ -298,11 +318,10 @@ const valuesOf = (
     : [];
 
 const claimsConsent = (slot: LabelSlot | undefined): boolean =>
-  (slot?.values ?? []).some(
-    (value) =>
-      isConsentClaim(value.text, value.path, slot?.pointer) ||
-      (isYesOrNo(value.text) && isConsentMember(slot?.name ?? "")),
-  );
+  slot !== undefined &&
+  (isConsentMember(slot.name ?? "") ||
+    isConsentClaim(slot.pointer) ||
+    slot.values.some((value) => isConsentClaim(value.path)));
 
 const WORKSPACE_VALUES = new Set([
   "workspace",
@@ -474,6 +493,19 @@ export const gistOf = (
     ),
   );
   if (showsConsent) return undefined;
+  const hiddenCharacters = labelItems.some((item) =>
+    [
+      item.title,
+      item.id,
+      item.target,
+      item.before,
+      item.after,
+      ...item.fields,
+    ].some((slot) => slot?.hidden === true),
+  );
+  const leavesOutConsent = labelItems.some((item) =>
+    item.fields.some(claimsConsent),
+  );
   const items = labelItems.flatMap((item) => {
     const gist = gistItem(item, action);
     return gist ? [gist] : [];
@@ -485,7 +517,14 @@ export const gistOf = (
     (item) => item.names.length > 0 || item.where.length > 0,
   );
   if (items.length === 0 || (needsName && !namesSomething)) return undefined;
-  return { action, kind, items, warnings: gistWarningsOf(items, input) };
+  return {
+    action,
+    kind,
+    items,
+    warnings: gistWarningsOf(items, input),
+    hiddenCharacters,
+    leavesOutConsent,
+  };
 };
 
 /** Values a line or a value cell shows before it counts the rest. */
@@ -543,7 +582,8 @@ const sentenceSlots: GistLineSlots = (_gist, item) => ({
 
 /**
  * Where the values a gist card shows sit in the call's input, and whether
- * each is shown whole. Mirrors what `ToolCallGist` renders in the ask phase.
+ * each is shown whole. Mirrors what `ToolCallGist` renders in the ask phase,
+ * where a name shows the value written beside it.
  */
 export const gistShownPaths = (
   gist: Gist,
@@ -623,8 +663,7 @@ const isCovered = (
   shown: ReadonlyMap<string, boolean>,
   node: ToolArgumentNode,
 ): boolean => {
-  const own = shown.get(node.path);
-  if (own === true || (own === false && !isBranch(node))) return true;
+  if (shown.get(node.path) === true) return true;
   for (
     let end = node.path.lastIndexOf("/");
     end >= 0;
@@ -637,23 +676,24 @@ const isCovered = (
 
 /**
  * The part of the readable view a gist card does not show: every argument
- * with no value on the card, so the card never hides one. Consent flags stay
- * out, as on the generic card; the raw arguments still have them.
+ * with no value on the card, or only a cut one, so the card never hides one.
+ * Consent flags stay out, as on the generic card, and the card says so; the
+ * raw arguments still have them.
  */
 export const unshownArguments = (
   view: ToolArgumentNode,
   gist: Gist,
-  input: unknown,
   lineSlots?: GistLineSlots,
-): ToolArgumentNode | undefined => {
+): { view: ToolArgumentNode | undefined; leavesOutConsent: boolean } => {
   const shown = gistShownPaths(gist, lineSlots);
+  let leavesOutConsent = false;
   const prune = (node: ToolArgumentNode): ToolArgumentNode | undefined => {
     if (isCovered(shown, node)) return undefined;
-    if (!isBranch(node)) {
-      return isConsentClaim(readPointer(input, node.path), node.path)
-        ? undefined
-        : node;
+    if (isConsentClaim(node.path)) {
+      leavesOutConsent = true;
+      return undefined;
     }
+    if (!isBranch(node)) return node;
     const children = (node.children ?? []).flatMap((child) => {
       const kept = prune(child);
       return kept ? [kept] : [];
@@ -662,25 +702,73 @@ export const unshownArguments = (
       ? { ...node, children }
       : undefined;
   };
-  return prune(view);
+  return { view: prune(view), leavesOutConsent };
 };
 
 /**
- * What a gist card lists below its line: the arguments it does not show, or,
- * for a label without a readable view, the raw arguments.
+ * The gist with the text it writes read whole from the call's input, so an
+ * approval card shows past the label's cut what the call writes.
+ */
+const withWholeText = (
+  gist: Gist,
+  input: unknown,
+  budget: ValueBudget,
+): { gist: Gist; hiddenCharacters: boolean } => {
+  let hiddenCharacters = false;
+  const whole = (value: GistValue): GistValue => {
+    if (value.origin !== "written") return value;
+    const raw = readPointer(input, value.path);
+    if (typeof raw !== "string") return value;
+    const cleaned = wholeValue(raw, budget);
+    if (cleaned.text.length === 0) return value;
+    hiddenCharacters ||= cleaned.hiddenCharacters;
+    return { ...value, text: cleaned.text, truncated: cleaned.truncated };
+  };
+  return {
+    gist: {
+      ...gist,
+      items: gist.items.map((item) => ({
+        ...item,
+        before: item.before.map(whole),
+        after: item.after.map(whole),
+      })),
+    },
+    hiddenCharacters,
+  };
+};
+
+/**
+ * What a gist card lists below its line: the arguments it does not show, with
+ * their values whole, or, for a label without a readable view, the raw
+ * arguments.
  */
 export type GistRest =
-  | { kind: "view"; view: ToolArgumentNode | undefined; truncated: boolean }
+  | {
+      kind: "view";
+      view: ToolArgumentNode | undefined;
+      values: ArgumentTexts;
+      truncated: boolean;
+    }
   | { kind: "raw" };
+
+/** What a labelled approval card says under its arguments. */
+export interface ToolCallCardNotes {
+  /** A value or name the card shows lost hidden characters. */
+  hiddenCharacters: boolean;
+  /** The card leaves out a consent flag the call set itself. */
+  leavesOutConsent: boolean;
+}
 
 /** Which card a call gets. Rows saved before labels render as before. */
 export type ToolCallCard =
-  | { kind: "gist"; gist: Gist; rest: GistRest }
+  | { kind: "gist"; gist: Gist; rest: GistRest; notes: ToolCallCardNotes }
   | {
       kind: "generic";
       label: ToolCallLabel;
       view: ToolArgumentNode | undefined;
+      values: ArgumentTexts;
       truncated: boolean;
+      notes: ToolCallCardNotes;
     }
   | { kind: "legacy" };
 
@@ -688,9 +776,9 @@ const labelWarns = (label: ToolCallLabel, warning: ToolCallLabelWarning) =>
   listOf(label.warnings).includes(warning);
 
 /**
- * The card for a call's label. A label this build cannot read at all gets
- * the card of a row saved before labels, never an error. `lineSlots` says
- * which values the line names in the language shown.
+ * The approval card for a call's label. A label this build cannot read at
+ * all gets the card of a row saved before labels, never an error.
+ * `lineSlots` says which values the line names in the language shown.
  */
 export const toolCallCardOf = (
   label: ToolCallLabel | null | undefined,
@@ -699,23 +787,61 @@ export const toolCallCardOf = (
 ): ToolCallCard => {
   if (!isRecord(label)) return { kind: "legacy" };
   try {
+    const budget = valueBudget();
     const view = readArgumentView(label.arguments);
-    const truncated =
-      labelWarns(label, ARGUMENTS_TRUNCATED) ||
-      (view !== undefined && hasOmittedArguments(view));
-    const gist = gistOf(label, input);
-    if (!gist) return { kind: "generic", label, view, truncated };
-    if (!view) return { kind: "gist", gist, rest: { kind: "raw" } };
-    const rest = unshownArguments(view, gist, input, lineSlots);
+    const labelTruncated = labelWarns(label, ARGUMENTS_TRUNCATED);
+    const labelHidden = labelWarns(label, HIDDEN_CHARACTERS);
+    const membersLeftOut =
+      view !== undefined && viewLeavesOutMembers(view, input);
+    const labelled = gistOf(label, input);
+    if (!labelled) {
+      const values = readArgumentValues(view, input, budget);
+      return {
+        kind: "generic",
+        label,
+        view,
+        values: values.texts,
+        truncated:
+          labelTruncated ||
+          (view !== undefined && hasOmittedArguments(view)) ||
+          values.cut,
+        notes: {
+          hiddenCharacters: labelHidden || values.hiddenCharacters,
+          leavesOutConsent:
+            view !== undefined && (holdsConsentFlag(view) || membersLeftOut),
+        },
+      };
+    }
+    const whole = withWholeText(labelled, input, budget);
+    const { gist } = whole;
+    const gistHidden =
+      labelHidden || gist.hiddenCharacters || whole.hiddenCharacters;
+    if (!view) {
+      return {
+        kind: "gist",
+        gist,
+        rest: { kind: "raw" },
+        notes: { hiddenCharacters: gistHidden, leavesOutConsent: false },
+      };
+    }
+    const rest = unshownArguments(view, gist, lineSlots);
+    const values = readArgumentValues(rest.view, input, budget);
     return {
       kind: "gist",
       gist,
       rest: {
         kind: "view",
-        view: rest,
+        view: rest.view,
+        values: values.texts,
         truncated:
-          labelWarns(label, ARGUMENTS_TRUNCATED) ||
-          (rest !== undefined && hasOmittedArguments(rest)),
+          labelTruncated ||
+          (rest.view !== undefined && hasOmittedArguments(rest.view)) ||
+          values.cut,
+      },
+      notes: {
+        hiddenCharacters: gistHidden || values.hiddenCharacters,
+        leavesOutConsent:
+          rest.leavesOutConsent || gist.leavesOutConsent || membersLeftOut,
       },
     };
   } catch {

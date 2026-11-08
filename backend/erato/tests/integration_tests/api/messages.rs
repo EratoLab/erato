@@ -4,6 +4,7 @@ mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;
 mod client_tool_operations;
+mod mcp_approval_argument;
 mod mcp_file_outputs;
 mod model_labels;
 mod preparation_failures;
@@ -73,6 +74,7 @@ fn mcp_server_config(
 ) -> McpServerConfig {
     McpServerConfig {
         display_name: None,
+        approval_argument: None,
         protocol_mode: Default::default(),
         transport_type: "streamable_http".to_string(),
         url: format!("{base_url}{path}"),
@@ -5746,6 +5748,7 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
             ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &earlier),
             &update.tool,
             &earlier,
+            None,
             async { Some(model) },
         )
         .await

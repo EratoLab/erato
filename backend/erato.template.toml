@@ -127,6 +127,11 @@ chat_provider_ids = ["test-token-limit"]
 # exclude_tools = ["get_secret_*"]
 # # Or opt in only selected tools on this server:
 # wait_tools = ["dispatch_*", "poll_*"]
+# # Name of the argument through which this server asks for the user's consent to
+# # a call (for example Dataverse's `hasUserApproved`). Erato hides it from the
+# # model, asks before each call of a tool that declares it, and fills it from the
+# # user's decision.
+# approval_argument = "hasUserApproved"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)
@@ -470,6 +475,48 @@ chat_provider_ids = ["test-token-limit"]
 # # Seconds until a retryable delivery is tried again, unless the channel asked
 # # for a specific wait such as a Retry-After header (default: 300)
 # retry_delay_seconds = 300
+
+# Templates on the web app's Scheduled page (shown while the user has no
+# items; the page itself follows [scheduled_deliveries] enabled). A template
+# opens the form filled with its name and message; the user still chooses
+# when. Erato ships no templates.
+# [scheduled.templates]
+# # Whether templates are offered (default: false)
+# enabled = true
+# # Template ids in display order; unlisted templates follow, sorted by id
+# priority_order = ["follow_up_offer", "prepare_meeting", "before_deadline", "continue_chat"]
+#
+# [scheduled.templates.templates.follow_up_offer]
+# # What the template creates; only "reminder" for now (default: "reminder")
+# type = "reminder"
+# # Label of the template's button
+# title = "Follow up on an offer"
+# # Short line shown with the button (optional)
+# description = "Check whether the customer has answered"
+# # Reminder name and message the form is filled with (message optional)
+# name = "Follow up on the offer"
+# message = "Has the customer answered? If not, send a short follow-up."
+#
+# [scheduled.templates.templates.prepare_meeting]
+# type = "reminder"
+# title = "Prepare for a meeting"
+# description = "Time to read up before it starts"
+# name = "Prepare for the meeting"
+# message = "Go through the agenda and the open points."
+#
+# [scheduled.templates.templates.before_deadline]
+# type = "reminder"
+# title = "Before a deadline"
+# description = "A heads-up while there is still time"
+# name = "Deadline coming up"
+# message = "Check what is still missing and who needs to sign off."
+#
+# [scheduled.templates.templates.continue_chat]
+# type = "reminder"
+# title = "Continue a chat later"
+# description = "Pick up where you left off"
+# name = "Continue the chat"
+# message = "Link the chat and pick up where you left off."
 
 # Delegated runs: shared runtime keys plus the two offer routes.
 # Replaces the deprecated [assistants.delegation] table, which is still read

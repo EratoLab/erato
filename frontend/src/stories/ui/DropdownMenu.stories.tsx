@@ -1,7 +1,12 @@
 import { within, userEvent } from "@storybook/test";
 
 import { DropdownMenu } from "../../components/ui/Controls/DropdownMenu";
-import { EditIcon, Trash } from "../../components/ui/icons";
+import {
+  CloseIcon,
+  EditIcon,
+  TimerIcon,
+  Trash,
+} from "../../components/ui/icons";
 import { defaultTheme } from "../../config/theme";
 
 import type { Meta, StoryObj } from "@storybook/react";
@@ -58,6 +63,32 @@ export const LeftAligned: Story = {
     ...Default.args,
     align: "left",
   },
+};
+
+/** `separatorBefore` opens a new run of rows with a divider and no label. */
+export const DividerWithoutLabel: Story = {
+  args: {
+    items: [
+      {
+        label: "Edit",
+        icon: <EditIcon className="size-4" />,
+        onClick: () => console.log("Edit clicked"),
+      },
+      {
+        label: "Snooze until tomorrow, 9:00",
+        icon: <TimerIcon className="size-4" />,
+        onClick: () => console.log("Snooze clicked"),
+      },
+      {
+        label: "Cancel",
+        icon: <CloseIcon className="size-4" />,
+        onClick: () => console.log("Cancel clicked"),
+        variant: "danger",
+        separatorBefore: true,
+      },
+    ],
+  },
+  play: Default.play,
 };
 
 export const WithDisabledItem: Story = {

@@ -108,9 +108,19 @@ pub struct McpCallMapping {
 
 /// The rules' verdict on an MCP call. A bug in them gives the generic
 /// mapping, marked sure so that no cached mapping stands in for it.
-pub fn guarded_rules(tool: &rmcp::model::Tool, arguments: &Value) -> rules::RulesLabel {
+/// `approval_argument` is the server's consent argument.
+pub fn guarded_rules(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+) -> rules::RulesLabel {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        rules::rules_label(&tool.name, arguments, tool.annotations.as_ref())
+        rules::rules_label(
+            &tool.name,
+            arguments,
+            tool.annotations.as_ref(),
+            approval_argument,
+        )
     }))
     .unwrap_or_else(|_| {
         tracing::error!("Showing the generic label for a tool call: its rules panicked");
@@ -128,33 +138,41 @@ pub fn guarded_rules(tool: &rmcp::model::Tool, arguments: &Value) -> rules::Rule
 
 /// The mapping an MCP call is labelled from: the rules', unless they are
 /// unsure and a model mapped a call of the same shape for this user before.
-/// `tool` carries the resolved annotations. A cache that fails or is slow
-/// only costs the call the cached mapping, and asks no model for one.
+/// `tool` carries the resolved annotations, and `approval_argument` is the
+/// server's consent argument. A cache that fails or is slow only costs the
+/// call the cached mapping, and asks no model for one.
 pub async fn mcp_call_mapping(
     cache: &cache::ToolLabelCache,
     user_id: &str,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
+    approval_argument: Option<&str>,
 ) -> McpCallMapping {
-    let rules = guarded_rules(tool, arguments);
+    let rules = guarded_rules(tool, arguments, approval_argument);
     if rules.unsure.is_none() {
         return McpCallMapping {
             mapping: rules.mapping,
             unlabelled: None,
         };
     }
-    let found = cache::bounded(cached_mapping(cache, user_id, server_id, tool, arguments))
-        .await
-        .unwrap_or_else(|failure| {
-            tracing::warn!(
-                server_id = %server_id,
-                tool_name = ?logged_tool_name(&tool.name),
-                failure,
-                "Labelling a tool call by the rules: looking up its cached mapping failed"
-            );
-            None
-        });
+    let lookup = cached_mapping(
+        cache,
+        user_id,
+        server_id,
+        tool,
+        arguments,
+        approval_argument,
+    );
+    let found = cache::bounded(lookup).await.unwrap_or_else(|failure| {
+        tracing::warn!(
+            server_id = %server_id,
+            tool_name = ?logged_tool_name(&tool.name),
+            failure,
+            "Labelling a tool call by the rules: looking up its cached mapping failed"
+        );
+        None
+    });
     match found {
         Some(Ok(mapping)) => McpCallMapping {
             mapping,
@@ -179,9 +197,10 @@ async fn cached_mapping(
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
+    approval_argument: Option<&str>,
 ) -> Option<Result<ToolCallLabelMapping, cache::ToolLabelCacheKey>> {
     let key = cache::ToolLabelCacheKey::new(user_id, server_id, tool, arguments);
-    let Some(mapping) = cache.lookup(&key, arguments).await else {
+    let Some(mapping) = cache.lookup(&key, arguments, approval_argument).await else {
         return Some(Err(key));
     };
     if rules::cross_check(tool, arguments, mapping.action).is_empty() {
@@ -195,12 +214,14 @@ async fn cached_mapping(
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
 /// its verb and [`filtered_label`] keeps it; otherwise the generic label and a
-/// log line that names the reason and no argument value.
+/// log line that names the reason and no argument value. `approval_argument`
+/// is the server's consent argument, a consent flag wherever it sits.
 pub fn checked_label(
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
     mapping: &ToolCallLabelMapping,
+    approval_argument: Option<&str>,
 ) -> ToolCallLabel {
     if mapping.source == ToolCallLabelSource::Generic {
         return generic_label(arguments);
@@ -222,7 +243,7 @@ pub fn checked_label(
         );
         return generic_label(arguments);
     }
-    filtered_label(server_id, &tool.name, arguments, mapping)
+    filtered_label(server_id, &tool.name, arguments, mapping, approval_argument)
 }
 
 // The server chose the name: logs get a short, cleaned copy.
@@ -243,6 +264,7 @@ pub fn filtered_label(
     tool_name: &str,
     arguments: &Value,
     mapping: &ToolCallLabelMapping,
+    approval_argument: Option<&str>,
 ) -> ToolCallLabel {
     if mapping.source == ToolCallLabelSource::Generic {
         return generic_label(arguments);
@@ -250,7 +272,7 @@ pub fn filtered_label(
     let tool_name = || logged_tool_name(tool_name);
     let recipients = rules::recipient_members(arguments);
     let mapping = &rules::with_every_recipient(mapping, &recipients);
-    match resolve_label(mapping, arguments) {
+    match resolve_label(mapping, arguments, approval_argument) {
         Ok(label) if rules::shows_every_recipient(&label, &recipients) => label,
         Ok(_) => {
             tracing::info!(
@@ -302,39 +324,59 @@ pub fn filtered_label(
 pub fn resolve_label(
     mapping: &ToolCallLabelMapping,
     arguments: &Value,
+    approval_argument: Option<&str>,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
     let mut budget = MAX_LABEL_VALUE_BYTES;
+    let mut hidden = false;
+    let mut reader = Reader {
+        arguments,
+        approval_argument,
+        budget: &mut budget,
+        hidden: &mut hidden,
+    };
     let items = mapping
         .items
         .iter()
         .take(MAX_LABEL_ITEMS)
         .enumerate()
         .map(|(index, item)| {
-            resolve_item(item, arguments, &mut budget).map_err(|(part, claim)| UnresolvedPointer {
+            resolve_item(item, &mut reader).map_err(|(part, claim)| UnresolvedPointer {
                 item: index,
                 part,
                 claim,
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(ToolCallLabel {
+    let mut label = ToolCallLabel {
         action: mapping.action,
         object_kind: mapping.object_kind,
         items,
         source: mapping.source,
         ..generic_label(arguments)
-    })
+    };
+    if hidden {
+        label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
+    }
+    Ok(label)
+}
+
+/// What reading a label's slots shares: the call's arguments and consent
+/// argument, the byte budget left and whether cleaning removed characters.
+struct Reader<'a> {
+    arguments: &'a Value,
+    approval_argument: Option<&'a str>,
+    budget: &'a mut usize,
+    hidden: &'a mut bool,
 }
 
 fn resolve_item(
     item: &ToolCallLabelItemMapping,
-    arguments: &Value,
-    budget: &mut usize,
+    reader: &mut Reader<'_>,
 ) -> Result<ToolCallLabelItem, (&'static str, Option<rules::Claim>)> {
     let mut core = |part: &'static str, pointer: &Option<String>| {
         pointer
             .as_deref()
-            .map(|pointer| match slot(arguments, pointer, false, budget) {
+            .map(|pointer| match slot(reader, pointer, false) {
                 Ok(Some(slot)) => Ok(slot),
                 Ok(None) => Err((part, None)),
                 Err(claim) => Err((part, Some(claim))),
@@ -350,7 +392,7 @@ fn resolve_item(
         .fields
         .iter()
         .take(MAX_FIELD_POINTERS)
-        .filter_map(|pointer| slot(arguments, pointer, true, budget).ok().flatten())
+        .filter_map(|pointer| slot(reader, pointer, true).ok().flatten())
         .take(MAX_LABEL_FIELDS)
         .collect();
     Ok(ToolCallLabelItem {
@@ -365,14 +407,15 @@ fn resolve_item(
 
 /// `None` when the pointer reaches nothing. A null it reaches counts as
 /// reached but shows no value. A value it would show that is a claim, such as
-/// a consent flag, costs the whole slot.
+/// a consent flag, costs the whole slot. Sets `hidden` when cleaning a value
+/// it reads, kept or not, or the field's name removed invisible characters.
 fn slot(
-    arguments: &Value,
+    reader: &mut Reader<'_>,
     pointer: &str,
     field: bool,
-    budget: &mut usize,
 ) -> Result<Option<ToolCallLabelSlot>, rules::Claim> {
-    let start = *budget;
+    let (arguments, approval_argument) = (reader.arguments, reader.approval_argument);
+    let start = *reader.budget;
     let mut values = Vec::new();
     let mut omitted = 0u32;
     let mut out_of_budget = false;
@@ -387,16 +430,19 @@ fn slot(
             Some(index) => format!("{path}/{index}"),
             None => path.to_string(),
         };
-        if let Some(found) = rules::claim(arguments, &path, value) {
+        if let Some(found) = rules::claim(arguments, &path, approval_argument) {
             claim = Some(found);
             return ControlFlow::Break(());
         }
-        let Some(value) = label_value(path, value) else {
+        let Some(value) = label_value(path, value, reader.hidden) else {
             return ControlFlow::Continue(());
         };
-        match budget.checked_sub(value.text.len() + value.path.len()) {
+        match reader
+            .budget
+            .checked_sub(value.text.len() + value.path.len())
+        {
             Some(left) => {
-                *budget = left;
+                *reader.budget = left;
                 values.push(value);
             }
             None => {
@@ -419,19 +465,20 @@ fn slot(
         }
     });
     if let Some(claim) = claim {
-        *budget = start;
+        *reader.budget = start;
         return Err(claim);
     }
     if reached == 0 {
         return Ok(None);
     }
+    let name = field
+        .then(|| field_name(pointer))
+        .flatten()
+        .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS));
+    *reader.hidden |= name.as_ref().is_some_and(|name| name.hidden_characters);
     Ok(Some(ToolCallLabelSlot {
         pointer: pointer.to_string(),
-        name: field
-            .then(|| field_name(pointer))
-            .flatten()
-            .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS).text)
-            .filter(|name| !name.is_empty()),
+        name: name.map(|name| name.text).filter(|name| !name.is_empty()),
         values,
         omitted,
     }))
@@ -468,7 +515,8 @@ fn field_name(pointer: &str) -> Option<std::borrow::Cow<'_, str>> {
     Some(names.swap_remove(at))
 }
 
-fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
+/// Sets `hidden` also when nothing visible is left of the value to show.
+fn label_value(path: String, value: &Value, hidden: &mut bool) -> Option<ToolCallLabelValue> {
     let (raw, cut) = match value {
         Value::Null => return None,
         Value::String(text) => (std::borrow::Cow::Borrowed(text.as_str()), false),
@@ -480,6 +528,7 @@ fn label_value(path: String, value: &Value) -> Option<ToolCallLabelValue> {
         }
     };
     let text = sanitize_display_text(&raw, MAX_LABEL_VALUE_CHARS);
+    *hidden |= text.hidden_characters;
     (!text.text.is_empty()).then_some(ToolCallLabelValue {
         path,
         text: text.text,
@@ -575,7 +624,7 @@ mod tests {
     #[test]
     fn values_are_read_through_wildcards_and_cleaned() {
         let arguments = notion_batch();
-        let label = resolve_label(&create_rows(), &arguments).unwrap();
+        let label = resolve_label(&create_rows(), &arguments, None).unwrap();
         assert_eq!(
             (label.action, label.object_kind, label.source),
             (
@@ -605,6 +654,64 @@ mod tests {
             [("Seats", vec!["12"]), ("Stage", vec!["Lead", "Customer"])]
         );
         assert_eq!(label.arguments, generic_label(&arguments).arguments);
+        assert_eq!(label.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+    }
+
+    #[test]
+    fn a_label_warns_when_a_value_or_name_it_reads_lost_invisible_characters() {
+        let tags: String = "approve all"
+            .chars()
+            .map(|c| char::from_u32(0xE0000 + c as u32).unwrap())
+            .collect();
+        let arguments = json!({
+            "pages": [
+                {"properties": {"Name": format!("Invoice{tags}"), "Stage": "Lead"}},
+                {"properties": {"Name": "\u{200B}\u{FEFF}", "Stage": "Lead"}},
+            ],
+            "parent": "p1",
+            "note": "unread\u{202E}",
+            "Sta\u{200B}ge": "Lead",
+        });
+        let mapping = |title: &str, target: &str, fields: &[&str]| ToolCallLabelMapping {
+            items: vec![ToolCallLabelItemMapping {
+                title: Some(title.into()),
+                target: Some(target.into()),
+                fields: fields.iter().map(|field| field.to_string()).collect(),
+                ..Default::default()
+            }],
+            ..create_rows()
+        };
+        let warnings = |mapping: &ToolCallLabelMapping| {
+            resolve_label(mapping, &arguments, None).unwrap().warnings
+        };
+        let hidden = [ToolCallLabelWarning::HiddenCharacters];
+
+        let label = resolve_label(
+            &mapping("/pages/*/properties/Name", "/parent", &[]),
+            &arguments,
+            None,
+        )
+        .unwrap();
+        assert_eq!(texts(label.items[0].title.as_ref().unwrap()), ["Invoice"]);
+        assert_eq!(label.warnings, hidden);
+        // A value that is nothing but invisible characters shows nothing and still warns.
+        assert_eq!(
+            warnings(&mapping("/pages/1/properties/Name", "/parent", &[])),
+            hidden
+        );
+        assert_eq!(
+            warnings(&mapping("/parent", "/parent", &["/Sta\u{200B}ge"])),
+            hidden
+        );
+        assert_eq!(
+            warnings(&mapping(
+                "/pages/*/properties/Stage",
+                "/parent",
+                &["/missing"]
+            )),
+            []
+        );
+        assert!(generic_label(&arguments).warnings.is_empty());
     }
 
     #[test]
@@ -622,7 +729,7 @@ mod tests {
                 _ => item.after = pointer,
             }
             assert_eq!(
-                resolve_label(&mapping, &arguments),
+                resolve_label(&mapping, &arguments, None),
                 Err(UnresolvedPointer {
                     item: 0,
                     part,
@@ -634,7 +741,7 @@ mod tests {
         mapping.items.insert(0, ToolCallLabelItemMapping::default());
         mapping.items[1].after = Some("not a pointer".into());
         assert_eq!(
-            resolve_label(&mapping, &arguments),
+            resolve_label(&mapping, &arguments, None),
             Err(UnresolvedPointer {
                 item: 1,
                 part: "after",
@@ -643,7 +750,7 @@ mod tests {
         );
         let mut mapping = create_rows();
         mapping.items[0].before = Some("/pages/1/properties/Seats".into());
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert!(label.items[0].before.as_ref().unwrap().values.is_empty());
     }
 
@@ -670,7 +777,7 @@ mod tests {
             ],
             source: ToolCallLabelSource::Model,
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert_eq!(label.items.len(), MAX_LABEL_ITEMS);
         let item = &label.items[0];
         let title = item.title.as_ref().unwrap();
@@ -801,10 +908,12 @@ mod tests {
             let stored = serde_json::to_string(&generic).unwrap().len();
             assert!(stored < 64 * 1024, "generic label of {stored} bytes");
 
-            let label = guarded(|| match resolve_label(&hostile_mapping(), &arguments) {
-                Ok(label) => label,
-                Err(_) => generic_label(&arguments),
-            })
+            let label = guarded(
+                || match resolve_label(&hostile_mapping(), &arguments, None) {
+                    Ok(label) => label,
+                    Err(_) => generic_label(&arguments),
+                },
+            )
             .unwrap();
             let stored = serde_json::to_string(&label).unwrap().len();
             assert!(stored < 128 * 1024, "label of {stored} bytes");
@@ -817,7 +926,7 @@ mod tests {
                     }],
                     ..hostile_mapping()
                 };
-                if let Ok(label) = resolve_label(&mapping, &arguments) {
+                if let Ok(label) = resolve_label(&mapping, &arguments, None) {
                     assert_eq!(label.items.len(), 1);
                     assert!(serde_json::to_string(&label).unwrap().len() < 64 * 1024);
                 }
@@ -831,7 +940,7 @@ mod tests {
             .map(|i| json!({ "title": format!("{i:03}{}", "w".repeat(MAX_LABEL_VALUE_CHARS)) }))
             .collect();
         let arguments = json!({ "pages": pages });
-        let label = resolve_label(&hostile_mapping(), &arguments);
+        let label = resolve_label(&hostile_mapping(), &arguments, None);
         assert_eq!(
             label,
             Err(UnresolvedPointer {
@@ -852,7 +961,7 @@ mod tests {
             items: vec![item; MAX_LABEL_ITEMS],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         let slots: Vec<_> = label
             .items
             .iter()
@@ -890,12 +999,12 @@ mod tests {
         let (json, cut) = json_prefix(&json!([1, {"b": null}]), 100);
         assert_eq!((json.as_str(), cut), (r#"[1,{"b":null}]"#, false));
 
-        let value = label_value("/blob".into(), &big).unwrap();
+        let value = label_value("/blob".into(), &big, &mut false).unwrap();
         assert!(value.truncated);
         assert_eq!(value.text.chars().count(), MAX_LABEL_VALUE_CHARS);
         let hidden =
             json!({ "k": format!("{}visible", "\u{200B}".repeat(MAX_LABEL_VALUE_CHARS * 4)) });
-        let value = label_value("/k".into(), &hidden).unwrap();
+        let value = label_value("/k".into(), &hidden, &mut false).unwrap();
         assert!(value.truncated && !value.text.contains('\u{200B}'));
     }
 
@@ -911,7 +1020,7 @@ mod tests {
             }],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert!(label.items[0].fields.is_empty());
 
         let mapping = ToolCallLabelMapping {
@@ -921,7 +1030,7 @@ mod tests {
             }],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         let names: Vec<_> = label.items[0]
             .fields
             .iter()
@@ -929,6 +1038,7 @@ mod tests {
             .collect();
         assert_eq!(names, [None, None, Some("stage")]);
         assert_eq!(texts(&label.items[0].fields[1]), ["invisible key"]);
+        assert_eq!(label.warnings, [ToolCallLabelWarning::HiddenCharacters]);
     }
 
     #[test]
@@ -974,7 +1084,7 @@ mod tests {
 
     #[test]
     fn stored_labels_round_trip_and_tolerate_newer_values() {
-        let label = resolve_label(&create_rows(), &notion_batch()).unwrap();
+        let label = resolve_label(&create_rows(), &notion_batch(), None).unwrap();
         let display = ToolDisplayMetadata {
             title: "Create pages".into(),
             description: None,
@@ -1061,12 +1171,14 @@ mod tests {
         server_id: &str,
         tool: &rmcp::model::Tool,
         arguments: &Value,
+        approval_argument: Option<&str>,
     ) -> ToolCallLabel {
         checked_label(
             server_id,
             tool,
             arguments,
-            &guarded_rules(tool, arguments).mapping,
+            &guarded_rules(tool, arguments, approval_argument).mapping,
+            approval_argument,
         )
     }
 
@@ -1086,7 +1198,7 @@ mod tests {
         // as destructive and flag every create.
         for annotations in [None, hints(Some(false), None)] {
             let (label, log) =
-                logged(|| mcp_call_label("notion", &create_page(annotations), &arguments));
+                logged(|| mcp_call_label("notion", &create_page(annotations), &arguments, None));
             assert_eq!(
                 (label.action, label.source),
                 (ToolCallAction::Create, ToolCallLabelSource::Rules)
@@ -1098,8 +1210,14 @@ mod tests {
             assert!(log.is_empty(), "{log}");
         }
 
-        let (label, log) =
-            logged(|| mcp_call_label("notion", &create_page(hints(Some(true), None)), &arguments));
+        let (label, log) = logged(|| {
+            mcp_call_label(
+                "notion",
+                &create_page(hints(Some(true), None)),
+                &arguments,
+                None,
+            )
+        });
         assert_eq!(label, generic_label(&arguments));
         for expected in ["notion", "create_page", "read_only_annotation", "Create"] {
             assert!(log.contains(expected), "{expected}: {log}");
@@ -1122,21 +1240,21 @@ mod tests {
             source: ToolCallLabelSource::Model,
             ..create_rows()
         };
-        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &model));
-        assert_eq!(label, resolve_label(&model, &arguments).unwrap());
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &model, None));
+        assert_eq!(label, resolve_label(&model, &arguments, None).unwrap());
         assert!(log.is_empty(), "{log}");
 
         let deleting = ToolCallLabelMapping {
             action: ToolCallAction::Delete,
             ..model.clone()
         };
-        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &deleting));
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &deleting, None));
         assert_eq!(label, generic_label(&arguments));
         assert!(log.contains("name_verb") && log.contains("Model"), "{log}");
 
         let mut missing = model.clone();
         missing.items[0].after = Some("/pages/*/body".into());
-        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &missing));
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &missing, None));
         assert_eq!(label, generic_label(&arguments));
         assert!(
             log.contains("part=\"after\"") || log.contains("part=after"),
@@ -1149,7 +1267,7 @@ mod tests {
             ..deleting
         };
         assert_eq!(
-            checked_label("notion", &tool, &arguments, &generic),
+            checked_label("notion", &tool, &arguments, &generic, None),
             generic_label(&arguments)
         );
 
@@ -1172,7 +1290,7 @@ mod tests {
             }],
             source: ToolCallLabelSource::Model,
         };
-        let (label, log) = logged(|| checked_label("word", &word, &changes, &creating));
+        let (label, log) = logged(|| checked_label("word", &word, &changes, &creating, None));
         assert_eq!(label, generic_label(&changes));
         assert!(log.contains("field_verb"), "{log}");
     }
@@ -1188,7 +1306,7 @@ mod tests {
                 .clone(),
         );
         let first = json!({"recordId": "rec-1", "stage": "won"});
-        let rules = rules::rules_label(&tool.name, &first, None);
+        let rules = rules::rules_label(&tool.name, &first, None, None);
         assert!(rules.unsure.is_some(), "{rules:?}");
         let model = ToolCallLabelMapping {
             action: ToolCallAction::Update,
@@ -1203,22 +1321,22 @@ mod tests {
         let cache = cache::ToolLabelCache::default();
         let key = cache::ToolLabelCacheKey::new("user-a", "crm", &tool, &first);
         cache
-            .get_or_compute(key, &tool, &first, async { Some(model.clone()) })
+            .get_or_compute(key, &tool, &first, None, async { Some(model.clone()) })
             .await;
 
         let second = json!({"recordId": "rec-2", "stage": "lost"});
         let McpCallMapping {
             mapping,
             unlabelled,
-        } = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
+        } = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
         assert_eq!((&mapping, unlabelled), (&model, None));
-        let label = checked_label("crm", &tool, &second, &mapping);
+        let label = checked_label("crm", &tool, &second, &mapping, None);
         assert_eq!(label.source, ToolCallLabelSource::Model);
         assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
         assert_eq!(
-            mcp_call_mapping(&cache, "user-b", "crm", &tool, &second).await,
+            mcp_call_mapping(&cache, "user-b", "crm", &tool, &second, None).await,
             McpCallMapping {
-                mapping: rules::rules_label(&tool.name, &second, None).mapping,
+                mapping: rules::rules_label(&tool.name, &second, None, None).mapping,
                 unlabelled: Some(cache::ToolLabelCacheKey::new(
                     "user-b", "crm", &tool, &second
                 )),
@@ -1235,12 +1353,12 @@ mod tests {
             ))
         };
         tool.annotations = hints(Some(true), None);
-        let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second).await;
+        let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
         assert_eq!(read.mapping.source, ToolCallLabelSource::Rules);
         assert_eq!(read.unlabelled, None);
         tool.annotations = None;
         assert_eq!(
-            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second)
+            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None)
                 .await
                 .mapping,
             model
@@ -1253,13 +1371,15 @@ mod tests {
         };
         let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
         cache
-            .get_or_compute(key.clone(), &tool, &first, async { Some(create.clone()) })
+            .get_or_compute(key.clone(), &tool, &first, None, async {
+                Some(create.clone())
+            })
             .await;
         tool.annotations = hints(None, Some(true));
         let rules_mapping =
-            rules::rules_label(&tool.name, &second, tool.annotations.as_ref()).mapping;
+            rules::rules_label(&tool.name, &second, tool.annotations.as_ref(), None).mapping;
         assert_eq!(
-            mcp_call_mapping(&cache, "user-c", "crm", &tool, &second).await,
+            mcp_call_mapping(&cache, "user-c", "crm", &tool, &second, None).await,
             McpCallMapping {
                 mapping: rules_mapping.clone(),
                 unlabelled: Some(key.clone()),
@@ -1267,7 +1387,7 @@ mod tests {
         );
         assert!(cache.entries().get(&key).await.is_none());
         assert_eq!(
-            checked_label("crm", &tool, &second, &rules_mapping).source,
+            checked_label("crm", &tool, &second, &rules_mapping, None).source,
             ToolCallLabelSource::Rules
         );
     }
@@ -1281,7 +1401,7 @@ mod tests {
     ) {
         let key = cache::ToolLabelCacheKey::new("user-a", "crm", tool, arguments);
         let kept = cache
-            .get_or_compute(key, tool, arguments, async { Some(mapping) })
+            .get_or_compute(key, tool, arguments, None, async { Some(mapping) })
             .await;
         assert!(kept.is_some());
     }
@@ -1296,7 +1416,7 @@ mod tests {
         let cache = cache::ToolLabelCache::default();
         let earlier = json!({"recordId": "r_0", "hasUserApproved": false, "stage": "open"});
         assert!(
-            rules::rules_label("outbox", &earlier, None)
+            rules::rules_label("outbox", &earlier, None, None)
                 .unsure
                 .is_some()
         );
@@ -1317,10 +1437,10 @@ mod tests {
         )
         .await;
         let call = json!({"recordId": "r_1", "hasUserApproved": true, "stage": "won"});
-        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call)
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None)
             .await
             .mapping;
-        let label = checked_label("crm", &tool, &call, &mapping);
+        let label = checked_label("crm", &tool, &call, &mapping, None);
         assert_eq!(label.source, ToolCallLabelSource::Model);
         let fields: Vec<_> = label.items[0]
             .fields
@@ -1354,12 +1474,12 @@ mod tests {
         .await;
         let mut call = earlier.clone();
         call["bcc"] = json!(["hidden@example.com"]);
-        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call)
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None)
             .await
             .mapping;
         assert_eq!(mapping.source, ToolCallLabelSource::Model);
         assert_eq!(
-            checked_label("crm", &tool, &call, &mapping),
+            checked_label("crm", &tool, &call, &mapping, None),
             generic_label(&call)
         );
     }
@@ -1386,12 +1506,12 @@ mod tests {
             json!({"recordId": "r_1", "deep": deep.clone()}),
             json!({"items": (0..20_000).map(|n| json!({"id": n})).collect::<Vec<_>>()}),
         ] {
-            let rules = guarded_rules(&tool, &arguments);
-            let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &arguments)
+            let rules = guarded_rules(&tool, &arguments, None);
+            let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &arguments, None)
                 .await
                 .mapping;
             assert_eq!(mapping, rules.mapping, "{:.80}", arguments.to_string());
-            checked_label("crm", &tool, &arguments, &mapping);
+            checked_label("crm", &tool, &arguments, &mapping, None);
         }
     }
 
@@ -1407,7 +1527,8 @@ mod tests {
         json!({
             "recordId": "r_1",
             "hasUserApproved": true,
-            "options": {"user_confirmed": "yes", "approved": true},
+            "options": {"has_user_approved": "yes", "approved": true, "marketing_consent": true},
+            "confirmedByUser": "yes",
             "item": {
                 "statuscode": 2,
                 "customer": {"recordId": "c_1", "relatedTable": "account", "name": "Typed by the model"},
@@ -1419,6 +1540,7 @@ mod tests {
     fn no_label_source_shows_a_consent_flag_or_a_lookup_s_name() {
         let arguments = consent_and_lookup();
         let tool = update_record();
+        let configured = Some("confirmedByUser");
         for source in [
             ToolCallLabelSource::Rules,
             ToolCallLabelSource::Model,
@@ -1434,16 +1556,19 @@ mod tests {
                 id: Some("/recordId".into()),
                 fields: vec![
                     "/hasUserApproved".into(),
-                    "/options/user_confirmed".into(),
+                    "/options/has_user_approved".into(),
+                    "/confirmedByUser".into(),
                     "/item/customer/name".into(),
                     "/item/customer/*".into(),
                     "/*".into(),
                     "/options/approved".into(),
+                    "/options/marketing_consent".into(),
                     "/item/statuscode".into(),
                 ],
                 ..Default::default()
             });
-            let (label, log) = logged(|| checked_label("crm", &tool, &arguments, &fields));
+            let (label, log) =
+                logged(|| checked_label("crm", &tool, &arguments, &fields, configured));
             assert_eq!(label.source, source);
             let shown: Vec<_> = label.items[0]
                 .fields
@@ -1452,7 +1577,11 @@ mod tests {
                 .collect();
             assert_eq!(
                 shown,
-                ["/options/approved", "/item/statuscode"],
+                [
+                    "/options/approved",
+                    "/options/marketing_consent",
+                    "/item/statuscode"
+                ],
                 "{source:?}"
             );
             assert!(log.is_empty(), "{log}");
@@ -1461,7 +1590,8 @@ mod tests {
                 ("title", "/hasUserApproved", "consent_flag"),
                 ("title", "/item/customer/name", "lookup_name"),
                 ("target", "/item/customer/name", "lookup_name"),
-                ("before", "/options/user_confirmed", "consent_flag"),
+                ("before", "/options/has_user_approved", "consent_flag"),
+                ("target", "/confirmedByUser", "consent_flag"),
                 ("after", "/item/customer/*", "lookup_name"),
             ] {
                 let mut item = ToolCallLabelItemMapping {
@@ -1476,26 +1606,39 @@ mod tests {
                     _ => item.after = pointer,
                 }
                 let (label, log) =
-                    logged(|| checked_label("crm", &tool, &arguments, &mapping(item)));
+                    logged(|| checked_label("crm", &tool, &arguments, &mapping(item), configured));
                 assert_eq!(label, generic_label(&arguments), "{part}");
                 assert!(log.contains(claim) && log.contains(part), "{log}");
                 assert!(!log.contains("Typed by the model"), "{log}");
             }
         }
         // The rules never point at a claim, so their label is unchanged.
-        let rules = mcp_call_label("crm", &tool, &arguments);
-        assert_eq!(rules.source, ToolCallLabelSource::Rules);
-        let fields: Vec<_> = rules.items[0]
-            .fields
-            .iter()
-            .map(|field| (field.pointer.as_str(), field.name.as_deref()))
-            .collect();
+        let rules_fields = |approval_argument| {
+            let rules = mcp_call_label("crm", &tool, &arguments, approval_argument);
+            assert_eq!(rules.source, ToolCallLabelSource::Rules);
+            rules.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.clone())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
-            fields,
+            rules_fields(configured),
             [
-                ("/options/approved", Some("approved")),
-                ("/item/statuscode", Some("statuscode")),
-                ("/item/customer/recordId", Some("customer")),
+                "/options/approved",
+                "/options/marketing_consent",
+                "/item/statuscode",
+                "/item/customer/recordId",
+            ]
+        );
+        // Without the server's setting, the member is the record's data.
+        assert_eq!(
+            rules_fields(None),
+            [
+                "/options/approved",
+                "/options/marketing_consent",
+                "/confirmedByUser",
+                "/item/statuscode",
             ]
         );
     }
@@ -1525,9 +1668,9 @@ mod tests {
         };
         for mapping in [
             only_to.clone(),
-            rules::rules_label("send_email", &arguments, None).mapping,
+            rules::rules_label("send_email", &arguments, None, None).mapping,
         ] {
-            let label = checked_label("mail", &tool, &arguments, &mapping);
+            let label = checked_label("mail", &tool, &arguments, &mapping, None);
             assert_eq!(label.action, ToolCallAction::Send);
             let item = &label.items[0];
             assert_eq!(texts(item.target.as_ref().unwrap()), ["ann@example.com"]);
@@ -1552,11 +1695,11 @@ mod tests {
                 .chain([("subject".to_string(), json!("Q3"))])
                 .collect();
         let crowded = Value::Object(crowded);
-        let (label, log) = logged(|| checked_label("mail", &tool, &crowded, &only_to));
+        let (label, log) = logged(|| checked_label("mail", &tool, &crowded, &only_to, None));
         assert_eq!(label, generic_label(&crowded));
         assert!(log.contains("every recipient"), "{log}");
         assert_eq!(
-            mcp_call_label("mail", &tool, &crowded),
+            mcp_call_label("mail", &tool, &crowded, None),
             generic_label(&crowded)
         );
     }
@@ -1588,7 +1731,7 @@ mod tests {
             None,
         )));
         tool.name = format!("create_page\n\u{202E}{}", "x".repeat(1024 * 1024)).into();
-        let (label, log) = logged(|| mcp_call_label("notion", &tool, &arguments));
+        let (label, log) = logged(|| mcp_call_label("notion", &tool, &arguments, None));
         assert_eq!(label, generic_label(&arguments));
         assert!(log.len() < 4 * 1024, "{} bytes", log.len());
         assert!(!log.contains('\u{202E}'), "{log}");

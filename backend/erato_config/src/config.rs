@@ -322,15 +322,7 @@ impl McpRuntimeConfig {
     }
 
     pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
-        let mut builder = Config::builder();
-        for source in sources {
-            builder = builder.add_source(File::from_str(&source.contents, FileFormat::Toml));
-        }
-        // Environment variables have the same final precedence as they do for
-        // the startup configuration.
-        builder = builder.add_source(app_environment_source());
-
-        let config: Self = builder.build()?.try_deserialize()?;
+        let config: Self = runtime_sources(sources)?.try_deserialize()?;
         validate_mcp_server_ids(&config.mcp_servers)?;
         config.mcp_server_permissions.validate()?;
         config.mcp_servers_global.validate()?;
@@ -346,6 +338,21 @@ impl McpRuntimeConfig {
             .mcp_server_permissions
             .clone_from(&self.mcp_server_permissions);
     }
+}
+
+/// The runtime configuration sources layered for one of the sections that
+/// can be replaced at runtime (`McpRuntimeConfig`,
+/// `TeamsInactivityNudgeConfig::from_toml_sources`): each TOML source in
+/// order, so a later one (the admin panel's) wins, then the environment.
+fn runtime_sources(sources: &[ConfigSourceFile]) -> Result<Config, Report> {
+    let mut builder = Config::builder();
+    for source in sources {
+        builder = builder.add_source(File::from_str(&source.contents, FileFormat::Toml));
+    }
+    // Environment variables have the same final precedence as they do for
+    // the startup configuration.
+    builder = builder.add_source(app_environment_source());
+    Ok(builder.build()?)
 }
 
 fn app_environment_source() -> Environment {
@@ -814,6 +821,12 @@ pub struct AppConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.9.0"))]
     pub scheduled_deliveries: ScheduledDeliveriesConfig,
+
+    // The web app's Scheduled page. The page itself is shown when
+    // `scheduled_deliveries.enabled` is true.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub scheduled: ScheduledConfig,
 
     // **Deprecated**: Please use `chat_providers` instead for multiple provider support and better flexibility.
     #[facet(erato_config::hide_in_docs(hidden = true))]
@@ -3918,6 +3931,14 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub tools: HashMap<String, McpToolConfig>,
+    /// Name of a tool argument through which this server asks for the user's
+    /// consent to a call, such as Dataverse's `hasUserApproved`. On every tool
+    /// that declares the argument, Erato hides it from the model, asks the user
+    /// before each call while the approval gate is on, and sets it from that
+    /// decision when the call is dispatched.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.8.1"))]
+    pub approval_argument: Option<String>,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -5883,6 +5904,60 @@ pub struct StarterPromptConfig {
 
     // Optional chat provider ID to select when the starter prompt is activated.
     pub chat_provider: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct ScheduledConfig {
+    // Templates offered on the Scheduled page while the user has no items.
+    #[serde(default)]
+    pub templates: ScheduledTemplatesConfig,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
+pub struct ScheduledTemplatesConfig {
+    // Whether templates are offered. Erato ships none.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+
+    // Map of template id to template.
+    #[serde(default)]
+    pub templates: HashMap<String, ScheduledTemplateConfig>,
+
+    // Template ids in display order; templates not listed follow, sorted by id.
+    #[serde(default)]
+    pub priority_order: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct ScheduledTemplateConfig {
+    // What the template creates. Only `reminder` for now.
+    // Defaults to `reminder`.
+    #[serde(default)]
+    pub r#type: ScheduledTemplateType,
+
+    // Label of the template's button.
+    pub title: String,
+
+    // Short line shown with the button.
+    #[serde(default)]
+    pub description: String,
+
+    // Reminder name the form is filled with.
+    pub name: String,
+
+    // Reminder message the form is filled with.
+    #[serde(default)]
+    pub message: String,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[serde(rename_all = "snake_case")]
+#[facet(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ScheduledTemplateType {
+    #[default]
+    Reminder,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Clone, Default, Facet, HeapSize)]
@@ -8155,6 +8230,28 @@ impl TeamsInactivityNudgeConfig {
 
     pub fn inactive_after_duration(&self) -> Result<std::time::Duration, Report> {
         Ok(humantime::parse_duration(self.inactive_after.trim())?)
+    }
+
+    /// Where the section sits in `erato.toml`.
+    pub const PATH: &'static str = "integrations.ms_office.teams.bot.inactivity_nudge";
+
+    /// The section as the runtime sources layer it — the deployment's files
+    /// mirrored by Erato, then the admin panel's override, then environment
+    /// variables — validated as at startup. Like `McpRuntimeConfig`, the
+    /// section can be replaced while the process runs; the rest of the Teams
+    /// bot cannot, so whether the bot is enabled comes from the startup
+    /// configuration. An absent section is the default (switched off).
+    pub fn from_toml_sources(
+        sources: &[ConfigSourceFile],
+        bot_enabled: bool,
+    ) -> Result<Self, Report> {
+        let section = match runtime_sources(sources)?.get::<Self>(Self::PATH) {
+            Ok(section) => section,
+            Err(ConfigError::NotFound(_)) => Self::default(),
+            Err(error) => return Err(error.into()),
+        };
+        section.validate(bot_enabled)?;
+        Ok(section)
     }
 }
 

@@ -11,6 +11,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useProfileApi } from "@/hooks/profile/useProfileApi";
 import { initializeMailboxConfiguration } from "@/lib/desktopSidecar/indexingConfiguration";
 import {
+  installUiPackageWhenRefused,
+  supportsUiPackageRelay,
+} from "@/lib/desktopSidecar/uiPackageRelay";
+import {
   fetchUiPackageToken,
   useOrganizationConfiguration,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -279,6 +283,17 @@ export function DesktopSidecarConfigurationSync() {
       await queryClient.invalidateQueries({
         queryKey: ["sidecar-indexing", snapshot.instanceId],
       });
+      if (uiPackage && supportsUiPackageRelay(client, snapshot.ui)) {
+        const outcome = await installUiPackageWhenRefused(
+          client,
+          uiPackage,
+          controller.signal,
+        );
+        if (outcome === "relayed")
+          await queryClient.invalidateQueries({
+            queryKey: ["sidecar-status", snapshot.instanceId],
+          });
+      }
     })().catch((error: unknown) => {
       if (controller.signal.aborted) return;
       console.warn("Failed to configure the Erato desktop sidecar:", error);

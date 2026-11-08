@@ -418,6 +418,7 @@ impl Labelling {
                 job.key.clone(),
                 &job.tool,
                 &job.arguments,
+                None,
                 self.model_mapping(record),
             )
             .await?;
@@ -527,6 +528,7 @@ fn shown_label(
         &job.server_id,
         &job.tool,
         &job.arguments,
+        None,
         mapping,
         &job.context,
     )

@@ -281,7 +281,7 @@ async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
 
     let kept = app_state
         .tool_label_cache
-        .lookup(&label_key(&app_state).await, &arguments())
+        .lookup(&label_key(&app_state).await, &arguments(), None)
         .await
         .expect("the model's mapping is kept");
     assert_eq!(kept.source, ToolCallLabelSource::Model);
@@ -414,7 +414,10 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
     continued.assert_status_ok();
     let key = label_key(&app_state).await;
     assert_eq!(
-        app_state.tool_label_cache.lookup(&key, &arguments()).await,
+        app_state
+            .tool_label_cache
+            .lookup(&key, &arguments(), None)
+            .await,
         None,
         "the label arrived before the continuation ended"
     );
@@ -431,9 +434,13 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
 
     let label = app_state
         .tool_label_cache
-        .get_or_compute(key, &update_record(&app_state).await, &arguments(), async {
-            None
-        })
+        .get_or_compute(
+            key,
+            &update_record(&app_state).await,
+            &arguments(),
+            None,
+            async { None },
+        )
         .await
         .expect("the model's label");
     assert_eq!(label.source, ToolCallLabelSource::Model);
@@ -484,13 +491,17 @@ async fn the_card_keeps_the_rules_label(
                 key.clone(),
                 &update_record(&app_state).await,
                 &arguments(),
+                None,
                 async { None }
             )
             .await,
         None
     );
     assert_eq!(
-        app_state.tool_label_cache.lookup(&key, &arguments()).await,
+        app_state
+            .tool_label_cache
+            .lookup(&key, &arguments(), None)
+            .await,
         None
     );
 
@@ -615,7 +626,10 @@ async fn a_models_mapping_the_cross_check_rejects_shows_generic_and_is_not_kept(
         assert_eq!(label["action"], "other");
         assert_eq!(recorder.bodies().len(), asked);
         assert_eq!(
-            app_state.tool_label_cache.lookup(&key, &arguments()).await,
+            app_state
+                .tool_label_cache
+                .lookup(&key, &arguments(), None)
+                .await,
             None
         );
     }
@@ -657,7 +671,7 @@ async fn nothing_goes_to_the_labeller(
     assert_eq!(
         app_state
             .tool_label_cache
-            .lookup(&label_key(&app_state).await, &arguments())
+            .lookup(&label_key(&app_state).await, &arguments(), None)
             .await,
         None
     );

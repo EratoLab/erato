@@ -14,6 +14,8 @@ export interface Validator {
 
 export const validateSidecarStatusV1Params: Validator;
 export const validateSidecarStatusV1Result: Validator;
+export const validateSidecarInstallUiPackageV1Params: Validator;
+export const validateSidecarInstallUiPackageV1Result: Validator;
 export const validateSidecarRequestPermissionV1Params: Validator;
 export const validateSidecarRequestPermissionV1Result: Validator;
 export const validateToolProviderTable: Validator;

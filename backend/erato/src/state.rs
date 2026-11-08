@@ -249,9 +249,16 @@ impl AppState {
             crate::ms_teams_bot::nudge::register(
                 &mut scheduled_deliveries,
                 bot,
-                &config.integrations.ms_office.teams.bot,
-            )?;
+                reloadable.clone(),
+            );
         }
+        scheduled_deliveries.register_producer(Arc::new(
+            crate::services::scheduled_items::ReminderProducer::new(
+                ms_teams_bot
+                    .as_ref()
+                    .and_then(|bot| bot.settings.public_base_url.clone()),
+            ),
+        ));
         let scheduled_deliveries = Arc::new(scheduled_deliveries);
         let actor_manager =
             ActorManager::new(db.clone(), config.clone(), scheduled_deliveries.clone()).await;
@@ -380,15 +387,19 @@ impl AppState {
         self.reloadable.read().await.mcp.clone()
     }
 
-    /// Clone the startup config with the reloadable MCP sections applied.
+    /// Clone the startup config with the reloadable MCP and Teams inactivity
+    /// nudge sections applied.
     pub async fn effective_config(&self) -> AppConfig {
         let mut config = self.config.clone();
-        self.reloadable
-            .read()
-            .await
-            .mcp
-            .config
-            .apply_to(&mut config);
+        let reloadable = self.reloadable.read().await;
+        reloadable.mcp.config.apply_to(&mut config);
+        config
+            .integrations
+            .ms_office
+            .teams
+            .bot
+            .inactivity_nudge
+            .clone_from(&reloadable.teams_nudge);
         config
     }
 
@@ -1341,11 +1352,13 @@ impl AppState {
             if let Some(policy) = &reloadable.experience_policy {
                 report.opaque(c, "shared.reloadable.experience_policy", policy);
             }
+            report.record(c, "shared.reloadable.teams_nudge", &reloadable.teams_nudge);
         } else {
             for owner in [
                 "shared.reloadable.distribution",
                 "shared.reloadable.mcp",
                 "shared.reloadable.experience_policy",
+                "shared.reloadable.teams_nudge",
             ] {
                 c.locked("reloadable state lock");
                 report.owners.insert(owner.to_owned(), c.take_usage());

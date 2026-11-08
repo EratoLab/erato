@@ -3,6 +3,7 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ModalBase } from "./ModalBase";
+import { DropdownMenu } from "../Controls/DropdownMenu";
 
 afterEach(() => {
   cleanup();
@@ -130,6 +131,113 @@ describe("ModalBase", () => {
     expect(
       screen.getAllByRole("dialog", { name: "Preview: dashboard.png" }),
     ).toHaveLength(1);
+  });
+
+  it("leaves a plain dialog non-modal unless asked", () => {
+    const { rerender } = render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Details">
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-modal");
+
+    rerender(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Details" modal>
+        <p>Body</p>
+      </ModalBase>,
+    );
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+  });
+
+  it("keeps a dropdown opened inside a dialog outside any aria-modal subtree", async () => {
+    render(
+      <ModalBase isOpen={true} onClose={vi.fn()} title="Pick a comment">
+        <DropdownMenu
+          items={[{ label: "Newest first", onClick: vi.fn() }]}
+          triggerAriaLabel="Sort"
+        />
+      </ModalBase>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort" }));
+    const menu = await screen.findByRole("menu");
+
+    // The panel portals to <body>, beside the dialog, so an aria-modal shell
+    // would hide it from WebKit/VoiceOver and Chromium on macOS.
+    expect(screen.getByRole("dialog")).not.toContainElement(menu);
+    expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: "Newest first" }),
+    ).toBeVisible();
+  });
+
+  it("renders a headerless alert dialog named and described by its content", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={onClose}
+        role="alertdialog"
+        labelledBy="ended-title"
+        describedBy="ended-body"
+        closeOnOverlayClick={false}
+      >
+        <h2 id="ended-title">This request was cancelled.</h2>
+        <p id="ended-body">Nothing was shared.</p>
+      </ModalBase>,
+    );
+
+    const dialog = screen.getByRole("alertdialog", {
+      name: "This request was cancelled.",
+      description: "Nothing was shared.",
+    });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("data-ui", "modal-shell");
+    expect(screen.queryByRole("button", { name: "Close modal" })).toBeNull();
+
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefers its own title over labelledBy and can drop the close button", () => {
+    render(
+      <ModalBase
+        isOpen={true}
+        onClose={vi.fn()}
+        title="Details"
+        labelledBy="elsewhere"
+        showCloseButton={false}
+      >
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Details" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Close modal" })).toBeNull();
+  });
+
+  it("closes on a scrim click by default", () => {
+    const onClose = vi.fn();
+    render(
+      <ModalBase isOpen={true} onClose={onClose} title="Details">
+        <p>Body</p>
+      </ModalBase>,
+    );
+
+    const overlay = document.querySelector(
+      '[data-ui="modal-overlay"]',
+    ) as HTMLElement;
+    fireEvent.mouseDown(overlay);
+    fireEvent.click(overlay);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("leaves an untitled dialog unlabelled", () => {

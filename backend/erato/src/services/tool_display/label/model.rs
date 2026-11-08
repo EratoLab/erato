@@ -526,7 +526,7 @@ pub fn parse_reply(
         items,
         source: ToolCallLabelSource::Model,
     };
-    if resolve_label(&mapping, arguments).is_err() {
+    if resolve_label(&mapping, arguments, None).is_err() {
         bail!("A pointer in the reply reaches nothing");
     }
     Ok(mapping)

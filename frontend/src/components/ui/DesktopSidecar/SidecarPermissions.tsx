@@ -1,11 +1,10 @@
 import { t } from "@lingui/core/macro";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useSidecarStatus } from "@/hooks/useSidecarStatus";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
 import { Button } from "../Controls/Button";
-
-import type { SidecarStatusV1Result } from "@erato/desktop-sidecar-protocol";
 
 export function SidecarPermissions() {
   const { client, snapshot } = useDesktopSidecar();
@@ -21,48 +20,10 @@ function PermissionList({
 }: {
   client: NonNullable<ReturnType<typeof useDesktopSidecar>["client"]>;
 }) {
-  const [permissions, setPermissions] = useState<
-    SidecarStatusV1Result["permissions"] | null
-  >(null);
-  const [loadError, setLoadError] = useState(false);
+  const { data, isError: loadError, refetch } = useSidecarStatus();
+  const permissions = loadError ? null : (data?.permissions ?? null);
   const [requestError, setRequestError] = useState(false);
   const [requesting, setRequesting] = useState<string | null>(null);
-  const [refresh, setRefresh] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    let pending = false;
-    const load = async () => {
-      if (pending) return;
-      pending = true;
-      try {
-        const result = await client.invoke(
-          "sidecar.status.v1",
-          {},
-          { signal: controller.signal },
-        );
-        if (!controller.signal.aborted) {
-          setPermissions(result.permissions);
-          setLoadError(false);
-        }
-      } catch {
-        if (!controller.signal.aborted) {
-          setPermissions(null);
-          setLoadError(true);
-        }
-      } finally {
-        pending = false;
-      }
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), 10000);
-    const onFocus = () => void load();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      controller.abort();
-      window.clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [client, refresh]);
   const applicable = Object.entries(permissions ?? {}).filter(
     ([, state]) => state !== "not_appliccable_different_platform",
   );
@@ -144,7 +105,7 @@ function PermissionList({
                     .catch(() => setRequestError(true))
                     .finally(() => {
                       setRequesting(null);
-                      setRefresh((value) => value + 1);
+                      void refetch();
                     });
                 }}
               >
@@ -170,11 +131,7 @@ function PermissionList({
           })}
         </p>
       )}
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => setRefresh((value) => value + 1)}
-      >
+      <Button variant="secondary" size="sm" onClick={() => void refetch()}>
         {t({
           id: "sidecar.permissions.refresh",
           message: "Check permissions again",

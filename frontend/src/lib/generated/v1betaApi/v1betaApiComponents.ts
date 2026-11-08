@@ -6970,6 +6970,669 @@ export const useRecentChats = <TData = Schemas.RecentChatsResponse,>(
   });
 };
 
+export type ListScheduledItemsQueryParams = {
+  tab?: Schemas.ScheduledItemsTab;
+};
+
+export type ListScheduledItemsError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListScheduledItemsVariables = {
+  queryParams?: ListScheduledItemsQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchListScheduledItems = (
+  variables: ListScheduledItemsVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItemsResponse,
+    ListScheduledItemsError,
+    undefined,
+    {},
+    ListScheduledItemsQueryParams,
+    {}
+  >({
+    url: "/api/v1beta/me/scheduled-items",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function listScheduledItemsQuery(
+  variables: ListScheduledItemsVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ScheduledItemsResponse>;
+};
+
+export function listScheduledItemsQuery(
+  variables: ListScheduledItemsVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ScheduledItemsResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listScheduledItemsQuery(
+  variables: ListScheduledItemsVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/scheduled-items",
+      operationId: "listScheduledItems",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListScheduledItems(variables, signal),
+  };
+}
+
+export const useSuspenseListScheduledItems = <
+  TData = Schemas.ScheduledItemsResponse,
+>(
+  variables: ListScheduledItemsVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledItemsResponse,
+      ListScheduledItemsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ScheduledItemsResponse,
+    ListScheduledItemsError,
+    TData
+  >({
+    ...listScheduledItemsQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListScheduledItems = <TData = Schemas.ScheduledItemsResponse,>(
+  variables: ListScheduledItemsVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledItemsResponse,
+      ListScheduledItemsError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ScheduledItemsResponse,
+    ListScheduledItemsError,
+    TData
+  >({
+    ...listScheduledItemsQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type CreateScheduledItemError = Fetcher.ErrorWrapper<
+  | {
+      status: 409;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 422;
+      payload: Schemas.ScheduledItemError;
+    }
+>;
+
+export type CreateScheduledItemVariables = {
+  body: Schemas.ScheduledItemRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCreateScheduledItem = (
+  variables: CreateScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItem,
+    CreateScheduledItemError,
+    Schemas.ScheduledItemRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/scheduled-items",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCreateScheduledItem = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ScheduledItem,
+      CreateScheduledItemError,
+      CreateScheduledItemVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ScheduledItem,
+    CreateScheduledItemError,
+    CreateScheduledItemVariables
+  >({
+    mutationFn: (variables: CreateScheduledItemVariables) =>
+      fetchCreateScheduledItem(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type GetScheduledItemPathParams = {
+  /**
+   * The item
+   *
+   * @format uuid
+   */
+  itemId: string;
+};
+
+export type GetScheduledItemError = Fetcher.ErrorWrapper<{
+  status: 404;
+  payload: Schemas.ScheduledItemError;
+}>;
+
+export type GetScheduledItemVariables = {
+  pathParams: GetScheduledItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetScheduledItem = (
+  variables: GetScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItem,
+    GetScheduledItemError,
+    undefined,
+    {},
+    {},
+    GetScheduledItemPathParams
+  >({
+    url: "/api/v1beta/me/scheduled-items/{itemId}",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getScheduledItemQuery(variables: GetScheduledItemVariables): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.ScheduledItem>;
+};
+
+export function getScheduledItemQuery(
+  variables: GetScheduledItemVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ScheduledItem>)
+    | reactQuery.SkipToken;
+};
+
+export function getScheduledItemQuery(
+  variables: GetScheduledItemVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/scheduled-items/{itemId}",
+      operationId: "getScheduledItem",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetScheduledItem(variables, signal),
+  };
+}
+
+export const useSuspenseGetScheduledItem = <TData = Schemas.ScheduledItem,>(
+  variables: GetScheduledItemVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledItem,
+      GetScheduledItemError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ScheduledItem,
+    GetScheduledItemError,
+    TData
+  >({
+    ...getScheduledItemQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetScheduledItem = <TData = Schemas.ScheduledItem,>(
+  variables: GetScheduledItemVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledItem,
+      GetScheduledItemError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ScheduledItem,
+    GetScheduledItemError,
+    TData
+  >({
+    ...getScheduledItemQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export type UpdateScheduledItemPathParams = {
+  /**
+   * The item
+   *
+   * @format uuid
+   */
+  itemId: string;
+};
+
+export type UpdateScheduledItemError = Fetcher.ErrorWrapper<
+  | {
+      status: 404;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 422;
+      payload: Schemas.ScheduledItemError;
+    }
+>;
+
+export type UpdateScheduledItemVariables = {
+  body: Schemas.ScheduledItemRequest;
+  pathParams: UpdateScheduledItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchUpdateScheduledItem = (
+  variables: UpdateScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItem,
+    UpdateScheduledItemError,
+    Schemas.ScheduledItemRequest,
+    {},
+    {},
+    UpdateScheduledItemPathParams
+  >({
+    url: "/api/v1beta/me/scheduled-items/{itemId}",
+    method: "put",
+    ...variables,
+    signal,
+  });
+
+export const useUpdateScheduledItem = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ScheduledItem,
+      UpdateScheduledItemError,
+      UpdateScheduledItemVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ScheduledItem,
+    UpdateScheduledItemError,
+    UpdateScheduledItemVariables
+  >({
+    mutationFn: (variables: UpdateScheduledItemVariables) =>
+      fetchUpdateScheduledItem(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type DeleteScheduledItemPathParams = {
+  /**
+   * The item
+   *
+   * @format uuid
+   */
+  itemId: string;
+};
+
+export type DeleteScheduledItemError = Fetcher.ErrorWrapper<
+  | {
+      status: 404;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.ScheduledItemError;
+    }
+>;
+
+export type DeleteScheduledItemVariables = {
+  pathParams: DeleteScheduledItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchDeleteScheduledItem = (
+  variables: DeleteScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    DeleteScheduledItemError,
+    undefined,
+    {},
+    {},
+    DeleteScheduledItemPathParams
+  >({
+    url: "/api/v1beta/me/scheduled-items/{itemId}",
+    method: "delete",
+    ...variables,
+    signal,
+  });
+
+export const useDeleteScheduledItem = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      DeleteScheduledItemError,
+      DeleteScheduledItemVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    DeleteScheduledItemError,
+    DeleteScheduledItemVariables
+  >({
+    mutationFn: (variables: DeleteScheduledItemVariables) =>
+      fetchDeleteScheduledItem(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type CancelScheduledItemPathParams = {
+  /**
+   * The item
+   *
+   * @format uuid
+   */
+  itemId: string;
+};
+
+export type CancelScheduledItemError = Fetcher.ErrorWrapper<
+  | {
+      status: 404;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.ScheduledItemError;
+    }
+>;
+
+export type CancelScheduledItemVariables = {
+  pathParams: CancelScheduledItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchCancelScheduledItem = (
+  variables: CancelScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItem,
+    CancelScheduledItemError,
+    undefined,
+    {},
+    {},
+    CancelScheduledItemPathParams
+  >({
+    url: "/api/v1beta/me/scheduled-items/{itemId}/cancel",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useCancelScheduledItem = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ScheduledItem,
+      CancelScheduledItemError,
+      CancelScheduledItemVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ScheduledItem,
+    CancelScheduledItemError,
+    CancelScheduledItemVariables
+  >({
+    mutationFn: (variables: CancelScheduledItemVariables) =>
+      fetchCancelScheduledItem(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type SnoozeScheduledItemPathParams = {
+  /**
+   * The item
+   *
+   * @format uuid
+   */
+  itemId: string;
+};
+
+export type SnoozeScheduledItemError = Fetcher.ErrorWrapper<
+  | {
+      status: 404;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 409;
+      payload: Schemas.ScheduledItemError;
+    }
+  | {
+      status: 422;
+      payload: Schemas.ScheduledItemError;
+    }
+>;
+
+export type SnoozeScheduledItemVariables = {
+  body: Schemas.SnoozeScheduledItemRequest;
+  pathParams: SnoozeScheduledItemPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchSnoozeScheduledItem = (
+  variables: SnoozeScheduledItemVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledItem,
+    SnoozeScheduledItemError,
+    Schemas.SnoozeScheduledItemRequest,
+    {},
+    {},
+    SnoozeScheduledItemPathParams
+  >({
+    url: "/api/v1beta/me/scheduled-items/{itemId}/snooze",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useSnoozeScheduledItem = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      Schemas.ScheduledItem,
+      SnoozeScheduledItemError,
+      SnoozeScheduledItemVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    Schemas.ScheduledItem,
+    SnoozeScheduledItemError,
+    SnoozeScheduledItemVariables
+  >({
+    mutationFn: (variables: SnoozeScheduledItemVariables) =>
+      fetchSnoozeScheduledItem(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
+export type ListScheduledTemplatesError = Fetcher.ErrorWrapper<undefined>;
+
+export type ListScheduledTemplatesVariables =
+  V1betaApiContext["fetcherOptions"];
+
+export const fetchListScheduledTemplates = (
+  variables: ListScheduledTemplatesVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ScheduledTemplatesResponse,
+    ListScheduledTemplatesError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/scheduled-templates",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function listScheduledTemplatesQuery(
+  variables: ListScheduledTemplatesVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ScheduledTemplatesResponse>;
+};
+
+export function listScheduledTemplatesQuery(
+  variables: ListScheduledTemplatesVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.ScheduledTemplatesResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function listScheduledTemplatesQuery(
+  variables: ListScheduledTemplatesVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/scheduled-templates",
+      operationId: "listScheduledTemplates",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchListScheduledTemplates(variables, signal),
+  };
+}
+
+export const useSuspenseListScheduledTemplates = <
+  TData = Schemas.ScheduledTemplatesResponse,
+>(
+  variables: ListScheduledTemplatesVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledTemplatesResponse,
+      ListScheduledTemplatesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ScheduledTemplatesResponse,
+    ListScheduledTemplatesError,
+    TData
+  >({
+    ...listScheduledTemplatesQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useListScheduledTemplates = <
+  TData = Schemas.ScheduledTemplatesResponse,
+>(
+  variables: ListScheduledTemplatesVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ScheduledTemplatesResponse,
+      ListScheduledTemplatesError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ScheduledTemplatesResponse,
+    ListScheduledTemplatesError,
+    TData
+  >({
+    ...listScheduledTemplatesQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type StarterPromptsError = Fetcher.ErrorWrapper<undefined>;
 
 export type StarterPromptsVariables = V1betaApiContext["fetcherOptions"];
@@ -8704,6 +9367,21 @@ export type QueryOperation =
       path: "/api/v1beta/me/recent_chats";
       operationId: "recentChats";
       variables: RecentChatsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/scheduled-items";
+      operationId: "listScheduledItems";
+      variables: ListScheduledItemsVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/scheduled-items/{itemId}";
+      operationId: "getScheduledItem";
+      variables: GetScheduledItemVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/scheduled-templates";
+      operationId: "listScheduledTemplates";
+      variables: ListScheduledTemplatesVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/starter-prompts";

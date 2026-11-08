@@ -373,3 +373,94 @@ destructive_hint = false
     assert!(ReloadableAppState::load(&app_state).await.is_err());
     assert_eq!(app_state.mcp_state().await.config, valid_config);
 }
+
+/// The Teams inactivity nudge is layered like the MCP sections: the admin
+/// panel's override wins key by key over the mirrored file. An override that
+/// fails validation keeps the previous nudge settings without holding up the
+/// rest of the reload.
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn reloadable_state_applies_admin_nudge_overrides_and_keeps_valid_settings(
+    pool: Pool<Postgres>,
+) {
+    let app_state = app_state_with_encryption(pool).await;
+    let row = |service: &str, contents: &str| runtime_configuration::ActiveModel {
+        source_service: Set(service.to_string()),
+        source_type: Set(ERATO_TOML_SOURCE_TYPE.to_string()),
+        source_filename: Set(Some("erato.toml".to_string())),
+        config: Set(app_state.encrypt(contents).unwrap()),
+        ..Default::default()
+    };
+    RuntimeConfiguration::insert_many([
+        row(
+            ERATO_BACKEND_SOURCE_SERVICE,
+            r#"
+[integrations.ms_office.teams.bot.inactivity_nudge]
+inactive_after = "7d"
+tips = ["From the file"]
+"#,
+        ),
+        row(
+            "erato_admin_panel",
+            r#"
+[integrations.ms_office.teams.bot.inactivity_nudge]
+inactive_after = "1h"
+pilot_users = ["pilot@example.com"]
+
+[integrations.ms_office.teams.bot.inactivity_nudge.send_window]
+start_hour = 9
+"#,
+        ),
+    ])
+    .exec(&app_state.db)
+    .await
+    .unwrap();
+
+    let reloaded = ReloadableAppState::load(&app_state).await.unwrap();
+    let nudge = reloaded.teams_nudge.clone();
+    assert_eq!(nudge.inactive_after, "1h");
+    assert_eq!(nudge.tips, ["From the file"]);
+    assert_eq!(nudge.pilot_users, ["pilot@example.com"]);
+    assert_eq!(nudge.send_window.start_hour, 9);
+    assert_eq!(nudge.send_window.end_hour, 18);
+    *app_state.reloadable.write().await = reloaded;
+    assert_eq!(
+        app_state
+            .effective_config()
+            .await
+            .integrations
+            .ms_office
+            .teams
+            .bot
+            .inactivity_nudge,
+        nudge
+    );
+
+    // This deployment runs no Teams bot, and an enabled nudge needs one: the
+    // override is refused and the previous settings stay, while the MCP
+    // server beside it in the same file still applies.
+    RuntimeConfiguration::update_many()
+        .filter(runtime_configuration::Column::SourceService.eq("erato_admin_panel"))
+        .col_expr(
+            runtime_configuration::Column::Config,
+            sea_orm::sea_query::Expr::value(
+                app_state
+                    .encrypt(
+                        r#"
+[integrations.ms_office.teams.bot.inactivity_nudge]
+enabled = true
+
+[mcp_servers.docs]
+transport_type = "streamable_http"
+url = "https://admin.example.test/mcp"
+"#,
+                    )
+                    .unwrap(),
+            ),
+        )
+        .exec(&app_state.db)
+        .await
+        .unwrap();
+    let reloaded = ReloadableAppState::load(&app_state).await.unwrap();
+    assert_eq!(reloaded.teams_nudge, nudge);
+    assert!(reloaded.mcp.config.mcp_servers.contains_key("docs"));
+}
