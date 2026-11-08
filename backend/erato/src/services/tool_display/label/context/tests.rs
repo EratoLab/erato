@@ -74,7 +74,7 @@ fn item_on(
         items: vec![mapping],
         source: ToolCallLabelSource::Rules,
     };
-    let mut label = resolve_label(&mapping, arguments).unwrap();
+    let mut label = resolve_label(&mapping, arguments, None).unwrap();
     context.resolve(&mut label, arguments, server);
     label.items.remove(0)
 }
@@ -1180,7 +1180,7 @@ fn the_index_and_each_labels_resolved_text_stay_within_their_byte_caps() {
         items: vec![pointers(), pointers(), pointers()],
         source: ToolCallLabelSource::Rules,
     };
-    let mut label = resolve_label(&mapping, &arguments).unwrap();
+    let mut label = resolve_label(&mapping, &arguments, None).unwrap();
     context.resolve(&mut label, &arguments, SERVER);
     let resolved: Vec<_> = label
         .items
@@ -1263,7 +1263,7 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
     let mut checked = 0;
     for write in fixture.writes {
         checked += 1;
-        let mut label = resolve_label(&write.mapping, &write.arguments).unwrap();
+        let mut label = resolve_label(&write.mapping, &write.arguments, None).unwrap();
         context.resolve(&mut label, &write.arguments, SERVER);
         let item = &label.items[0];
         let owned = |slot: &Option<ToolCallLabelSlot>| {

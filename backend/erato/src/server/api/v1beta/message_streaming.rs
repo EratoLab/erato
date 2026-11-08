@@ -13389,11 +13389,10 @@ mod tests {
         assert_eq!(restored.mcp_server_id, "new_server");
         assert_eq!(restored.tool_name, "new_mcp_tool");
         assert_eq!(restored.input, call.fn_arguments);
+        assert_eq!(restored.display.as_ref().unwrap().label, display.label);
         assert_eq!(
-            restored.display.as_ref().unwrap().label,
-            Some(crate::services::tool_display::label::generic_label(
-                &call.fn_arguments
-            ))
+            display.label.as_ref().unwrap().source,
+            crate::models::message::ToolCallLabelSource::Rules
         );
         assert_eq!(restored.approval_items()[0].display, restored.display);
         let delegated = super::delegated_task_approval_part(
@@ -13589,7 +13588,7 @@ mod tests {
             }],
             source: ToolCallLabelSource::Rules,
         };
-        let written = resolve_label(&mapping, &arguments).unwrap();
+        let written = resolve_label(&mapping, &arguments, None).unwrap();
         let mut resolved = written.clone();
         resolved.items[0].id.as_mut().unwrap().values[0].resolved =
             Some("Named by the child's results".into());
@@ -14649,6 +14648,7 @@ mod tests {
                 source: ToolCallLabelSource::Model,
             },
             &call.fn_arguments,
+            None,
         )
         .unwrap();
         let cases = configs
@@ -14662,7 +14662,7 @@ mod tests {
                     Some(UserToolDecision::AlwaysAllow),
                     Some(UserToolDecision::Denied),
                 ] {
-                    let generic = mcp_tool_call_display(
+                    let computed = mcp_tool_call_display(
                         &crate::config::McpRuntimeConfig::default(),
                         "server",
                         tool,
@@ -14670,12 +14670,12 @@ mod tests {
                         approval_argument,
                         &Default::default(),
                     );
-                    let gates: Vec<_> = [None, generic.label.clone(), Some(delete.clone())]
+                    let gates: Vec<_> = [None, computed.label.clone(), Some(delete.clone())]
                         .into_iter()
                         .map(|label| {
                             let display = crate::models::message::ToolDisplayMetadata {
                                 label,
-                                ..generic.clone()
+                                ..computed.clone()
                             };
                             let mut gate = gate_mcp_tool_call(
                                 config,
@@ -14703,6 +14703,56 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_card_carries_the_rules_label_or_the_generic_one_when_the_hints_disagree() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource};
+        let restrictive = McpToolApprovalConfig {
+            enabled: true,
+            preset: McpToolApprovalPreset::Restrictive,
+            allow_always: false,
+        };
+        let call = ToolCall {
+            call_id: "call-1".to_string(),
+            fn_name: "create_page".to_string(),
+            fn_arguments: json!({"title": "Quarterly plan", "parent_id": "page-1"}),
+            thought_signatures: None,
+        };
+        let card_label = |tool: &Tool| match gate_call(
+            &restrictive,
+            "server",
+            tool,
+            &call,
+            Some(UserToolDecision::Ask),
+        ) {
+            ToolCallGate::Ask(request) => {
+                assert_eq!(request.approvals[0].display, request.display);
+                request.display.unwrap().label.unwrap()
+            }
+            other => panic!("expected an approval request, got {other:?}"),
+        };
+
+        let label = card_label(&Tool::new("create_page", "Creates a page.", Map::new()));
+        assert_eq!(
+            (label.action, label.source),
+            (ToolCallAction::Create, ToolCallLabelSource::Rules)
+        );
+        let item = &label.items[0];
+        assert_eq!(
+            item.title.as_ref().unwrap().values[0].text,
+            "Quarterly plan"
+        );
+        assert_eq!(item.target.as_ref().unwrap().pointer, "/parent_id");
+
+        // The resolved hints, as an operator override leaves them on the tool.
+        let read_only = Tool::new("create_page", "Creates a page.", Map::new()).with_annotations(
+            ToolAnnotations::from_raw(None, Some(true), None, None, None),
+        );
+        assert_eq!(
+            card_label(&read_only),
+            crate::services::tool_display::label::generic_label(&call.fn_arguments)
+        );
     }
 
     #[test]

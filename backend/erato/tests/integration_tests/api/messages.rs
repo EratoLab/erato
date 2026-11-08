@@ -4720,7 +4720,8 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["display"]["server_name"], "Approval Probe");
-    assert_eq!(approval_request["display"]["label"]["source"], "generic");
+    assert_eq!(approval_request["display"]["label"]["source"], "rules");
+    assert_eq!(approval_request["display"]["label"]["action"], "send");
     assert_eq!(approval_request["preset"], "restrictive");
     // The gated call is also recorded as a decision the client can name.
     assert_eq!(approval_request["kind"], "mcp_tool");
@@ -5241,10 +5242,11 @@ async fn park_a_turn_and_keep_its_events(
 
 /// Every MCP call is stored with a label, the call that ran without asking as
 /// well as the gated one, and a call's live updates, the first running one as
-/// well as the final one, carry the display its row is stored with. With no
-/// better source the label is generic, and its readable view names the gated
-/// call's arguments by path without copying their values; the approval fields
-/// stay what the gate decided.
+/// well as the final one, carry the display its row is stored with. The rules
+/// label the gated call from its name and arguments; the read gives them
+/// nothing to say and stays generic. The readable view names the arguments by
+/// path without copying their values, and the approval fields stay what the
+/// gate decided.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -5253,7 +5255,7 @@ async fn park_a_turn_and_keep_its_events(
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
+async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     let arguments = json!({
         "destination": {"page_id": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
         "pages": [{"title": "Quarterly plan", "body": "Line one.\nLine two."}],
@@ -5313,7 +5315,15 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
     assert_eq!(request["input"], arguments);
     assert_eq!(request["preset"], "restrictive");
     let label = &request["display"]["label"];
-    assert_eq!(label["source"], "generic");
+    assert_eq!(
+        (&label["source"], &label["action"]),
+        (&json!("rules"), &json!("send"))
+    );
+    let item = &label["items"][0];
+    assert_eq!(item["title"]["pointer"], "/pages/*/title");
+    assert_eq!(item["title"]["values"][0]["text"], "Quarterly plan");
+    assert_eq!(item["target"]["pointer"], "/destination/page_id");
+    assert_eq!(item["after"]["pointer"], "/pages/*/body");
     fn walk<'a>(node: &'a Value, out: &mut Vec<(&'a str, &'a str)>) {
         out.push((
             node["path"].as_str().unwrap(),
@@ -5338,11 +5348,296 @@ async fn every_mcp_call_is_stored_with_a_generic_label(pool: Pool<Postgres>) {
             ("/notify", "value"),
         ]
     );
-    let stored = serde_json::to_string(label).unwrap();
+    let stored = serde_json::to_string(&label["arguments"]).unwrap();
     assert!(
         !stored.contains("Quarterly plan") && !stored.contains("9b1d5f2e"),
         "the view holds paths, the values stay in the input: {stored}"
     );
+}
+
+/// The records server, served in-process so these tests carry their own
+/// fixture, and gated by the restrictive preset.
+async fn records_app_state(pool: Pool<Postgres>, mocks: MockSet) -> erato::state::AppState {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock MCP listener");
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, mock_mcp_server::app()).await.unwrap() });
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "records".to_string(),
+        mcp_server_config(
+            &base_url,
+            "/mcp/records",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-records".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["records".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    app_state
+}
+
+fn answers_with(
+    mocks: &mut MockSet,
+    contains: &'static [&'static str],
+    excludes: &'static [&'static str],
+    actions: Vec<BodyAction>,
+) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(contains, excludes));
+        mock_llm_sse_response(then, actions.clone());
+    });
+}
+
+async fn message_content(app_state: &erato::state::AppState, message_id: Uuid) -> Vec<Value> {
+    Messages::find_by_id(message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the assistant message")
+        .raw_message["content"]
+        .as_array()
+        .unwrap()
+        .clone()
+}
+
+/// The label's field named `name` on its one item.
+fn label_field<'a>(label: &'a Value, name: &str) -> &'a Value {
+    label["items"][0]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|field| field["name"] == name)
+        .unwrap_or_else(|| panic!("no field {name} in {label}"))
+}
+
+/// A gated update of a record an earlier turn read is labelled by the rules
+/// and named from that read: the approval card shows the record's name for
+/// its ID and the value the field held, and the row the approved call is
+/// stored as keeps that label.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_gated_update_names_the_record_an_earlier_turn_read(pool: Pool<Postgres>) {
+    use mock_mcp_server::{RECORD_ID, RECORD_NAME, RECORD_STATUS};
+    const READ_ASK: &str = "Show me the record";
+    const UPDATE_ASK: &str = "Approve the record";
+    const UPDATED: &str = "updated to Approved";
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[READ_ASK],
+        &[RECORD_NAME, UPDATE_ASK],
+        build_openai_tool_calls_streaming_response(&[("call_read", "read_record", json!({}))]),
+    );
+    answers_with(
+        &mut mocks,
+        &[RECORD_NAME],
+        &[UPDATE_ASK],
+        build_openai_text_streaming_response(&["READ-ANSWER"]),
+    );
+    answers_with(
+        &mut mocks,
+        &[UPDATE_ASK],
+        &[UPDATED],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_update",
+            "update_record",
+            json!({"id": RECORD_ID, "status": "Approved"}),
+        )]),
+    );
+    answers_with(
+        &mut mocks,
+        &[UPDATED],
+        &[],
+        build_openai_text_streaming_response(&["UPDATE-ANSWER"]),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let read = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": READ_ASK }))
+        .await;
+    read.assert_status_ok();
+    let read_events = parse_sse_events(&read);
+    assert_eq!(extract_full_text(&read_events), "READ-ANSWER");
+    let read_message_id = assistant_message_id_from_events(&read_events);
+
+    let update = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": UPDATE_ASK, "previous_message_id": read_message_id }))
+        .await;
+    update.assert_status_ok();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+        &update,
+    )))
+    .unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = &card["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("rules"), &json!("update"), &json!("row"))
+    );
+    let id = &label["items"][0]["id"]["values"][0];
+    assert_eq!(
+        (&id["text"], &id["resolved"]),
+        (&json!(RECORD_ID), &json!(RECORD_NAME))
+    );
+    let status = &label_field(label, "status")["values"][0];
+    assert_eq!(
+        (&status["text"], &status["resolved"]),
+        (&json!("Approved"), &json!(RECORD_STATUS))
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "UPDATE-ANSWER"
+    );
+    let row = message_content(&app_state, message_id)
+        .await
+        .into_iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "update_record")
+        .expect("the approved call's row");
+    assert_eq!(row["status"], "success");
+    assert_eq!(row["display"]["label"], *label);
+}
+
+/// The same within one turn that reads, parks on the update and resumes. The
+/// card names the record from the read the turn just ran, and the approved
+/// call's row keeps the card's label. After the resume a second update still
+/// names the record, from the turn's own calls replayed once each, but shows
+/// no earlier status: the first update changed it, and reading the replayed
+/// read again would bring back the stale one.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgres>) {
+    use mock_mcp_server::{RECORD_ID, RECORD_NAME, RECORD_STATUS};
+    const ASK: &str = "Approve, then archive the record";
+    const APPROVED: &str = "updated to Approved";
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[APPROVED],
+        build_openai_tool_calls_streaming_response(&[
+            ("call_read", "read_record", json!({})),
+            (
+                "call_approve",
+                "update_record",
+                json!({"id": RECORD_ID, "status": "Approved"}),
+            ),
+        ]),
+    );
+    answers_with(
+        &mut mocks,
+        &[APPROVED],
+        &[],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_archive",
+            "update_record",
+            json!({"id": RECORD_ID, "status": "Archived"}),
+        )]),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let parked = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": ASK }))
+        .await;
+    parked.assert_status_ok();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+        &parked,
+    )))
+    .unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = card["display"]["label"].clone();
+    assert_eq!(
+        label["items"][0]["id"]["values"][0]["resolved"],
+        RECORD_NAME
+    );
+    assert_eq!(
+        label_field(&label, "status")["values"][0]["resolved"],
+        RECORD_STATUS
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    let content = message_content(&app_state, message_id).await;
+    let approved = content
+        .iter()
+        .find(|part| {
+            part["content_type"] == "tool_use"
+                && part["tool_call_id"] == generated_tool_call_id(message_id, 1, "call_approve")
+        })
+        .expect("the approved call's row");
+    assert_eq!(approved["status"], "success");
+    assert_eq!(approved["display"]["label"], label);
+
+    let second = content.last().unwrap();
+    assert_eq!(second["content_type"], "tool_approval_request");
+    assert_eq!(
+        second["tool_call_id"],
+        generated_tool_call_id(message_id, 2, "call_archive")
+    );
+    let second_label = &second["display"]["label"];
+    assert_eq!(
+        second_label["items"][0]["id"]["values"][0]["resolved"],
+        RECORD_NAME
+    );
+    let status = &label_field(second_label, "status")["values"][0];
+    assert_eq!(status["text"], "Archived");
+    assert!(status.get("resolved").is_none(), "{status}");
 }
 
 /// A turn that ran two calls before the gate stopped it must hand the model
@@ -7019,10 +7314,7 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             .map(|part| part["content_type"].as_str().unwrap())
             .collect();
         let settled = &resumed.raw_message["content"][3];
-        assert_eq!(
-            settled["display"]["label"]["source"], "generic",
-            "{decision}"
-        );
+        assert_eq!(settled["display"]["label"]["source"], "rules", "{decision}");
         assert_eq!(
             tool_updates[0]["display"], settled["display"],
             "{decision}: the live update carries the display the row is stored with"

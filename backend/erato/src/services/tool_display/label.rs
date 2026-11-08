@@ -7,6 +7,7 @@ mod arguments;
 pub mod context;
 pub mod pointer;
 mod recipients;
+pub mod rules;
 
 pub use arguments::readable_arguments;
 pub use context::ToolResultContext;
@@ -18,6 +19,7 @@ use crate::models::message::{
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::ops::ControlFlow;
 
 pub const MAX_LABEL_ITEMS: usize = 3;
 pub const MAX_LABEL_FIELDS: usize = 4;
@@ -56,11 +58,13 @@ pub struct ToolCallLabelItemMapping {
     pub fields: Vec<String>,
 }
 
-/// The core pointer of a mapping that reached nothing in a call.
+/// The core pointer of a mapping that reached nothing in a call, or reached
+/// a value no card shows as a fact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UnresolvedPointer {
     pub item: usize,
     pub part: &'static str,
+    pub claim: Option<rules::Claim>,
 }
 
 /// Runs a labeller so that a bug in it costs the call its label and never the
@@ -91,23 +95,146 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
     }
 }
 
+/// The label an MCP call shows: the rules' when the cross-check agrees with
+/// it, else the generic one. `tool` carries the resolved annotations, and
+/// `approval_argument` is the server's consent argument.
+pub fn mcp_call_label(
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+) -> ToolCallLabel {
+    let rules = rules::rules_label(
+        &tool.name,
+        arguments,
+        tool.annotations.as_ref(),
+        approval_argument,
+    );
+    checked_label(
+        server_id,
+        tool,
+        arguments,
+        &rules.mapping,
+        approval_argument,
+    )
+}
+
+/// A mapping's label, whatever its source, once the cross-check agrees with
+/// its verb, its core pointers all reach a value that is no consent flag or
+/// lookup name, and it shows every recipient; otherwise the generic label and
+/// a log line that names the reason and no argument value. A field that
+/// reaches such a claim is only left out. `approval_argument` is the server's
+/// consent argument, a consent flag wherever it sits.
+pub fn checked_label(
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    mapping: &ToolCallLabelMapping,
+    approval_argument: Option<&str>,
+) -> ToolCallLabel {
+    if mapping.source == ToolCallLabelSource::Generic {
+        return generic_label(arguments);
+    }
+    // The server chose the name: logs get a short, cleaned copy.
+    let tool_name = || {
+        sanitize_display_text(
+            context::text_prefix(&tool.name, MAX_DISPLAY_NAME_CHARS * 4),
+            MAX_DISPLAY_NAME_CHARS,
+        )
+        .text
+    };
+    let flags = rules::cross_check(tool, arguments, mapping.action);
+    if !flags.is_empty() {
+        let reasons = flags
+            .iter()
+            .map(|flag| flag.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        tracing::info!(
+            server_id = %server_id,
+            tool_name = ?tool_name(),
+            action = ?mapping.action,
+            source = ?mapping.source,
+            reasons = %reasons,
+            "Showing the generic label for a tool call: its verb disagrees with the tool's name or annotations"
+        );
+        return generic_label(arguments);
+    }
+    let recipients = rules::recipient_members(arguments);
+    let mapping = &rules::with_every_recipient(mapping, &recipients);
+    match resolve_label(mapping, arguments, approval_argument) {
+        Ok(label) if rules::shows_every_recipient(&label, &recipients) => label,
+        Ok(_) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                recipient_members = recipients.len(),
+                "Showing the generic label for a tool call: the label cannot show every recipient"
+            );
+            generic_label(arguments)
+        }
+        Err(UnresolvedPointer {
+            item,
+            part,
+            claim: Some(claim),
+        }) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                item,
+                part,
+                claim = claim.as_str(),
+                "Showing the generic label for a tool call: a label pointer reaches a value no card shows as a fact"
+            );
+            generic_label(arguments)
+        }
+        Err(UnresolvedPointer {
+            item,
+            part,
+            claim: None,
+        }) => {
+            tracing::info!(
+                server_id = %server_id,
+                tool_name = ?tool_name(),
+                source = ?mapping.source,
+                item,
+                part,
+                "Showing the generic label for a tool call: a label pointer reaches nothing in its arguments"
+            );
+            generic_label(arguments)
+        }
+    }
+}
+
 /// The mapping's label for one call. A core pointer that reaches nothing
 /// means the mapping does not fit the call, and the caller shows the generic
 /// label instead; a field that reaches nothing is only left out.
 pub fn resolve_label(
     mapping: &ToolCallLabelMapping,
     arguments: &Value,
+    approval_argument: Option<&str>,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
     let mut budget = MAX_LABEL_VALUE_BYTES;
     let mut hidden = false;
+    let mut reader = Reader {
+        arguments,
+        approval_argument,
+        budget: &mut budget,
+        hidden: &mut hidden,
+    };
     let items = mapping
         .items
         .iter()
         .take(MAX_LABEL_ITEMS)
         .enumerate()
         .map(|(index, item)| {
-            resolve_item(item, arguments, &mut budget, &mut hidden)
-                .map_err(|part| UnresolvedPointer { item: index, part })
+            resolve_item(item, &mut reader).map_err(|(part, claim)| UnresolvedPointer {
+                item: index,
+                part,
+                claim,
+            })
         })
         .collect::<Result<Vec<_>, _>>()?;
     let mut label = ToolCallLabel {
@@ -123,16 +250,27 @@ pub fn resolve_label(
     Ok(label)
 }
 
+/// What reading a label's slots shares: the call's arguments and consent
+/// argument, the byte budget left and whether cleaning removed characters.
+struct Reader<'a> {
+    arguments: &'a Value,
+    approval_argument: Option<&'a str>,
+    budget: &'a mut usize,
+    hidden: &'a mut bool,
+}
+
 fn resolve_item(
     item: &ToolCallLabelItemMapping,
-    arguments: &Value,
-    budget: &mut usize,
-    hidden: &mut bool,
-) -> Result<ToolCallLabelItem, &'static str> {
+    reader: &mut Reader<'_>,
+) -> Result<ToolCallLabelItem, (&'static str, Option<rules::Claim>)> {
     let mut core = |part: &'static str, pointer: &Option<String>| {
         pointer
             .as_deref()
-            .map(|pointer| slot(arguments, pointer, false, budget, hidden).ok_or(part))
+            .map(|pointer| match slot(reader, pointer, false) {
+                Ok(Some(slot)) => Ok(slot),
+                Ok(None) => Err((part, None)),
+                Err(claim) => Err((part, Some(claim))),
+            })
             .transpose()
     };
     let title = core("title", &item.title)?;
@@ -144,7 +282,7 @@ fn resolve_item(
         .fields
         .iter()
         .take(MAX_FIELD_POINTERS)
-        .filter_map(|pointer| slot(arguments, pointer, true, budget, hidden))
+        .filter_map(|pointer| slot(reader, pointer, true).ok().flatten())
         .take(MAX_LABEL_FIELDS)
         .collect();
     Ok(ToolCallLabelItem {
@@ -158,34 +296,43 @@ fn resolve_item(
 }
 
 /// `None` when the pointer reaches nothing. A null it reaches counts as
-/// reached but shows no value. Sets `hidden` when cleaning a value it reads,
-/// kept or not, or the field's name removed invisible characters.
+/// reached but shows no value. A value it would show that is a claim, such as
+/// a consent flag, costs the whole slot. Sets `hidden` when cleaning a value
+/// it reads, kept or not, or the field's name removed invisible characters.
 fn slot(
-    arguments: &Value,
+    reader: &mut Reader<'_>,
     pointer: &str,
     field: bool,
-    budget: &mut usize,
-    hidden: &mut bool,
-) -> Option<ToolCallLabelSlot> {
+) -> Result<Option<ToolCallLabelSlot>, rules::Claim> {
+    let (arguments, approval_argument) = (reader.arguments, reader.approval_argument);
+    let start = *reader.budget;
     let mut values = Vec::new();
     let mut omitted = 0u32;
     let mut out_of_budget = false;
+    let mut claim = None;
     let mut keep = |path: Option<&str>, index: Option<usize>, value: &Value| {
         let room = values.len() < MAX_SLOT_VALUES && !out_of_budget;
         let Some(path) = path.filter(|_| room) else {
             omitted = omitted.saturating_add(1);
-            return;
+            return ControlFlow::Continue(());
         };
         let path = match index {
             Some(index) => format!("{path}/{index}"),
             None => path.to_string(),
         };
-        let Some(value) = label_value(path, value, hidden) else {
-            return;
+        if let Some(found) = rules::claim(arguments, &path, approval_argument) {
+            claim = Some(found);
+            return ControlFlow::Break(());
+        }
+        let Some(value) = label_value(path, value, reader.hidden) else {
+            return ControlFlow::Continue(());
         };
-        match budget.checked_sub(value.text.len() + value.path.len()) {
+        match reader
+            .budget
+            .checked_sub(value.text.len() + value.path.len())
+        {
             Some(left) => {
-                *budget = left;
+                *reader.budget = left;
                 values.push(value);
             }
             None => {
@@ -193,33 +340,69 @@ fn slot(
                 omitted = omitted.saturating_add(1);
             }
         }
+        ControlFlow::Continue(())
     };
     let reached = pointer::visit(arguments, pointer, |path, value| {
         // An array reached whole lists its entries, as `*` would.
         match value {
             Value::Array(entries) => {
                 for (index, entry) in entries.iter().enumerate() {
-                    keep(path, Some(index), entry);
+                    keep(path, Some(index), entry)?;
                 }
+                ControlFlow::Continue(())
             }
             value => keep(path, None, value),
         }
-        std::ops::ControlFlow::Continue(())
     });
+    if let Some(claim) = claim {
+        *reader.budget = start;
+        return Err(claim);
+    }
     if reached == 0 {
-        return None;
+        return Ok(None);
     }
     let name = field
-        .then(|| pointer::last_name(pointer))
+        .then(|| field_name(pointer))
         .flatten()
         .map(|name| sanitize_display_text(&name, MAX_DISPLAY_NAME_CHARS));
-    *hidden |= name.as_ref().is_some_and(|name| name.hidden_characters);
-    Some(ToolCallLabelSlot {
+    *reader.hidden |= name.as_ref().is_some_and(|name| name.hidden_characters);
+    Ok(Some(ToolCallLabelSlot {
         pointer: pointer.to_string(),
         name: name.map(|name| name.text).filter(|name| !name.is_empty()),
         values,
         omitted,
-    })
+    }))
+}
+
+/// What a field is called on a card: its last member, unless that only holds
+/// the ID or address of what the member before it names, as in
+/// `/cc/*/emailAddress/address` or `/customer/recordId`.
+fn field_name(pointer: &str) -> Option<std::borrow::Cow<'_, str>> {
+    const HANDLES: [&str; 8] = [
+        "id",
+        "recordid",
+        "email",
+        "emailaddress",
+        "address",
+        "mail",
+        "userprincipalname",
+        "upn",
+    ];
+    let mut names = pointer::member_names(pointer);
+    let is_handle = |name: &str| {
+        let bare: String = name
+            .chars()
+            .take(32)
+            .filter(|c| !matches!(c, '_' | '-'))
+            .map(|c| c.to_ascii_lowercase())
+            .collect();
+        name.len() <= 32 && HANDLES.contains(&bare.as_str())
+    };
+    let at = names
+        .iter()
+        .rposition(|name| !is_handle(name))
+        .unwrap_or(names.len().checked_sub(1)?);
+    Some(names.swap_remove(at))
 }
 
 /// Sets `hidden` also when nothing visible is left of the value to show.
@@ -331,7 +514,7 @@ mod tests {
     #[test]
     fn values_are_read_through_wildcards_and_cleaned() {
         let arguments = notion_batch();
-        let label = resolve_label(&create_rows(), &arguments).unwrap();
+        let label = resolve_label(&create_rows(), &arguments, None).unwrap();
         assert_eq!(
             (label.action, label.object_kind, label.source),
             (
@@ -388,13 +571,15 @@ mod tests {
             }],
             ..create_rows()
         };
-        let warnings =
-            |mapping: &ToolCallLabelMapping| resolve_label(mapping, &arguments).unwrap().warnings;
+        let warnings = |mapping: &ToolCallLabelMapping| {
+            resolve_label(mapping, &arguments, None).unwrap().warnings
+        };
         let hidden = [ToolCallLabelWarning::HiddenCharacters];
 
         let label = resolve_label(
             &mapping("/pages/*/properties/Name", "/parent", &[]),
             &arguments,
+            None,
         )
         .unwrap();
         assert_eq!(texts(label.items[0].title.as_ref().unwrap()), ["Invoice"]);
@@ -443,6 +628,7 @@ mod tests {
         let emoji = resolve_label(
             &mapping("/pages/*/properties/Name", &["/pages/*/properties/Stage"]),
             &arguments,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -452,29 +638,31 @@ mod tests {
         assert_eq!(texts(&emoji.items[0].fields[0]), ["Hot \u{2600}\u{FE0F}"]);
         assert!(emoji.warnings.is_empty());
 
-        let smuggled = resolve_label(&mapping("/smuggled", &[]), &arguments).unwrap();
+        let smuggled = resolve_label(&mapping("/smuggled", &[]), &arguments, None).unwrap();
         assert_eq!(
             texts(smuggled.items[0].title.as_ref().unwrap()),
             ["\u{1F600}\u{FE0F}"]
         );
         assert_eq!(smuggled.warnings, [ToolCallLabelWarning::HiddenCharacters]);
 
-        let soft = resolve_label(&mapping("/parent", &["/Sta\u{00AD}ge"]), &arguments).unwrap();
+        let soft =
+            resolve_label(&mapping("/parent", &["/Sta\u{00AD}ge"]), &arguments, None).unwrap();
         assert_eq!(soft.items[0].fields[0].name.as_deref(), Some("Stage"));
         assert_eq!(soft.warnings, [ToolCallLabelWarning::HiddenCharacters]);
 
-        let selector = resolve_label(&mapping("/parent", &["/Sta\u{FE0F}ge"]), &arguments).unwrap();
+        let selector =
+            resolve_label(&mapping("/parent", &["/Sta\u{FE0F}ge"]), &arguments, None).unwrap();
         assert_eq!(selector.items[0].fields[0].name.as_deref(), Some("Stage"));
         assert_eq!(selector.warnings, [ToolCallLabelWarning::HiddenCharacters]);
 
-        let joined = resolve_label(&mapping("/family", &["/joined"]), &arguments).unwrap();
+        let joined = resolve_label(&mapping("/family", &["/joined"]), &arguments, None).unwrap();
         assert_eq!(
             texts(joined.items[0].title.as_ref().unwrap()),
             ["\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} and \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}"]
         );
         assert_eq!(texts(&joined.items[0].fields[0]), ["Lead"]);
         assert_eq!(joined.warnings, [ToolCallLabelWarning::HiddenCharacters]);
-        let family = resolve_label(&mapping("/family", &[]), &arguments).unwrap();
+        let family = resolve_label(&mapping("/family", &[]), &arguments, None).unwrap();
         assert!(family.warnings.is_empty());
     }
 
@@ -493,23 +681,28 @@ mod tests {
                 _ => item.after = pointer,
             }
             assert_eq!(
-                resolve_label(&mapping, &arguments),
-                Err(UnresolvedPointer { item: 0, part })
+                resolve_label(&mapping, &arguments, None),
+                Err(UnresolvedPointer {
+                    item: 0,
+                    part,
+                    claim: None
+                })
             );
         }
         let mut mapping = create_rows();
         mapping.items.insert(0, ToolCallLabelItemMapping::default());
         mapping.items[1].after = Some("not a pointer".into());
         assert_eq!(
-            resolve_label(&mapping, &arguments),
+            resolve_label(&mapping, &arguments, None),
             Err(UnresolvedPointer {
                 item: 1,
-                part: "after"
+                part: "after",
+                claim: None
             })
         );
         let mut mapping = create_rows();
         mapping.items[0].before = Some("/pages/1/properties/Seats".into());
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert!(label.items[0].before.as_ref().unwrap().values.is_empty());
     }
 
@@ -536,7 +729,7 @@ mod tests {
             ],
             source: ToolCallLabelSource::Model,
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert_eq!(label.items.len(), MAX_LABEL_ITEMS);
         let item = &label.items[0];
         let title = item.title.as_ref().unwrap();
@@ -589,7 +782,7 @@ mod tests {
         assert_eq!(label.warnings, [ToolCallLabelWarning::ArgumentsTruncated]);
     }
 
-    fn hostile_arguments() -> Vec<Value> {
+    pub(super) fn hostile_arguments() -> Vec<Value> {
         let mut deep = json!("leaf");
         for _ in 0..120 {
             deep = json!({ "next": [deep] });
@@ -667,10 +860,12 @@ mod tests {
             let stored = serde_json::to_string(&generic).unwrap().len();
             assert!(stored < 64 * 1024, "generic label of {stored} bytes");
 
-            let label = guarded(|| match resolve_label(&hostile_mapping(), &arguments) {
-                Ok(label) => label,
-                Err(_) => generic_label(&arguments),
-            })
+            let label = guarded(
+                || match resolve_label(&hostile_mapping(), &arguments, None) {
+                    Ok(label) => label,
+                    Err(_) => generic_label(&arguments),
+                },
+            )
             .unwrap();
             let stored = serde_json::to_string(&label).unwrap().len();
             assert!(stored < 128 * 1024, "label of {stored} bytes");
@@ -683,7 +878,7 @@ mod tests {
                     }],
                     ..hostile_mapping()
                 };
-                if let Ok(label) = resolve_label(&mapping, &arguments) {
+                if let Ok(label) = resolve_label(&mapping, &arguments, None) {
                     assert_eq!(label.items.len(), 1);
                     assert!(serde_json::to_string(&label).unwrap().len() < 64 * 1024);
                 }
@@ -697,12 +892,13 @@ mod tests {
             .map(|i| json!({ "title": format!("{i:03}{}", "w".repeat(MAX_LABEL_VALUE_CHARS)) }))
             .collect();
         let arguments = json!({ "pages": pages });
-        let label = resolve_label(&hostile_mapping(), &arguments);
+        let label = resolve_label(&hostile_mapping(), &arguments, None);
         assert_eq!(
             label,
             Err(UnresolvedPointer {
                 item: 0,
-                part: "before"
+                part: "before",
+                claim: None
             })
         );
 
@@ -717,7 +913,7 @@ mod tests {
             items: vec![item; MAX_LABEL_ITEMS],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         let slots: Vec<_> = label
             .items
             .iter()
@@ -776,7 +972,7 @@ mod tests {
             }],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         assert!(label.items[0].fields.is_empty());
 
         let mapping = ToolCallLabelMapping {
@@ -786,7 +982,7 @@ mod tests {
             }],
             ..create_rows()
         };
-        let label = resolve_label(&mapping, &arguments).unwrap();
+        let label = resolve_label(&mapping, &arguments, None).unwrap();
         let names: Vec<_> = label.items[0]
             .fields
             .iter()
@@ -840,7 +1036,7 @@ mod tests {
 
     #[test]
     fn stored_labels_round_trip_and_tolerate_newer_values() {
-        let label = resolve_label(&create_rows(), &notion_batch()).unwrap();
+        let label = resolve_label(&create_rows(), &notion_batch(), None).unwrap();
         let display = ToolDisplayMetadata {
             title: "Create pages".into(),
             description: None,
@@ -882,5 +1078,378 @@ mod tests {
         )
         .unwrap();
         assert_eq!(older.label, None);
+    }
+
+    #[derive(Clone, Default)]
+    struct Capture(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Capture {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The label `run` computes and what it logged.
+    fn logged(run: impl FnOnce() -> ToolCallLabel) -> (ToolCallLabel, String) {
+        let capture = Capture::default();
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        let label = tracing::subscriber::with_default(subscriber, run);
+        let log = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
+        (label, log)
+    }
+
+    fn create_page(annotations: Option<rmcp::model::ToolAnnotations>) -> rmcp::model::Tool {
+        let mut tool = rmcp::model::Tool::new(
+            "create_page",
+            "Creates a page.",
+            rmcp::model::JsonObject::new(),
+        );
+        tool.annotations = annotations;
+        tool
+    }
+
+    #[test]
+    fn an_mcp_call_shows_the_rules_label_unless_its_resolved_hints_disagree() {
+        let arguments = json!({"title": "Secret plan", "parent_id": "secret-parent"});
+        let hints = |read_only, destructive| {
+            Some(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                read_only,
+                destructive,
+                None,
+                None,
+            ))
+        };
+        // An absent destructive hint says nothing; normalized, it would read
+        // as destructive and flag every create.
+        for annotations in [None, hints(Some(false), None)] {
+            let (label, log) =
+                logged(|| mcp_call_label("notion", &create_page(annotations), &arguments, None));
+            assert_eq!(
+                (label.action, label.source),
+                (ToolCallAction::Create, ToolCallLabelSource::Rules)
+            );
+            assert_eq!(
+                texts(label.items[0].title.as_ref().unwrap()),
+                ["Secret plan"]
+            );
+            assert!(log.is_empty(), "{log}");
+        }
+
+        let (label, log) = logged(|| {
+            mcp_call_label(
+                "notion",
+                &create_page(hints(Some(true), None)),
+                &arguments,
+                None,
+            )
+        });
+        assert_eq!(label, generic_label(&arguments));
+        for expected in ["notion", "create_page", "read_only_annotation", "Create"] {
+            assert!(log.contains(expected), "{expected}: {log}");
+        }
+        assert!(
+            !log.contains("Secret") && !log.contains("secret-parent"),
+            "{log}"
+        );
+    }
+
+    #[test]
+    fn a_label_from_any_source_falls_back_to_generic_when_checks_fail() {
+        let arguments = notion_batch();
+        let tool = rmcp::model::Tool::new(
+            "notion-create-pages",
+            "Creates pages.",
+            rmcp::model::JsonObject::new(),
+        );
+        let model = ToolCallLabelMapping {
+            source: ToolCallLabelSource::Model,
+            ..create_rows()
+        };
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &model, None));
+        assert_eq!(label, resolve_label(&model, &arguments, None).unwrap());
+        assert!(log.is_empty(), "{log}");
+
+        let deleting = ToolCallLabelMapping {
+            action: ToolCallAction::Delete,
+            ..model.clone()
+        };
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &deleting, None));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(log.contains("name_verb") && log.contains("Model"), "{log}");
+
+        let mut missing = model.clone();
+        missing.items[0].after = Some("/pages/*/body".into());
+        let (label, log) = logged(|| checked_label("notion", &tool, &arguments, &missing, None));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(
+            log.contains("part=\"after\"") || log.contains("part=after"),
+            "{log}"
+        );
+        assert!(!log.contains("Acme"), "{log}");
+
+        let generic = ToolCallLabelMapping {
+            source: ToolCallLabelSource::Generic,
+            ..deleting
+        };
+        assert_eq!(
+            checked_label("notion", &tool, &arguments, &generic, None),
+            generic_label(&arguments)
+        );
+
+        let changes = json!({"changes": [{"op": "delete", "thread": "t_1"}]});
+        let schema = json!({"type": "object", "properties": {"changes": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"op": {"type": "string"}, "thread": {"type": "string"}}},
+        }}});
+        let word = rmcp::model::Tool::new(
+            "word_submit_comment_changes",
+            "Changes comments.",
+            schema.as_object().unwrap().clone(),
+        );
+        let creating = ToolCallLabelMapping {
+            action: ToolCallAction::Create,
+            object_kind: ToolCallObjectKind::Comment,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/changes/*/thread".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let (label, log) = logged(|| checked_label("word", &word, &changes, &creating, None));
+        assert_eq!(label, generic_label(&changes));
+        assert!(log.contains("field_verb"), "{log}");
+    }
+
+    fn update_record() -> rmcp::model::Tool {
+        rmcp::model::Tool::new(
+            "update_record",
+            "Updates a record.",
+            rmcp::model::JsonObject::new(),
+        )
+    }
+
+    fn consent_and_lookup() -> Value {
+        json!({
+            "recordId": "r_1",
+            "hasUserApproved": true,
+            "options": {"has_user_approved": "yes", "approved": true, "marketing_consent": true},
+            "confirmedByUser": "yes",
+            "item": {
+                "statuscode": 2,
+                "customer": {"recordId": "c_1", "relatedTable": "account", "name": "Typed by the model"},
+            },
+        })
+    }
+
+    #[test]
+    fn no_label_source_shows_a_consent_flag_or_a_lookup_s_name() {
+        let arguments = consent_and_lookup();
+        let tool = update_record();
+        let configured = Some("confirmedByUser");
+        for source in [
+            ToolCallLabelSource::Rules,
+            ToolCallLabelSource::Model,
+            ToolCallLabelSource::OwnMapping,
+        ] {
+            let mapping = |item: ToolCallLabelItemMapping| ToolCallLabelMapping {
+                action: ToolCallAction::Update,
+                object_kind: ToolCallObjectKind::Row,
+                items: vec![item],
+                source,
+            };
+            let fields = mapping(ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec![
+                    "/hasUserApproved".into(),
+                    "/options/has_user_approved".into(),
+                    "/confirmedByUser".into(),
+                    "/item/customer/name".into(),
+                    "/item/customer/*".into(),
+                    "/*".into(),
+                    "/options/approved".into(),
+                    "/options/marketing_consent".into(),
+                    "/item/statuscode".into(),
+                ],
+                ..Default::default()
+            });
+            let (label, log) =
+                logged(|| checked_label("crm", &tool, &arguments, &fields, configured));
+            assert_eq!(label.source, source);
+            let shown: Vec<_> = label.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.as_str())
+                .collect();
+            assert_eq!(
+                shown,
+                [
+                    "/options/approved",
+                    "/options/marketing_consent",
+                    "/item/statuscode"
+                ],
+                "{source:?}"
+            );
+            assert!(log.is_empty(), "{log}");
+
+            for (part, pointer, claim) in [
+                ("title", "/hasUserApproved", "consent_flag"),
+                ("title", "/item/customer/name", "lookup_name"),
+                ("target", "/item/customer/name", "lookup_name"),
+                ("before", "/options/has_user_approved", "consent_flag"),
+                ("target", "/confirmedByUser", "consent_flag"),
+                ("after", "/item/customer/*", "lookup_name"),
+            ] {
+                let mut item = ToolCallLabelItemMapping {
+                    id: Some("/recordId".into()),
+                    ..Default::default()
+                };
+                let pointer = Some(pointer.to_string());
+                match part {
+                    "title" => item.title = pointer,
+                    "target" => item.target = pointer,
+                    "before" => item.before = pointer,
+                    _ => item.after = pointer,
+                }
+                let (label, log) =
+                    logged(|| checked_label("crm", &tool, &arguments, &mapping(item), configured));
+                assert_eq!(label, generic_label(&arguments), "{part}");
+                assert!(log.contains(claim) && log.contains(part), "{log}");
+                assert!(!log.contains("Typed by the model"), "{log}");
+            }
+        }
+        // The rules never point at a claim, so their label is unchanged.
+        let rules_fields = |approval_argument| {
+            let rules = mcp_call_label("crm", &tool, &arguments, approval_argument);
+            assert_eq!(rules.source, ToolCallLabelSource::Rules);
+            rules.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            rules_fields(configured),
+            [
+                "/options/approved",
+                "/options/marketing_consent",
+                "/item/statuscode",
+                "/item/customer/recordId",
+            ]
+        );
+        // Without the server's setting, the member is the record's data.
+        assert_eq!(
+            rules_fields(None),
+            [
+                "/options/approved",
+                "/options/marketing_consent",
+                "/confirmedByUser",
+                "/item/statuscode",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_label_from_any_source_names_every_recipient_or_is_generic() {
+        let arguments = json!({
+            "to": ["ann@example.com"],
+            "cc": [{"emailAddress": {"address": "bob@example.com", "name": "Bob"}}],
+            "bcc": ["cy@example.com"],
+            "subject": "Q3",
+        });
+        let tool = rmcp::model::Tool::new(
+            "send_email",
+            "Sends an email.",
+            rmcp::model::JsonObject::new(),
+        );
+        let only_to = ToolCallLabelMapping {
+            action: ToolCallAction::Send,
+            object_kind: ToolCallObjectKind::Email,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/subject".into()),
+                target: Some("/to".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        for mapping in [
+            only_to.clone(),
+            rules::rules_label("send_email", &arguments, None, None).mapping,
+        ] {
+            let label = checked_label("mail", &tool, &arguments, &mapping, None);
+            assert_eq!(label.action, ToolCallAction::Send);
+            let item = &label.items[0];
+            assert_eq!(texts(item.target.as_ref().unwrap()), ["ann@example.com"]);
+            let fields: Vec<_> = item
+                .fields
+                .iter()
+                .map(|field| (field.name.as_deref().unwrap(), texts(field)))
+                .collect();
+            assert_eq!(
+                fields,
+                [
+                    ("cc", vec!["bob@example.com"]),
+                    ("bcc", vec!["cy@example.com"])
+                ]
+            );
+        }
+
+        let crowded: serde_json::Map<String, Value> =
+            ["to", "cc", "bcc", "attendees", "invitees", "participants"]
+                .into_iter()
+                .map(|member| (member.to_string(), json!(["x@example.com"])))
+                .chain([("subject".to_string(), json!("Q3"))])
+                .collect();
+        let crowded = Value::Object(crowded);
+        let (label, log) = logged(|| checked_label("mail", &tool, &crowded, &only_to, None));
+        assert_eq!(label, generic_label(&crowded));
+        assert!(log.contains("every recipient"), "{log}");
+        assert_eq!(
+            mcp_call_label("mail", &tool, &crowded, None),
+            generic_label(&crowded)
+        );
+    }
+
+    #[test]
+    fn a_field_is_named_after_what_its_id_or_address_belongs_to() {
+        for (pointer, name) in [
+            ("/cc/*/emailAddress/address", Some("cc")),
+            ("/item/customer/recordId", Some("customer")),
+            ("/attendees/*/email", Some("attendees")),
+            ("/pages/*/properties/Name", Some("Name")),
+            ("/page_id", Some("page_id")),
+            ("/id", Some("id")),
+            ("/a/id/email", Some("a")),
+            ("/*", None),
+        ] {
+            assert_eq!(field_name(pointer).as_deref(), name, "{pointer}");
+        }
+    }
+
+    #[test]
+    fn hostile_tool_names_reach_the_log_short_and_cleaned() {
+        let arguments = json!({"title": "Plan"});
+        let mut tool = create_page(Some(rmcp::model::ToolAnnotations::from_raw(
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+        )));
+        tool.name = format!("create_page\n\u{202E}{}", "x".repeat(1024 * 1024)).into();
+        let (label, log) = logged(|| mcp_call_label("notion", &tool, &arguments, None));
+        assert_eq!(label, generic_label(&arguments));
+        assert!(log.len() < 4 * 1024, "{} bytes", log.len());
+        assert!(!log.contains('\u{202E}'), "{log}");
+        assert_eq!(log.lines().count(), 1, "{log}");
     }
 }

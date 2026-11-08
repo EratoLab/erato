@@ -9321,7 +9321,7 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
         .find(|part| part["tool_name"] == "publish_approval_probe")
         .expect("the refused call keeps its row");
     assert_eq!(refused["status"], "error");
-    assert_eq!(refused["display"]["label"]["source"], "generic");
+    assert_eq!(refused["display"]["label"]["source"], "rules");
 }
 
 /// A task that is still running is already on disk, at the slot it will settle
@@ -15823,7 +15823,7 @@ async fn task_child_parks_and_parent_surfaces_one_delegated_task_approval(pool: 
         "the child keeps its own request: that row, not the copy, is what a \
          continuation decides against"
     );
-    assert_eq!(child_ref["display"]["label"]["source"], "generic");
+    assert_eq!(child_ref["display"]["label"]["source"], "rules");
     assert_eq!(
         child_ref["display"],
         child_content.last().unwrap()["display"],

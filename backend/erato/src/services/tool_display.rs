@@ -39,7 +39,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 /// the server's name from the live config and the call's label, with the IDs
 /// it names resolved from earlier results in the chat, stored with the call's
 /// parts. `approval_argument` is the tool's consent argument, which the label
-/// leaves out.
+/// leaves out; the server's configured one is a consent flag on any tool.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -49,15 +49,22 @@ pub fn mcp_tool_call_display(
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
     let arguments = without_approval_argument(arguments, approval_argument);
+    let consent = approval_argument.or_else(|| {
+        config
+            .mcp_servers
+            .get(server_id)
+            .and_then(|server| server.approval_argument.as_deref())
+    });
     let scope = names_scope(config, server_id);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
-        let mut label = label::generic_label(&arguments);
+        let mut label = label::mcp_call_label(server_id, tool, &arguments, consent);
         if let Some(server) = &scope {
             context.resolve(&mut label, &arguments, server);
         }
         label
     })
+    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, &arguments, consent)))
     .or_else(|| label::guarded(|| label::generic_label(&arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
@@ -125,6 +132,7 @@ pub fn tool_row_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
     use rmcp::model::{JsonObject, Tool, ToolAnnotations};
 
     #[test]
@@ -261,7 +269,22 @@ mod tests {
             None,
             &Default::default(),
         );
-        assert_eq!(display.label, Some(label::generic_label(&arguments)));
+        let rules = display.label.as_ref().unwrap();
+        assert_eq!(
+            (rules.action, rules.object_kind, rules.source),
+            (
+                ToolCallAction::Create,
+                ToolCallObjectKind::Row,
+                ToolCallLabelSource::Rules
+            )
+        );
+        let item = &rules.items[0];
+        assert_eq!(item.title.as_ref().unwrap().values[0].text, "Contoso");
+        assert_eq!(
+            item.target.as_ref().unwrap().pointer,
+            "/item/parentaccountid"
+        );
+        assert_eq!(rules.arguments, label::generic_label(&arguments).arguments);
         let paths: Vec<_> = display
             .label
             .as_ref()
@@ -303,23 +326,33 @@ mod tests {
             "item": {"hasUserApproved": "a member of the record"},
             "zeta": 1,
         });
-        let display = mcp_tool_call_display(
-            &config,
-            "dv",
-            &tool,
-            &arguments,
-            Some("hasUserApproved"),
-            &Default::default(),
-        );
-        assert_eq!(display.label, Some(label::generic_label(&without)));
+        let label_of = |arguments: &serde_json::Value, approval_argument| {
+            mcp_tool_call_display(
+                &config,
+                "dv",
+                &tool,
+                arguments,
+                approval_argument,
+                &Default::default(),
+            )
+            .label
+            .unwrap()
+        };
+        let shown = label_of(&arguments, Some("hasUserApproved"));
         assert_eq!(
-            mcp_tool_call_display(&config, "dv", &tool, &arguments, None, &Default::default())
-                .label,
-            Some(label::generic_label(&arguments))
+            (
+                shown.action,
+                shown.items[0].id.as_ref().unwrap().pointer.as_str()
+            ),
+            (ToolCallAction::Delete, "/recordId")
         );
+        assert_eq!(shown.arguments, label::generic_label(&without).arguments);
+        let kept = label_of(&arguments, None);
+        assert_eq!(kept.items, shown.items);
+        assert_eq!(kept.arguments, label::generic_label(&arguments).arguments);
         assert_ne!(
-            label::generic_label(&arguments),
-            label::generic_label(&without)
+            label::generic_label(&arguments).arguments,
+            label::generic_label(&without).arguments
         );
         for unchanged in [
             serde_json::json!({"recordId": "r1"}),
@@ -327,16 +360,8 @@ mod tests {
             serde_json::json!([{"hasUserApproved": true}]),
         ] {
             assert_eq!(
-                mcp_tool_call_display(
-                    &config,
-                    "dv",
-                    &tool,
-                    &unchanged,
-                    Some("hasUserApproved"),
-                    &Default::default()
-                )
-                .label,
-                Some(label::generic_label(&unchanged))
+                label_of(&unchanged, Some("hasUserApproved")).arguments,
+                label::generic_label(&unchanged).arguments
             );
         }
 
@@ -351,7 +376,7 @@ mod tests {
             source: crate::models::message::ToolCallLabelSource::Rules,
         };
         let shown = without_approval_argument(&arguments, Some("hasUserApproved"));
-        let label = label::resolve_label(&mapping, &shown).unwrap();
+        let label = label::resolve_label(&mapping, &shown, None).unwrap();
         let paths: Vec<_> = label.items[0].fields[0]
             .values
             .iter()
@@ -365,7 +390,59 @@ mod tests {
             }],
             ..mapping
         };
-        assert!(label::resolve_label(&consent, &shown).is_err());
+        assert!(label::resolve_label(&consent, &shown, None).is_err());
+    }
+
+    #[test]
+    fn the_server_s_approval_argument_is_a_consent_flag_on_every_tool() {
+        let server = |approval_argument: Option<&str>| {
+            let mut server = serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            });
+            if let Some(name) = approval_argument {
+                server["approval_argument"] = name.into();
+            }
+            server
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dv": server(Some("userConfirmed")),
+                "crm": server(None),
+            }
+        }))
+        .unwrap();
+        // The tool does not declare the argument, so the call keeps it.
+        let tool = Tool::new("update_record", "Updates a record.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "recordId": "r1",
+            "userConfirmed": true,
+            "marketing_consent": true,
+            "statuscode": 2,
+        });
+        let fields = |server_id: &str| {
+            let label = mcp_tool_call_display(
+                &config,
+                server_id,
+                &tool,
+                &arguments,
+                None,
+                &Default::default(),
+            )
+            .label
+            .unwrap();
+            assert_eq!(label.arguments, label::generic_label(&arguments).arguments);
+            label.items[0]
+                .fields
+                .iter()
+                .map(|field| field.pointer.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(fields("dv"), ["/marketing_consent", "/statuscode"]);
+        assert_eq!(
+            fields("crm"),
+            ["/userConfirmed", "/marketing_consent", "/statuscode"]
+        );
     }
 
     #[test]
@@ -382,7 +459,10 @@ mod tests {
             &Default::default(),
         )
         .label;
-        assert_eq!(expected, Some(label::generic_label(&arguments)));
+        assert_eq!(
+            expected.as_ref().map(|label| label.source),
+            Some(crate::models::message::ToolCallLabelSource::Rules)
+        );
 
         let mut schema = JsonObject::new();
         schema.insert("type".into(), serde_json::json!(42));
@@ -395,10 +475,8 @@ mod tests {
         let mut hostile = Tool::new("publish\u{202E}\u{200B}", "x".repeat(1024 * 1024), schema);
         let mut annotations = ToolAnnotations::default();
         annotations.title = Some("\u{E0041}".repeat(1_000));
-        annotations.read_only_hint = Some(true);
-        annotations.destructive_hint = Some(true);
         annotations.idempotent_hint = Some(false);
-        hostile.annotations = Some(annotations);
+        hostile.annotations = Some(annotations.clone());
         hostile.title = Some("\u{200B}\u{FEFF}".into());
         let display = mcp_tool_call_display(
             &config,
@@ -409,6 +487,18 @@ mod tests {
             &Default::default(),
         );
         assert_eq!(display.label, expected);
+        annotations.read_only_hint = Some(true);
+        annotations.destructive_hint = Some(true);
+        hostile.annotations = Some(annotations);
+        let display = mcp_tool_call_display(
+            &config,
+            "notion",
+            &hostile,
+            &arguments,
+            None,
+            &Default::default(),
+        );
+        assert_eq!(display.label, Some(label::generic_label(&arguments)));
         assert_eq!(display.title, "publish");
         assert!(display.description_truncated);
         assert!(serde_json::to_string(&display).unwrap().len() < 32 * 1024);
@@ -425,6 +515,54 @@ mod tests {
             .map(|label| label.source),
             Some(crate::models::message::ToolCallLabelSource::Generic)
         );
+    }
+
+    #[test]
+    fn a_mail_card_names_every_recipient_and_no_claim_the_model_made() {
+        let config = McpRuntimeConfig::default();
+        let tool = Tool::new("send_email", "Sends an email.", JsonObject::new());
+        let arguments = serde_json::json!({
+            "to": ["ann@example.com"],
+            "cc": ["bob@example.com"],
+            "bcc": ["cy@example.com"],
+            "subject": "Q3",
+            "body": "Numbers attached.",
+            "hasUserApproved": true,
+            "account": {"recordId": "a_1", "relatedTable": "account", "name": "Typed name"},
+        });
+        let label = mcp_tool_call_display(
+            &config,
+            "mail",
+            &tool,
+            &arguments,
+            None,
+            &Default::default(),
+        )
+        .label
+        .unwrap();
+        assert_eq!(
+            (label.action, label.source),
+            (ToolCallAction::Send, ToolCallLabelSource::Rules)
+        );
+        let item = &label.items[0];
+        let shown: Vec<_> = [&item.title, &item.target, &item.after]
+            .into_iter()
+            .flatten()
+            .chain(&item.fields)
+            .map(|slot| (slot.pointer.as_str(), slot.values[0].text.as_str()))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("/subject", "Q3"),
+                ("/to", "ann@example.com"),
+                ("/body", "Numbers attached."),
+                ("/cc", "bob@example.com"),
+                ("/bcc", "cy@example.com"),
+            ]
+        );
+        let stored = serde_json::to_string(&label).unwrap();
+        assert!(!stored.contains("Typed name"), "{stored}");
     }
 
     #[test]
@@ -469,7 +607,7 @@ mod tests {
             }],
             source: ToolCallLabelSource::Rules,
         };
-        let written = resolve_label(&mapping, &arguments).unwrap();
+        let written = resolve_label(&mapping, &arguments, None).unwrap();
         let mut resolved = written.clone();
         let item = &mut resolved.items[0];
         let mut set = 0;
