@@ -3,7 +3,10 @@ import {
   SidecarClientError,
   SidecarRpcError,
 } from "@erato/desktop-sidecar-protocol";
+import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { setClientPlatform } from "@/lib/clientPlatform";
 
 import {
   completedJob,
@@ -369,6 +372,34 @@ describe("runSidecarJob", () => {
     };
     const waiting = () => useSidecarReviewStore.getState().waitingByChatId;
 
+    it("names this client and its language on the review request", async () => {
+      vi.useFakeTimers();
+      const locale = vi.spyOn(i18n, "locale", "get").mockReturnValue("de");
+      setClientPlatform("outlook");
+      try {
+        const { client, requests } = fakeSidecarClient((method) => {
+          if (method === "jobs.status.v1") return at(approved, maxWaitMs);
+          if (method === "jobs.ack.v1")
+            return { result: { handle: JOB_HANDLE, state: "acked" } };
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const result = runSidecarJob(client, "search_sidecar_index", {
+          query: "report",
+        });
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS + maxWaitMs);
+        await result;
+        expect(
+          requests.find(({ method }) => method === "jobs.review.v1")?.params,
+        ).toEqual({
+          handle: JOB_HANDLE,
+          client: { platform: "outlook", locale: "de" },
+        });
+      } finally {
+        setClientPlatform("web");
+        locale.mockRestore();
+      }
+    });
+
     it("opens the native review once, keeps polling with wait_ms and returns the approved result", async () => {
       vi.useFakeTimers();
       let polls = 0;
@@ -402,7 +433,10 @@ describe("runSidecarJob", () => {
         "jobs.status.v1",
         "jobs.ack.v1",
       ]);
-      expect(requests[1].params).toEqual({ handle: JOB_HANDLE });
+      expect(requests[1].params).toEqual({
+        handle: JOB_HANDLE,
+        client: expect.objectContaining({ platform: "web" }),
+      });
       for (const poll of requests.filter(
         ({ method }) => method === "jobs.status.v1",
       ))

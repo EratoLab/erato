@@ -4953,7 +4953,7 @@ return errors === 0;
 }
 
 export const validateJobsReviewV1Params = validate76;
-const schema67 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json","title":"JobsReviewV1Params","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"}},"required":["handle"],"additionalProperties":true};
+const schema67 = {"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json","title":"JobsReviewV1Params","type":"object","properties":{"handle":{"type":"string","pattern":"^[A-Za-z0-9_-]{32,128}$"},"client":{"type":"object","description":"Who asks for the review (package 0.1.48), as the client declares it. Display data the sidecar does not check: the review window names the client and uses its language. A value the sidecar cannot use is dropped, not refused.","properties":{"platform":{"type":"string","description":"The client's surface, its X-Erato-Platform value such as web or outlook."},"locale":{"type":"string","description":"The client's active language as a BCP-47 tag."}},"additionalProperties":true}},"required":["handle"],"additionalProperties":true};
 
 function validate76(data, {instancePath="", parentData, parentDataProperty, rootData=data}={}){
 /*# sourceURL="https://schemas.erato.ai/desktop-sidecar/v1/methods/jobs-review-v1-params.schema.json" */;
@@ -4995,14 +4995,53 @@ vErrors.push(err2);
 errors++;
 }
 }
-}
-else {
-const err3 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(data.client !== undefined){
+let data1 = data.client;
+if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
+if(data1.platform !== undefined){
+if(typeof data1.platform !== "string"){
+const err3 = {instancePath:instancePath+"/client/platform",schemaPath:"#/properties/client/properties/platform/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err3];
 }
 else {
 vErrors.push(err3);
+}
+errors++;
+}
+}
+if(data1.locale !== undefined){
+if(typeof data1.locale !== "string"){
+const err4 = {instancePath:instancePath+"/client/locale",schemaPath:"#/properties/client/properties/locale/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err4];
+}
+else {
+vErrors.push(err4);
+}
+errors++;
+}
+}
+}
+else {
+const err5 = {instancePath:instancePath+"/client",schemaPath:"#/properties/client/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err5];
+}
+else {
+vErrors.push(err5);
+}
+errors++;
+}
+}
+}
+else {
+const err6 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err6];
+}
+else {
+vErrors.push(err6);
 }
 errors++;
 }
