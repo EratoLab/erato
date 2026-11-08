@@ -91,6 +91,18 @@
     {
       "source": "/assistant-hub/:hubAssistantId",
       "destination": "index.html"
+    },
+    {
+      "source": "/scheduled",
+      "destination": "index.html"
+    },
+    {
+      "source": "/scheduled/new",
+      "destination": "index.html"
+    },
+    {
+      "source": "/scheduled/:itemId/edit",
+      "destination": "index.html"
     }
   ]
 }
