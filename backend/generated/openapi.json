@@ -8117,6 +8117,10 @@
           "kind": {
             "$ref": "#/components/schemas/ToolApprovalKind"
           },
+          "labels_updated_at": {
+            "type": "string",
+            "description": "When a model's label last replaced the one this stop was stored with,\nso a client showing the parked card knows to load it again."
+          },
           "mcp_server_id": {
             "type": "string"
           },
@@ -9497,6 +9501,11 @@
           "initiator": {
             "$ref": "#/components/schemas/GenerationInitiator",
             "description": "Who started the generation this row describes. Absent means a person\ndid — including every generation written before the field existed."
+          },
+          "labels_updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Set on an `action_required` chat once a model's label replaced the one\nits approval card was stored with; a client showing that card reloads\nthe chat's messages when this changes."
           },
           "started_at": {
             "type": "string",

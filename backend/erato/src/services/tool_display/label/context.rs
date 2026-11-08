@@ -18,6 +18,7 @@ use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_tex
 use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::ControlFlow;
+use std::sync::Arc;
 
 /// Records kept for one turn; the ones seen least recently go first.
 pub const MAX_RECORDS: usize = 500;
@@ -124,6 +125,31 @@ impl ToolResultContext {
             }
         }
         context
+    }
+
+    /// As [`Self::observe`] on an index label jobs may share: copied only
+    /// when `content` holds something unread, so each job keeps the index
+    /// as its call saw it.
+    pub fn observe_shared(context: &mut Arc<Self>, content: &[ContentPart]) {
+        if context.has_unread(content) {
+            Arc::make_mut(context).observe(content);
+        }
+    }
+
+    /// Whether [`Self::observe`] would change anything for `content`.
+    fn has_unread(&self, content: &[ContentPart]) -> bool {
+        content.iter().any(|part| match part {
+            ContentPart::ToolApproval(approval) => !self.approved.contains(&approval.tool_call_id),
+            ContentPart::ToolRejection(rejection) => {
+                self.approved.contains(&rejection.tool_call_id)
+            }
+            ContentPart::ToolUse(tool) => {
+                !tool.tool_call_id.is_empty()
+                    && is_settled(tool)
+                    && !self.seen.contains(&tool.tool_call_id)
+            }
+            _ => false,
+        })
     }
 
     /// Reads the running turn's calls that have settled since the last look.

@@ -1,11 +1,11 @@
 //! Model label mappings per user, tool and argument shape. Entries and keys
-//! hold no argument value; `mcp_call_mapping` drops a mapping the
-//! cross-check rejects, so no hook invalidates entries when a tool's
-//! annotations change. An entry is only ever a hint: every label is checked
-//! again on the call it is shown for.
+//! hold no argument value. A mapping the cross-check rejects is not kept,
+//! and `mcp_call_mapping` drops one it rejects later, so no hook invalidates
+//! entries when a tool's annotations change. An entry is only ever a hint:
+//! every label is checked again on the call it is shown for.
 
 use super::pointer::{MAX_POINTER_BYTES, escape};
-use super::rules::verb_fields;
+use super::rules::{cross_check, verb_fields};
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping, ToolCallLabelMapping,
     resolve_label,
@@ -118,17 +118,19 @@ impl ToolLabelCache {
 
     /// The mapping for `key`, from `compute` on a miss; concurrent misses of
     /// one key wait for one computation. What `compute` returns is kept only
-    /// when it is a model's, within the caps, and fits the `arguments` it was
-    /// made for as [`Self::lookup`] checks. A panic in `compute` or the cache
-    /// gives `None`.
+    /// when it is a model's, within the caps, fits the `arguments` it was made
+    /// for as [`Self::lookup`] checks and passes the cross-check against
+    /// `tool`. One that fails the cross-check is still returned, but only to
+    /// this caller. A panic in `compute` or the cache gives `None`.
     pub async fn get_or_compute(
         &self,
         key: ToolLabelCacheKey,
+        tool: &rmcp::model::Tool,
         arguments: &Value,
         approval_argument: Option<&str>,
         compute: impl Future<Output = Option<ToolCallLabelMapping>>,
     ) -> Option<ToolCallLabelMapping> {
-        AssertUnwindSafe(self.fill(key, arguments, approval_argument, compute))
+        AssertUnwindSafe(self.fill(key, tool, arguments, approval_argument, compute))
             .catch_unwind()
             .await
             .unwrap_or_else(|_| {
@@ -142,6 +144,7 @@ impl ToolLabelCache {
     async fn fill(
         &self,
         key: ToolLabelCacheKey,
+        tool: &rmcp::model::Tool,
         arguments: &Value,
         approval_argument: Option<&str>,
         compute: impl Future<Output = Option<ToolCallLabelMapping>>,
@@ -150,6 +153,8 @@ impl ToolLabelCache {
             return Some(mapping);
         }
         let owner = key.clone();
+        let mut rejected = None;
+        let flagged = &mut rejected;
         let mapping = self
             .entries
             .optionally_get_with(key, async move {
@@ -161,11 +166,22 @@ impl ToolLabelCache {
                     item.fields.truncate(MAX_FIELD_POINTERS);
                     item.fields.shrink_to_fit();
                 }
-                let fits = resolve_label(&mapping, arguments, approval_argument).is_ok();
-                (keepable(&mapping) && fits)
-                    .then(|| Cached::with_key(MEMORY_OWNER, mapping, &owner))
+                if !(keepable(&mapping)
+                    && resolve_label(&mapping, arguments, approval_argument).is_ok())
+                {
+                    return None;
+                }
+                // Not kept, so the next call of this shape asks the model again.
+                if !cross_check(tool, arguments, mapping.action).is_empty() {
+                    *flagged = Some(mapping);
+                    return None;
+                }
+                Some(Cached::with_key(MEMORY_OWNER, mapping, &owner))
             })
-            .await?;
+            .await;
+        let Some(mapping) = mapping else {
+            return rejected;
+        };
         // Filled meanwhile by a call of the same shape whose pointers this
         // call's arguments may not have.
         resolve_label(&mapping, arguments, approval_argument)
@@ -419,7 +435,7 @@ mod tests {
     ) -> Option<ToolCallLabelMapping> {
         let key = ToolLabelCacheKey::new(user_id, "crm", tool, arguments);
         cache
-            .get_or_compute(key, arguments, None, labeller.label())
+            .get_or_compute(key, tool, arguments, None, labeller.label())
             .await
     }
 
@@ -521,10 +537,27 @@ mod tests {
         let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
         assert_eq!(
             cache
-                .get_or_compute(key.clone(), &arguments, None, async { None })
+                .get_or_compute(key.clone(), &records, &arguments, None, async { None })
                 .await,
             None
         );
+        cache.entries.run_pending_tasks().await;
+        assert_eq!(cache.entries.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_mapping_the_cross_check_rejects_is_returned_but_not_kept() {
+        let cache = ToolLabelCache::default();
+        let records = tool(schema());
+        let deleting = call("delete", &["Acme"]);
+        let updating = Labeller::new(model("/records/*/recordId"));
+        for runs in 1..=2 {
+            assert_eq!(
+                label(&cache, &updating, "user-a", &records, &deleting).await,
+                Some(model("/records/*/recordId"))
+            );
+            assert_eq!(updating.runs(), runs);
+        }
         cache.entries.run_pending_tasks().await;
         assert_eq!(cache.entries.entry_count(), 0);
     }
@@ -549,7 +582,10 @@ mod tests {
     #[tokio::test]
     async fn stored_entries_hold_no_argument_values() {
         let cache = ToolLabelCache::default();
-        let labeller = Labeller::new(model("/records/*/recordId"));
+        let labeller = Labeller::new(ToolCallLabelMapping {
+            action: ToolCallAction::Delete,
+            ..model("/records/*/recordId")
+        });
         let records = tool(schema());
         let arguments = call("archive_quietly", &["Secret merger with Globex"]);
         label(&cache, &labeller, "user-a", &records, &arguments).await;
@@ -732,7 +768,9 @@ mod tests {
         let arguments = json!({member: "Acme"});
         let key = ToolLabelCacheKey::new(&"u".repeat(36), "crm", &records, &arguments);
         let kept = cache
-            .get_or_compute(key.clone(), &arguments, None, async { Some(largest) })
+            .get_or_compute(key.clone(), &records, &arguments, None, async {
+                Some(largest)
+            })
             .await;
         assert!(kept.is_some());
         let entry = cache.entries.get(&key).await.unwrap();
@@ -810,7 +848,7 @@ mod tests {
         }
         assert!(cache.entries.get(&key).await.is_none());
         let filled = cache
-            .get_or_compute(key.clone(), &arguments, Some("confirm"), async {
+            .get_or_compute(key.clone(), &records, &arguments, Some("confirm"), async {
                 Some(confirm.clone())
             })
             .await;
@@ -830,8 +868,8 @@ mod tests {
         };
         let labeller = Labeller::new(model("/records/*/recordId"));
         let (failed, labelled) = tokio::join!(
-            cache.get_or_compute(key.clone(), &arguments, None, panicking),
-            cache.get_or_compute(key.clone(), &arguments, None, labeller.label()),
+            cache.get_or_compute(key.clone(), &records, &arguments, None, panicking),
+            cache.get_or_compute(key.clone(), &records, &arguments, None, labeller.label()),
         );
         assert_eq!(failed, None);
         assert_eq!(labelled, Some(model("/records/*/recordId")));
@@ -843,7 +881,9 @@ mod tests {
         cache.forget(&key).await;
         assert_eq!(
             cache
-                .get_or_compute(key.clone(), &arguments, None, async { panic!("again") })
+                .get_or_compute(key.clone(), &records, &arguments, None, async {
+                    panic!("again")
+                })
                 .await,
             None
         );

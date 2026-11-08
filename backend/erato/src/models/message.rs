@@ -2,6 +2,7 @@ use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELEGATION_TOOL_CALL, POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+    POSTGRES_QUERY_UPGRADE_APPROVAL_LABEL,
 };
 use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::pagination;
@@ -949,6 +950,11 @@ pub struct ContentPartToolApprovalRequest {
     /// the task calls of the tool on the same document or turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_scope: Option<ApprovalScope>,
+    /// When a model's label last replaced the one this stop was stored with,
+    /// so a client showing the parked card knows to load it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub labels_updated_at: Option<String>,
 }
 
 impl ContentPartToolApprovalRequest {
@@ -2174,6 +2180,50 @@ pub async fn update_message_content(
         .ok_or_else(|| eyre!("Message with ID {} not found after update", message_id))?;
 
     Ok(updated_message_model)
+}
+
+/// Puts `label` on the parked card of `tool_call_id`: the stop's own call,
+/// written path by path and only while that stop is still the message's last
+/// part, so a decision or a later whole-content write always wins. Nothing
+/// but the label changes. Returns whether the card was there to take it.
+pub async fn upgrade_open_approval_label(
+    conn: &DatabaseConnection,
+    message_id: Uuid,
+    tool_call_id: &str,
+    label: &ToolCallLabel,
+) -> Result<bool, Report> {
+    // `approvals[0]` is the stop's own call; children folded into it follow.
+    let result = conn
+        .execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_UPGRADE_APPROVAL_LABEL,
+            r#"
+            UPDATE "messages"
+            SET "raw_message" = jsonb_set(
+                jsonb_set(
+                    CASE
+                        WHEN jsonb_typeof("raw_message" #> '{content,-1,approvals,0,display}') = 'object'
+                        THEN jsonb_set("raw_message", '{content,-1,approvals,0,display,label}', $3::jsonb)
+                        ELSE "raw_message"
+                    END,
+                    '{content,-1,display,label}', $3::jsonb
+                ),
+                '{content,-1,labels_updated_at}', to_jsonb(now())
+            )
+            WHERE "id" = $1::uuid
+              AND "raw_message" #>> '{content,-1,content_type}' = 'tool_approval_request'
+              AND "raw_message" #>> '{content,-1,tool_call_id}' = $2
+              AND "raw_message" #>> '{content,-1,approvals,0,tool_call_id}' = $2
+              AND jsonb_typeof("raw_message" #> '{content,-1,display}') = 'object'
+            "#,
+            [
+                message_id.into(),
+                tool_call_id.into(),
+                serde_json::to_string(label)?.into(),
+            ],
+        ))
+        .await?;
+    Ok(result.rows_affected() > 0)
 }
 
 /// Update the generation metadata for a message.

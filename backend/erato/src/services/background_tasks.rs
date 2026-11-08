@@ -1454,6 +1454,7 @@ pub struct StreamingTask {
     tool_budget_exhausted: Arc<AtomicBool>,
     /// Whether the generation is complete
     completed: Arc<AtomicBool>,
+    completed_notify: Notify,
     /// Whether cancellation was requested by the user
     abort_requested: Arc<AtomicBool>,
     /// Notifies waiters when an abort is requested
@@ -1512,6 +1513,7 @@ impl StreamingTask {
             awaiting_approval: Arc::new(AtomicBool::new(false)),
             tool_budget_exhausted: Arc::new(AtomicBool::new(false)),
             completed: Arc::new(AtomicBool::new(false)),
+            completed_notify: Notify::new(),
             abort_requested: Arc::new(AtomicBool::new(false)),
             abort_notify: Arc::new(Notify::new()),
             pending_client_tools: Arc::new(RwLock::new(HashMap::new())),
@@ -1660,6 +1662,20 @@ impl StreamingTask {
     /// Mark the task as completed
     pub fn mark_completed(&self) {
         self.completed.store(true, Ordering::SeqCst);
+        self.completed_notify.notify_waiters();
+    }
+
+    /// Wait until the task is marked completed, which every path does only
+    /// after the final content is stored.
+    pub async fn wait_for_completion(&self) {
+        // Registered before the check, as in `wait_for_abort`.
+        let notified = self.completed_notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if self.is_completed() {
+            return;
+        }
+        notified.await;
     }
 
     /// Check if the task is completed

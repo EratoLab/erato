@@ -55,14 +55,14 @@ pub fn mcp_tool_call_display(
 /// model's this user's earlier call of the same shape got where they are
 /// unsure; see [`label::mcp_call_mapping`].
 pub async fn mcp_tool_call_mapping(
-    cache: &label::cache::ToolLabelCache,
+    cache: Option<&label::cache::ToolLabelCache>,
     user_id: &str,
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &serde_json::Value,
     approval_argument: Option<&str>,
-) -> label::ToolCallLabelMapping {
+) -> label::McpCallMapping {
     let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
     label::mcp_call_mapping(
         cache,
@@ -110,14 +110,33 @@ impl<'a> LabelledArguments<'a> {
     ) -> Self {
         Self {
             arguments: without_approval_argument(arguments, approval_argument),
-            consent: approval_argument.or_else(|| {
-                config
-                    .mcp_servers
-                    .get(server_id)
-                    .and_then(|server| server.approval_argument.as_deref())
-            }),
+            consent: label_consent_argument(config, server_id, approval_argument),
         }
     }
+}
+
+/// A call's arguments as its label reads them and a model labelling it sees
+/// them: without the tool's consent argument, which Erato sets at dispatch.
+pub fn labelled_arguments(
+    arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
+) -> serde_json::Value {
+    without_approval_argument(arguments, approval_argument).into_owned()
+}
+
+/// The consent argument a call's label treats as a flag: the tool's
+/// `approval_argument`, else the server's configured one.
+pub fn label_consent_argument<'a>(
+    config: &'a McpRuntimeConfig,
+    server_id: &str,
+    approval_argument: Option<&'a str>,
+) -> Option<&'a str> {
+    approval_argument.or_else(|| {
+        config
+            .mcp_servers
+            .get(server_id)
+            .and_then(|server| server.approval_argument.as_deref())
+    })
 }
 
 fn labelled_display(
@@ -736,7 +755,7 @@ mod tests {
         let key = ToolLabelCacheKey::new("user-a", "dv", &tool, &earlier);
         let model_mapping = model.clone();
         cache
-            .get_or_compute(key, &earlier, Some("hasUserApproved"), async {
+            .get_or_compute(key, &tool, &earlier, Some("hasUserApproved"), async {
                 Some(model_mapping)
             })
             .await
@@ -747,7 +766,7 @@ mod tests {
             serde_json::json!({"recordId": "rec-2", "stage": "lost", "hasUserApproved": true});
         let approval_argument = Some("hasUserApproved");
         let mapping = mcp_tool_call_mapping(
-            &cache,
+            Some(&cache),
             "user-a",
             &config,
             "dv",
@@ -756,7 +775,14 @@ mod tests {
             approval_argument,
         )
         .await;
-        assert_eq!(mapping, model);
+        assert_eq!(
+            mapping,
+            label::McpCallMapping {
+                mapping: model.clone(),
+                unlabelled: None,
+            }
+        );
+        let mapping = mapping.mapping;
         let label = mcp_tool_call_display_from(
             &config,
             "dv",
@@ -788,14 +814,26 @@ mod tests {
         let flagged = serde_json::json!({"recordId": "rec-3", "userConfirmed": "yes"});
         let key = ToolLabelCacheKey::new("user-a", "crm", &tool, &flagged);
         cache
-            .get_or_compute(key.clone(), &flagged, None, async { Some(confirm) })
+            .get_or_compute(key.clone(), &tool, &flagged, None, async { Some(confirm) })
             .await
             .unwrap();
         let rules = label::guarded_rules(&tool, &flagged, Some("userConfirmed"));
         assert!(rules.unsure.is_some(), "{rules:?}");
         assert_eq!(
-            mcp_tool_call_mapping(&cache, "user-a", &config, "crm", &tool, &flagged, None).await,
-            rules.mapping
+            mcp_tool_call_mapping(
+                Some(&cache),
+                "user-a",
+                &config,
+                "crm",
+                &tool,
+                &flagged,
+                None
+            )
+            .await,
+            label::McpCallMapping {
+                mapping: rules.mapping,
+                unlabelled: Some(key.clone()),
+            }
         );
         assert!(cache.entries().get(&key).await.is_none());
     }

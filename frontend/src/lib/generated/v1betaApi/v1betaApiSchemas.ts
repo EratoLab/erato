@@ -1604,6 +1604,11 @@ export type ContentPartToolApprovalRequest = {
   display?: null | ToolDisplayMetadata;
   input: Value;
   kind?: ToolApprovalKind;
+  /**
+   * When a model's label last replaced the one this stop was stored with,
+   * so a client showing the parked card knows to load it again.
+   */
+  labels_updated_at?: string;
   mcp_server_id: string;
   pending_tool_calls?: PendingToolCall[];
   preset: string;
@@ -2315,6 +2320,14 @@ export type GeneratingChat = {
    */
   ended_at?: string;
   initiator?: GenerationInitiator;
+  /**
+   * Set on an `action_required` chat once a model's label replaced the one
+   * its approval card was stored with; a client showing that card reloads
+   * the chat's messages when this changes.
+   *
+   * @format date-time
+   */
+  labels_updated_at?: string;
   /**
    * When the generation started
    *
