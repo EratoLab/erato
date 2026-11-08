@@ -1,17 +1,16 @@
-//! What a delivered reminder says about itself, on any channel: its buttons,
-//! the line its card shows once a button was used, and times as the user
-//! reads them. English for now; the user's language follows.
+//! What a delivered reminder offers, on any channel: its buttons, and times
+//! as the user reads them. English for now; the user's language follows.
+//! Each channel words the replies to those buttons itself.
 //!
 //! Times are shown in the reminder's zone without a zone name, unless that
 //! zone is not the user's current one: "10:00 (New York time)".
 
 use super::recurrence::local_time;
-use super::{Refusal, SNOOZE_HOUR, SnoozeChoice};
+use super::{SNOOZE_HOUR, SnoozeChoice};
 use chrono::{DateTime, Duration, Utc};
 use chrono_tz::Tz;
 
 pub const DONE_BUTTON: &str = "Done";
-pub const DONE_NOTE: &str = "Marked as done.";
 
 pub fn snooze_button(choice: SnoozeChoice, zone: Tz, user_zone: Option<Tz>) -> String {
     match choice {
@@ -20,15 +19,6 @@ pub fn snooze_button(choice: SnoozeChoice, zone: Tz, user_zone: Option<Tz>) -> S
             format!("Tomorrow {SNOOZE_HOUR}:00{}", zone_suffix(zone, user_zone))
         }
     }
-}
-
-pub fn snoozed_note(
-    until: DateTime<Utc>,
-    zone: Tz,
-    user_zone: Option<Tz>,
-    now: DateTime<Utc>,
-) -> String {
-    format!("Snoozed until {}.", when(until, zone, user_zone, now))
 }
 
 /// `9:30`, `tomorrow 9:00` or `Fri, Nov 13, 9:00`, as seen from `now`.
@@ -58,29 +48,6 @@ fn zone_suffix(zone: Tz, user_zone: Option<Tz>) -> String {
         }
         _ => String::new(),
     }
-}
-
-/// Why a button on the card did nothing, shown on the card in its place.
-pub fn refusal_note(refusal: Refusal) -> &'static str {
-    match refusal {
-        Refusal::NotFound => "This reminder no longer exists.",
-        Refusal::Finished => "This reminder was cancelled.",
-        Refusal::InFlight => "Not snoozed: this reminder is arriving right now.",
-        Refusal::NothingToSnooze => "Not snoozed: its next time comes before then.",
-        Refusal::NoFutureOccurrence => "Not snoozed: that time has passed.",
-        Refusal::NotFinished => "This reminder cannot be changed right now.",
-    }
-}
-
-/// The reply to a button whose token was used or has expired.
-pub fn button_gone(scheduled_url: Option<&str>) -> String {
-    let page = match scheduled_url {
-        Some(url) => format!("[Scheduled page]({url})"),
-        None => "Scheduled page".to_string(),
-    };
-    format!(
-        "This button was already used or has expired. You can find your reminders on the {page}."
-    )
 }
 
 #[cfg(test)]
@@ -151,14 +118,9 @@ mod tests {
             SnoozeChoice::HalfAnHour.until(BERLIN, now),
             utc("2026-11-09T00:00:00Z")
         );
-    }
-
-    #[test]
-    fn a_gone_button_points_to_the_scheduled_page() {
         assert_eq!(
-            button_gone(Some("https://erato.example.com/scheduled")),
-            "This button was already used or has expired. You can find your reminders on the [Scheduled page](https://erato.example.com/scheduled)."
+            SnoozeChoice::HalfAnHour.until(BERLIN, now + Duration::nanoseconds(1_234_567)),
+            utc("2026-11-09T00:00:00.001234Z")
         );
-        assert!(button_gone(None).ends_with("on the Scheduled page."));
     }
 }

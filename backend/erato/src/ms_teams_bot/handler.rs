@@ -16,7 +16,7 @@ use super::nudge;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
-use crate::services::scheduled_items::{self, wording};
+use crate::services::scheduled_items::{self, Refusal, wording};
 use axum::http::StatusCode;
 use chrono::Utc;
 use eyre::{Report, eyre};
@@ -485,7 +485,7 @@ async fn on_delivery_action(
             nudge::DeliveryCommand::OptOut => {
                 "This button was already used or has expired.".to_string()
             }
-            _ => wording::button_gone(scheduled_page_url(bot).as_deref()),
+            _ => reminder_button_gone_text(scheduled_page_url(bot).as_deref()),
         };
         return target.send_text(&text).await;
     }
@@ -499,21 +499,24 @@ async fn on_delivery_action(
                 .acknowledge_reminder(user.id, submit.delivery_id)
                 .await?
             {
-                Ok(_) => wording::DONE_NOTE.to_string(),
-                Err(refusal) => wording::refusal_note(refusal).to_string(),
+                Ok(_) => REMINDER_DONE_NOTE.to_string(),
+                Err(refusal) => reminder_refusal_note(refusal).to_string(),
             }
         }
         nudge::DeliveryCommand::Snooze(choice) => match host
             .snooze_delivered_reminder(user.id, submit.delivery_id, choice)
             .await?
         {
-            Ok((item, until)) => wording::snoozed_note(
-                until,
-                scheduled_items::zone_of(&item)?,
-                host.stored_time_zone(user.id).await?,
-                Utc::now(),
+            Ok((item, until)) => format!(
+                "Snoozed until {}.",
+                wording::when(
+                    until,
+                    scheduled_items::zone_of(&item)?,
+                    host.stored_time_zone(user.id).await?,
+                    Utc::now(),
+                )
             ),
-            Err(refusal) => wording::refusal_note(refusal).to_string(),
+            Err(refusal) => reminder_refusal_note(refusal).to_string(),
         },
     };
     settle_delivered_card(host, target, submit.delivery_id, &note).await
@@ -544,6 +547,30 @@ fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
         .public_base_url
         .as_deref()
         .map(|base| format!("{}/scheduled", base.trim_end_matches('/')))
+}
+
+const REMINDER_DONE_NOTE: &str = "Marked as done.";
+
+/// Why a reminder's button did nothing, shown on the card in its place.
+fn reminder_refusal_note(refusal: Refusal) -> &'static str {
+    match refusal {
+        Refusal::NotFound => "This reminder no longer exists.",
+        Refusal::Finished => "This reminder was cancelled.",
+        Refusal::InFlight => "Not snoozed: this reminder is arriving right now.",
+        Refusal::NothingToSnooze => "Not snoozed: its next time comes before then.",
+        Refusal::NoFutureOccurrence => "Not snoozed: that time has passed.",
+        Refusal::NotFinished => "This reminder cannot be changed right now.",
+    }
+}
+
+fn reminder_button_gone_text(scheduled_url: Option<&str>) -> String {
+    let page = match scheduled_url {
+        Some(url) => format!("[Scheduled page]({url})"),
+        None => "Scheduled page".to_string(),
+    };
+    format!(
+        "This button was already used or has expired. You can find your reminders on the {page}."
+    )
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
@@ -1453,6 +1480,15 @@ mod tests {
             approvals: None,
             needs_client: false,
         }
+    }
+
+    #[test]
+    fn a_gone_reminder_button_points_to_the_scheduled_page() {
+        assert_eq!(
+            reminder_button_gone_text(Some("https://erato.example.com/scheduled")),
+            "This button was already used or has expired. You can find your reminders on the [Scheduled page](https://erato.example.com/scheduled)."
+        );
+        assert!(reminder_button_gone_text(None).ends_with("on the Scheduled page."));
     }
 
     #[test]

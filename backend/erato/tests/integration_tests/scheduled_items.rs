@@ -5,7 +5,7 @@
 //! bring it back without touching the regular schedule.
 
 use crate::MIGRATOR;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, SubsecRound, Utc};
 use erato::db::entity::prelude::{ScheduledDeliveries, ScheduledItems};
 use erato::db::entity::scheduled_deliveries::{self, DeliveryState};
 use erato::db::entity::scheduled_items::{ItemStatus, Model};
@@ -21,7 +21,7 @@ use erato::services::scheduled_items::recurrence::{
 use erato::services::scheduled_items::{
     DONE_COMMAND, DisplayStatus, ItemInput, REMINDER, Refusal, ReminderProducer, SNOOZE_COMMAND,
     SnoozeChoice, acknowledge, cancel, create, current_occurrence, delete, display_status, get,
-    list, next_occurrence, snooze_choices, snooze_delivered, update,
+    list, next_occurrence, snooze_choices, snooze_delivered, snooze_occurrence, update,
 };
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -630,7 +630,10 @@ async fn snoozing_after_delivery_brings_back_this_one_reminder(pool: Pool<Postgr
         .unwrap()
         .unwrap();
     assert_eq!(snoozed.status, ItemStatus::Active);
-    assert!(until >= before + Duration::minutes(30) && until <= Utc::now() + Duration::minutes(30));
+    assert!(
+        until >= before.trunc_subsecs(6) + Duration::minutes(30)
+            && until <= Utc::now() + Duration::minutes(30)
+    );
     let rows = deliveries(&db, &item).await;
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0], delivered_row, "the delivered row is left alone");
@@ -769,6 +772,81 @@ async fn a_snooze_after_delivery_comes_before_the_next_occurrence(pool: Pool<Pos
             .await
             .unwrap(),
         Err(Refusal::NothingToSnooze)
+    );
+}
+
+/// The page's Snooze moves a reminder snoozed after delivery only to a time
+/// before the item's next regular occurrence, as its card does, whether that
+/// occurrence has its row yet or not; the regular schedule stays.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_pages_snooze_keeps_a_snoozed_reminder_before_the_next_occurrence(
+    pool: Pool<Postgres>,
+) {
+    let (db, user) = database(pool).await;
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let registry = registry(&channel);
+
+    let item = create_item(&db, user.id, input(daily(nine(), RepeatEnd::Never))).await;
+    let first = open(&db, &item).await.unwrap();
+    make_due(&db, first.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    let second = open(&db, &item).await.expect("next occurrence");
+    let (_, until) = snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
+        .await
+        .unwrap()
+        .unwrap();
+    let next = utc(second.due_at);
+    for later in [next, next + Duration::hours(1)] {
+        assert_eq!(
+            snooze_occurrence(&db, user.id, item.id, later)
+                .await
+                .unwrap(),
+            Err(Refusal::NothingToSnooze)
+        );
+    }
+    assert_eq!(utc(open(&db, &item).await.unwrap().due_at), until);
+    snooze_occurrence(&db, user.id, item.id, next - Duration::minutes(1))
+        .await
+        .unwrap()
+        .unwrap();
+    let current = open(&db, &item).await.unwrap();
+    assert_ne!(current.id, second.id);
+    assert_eq!(utc(current.due_at), next - Duration::minutes(1));
+    let regular = ScheduledDeliveries::find_by_id(second.id)
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(regular, second, "the regular occurrence is left alone");
+    assert_eq!(status(&db, &user, &item).await, DisplayStatus::Snoozed);
+
+    // Snoozed before the producer gave the item its next occurrence.
+    let item = create_item(&db, user.id, input(daily(nine(), RepeatEnd::Never))).await;
+    let first = open(&db, &item).await.unwrap();
+    make_due(&db, first.id).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
+        .await
+        .unwrap()
+        .unwrap();
+    let next = utc(reload(&db, &item).await.occurrence_at.unwrap()) + Duration::days(1);
+    assert_eq!(
+        snooze_occurrence(&db, user.id, item.id, next)
+            .await
+            .unwrap(),
+        Err(Refusal::NothingToSnooze)
+    );
+    snooze_occurrence(&db, user.id, item.id, next - Duration::minutes(1))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        utc(open(&db, &item).await.unwrap().due_at),
+        next - Duration::minutes(1)
     );
 }
 

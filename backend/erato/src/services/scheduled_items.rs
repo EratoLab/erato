@@ -32,7 +32,7 @@ use crate::services::scheduled_deliveries::{
     self as deliveries, DeliveryAction, DeliveryContent, DeliveryLink, DeliveryProducer,
     NewDelivery, ResolvedContent, StillDue, cancel_open, schedule, snooze, store_action_token,
 };
-use chrono::{DateTime, NaiveTime, SecondsFormat, Utc};
+use chrono::{DateTime, NaiveTime, SecondsFormat, SubsecRound, Utc};
 use chrono_tz::Tz;
 use eyre::{Report, eyre};
 use recurrence::{Trigger, local_time, resolve_local};
@@ -100,7 +100,8 @@ impl SnoozeChoice {
 
     pub fn until(self, zone: Tz, now: DateTime<Utc>) -> DateTime<Utc> {
         match self {
-            Self::HalfAnHour => now + chrono::Duration::minutes(SNOOZE_MINUTES),
+            // As Postgres stores it, so the time returned is the one kept.
+            Self::HalfAnHour => (now + chrono::Duration::minutes(SNOOZE_MINUTES)).trunc_subsecs(6),
             Self::TomorrowMorning => {
                 let tomorrow = local_time(zone, now).date() + chrono::Duration::days(1);
                 let morning = NaiveTime::from_hms_opt(SNOOZE_HOUR, 0, 0).unwrap_or_default();
@@ -129,7 +130,8 @@ pub enum Refusal {
     /// Its occurrence is being delivered right now, and the change would
     /// leave nothing after it.
     InFlight,
-    /// There is no open occurrence to snooze.
+    /// There is no open occurrence to snooze, or a reminder snoozed after
+    /// delivery would not come back before the next regular occurrence.
     NothingToSnooze,
     /// The item may still deliver something, so it cannot be deleted.
     NotFinished,
@@ -315,28 +317,38 @@ pub async fn cancel(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Ch
 }
 
 /// Move the item's open occurrence (the one arriving first, which may be a
-/// re-delivery) to `until`. The next occurrence keeps its regular time.
+/// re-delivery) to `until`. The next occurrence keeps its regular time, and
+/// a re-delivery only moves to a time before it, as from its card.
 pub async fn snooze_occurrence(
     db: &DatabaseConnection,
     user_id: Uuid,
     item_id: Uuid,
     until: DateTime<Utc>,
 ) -> Change<Model> {
-    let Some(item) = find(db, user_id, item_id).await? else {
+    let txn = db.begin().await?;
+    let Some(item) = lock(&txn, Some(user_id), item_id).await? else {
         return Ok(Err(Refusal::NotFound));
     };
     if item.status != ItemStatus::Active {
         return Ok(Err(Refusal::Finished));
     }
-    let Some(row) = current_occurrence(db, &item)
+    let Some(row) = current_occurrence(&txn, &item)
         .await?
         .filter(|row| row.state.is_open())
     else {
         return Ok(Err(Refusal::NothingToSnooze));
     };
-    if !snooze(db, row.id, until).await? {
+    if row.dedupe_key.as_deref() == Some(redelivery_key(item.id).as_str())
+        && !next_regular_after(&txn, &item, &row, Utc::now())
+            .await?
+            .allows(until)
+    {
         return Ok(Err(Refusal::NothingToSnooze));
     }
+    if !snooze(&txn, row.id, until).await? {
+        return Ok(Err(Refusal::NothingToSnooze));
+    }
+    txn.commit().await?;
     Ok(Ok(item))
 }
 

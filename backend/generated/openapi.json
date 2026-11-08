@@ -4208,7 +4208,7 @@
             }
           },
           "409": {
-            "description": "The item is over or nothing is waiting to be delivered",
+            "description": "The item is over, nothing is waiting to be delivered, or a reminder snoozed after delivery would not come back before its next regular time",
             "content": {
               "application/json": {
                 "schema": {

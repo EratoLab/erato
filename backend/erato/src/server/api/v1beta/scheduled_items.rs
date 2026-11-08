@@ -794,7 +794,7 @@ pub async fn delete_scheduled_item(
         (status = OK, body = ScheduledItem),
         (status = NOT_FOUND, body = ScheduledItemError),
         (status = UNPROCESSABLE_ENTITY, body = ScheduledItemError, description = "`until` is not in the future (`trigger_in_past`)"),
-        (status = CONFLICT, body = ScheduledItemError, description = "The item is over or nothing is waiting to be delivered")
+        (status = CONFLICT, body = ScheduledItemError, description = "The item is over, nothing is waiting to be delivered, or a reminder snoozed after delivery would not come back before its next regular time")
     ),
     security(("bearer_auth" = []))
 )]
