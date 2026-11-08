@@ -4,9 +4,12 @@
 //! (by hand, by rules or a model) cannot put text of its own on the card.
 
 mod arguments;
+pub mod context;
 pub mod pointer;
+mod recipients;
 
 pub use arguments::readable_arguments;
+pub use context::ToolResultContext;
 
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource,

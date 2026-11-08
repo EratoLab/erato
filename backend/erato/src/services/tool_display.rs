@@ -36,22 +36,60 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 }
 
 /// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
-/// the server's name from the live config and the call's label, stored with
-/// the call's parts. `approval_argument` is the tool's consent argument, which
-/// the label leaves out.
+/// the server's name from the live config and the call's label, with the IDs
+/// it names resolved from earlier results in the chat, stored with the call's
+/// parts. `approval_argument` is the tool's consent argument, which the label
+/// leaves out.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &serde_json::Value,
     approval_argument: Option<&str>,
+    context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
     let arguments = without_approval_argument(arguments, approval_argument);
+    let scope = names_scope(config, server_id);
+    // Names only add to a label, so a resolver bug costs the names, not the label.
+    let label = label::guarded(|| {
+        let mut label = label::generic_label(&arguments);
+        if let Some(server) = &scope {
+            context.resolve(&mut label, &arguments, server);
+        }
+        label
+    })
+    .or_else(|| label::guarded(|| label::generic_label(&arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
-        label: label::guarded(|| label::generic_label(&arguments)),
+        label,
         ..tool_display_metadata(tool)
     }
+}
+
+/// The server name a call's tool rows carry, under which the context keeps
+/// the names that server's results gave. `None`, and so no names, for a
+/// server the config does not hold or whose name another server shares.
+fn names_scope(config: &McpRuntimeConfig, server_id: &str) -> Option<String> {
+    if !config.mcp_servers.contains_key(server_id) {
+        return None;
+    }
+    let name = config.mcp_server_display_name(server_id);
+    let shared = config
+        .mcp_servers
+        .keys()
+        .any(|other| other != server_id && config.mcp_server_display_name(other) == name);
+    (!shared).then_some(name)
+}
+
+/// What a parent chat keeps of the display a delegated child's call carries:
+/// the label's pointers and values as written, without the names and old
+/// values the child chat's results gave them.
+pub fn child_approval_display(display: &ToolDisplayMetadata) -> ToolDisplayMetadata {
+    let mut display = display.clone();
+    if let Some(label) = display.label.as_mut() {
+        label::context::forget_resolved(label);
+    }
+    display
 }
 
 /// Erato sets the consent argument from the user's decision at dispatch, so a
@@ -127,22 +165,85 @@ mod tests {
         .unwrap();
         let tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
         let arguments = serde_json::json!({});
-        let display = mcp_tool_call_display(&config, "dynamics", &tool, &arguments, None);
+        let display = mcp_tool_call_display(
+            &config,
+            "dynamics",
+            &tool,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.server_name.as_deref(), Some("Dynamics 365"));
         assert_eq!(display.title, "create_record");
         assert_eq!(
-            mcp_tool_call_display(&config, "web_access", &tool, &arguments, None)
-                .server_name
-                .as_deref(),
+            mcp_tool_call_display(
+                &config,
+                "web_access",
+                &tool,
+                &arguments,
+                None,
+                &Default::default()
+            )
+            .server_name
+            .as_deref(),
             Some("Web access")
         );
         assert_eq!(
-            mcp_tool_call_display(&config, "removed-since", &tool, &arguments, None)
-                .server_name
-                .as_deref(),
+            mcp_tool_call_display(
+                &config,
+                "removed-since",
+                &tool,
+                &arguments,
+                None,
+                &Default::default()
+            )
+            .server_name
+            .as_deref(),
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn names_come_only_from_a_configured_server_whose_name_no_other_shares() {
+        let server = |display_name: Option<&str>| {
+            let mut server = serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            });
+            if let Some(name) = display_name {
+                server["display_name"] = name.into();
+            }
+            server
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "dynamics": server(Some("CRM")),
+                "notes": server(Some("Notes")),
+                "notes_mirror": server(Some(" Notes ")),
+                "web_access": server(None),
+                "crawler": server(Some("Web access")),
+                "files": server(None),
+            }
+        }))
+        .unwrap();
+        let tool = Tool::new("search", "Searches.", JsonObject::new());
+        for (server_id, expected) in [("dynamics", "CRM"), ("files", "Files")] {
+            let stored = mcp_tool_call_display(
+                &config,
+                server_id,
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            )
+            .server_name;
+            assert_eq!(stored.as_deref(), Some(expected));
+            assert_eq!(names_scope(&config, server_id), stored);
+        }
+        for server_id in ["notes", "notes_mirror", "web_access", "crawler", "removed"] {
+            assert_eq!(names_scope(&config, server_id), None, "{server_id}");
+        }
     }
 
     #[test]
@@ -158,6 +259,7 @@ mod tests {
             &tool,
             &arguments,
             None,
+            &Default::default(),
         );
         assert_eq!(display.label, Some(label::generic_label(&arguments)));
         let paths: Vec<_> = display
@@ -201,11 +303,18 @@ mod tests {
             "item": {"hasUserApproved": "a member of the record"},
             "zeta": 1,
         });
-        let display =
-            mcp_tool_call_display(&config, "dv", &tool, &arguments, Some("hasUserApproved"));
+        let display = mcp_tool_call_display(
+            &config,
+            "dv",
+            &tool,
+            &arguments,
+            Some("hasUserApproved"),
+            &Default::default(),
+        );
         assert_eq!(display.label, Some(label::generic_label(&without)));
         assert_eq!(
-            mcp_tool_call_display(&config, "dv", &tool, &arguments, None).label,
+            mcp_tool_call_display(&config, "dv", &tool, &arguments, None, &Default::default())
+                .label,
             Some(label::generic_label(&arguments))
         );
         assert_ne!(
@@ -218,8 +327,15 @@ mod tests {
             serde_json::json!([{"hasUserApproved": true}]),
         ] {
             assert_eq!(
-                mcp_tool_call_display(&config, "dv", &tool, &unchanged, Some("hasUserApproved"))
-                    .label,
+                mcp_tool_call_display(
+                    &config,
+                    "dv",
+                    &tool,
+                    &unchanged,
+                    Some("hasUserApproved"),
+                    &Default::default()
+                )
+                .label,
                 Some(label::generic_label(&unchanged))
             );
         }
@@ -257,7 +373,15 @@ mod tests {
         let arguments = serde_json::json!({"title": "Plan", "parent_id": "p1"});
         let config = McpRuntimeConfig::default();
         let plain = Tool::new("publish", "Publishes.", JsonObject::new());
-        let expected = mcp_tool_call_display(&config, "notion", &plain, &arguments, None).label;
+        let expected = mcp_tool_call_display(
+            &config,
+            "notion",
+            &plain,
+            &arguments,
+            None,
+            &Default::default(),
+        )
+        .label;
         assert_eq!(expected, Some(label::generic_label(&arguments)));
 
         let mut schema = JsonObject::new();
@@ -276,7 +400,14 @@ mod tests {
         annotations.idempotent_hint = Some(false);
         hostile.annotations = Some(annotations);
         hostile.title = Some("\u{200B}\u{FEFF}".into());
-        let display = mcp_tool_call_display(&config, "notion", &hostile, &arguments, None);
+        let display = mcp_tool_call_display(
+            &config,
+            "notion",
+            &hostile,
+            &arguments,
+            None,
+            &Default::default(),
+        );
         assert_eq!(display.label, expected);
         assert_eq!(display.title, "publish");
         assert!(display.description_truncated);
@@ -288,6 +419,7 @@ mod tests {
                 &hostile,
                 &serde_json::json!("not json {"),
                 None,
+                &Default::default(),
             )
             .label
             .map(|label| label.source),
@@ -315,5 +447,67 @@ mod tests {
         );
         tool.description = Some("\u{202E}".into());
         assert_eq!(tool_display_metadata(&tool).description, None);
+    }
+
+    #[test]
+    fn a_childs_display_reaches_the_parent_with_its_values_as_written_only() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use label::{ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label};
+        let arguments = serde_json::json!({
+            "title": "Plan", "id": "rec-1", "parent": "p1", "from": "a", "to": "b", "status": "done",
+        });
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/title".into()),
+                id: Some("/id".into()),
+                target: Some("/parent".into()),
+                before: Some("/from".into()),
+                after: Some("/to".into()),
+                fields: vec!["/status".into()],
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        let item = &mut resolved.items[0];
+        let mut set = 0;
+        for slot in [
+            &mut item.title,
+            &mut item.id,
+            &mut item.target,
+            &mut item.before,
+            &mut item.after,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(&mut item.fields)
+        {
+            for value in &mut slot.values {
+                value.resolved = Some("From the child's results".into());
+                set += 1;
+            }
+        }
+        assert_eq!(set, 6);
+        let child = ToolDisplayMetadata {
+            title: "Update record".into(),
+            description: Some("Updates a record.".into()),
+            description_truncated: false,
+            server_name: Some("Dynamics 365".into()),
+            label: Some(resolved),
+        };
+        assert_eq!(
+            child_approval_display(&child),
+            ToolDisplayMetadata {
+                label: Some(written),
+                ..child.clone()
+            }
+        );
+        let unlabelled = ToolDisplayMetadata {
+            label: None,
+            ..child
+        };
+        assert_eq!(child_approval_display(&unlabelled), unlabelled);
     }
 }

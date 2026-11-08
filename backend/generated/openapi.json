@@ -6971,7 +6971,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ToolDisplayMetadata"
+                "$ref": "#/components/schemas/ToolDisplayMetadata",
+                "description": "The child call's display. Its label carries no `resolved` values:\nthose come from the child chat's results, which stay in that chat."
               }
             ]
           },
@@ -13511,7 +13512,7 @@
           },
           "resolved": {
             "type": "string",
-            "description": "What earlier results in the chat call this value, such as a record's\nname or a field's old value; never taken from the call itself."
+            "description": "What earlier results in the chat say about this value, never what the\ncall itself says: on `id`, `target` and `before` the name of the record\nthe value identifies; on a field of an update, the value the field held\nin the record the item's `id` names, where an earlier link shows as its\nrecord's name and never as a raw ID. Absent when no result has it."
           },
           "text": {
             "type": "string",

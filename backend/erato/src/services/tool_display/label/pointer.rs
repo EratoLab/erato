@@ -173,6 +173,23 @@ pub fn last_name(pointer: &str) -> Option<Cow<'_, str>> {
         .map(unescape)
 }
 
+/// The segments of a value's path that name members, unescaped, in order;
+/// none for a path longer than [`MAX_PATH_BYTES`], which no value has.
+pub fn member_names(path: &str) -> Vec<Cow<'_, str>> {
+    if path.len() > MAX_PATH_BYTES {
+        return Vec::new();
+    }
+    path.strip_prefix('/')
+        .map(|tokens| {
+            tokens
+                .split('/')
+                .filter(|token| *token != "*" && array_index(token).is_none())
+                .map(unescape)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn escape(key: &str) -> Cow<'_, str> {
     if key.contains(['~', '/']) {
         Cow::Owned(key.replace('~', "~0").replace('/', "~1"))
@@ -343,5 +360,11 @@ mod tests {
         assert_eq!(last_name("/a~1b").unwrap(), "a/b");
         assert_eq!(last_name("/*"), None);
         assert_eq!(last_name("name"), None);
+        assert_eq!(
+            member_names("/item/a~1b/*/recordId/0"),
+            ["item", "a/b", "recordId"]
+        );
+        assert!(member_names("name").is_empty());
+        assert!(member_names(&"/a".repeat(MAX_PATH_BYTES)).is_empty());
     }
 }

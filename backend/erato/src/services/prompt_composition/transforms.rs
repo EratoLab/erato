@@ -871,26 +871,29 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
 /// containment would last exactly one turn.
 ///
 /// The display is the UI's too, and a replay is stored with every generation:
-/// only the label's action stays, never its values or argument tree.
+/// only the label's action and the server name stay, never the label's values
+/// or argument tree. The next turn's name index keys results by that server.
 fn strip_ui_only_tool_output(
     mut tool_use: crate::models::message::ToolUse,
 ) -> crate::models::message::ToolUse {
     tool_use.display = tool_use
         .display
-        .and_then(|display| display.label)
-        .map(|label| crate::models::message::ToolDisplayMetadata {
+        .filter(|display| display.label.is_some() || display.server_name.is_some())
+        .map(|display| crate::models::message::ToolDisplayMetadata {
             title: String::new(),
             description: None,
             description_truncated: false,
-            server_name: None,
-            label: Some(crate::models::message::ToolCallLabel {
-                action: label.action,
-                object_kind: Default::default(),
-                items: Vec::new(),
-                arguments: None,
-                warnings: Vec::new(),
-                source: Default::default(),
-            }),
+            server_name: display.server_name,
+            label: display
+                .label
+                .map(|label| crate::models::message::ToolCallLabel {
+                    action: label.action,
+                    object_kind: Default::default(),
+                    items: Vec::new(),
+                    arguments: None,
+                    warnings: Vec::new(),
+                    source: Default::default(),
+                }),
         });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
     if let Some(output) = tool_use.output.as_mut() {

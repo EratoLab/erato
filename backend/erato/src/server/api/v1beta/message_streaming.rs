@@ -3244,6 +3244,8 @@ pub struct PreparedChatRequest {
     // Move with the prepared payloads when the struct is destructured.
     _payload_reservations: Vec<crate::metrics::memory::PayloadReservation>,
     pub(crate) retrieval_context: crate::services::file_retrieval::RetrievalContext,
+    // Names and earlier field values from the replayed tool results, for labels.
+    pub(crate) tool_result_context: crate::services::tool_display::label::ToolResultContext,
     pub(crate) attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     // Our internal abstract structure of the message chain
     generation_input_messages: GenerationInputMessages,
@@ -4789,6 +4791,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     )
     .await?;
 
+    let tool_result_context =
+        crate::services::tool_display::label::ToolResultContext::from_messages(
+            &generation_input_messages,
+        );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
         policy,
@@ -5246,6 +5252,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     Ok(PreparedChatRequest {
         _payload_reservations: payload_reservations,
         retrieval_context,
+        tool_result_context,
         attachment_plans,
         generation_input_messages,
         generation_parameters,
@@ -5848,7 +5855,9 @@ pub(crate) fn parked_child_approval_item(child: &ParkedChild) -> ApprovalItem {
                 child_message_id: child.child_message_id,
                 child_tool_call_id,
                 tool_name: child_tool_name,
-                display: child_display,
+                display: child_display
+                    .as_ref()
+                    .map(crate::services::tool_display::child_approval_display),
                 mcp_server_id: request.mcp_server_id.clone(),
                 input: child_input,
                 annotations: request.annotations.clone(),
@@ -6486,6 +6495,7 @@ mod generation_event_wire_format_tests {
                                 ),
                                 &json!({ "query": "example" }),
                                 None,
+                                &Default::default(),
                             )
                         }),
                         input: Some(json!({ "query": "example" })),
@@ -6519,6 +6529,7 @@ async fn stream_generate_chat_completion<'a>(
     chat_request: ChatRequest,
     attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     mut retrieval_context: crate::services::file_retrieval::RetrievalContext,
+    mut tool_result_context: crate::services::tool_display::label::ToolResultContext,
     langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -7410,6 +7421,7 @@ async fn stream_generate_chat_completion<'a>(
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
+            tool_result_context.observe(&current_message_content);
             // Built once per call: the in-progress update, a budget refusal and
             // the MCP dispatch below all show this one.
             let mcp_display = available_mcp_tools_by_name
@@ -7421,6 +7433,7 @@ async fn stream_generate_chat_completion<'a>(
                         &managed.tool,
                         &unfinished_tool_call.fn_arguments,
                         managed.approval_argument.as_deref(),
+                        &tool_result_context,
                     )
                 });
             // Emit event for tool call proposed
@@ -13282,6 +13295,7 @@ mod tests {
                 tool,
                 &call.fn_arguments,
                 None,
+                &Default::default(),
             ),
             call,
             user_decision,
@@ -13350,8 +13364,14 @@ mod tests {
             }}
         }))
         .unwrap();
-        let display =
-            mcp_tool_call_display(&servers, "new_server", &tool, &call.fn_arguments, None);
+        let display = mcp_tool_call_display(
+            &servers,
+            "new_server",
+            &tool,
+            &call.fn_arguments,
+            None,
+            &Default::default(),
+        );
         let ToolCallGate::Ask(request) =
             gate_mcp_tool_call(&config, "new_server", &tool, &display, &call, None, None)
         else {
@@ -13550,6 +13570,52 @@ mod tests {
         assert_eq!(legacy.approvals.len(), 2);
         assert_eq!(legacy.approvals[0].approval_id, "legacy-call");
         assert!(legacy.approvals[0].child.is_none());
+    }
+
+    #[test]
+    fn a_parked_childs_label_reaches_the_parent_without_what_the_child_chat_resolved() {
+        use crate::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+        use crate::services::tool_display::label::{
+            ToolCallLabelItemMapping, ToolCallLabelMapping, resolve_label,
+        };
+        let arguments = json!({"recordId": "rec-1", "item": {"status": "done"}});
+        let mapping = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/item/status".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let written = resolve_label(&mapping, &arguments).unwrap();
+        let mut resolved = written.clone();
+        resolved.items[0].id.as_mut().unwrap().values[0].resolved =
+            Some("Named by the child's results".into());
+        resolved.items[0].fields[0].values[0].resolved = Some("open".into());
+
+        let mut child = parked_child("task-a", "2026-10-20T10:00:00Z");
+        let crate::services::delegation::ChildStop::Approval(request) = &mut child.stop else {
+            unreachable!()
+        };
+        request.input = arguments;
+        let display = request.display.as_mut().expect("an MCP call's display");
+        display.label = Some(resolved);
+        let child_display = display.clone();
+        for item in &mut request.approvals {
+            item.display = Some(child_display.clone());
+        }
+
+        let item = super::parked_child_approval_item(&child);
+        assert_eq!(
+            item.child.and_then(|child| child.display),
+            Some(crate::models::message::ToolDisplayMetadata {
+                label: Some(written),
+                ..child_display.clone()
+            })
+        );
+        assert_eq!(parked_request(&child).display, Some(child_display));
     }
 
     #[test]
@@ -14602,6 +14668,7 @@ mod tests {
                         tool,
                         &call.fn_arguments,
                         approval_argument,
+                        &Default::default(),
                     );
                     let gates: Vec<_> = [None, generic.label.clone(), Some(delete.clone())]
                         .into_iter()
@@ -14666,6 +14733,7 @@ mod tests {
             &read_only,
             &call.fn_arguments,
             None,
+            &Default::default(),
         );
         match gate_mcp_tool_call(
             &granting,
@@ -16979,6 +17047,7 @@ async fn run_generation_after_user_message_memory_inner(
     let PreparedChatRequest {
         _payload_reservations,
         retrieval_context,
+        tool_result_context,
         attachment_plans,
         chat_request,
         chat_options,
@@ -17154,6 +17223,7 @@ async fn run_generation_after_user_message_memory_inner(
         chat_request,
         attachment_plans,
         retrieval_context,
+        tool_result_context,
         langfuse_trace_enrichment,
         chat_options,
         initial_assistant_message.id,
@@ -17767,6 +17837,7 @@ pub(crate) async fn start_regeneration(
             let PreparedChatRequest {
                 _payload_reservations,
                 retrieval_context,
+                tool_result_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -17902,6 +17973,7 @@ pub(crate) async fn start_regeneration(
                 chat_request,
                 attachment_plans,
                 retrieval_context,
+                tool_result_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -18396,6 +18468,7 @@ pub(crate) async fn start_edit(
             let PreparedChatRequest {
                 _payload_reservations,
                 retrieval_context,
+                tool_result_context,
                 attachment_plans,
                 chat_request,
                 chat_options,
@@ -18531,6 +18604,7 @@ pub(crate) async fn start_edit(
                 chat_request,
                 attachment_plans,
                 retrieval_context,
+                tool_result_context,
                 langfuse_trace_enrichment,
                 chat_options,
                 initial_assistant_message.id,
@@ -22747,6 +22821,8 @@ async fn resume_parked_generation(
     )
     .await;
     let source_generation_input_messages = retrieval_source.clone();
+    let tool_result_context =
+        crate::services::tool_display::label::ToolResultContext::from_messages(&retrieval_source);
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(
             app_state,
@@ -23160,6 +23236,7 @@ async fn resume_parked_generation(
         chat_request,
         attachment_plans,
         retrieval_context,
+        tool_result_context,
         LangfuseTraceEnrichment::default(),
         chat_options,
         message.id,
@@ -23686,6 +23763,7 @@ mod mcp_progress_event_tests {
                     &rmcp::model::Tool::new("read_file", "Reads.", rmcp::model::JsonObject::new()),
                     &json!({ "path": "notes.txt" }),
                     None,
+                    &Default::default(),
                 )),
                 input: None,
                 status: ToolCallStatus::InProgress,

@@ -1,0 +1,287 @@
+{
+  "history": [
+    {
+      "tool_name": "search",
+      "input": { "query": "opportunity contact", "limit": 5 },
+      "output": "- `tables/opportunity` - Opportunity\n- `tables/contact` - Contact\n- `tables/task` - Task"
+    },
+    {
+      "tool_name": "read_query",
+      "input": {
+        "querytext": "SELECT name, opportunityid, customerid, parentcontactid, estimatedclosedate, risklevel, statecode FROM opportunity WHERE name LIKE '%Line%'",
+        "top": 5
+      },
+      "output": [
+        {
+          "name": "Line 4 retrofit",
+          "opportunityid": "5f0c2a10-0000-4000-8000-00000000a001",
+          "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+          "parentcontactid": "5f0c2a10-0000-4000-8000-00000000b001",
+          "transactioncurrencyid": "5f0c2a10-0000-4000-8000-00000000e001",
+          "estimatedclosedate": "2026-12-01T00:00:00",
+          "risklevel": 1,
+          "statecode": 0,
+          "statecodename": "Open"
+        },
+        {
+          "name": "Spare parts frame deal",
+          "opportunityid": "5f0c2a10-0000-4000-8000-00000000a002",
+          "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+          "parentcontactid": null,
+          "transactioncurrencyid": "5f0c2a10-0000-4000-8000-00000000e001",
+          "estimatedclosedate": "2027-02-01T00:00:00",
+          "risklevel": 2,
+          "statecode": 0,
+          "statecodename": "Open"
+        }
+      ]
+    },
+    {
+      "tool_name": "read_query",
+      "input": {
+        "querytext": "SELECT fullname, contactid, parentcustomerid, jobtitle FROM contact WHERE parentcustomerid = '5f0c2a10-0000-4000-8000-00000000c001'"
+      },
+      "output": [
+        {
+          "fullname": "Ana Example",
+          "contactid": "5f0c2a10-0000-4000-8000-00000000b001",
+          "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+          "jobtitle": "Plant manager"
+        },
+        {
+          "fullname": "Ben Sample",
+          "contactid": "5f0c2a10-0000-4000-8000-00000000b002",
+          "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+          "jobtitle": "Buyer"
+        }
+      ]
+    },
+    {
+      "tool_name": "read_query",
+      "input": {
+        "querytext": "SELECT name, accountid FROM account WHERE accountid = '5f0c2a10-0000-4000-8000-00000000c001'"
+      },
+      "output": [
+        {
+          "name": "Example Industries",
+          "accountid": "5f0c2a10-0000-4000-8000-00000000c001"
+        }
+      ]
+    },
+    {
+      "tool_name": "describe",
+      "input": { "path": "tables/task" },
+      "output": "DESCRIBE TABLE task (\n  subject nvarchar,\n  regardingobjectid lookup (Related table : opportunity, account)\n)"
+    },
+    {
+      "tool_name": "create_record",
+      "input": {
+        "tablename": "task",
+        "item": {
+          "subject": "Agree technical layout",
+          "scheduledend": "2026-11-20",
+          "regardingobjectid": {
+            "name": "Line four, as the model typed it",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      },
+      "output": "Created record with ID 5f0c2a10-0000-4000-8000-00000000d001."
+    }
+  ],
+  "writes": [
+    {
+      "case": "create a task regarding a record read earlier",
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Send the quote",
+          "description": "Include the spare parts.",
+          "regardingobjectid": {
+            "name": "Typed by the model",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      },
+      "mapping": {
+        "action": "create",
+        "object_kind": "task",
+        "items": [
+          {
+            "title": "/item/subject",
+            "target": "/item/regardingobjectid/recordId",
+            "after": "/item/description"
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": { "target": ["Line 4 retrofit"] }
+    },
+    {
+      "case": "create a contact under an account read earlier",
+      "arguments": {
+        "tablename": "contact",
+        "item": {
+          "firstname": "Cleo",
+          "lastname": "Placeholder",
+          "parentcustomerid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+            "relatedTable": "account"
+          }
+        }
+      },
+      "mapping": {
+        "action": "create",
+        "object_kind": "row",
+        "items": [
+          {
+            "title": "/item/lastname",
+            "target": "/item/parentcustomerid/recordId",
+            "fields": ["/item/firstname"]
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": { "target": ["Example Industries"], "fields": [[null]] }
+    },
+    {
+      "case": "update two columns of a record read earlier",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5F0C2A10-0000-4000-8000-00000000A001",
+        "item": { "estimatedclosedate": "2027-01-15", "risklevel": 3 }
+      },
+      "mapping": {
+        "action": "update",
+        "object_kind": "row",
+        "items": [
+          {
+            "id": "/recordId",
+            "fields": ["/item/estimatedclosedate", "/item/risklevel"]
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": {
+        "id": ["Line 4 retrofit"],
+        "fields": [["2026-12-01T00:00:00"], ["1"]]
+      }
+    },
+    {
+      "case": "change a lookup: the old value is the earlier record's name",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "parentcontactid": {
+            "name": "Typed by the model",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+            "relatedTable": "contact"
+          }
+        }
+      },
+      "mapping": {
+        "action": "update",
+        "object_kind": "row",
+        "items": [
+          {
+            "id": "/recordId",
+            "fields": ["/item/parentcontactid/recordId"]
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": { "id": ["Line 4 retrofit"], "fields": [["Ana Example"]] }
+    },
+    {
+      "case": "a column the earlier read had empty has no old value",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a002",
+        "item": {
+          "parentcontactid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+            "relatedTable": "contact"
+          }
+        }
+      },
+      "mapping": {
+        "action": "update",
+        "object_kind": "row",
+        "items": [
+          {
+            "id": "/recordId",
+            "fields": ["/item/parentcontactid/recordId"]
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": { "id": ["Spare parts frame deal"], "fields": [[null]] }
+    },
+    {
+      "case": "delete the task created earlier in the chat",
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001",
+        "hasUserApproved": true
+      },
+      "mapping": {
+        "action": "delete",
+        "object_kind": "task",
+        "items": [{ "id": "/recordId" }],
+        "source": "rules"
+      },
+      "expect": { "id": ["Agree technical layout"] }
+    },
+    {
+      "case": "an email to two contacts read earlier names neither recipient",
+      "arguments": {
+        "tablename": "email",
+        "item": {
+          "subject": "Layout review",
+          "description": "Agenda attached.",
+          "to": [
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+              "relatedTable": "contact"
+            },
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+              "relatedTable": "contact"
+            }
+          ]
+        }
+      },
+      "mapping": {
+        "action": "send",
+        "object_kind": "email",
+        "items": [
+          {
+            "title": "/item/subject",
+            "target": "/item/to/*/recordId",
+            "after": "/item/description"
+          }
+        ],
+        "source": "rules"
+      },
+      "expect": { "target": [null, null] }
+    },
+    {
+      "case": "a record nobody read is a miss, not a guess",
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+        "item": { "risklevel": 2 }
+      },
+      "mapping": {
+        "action": "update",
+        "object_kind": "row",
+        "items": [{ "id": "/recordId", "fields": ["/item/risklevel"] }],
+        "source": "rules"
+      },
+      "expect": { "id": [null], "fields": [[null]] }
+    }
+  ]
+}
