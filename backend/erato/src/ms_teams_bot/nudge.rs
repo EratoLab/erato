@@ -22,7 +22,7 @@ use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
     DeliveryAction, DeliveryChannel, DeliveryContent, DeliveryLink, DeliveryOutcome,
     DeliveryProducer, DeliveryRegistry, NewDelivery, ResolvedContent, StillDue, count_delivered,
-    schedule_once,
+    schedule_once, store_action_token,
 };
 use chrono::{
     DateTime, Datelike, Duration as ChronoDuration, FixedOffset, TimeZone, Timelike, Utc,
@@ -52,8 +52,6 @@ pub const OPT_OUT_COMMAND: &str = "opt_out";
 /// The producer rule runs at most this often per replica; the dedupe key
 /// keeps several replicas from scheduling the same tip.
 const PRODUCE_INTERVAL: Duration = Duration::from_secs(60 * 60);
-/// How long a tip card's button stays usable.
-const ACTION_TTL_DAYS: i32 = 30;
 
 fn statement(id: &'static str, sql: &str, values: Vec<sea_orm::Value>) -> Statement {
     named_statement_from_sql_and_values(DbBackend::Postgres, id, sql, values)
@@ -510,41 +508,6 @@ impl DeliveryProducer for InactivityNudgeProducer {
             },
         })
     }
-}
-
-/// Keep the card's single-use token on the row it belongs to, fenced on the
-/// claim so a lost claim cannot arm a card for a row someone else delivers.
-async fn store_action_token(
-    db: &DatabaseConnection,
-    row: &Model,
-    token: Uuid,
-) -> Result<(), Report> {
-    let claim_token = row
-        .claim_token
-        .clone()
-        .ok_or_else(|| eyre!("nudge content resolved for an unclaimed row"))?;
-    let result = db
-        .execute_raw(statement(
-            "teams_nudge.store_action",
-            "UPDATE scheduled_deliveries
-             SET outcome = outcome || jsonb_build_object(
-                 'action_token', $3::text,
-                 'action_expires_at', (now() + make_interval(days => $4))::text)
-             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
-            vec![
-                row.id.into(),
-                claim_token.into(),
-                token.to_string().into(),
-                ACTION_TTL_DAYS.into(),
-            ],
-        ))
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(eyre!(
-            "the delivery claim was lost before the card was built"
-        ));
-    }
-    Ok(())
 }
 
 /// A button press on a delivered card, as Teams sends it back.
