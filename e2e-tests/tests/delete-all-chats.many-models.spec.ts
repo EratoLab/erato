@@ -96,7 +96,7 @@ test(
           response.request().method() === "POST",
       );
 
-      await page.getByRole("button", { name: "Confirm action" }).click();
+      await page.getByRole("button", { name: "Confirm", exact: true }).click();
       await archiveAllResponsePromise;
 
       await expect

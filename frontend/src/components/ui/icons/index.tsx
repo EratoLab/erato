@@ -70,6 +70,9 @@ import {
   Shield,
   ShieldCheck,
   ShieldXmark,
+  Bell,
+  Clock,
+  Play,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -427,6 +430,18 @@ export const CalendarIcon = ({ className, ...props }: IconProps) => (
 
 export const AttachmentIcon = ({ className, ...props }: IconProps) => (
   <Attachment className={className} {...props} />
+);
+
+export const BellIcon = ({ className, ...props }: IconProps) => (
+  <Bell className={className} {...props} />
+);
+
+export const ClockIcon = ({ className, ...props }: IconProps) => (
+  <Clock className={className} {...props} />
+);
+
+export const PlayIcon = ({ className, ...props }: IconProps) => (
+  <Play className={className} {...props} />
 );
 
 export const PinIcon = ({ className, ...props }: IconProps) => (
