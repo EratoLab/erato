@@ -976,6 +976,7 @@ impl AppState {
     /// Get the system prompt for a given chat provider configuration.
     /// This resolves either a static system prompt or retrieves one from Langfuse,
     /// and renders any placeholders (e.g., {{erato_inject_preferred_language_code}}).
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_system_prompt(
         &self,
         config: &ChatProviderConfig,
