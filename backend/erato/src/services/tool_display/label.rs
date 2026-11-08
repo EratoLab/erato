@@ -650,18 +650,19 @@ mod tests {
         assert_eq!(soft.items[0].fields[0].name.as_deref(), Some("Stage"));
         assert_eq!(soft.warnings, [ToolCallLabelWarning::HiddenCharacters]);
 
-        let selector = resolve_label(&mapping("/parent", &["/Sta\u{FE0F}ge"]), &arguments).unwrap();
+        let selector =
+            resolve_label(&mapping("/parent", &["/Sta\u{FE0F}ge"]), &arguments, None).unwrap();
         assert_eq!(selector.items[0].fields[0].name.as_deref(), Some("Stage"));
         assert_eq!(selector.warnings, [ToolCallLabelWarning::HiddenCharacters]);
 
-        let joined = resolve_label(&mapping("/family", &["/joined"]), &arguments).unwrap();
+        let joined = resolve_label(&mapping("/family", &["/joined"]), &arguments, None).unwrap();
         assert_eq!(
             texts(joined.items[0].title.as_ref().unwrap()),
             ["\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} and \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}"]
         );
         assert_eq!(texts(&joined.items[0].fields[0]), ["Lead"]);
         assert_eq!(joined.warnings, [ToolCallLabelWarning::HiddenCharacters]);
-        let family = resolve_label(&mapping("/family", &[]), &arguments).unwrap();
+        let family = resolve_label(&mapping("/family", &[]), &arguments, None).unwrap();
         assert!(family.warnings.is_empty());
     }
 
