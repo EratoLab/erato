@@ -1,6 +1,6 @@
 use erato_config::config::{
-    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_hidden_char,
-    is_invisible_format_char, validate_mcp_server_ids,
+    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_invisible_format_char,
+    mark_hidden_chars, validate_mcp_server_ids,
 };
 use std::collections::HashMap;
 
@@ -119,35 +119,77 @@ fn invisible_formatting_characters_are_exactly_the_default_ignorable_ones() {
     assert!(validate_mcp_server_ids(&HashMap::from([("crm".into(), named)])).is_ok());
 }
 
+fn hidden_positions(text: &str) -> Vec<usize> {
+    mark_hidden_chars(text.chars())
+        .enumerate()
+        .filter_map(|(index, (_, hidden))| hidden.then_some(index))
+        .collect()
+}
+
 #[test]
-fn a_presentation_selector_is_hidden_only_where_it_styles_no_character() {
-    for (previous, c) in [
-        (Some('\u{2764}'), '\u{FE0F}'),
-        (Some('\u{2764}'), '\u{FE0E}'),
-        (Some('1'), '\u{FE0F}'),
-        (Some('a'), 'b'),
-        (None, 'a'),
-    ] {
-        assert!(!is_hidden_char(previous, c), "{previous:?} {c:?}");
+fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
+    // Keycap bases, regional indicators and Unicode 16's newest emoji
+    // (harp, fingerprint, face with bags under eyes) all have Emoji=Yes.
+    for base in "#*0123456789".chars().chain([
+        '\u{00A9}',
+        '\u{2764}',
+        '\u{1F1E6}',
+        '\u{1F1FF}',
+        '\u{1FA89}',
+        '\u{1FAC6}',
+        '\u{1FAE9}',
+    ]) {
+        for selector in ['\u{FE0E}', '\u{FE0F}'] {
+            assert_eq!(
+                hidden_positions(&format!("{base}{selector}")),
+                [] as [usize; 0],
+                "U+{:04X}",
+                u32::from(base)
+            );
+        }
     }
-    for (previous, c) in [
-        (None, '\u{FE0F}'),
-        (Some(' '), '\u{FE0F}'),
-        (Some('\n'), '\u{FE0E}'),
-        (Some('\u{7}'), '\u{FE0F}'),
-        (Some('\u{FE0F}'), '\u{FE0F}'),
-        (Some('\u{200B}'), '\u{FE0E}'),
-        (Some('\u{2764}'), '\u{FE00}'),
-        (Some('\u{2764}'), '\u{E0100}'),
-        (Some('\u{2764}'), '\u{200B}'),
-    ] {
-        assert!(is_hidden_char(previous, c), "{previous:?} {c:?}");
+    for base in ['a', 'Z', '\u{00E9}', '\u{4E2D}', '\u{1F000}', '\u{20E3}'] {
+        assert_eq!(
+            hidden_positions(&format!("{base}\u{FE0F}")),
+            [1],
+            "U+{:04X}",
+            u32::from(base)
+        );
     }
 
+    for (text, hidden) in [
+        ("1\u{FE0F}\u{20E3}", vec![]),
+        ("\u{1F44D}\u{1F3FD}\u{FE0F}", vec![]),
+        ("a\u{1F3FD}\u{FE0F}", vec![2]),
+        ("\u{1F3FD}\u{FE0F}", vec![1]),
+        ("\u{2764}\u{FE0F}\u{FE0E}", vec![2]),
+        ("\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", vec![]),
+        ("\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}", vec![]),
+        ("\u{1F469}\u{1F3FD}\u{200D}\u{1F4BB}", vec![]),
+        ("\u{1F000}\u{FE0F}\u{200D}\u{1F469}", vec![1, 2]),
+        ("\u{1F1E9}\u{200D}\u{1F1EA}", vec![1]),
+        ("\u{1F468}\u{200D}a", vec![1]),
+        ("a\u{200D}b", vec![1]),
+        ("\u{1F3F4}\u{E0067}\u{E0062}\u{E007F}", vec![1, 2, 3]),
+    ] {
+        assert_eq!(hidden_positions(text), hidden, "{text:?}");
+    }
+
+    let valid = |name: &str| {
+        let server = parse(&format!("display_name = \"{name}\"")).unwrap();
+        validate_mcp_server_ids(&HashMap::from([("crm".into(), server)])).is_ok()
+    };
+    for name in [
+        "Weather \u{2600}\u{FE0F}",
+        "Team \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+        "Pride \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+    ] {
+        assert!(valid(name), "{name:?}");
+    }
+    for name in ["Wea\u{FE0F}ther", "CRM\u{FE0E}", "C\u{200D}RM"] {
+        assert!(!valid(name), "{name:?}");
+    }
     assert!(!has_hidden_chars(
         "I \u{2764}\u{FE0F} it, 1\u{FE0F}\u{20E3}"
     ));
-    assert!(has_hidden_chars("\u{2764}\u{FE0F}\u{FE0E}"));
-    let named = parse("display_name = \"Weather \u{2600}\u{FE0F}\"").unwrap();
-    assert!(validate_mcp_server_ids(&HashMap::from([("weather".into(), named)])).is_ok());
 }

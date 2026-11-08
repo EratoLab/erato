@@ -3074,6 +3074,143 @@ describe("gist cards", () => {
     });
   });
 
+  describe("a 4,000-character ID", () => {
+    const LONG_ID = `${"a1b2c3d4".repeat(499)}tail0001`;
+    const OTHER_ID = `${"a1b2c3d4".repeat(499)}tail0002`;
+    const cardWith = (input: unknown, label: unknown) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            input,
+            display: {
+              ...createRowDisplay,
+              label: label as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    const createIn = (resolved?: string) => {
+      const input = { ...createRowInput, parent: { data_source_id: LONG_ID } };
+      cardWith(input, {
+        ...createRowLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...createRowLabel.items[0],
+            target: {
+              pointer: "/parent/data_source_id",
+              values: [
+                { path: "/parent/data_source_id", text: LONG_ID, resolved },
+              ],
+            },
+          },
+        ],
+      });
+    };
+    const scrollBoxOf = (node: Element) =>
+      node.closest<HTMLElement>(".overflow-y-auto");
+    const expectButtons = () => {
+      expect(
+        screen.getByRole("button", { name: "Allow once" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Deny once" }),
+      ).toBeInTheDocument();
+    };
+
+    it("shows it whole in the line, which scrolls in a box of its own", () => {
+      createIn();
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      const id = line.querySelector('[data-origin="id"]')!;
+      expect(id.textContent).toBe(LONG_ID);
+      expect(scrollBoxOf(id)).toBe(line);
+      expect(line).toHaveClass("max-h-32");
+      expectButtons();
+    });
+
+    it("shows it whole beside a resolved name, inside the line's box", () => {
+      createIn("Companies");
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      const id = within(line)
+        .getByTestId("tool-call-gist-written")
+        .querySelector(".font-mono")!;
+      expect(id.textContent).toBe(LONG_ID);
+      expect(scrollBoxOf(id)).toBe(line);
+      expectButtons();
+    });
+
+    it("shows each in a batch whole, every row in a box of its own", () => {
+      const input = { ids: [LONG_ID, OTHER_ID] };
+      cardWith(input, {
+        action: "delete",
+        object_kind: "row",
+        source: "rules",
+        arguments: viewOf(input),
+        items: [
+          {
+            id: {
+              pointer: "/ids/*",
+              values: input.ids.map((text, index) => ({
+                path: `/ids/${index}`,
+                text,
+              })),
+            },
+          },
+        ],
+      });
+
+      const rows = Array.from(
+        screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+      );
+      expect(rows.map((row) => row.textContent)).toEqual([LONG_ID, OTHER_ID]);
+      for (const row of rows) {
+        const box = scrollBoxOf(row.querySelector('[data-origin="id"]')!);
+        expect(row).toContainElement(box);
+        expect(box).toHaveClass("max-h-24");
+      }
+      expectButtons();
+    });
+
+    it("shows it whole in a field, whose value scrolls in a box of its own", () => {
+      const input = { recordId: "r1", owner_id: LONG_ID };
+      cardWith(input, {
+        action: "update",
+        object_kind: "row",
+        source: "rules",
+        arguments: viewOf(input),
+        items: [
+          {
+            id: {
+              pointer: "/recordId",
+              values: [{ path: "/recordId", text: "r1", resolved: "Acme" }],
+            },
+            fields: [
+              {
+                pointer: "/owner_id",
+                name: "owner_id",
+                values: [{ path: "/owner_id", text: LONG_ID }],
+              },
+            ],
+          },
+        ],
+      });
+
+      const id = screen
+        .getByTestId("tool-call-gist-values")
+        .querySelector('[data-origin="id"]')!;
+      expect(id.textContent).toBe(LONG_ID);
+      const box = scrollBoxOf(id);
+      expect(box?.tagName).toBe("DD");
+      expect(box).toHaveClass("max-h-24");
+      expectButtons();
+    });
+  });
+
   it("lines a batch's fields up only under the names' own arrays, and lists the rest once", () => {
     const field = (pointer: string, values: [string, string][]) => ({
       pointer,
@@ -3955,6 +4092,19 @@ describe("gist cards", () => {
         screen.getByTestId("tool-argument-view").querySelector("dd")
           ?.textContent,
       ).toBe(shown);
+      expect(hiddenNote()).toBeInTheDocument();
+    });
+
+    it("warns about member names that differ only by a selector after a letter", () => {
+      const input = { status: "open", "status\uFE0F": "closed" };
+      cardFor(input, genericLabel(input));
+
+      expect(
+        Array.from(
+          screen.getByTestId("tool-argument-view").querySelectorAll("dt"),
+          (name) => name.textContent,
+        ),
+      ).toEqual(["status", "status"]);
       expect(hiddenNote()).toBeInTheDocument();
     });
 

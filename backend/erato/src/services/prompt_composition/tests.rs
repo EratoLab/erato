@@ -4009,6 +4009,108 @@ mod test_cases {
             assert_provider_sequence_is_valid(stubbed);
         }
 
+        fn mcp_call(labelled: bool) -> ContentPart {
+            let ContentPart::ToolUse(mut call) = tool_use(
+                "mcp-1",
+                "notion-create-pages",
+                json!({"pages": [{"title": "Quarterly plan"}]}),
+                json!({"created": ["page-1"]}),
+            ) else {
+                unreachable!()
+            };
+            call.display = labelled.then(|| {
+                serde_json::from_value(json!({
+                    "title": "TOOL-TITLE",
+                    "description": "TOOL-DESCRIPTION",
+                    "description_truncated": false,
+                    "server_name": "SERVER-NAME",
+                    "label": {
+                        "action": "create",
+                        "object_kind": "page",
+                        "items": [{"title": {
+                            "pointer": "/pages/*/title",
+                            "values": [{
+                                "path": "/pages/0/title",
+                                "text": "LABEL-VALUE",
+                                "resolved": "RESOLVED-NAME",
+                            }],
+                        }}],
+                        "arguments": {
+                            "path": "",
+                            "kind": "group",
+                            "children": [{"path": "/pages", "kind": "list"}],
+                        },
+                        "warnings": ["hidden_characters"],
+                        "source": "rules",
+                    },
+                }))
+                .expect("display parses")
+            });
+            ContentPart::ToolUse(call)
+        }
+
+        fn model_input(messages: GenerationInputMessages) -> String {
+            let request = messages.into_chat_request();
+            serde_json::to_string(
+                &into_openai_request_parts(&request)
+                    .expect("OpenAI request parts")
+                    .messages,
+            )
+            .expect("serializable")
+        }
+
+        #[tokio::test]
+        async fn a_replayed_call_keeps_only_its_label_action_and_server_and_the_model_input_is_unchanged()
+         {
+            let labelled = two_edit_chat(word_policy(), vec![mcp_call(true)], WORD_TOOLS).await;
+            let bare = two_edit_chat(word_policy(), vec![mcp_call(false)], WORD_TOOLS).await;
+
+            let snapshot = stored_snapshot(&labelled, 1);
+            let copies: Vec<_> = snapshot
+                .messages
+                .iter()
+                .filter_map(|message| match &message.content {
+                    ContentPart::ToolUse(part) if part.tool_call_id == "mcp-1" => {
+                        Some((message.role.clone(), json!(part.display)))
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                copies,
+                [
+                    (MessageRole::Assistant, JsonValue::Null),
+                    (
+                        MessageRole::Tool,
+                        json!({
+                            "title": "",
+                            "description_truncated": false,
+                            "server_name": "SERVER-NAME",
+                            "label": {"action": "create", "object_kind": "other", "source": "generic"},
+                        })
+                    ),
+                ]
+            );
+            let snapshot_text = json_text(&snapshot);
+            for kept_out in [
+                "TOOL-TITLE",
+                "TOOL-DESCRIPTION",
+                "LABEL-VALUE",
+                "RESOLVED-NAME",
+                "/pages/*/title",
+            ] {
+                assert!(!snapshot_text.contains(kept_out), "{kept_out} replayed");
+            }
+
+            let replayed = model_input(snapshot);
+            assert!(replayed.contains("Quarterly plan"), "{replayed}");
+            assert_eq!(replayed, model_input(stored_snapshot(&bare, 1)));
+            assert_eq!(
+                model_input(compose(&labelled.repo, &word_provider(), labelled.user[2]).await),
+                model_input(compose(&bare.repo, &word_provider(), bare.user[2]).await)
+            );
+        }
+
         #[tokio::test]
         async fn delegation_results_keep_their_trace_stripping_and_framing() {
             let delegation = tool_use(
