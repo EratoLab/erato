@@ -48,14 +48,12 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           <Button
             variant="secondary"
             onClick={onClose} // Use onClose directly
-            aria-label={t`Cancel action`}
           >
             {cancelButtonText}
           </Button>
           <Button
             variant={confirmButtonVariant}
             onClick={onConfirm} // Use onConfirm directly
-            aria-label={t`Confirm action`}
           >
             {confirmButtonText}
           </Button>

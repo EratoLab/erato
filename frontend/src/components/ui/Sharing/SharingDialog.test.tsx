@@ -162,7 +162,7 @@ describe("SharingDialog", () => {
 
     const confirmRemoval = () => {
       fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-      fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     };
     confirmRemoval();
     confirmRemoval();
@@ -198,7 +198,7 @@ describe("SharingDialog", () => {
 
     const confirmRemoval = (index: number) => {
       fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[index]);
-      fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     };
     confirmRemoval(0);
     await settle();

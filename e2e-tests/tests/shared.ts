@@ -208,7 +208,7 @@ export const archiveChatFromRow = async (
   await row.getByRole("button", { name: "Open menu" }).click();
   await page.getByTestId("chat-history-menu-archive").click();
   if (confirm) {
-    await page.getByRole("button", { name: "Confirm action" }).click();
+    await page.getByRole("button", { name: "Confirm", exact: true }).click();
   }
 };
 

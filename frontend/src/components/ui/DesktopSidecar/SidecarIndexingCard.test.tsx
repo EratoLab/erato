@@ -355,7 +355,7 @@ it("resets only after confirmation and hides reset on older sidecars", () => {
     screen.getByRole("button", { name: "Reset sidecar indices" }),
   );
   expect(reset).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
   expect(reset).toHaveBeenCalledOnce();
   vi.mocked(useSidecarIndexing).mockReturnValue({
     ...vi.mocked(useSidecarIndexing)(),

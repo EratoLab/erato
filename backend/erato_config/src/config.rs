@@ -87,9 +87,11 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': stateless protocol requires streamable_http"
             ));
         }
-        if server.display_name.as_deref().is_some_and(|name| {
-            !is_valid_display_name(name) || name.chars().any(is_invisible_format_char)
-        }) {
+        if server
+            .display_name
+            .as_deref()
+            .is_some_and(|name| !is_valid_display_name(name) || has_hidden_chars(name))
+        {
             return Err(eyre!(
                 "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
@@ -103,20 +105,56 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// Bidi controls, which can reorder a string, and zero-width, byte order mark
-/// and tag characters, which can hide text in it. MCP tool text is stripped of
-/// them and MCP server display names, shown next to that text, may not hold them.
+/// Unicode's default-ignorable code points (as of Unicode 16): bidi controls,
+/// which can reorder a string, and zero-width, joiner, soft hyphen, filler,
+/// variation selector, byte order mark and tag characters, which render as
+/// nothing and can hide text in it.
 pub fn is_invisible_format_char(c: char) -> bool {
     matches!(
         c,
-        '\u{061C}'
+        '\u{00AD}'
+            | '\u{034F}'
+            | '\u{061C}'
+            | '\u{115F}'..='\u{1160}'
+            | '\u{17B4}'..='\u{17B5}'
+            | '\u{180B}'..='\u{180F}'
             | '\u{200B}'..='\u{200F}'
             | '\u{202A}'..='\u{202E}'
-            | '\u{2060}'
-            | '\u{2066}'..='\u{2069}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{3164}'
+            | '\u{FE00}'..='\u{FE0F}'
             | '\u{FEFF}'
-            | '\u{E0000}'..='\u{E007F}'
+            | '\u{FFA0}'
+            | '\u{FFF0}'..='\u{FFF8}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}'
     )
+}
+
+/// Whether `c`, right after `previous`, is an invisible character that MCP tool
+/// text is stripped of and an MCP server display name, shown next to that text,
+/// may not hold. A text or emoji presentation selector (U+FE0E, U+FE0F) right
+/// after a visible character is ordinary emoji text, as in "❤️", and is kept;
+/// anywhere else, such as in a run, it can carry hidden data.
+pub fn is_hidden_char(previous: Option<char>, c: char) -> bool {
+    is_invisible_format_char(c)
+        && !(matches!(c, '\u{FE0E}' | '\u{FE0F}')
+            && previous.is_some_and(|previous| {
+                !previous.is_whitespace()
+                    && !previous.is_control()
+                    && !is_invisible_format_char(previous)
+            }))
+}
+
+/// Whether `text` holds a character [`is_hidden_char`] rejects.
+pub fn has_hidden_chars(text: &str) -> bool {
+    let mut previous = None;
+    text.chars().any(|c| {
+        let hidden = is_hidden_char(previous, c);
+        previous = Some(c);
+        hidden
+    })
 }
 
 /// `web_access` reads as "Web access": separators become spaces and the first
