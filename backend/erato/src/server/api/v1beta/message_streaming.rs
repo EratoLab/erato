@@ -23045,7 +23045,10 @@ async fn resume_parked_generation(
     .await;
     let source_generation_input_messages = retrieval_source.clone();
     let tool_result_context =
-        crate::services::tool_display::label::ToolResultContext::from_messages(&retrieval_source);
+        crate::services::tool_display::label::ToolResultContext::from_messages_and_row(
+            &retrieval_source,
+            &parsed.content,
+        );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(
             app_state,

@@ -1,6 +1,6 @@
 use super::*;
 use crate::models::message::{
-    ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource, ToolCallObjectKind,
+    ToolAllowedBy, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource, ToolCallObjectKind,
     ToolDisplayMetadata,
 };
 use crate::services::prompt_composition::transforms::replay_assistant_content;
@@ -941,6 +941,124 @@ fn only_erato_s_own_refusal_keeps_old_values_not_a_server_error_shaped_like_it()
             "{output}"
         );
     }
+}
+
+fn decision(content_type: &str, id: &str) -> ContentPart {
+    serde_json::from_value(json!({
+        "content_type": content_type, "tool_call_id": id,
+        "approved_at": "2026-11-08T00:00:00Z", "rejected_at": "2026-11-08T00:00:00Z",
+    }))
+    .unwrap()
+}
+
+/// A write the server answered in exactly the shape of Erato's own refusal.
+fn rejected_write(allowed_by: Option<ToolAllowedBy>) -> ToolUse {
+    ToolUse {
+        status: ToolCallStatus::Error,
+        allowed_by,
+        ..call(
+            "write",
+            "update_record",
+            json!({ "recordId": OPPORTUNITY, "item": { "risklevel": 2 } }),
+            json!({ "status": "rejected", "error": "The user denied this tool call." }),
+        )
+    }
+}
+
+#[test]
+fn a_call_that_ran_without_a_card_is_never_taken_for_eratos_refusal() {
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    for allowed_by in [
+        ToolAllowedBy::Policy,
+        ToolAllowedBy::AlwaysAllow,
+        ToolAllowedBy::Other,
+    ] {
+        let context = after(vec![read.clone(), rejected_write(Some(allowed_by))]);
+        assert_eq!(
+            earlier(&context, OPPORTUNITY, "risklevel", json!(3)),
+            None,
+            "{allowed_by:?}"
+        );
+        let mut running = ToolResultContext::default();
+        running.observe(&[
+            ContentPart::ToolUse(read.clone()),
+            ContentPart::ToolUse(rejected_write(Some(allowed_by))),
+        ]);
+        assert_eq!(
+            earlier(&running, OPPORTUNITY, "risklevel", json!(3)),
+            None,
+            "{allowed_by:?}"
+        );
+    }
+    let context = after(vec![read, rejected_write(None)]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+}
+
+#[test]
+fn a_call_approved_on_a_card_counts_as_run_where_its_row_records_the_approval() {
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    let approved = vec![
+        decision("tool_approval", "write"),
+        ContentPart::ToolUse(rejected_write(None)),
+    ];
+    let withdrawn = vec![
+        decision("tool_approval", "write"),
+        decision("tool_rejection", "write"),
+        ContentPart::ToolUse(rejected_write(None)),
+    ];
+    let other_call = vec![
+        decision("tool_approval", "another-call"),
+        ContentPart::ToolUse(rejected_write(None)),
+    ];
+    for (row, kept) in [
+        (approved, None),
+        (withdrawn, Some("1")),
+        (other_call, Some("1")),
+    ] {
+        let earlier_turns = GenerationInputMessages {
+            messages: replay_assistant_content(
+                &MessageRole::Assistant,
+                vec![ContentPart::ToolUse(read.clone())],
+            ),
+        };
+        let mut source = earlier_turns.clone();
+        source.messages.extend(replay_assistant_content(
+            &MessageRole::Assistant,
+            row.clone(),
+        ));
+        let resumed = ToolResultContext::from_messages_and_row(&source, &row);
+        assert_eq!(
+            earlier(&resumed, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+            kept,
+            "{row:?}"
+        );
+
+        let mut running = ToolResultContext::from_messages(&earlier_turns);
+        running.observe(&row);
+        assert_eq!(
+            earlier(&running, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+            kept,
+            "{row:?}"
+        );
+    }
+
+    // A later turn replays the row without its decision parts.
+    let context = after(vec![read, rejected_write(None)]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
 }
 
 #[test]

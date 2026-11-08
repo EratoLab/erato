@@ -801,11 +801,13 @@ pub(crate) fn replay_assistant_content(
                     continue;
                 }
                 // For the UI only; the snapshot stores both copies, so both drop it.
+                // The Tool copy keeps `allowed_by`: the label context reads it.
                 tool_use.result_details = None;
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
                     content: ContentPart::ToolUse(crate::models::message::ToolUse {
                         display: None,
+                        allowed_by: None,
                         ..tool_use.clone()
                     }),
                 });
@@ -1086,7 +1088,9 @@ pub fn to_concrete_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::message::{ToolCallStatus, ToolResultDetails, ToolResultLink, ToolUse};
+    use crate::models::message::{
+        ToolAllowedBy, ToolCallStatus, ToolResultDetails, ToolResultLink, ToolUse,
+    };
     use crate::services::delegation::{
         DELEGATE_TO_ASSISTANT_TOOL_NAME, DelegationResultEnvelope, DelegationRunStatus,
     };
@@ -1206,6 +1210,38 @@ mod tests {
         let snapshot = serde_json::to_string(&replayed).unwrap();
         assert!(!snapshot.contains("SYNTHETIC-LINK-TITLE"), "{snapshot}");
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
+    }
+
+    #[test]
+    fn a_replayed_tool_call_keeps_its_allowed_by_on_the_tool_copy_only() {
+        for allowed_by in [
+            ToolAllowedBy::Policy,
+            ToolAllowedBy::AlwaysAllow,
+            ToolAllowedBy::Other,
+        ] {
+            let stored = ToolUse {
+                allowed_by: Some(allowed_by),
+                ..part("update_row", serde_json::json!("Updated row row-1."))
+            };
+            let replayed = replay_assistant_content(
+                &MessageRole::Assistant,
+                vec![ContentPart::ToolUse(stored)],
+            );
+            let kept: Vec<_> = replayed
+                .iter()
+                .map(|message| match &message.content {
+                    ContentPart::ToolUse(tool_use) => (message.role.clone(), tool_use.allowed_by),
+                    other => panic!("not a tool use: {other:?}"),
+                })
+                .collect();
+            assert_eq!(
+                kept,
+                vec![
+                    (MessageRole::Assistant, None),
+                    (MessageRole::Tool, Some(allowed_by)),
+                ]
+            );
+        }
     }
 
     /// Framing keys on the tool that produced the part. Another tool's output
