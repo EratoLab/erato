@@ -132,29 +132,99 @@ pub fn is_invisible_format_char(c: char) -> bool {
     )
 }
 
-/// Whether `c`, right after `previous`, is an invisible character that MCP tool
-/// text is stripped of and an MCP server display name, shown next to that text,
-/// may not hold. A text or emoji presentation selector (U+FE0E, U+FE0F) right
-/// after a visible character is ordinary emoji text, as in "❤️", and is kept;
-/// anywhere else, such as in a run, it can carry hidden data.
-pub fn is_hidden_char(previous: Option<char>, c: char) -> bool {
-    is_invisible_format_char(c)
-        && !(matches!(c, '\u{FE0E}' | '\u{FE0F}')
-            && previous.is_some_and(|previous| {
-                !previous.is_whitespace()
-                    && !previous.is_control()
-                    && !is_invisible_format_char(previous)
-            }))
+const ZERO_WIDTH_JOINER: char = '\u{200D}';
+
+/// Each character of `text` with whether it is an invisible character that MCP
+/// tool text is stripped of and an MCP server display name, shown next to that
+/// text, may not hold. Two of them are ordinary emoji text where they sit:
+///
+/// - a text or emoji presentation selector (U+FE0E, U+FE0F) directly after a
+///   character with the Unicode `Emoji` property, as in "❤️" or "1️⃣", or after
+///   a skin tone (U+1F3FB–U+1F3FF) that follows one;
+/// - a zero-width joiner between two `Extended_Pictographic` characters, the
+///   first one optionally followed by a kept U+FE0F or a skin tone, as in
+///   "👨‍👩‍👧" or "🏳️‍🌈".
+///
+/// Anywhere else, such as after a letter or in a run, they can carry hidden
+/// data. A client mirrors this with JavaScript's `/\p{Emoji}/u` and
+/// `/\p{Extended_Pictographic}/u` (Unicode 16 here).
+pub fn mark_hidden_chars(
+    text: impl IntoIterator<Item = char>,
+) -> impl Iterator<Item = (char, bool)> {
+    let mut chars = text.into_iter().peekable();
+    let (mut two_back, mut previous) = (None, None);
+    std::iter::from_fn(move || {
+        let c = chars.next()?;
+        let hidden = is_hidden_at(two_back, previous, c, chars.peek().copied());
+        (two_back, previous) = (previous, Some(c));
+        Some((c, hidden))
+    })
 }
 
-/// Whether `text` holds a character [`is_hidden_char`] rejects.
+/// Whether `text` holds a character [`mark_hidden_chars`] marks hidden.
 pub fn has_hidden_chars(text: &str) -> bool {
-    let mut previous = None;
-    text.chars().any(|c| {
-        let hidden = is_hidden_char(previous, c);
-        previous = Some(c);
-        hidden
-    })
+    mark_hidden_chars(text.chars()).any(|(_, hidden)| hidden)
+}
+
+fn is_hidden_at(
+    two_back: Option<char>,
+    previous: Option<char>,
+    c: char,
+    next: Option<char>,
+) -> bool {
+    if !is_invisible_format_char(c) {
+        return false;
+    }
+    match c {
+        '\u{FE0E}' | '\u{FE0F}' => !selector_styles_emoji(two_back, previous),
+        ZERO_WIDTH_JOINER => {
+            !(joiner_follows_emoji(two_back, previous)
+                && next.is_some_and(is_extended_pictographic))
+        }
+        // Tag characters stay hidden even in subdivision flags such as
+        // England's: they spell out ASCII nobody sees, the main way to smuggle
+        // text past a reader.
+        _ => true,
+    }
+}
+
+fn selector_styles_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+    match previous {
+        Some(modifier) if is_emoji_modifier(modifier) => two_back.is_some_and(is_emoji),
+        Some(previous) => is_emoji(previous),
+        None => false,
+    }
+}
+
+/// A U+FE0F after a pictograph is kept exactly when the pictograph is `Emoji`.
+fn joiner_follows_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+    match previous {
+        Some('\u{FE0F}') => {
+            two_back.is_some_and(|emoji| is_extended_pictographic(emoji) && is_emoji(emoji))
+        }
+        Some(modifier) if is_emoji_modifier(modifier) => {
+            two_back.is_some_and(is_extended_pictographic)
+        }
+        Some(previous) => is_extended_pictographic(previous),
+        None => false,
+    }
+}
+
+fn is_emoji_modifier(c: char) -> bool {
+    matches!(c, '\u{1F3FB}'..='\u{1F3FF}')
+}
+
+fn is_emoji(c: char) -> bool {
+    static EMOJI: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"\A\p{Emoji}\z").expect("valid class"));
+    EMOJI.is_match(c.encode_utf8(&mut [0; 4]))
+}
+
+fn is_extended_pictographic(c: char) -> bool {
+    static PICTOGRAPHIC: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"\A\p{Extended_Pictographic}\z").expect("valid class")
+    });
+    PICTOGRAPHIC.is_match(c.encode_utf8(&mut [0; 4]))
 }
 
 /// `web_access` reads as "Web access": separators become spaces and the first

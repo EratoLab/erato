@@ -5,6 +5,8 @@
  * row, trimmed and capped.
  */
 
+import { isEmoji, isExtendedPictographic } from "./emojiProperties";
+
 /** The backend's cap for a tool's name or title. */
 export const MAX_SERVER_TEXT_CHARS = 200;
 /** The backend's cap for a tool's description (`MAX_DISPLAY_DESCRIPTION_CHARS`). */
@@ -57,27 +59,58 @@ const isControl = (code: number): boolean =>
 
 const isSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdfff;
 
-const isPresentationSelector = (code: number): boolean =>
-  code === 0xfe0e || code === 0xfe0f;
+const EMOJI_PRESENTATION_SELECTOR = 0xfe0f;
+const ZERO_WIDTH_JOINER = 0x200d;
+
+const isEmojiModifier = (code: number | undefined): boolean =>
+  code !== undefined && code >= 0x1f3fb && code <= 0x1f3ff;
+
+const isEmojiAt = (code: number | undefined): boolean =>
+  code !== undefined && isEmoji(code);
+
+const isPictographAt = (code: number | undefined): boolean =>
+  code !== undefined && isExtendedPictographic(code);
+
+const selectorStylesEmoji = (
+  twoBack: number | undefined,
+  previous: number | undefined,
+): boolean =>
+  isEmojiModifier(previous) ? isEmojiAt(twoBack) : isEmojiAt(previous);
+
+const joinerFollowsEmoji = (
+  twoBack: number | undefined,
+  previous: number | undefined,
+): boolean => {
+  if (previous === EMOJI_PRESENTATION_SELECTOR) {
+    return isPictographAt(twoBack) && isEmojiAt(twoBack);
+  }
+  if (isEmojiModifier(previous)) return isPictographAt(twoBack);
+  return isPictographAt(previous);
+};
 
 /**
- * The backend's `is_hidden_char`: an invisible character, except a text or
- * emoji presentation selector right after a visible character, as in "❤️".
+ * The backend's `mark_hidden_chars` for one code point, from the raw code
+ * points around it: an invisible character, except two that are emoji text
+ * where they sit. A text or emoji presentation selector (U+FE0E, U+FE0F)
+ * stays right after an `Emoji` character, as in "❤️" or "1️⃣", or after a skin
+ * tone that follows one; a zero-width joiner stays between two
+ * `Extended_Pictographic` characters, the first optionally followed by a
+ * kept U+FE0F or a skin tone, as in "👨‍👩‍👧" or "🏳️‍🌈". Tag characters always hide.
  */
-export const isHiddenChar = (
-  previous: string | undefined,
-  char: string,
+const isHiddenAt = (
+  twoBack: number | undefined,
+  previous: number | undefined,
+  code: number,
+  next: number | undefined,
 ): boolean => {
-  const code = char.codePointAt(0) ?? 0;
   if (!isInvisibleFormatChar(code)) return false;
-  if (!isPresentationSelector(code) || previous === undefined) return true;
-  const before = previous.codePointAt(0) ?? 0;
-  return (
-    /\s/u.test(previous) ||
-    isControl(before) ||
-    isSurrogate(before) ||
-    isInvisibleFormatChar(before)
-  );
+  if (code === 0xfe0e || code === EMOJI_PRESENTATION_SELECTOR) {
+    return !selectorStylesEmoji(twoBack, previous);
+  }
+  if (code === ZERO_WIDTH_JOINER) {
+    return !(joinerFollowsEmoji(twoBack, previous) && isPictographAt(next));
+  }
+  return true;
 };
 
 // Enough room for the dropped characters and line breaks a capped text may
@@ -92,19 +125,20 @@ export const cleanServerText = (
     return { text: "", truncated: false, hiddenCharacters: false };
   }
   const scanned = raw.slice(0, maxChars * SCAN_FACTOR);
+  const codes = Array.from(scanned, (char) => char.codePointAt(0) ?? 0);
+  // A joiner at the end of what is scanned still sees what the text has next.
+  const after = raw.codePointAt(scanned.length);
   let hiddenCharacters = false;
-  let previous: string | undefined;
-  const kept = Array.from(scanned)
-    .filter((char) => {
-      const hides = isHiddenChar(previous, char);
-      previous = char;
-      if (hides) {
+  const kept = codes
+    .filter((code, index) => {
+      const next = index + 1 < codes.length ? codes[index + 1] : after;
+      if (isHiddenAt(codes[index - 2], codes[index - 1], code, next)) {
         hiddenCharacters = true;
         return false;
       }
-      const code = char.codePointAt(0) ?? 0;
       return !isControl(code) && !isSurrogate(code);
     })
+    .map((code) => String.fromCodePoint(code))
     .join("")
     .normalize("NFC")
     .replace(/\n{3,}/g, "\n\n")

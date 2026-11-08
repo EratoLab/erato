@@ -284,6 +284,25 @@ fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
     let saved = label("save_issue", json!({"id": "ISSUE-1", "state": "Done"}));
     assert_eq!(saved.mapping.action, ToolCallAction::Update);
     assert_eq!(saved.unsure, None);
+    let page = label("save_page", json!({"page_id": "p_1", "title": "Plan"})).mapping;
+    assert_eq!(page.action, ToolCallAction::Update);
+    assert_eq!(
+        (page.items[0].id.as_deref(), page.items[0].fields.as_slice()),
+        (Some("/page_id"), ["/title".to_string()].as_slice())
+    );
+    for arguments in [
+        json!({"title": "Plan"}),
+        json!({"title": "Plan", "parent_id": "p_0"}),
+        json!({"title": "Plan", "source": "web_form"}),
+    ] {
+        let page = label("save_page", arguments.clone()).mapping;
+        assert_eq!(page.action, ToolCallAction::Create, "{arguments}");
+        assert_eq!(
+            page.items[0].title.as_deref(),
+            Some("/title"),
+            "{arguments}"
+        );
+    }
 }
 
 #[test]
@@ -1019,6 +1038,116 @@ fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
     assert!(
         members(json!({"phonecall": {"subject": "Call back"}, "ordernumber": "7", "mobile": true, "fax": ""}))
             .is_empty()
+    );
+}
+
+#[test]
+fn a_phone_number_where_a_call_goes_is_a_number_and_never_the_target() {
+    let members = |arguments: &Value| -> Vec<String> {
+        recipient_members(arguments)
+            .into_iter()
+            .map(|recipient| recipient.member)
+            .collect()
+    };
+    let sent = label(
+        "send_sms",
+        json!({"to_number": "+49 170 0000001", "body": "Your code is 1234"}),
+    );
+    assert_eq!(sent.mapping.action, ToolCallAction::Send);
+    let sent = &sent.mapping.items[0];
+    assert_eq!(
+        (sent.target.as_deref(), sent.after.as_deref()),
+        (None, Some("/body"))
+    );
+    assert_eq!(sent.fields, ["/to_number"]);
+
+    let call = json!({"destination": "+49 30 1234567"});
+    let called = item("call", call.clone());
+    assert_eq!(
+        (called.id.as_deref(), called.target.as_deref()),
+        (None, None)
+    );
+    assert_eq!(called.fields, ["/destination"]);
+    let typed_without_it = ToolCallLabelMapping {
+        action: ToolCallAction::Other,
+        object_kind: ToolCallObjectKind::Other,
+        items: vec![ToolCallLabelItemMapping {
+            title: Some("/note".into()),
+            ..Default::default()
+        }],
+        source: ToolCallLabelSource::Model,
+    };
+    assert_eq!(
+        with_every_recipient(&typed_without_it, &recipient_members(&call)).items[0].fields,
+        ["/destination"]
+    );
+
+    let faxed = item(
+        "send_fax",
+        json!({"subject": "Order 7", "destination": "+49 30 1234567", "pages": 3}),
+    );
+    assert_eq!(
+        (faxed.title.as_deref(), faxed.target.as_deref()),
+        (Some("/subject"), None)
+    );
+    assert_eq!(faxed.fields, ["/destination", "/pages"]);
+
+    for (member, number) in [
+        ("target", "+1-555-0100"),
+        ("callee", "(030) 1234567"),
+        ("receiver", "0170/1234567"),
+        ("dest", "\u{FF0B}\u{FF14}\u{FF19} 30 1234567"),
+        ("channel", "+49 170 0000002"),
+    ] {
+        let arguments = json!({ member: number, "text": "Hi" });
+        let to_number = item("send_message", arguments.clone());
+        assert_eq!(
+            (to_number.id.as_deref(), to_number.target.as_deref()),
+            (None, None),
+            "{member}"
+        );
+        assert_eq!(to_number.fields, [format!("/{member}")], "{member}");
+        assert_eq!(members(&arguments), [format!("/{member}")], "{member}");
+    }
+    let listed = json!({"destination": ["+49 170 0000001", "+49 170 0000002"], "text": "Hi"});
+    assert_eq!(item("send_sms", listed.clone()).fields, ["/destination"]);
+
+    // One number in a batch is enough: a folder beside it cannot hide it.
+    let batch = json!({"moves": [
+        {"file_id": "f_1", "destination": "fld_1"},
+        {"file_id": "f_2", "destination": "+49 30 1234567"},
+    ]});
+    let moved = item("move_files", batch.clone());
+    assert_eq!(
+        (moved.id.as_deref(), moved.target.as_deref()),
+        (Some("/moves/*/file_id"), None)
+    );
+    assert_eq!(moved.fields, ["/moves/*/destination"]);
+    assert_eq!(members(&batch), ["/moves/*/destination"]);
+
+    // A number the parent fallback would have taken stays a field.
+    let contact = item(
+        "create_contact",
+        json!({"name": "Lee", "parent_phone": "+49 30 0000002"}),
+    );
+    assert_eq!(contact.target, None);
+    assert_eq!(contact.fields, ["/parent_phone"]);
+
+    for destination in ["fld_1", "4930123456", "+49 30 1234567 ext", "2"] {
+        let arguments = json!({"file_id": "f_1", "destination": destination});
+        let moved = item("move_file", arguments.clone());
+        assert_eq!(
+            moved.target.as_deref(),
+            Some("/destination"),
+            "{destination}"
+        );
+        assert!(members(&arguments).is_empty(), "{destination}");
+    }
+    assert_eq!(
+        item("update_task", json!({"target": "TASK-7", "status": "done"}))
+            .id
+            .as_deref(),
+        Some("/target")
     );
 }
 
