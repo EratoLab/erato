@@ -750,6 +750,24 @@ impl Host {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Give back a claimed token whose press changed nothing, so the card's
+    /// buttons work again.
+    pub async fn release_delivery_action(&self, submit: &DeliverySubmit) -> Result<(), Report> {
+        self.app_state
+            .db
+            .execute_raw(statement(
+                "teams_nudge.release_action",
+                "UPDATE scheduled_deliveries
+                 SET outcome = outcome - 'action_claimed_at' - 'action_command'
+                 WHERE id = $1 AND state = 'delivered'
+                   AND outcome->>'action_token' = $2
+                   AND outcome->>'action_claimed_at' IS NOT NULL",
+                vec![submit.delivery_id.into(), submit.token.to_string().into()],
+            ))
+            .await?;
+        Ok(())
+    }
+
     pub async fn set_teams_nudges_opt_out(
         &self,
         user_id: Uuid,
