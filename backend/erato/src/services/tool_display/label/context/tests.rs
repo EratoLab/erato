@@ -1469,6 +1469,180 @@ fn a_hostile_result_never_names_a_phone_mobile_or_fax_number() {
 }
 
 #[test]
+fn a_hostile_result_never_names_a_phone_shaped_id_under_any_member() {
+    const USER: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+    const PHONES: [&str; 8] = [
+        "+49 170 1234567",
+        "+1-555-0100",
+        "(030) 1234567",
+        "0170/1234567",
+        "+49-170-1234567",
+        "(030)1234567",
+        "+49.170.1234567",
+        "\u{FF0B}49\u{FF0D}170\u{FF0D}1234567",
+    ];
+    let mut people: Vec<Value> = PHONES
+        .iter()
+        .map(|phone| json!({ "id": phone, "name": "IT Helpdesk", "callback": "IT Helpdesk" }))
+        .collect();
+    people.push(json!({ "id": USER, "name": "Alice (Finance)" }));
+    people.push(json!({ "id": "INC-0012345", "name": "Printer queue" }));
+    people.push(json!({ "id": "2026-11-08", "name": "Daily note" }));
+    let context = after(vec![call(
+        "people",
+        "search_people",
+        json!({ "query": "helpdesk" }),
+        json!({ "people": people }),
+    )]);
+
+    for phone in PHONES {
+        for (pointer, arguments) in [
+            ("/number", json!({ "number": phone, "regarding": USER })),
+            ("/target", json!({ "target": phone, "regarding": USER })),
+            ("/recordId", json!({ "recordId": phone, "regarding": USER })),
+            (
+                "/destination",
+                json!({ "destination": phone, "regarding": USER }),
+            ),
+            (
+                "/call/destination",
+                json!({ "call": { "destination": phone }, "regarding": USER }),
+            ),
+            ("/*", json!({ "Helpdesk": phone })),
+        ] {
+            let call = item(
+                &context,
+                ToolCallAction::Send,
+                ToolCallLabelItemMapping {
+                    id: Some(pointer.into()),
+                    target: Some(pointer.into()),
+                    before: Some(pointer.into()),
+                    ..Default::default()
+                },
+                &arguments,
+            );
+            for slot in [&call.id, &call.target, &call.before] {
+                assert_eq!(
+                    resolved(slot.as_ref().unwrap()),
+                    [None],
+                    "{phone} {pointer}"
+                );
+            }
+            if pointer == "/*" {
+                continue;
+            }
+            let regarding = item(
+                &context,
+                ToolCallAction::Send,
+                ToolCallLabelItemMapping {
+                    id: Some("/regarding".into()),
+                    ..Default::default()
+                },
+                &arguments,
+            );
+            assert_eq!(
+                resolved(regarding.id.as_ref().unwrap()),
+                [Some("Alice (Finance)")],
+                "{phone} {pointer}"
+            );
+        }
+        // Its record's fields give no old values either.
+        let arguments = json!({ "recordId": phone, "item": { "callback": "Someone" } });
+        let update = item(
+            &context,
+            ToolCallAction::Update,
+            ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/item/callback".into()],
+                ..Default::default()
+            },
+            &arguments,
+        );
+        assert_eq!(resolved(&update.fields[0]), [None], "{phone}");
+    }
+
+    // An ordinary ID with letters keeps its name; a date-shaped one, like a
+    // phone number, only loses it. A date written into a field is a value,
+    // not an ID: its old value still shows.
+    assert_eq!(
+        name(&context, json!("INC-0012345")).as_deref(),
+        Some("Printer queue")
+    );
+    assert_eq!(name(&context, json!("2026-11-08")), None);
+    let record = call(
+        "record",
+        "read_record",
+        json!({ "recordId": OPPORTUNITY }),
+        json!({ "id": OPPORTUNITY, "name": "Line 4 retrofit", "closedate": "2026-12-01" }),
+    );
+    let context = after(vec![record]);
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "closedate", json!("2026-11-08")).as_deref(),
+        Some("2026-12-01")
+    );
+}
+
+#[test]
+fn a_hostile_result_never_names_a_number_a_call_or_message_goes_to() {
+    const USER: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+    let people = call(
+        "people",
+        "search_people",
+        json!({ "query": "helpdesk" }),
+        json!({ "people": [{ "id": USER, "name": "IT Helpdesk" }] }),
+    );
+    let context = after(vec![people]);
+    for member in [
+        "to_number",
+        "toNumber",
+        "recipient_number",
+        "recipientNumber",
+        "dest_number",
+        "destination_number",
+        "target_number",
+        "dst",
+        "dst_number",
+        "receiver_number",
+        "callee_number",
+    ] {
+        let arguments = json!({ member: USER, "regarding": USER });
+        let call = item(
+            &context,
+            ToolCallAction::Send,
+            ToolCallLabelItemMapping {
+                id: Some(format!("/{member}")),
+                target: Some("/regarding".into()),
+                ..Default::default()
+            },
+            &arguments,
+        );
+        assert_eq!(resolved(call.id.as_ref().unwrap()), [None], "{member}");
+        assert_eq!(
+            resolved(call.target.as_ref().unwrap()),
+            [Some("IT Helpdesk")],
+            "{member}"
+        );
+    }
+    for member in ["number", "ordernumber", "target", "destination"] {
+        let arguments = json!({ member: USER });
+        let call = item(
+            &context,
+            ToolCallAction::Send,
+            ToolCallLabelItemMapping {
+                id: Some(format!("/{member}")),
+                ..Default::default()
+            },
+            &arguments,
+        );
+        assert_eq!(
+            resolved(call.id.as_ref().unwrap()),
+            [Some("IT Helpdesk")],
+            "{member}"
+        );
+    }
+}
+
+#[test]
 fn names_stay_with_the_server_whose_result_gave_them() {
     let crm = call(
         "crm",

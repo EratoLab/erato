@@ -605,12 +605,15 @@ mod tests {
     }
 
     #[test]
-    fn emoji_text_shows_without_a_warning_and_selector_runs_or_soft_hyphens_warn() {
+    fn emoji_text_shows_without_a_warning_and_stray_selectors_joiners_or_soft_hyphens_warn() {
         let arguments = json!({
             "pages": [{"properties": {"Name": "Launch \u{1F680} \u{2764}\u{FE0F}", "Stage": "Hot \u{2600}\u{FE0F}"}}],
             "smuggled": "\u{1F600}\u{FE0F}\u{E0169}\u{E0167}\u{FE0E}",
             "parent": "p1",
             "Sta\u{00AD}ge": "Lead",
+            "Sta\u{FE0F}ge": "Lead",
+            "family": "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} and \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+            "joined": "Le\u{200D}ad",
         });
         let mapping = |title: &str, fields: &[&str]| ToolCallLabelMapping {
             items: vec![ToolCallLabelItemMapping {
@@ -646,6 +649,20 @@ mod tests {
             resolve_label(&mapping("/parent", &["/Sta\u{00AD}ge"]), &arguments, None).unwrap();
         assert_eq!(soft.items[0].fields[0].name.as_deref(), Some("Stage"));
         assert_eq!(soft.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+
+        let selector = resolve_label(&mapping("/parent", &["/Sta\u{FE0F}ge"]), &arguments).unwrap();
+        assert_eq!(selector.items[0].fields[0].name.as_deref(), Some("Stage"));
+        assert_eq!(selector.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+
+        let joined = resolve_label(&mapping("/family", &["/joined"]), &arguments).unwrap();
+        assert_eq!(
+            texts(joined.items[0].title.as_ref().unwrap()),
+            ["\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} and \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}"]
+        );
+        assert_eq!(texts(&joined.items[0].fields[0]), ["Lead"]);
+        assert_eq!(joined.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+        let family = resolve_label(&mapping("/family", &[]), &arguments).unwrap();
+        assert!(family.warnings.is_empty());
     }
 
     #[test]
