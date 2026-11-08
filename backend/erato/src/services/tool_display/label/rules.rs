@@ -13,8 +13,8 @@ use super::context::{
 };
 use super::pointer::{self, MAX_POINTER_BYTES, escape};
 use super::recipients::{
-    ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, bare_member,
-    is_contact_number_member,
+    ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, RECIPIENT_NUMBER_WORDS,
+    bare_member, is_contact_number_member, is_phone_shaped,
 };
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
@@ -550,10 +550,11 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     if let Some(action) = actions_of(name).first() {
         return found(*action, VerbSource::Name);
     }
-    if let (Some(first), Some(Value::Object(members))) = (name.first(), arguments)
+    if let (Some(first), Some(arguments)) = (name.first(), arguments)
+        && arguments.is_object()
         && SAVE_VERBS.contains(&first.as_str())
     {
-        let action = if members.get("id").is_some_and(is_text_or_number) {
+        let action = if holds_an_id(arguments) {
             ToolCallAction::Update
         } else {
             ToolCallAction::Create
@@ -708,10 +709,10 @@ fn id_pointer(arguments: &Value) -> Option<String> {
     .or_else(|| find(arguments, Skip::Targets, id_member(names_an_id)))
 }
 
-/// A member `named` holding an ID, or a list of them.
+/// A member `named` holding an ID, or a list of them; never a recipient.
 fn id_member(named: fn(&str) -> bool) -> impl FnMut(&str, &str, &[&Value]) -> Option<String> {
     move |pointer, member, values| {
-        if !named(member) {
+        if !named(member) || recipients_in(member, values).is_some() {
             return None;
         }
         if values.iter().copied().any(is_text_or_number) {
@@ -740,7 +741,7 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
         if !not_the_id(pointer) {
             return None;
         }
-        match recipients_in(member) {
+        match recipients_in(member, values) {
             Some(Recipients::To) => recipient_at(pointer, values),
             Some(Recipients::Copy | Recipients::Number) => None,
             None if is_one_of(member, &TARGET_MEMBERS) => target_at(pointer, values),
@@ -749,7 +750,7 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
     })
     .or_else(|| {
         find(arguments, Skip::Nothing, |pointer, member, values| {
-            (recipients_in(member) == Some(Recipients::Copy) && not_the_id(pointer))
+            (recipients_in(member, values) == Some(Recipients::Copy) && not_the_id(pointer))
                 .then(|| recipient_at(pointer, values))
                 .flatten()
         })
@@ -758,14 +759,16 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
         return found;
     }
     find(arguments, Skip::Nothing, |pointer, member, values| {
-        member
-            .to_ascii_lowercase()
-            .starts_with("parent")
-            .then(|| target_at(pointer, values))
-            .flatten()
+        (member.to_ascii_lowercase().starts_with("parent")
+            && recipients_in(member, values).is_none())
+        .then(|| target_at(pointer, values))
+        .flatten()
     })
     .or_else(|| {
         find(arguments, Skip::Nothing, |pointer, member, values| {
+            if recipients_in(member, values).is_some() {
+                return None;
+            }
             let links = values.iter().any(|value| match value {
                 Value::Object(members) => is_link(members),
                 Value::Array(entries) => all_links(entries),
@@ -821,20 +824,41 @@ enum Recipients {
     /// Who gets a copy.
     Copy,
     /// A phone, mobile, fax or pager number: always shown, but a contact's
-    /// `telephone1` is not where the contact goes, so never the target.
+    /// `telephone1` is not where the contact goes, so never the target. A
+    /// phone number under a target member or a bare recipient word
+    /// (`destination`, `target`, `callee`) counts too: it shows as written,
+    /// never as a record a result's name could stand in for.
     Number,
 }
 
-fn recipients_in(member: &str) -> Option<Recipients> {
+/// What a member holding `values` says about recipients. Without values only
+/// its name counts.
+fn recipients_in(member: &str, values: &[&Value]) -> Option<Recipients> {
     let bare = bare_member(member);
     if RECIPIENT_MEMBERS.contains(&bare.as_str()) {
         Some(Recipients::To)
     } else if COPY_RECIPIENT_MEMBERS.contains(&bare.as_str()) {
         Some(Recipients::Copy)
-    } else if is_contact_number_member(member) {
+    } else if is_contact_number_member(member)
+        || (names_where_it_goes(member) && values.iter().copied().any(holds_a_phone_number))
+    {
         Some(Recipients::Number)
     } else {
         None
+    }
+}
+
+fn names_where_it_goes(member: &str) -> bool {
+    is_one_of(member, &TARGET_MEMBERS)
+        || RECIPIENT_NUMBER_WORDS.contains(&bare_member(member).as_str())
+}
+
+/// A phone-shaped text, or a list holding one.
+fn holds_a_phone_number(value: &Value) -> bool {
+    let phone = |value: &Value| value.as_str().is_some_and(is_phone_shaped);
+    match value {
+        Value::Array(entries) => entries.iter().take(MAX_LIST_ENTRIES).any(phone),
+        value => phone(value),
     }
 }
 
@@ -938,7 +962,7 @@ pub fn recipient_members(arguments: &Value) -> Vec<RecipientMember> {
     let mut found = Vec::new();
     find(arguments, Skip::Targets, |pointer, member, values| {
         if found.len() < MAX_RECIPIENT_MEMBERS
-            && recipients_in(member).is_some()
+            && recipients_in(member, values).is_some()
             && let Some(shown_at) = recipient_at(pointer, values)
         {
             found.push(RecipientMember {
@@ -1106,7 +1130,7 @@ fn fields(
                 // Recipients that name no one are no field beside the title.
                 if covers(&used, &pointer)
                     || is_consent_member(member, approval_argument)
-                    || recipients_in(member).is_some()
+                    || recipients_in(member, &values).is_some()
                 {
                     continue;
                 }
@@ -1238,8 +1262,10 @@ impl Skip {
     fn skips_member(self, member: &str) -> bool {
         match self {
             Skip::Nothing => false,
-            Skip::Lookups => recipients_in(member).is_some(),
-            Skip::Targets => is_one_of(member, &TARGET_MEMBERS) || recipients_in(member).is_some(),
+            Skip::Lookups => recipients_in(member, &[]).is_some(),
+            Skip::Targets => {
+                is_one_of(member, &TARGET_MEMBERS) || recipients_in(member, &[]).is_some()
+            }
         }
     }
 
