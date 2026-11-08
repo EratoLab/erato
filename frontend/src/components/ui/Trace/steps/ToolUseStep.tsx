@@ -11,16 +11,29 @@ import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 import { DelegationStep } from "./DelegationStep";
+import { refusedWithoutDecision, ToolDecisionRow } from "./ToolDecisionRow";
 import { ToolStatusPill } from "./ToolStatusPill";
 
-import type { ToolApprovalStatus } from "../Trace";
+import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
-  approvalStatus?: ToolApprovalStatus;
+  decision?: ToolDecision;
 }
+
+// The server's cap; rows and events from other writers get it here.
+const MAX_PROGRESS_CHARS = 200;
+
+const progressText = (message: unknown): string | undefined => {
+  if (typeof message !== "string") return undefined;
+  const text = Array.from(message.slice(0, MAX_PROGRESS_CHARS * 2))
+    .slice(0, MAX_PROGRESS_CHARS)
+    .join("")
+    .trim();
+  return text.length > 0 ? text : undefined;
+};
 
 const PlainToolUseStep = ({
   part,
@@ -28,12 +41,13 @@ const PlainToolUseStep = ({
   isStreaming,
   isCollapsed,
   isLastStep,
-  approvalStatus,
+  decision,
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
   const toolCallId = part.tool_call_id;
+  const progress = progressText(part.progress_message);
 
   // The sidecar's on-device steps are the step's body: rows like the main
   // line, each with its own toggle for its own details. This step's toggle
@@ -70,6 +84,7 @@ const PlainToolUseStep = ({
       data-tool-name={toolName}
       data-tool-status={resolvedStatus}
     >
+      <ToolDecisionRow part={part} decision={decision} />
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
@@ -84,26 +99,30 @@ const PlainToolUseStep = ({
                 {part.display.server_name}
               </span>
             )}
-            {part.progress_message && (
+            {progress && (
               <span
-                className="pl-2 font-normal text-theme-fg-muted"
-                title={part.progress_message}
+                dir="auto"
+                className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
+                title={progress}
               >
-                {part.progress_message}
+                {progress}
               </span>
             )}
           </>
         }
         titleSlot={
-          <ToolStatusPill
-            status={status}
-            approvalStatus={approvalStatus}
-            label={
-              part.status === "preparing" && status !== "interrupted"
-                ? t({ id: "trace.tool.preparing", message: "Preparing" })
-                : undefined
-            }
-          />
+          // A denied or refused call never ran: its decision row says so.
+          decision?.status === "denied" ||
+          refusedWithoutDecision(part, decision) ? undefined : (
+            <ToolStatusPill
+              status={status}
+              label={
+                part.status === "preparing" && status !== "interrupted"
+                  ? t({ id: "trace.tool.preparing", message: "Preparing" })
+                  : undefined
+              }
+            />
+          )
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}

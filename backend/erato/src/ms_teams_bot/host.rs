@@ -1018,6 +1018,7 @@ mod tests {
                 total: Some(3.0),
                 output: None,
                 result_details: None,
+                allowed_by: None,
             })
             .unwrap();
         sender
@@ -1034,6 +1035,7 @@ mod tests {
                 total: None,
                 output: None,
                 result_details: None,
+                allowed_by: None,
             })
             .unwrap();
         sender
@@ -1110,6 +1112,7 @@ mod tests {
             description_truncated: true,
             server_name: None,
             label: None,
+            read_only: false,
         });
         let completion = completion_from_content(
             Uuid::nil(),
@@ -1156,6 +1159,7 @@ mod tests {
                 description_truncated: false,
                 server_name: Some("Team Wiki".into()),
                 label: None,
+                read_only: false,
             });
         let completion = completion_from_content(
             Uuid::nil(),
@@ -1374,6 +1378,7 @@ mod tests {
                 input: None,
                 output: None,
                 result_details: None,
+                allowed_by: None,
                 progress_message: None,
                 progress: None,
                 total: None,

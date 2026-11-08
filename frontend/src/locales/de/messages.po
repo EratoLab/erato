@@ -8810,6 +8810,61 @@ msgid "trace.tool.budget_approval"
 msgstr "Budget für Tool-Aufrufe"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr "Sie haben das erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForDocument"
+msgstr "Sie haben das für dieses Dokument erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForTurn"
+msgstr "Sie haben das für diese Antwort erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedOnce"
+msgstr "Sie haben das einmal erlaubt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.alwaysAllowed"
+msgstr "Sie haben „Immer erlauben“ gewählt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.denied"
+msgstr "Sie haben das abgelehnt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.neverAllowed"
+msgstr "Sie haben „Nie erlauben“ gewählt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.notRun"
+msgstr "Nicht ausgeführt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.ranWithoutAsking"
+msgstr "Ohne Nachfrage ausgeführt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.underAlwaysAllow"
+msgstr "Ausgeführt, weil Sie „Immer erlauben“ gewählt haben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.withdrawn"
+msgstr "Nicht ausgeführt: Sie erlauben dieses Tool nicht mehr"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr ""

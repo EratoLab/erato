@@ -10366,6 +10366,19 @@ async fn generation_state(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Op
         .generation_state
 }
 
+/// The `allowed_by` of every settled `tool_call_update`.
+fn tool_update_allowed_by(events: &[crate::test_utils::Event]) -> Vec<Value> {
+    events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|event| {
+            event["message_type"] == "tool_call_update"
+                && matches!(event["status"].as_str(), Some("success" | "error"))
+        })
+        .map(|event| event["allowed_by"].clone())
+        .collect()
+}
+
 /// A user's "ask" decision escalates a tool the policy would run unasked:
 /// the read-only, closed-world fixture tool is auto under the permissive
 /// preset, yet the turn parks on the approval card, and `continuestream`
@@ -10730,6 +10743,12 @@ async fn test_approve_always_replaces_an_ask_decision(pool: Pool<Postgres>) {
         vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
     );
     assert_eq!(resumed.raw_message["content"][1]["always_allow"], true);
+    // The card is the record of this decision.
+    assert!(
+        resumed.raw_message["content"][2]
+            .get("allowed_by")
+            .is_none()
+    );
     assert_eq!(
         erato::models::user_tool_approval_setting::find_active_decision(
             &db,
@@ -10817,6 +10836,8 @@ async fn test_ask_decision_is_inert_while_approvals_are_disabled(pool: Pool<Post
         .expect("Expected the assistant message");
     assert_eq!(content_types(&completed), vec!["tool_use", "text"]);
     assert_eq!(completed.raw_message["content"][0]["status"], "success");
+    assert_eq!(completed.raw_message["content"][0]["allowed_by"], "policy");
+    assert_eq!(tool_update_allowed_by(&events), vec![json!("policy")]);
     assert_eq!(
         generation_state(&db, chat_id).await.as_deref(),
         Some("completed")
@@ -10900,6 +10921,11 @@ async fn test_always_allow_bypasses_a_policy_ask_tool(pool: Pool<Postgres>) {
             .unwrap()
             .contains(TOOL_RESULT)
     );
+    assert_eq!(
+        completed.raw_message["content"][0]["allowed_by"],
+        "always_allow"
+    );
+    assert_eq!(tool_update_allowed_by(&events), vec![json!("always_allow")]);
     assert_eq!(
         generation_state(&db, chat_id).await.as_deref(),
         Some("completed")

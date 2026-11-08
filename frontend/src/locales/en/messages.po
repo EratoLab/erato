@@ -8810,6 +8810,61 @@ msgid "trace.tool.budget_approval"
 msgstr "Tool-call budget"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr "You allowed this"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForDocument"
+msgstr "You allowed this for this document"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForTurn"
+msgstr "You allowed this for this response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedOnce"
+msgstr "You allowed this once"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.alwaysAllowed"
+msgstr "You chose “Always allow”"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.denied"
+msgstr "You denied this"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.neverAllowed"
+msgstr "You chose “Never allow”"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.notRun"
+msgstr "Not run"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.ranWithoutAsking"
+msgstr "Ran without asking"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.underAlwaysAllow"
+msgstr "Ran under your earlier “Always allow”"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.withdrawn"
+msgstr "Not run: you no longer allow this tool"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr "Denied"

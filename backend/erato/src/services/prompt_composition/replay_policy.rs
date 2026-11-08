@@ -220,6 +220,7 @@ mod tests {
                 input: Some(input),
                 output: Some(output),
                 result_details: None,
+                allowed_by: None,
                 started_at: None,
                 ended_at: None,
             }),

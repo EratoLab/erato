@@ -364,6 +364,13 @@ async fn check_output_for_protocol(
         .find(|part| part["content_type"] == "tool_use")
         .unwrap();
     assert_eq!(tool["status"], expected_status, "{tool}");
+    // A card answer is its own record; only a call that ran unasked says why.
+    let expected_allowed_by = if approval.is_some() {
+        Value::Null
+    } else {
+        json!("policy")
+    };
+    assert_eq!(tool["allowed_by"], expected_allowed_by, "{tool}");
     let pointers: Vec<_> = parts
         .iter()
         .filter(|part| {
@@ -444,6 +451,7 @@ async fn check_output_for_protocol(
             .expect("terminal tool update");
         assert_eq!(event_output["output"], tool["output"]);
         assert_eq!(event_output["result_details"], tool["result_details"]);
+        assert_eq!(event_output["allowed_by"], expected_allowed_by);
     }
     if fixture.details {
         assert_eq!(
@@ -681,6 +689,10 @@ async fn approved_storage_failure(pool: Pool<Postgres>) {
         0,
     )
     .await;
+}
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn uninterrupted_storage_failure(pool: Pool<Postgres>) {
+    check_output(pool, file_output(), None, true, false, true, "error", 0).await;
 }
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn approved_empty_files(pool: Pool<Postgres>) {

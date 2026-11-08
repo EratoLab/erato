@@ -8810,6 +8810,61 @@ msgid "trace.tool.budget_approval"
 msgstr "Budget d’appels d’outils"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForDocument"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedForTurn"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.allowedOnce"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.alwaysAllowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.denied"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.neverAllowed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.notRun"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.ranWithoutAsking"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.underAlwaysAllow"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+msgid "trace.tool.decision.withdrawn"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.denied"
 msgstr ""

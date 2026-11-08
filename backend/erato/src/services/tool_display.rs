@@ -32,6 +32,7 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
         description: description.map(|value| value.text),
         server_name: None,
         label: None,
+        read_only: false,
     }
 }
 
@@ -69,8 +70,20 @@ pub fn mcp_tool_call_display(
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
+        read_only: shown_as_read_only(tool),
         ..tool_display_metadata(tool)
     }
+}
+
+/// A tool that says it is both read-only and destructive is shown as a write,
+/// so the trace keeps its "ran without asking" note.
+fn shown_as_read_only(tool: &rmcp::model::Tool) -> bool {
+    crate::services::mcp_tool_approval::normalize_tool_annotations(tool).read_only_hint
+        && tool
+            .annotations
+            .as_ref()
+            .and_then(|annotations| annotations.destructive_hint)
+            != Some(true)
 }
 
 /// The server name a call's tool rows carry, under which the context keeps
@@ -210,6 +223,47 @@ mod tests {
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn a_call_is_read_only_only_when_its_annotations_say_so() {
+        let shown = |hint: Option<bool>, destructive: Option<bool>| {
+            let mut tool = Tool::new("tool", "", JsonObject::new());
+            if hint.is_some() || destructive.is_some() {
+                tool.annotations = Some(ToolAnnotations::from_raw(
+                    None,
+                    hint,
+                    destructive,
+                    None,
+                    None,
+                ));
+            }
+            let display = mcp_tool_call_display(
+                &McpRuntimeConfig::default(),
+                "server",
+                &tool,
+                &serde_json::json!({}),
+                None,
+                &Default::default(),
+            );
+            (display.read_only, serde_json::to_value(&display).unwrap())
+        };
+        for destructive in [None, Some(false)] {
+            let (flag, json) = shown(Some(true), destructive);
+            assert!(flag);
+            assert_eq!(json["read_only"], true);
+        }
+        // Contradictory hints read as a write.
+        for (hint, destructive) in [
+            (Some(false), None),
+            (None, None),
+            (Some(true), Some(true)),
+            (None, Some(false)),
+        ] {
+            let (flag, json) = shown(hint, destructive);
+            assert!(!flag, "{hint:?} {destructive:?}");
+            assert!(json.get("read_only").is_none());
+        }
     }
 
     #[test]
@@ -634,6 +688,7 @@ mod tests {
             description_truncated: false,
             server_name: Some("Dynamics 365".into()),
             label: Some(resolved),
+            read_only: false,
         };
         assert_eq!(
             child_approval_display(&child),

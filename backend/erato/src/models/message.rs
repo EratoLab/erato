@@ -445,6 +445,15 @@ pub struct ToolUse {
     )]
     #[schema(nullable = false)]
     pub result_details: Option<ToolResultDetails>,
+    /// Why an MCP call ran without an approval card. Absent when the user
+    /// decided on a card, the call was refused, on other tools and old rows.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub allowed_by: Option<ToolAllowedBy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -516,15 +525,28 @@ pub struct ToolDisplayMetadata {
     )]
     #[schema(nullable = false)]
     pub label: Option<ToolCallLabel>,
+    /// Whether the tool is read-only by the annotations the approval policy
+    /// read for this call and does not also call itself destructive. Set on
+    /// MCP calls only.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "readable_flag"
+    )]
+    pub read_only: bool,
 }
 
-/// A stored label or result detail this version cannot read is dropped, never
-/// the row: the call then renders as it did before them.
+/// A stored label, result detail or decision note this version cannot read is
+/// dropped, never the row: the call then renders as it did before them.
 pub(crate) fn readable_or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(
     deserializer: D,
 ) -> Result<Option<T>, D::Error> {
     let stored = Option::<JsonValue>::deserialize(deserializer)?;
     Ok(stored.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+fn readable_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    Ok(readable_or_none(deserializer)?.unwrap_or(false))
 }
 
 /// What a tool call does to what, and where, read from its arguments by code.
@@ -786,6 +808,21 @@ pub enum ToolApprovalKind {
     /// A client tool the user set to ask. `mcp_server_id` carries the tool's
     /// namespace, so `namespace/tool_name` is the key its decision is saved under.
     ClientTool,
+}
+
+/// What let an MCP call run without asking the user.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolAllowedBy {
+    /// The approval policy needed no prompt, or the approval gate is off.
+    Policy,
+    /// The user's saved "always allow" skipped a prompt the policy would ask.
+    AlwaysAllow,
+    /// A reason from a newer version; the call still ran without a card.
+    #[serde(other)]
+    Other,
 }
 
 /// What a context approval covers besides the call it was given on.
@@ -2681,7 +2718,9 @@ mod task_result_marker_tests {
 
 #[cfg(test)]
 mod tool_approval_part_tests {
-    use super::{ContentPart, ContentPartToolRejection, MessageSchema, ToolApprovalKind};
+    use super::{
+        ContentPart, ContentPartToolRejection, MessageSchema, ToolAllowedBy, ToolApprovalKind,
+    };
     use serde_json::json;
 
     #[test]
@@ -2806,6 +2845,62 @@ mod tool_approval_part_tests {
         .expect("the links of an earlier row still read");
         assert_eq!(earlier.links.len(), 1);
         assert_eq!(earlier.links[0].host, "records.example.test");
+    }
+
+    #[test]
+    fn a_stored_decision_note_this_version_cannot_read_never_fails_its_row() {
+        let row = |allowed_by: serde_json::Value, read_only: serde_json::Value| {
+            let message = MessageSchema::validate(&json!({
+                "role": "assistant",
+                "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                             "status": "error", "tool_name": "create_row",
+                             "output": {"status": "rejected"}, "allowed_by": allowed_by,
+                             "display": {"title": "Create row", "description_truncated": false,
+                                         "read_only": read_only}}],
+            }))
+            .expect("a note it cannot read leaves the row readable");
+            let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+                panic!("expected one tool row");
+            };
+            assert_eq!(tool.output, Some(json!({"status": "rejected"})));
+            let display = tool.display.as_ref().unwrap();
+            assert_eq!(display.title, "Create row");
+            (tool.allowed_by, display.read_only)
+        };
+
+        for odd in [
+            json!(5),
+            json!(["policy"]),
+            json!({"policy": true}),
+            json!(null),
+        ] {
+            assert_eq!(row(odd.clone(), odd.clone()), (None, false), "{odd}");
+        }
+        for newer in [json!("granted_by_a_later_release"), json!("Policy")] {
+            assert_eq!(
+                row(newer.clone(), json!(false)),
+                (Some(ToolAllowedBy::Other), false),
+                "{newer}"
+            );
+        }
+        assert_eq!(
+            row(json!("always_allow"), json!(true)),
+            (Some(ToolAllowedBy::AlwaysAllow), true)
+        );
+        let old = MessageSchema::validate(&json!({
+            "role": "assistant",
+            "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                         "status": "success", "tool_name": "create_row",
+                         "display": {"title": "Create row", "description_truncated": false}}],
+        }))
+        .unwrap();
+        let [ContentPart::ToolUse(tool)] = &old.content[..] else {
+            panic!("expected one tool row");
+        };
+        assert_eq!(
+            (tool.allowed_by, tool.display.as_ref().unwrap().read_only),
+            (None, false)
+        );
     }
 
     /// Approval rows are durable and predate every field this stop now carries,

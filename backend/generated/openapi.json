@@ -10812,6 +10812,10 @@
           "status"
         ],
         "properties": {
+          "allowed_by": {
+            "$ref": "#/components/schemas/ToolAllowedBy",
+            "description": "The stored part's `allowed_by`, on every update of the call."
+          },
           "content_index": {
             "type": "integer",
             "minimum": 0
@@ -13296,6 +13300,15 @@
           }
         }
       },
+      "ToolAllowedBy": {
+        "type": "string",
+        "description": "What let an MCP call run without asking the user.",
+        "enum": [
+          "policy",
+          "always_allow",
+          "other"
+        ]
+      },
       "ToolApprovalAnnotations": {
         "type": "object",
         "description": "Snapshot of the MCP annotations used to decide whether a tool call needs\nuser approval. The values are normalized to the MCP defaults so an absent\nannotation remains auditable as the pessimistic interpretation.",
@@ -13586,6 +13599,10 @@
             "$ref": "#/components/schemas/ToolCallLabel",
             "description": "What this call does to what, and where. Absent on client tools and\nolder rows, which render as before."
           },
+          "read_only": {
+            "type": "boolean",
+            "description": "Whether the tool is read-only by the annotations the approval policy\nread for this call and does not also call itself destructive. Set on\nMCP calls only."
+          },
           "server_name": {
             "type": "string",
             "description": "The MCP server as the operator named it, else its id tidied up; never\ntext from the server itself. Absent on client tools and older rows."
@@ -13638,6 +13655,15 @@
       "ToolUse": {
         "type": "object",
         "properties": {
+          "allowed_by": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolAllowedBy",
+                "description": "Why an MCP call ran without an approval card. Absent when the user\ndecided on a card, the call was refused, on other tools and old rows."
+              }
+            ],
+            "default": null
+          },
           "display": {
             "oneOf": [
               {

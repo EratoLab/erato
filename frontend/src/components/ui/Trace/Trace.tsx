@@ -24,6 +24,7 @@ import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 import { approvalStopState } from "../Message/approvalItems";
 
 import type {
+  ApprovalScopeCovers,
   ContentPart,
   ToolUse,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -53,10 +54,25 @@ interface TraceProps {
   /** When true, the cold-load pill flips to a "Stopped after Xs" label. */
   hasError?: boolean;
   /** Durable user decisions keyed by MCP tool-call id. */
-  toolApprovalStatuses?: Record<string, ToolApprovalStatus>;
+  toolDecisions?: Record<string, ToolDecision>;
 }
 
 export type ToolApprovalStatus = "approved" | "denied";
+
+/** A user's decision on one call, as its decision part records it. */
+export type ToolDecision =
+  | {
+      status: "approved";
+      alwaysAllow: boolean;
+      /** Set when the call was allowed for its document or response. */
+      covers?: ApprovalScopeCovers;
+    }
+  | {
+      status: "denied";
+      neverAllow: boolean;
+      /** Ended because the user no longer allows the tool, not on a card. */
+      withdrawn: boolean;
+    };
 
 /**
  * Vertical timeline of reasoning + tool-call steps. Renders the rail-with-line
@@ -78,7 +94,7 @@ export const Trace = ({
   renderMarkdown,
   durationMs = null,
   hasError = false,
-  toolApprovalStatuses = {},
+  toolDecisions = {},
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
   const { maskReasoningText } = useTraceFeature();
@@ -107,7 +123,7 @@ export const Trace = ({
         showDoneMarker={!isTraceActive}
         showThinkingPlaceholder={showThinkingPlaceholder}
         maskReasoningText={maskReasoningText}
-        toolApprovalStatuses={toolApprovalStatuses}
+        toolDecisions={toolDecisions}
       />
     );
   }
@@ -120,7 +136,7 @@ export const Trace = ({
       durationMs={durationMs}
       hasError={hasError}
       maskReasoningText={maskReasoningText}
-      toolApprovalStatuses={toolApprovalStatuses}
+      toolDecisions={toolDecisions}
     />
   );
 };
@@ -132,7 +148,7 @@ interface ColdLoadTraceProps {
   durationMs: number | null;
   hasError: boolean;
   maskReasoningText: boolean;
-  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
+  toolDecisions: Record<string, ToolDecision>;
 }
 
 const ColdLoadTrace = ({
@@ -142,7 +158,7 @@ const ColdLoadTrace = ({
   durationMs,
   hasError,
   maskReasoningText,
-  toolApprovalStatuses,
+  toolDecisions,
 }: ColdLoadTraceProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -163,7 +179,7 @@ const ColdLoadTrace = ({
           showDoneMarker
           showThinkingPlaceholder={false}
           maskReasoningText={maskReasoningText}
-          toolApprovalStatuses={toolApprovalStatuses}
+          toolDecisions={toolDecisions}
         />
       </TraceCollapse>
     </div>
@@ -184,7 +200,7 @@ interface TraceTimelineProps {
   showThinkingPlaceholder: boolean;
   /** When true, reasoning step titles and bodies are replaced with the mask label. */
   maskReasoningText: boolean;
-  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
+  toolDecisions: Record<string, ToolDecision>;
 }
 
 const TraceTimeline = ({
@@ -195,7 +211,7 @@ const TraceTimeline = ({
   showDoneMarker,
   showThinkingPlaceholder,
   maskReasoningText,
-  toolApprovalStatuses,
+  toolDecisions,
 }: TraceTimelineProps) => {
   const placeholderIsLastNode = !showDoneMarker;
   // Read here rather than threaded from the parent: both the streaming and
@@ -223,7 +239,7 @@ const TraceTimeline = ({
           isLastStep: isLastNodeInTimeline,
           renderMarkdown,
           maskReasoningText,
-          toolApprovalStatuses,
+          toolDecisions,
         });
 
         return (
@@ -318,7 +334,7 @@ interface RenderStepArgs {
   isLastStep: boolean;
   renderMarkdown: (text: string) => ReactNode;
   maskReasoningText: boolean;
-  toolApprovalStatuses: Record<string, ToolApprovalStatus>;
+  toolDecisions: Record<string, ToolDecision>;
 }
 
 /**
@@ -329,16 +345,20 @@ interface RenderStepArgs {
  * child's chat rather than on the parent's call, so the child this slot
  * dispatched is the second way in.
  */
-const approvalStatusForStep = (
+const decisionForStep = (
   part: ToolUse & { content_type: "tool_use" },
-  statuses: Record<string, ToolApprovalStatus | undefined>,
-): ToolApprovalStatus | undefined => {
-  const byCall = part.tool_call_id ? statuses[part.tool_call_id] : undefined;
+  decisions: Record<string, ToolDecision | undefined>,
+): ToolDecision | undefined => {
+  // Own keys only: a call id like `constructor` must not find Object's.
+  const decided = (key: string | null | undefined) =>
+    typeof key === "string" && Object.hasOwn(decisions, key)
+      ? decisions[key]
+      : undefined;
+  const byCall = decided(part.tool_call_id);
   if (byCall !== undefined || !isDelegationToolName(part.tool_name)) {
     return byCall;
   }
-  const childChatId = parseDelegationEnvelope(part.output)?.delegateChatId;
-  return childChatId ? statuses[childChatId] : undefined;
+  return decided(parseDelegationEnvelope(part.output)?.delegateChatId);
 };
 
 const renderStep = (args: RenderStepArgs): ReactNode => {
@@ -382,10 +402,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isStreaming={args.isStreaming}
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
-          approvalStatus={approvalStatusForStep(
-            args.step.part,
-            args.toolApprovalStatuses,
-          )}
+          decision={decisionForStep(args.step.part, args.toolDecisions)}
         />
       );
     default: {

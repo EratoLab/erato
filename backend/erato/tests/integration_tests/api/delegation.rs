@@ -2286,42 +2286,38 @@ fn mock_mcp_base_url() -> String {
         .unwrap_or_else(|_| "http://127.0.0.1:44321".to_string())
 }
 
-/// A delegate whose MCP tool is approval-gated under the `restrictive` preset
-/// has the gated call refused in-run: the child completes in prose, the
-/// envelope is `completed`, and the child chat is NOT parked awaiting
-/// approval.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-/// - `sse-streaming`
-/// - `uses-mocked-llm`
-/// - `uses-mock-mcp`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres>) {
+/// A parent turn that delegates to an assistant whose child calls
+/// `publish_approval_probe` once under `preset`, then answers in prose once
+/// its request holds `tool_response`. Returns the parent's events, the child
+/// chat and the content of the child's assistant row.
+async fn delegate_one_probe_call(
+    pool: Pool<Postgres>,
+    preset: erato::config::McpToolApprovalPreset,
+    tool_response: &str,
+) -> (Vec<Event>, erato::db::entity::chats::Model, Vec<Value>) {
     let mut mocks = MockSet::new();
-    // Child turn 2: the refusal tool response arrived; answer in prose.
+    // Child turn 2: the tool response arrived; answer in prose.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
-                &["approval, which is unavailable in a delegated run"],
+                &[tool_response],
                 &["delegate_chat_id"],
             ));
         mock_llm_sse_response(
             then,
             crate::test_utils::build_openai_text_streaming_response(&[
-                "CHILD-MCP-DONE without the gated tool",
+                "CHILD-MCP-DONE after the probe call",
             ]),
         );
     });
-    // Child turn 1: narrate, then call the approval-gated MCP tool.
+    // Child turn 1: narrate, then call the MCP tool.
     mocks.mock(|when, then| {
         when.post()
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
                 &["CHILD-MCP-TASK"],
-                &["delegate_chat_id", "approval, which is unavailable"],
+                &["delegate_chat_id", tool_response],
             ));
         mock_llm_sse_response(
             then,
@@ -2391,7 +2387,7 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
     );
     app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
         enabled: true,
-        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        preset,
         allow_always: false,
     };
     let app_state = test_app_state(app_config, pool).await;
@@ -2422,6 +2418,49 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
     response.assert_status_ok();
     let events = parse_sse_events(&response);
 
+    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
+    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
+    let child_rows = chat_messages_by_created_at(&app_state.db, child_chat.id).await;
+    let content = child_rows
+        .iter()
+        .find(|row| row.raw_message["role"] == "assistant")
+        .unwrap()
+        .raw_message["content"]
+        .as_array()
+        .unwrap()
+        .clone();
+    (events, child_chat, content)
+}
+
+fn probe_tool_use(content: &[Value]) -> &Value {
+    content
+        .iter()
+        .find(|part| {
+            part["content_type"] == "tool_use" && part["tool_name"] == "publish_approval_probe"
+        })
+        .expect("the probe call recorded as a tool_use")
+}
+
+/// A delegate whose MCP tool is approval-gated under the `restrictive` preset
+/// has the gated call refused in-run: the child completes in prose, the
+/// envelope is `completed`, and the child chat is NOT parked awaiting
+/// approval.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres>) {
+    let (events, child_chat, content) = delegate_one_probe_call(
+        pool,
+        erato::config::McpToolApprovalPreset::Restrictive,
+        "approval, which is unavailable in a delegated run",
+    )
+    .await;
+
     let output = find_tool_call_update_output(&events, "delegate_to_assistant");
     assert_eq!(output["status"], "completed");
     assert!(
@@ -2446,31 +2485,16 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             >= steps[0]["startedAtOffsetMs"].as_u64().unwrap()
     );
 
-    let chat_id = crate::test_utils::extract_chat_id(&events).unwrap();
-    let child_chat = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat_id).unwrap()).await;
     // Not parked: the durable approval stop was pre-empted by the refusal.
     assert_eq!(child_chat.generation_state.as_deref(), Some("completed"));
 
-    let child_rows = chat_messages_by_created_at(&app_state.db, child_chat.id).await;
-    let child_assistant_row = child_rows
-        .iter()
-        .find(|row| row.raw_message["role"] == "assistant")
-        .unwrap();
-    let content = child_assistant_row.raw_message["content"]
-        .as_array()
-        .unwrap();
     assert!(
         content
             .iter()
             .all(|part| part["content_type"] != "tool_approval_request"),
         "the child must not carry an approval request part"
     );
-    let gated_tool_use = content
-        .iter()
-        .find(|part| {
-            part["content_type"] == "tool_use" && part["tool_name"] == "publish_approval_probe"
-        })
-        .expect("gated MCP call recorded as a refused tool_use");
+    let gated_tool_use = probe_tool_use(&content);
     assert_eq!(gated_tool_use["status"], "error");
     assert!(
         gated_tool_use["output"]["error"]
@@ -2478,6 +2502,40 @@ async fn test_delegation_refuses_approval_gated_mcp_in_child(pool: Pool<Postgres
             .unwrap()
             .contains("approval")
     );
+    assert!(gated_tool_use.get("allowed_by").is_none());
+}
+
+/// The same child call under the `permissive` preset runs unasked, and the
+/// child's own row records that the policy allowed it. The parent's
+/// delegation trace keeps only the step's status.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_delegation_child_records_a_policy_allowed_mcp_call(pool: Pool<Postgres>) {
+    let (events, child_chat, content) = delegate_one_probe_call(
+        pool,
+        erato::config::McpToolApprovalPreset::Permissive,
+        "approval probe published",
+    )
+    .await;
+
+    let output = find_tool_call_update_output(&events, "delegate_to_assistant");
+    assert_eq!(output["status"], "completed");
+    assert!(extract_full_text_answer(&events).contains("PARENT-MCP-FINAL"));
+    let steps = output["localTrace"]["steps"].as_array().unwrap();
+    assert_eq!(steps[0]["id"], "publish_approval_probe");
+    assert_eq!(steps[0]["status"], "ok");
+    assert!(steps[0].get("allowed_by").is_none());
+
+    assert_eq!(child_chat.generation_state.as_deref(), Some("completed"));
+    let tool_use = probe_tool_use(&content);
+    assert_eq!(tool_use["status"], "success");
+    assert_eq!(tool_use["allowed_by"], "policy");
 }
 
 /// A slow child run hits `run_timeout_seconds`: the envelope reports

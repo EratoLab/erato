@@ -2951,6 +2951,7 @@ export type MessageSubmitStreamingResponseToolCallProposed = {
 };
 
 export type MessageSubmitStreamingResponseToolCallUpdate = {
+  allowed_by?: ToolAllowedBy;
   /**
    * @minimum 0
    */
@@ -4383,6 +4384,11 @@ export type TokenUsageVirtualFile = {
 };
 
 /**
+ * What let an MCP call run without asking the user.
+ */
+export type ToolAllowedBy = "policy" | "always_allow" | "other";
+
+/**
  * Snapshot of the MCP annotations used to decide whether a tool call needs
  * user approval. The values are normalized to the MCP defaults so an absent
  * annotation remains auditable as the pessimistic interpretation.
@@ -4583,6 +4589,12 @@ export type ToolDisplayMetadata = {
   description_truncated: boolean;
   label?: ToolCallLabel;
   /**
+   * Whether the tool is read-only by the annotations the approval policy
+   * read for this call and does not also call itself destructive. Set on
+   * MCP calls only.
+   */
+  read_only?: boolean;
+  /**
    * The MCP server as the operator named it, else its id tidied up; never
    * text from the server itself. Absent on client tools and older rows.
    */
@@ -4620,6 +4632,10 @@ export type ToolResultLink = {
 };
 
 export type ToolUse = {
+  /**
+   * @default null
+   */
+  allowed_by?: ToolAllowedBy;
   /**
    * @default null
    */

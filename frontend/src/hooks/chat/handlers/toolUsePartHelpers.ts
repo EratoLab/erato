@@ -20,6 +20,8 @@ const buildToolUsePart = (data: {
   progressMessage?: string | null;
   progress?: number | null;
   total?: number | null;
+  display?: ToolUse["display"];
+  allowedBy?: ToolUse["allowed_by"];
 }): ToolUseContentPart => ({
   content_type: "tool_use",
   tool_call_id: data.toolCallId,
@@ -30,6 +32,8 @@ const buildToolUsePart = (data: {
   progress_message: data.progressMessage ?? null,
   ...(data.progress != null ? { progress: data.progress } : {}),
   ...(data.total != null ? { total: data.total } : {}),
+  ...(data.display != null ? { display: data.display } : {}),
+  ...(data.allowedBy != null ? { allowed_by: data.allowedBy } : {}),
 });
 
 /**
@@ -103,6 +107,9 @@ export function applyToolUseUpdate(
       progressMessage: responseData.progress_message ?? null,
       progress: responseData.progress,
       total: responseData.total,
+      // Only a call's first progress update carries its display.
+      display: responseData.display ?? existing.display,
+      allowedBy: responseData.allowed_by ?? existing.allowed_by,
     });
     return updated;
   }
@@ -116,6 +123,8 @@ export function applyToolUseUpdate(
     progressMessage: responseData.progress_message ?? null,
     progress: responseData.progress,
     total: responseData.total,
+    display: responseData.display,
+    allowedBy: responseData.allowed_by,
   });
   const index = responseData.content_index;
   if (index >= updated.length) {

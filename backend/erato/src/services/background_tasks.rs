@@ -2034,6 +2034,12 @@ pub enum StreamingEvent {
             deserialize_with = "crate::models::message::readable_or_none"
         )]
         result_details: Option<crate::models::message::ToolResultDetails>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "crate::models::message::readable_or_none"
+        )]
+        allowed_by: Option<crate::models::message::ToolAllowedBy>,
     },
     /// The model called a facet `client_tool`: the loop is now SUSPENDED
     /// awaiting the client to execute it and POST the result back. Distinct
@@ -2341,6 +2347,47 @@ mod tests {
                 (None, Some(serde_json::json!("Created.")))
             );
         }
+    }
+
+    #[test]
+    fn a_shared_tool_update_with_an_unreadable_decision_note_still_reads() {
+        let allowed_by = |note: JsonValue| {
+            let event = serde_json::from_value::<StreamingEvent>(serde_json::json!({
+                "message_type": "tool_call_update", "message_id": Uuid::nil(),
+                "content_index": 0, "tool_call_id": "call-1", "tool_name": "create_row",
+                "status": "in_progress", "progress_message": "Writing", "allowed_by": note,
+                "display": {"title": "Create row", "description_truncated": false,
+                            "read_only": note},
+            }))
+            .expect("the event stays readable");
+            let StreamingEvent::ToolCallUpdate {
+                allowed_by,
+                display,
+                progress_message,
+                ..
+            } = event
+            else {
+                panic!("expected a tool update");
+            };
+            assert_eq!(progress_message.as_deref(), Some("Writing"));
+            assert!(!display.unwrap().read_only);
+            allowed_by
+        };
+        for note in [
+            serde_json::json!(1),
+            serde_json::json!({"policy": true}),
+            serde_json::json!(null),
+        ] {
+            assert_eq!(allowed_by(note.clone()), None, "{note}");
+        }
+        assert_eq!(
+            allowed_by(serde_json::json!("granted_by_a_later_release")),
+            Some(crate::models::message::ToolAllowedBy::Other)
+        );
+        assert_eq!(
+            allowed_by(serde_json::json!("policy")),
+            Some(crate::models::message::ToolAllowedBy::Policy)
+        );
     }
 
     #[tokio::test]
