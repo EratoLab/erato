@@ -7332,6 +7332,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nextOccurrenceFirst"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.refusal.notFinished"
 msgstr ""
 

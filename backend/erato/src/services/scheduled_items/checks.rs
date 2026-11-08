@@ -80,6 +80,9 @@ pub enum ScheduledItemErrorCode {
     InFlight,
     /// The item has no occurrence waiting to be snoozed.
     NothingToSnooze,
+    /// A reminder snoozed after delivery would not come back before its next
+    /// regular occurrence, or that occurrence already came.
+    NextOccurrenceFirst,
     /// Only done, failed or cancelled items can be deleted.
     NotFinished,
     Internal,
@@ -129,6 +132,10 @@ impl From<Refusal> for Refused {
             Refusal::NothingToSnooze => Self::new(
                 Code::NothingToSnooze,
                 "Nothing of this item is waiting to be delivered.",
+            ),
+            Refusal::NextOccurrenceFirst => Self::new(
+                Code::NextOccurrenceFirst,
+                "Not snoozed: this reminder is due again by then, or already was.",
             ),
             Refusal::NotFinished => Self::new(
                 Code::NotFinished,
