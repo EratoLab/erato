@@ -13,12 +13,14 @@ use super::host::{
     ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
 };
 use super::nudge;
+use super::reminders;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
 use super::texts::{Lang, Msg};
 use super::user_token::sign_in_activity;
+use crate::db::entity::scheduled_items::ItemStatus;
 use crate::db::entity::users;
-use crate::services::scheduled_items::{self, Refusal, wording};
+use crate::services::scheduled_items::{self, Refusal, ScheduledItemErrorCode, wording};
 use axum::http::StatusCode;
 use chrono::Utc;
 use eyre::{Report, eyre};
@@ -121,6 +123,13 @@ async fn process_message(
         .and_then(nudge::DeliverySubmit::from_value)
     {
         return on_delivery_action(bot, host, activity, target, sender, submit).await;
+    }
+    if let Some(submit) = activity
+        .value
+        .as_ref()
+        .and_then(reminders::CancelSubmit::from_value)
+    {
+        return on_reminder_cancel(bot, host, activity, target, sender, submit).await;
     }
 
     let text = activity.text_without_bot_mention();
@@ -259,7 +268,8 @@ async fn process_message(
     .await;
     match prepared {
         Ok(Ok(updates)) => {
-            render_generation(bot, host, target, updates, stream, Some(request)).await
+            let user_id = user.session.user_id();
+            render_generation(bot, host, target, user_id, updates, stream, Some(request)).await
         }
         Ok(Err(error)) => {
             let finished = stream.finish(&start_error_text(error, lang)).await;
@@ -341,7 +351,8 @@ async fn on_approval(
     }
     let stream = stream_for(bot, target, activity.conversation_kind());
     let request = host.request_for_assistant(message_id).await?;
-    render_generation(bot, host, target, updates, stream, request).await
+    let user_id = user.session.user_id();
+    render_generation(bot, host, target, user_id, updates, stream, request).await
 }
 
 /// The reply to an approval answer that did not continue the response.
@@ -478,7 +489,8 @@ async fn on_control(
                 }
             };
             let stream = stream_for(bot, target, activity.conversation_kind());
-            render_generation(bot, host, target, updates, stream, current).await
+            let user_id = user.session.user_id();
+            render_generation(bot, host, target, user_id, updates, stream, current).await
         }
         Err(error @ (StartError::Busy | StartError::Internal)) => {
             host.restore_request_action(&claimed, token, &request)
@@ -584,6 +596,93 @@ async fn settle_delivered_card(
     target.send_text(note).await
 }
 
+/// Cancel on a confirmation card. It works while the reminder is upcoming,
+/// for the user whose reminder it is, with no sign-in, as the delivered
+/// card's buttons. The outcome replaces the card in place, which keeps Open
+/// in Scheduled; someone else's press only gets a reply.
+async fn on_reminder_cancel(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CancelSubmit,
+) -> Result<(), Report> {
+    let lang = target.lang;
+    let Some(user) = known_user(bot, activity, target, sender).await? else {
+        return Ok(());
+    };
+    let scheduled_url = scheduled_page_url(bot);
+    let note = match host.cancel_reminder(user.id, submit.item_id).await? {
+        Ok(_) => Msg::ReminderCancelled.text(lang).to_string(),
+        Err(refused) => match refused.code {
+            ScheduledItemErrorCode::NotFound => {
+                return target.send_text(Msg::ReminderGone.text(lang)).await;
+            }
+            ScheduledItemErrorCode::Finished => {
+                match host.reminder_status(user.id, submit.item_id).await? {
+                    Some(ItemStatus::Cancelled) => Msg::ReminderCancelled.text(lang).to_string(),
+                    _ => Msg::ReminderAlreadyHappened.fill(
+                        lang,
+                        &[("page", &scheduled_page_link(scheduled_url.as_deref(), lang))],
+                    ),
+                }
+            }
+            _ => Msg::ReminderUnchangeable.text(lang).to_string(),
+        },
+    };
+    if let Some(card_id) = activity.reply_to_id.as_deref()
+        && let Some(confirmation) = host
+            .reminder_confirmation(user.id, submit.item_id, lang)
+            .await?
+    {
+        let card = reminders::confirmation_card(
+            &confirmation,
+            scheduled_url.as_deref(),
+            Some(&note),
+            false,
+        );
+        match target.update(card_id, card).await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                tracing::warn!(%error, "Could not replace a reminder's confirmation card")
+            }
+        }
+    }
+    target.send_text(&note).await
+}
+
+/// One confirmation card per reminder the turn scheduled, after its answer.
+/// A card that cannot be built or sent is logged: the reminder is stored and
+/// the answer already went out.
+pub(super) async fn send_reminder_confirmations(
+    bot: &TeamsBot,
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    reminders: &[Uuid],
+) {
+    let scheduled_url = scheduled_page_url(bot);
+    for item_id in reminders {
+        let card = match host
+            .reminder_confirmation(user_id, *item_id, target.lang)
+            .await
+        {
+            Ok(Some(confirmation)) => {
+                reminders::confirmation_card(&confirmation, scheduled_url.as_deref(), None, true)
+            }
+            Ok(None) => continue,
+            Err(error) => {
+                tracing::warn!(%error, %item_id, "Could not build a reminder's confirmation card");
+                continue;
+            }
+        };
+        if let Err(error) = target.send(&card).await {
+            tracing::warn!(%error, %item_id, "Could not send a reminder's confirmation card");
+        }
+    }
+}
+
 fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
     bot.settings
         .public_base_url
@@ -604,12 +703,15 @@ fn reminder_refusal_note(refusal: Refusal) -> Msg {
 }
 
 fn reminder_button_gone_text(scheduled_url: Option<&str>, lang: Lang) -> String {
+    Msg::ReminderButtonGone.fill(lang, &[("page", &scheduled_page_link(scheduled_url, lang))])
+}
+
+fn scheduled_page_link(scheduled_url: Option<&str>, lang: Lang) -> String {
     let name = Msg::ScheduledPage.text(lang);
-    let page = match scheduled_url {
+    match scheduled_url {
         Some(url) => format!("[{name}]({url})"),
         None => name.to_string(),
-    };
-    Msg::ReminderButtonGone.fill(lang, &[("page", &page)])
+    }
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
@@ -1156,12 +1258,13 @@ async fn conversation_context(
     Ok(Some(file_id))
 }
 
-/// Stream or edit one progress reply, then
-/// post approval cards for any tool calls it stopped on.
+/// Stream or edit one progress reply, then post approval cards for any tool
+/// calls it stopped on and a confirmation for each reminder it scheduled.
 async fn render_generation(
     bot: &TeamsBot,
     host: &Host,
     target: &ReplyTarget<'_>,
+    user_id: Uuid,
     mut updates: mpsc::Receiver<GenerationUpdate>,
     mut stream: StreamingReply<'_>,
     mut request: Option<TeamsRequest>,
@@ -1274,6 +1377,9 @@ async fn render_generation(
             settle_controls(host, target, request, RequestState::Stopped).await;
         }
         return delivered.and(stopped);
+    }
+    if delivered.is_ok() {
+        send_reminder_confirmations(bot, host, target, user_id, &completion.reminders).await;
     }
     let approvals = match (&delivered, &completion.approvals) {
         (Ok(()), Some(set)) => send_approval_card(target, set, &bot.settings.app_name).await,
@@ -1413,6 +1519,14 @@ pub(super) async fn deliver_proactive(
                 bot.settings.public_base_url.as_deref(),
             )
             .await?;
+        send_reminder_confirmations(
+            bot,
+            host,
+            &target,
+            conversation.user_id,
+            &completion.reminders,
+        )
+        .await;
         if let Some(set) = &completion.approvals {
             send_approval_card(&target, set, &bot.settings.app_name).await?;
         }
@@ -1557,6 +1671,7 @@ mod tests {
             earlier_text: String::new(),
             approvals: None,
             needs_client: false,
+            reminders: Vec::new(),
         }
     }
 

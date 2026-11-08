@@ -504,7 +504,7 @@ pub struct Confirmation {
     pub language: String,
     pub heading: String,
     pub name: String,
-    /// When it arrives (next); absent once nothing is coming.
+    /// When it arrives next, or for an item that is over, when it was due.
     pub when: Option<String>,
     /// A repeating reminder's schedule.
     pub repeats: Option<String>,
@@ -530,6 +530,7 @@ impl Confirmation {
             heading: wording::confirmation_heading(lang).to_string(),
             name: item.name.clone(),
             when: super::next_occurrence(view, now)
+                .or(item.occurrence_at.map(|at| at.with_timezone(&Utc)))
                 .map(|at| wording::exact_when(at, zone, user_zone, now, lang)),
             repeats: match super::trigger_of(item)? {
                 Trigger::Repeat(rule) => {

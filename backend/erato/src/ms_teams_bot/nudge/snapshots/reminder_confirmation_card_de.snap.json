@@ -1,0 +1,65 @@
+{
+  "type": "message",
+  "summary": "Erinnerung geplant: Wochenbericht senden",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Erinnerung geplant",
+            "wrap": true,
+            "isSubtle": true,
+            "size": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Wochenbericht senden",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium",
+            "spacing": "None"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Montag, 3. März, 9:00",
+            "wrap": true,
+            "spacing": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Jede Woche am Montag und Donnerstag um 9:00",
+            "wrap": true,
+            "spacing": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Zustellung per Teams-Chat",
+            "wrap": true,
+            "isSubtle": true,
+            "spacing": "Small"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.Submit",
+            "title": "Abbrechen",
+            "data": {
+              "action": "erato_reminder_cancel",
+              "item_id": "ITEM_ID"
+            }
+          },
+          {
+            "type": "Action.OpenUrl",
+            "title": "In „Geplant“ öffnen",
+            "url": "https://erato.example.com/scheduled"
+          }
+        ]
+      }
+    }
+  ]
+}

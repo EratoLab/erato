@@ -1,0 +1,59 @@
+{
+  "type": "message",
+  "summary": "Reminder scheduled: Follow up on the offer",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Reminder scheduled",
+            "wrap": true,
+            "isSubtle": true,
+            "size": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Follow up on the offer",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium",
+            "spacing": "None"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Friday, 7 Mar, 10:00",
+            "wrap": true,
+            "spacing": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Delivered via Teams chat",
+            "wrap": true,
+            "isSubtle": true,
+            "spacing": "Small"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.Submit",
+            "title": "Cancel",
+            "data": {
+              "action": "erato_reminder_cancel",
+              "item_id": "ITEM_ID"
+            }
+          },
+          {
+            "type": "Action.OpenUrl",
+            "title": "Open in Scheduled",
+            "url": "https://erato.example.com/scheduled"
+          }
+        ]
+      }
+    }
+  ]
+}

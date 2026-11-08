@@ -246,6 +246,8 @@ texts! {
         "Nicht zurückgestellt: Dieser Zeitpunkt ist schon vorbei.";
     ReminderUnchangeable => "This reminder cannot be changed right now.",
         "Diese Erinnerung lässt sich gerade nicht ändern.";
+    ReminderAlreadyHappened => "This reminder already happened. You can find it on the {page}.",
+        "Diese Erinnerung hat bereits stattgefunden. Sie finden sie auf der Seite {page}.";
 }
 
 impl Msg {

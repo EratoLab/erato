@@ -200,6 +200,7 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
             &bot,
             &host,
             &target,
+            session.user_id(),
             updates,
             stream_for(&bot, &target, ConversationKind::Personal),
             Some(request.clone()),
