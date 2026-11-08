@@ -2390,13 +2390,16 @@ mod tests {
             allowed_by
         };
         for note in [
-            serde_json::json!("granted_by_a_later_release"),
             serde_json::json!(1),
             serde_json::json!({"policy": true}),
             serde_json::json!(null),
         ] {
             assert_eq!(allowed_by(note.clone()), None, "{note}");
         }
+        assert_eq!(
+            allowed_by(serde_json::json!("granted_by_a_later_release")),
+            Some(crate::models::message::ToolAllowedBy::Other)
+        );
         assert_eq!(
             allowed_by(serde_json::json!("policy")),
             Some(crate::models::message::ToolAllowedBy::Policy)

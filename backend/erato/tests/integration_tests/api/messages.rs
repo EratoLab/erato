@@ -5760,10 +5760,8 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
         .json(&json!({ "user_message": ASK }))
         .await;
     response.assert_status_ok();
-    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
-        &response,
-    )))
-    .unwrap();
+    let events = parse_sse_events(&response);
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
     let card = message_content(&app_state, message_id)
         .await
         .last()
@@ -5779,6 +5777,16 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
         label_field(label, "status")["values"][0]["text"],
         "Rejected"
     );
+    let running = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["status"] == "in_progress"
+                && json["tool_call_id"] == card["tool_call_id"]
+        })
+        .expect("the streamed call goes in progress");
+    assert_eq!(&running["display"]["label"], label);
 }
 
 /// A turn that ran two calls before the gate stopped it must hand the model

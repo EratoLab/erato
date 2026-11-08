@@ -267,7 +267,7 @@ const FieldList = ({
           >
             {field.name}
           </dt>
-          <dd className="min-w-0 break-words text-theme-fg-primary [overflow-wrap:anywhere]">
+          <dd className="max-h-24 min-w-0 overflow-y-auto break-words text-theme-fg-primary [overflow-wrap:anywhere]">
             <FieldValues
               values={field.values}
               omitted={field.omitted}
@@ -292,9 +292,9 @@ const BatchRows = ({
   <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
     {rows.map(({ name, fields }, index) => (
       <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
-        <span className="text-sm text-theme-fg-primary">
+        <div className="max-h-24 overflow-y-auto text-sm text-theme-fg-primary">
           <GistValueText value={name} showWritten={onCard} wholeId={onCard} />
-        </span>
+        </div>
         {fields.length > 0 && (
           <div className="mt-0.5 pl-3">
             <FieldList fields={fields} wholeId={onCard} />
@@ -402,7 +402,9 @@ export const ToolCallGistValues = ({
 
 /**
  * The gist a card shows before approval: each item's line and values, and
- * the warnings the values the call writes call for.
+ * the warnings the values the call writes call for. Values show whole, so a
+ * long line, field value or row scrolls in a box of its own and the buttons
+ * below stay in view.
  */
 export const ToolCallGist = ({
   gist,
@@ -415,7 +417,7 @@ export const ToolCallGist = ({
     {gist.items.map((item, index) => (
       <div key={index} className="space-y-1">
         <p
-          className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+          className="max-h-32 overflow-y-auto break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
           data-testid="tool-call-gist-line"
         >
           <ToolCallGistLine

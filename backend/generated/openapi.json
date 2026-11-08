@@ -13314,7 +13314,8 @@
         "description": "What let an MCP call run without asking the user.",
         "enum": [
           "policy",
-          "always_allow"
+          "always_allow",
+          "other"
         ]
       },
       "ToolApprovalAnnotations": {

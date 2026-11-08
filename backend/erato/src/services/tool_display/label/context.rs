@@ -8,7 +8,7 @@
 
 use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
 use super::pointer;
-use super::recipients::is_recipient_member;
+use super::recipients::{is_phone_shaped, is_recipient_member};
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
@@ -60,6 +60,8 @@ pub struct ToolResultContext {
     order: VecDeque<RecordKey>,
     /// Calls already read, so the running turn's parts are read once.
     seen: HashSet<String>,
+    /// Calls whose latest decision part in the stored row is an approval.
+    approved: HashSet<String>,
     /// Estimated size of `records`, kept under [`MAX_INDEX_BYTES`].
     bytes: usize,
 }
@@ -94,7 +96,15 @@ impl ToolResultContext {
     /// [`MAX_CALLS_READ`] calls only. After a chat-history compaction none are
     /// left, so names read before it are misses.
     pub fn from_messages(source: &GenerationInputMessages) -> Self {
+        Self::from_messages_and_row(source, &[])
+    }
+
+    /// As [`Self::from_messages`], for a `source` that ends with the replay of
+    /// the stored `row`. Replay drops the row's decision parts, which tell a
+    /// call approved on a card from one Erato refused, so they come from `row`.
+    pub fn from_messages_and_row(source: &GenerationInputMessages, row: &[ContentPart]) -> Self {
         let mut context = Self::default();
+        context.note_decisions(row);
         let calls: Vec<&ToolUse> = source
             .messages
             .iter()
@@ -118,6 +128,7 @@ impl ToolResultContext {
 
     /// Reads the running turn's calls that have settled since the last look.
     pub fn observe(&mut self, content: &[ContentPart]) {
+        self.note_decisions(content);
         for part in content {
             // A call without an ID cannot be told from one read before, and
             // reading it again would bring back values a later write retired.
@@ -133,8 +144,9 @@ impl ToolResultContext {
     /// `target` and `before`, and on an update each field's earlier value,
     /// read from the one record the item's `id` names. Only results of
     /// `server`, the name the call's own tool rows carry, are used. A miss
-    /// stays `None`, and so does every value below a recipient member and
-    /// every value past [`MAX_RESOLVED_BYTES`] of resolved text.
+    /// stays `None`, and so does every value below a recipient member, every
+    /// ID shaped like a phone number and every value past
+    /// [`MAX_RESOLVED_BYTES`] of resolved text.
     pub fn resolve(&self, label: &mut ToolCallLabel, arguments: &Value, server: &str) {
         let update = label.action == ToolCallAction::Update;
         let mut budget = MAX_RESOLVED_BYTES;
@@ -190,6 +202,42 @@ impl ToolResultContext {
         }
     }
 
+    fn note_decisions(&mut self, content: &[ContentPart]) {
+        for part in content {
+            match part {
+                ContentPart::ToolApproval(approval) => {
+                    self.approved.insert(approval.tool_call_id.clone());
+                }
+                ContentPart::ToolRejection(rejection) => {
+                    self.approved.remove(&rejection.tool_call_id);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// A call Erato itself turned down (the user denied it, a gate refused it,
+    /// the budget ran out) never reached its server. Erato writes exactly
+    /// `{status: "rejected", error: <text>}`, never with `allowed_by`. A call
+    /// that ran may get the same shape from its server: with `allowed_by` or
+    /// an approval it counts as ran. Earlier turns replay without their
+    /// decision parts, so there a card-approved call stays ambiguous and
+    /// counts as refused.
+    fn is_refused_by_erato(&self, tool: &ToolUse) -> bool {
+        tool.allowed_by.is_none()
+            && !self.approved.contains(&tool.tool_call_id)
+            && tool.status == ToolCallStatus::Error
+            && tool
+                .output
+                .as_ref()
+                .and_then(Value::as_object)
+                .is_some_and(|output| {
+                    output.len() == 2
+                        && output.get("status").and_then(Value::as_str) == Some("rejected")
+                        && output.get("error").is_some_and(Value::is_string)
+                })
+    }
+
     fn record(&self, server: &str, id: String) -> Option<&Record> {
         if !indexable(&id) {
             return None;
@@ -230,7 +278,7 @@ impl ToolResultContext {
     }
 
     fn read_settled(&mut self, tool: &ToolUse) {
-        if is_refused_by_erato(tool) {
+        if self.is_refused_by_erato(tool) {
             return;
         }
         // A task's child may have changed any record, and what its tools
@@ -471,8 +519,8 @@ fn result_server(tool: &ToolUse) -> Option<&str> {
 }
 
 /// IDs the index never holds. Digits: every table numbers its own records,
-/// so `7` could be anything. Addresses and links: a call writing one must
-/// show it as written, never as a name a result gave it.
+/// so `7` could be anything. Addresses, phone numbers and links: a call
+/// writing one must show it as written, never as a name a result gave it.
 fn indexable(id: &str) -> bool {
     const LINK_PREFIXES: [&str; 6] = ["mailto:", "tel:", "sms:", "data:", "javascript:", "www."];
     let link_prefix = |prefix: &&str| {
@@ -480,6 +528,7 @@ fn indexable(id: &str) -> bool {
             .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
     };
     !id.bytes().all(|byte| byte.is_ascii_digit())
+        && !is_phone_shaped(id)
         && !id.contains('@')
         && !id.contains("://")
         && !LINK_PREFIXES.iter().any(link_prefix)
@@ -834,22 +883,6 @@ fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
     let mut keys = Vec::new();
     let mut nodes = MAX_NODES_PER_VALUE;
     collect(arguments, skip_links, &mut keys, &mut nodes, 0).then_some(keys)
-}
-
-/// A call Erato itself turned down (the user denied it, a gate refused it,
-/// the budget ran out) never reached its server. Erato writes exactly
-/// `{status: "rejected", error: <text>}`.
-fn is_refused_by_erato(tool: &ToolUse) -> bool {
-    tool.status == ToolCallStatus::Error
-        && tool
-            .output
-            .as_ref()
-            .and_then(Value::as_object)
-            .is_some_and(|output| {
-                output.len() == 2
-                    && output.get("status").and_then(Value::as_str) == Some("rejected")
-                    && output.get("error").is_some_and(Value::is_string)
-            })
 }
 
 /// The UUIDs written anywhere in `text`, as lookup keys.

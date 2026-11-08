@@ -821,6 +821,9 @@ pub enum ToolAllowedBy {
     Policy,
     /// The user's saved "always allow" skipped a prompt the policy would ask.
     AlwaysAllow,
+    /// A reason from a newer version; the call still ran without a card.
+    #[serde(other)]
+    Other,
 }
 
 /// What a context approval covers besides the call it was given on.
@@ -2916,14 +2919,19 @@ mod tool_approval_part_tests {
         };
 
         for odd in [
-            json!("granted_by_a_later_release"),
             json!(5),
             json!(["policy"]),
             json!({"policy": true}),
-            json!("Policy"),
             json!(null),
         ] {
             assert_eq!(row(odd.clone(), odd.clone()), (None, false), "{odd}");
+        }
+        for newer in [json!("granted_by_a_later_release"), json!("Policy")] {
+            assert_eq!(
+                row(newer.clone(), json!(false)),
+                (Some(ToolAllowedBy::Other), false),
+                "{newer}"
+            );
         }
         assert_eq!(
             row(json!("always_allow"), json!(true)),

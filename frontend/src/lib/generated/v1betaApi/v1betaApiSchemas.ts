@@ -4399,7 +4399,7 @@ export type TokenUsageVirtualFile = {
 /**
  * What let an MCP call run without asking the user.
  */
-export type ToolAllowedBy = "policy" | "always_allow";
+export type ToolAllowedBy = "policy" | "always_allow" | "other";
 
 /**
  * Snapshot of the MCP annotations used to decide whether a tool call needs

@@ -7562,18 +7562,34 @@ async fn stream_generate_chat_completion<'a>(
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
             tool_result_context.observe(&current_message_content);
-            let mcp_row_display = available_mcp_tools_by_name
-                .get(unfinished_tool_call.fn_name.as_str())
-                .map(|managed| {
-                    tool_row_display(&crate::services::tool_display::mcp_tool_call_display(
-                        &mcp.config,
-                        &managed.server_id,
-                        &managed.tool,
-                        &unfinished_tool_call.fn_arguments,
-                        managed.approval_argument.as_deref(),
-                        &tool_result_context,
-                    ))
-                });
+            // Built once per call: the in-progress update, a budget refusal and
+            // the MCP dispatch below all show this one.
+            let (mcp_display, mcp_unlabelled) =
+                match available_mcp_tools_by_name.get(unfinished_tool_call.fn_name.as_str()) {
+                    Some(managed) => {
+                        let label_mapping = crate::services::tool_display::mcp_tool_call_mapping(
+                            &app_state.tool_label_cache,
+                            &user_id,
+                            &mcp.config,
+                            &managed.server_id,
+                            &managed.tool,
+                            &unfinished_tool_call.fn_arguments,
+                            managed.approval_argument.as_deref(),
+                        )
+                        .await;
+                        let display = crate::services::tool_display::mcp_tool_call_display_from(
+                            &mcp.config,
+                            &managed.server_id,
+                            &managed.tool,
+                            &unfinished_tool_call.fn_arguments,
+                            managed.approval_argument.as_deref(),
+                            &label_mapping.mapping,
+                            &tool_result_context,
+                        );
+                        (Some(display), label_mapping.unlabelled)
+                    }
+                    None => (None, None),
+                };
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();
@@ -7585,7 +7601,7 @@ async fn stream_generate_chat_completion<'a>(
                         assistant_message_id,
                         tool_index,
                         &unfinished_tool_call,
-                        mcp_row_display.clone(),
+                        mcp_display.as_ref().map(tool_row_display),
                         ToolCallStatus::InProgress,
                         None,
                         streaming_task,
@@ -7652,7 +7668,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: mcp_row_display,
+                        display: mcp_display.as_ref().map(tool_row_display),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -9249,11 +9265,12 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
 
-            let managed_tool = match available_mcp_tools_by_name
-                .get(unfinished_tool_call.fn_name.as_str())
-            {
-                Some(managed_tool) => managed_tool.clone(),
-                None => {
+            let (managed_tool, display) = match (
+                available_mcp_tools_by_name.get(unfinished_tool_call.fn_name.as_str()),
+                mcp_display,
+            ) {
+                (Some(managed_tool), Some(display)) => (managed_tool.clone(), display),
+                _ => {
                     tool_call_started_at.remove(&unfinished_tool_call.call_id);
                     let error = eyre!(
                         "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
@@ -9275,26 +9292,6 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 }),
             };
-            tool_result_context.observe(&current_message_content);
-            let label_mapping = crate::services::tool_display::mcp_tool_call_mapping(
-                &app_state.tool_label_cache,
-                &user_id,
-                &mcp.config,
-                &managed_tool_call.server_id,
-                &managed_tool_call.tool,
-                &managed_tool_call.tool_call.fn_arguments,
-                managed_tool.approval_argument.as_deref(),
-            )
-            .await;
-            let display = crate::services::tool_display::mcp_tool_call_display_from(
-                &mcp.config,
-                &managed_tool_call.server_id,
-                &managed_tool_call.tool,
-                &managed_tool_call.tool_call.fn_arguments,
-                managed_tool.approval_argument.as_deref(),
-                &label_mapping.mapping,
-                &tool_result_context,
-            );
             let row_display = tool_row_display(&display);
 
             // MCP approval is a durable stop, not an in-memory park. Persist
@@ -9331,7 +9328,7 @@ async fn stream_generate_chat_completion<'a>(
                 ToolCallGate::Ask(_) => !is_delegated_run || child_may_park,
                 ToolCallGate::Refuse(_) => false,
             };
-            if shown && let Some(key) = label_mapping.unlabelled {
+            if shown && let Some(key) = mcp_unlabelled {
                 label_upgrades.start(app_state, chat_provider_headers_context, || {
                     crate::services::tool_labeller::LabelJob {
                         key,
@@ -23209,7 +23206,10 @@ async fn resume_parked_generation(
     .await;
     let source_generation_input_messages = retrieval_source.clone();
     let tool_result_context =
-        crate::services::tool_display::label::ToolResultContext::from_messages(&retrieval_source);
+        crate::services::tool_display::label::ToolResultContext::from_messages_and_row(
+            &retrieval_source,
+            &parsed.content,
+        );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(
             app_state,
