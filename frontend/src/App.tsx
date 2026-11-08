@@ -14,6 +14,7 @@ import NewChatPage from "./pages/NewChatPage";
 const AssistantChatLayout = lazy(() => import("./layouts/AssistantChatLayout"));
 const AssistantsLayout = lazy(() => import("./layouts/AssistantsLayout"));
 const ChatLayout = lazy(() => import("./layouts/ChatLayout"));
+const ScheduledLayout = lazy(() => import("./layouts/ScheduledLayout"));
 const SearchLayout = lazy(() => import("./layouts/SearchLayout"));
 const AssistantChatSpacePage = lazy(
   () => import("./pages/AssistantChatSpacePage"),
@@ -36,6 +37,10 @@ const DesktopSidecarSetupPage = lazy(
   () => import("./pages/DesktopSidecarSetupPage"),
 );
 const BrandingOverviewPage = lazy(() => import("./pages/BrandingOverviewPage"));
+const ScheduledPage = lazy(() => import("./pages/ScheduledPage"));
+const ScheduledItemFormPage = lazy(
+  () => import("./pages/ScheduledItemFormPage"),
+);
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const SharedChatPage = lazy(() => import("./pages/SharedChatPage"));
 
@@ -143,6 +148,11 @@ function AppRoutes() {
             element={<AssistantHubSubmitPage />}
           />
           <Route path=":hubAssistantId" element={<AssistantHubDetailPage />} />
+        </Route>
+        <Route path="scheduled" element={<ScheduledLayout />}>
+          <Route index element={<ScheduledPage />} />
+          <Route path="new" element={<ScheduledItemFormPage />} />
+          <Route path=":itemId/edit" element={<ScheduledItemFormPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
