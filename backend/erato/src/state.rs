@@ -134,6 +134,13 @@ pub struct AppState {
     pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
+    /// Model label mappings per user, tool and argument shape.
+    pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
+    /// How long one labeller request may take; tests shorten it.
+    pub tool_label_timeout: std::time::Duration,
+    /// Labeller requests in flight on this replica; a call past the cap is
+    /// not labelled by a model.
+    pub tool_label_permits: Arc<Semaphore>,
     /// Global limiter for file processing work on cache misses.
     pub file_processing_semaphore: Arc<Semaphore>,
     /// Global limiter for end-to-end per-file processing concurrency.
@@ -185,6 +192,7 @@ impl std::fmt::Debug for AppState {
             .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
+            .field("tool_label_cache", &"<Cache>")
             .field("file_processing_semaphore", &"<Semaphore>")
             .field("file_processing_pipeline_semaphore", &"<Semaphore>")
             .field("file_processor", &"<FileProcessor>")
@@ -363,6 +371,11 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
+            tool_label_cache: Default::default(),
+            tool_label_timeout: crate::services::tool_labeller::LABEL_TIMEOUT,
+            tool_label_permits: Arc::new(Semaphore::new(
+                crate::services::tool_labeller::MAX_CONCURRENT_LABELS,
+            )),
             file_processing_semaphore,
             file_processing_pipeline_semaphore,
             file_processor,
@@ -525,6 +538,32 @@ impl AppState {
             .chat_provider_id
             .as_deref()
             .ok_or_eyre("Compaction chat provider is not configured")?;
+        let id = self.config.resolve_chat_provider_id(id)?;
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(id).clone(),
+        })
+    }
+
+    /// The model mappings MCP calls are labelled from: none while tool labels
+    /// are off, since only the labeller keeps any.
+    pub fn tool_label_mappings(
+        &self,
+    ) -> Option<&crate::services::tool_display::label::cache::ToolLabelCache> {
+        self.config
+            .tool_labels
+            .enabled
+            .then_some(&self.tool_label_cache)
+    }
+
+    pub fn chat_provider_for_tool_labels(&self) -> Result<ChatProviderConfigWithId, Report> {
+        self.config.validate_tool_labels()?;
+        let id = self
+            .config
+            .tool_labels
+            .chat_provider_id
+            .as_deref()
+            .ok_or_eyre("Tool labels chat provider is not configured")?;
         let id = self.config.resolve_chat_provider_id(id)?;
         Ok(ChatProviderConfigWithId {
             chat_provider_id: id.to_string(),
@@ -1284,6 +1323,9 @@ impl Clone for AppState {
             file_bytes_cache: self.file_bytes_cache.clone(),
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
+            tool_label_cache: self.tool_label_cache.clone(),
+            tool_label_timeout: self.tool_label_timeout,
+            tool_label_permits: self.tool_label_permits.clone(),
             file_processing_semaphore: self.file_processing_semaphore.clone(),
             file_processing_pipeline_semaphore: self.file_processing_pipeline_semaphore.clone(),
             file_processor: self.file_processor.clone(),
@@ -1364,6 +1406,11 @@ impl AppState {
             c,
             "shared.token_count_cache.bookkeeping",
             &self.token_count_cache,
+        );
+        report.opaque(
+            c,
+            "shared.tool_label_cache.bookkeeping",
+            self.tool_label_cache.entries(),
         );
         report.opaque(c, "shared.file_processor", &self.file_processor);
         if let Some(detector) = &self.file_type_detector {

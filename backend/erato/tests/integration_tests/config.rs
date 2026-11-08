@@ -6505,6 +6505,172 @@ keep_output_fields = ["$.result.blocks[0]"]
 }
 
 #[test]
+fn test_client_tool_label_loads_with_array_pointers() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.plain]
+name = "plain"
+description = "no label"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments]
+name = "submit_comments"
+description = "stages comment changes"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.comments.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.changes[*].op"]
+"#,
+    );
+    assert_eq!(config.client_tools.tools["plain"].label, None);
+    let label = config.client_tools.tools["comments"]
+        .label
+        .as_ref()
+        .unwrap();
+    assert_eq!(label.action, erato::config::ClientToolLabelAction::Comment);
+    assert_eq!(
+        label.object_kind,
+        erato::config::ClientToolLabelObjectKind::Comment
+    );
+    assert_eq!(
+        erato::config::parse_label_pointer(&label.fields[0]).unwrap(),
+        "/changes/*/op"
+    );
+}
+
+#[test]
+fn test_client_tool_labels_the_chat_cannot_use_are_left_out_and_the_tools_load() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.indexed]
+name = "indexed"
+description = "array indices are not supported"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.indexed.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.changes[0].op"]
+
+[client_tools.tools.five]
+name = "five"
+description = "five fields"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.five.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.a", "$.b", "$.c", "$.d", "$.e"]
+
+[client_tools.tools.titled]
+name = "titled"
+description = "the chat shows no title for a proposal"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.titled.label]
+action = "create"
+object_kind = "row"
+title = "$.name"
+
+[client_tools.tools.newer]
+name = "newer"
+description = "a verb from a later release"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.newer.label]
+action = "share"
+object_kind = "spreadsheet"
+fields = ["$.x"]
+
+[client_tools.tools.shapeless]
+name = "shapeless"
+description = "a label that is not a table"
+parameters = '{ "type": "object" }'
+label = "update the document"
+
+[client_tools.tools.odd]
+name = "odd"
+description = "odd paths"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.odd.label]
+action = "update"
+object_kind = "document"
+fields = ["$.a/b", "$.\u202Eevil", "$.~0"]
+
+[client_tools.tools.kept]
+name = "kept"
+description = "a usable label"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.kept.label]
+action = "update"
+object_kind = "document"
+"#,
+    );
+    for id in ["indexed", "five", "titled", "newer", "shapeless", "odd"] {
+        let tool = &config.client_tools.tools[id];
+        assert_eq!(tool.label, None, "{id}");
+        assert!(!tool.description.is_empty(), "{id}");
+    }
+    assert_eq!(
+        config.client_tools.tools["kept"]
+            .label
+            .as_ref()
+            .map(|label| label.action),
+        Some(erato::config::ClientToolLabelAction::Update)
+    );
+}
+
+#[test]
+fn test_same_named_client_tools_that_disagree_on_label_load_without_one() {
+    let config = migrate_config_with_action_facets(
+        r#"
+[client_tools.tools.a]
+name = "submit_comments"
+namespace = "word"
+description = "labelled"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.a.label]
+action = "comment"
+object_kind = "comment"
+
+[client_tools.tools.b]
+name = "submit_comments"
+namespace = "other"
+description = "not labelled"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.c]
+name = "submit_plan"
+namespace = "word"
+description = "labelled alike"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.c.label]
+action = "update"
+object_kind = "document"
+
+[client_tools.tools.d]
+name = "submit_plan"
+namespace = "other"
+description = "labelled alike"
+parameters = '{ "type": "object" }'
+
+[client_tools.tools.d.label]
+action = "update"
+object_kind = "document"
+"#,
+    );
+    let tools = &config.client_tools.tools;
+    assert_eq!((&tools["a"].label, &tools["b"].label), (&None, &None));
+    assert!(tools["c"].label.is_some() && tools["c"].label == tools["d"].label);
+}
+
+#[test]
 #[should_panic(expected = "must use the same replay settings")]
 fn test_same_named_client_tools_must_agree_on_replay() {
     migrate_config_with_action_facets(

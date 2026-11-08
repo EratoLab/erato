@@ -1756,6 +1756,8 @@ pub struct GeneratingChatRow {
     /// field, and for every ordinary user turn — which writes nothing, because
     /// the field is `skip_serializing_if = "Option::is_none"`.
     pub initiator: Option<String>,
+    /// `labels_updated_at` of the approval stop that ends that generation.
+    pub labels_updated_at: Option<String>,
 }
 
 /// Get the chats of a user whose generation is currently running (with a
@@ -1778,9 +1780,13 @@ pub async fn get_generating_chats(
             "chats"."title_by_user_provided",
             "chats"."title_by_summary"
             ,"latest_gen"."initiator"
+            ,"latest_gen"."labels_updated_at"
         FROM "chats"
         LEFT JOIN LATERAL (
-            SELECT m.generation_parameters ->> 'initiator' AS "initiator"
+            SELECT m.generation_parameters ->> 'initiator' AS "initiator",
+                CASE WHEN m.raw_message #>> '{content,-1,content_type}' = 'tool_approval_request'
+                    THEN m.raw_message #>> '{content,-1,labels_updated_at}'
+                END AS "labels_updated_at"
             FROM messages m
             WHERE m.chat_id = "chats"."id"
                 AND m.is_message_in_active_thread

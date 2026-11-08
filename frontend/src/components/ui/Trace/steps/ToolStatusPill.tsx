@@ -38,7 +38,8 @@ const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
 
 interface ToolStatusPillProps {
   status: TraceStepStatus;
-  /** Wins over the step status: the decision is the news. */
+  /** For the tool-call budget row, where the decision is the news. A tool
+   * call shows its decision on a row of its own and its run status here. */
   approvalStatus?: ToolApprovalStatus;
   /** Says the outcome in the step's own words; the styling stays shared. */
   label?: string;

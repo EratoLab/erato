@@ -2,6 +2,7 @@ use crate::db::entity::messages;
 use crate::db::entity::prelude::*;
 use crate::metrics_constants::{
     POSTGRES_QUERY_DELEGATION_TOOL_CALL, POSTGRES_QUERY_RESOLVE_SYSTEM_DELIVERED_TIP,
+    POSTGRES_QUERY_UPGRADE_APPROVAL_LABEL,
 };
 use crate::models::file_upload::proxied_preview_url_for_file;
 use crate::models::pagination;
@@ -423,7 +424,8 @@ pub struct ToolUse {
     pub tool_call_id: String,
     pub status: ToolCallStatus,
     pub tool_name: String,
-    /// Set on MCP calls; copied from the approval item when the call was gated.
+    /// Set on MCP calls, label included and description left out: only
+    /// approval cards show that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<ToolDisplayMetadata>,
     pub progress_message: Option<String>,
@@ -435,10 +437,58 @@ pub struct ToolUse {
     pub total: Option<f64>,
     pub input: Option<JsonValue>,
     pub output: Option<JsonValue>,
+    /// The links of an MCP result. For the UI only: replay drops it, so the
+    /// model never sees it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub result_details: Option<ToolResultDetails>,
+    /// Why an MCP call ran without an approval card. Absent when the user
+    /// decided on a card, the call was refused, on other tools and old rows.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub allowed_by: Option<ToolAllowedBy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
+}
+
+/// What a tool row keeps of an MCP result besides `output`: at most ten of its
+/// links. Its structured content and embedded resources are not kept.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolResultDetails {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<ToolResultLink>,
+}
+
+/// A resource link from the result. Only `https` links with a host, without
+/// user info and at most 512 bytes long are kept; the name and title are
+/// display-cleaned and capped like a tool title.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolResultLink {
+    pub uri: String,
+    /// The link's host as the URL parser reads it: lowercase, and punycode for
+    /// a non-ASCII name, so a lookalike host reads as `xn--…`.
+    pub host: String,
+    /// Whether `host` is the host of the MCP server's configured URL, ignoring
+    /// case and port. Never true for a server without a URL.
+    pub matches_server_host: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub title: Option<String>,
 }
 
 /// Snapshot of the MCP annotations used to decide whether a tool call needs
@@ -453,8 +503,9 @@ pub struct ToolApprovalAnnotations {
     pub open_world_hint: bool,
 }
 
-/// Inert display text from the tool descriptor, captured when approval is
-/// requested. Never used to select a tool, evaluate policy or execute a call.
+/// Inert display text for a tool call, captured with the call: the tool
+/// descriptor's text, the server's name and the call's label. Never used to
+/// select a tool, evaluate policy or execute a call.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolDisplayMetadata {
     pub title: String,
@@ -466,6 +517,279 @@ pub struct ToolDisplayMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub server_name: Option<String>,
+    /// What this call does to what, and where. Absent on client tools and
+    /// older rows, which render as before.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub label: Option<ToolCallLabel>,
+    /// Whether the tool is read-only by the annotations the approval policy
+    /// read for this call and does not also call itself destructive. Set on
+    /// MCP calls only.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "readable_flag"
+    )]
+    pub read_only: bool,
+}
+
+/// A stored label, result detail or decision note this version cannot read is
+/// dropped, never the row: the call then renders as it did before them.
+pub(crate) fn readable_or_none<'de, D: serde::Deserializer<'de>, T: serde::de::DeserializeOwned>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    let stored = Option::<JsonValue>::deserialize(deserializer)?;
+    Ok(stored.and_then(|value| serde_json::from_value(value).ok()))
+}
+
+fn readable_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    Ok(readable_or_none(deserializer)?.unwrap_or(false))
+}
+
+/// What a tool call does to what, and where, read from its arguments by code.
+/// The verb and the kind come from closed lists, never from argument text, and
+/// every value keeps the pointer it was read through. Shown only: it never
+/// decides whether a call needs approval or which decisions a card offers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallLabel {
+    pub action: ToolCallAction,
+    pub object_kind: ToolCallObjectKind,
+    /// What the call acts on; empty on a `generic` label.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<ToolCallLabelItem>,
+    /// The arguments for the generic card: paths into the call's `input` and
+    /// how to show each, never the values themselves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub arguments: Option<ToolArgumentNode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ToolCallLabelWarning>,
+    pub source: ToolCallLabelSource,
+}
+
+/// What a call does. Reads, and anything none of the verbs fits, are `other`.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallAction {
+    Create,
+    Update,
+    Delete,
+    Move,
+    Send,
+    Comment,
+    /// Also what a value from a newer version reads as.
+    #[default]
+    #[serde(other)]
+    Other,
+}
+
+/// What kind of thing a call acts on.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallObjectKind {
+    Page,
+    Row,
+    Database,
+    Folder,
+    Note,
+    Comment,
+    Paragraph,
+    Document,
+    Email,
+    Message,
+    Event,
+    File,
+    Task,
+    /// Also what a value from a newer version reads as.
+    #[default]
+    #[serde(other)]
+    Other,
+}
+
+/// Who chose a label's pointers. Values are always read by code.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallLabelSource {
+    /// Written by hand next to one of Erato's own tools.
+    OwnMapping,
+    /// Generic rules over the tool name and the arguments.
+    Rules,
+    /// A configured model, choosing among the call's real argument paths.
+    Model,
+    /// Nothing better is known: the card shows the tool, the server and the
+    /// readable arguments. Also what a value from a newer version reads as.
+    #[default]
+    #[serde(other)]
+    Generic,
+}
+
+/// Something the card says next to a label.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallLabelWarning {
+    /// The readable arguments leave some out; the raw input has them all.
+    ArgumentsTruncated,
+    /// A value or field name the label read had invisible characters (such as
+    /// bidi controls or zero-width, filler, variation selector or tag
+    /// characters) removed; the raw input still has them.
+    HiddenCharacters,
+    /// A warning from a newer version; clients skip it.
+    #[serde(other)]
+    Other,
+}
+
+/// One thing a call acts on, each part read through its own pointer.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallLabelItem {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub title: Option<ToolCallLabelSlot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub id: Option<ToolCallLabelSlot>,
+    /// Where the item goes or lives: a parent, folder, channel or recipient.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub target: Option<ToolCallLabelSlot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub before: Option<ToolCallLabelSlot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub after: Option<ToolCallLabelSlot>,
+    /// Key values worth showing, each with its argument's `name`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<ToolCallLabelSlot>,
+}
+
+/// The values one pointer reached in a call's arguments.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallLabelSlot {
+    /// A JSON pointer into the call's `input` where `*` stands for every
+    /// element. A lookup key, never shown.
+    pub pointer: String,
+    /// The argument's name, display-cleaned; set on fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<ToolCallLabelValue>,
+    /// Values the pointer reached beyond those kept.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omitted: u32,
+}
+
+/// One value as the call wrote it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallLabelValue {
+    /// Where the value sits in `input`, with indices in place of `*`.
+    pub path: String,
+    /// Display-cleaned and capped; an object reads as compact JSON.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    /// What earlier results in the chat say about this value, never what the
+    /// call itself says: on `id`, `target` and `before` the name of the record
+    /// the value identifies; on a field of an update, the value the field held
+    /// in the record the item's `id` names, where an earlier link shows as its
+    /// record's name and never as a raw ID. Absent when no result has it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub resolved: Option<String>,
+}
+
+/// One argument in the readable view. A member's name is the last segment of
+/// its path; the value is read from `input` at `path`. Both are raw: the
+/// reader unescapes the segment and cleans and caps both like other server text.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolArgumentNode {
+    /// A JSON pointer into `input`; the empty pointer is the whole input.
+    pub path: String,
+    pub kind: ToolArgumentKind,
+    /// A group's members or a list's entries, in argument order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schema(no_recursion)]
+    pub children: Vec<ToolArgumentNode>,
+    /// Members or entries left out of `children`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omitted: u32,
+}
+
+/// How the readable view shows one argument.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolArgumentKind {
+    /// An object.
+    Group,
+    /// An array.
+    List,
+    /// An identifier, to show shortened and apart from prose.
+    Id,
+    /// Long or multi-line text, to show as a block.
+    Text,
+    /// A short string, a number, a boolean or null. Also what a kind from a
+    /// newer version reads as.
+    #[serde(other)]
+    Value,
+}
+
+fn is_zero(count: &u32) -> bool {
+    *count == 0
 }
 
 /// Which surface a durable approval stop belongs to. `McpTool` is the
@@ -485,6 +809,21 @@ pub enum ToolApprovalKind {
     /// A client tool the user set to ask. `mcp_server_id` carries the tool's
     /// namespace, so `namespace/tool_name` is the key its decision is saved under.
     ClientTool,
+}
+
+/// What let an MCP call run without asking the user.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolAllowedBy {
+    /// The approval policy needed no prompt, or the approval gate is off.
+    Policy,
+    /// The user's saved "always allow" skipped a prompt the policy would ask.
+    AlwaysAllow,
+    /// A reason from a newer version; the call still ran without a card.
+    #[serde(other)]
+    Other,
 }
 
 /// What a context approval covers besides the call it was given on.
@@ -521,6 +860,8 @@ pub struct ChildApprovalRef {
     pub child_message_id: Uuid,
     pub child_tool_call_id: String,
     pub tool_name: String,
+    /// The child call's display. Its label carries no `resolved` values:
+    /// those come from the child chat's results, which stay in that chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display: Option<ToolDisplayMetadata>,
     pub mcp_server_id: String,
@@ -609,6 +950,11 @@ pub struct ContentPartToolApprovalRequest {
     /// the task calls of the tool on the same document or turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_scope: Option<ApprovalScope>,
+    /// When a model's label last replaced the one this stop was stored with,
+    /// so a client showing the parked card knows to load it again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub labels_updated_at: Option<String>,
 }
 
 impl ContentPartToolApprovalRequest {
@@ -1836,6 +2182,50 @@ pub async fn update_message_content(
     Ok(updated_message_model)
 }
 
+/// Puts `label` on the parked card of `tool_call_id`: the stop's own call,
+/// written path by path and only while that stop is still the message's last
+/// part, so a decision or a later whole-content write always wins. Nothing
+/// but the label changes. Returns whether the card was there to take it.
+pub async fn upgrade_open_approval_label(
+    conn: &DatabaseConnection,
+    message_id: Uuid,
+    tool_call_id: &str,
+    label: &ToolCallLabel,
+) -> Result<bool, Report> {
+    // `approvals[0]` is the stop's own call; children folded into it follow.
+    let result = conn
+        .execute_raw(named_statement_from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            POSTGRES_QUERY_UPGRADE_APPROVAL_LABEL,
+            r#"
+            UPDATE "messages"
+            SET "raw_message" = jsonb_set(
+                jsonb_set(
+                    CASE
+                        WHEN jsonb_typeof("raw_message" #> '{content,-1,approvals,0,display}') = 'object'
+                        THEN jsonb_set("raw_message", '{content,-1,approvals,0,display,label}', $3::jsonb)
+                        ELSE "raw_message"
+                    END,
+                    '{content,-1,display,label}', $3::jsonb
+                ),
+                '{content,-1,labels_updated_at}', to_jsonb(now())
+            )
+            WHERE "id" = $1::uuid
+              AND "raw_message" #>> '{content,-1,content_type}' = 'tool_approval_request'
+              AND "raw_message" #>> '{content,-1,tool_call_id}' = $2
+              AND "raw_message" #>> '{content,-1,approvals,0,tool_call_id}' = $2
+              AND jsonb_typeof("raw_message" #> '{content,-1,display}') = 'object'
+            "#,
+            [
+                message_id.into(),
+                tool_call_id.into(),
+                serde_json::to_string(label)?.into(),
+            ],
+        ))
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Update the generation metadata for a message.
 pub async fn update_message_generation_metadata(
     conn: &DatabaseConnection,
@@ -2378,7 +2768,9 @@ mod task_result_marker_tests {
 
 #[cfg(test)]
 mod tool_approval_part_tests {
-    use super::{ContentPart, ContentPartToolRejection, MessageSchema, ToolApprovalKind};
+    use super::{
+        ContentPart, ContentPartToolRejection, MessageSchema, ToolAllowedBy, ToolApprovalKind,
+    };
     use serde_json::json;
 
     #[test]
@@ -2437,6 +2829,127 @@ mod tool_approval_part_tests {
                 stop(vec![item("task-a", false)]),
             ])
             .is_err()
+        );
+    }
+
+    #[test]
+    fn a_stored_label_this_version_cannot_read_never_fails_its_row() {
+        let display = json!({
+            "title": "Create pages",
+            "description_truncated": false,
+            "server_name": "Notion",
+            "label": {"action": "create", "object_kind": "row", "source": "rules",
+                      "items": [{"title": {"pointer": "/t", "values": [{"path": 1}]}}]},
+        });
+        let message = MessageSchema::validate(&json!({
+            "role": "assistant",
+            "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                         "status": "success", "tool_name": "create_pages",
+                         "display": display, "input": {"t": "Plan"}}],
+        }))
+        .expect("a label it cannot read leaves the row readable");
+        let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+            panic!("expected one tool row");
+        };
+        let display = tool.display.as_ref().unwrap();
+        assert_eq!(
+            (display.title.as_str(), &display.label),
+            ("Create pages", &None)
+        );
+        assert_eq!(display.server_name.as_deref(), Some("Notion"));
+    }
+
+    #[test]
+    fn stored_result_details_this_version_cannot_read_never_fail_their_row() {
+        let link = json!({"uri": "https://records.example.test/rows/1",
+                          "host": "records.example.test", "matches_server_host": false});
+        let row = |details: serde_json::Value| {
+            let message = MessageSchema::validate(&json!({
+                "role": "assistant",
+                "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                             "status": "success", "tool_name": "create_row",
+                             "output": "Created.", "result_details": details}],
+            }))
+            .expect("details it cannot read leave the row readable");
+            let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+                panic!("expected one tool row");
+            };
+            assert_eq!(tool.output, Some(json!("Created.")));
+            tool.result_details.clone()
+        };
+
+        for unreadable in [
+            json!(5),
+            json!("links"),
+            json!([link]),
+            json!({"links": "https://records.example.test/rows/1"}),
+            json!({"links": [{"uri": "https://records.example.test/rows/1"}]}),
+            json!({"links": [link, {"uri": 1, "host": [], "matches_server_host": "yes"}]}),
+        ] {
+            assert_eq!(row(unreadable.clone()), None, "{unreadable}");
+        }
+        assert_eq!(row(json!(null)), None);
+        // An earlier build stored structured content and resources beside the links.
+        let earlier = row(json!({"structured": {"title": "Plan"}, "links": [link],
+                                 "resources": [{"uri": "records://rows/1", "text": "x"}]}))
+        .expect("the links of an earlier row still read");
+        assert_eq!(earlier.links.len(), 1);
+        assert_eq!(earlier.links[0].host, "records.example.test");
+    }
+
+    #[test]
+    fn a_stored_decision_note_this_version_cannot_read_never_fails_its_row() {
+        let row = |allowed_by: serde_json::Value, read_only: serde_json::Value| {
+            let message = MessageSchema::validate(&json!({
+                "role": "assistant",
+                "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                             "status": "error", "tool_name": "create_row",
+                             "output": {"status": "rejected"}, "allowed_by": allowed_by,
+                             "display": {"title": "Create row", "description_truncated": false,
+                                         "read_only": read_only}}],
+            }))
+            .expect("a note it cannot read leaves the row readable");
+            let [ContentPart::ToolUse(tool)] = &message.content[..] else {
+                panic!("expected one tool row");
+            };
+            assert_eq!(tool.output, Some(json!({"status": "rejected"})));
+            let display = tool.display.as_ref().unwrap();
+            assert_eq!(display.title, "Create row");
+            (tool.allowed_by, display.read_only)
+        };
+
+        for odd in [
+            json!(5),
+            json!(["policy"]),
+            json!({"policy": true}),
+            json!(null),
+        ] {
+            assert_eq!(row(odd.clone(), odd.clone()), (None, false), "{odd}");
+        }
+        for newer in [json!("granted_by_a_later_release"), json!("Policy")] {
+            assert_eq!(
+                row(newer.clone(), json!(false)),
+                (Some(ToolAllowedBy::Other), false),
+                "{newer}"
+            );
+        }
+        assert_eq!(
+            row(json!("always_allow"), json!(true)),
+            (Some(ToolAllowedBy::AlwaysAllow), true)
+        );
+        let old = MessageSchema::validate(&json!({
+            "role": "assistant",
+            "content": [{"content_type": "tool_use", "tool_call_id": "call-1",
+                         "status": "success", "tool_name": "create_row",
+                         "display": {"title": "Create row", "description_truncated": false}}],
+        }))
+        .unwrap();
+        let [ContentPart::ToolUse(tool)] = &old.content[..] else {
+            panic!("expected one tool row");
+        };
+        assert_eq!(
+            (tool.allowed_by, tool.display.as_ref().unwrap().read_only),
+            (None, false)
         );
     }
 

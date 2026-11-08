@@ -39,6 +39,7 @@ import {
 } from "@/lib/delegation/taskBrief";
 import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
 import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
@@ -66,7 +67,7 @@ import {
 import { approvalStopState } from "./approvalItems";
 
 import type { ApprovalStopState } from "./approvalItems";
-import type { ToolApprovalStatus } from "../Trace/Trace";
+import type { ToolDecision } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
 import type {
@@ -726,6 +727,13 @@ const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "image_file_pointer" ||
   part.content_type === "audio_file_pointer";
 
+// Outside Word, the accepted submission stays as the one trace step that says
+// what was proposed; a row saved before proposal labels folds as before.
+const isWordProposalStep = (part: ContentPart): boolean =>
+  part.content_type === "tool_use" &&
+  isAcceptedWordSubmission(part) &&
+  ownProposalOf(part.display?.label, part.input) !== undefined;
+
 const contentPartToImage = (
   part: ContentPart,
   index: number,
@@ -809,6 +817,30 @@ const decisionKeys = (part: ContentPart): string[] => {
     decided.approval_id,
     decided.child_chat_id,
   ].filter((key): key is string => typeof key === "string" && key.length > 0);
+};
+
+/** A map in which an id like `__proto__` or `constructor` is just a key. */
+const noPrototype = <T,>(): Record<string, T> =>
+  Object.create(null) as Record<string, T>;
+
+/** The decision a decision part records, or nothing for any other part. */
+const toolDecisionOf = (part: ContentPart): ToolDecision | undefined => {
+  if (part.content_type === "tool_approval") {
+    return {
+      status: "approved",
+      alwaysAllow: part.always_allow === true,
+      ...(part.covers ? { covers: part.covers } : {}),
+    };
+  }
+  if (part.content_type === "tool_rejection") {
+    const { reason } = part as unknown as { reason?: string | null };
+    return {
+      status: "denied",
+      neverAllow: part.never_allow === true,
+      withdrawn: reason === "withdrawn",
+    };
+  }
+  return undefined;
 };
 
 type ResolvedEratoFileLink = {
@@ -1301,34 +1333,30 @@ export const MessageContent = memo(function MessageContent({
   const content = React.useMemo(
     () =>
       foldsWordPlan
-        ? messageContent.filter((part) => !isWordPlanToolPart(part))
+        ? messageContent.filter(
+            (part) => !isWordPlanToolPart(part) || isWordProposalStep(part),
+          )
         : messageContent,
     [foldsWordPlan, messageContent],
   );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
-  const toolApprovalStatuses = React.useMemo<
-    Record<string, ToolApprovalStatus>
-  >(
+  const toolDecisions = React.useMemo<Record<string, ToolDecision>>(
     () =>
-      content.reduce<Record<string, ToolApprovalStatus>>((statuses, part) => {
-        if (
-          part.content_type !== "tool_approval" &&
-          part.content_type !== "tool_rejection"
-        ) {
-          return statuses;
+      content.reduce<Record<string, ToolDecision>>((decisions, part) => {
+        const decision = toolDecisionOf(part);
+        if (decision === undefined) {
+          return decisions;
         }
-        const status =
-          part.content_type === "tool_approval" ? "approved" : "denied";
         // Under every id the step that should show the decision may carry: the
         // gated call, the approval the decision answered, or the child chat it
         // was taken on. A parked child's slot and its approval share an id; a
         // plan item's do not.
         decisionKeys(part).forEach((key) => {
-          statuses[key] = status;
+          decisions[key] = decision;
         });
-        return statuses;
-      }, {}),
+        return decisions;
+      }, noPrototype<ToolDecision>()),
     [content],
   );
 
@@ -1740,7 +1768,7 @@ export const MessageContent = memo(function MessageContent({
                   (traceClusterCount === 1 ? traceDurationMs : null)
                 }
                 hasError={hasError}
-                toolApprovalStatuses={toolApprovalStatuses}
+                toolDecisions={toolDecisions}
               />
             </WaitingHostsContext.Provider>
           );
