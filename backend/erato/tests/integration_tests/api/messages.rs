@@ -7,6 +7,7 @@ mod client_tool_operations;
 mod mcp_approval_argument;
 mod mcp_file_outputs;
 mod preparation_failures;
+mod reminder_tools;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;

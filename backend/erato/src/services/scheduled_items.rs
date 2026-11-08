@@ -19,6 +19,7 @@
 //! per key. Everything that asks for the item's open occurrence sees the
 //! re-delivery too, and the producer leaves the item alone until it settles.
 
+pub mod chat_tools;
 mod checks;
 pub mod recurrence;
 pub mod wording;
