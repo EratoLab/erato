@@ -4,6 +4,7 @@ import { lingui } from "@lingui/vite-plugin";
 import path from "node:path";
 
 import { libraryBuildStatusPlugin } from "./library-build-status";
+import { katexWoff2OnlyPlugin } from "./vite.katex-woff2-only";
 import { browserOnlyBuildPlugin } from "./vite.browser-only-build";
 import {
   iconCatalogManualChunk,
@@ -26,6 +27,7 @@ export default defineConfig(({ mode }) => {
       }),
       lingui(),
       iconCatalogPlugin({ rootDir: __dirname }),
+      katexWoff2OnlyPlugin(),
       createVoiceRuntimePackageAssetsPlugin({
         rootDir: __dirname,
         outputBasePath: "voice-runtime",

@@ -560,7 +560,12 @@ under the paths the browser fetches them from:
 - the active theme at `public/common/custom-theme/<name>/**` (regular files
   only, catalogs compiled; nothing remote);
 - every discovered component kit at `public/component-kits/<name>/**` with
-  its catalogs.
+  its catalogs;
+- the composition at `public/platform-desktop-ui/composition.json`: the JSON of
+  the manifest's `composition`, listed in `files` so that `digest` covers it. A
+  deployment that changes only a composition value, a logo path for instance,
+  gets a new digest and reaches installed sidecars. Sidecars read the manifest's
+  `composition`, not this file.
 
 `manifest.json` keeps the archive's fields and adds:
 
