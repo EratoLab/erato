@@ -20,7 +20,7 @@ use crate::services::tool_display::label::cache::ToolLabelCacheKey;
 use crate::services::tool_display::label::{
     ToolCallLabelMapping, ToolResultContext, logged_tool_name, model,
 };
-use crate::services::tool_display::mcp_tool_call_display_from;
+use crate::services::tool_display::{label_consent_argument, mcp_tool_call_display_from};
 use crate::state::{AppState, ChatProviderConfigWithId};
 use futures::FutureExt;
 use sea_orm::prelude::Uuid;
@@ -60,7 +60,11 @@ pub struct LabelJob {
     pub key: ToolLabelCacheKey,
     pub server_id: String,
     pub tool: rmcp::model::Tool,
+    /// The model's arguments without the tool's consent argument; see
+    /// [`crate::services::tool_display::labelled_arguments`].
     pub arguments: Value,
+    /// The consent argument the tool declares, which Erato fills at dispatch.
+    pub approval_argument: Option<String>,
     pub context: ToolResultContext,
     pub tool_call_id: String,
     /// What the call shows until the label arrives.
@@ -411,6 +415,12 @@ impl Labelling {
     /// call's shape is used without a request.
     async fn label(&self, record: &mut Option<TraceRecord>) -> Option<ToolCallLabel> {
         let job = &self.job;
+        let mcp = self.app_state.mcp_state().await;
+        let consent = label_consent_argument(
+            &mcp.config,
+            &job.server_id,
+            job.approval_argument.as_deref(),
+        );
         let mapping = self
             .app_state
             .tool_label_cache
@@ -418,11 +428,10 @@ impl Labelling {
                 job.key.clone(),
                 &job.tool,
                 &job.arguments,
-                None,
+                consent,
                 self.model_mapping(record),
             )
             .await?;
-        let mcp = self.app_state.mcp_state().await;
         shown_label(&mcp.config, job, &mapping)
     }
 
@@ -528,7 +537,7 @@ fn shown_label(
         &job.server_id,
         &job.tool,
         &job.arguments,
-        None,
+        job.approval_argument.as_deref(),
         mapping,
         &job.context,
     )
@@ -934,6 +943,7 @@ mod tests {
             server_id: "records".into(),
             tool,
             arguments,
+            approval_argument: None,
             context: ToolResultContext::default(),
             tool_call_id: "call_a".into(),
             shown: display(ToolCallLabelSource::Rules),

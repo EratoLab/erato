@@ -9337,7 +9337,11 @@ async fn stream_generate_chat_completion<'a>(
                         key,
                         server_id: managed_tool_call.server_id.clone(),
                         tool: managed_tool_call.tool.clone(),
-                        arguments: managed_tool_call.tool_call.fn_arguments.clone(),
+                        arguments: crate::services::tool_display::labelled_arguments(
+                            &managed_tool_call.tool_call.fn_arguments,
+                            managed_tool.approval_argument.as_deref(),
+                        ),
+                        approval_argument: managed_tool.approval_argument.clone(),
                         context: tool_result_context.clone(),
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         shown: display.clone(),

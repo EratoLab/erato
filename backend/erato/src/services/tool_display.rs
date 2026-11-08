@@ -110,14 +110,33 @@ impl<'a> LabelledArguments<'a> {
     ) -> Self {
         Self {
             arguments: without_approval_argument(arguments, approval_argument),
-            consent: approval_argument.or_else(|| {
-                config
-                    .mcp_servers
-                    .get(server_id)
-                    .and_then(|server| server.approval_argument.as_deref())
-            }),
+            consent: label_consent_argument(config, server_id, approval_argument),
         }
     }
+}
+
+/// A call's arguments as its label reads them and a model labelling it sees
+/// them: without the tool's consent argument, which Erato sets at dispatch.
+pub fn labelled_arguments(
+    arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
+) -> serde_json::Value {
+    without_approval_argument(arguments, approval_argument).into_owned()
+}
+
+/// The consent argument a call's label treats as a flag: the tool's
+/// `approval_argument`, else the server's configured one.
+pub fn label_consent_argument<'a>(
+    config: &'a McpRuntimeConfig,
+    server_id: &str,
+    approval_argument: Option<&'a str>,
+) -> Option<&'a str> {
+    approval_argument.or_else(|| {
+        config
+            .mcp_servers
+            .get(server_id)
+            .and_then(|server| server.approval_argument.as_deref())
+    })
 }
 
 fn labelled_display(

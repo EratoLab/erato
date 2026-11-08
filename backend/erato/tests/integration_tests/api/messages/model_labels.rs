@@ -86,6 +86,16 @@ async fn labelled_records(
     preset: McpToolApprovalPreset,
     labeller: Option<Labeller>,
 ) -> erato::state::AppState {
+    labelled_records_with(pool, mocks, preset, labeller, |_| {}).await
+}
+
+async fn labelled_records_with(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    preset: McpToolApprovalPreset,
+    labeller: Option<Labeller>,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> erato::state::AppState {
     records_app_state_with(pool, mocks, |config| {
         let providers = &mut config.chat_providers.as_mut().unwrap().providers;
         let provider = providers["mock-llm"].clone();
@@ -110,6 +120,7 @@ async fn labelled_records(
                 },
             );
         }
+        configure(config);
     })
     .await
 }
@@ -362,6 +373,120 @@ async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: P
     let served = served["content"].as_array().unwrap().last().unwrap();
     assert_eq!(served["display"], upgraded["display"]);
     assert_eq!(recorder.bodies().len(), 1);
+}
+
+const CONSENT: &str = "hasUserApproved";
+
+/// A records server whose `update_record` declares the consent argument.
+async fn consent_records_server() -> String {
+    async fn mcp(axum::Json(request): axum::Json<Value>) -> axum::response::Response {
+        use axum::response::IntoResponse;
+        if request.get("id").is_none() {
+            return http::StatusCode::ACCEPTED.into_response();
+        }
+        let mut result = match request["method"].as_str().unwrap_or_default() {
+            "server/discover" => {
+                json!({"supportedVersions": ["2026-07-28"], "capabilities": {"tools": {}}})
+            }
+            "initialize" => json!({
+                "protocolVersion": request["params"]["protocolVersion"],
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "consent-records", "version": "1"}
+            }),
+            "tools/list" => json!({"tools": [{
+                "name": "update_record",
+                "description": "Updates the record.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"},
+                        CONSENT: {"type": "boolean"}
+                    },
+                    "required": ["status", CONSENT]
+                }
+            }]}),
+            _ => return http::StatusCode::BAD_REQUEST.into_response(),
+        };
+        result["resultType"] = json!("complete");
+        result["ttlMs"] = json!(30_000);
+        result["cacheScope"] = json!("private");
+        axum::Json(json!({"jsonrpc": "2.0", "id": request["id"], "result": result})).into_response()
+    }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let app = Router::new().route("/mcp", axum::routing::post(mcp));
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    url
+}
+
+/// The consent argument Erato fills at dispatch never reaches the labeller,
+/// whatever value the model sent for it: the skeleton and the paths leave it
+/// out, and the model's mapping is kept for the call's shape without it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Postgres>) {
+    let url = consent_records_server().await;
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
+    let mut claimed = arguments();
+    claimed[CONSENT] = json!(true);
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[CALL_ID, SENTINEL],
+        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_record", claimed)]),
+    );
+    let app_state = labelled_records_with(
+        pool,
+        mocks,
+        McpToolApprovalPreset::Restrictive,
+        Some(Labeller::Own),
+        |config| {
+            let mut server = mcp_server_config(&url, "/mcp", McpServerAuthenticationConfig::None);
+            server.protocol_mode = erato::config::McpProtocolMode::Stateless;
+            server.approval_argument = Some(CONSENT.into());
+            config.mcp_servers.insert("records".into(), server);
+        },
+    )
+    .await;
+    let (_chat_id, message_id, _events) = submit(&app_state).await;
+
+    let upgraded = eventually("the card's upgrade", || async {
+        let card = card(&app_state, message_id).await;
+        (card["display"]["label"]["source"] == "model").then_some(card)
+    })
+    .await;
+    assert_eq!(
+        upgraded["display"]["label"]["items"][0]["after"]["pointer"],
+        "/status"
+    );
+    let bodies = recorder.bodies();
+    assert_eq!(bodies.len(), 1, "{bodies:?}");
+    let request: Value = serde_json::from_str(&bodies[0]).unwrap();
+    let user = request["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .unwrap_or_else(|| panic!("{request}"));
+    assert_eq!(
+        user["content"],
+        "TOOL: update_record\nARGUMENTS: {\"status\":\"<str len=8>\"}\nPATHS: [\"/status\"]"
+    );
+    assert!(!bodies[0].contains(CONSENT), "{}", bodies[0]);
+
+    let kept = app_state
+        .tool_label_cache
+        .lookup(&label_key(&app_state).await, &arguments(), Some(CONSENT))
+        .await
+        .expect("the model's mapping is kept for the shape without the consent argument");
+    assert_eq!(kept.source, ToolCallLabelSource::Model);
 }
 
 /// A label that arrives after the card was approved leaves the message as
