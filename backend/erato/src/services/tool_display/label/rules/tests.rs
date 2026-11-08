@@ -951,6 +951,106 @@ fn recipients_go_by_their_usual_spellings_and_only_when_they_name_someone() {
 }
 
 #[test]
+fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
+    let sms = json!({"phone_number": "+49 170 0000001", "message": "Your code is 1234"});
+    let sent = item("send_sms", sms.clone());
+    assert_eq!(
+        (sent.target.as_deref(), sent.after.as_deref()),
+        (None, Some("/message"))
+    );
+    assert_eq!(sent.fields, ["/phone_number"]);
+    let typed_without_it = ToolCallLabelMapping {
+        action: ToolCallAction::Send,
+        object_kind: ToolCallObjectKind::Message,
+        items: vec![ToolCallLabelItemMapping {
+            after: Some("/message".into()),
+            ..Default::default()
+        }],
+        source: ToolCallLabelSource::Model,
+    };
+    assert_eq!(
+        with_every_recipient(&typed_without_it, &recipient_members(&sms)).items[0].fields,
+        ["/phone_number"]
+    );
+
+    // A contact's numbers are its data: where it goes is still its parent.
+    let contact = item(
+        "create_record",
+        json!({"tablename": "contact", "item": {
+            "lastname": "Lee",
+            "telephone1": "+49 30 0000002",
+            "jobtitle": "Buyer",
+            "mobilephone": "+49 170 0000003",
+            "parentcustomerid": lookup(ACCOUNT, "account"),
+        }}),
+    );
+    assert_eq!(
+        (contact.title.as_deref(), contact.target.as_deref()),
+        (
+            Some("/item/lastname"),
+            Some("/item/parentcustomerid/recordId")
+        )
+    );
+    assert_eq!(
+        contact.fields,
+        ["/item/telephone1", "/item/mobilephone", "/item/jobtitle"]
+    );
+    let updated = item(
+        "update_record",
+        json!({"tablename": "contact", "recordId": CONTACT, "item": {
+            "jobtitle": "Head of purchasing",
+            "address1_fax": "+49 30 0000009",
+        }}),
+    );
+    assert_eq!(updated.target, None);
+    assert_eq!(updated.fields, ["/item/address1_fax", "/item/jobtitle"]);
+
+    let members = |arguments: Value| -> Vec<String> {
+        recipient_members(&arguments)
+            .into_iter()
+            .map(|recipient| recipient.member)
+            .collect()
+    };
+    assert_eq!(
+        members(json!({"cr123_emergencycontactmobilephone": "+49 170 0000004"})),
+        ["/cr123_emergencycontactmobilephone"],
+        "longer than any listed member"
+    );
+    assert!(
+        members(json!({"phonecall": {"subject": "Call back"}, "ordernumber": "7", "mobile": true, "fax": ""}))
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_recipient_shows_by_its_one_number_or_whole() {
+    let texted = item(
+        "send_message",
+        json!({"recipients": [
+            {"name": "Ann", "mobilePhone": "+49 170 0000005"},
+            {"name": "Bob", "mobilePhone": "+49 170 0000006"},
+        ], "text": "Hi"}),
+    );
+    assert_eq!(texted.target.as_deref(), Some("/recipients/*/mobilePhone"));
+    let unreachable = item(
+        "send_email",
+        json!({"to": [{"email": "ann@example.com", "phone": ""}], "subject": "Hi"}),
+    );
+    assert_eq!(unreachable.target.as_deref(), Some("/to/*/email"));
+
+    // Either may be where it goes, so neither hides the other.
+    for entry in [
+        json!({"phone": "+49 170 0000007", "email": "someone@example.org"}),
+        json!({"email": "ann@example.com", "phone": "+49 170 0000007"}),
+        json!({"emailAddress": {"address": "ann@example.com"}, "businessPhones": ["+49 30 0000008"]}),
+        json!({"phone": "+49 170 0000007", "mobile": "+49 170 0000008"}),
+    ] {
+        let mixed = item("send_message", json!({"to": [entry.clone()], "text": "Hi"}));
+        assert_eq!(mixed.target.as_deref(), Some("/to"), "{entry}");
+    }
+}
+
+#[test]
 fn a_label_shows_every_recipient_or_none() {
     let mail = json!({"to": ["a@example.com"], "cc": ["b@example.com"], "bcc": ["c@example.com"], "subject": "Hi"});
     let recipients = recipient_members(&mail);
@@ -1127,6 +1227,9 @@ fn the_rules_and_the_cross_check_are_total_and_bounded_on_hostile_input() {
     cases.push(
         json!({"to": [{"emailAddress": {"address": "a".repeat(1024 * 1024)}}], "subject": "x"}),
     );
+    let long_number = format!("{}_phone", "k".repeat(MAX_POINTER_BYTES));
+    cases
+        .push(json!({"to": [{&long_number: "+49 170 0000001"}], long_number: "1", "subject": "x"}));
 
     // Deeper than this, serde_json refuses a server's tool list.
     let mut deep_schema = json!({"type": "object"});

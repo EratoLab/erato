@@ -12,6 +12,10 @@ use super::context::{
     is_id_member, is_link, is_lookup, is_name_member, link_id_member, name_words, text_prefix,
 };
 use super::pointer::{self, MAX_POINTER_BYTES, escape};
+use super::recipients::{
+    ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, bare_member,
+    is_contact_number_member,
+};
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
     ToolCallLabelMapping,
@@ -133,42 +137,6 @@ const ID_MEMBERS: [&str; 16] = [
 const BEFORE_MEMBERS: [&str; 4] = ["old_str", "old_text", "old", "before"];
 const AFTER_MEMBERS: [&str; 9] = [
     "new_str", "new_text", "new", "after", "text", "content", "body", "markdown", "message",
-];
-/// Members naming who a message, invite or share is for, compared without
-/// `_` and `-`: first who it is addressed to, then who gets a copy.
-const RECIPIENT_MEMBERS: [&str; 15] = [
-    "to",
-    "torecipients",
-    "recipient",
-    "recipients",
-    "attendee",
-    "attendees",
-    "requiredattendees",
-    "invitee",
-    "invitees",
-    "guests",
-    "participants",
-    "sharewith",
-    "sharedwith",
-    "shareto",
-    "sendto",
-];
-const COPY_RECIPIENT_MEMBERS: [&str; 5] = [
-    "cc",
-    "ccrecipients",
-    "bcc",
-    "bccrecipients",
-    "optionalattendees",
-];
-/// Members of a recipient object holding its address, compared the same way,
-/// as in `{"email": ...}` or Graph's `{"emailAddress": {"address": ...}}`.
-const ADDRESS_MEMBERS: [&str; 6] = [
-    "email",
-    "emailaddress",
-    "address",
-    "mail",
-    "userprincipalname",
-    "upn",
 ];
 /// Recipient members read from one call: more than a card can show already
 /// means the generic label.
@@ -303,8 +271,9 @@ impl Claim {
     }
 }
 
-/// A member of the arguments that names recipients: `member` is where it
-/// sits, `shown_at` the pointer a label shows it through.
+/// A member of the arguments that names recipients or holds a contact
+/// number: `member` is where it sits, `shown_at` the pointer a label shows it
+/// through.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipientMember {
     pub member: String,
@@ -773,7 +742,7 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
         }
         match recipients_in(member) {
             Some(Recipients::To) => recipient_at(pointer, values),
-            Some(Recipients::Copy) => None,
+            Some(Recipients::Copy | Recipients::Number) => None,
             None if is_one_of(member, &TARGET_MEMBERS) => target_at(pointer, values),
             None => None,
         }
@@ -851,29 +820,22 @@ enum Recipients {
     To,
     /// Who gets a copy.
     Copy,
+    /// A phone, mobile, fax or pager number: always shown, but a contact's
+    /// `telephone1` is not where the contact goes, so never the target.
+    Number,
 }
 
 fn recipients_in(member: &str) -> Option<Recipients> {
-    let bare = bare_member(member)?;
+    let bare = bare_member(member);
     if RECIPIENT_MEMBERS.contains(&bare.as_str()) {
         Some(Recipients::To)
     } else if COPY_RECIPIENT_MEMBERS.contains(&bare.as_str()) {
         Some(Recipients::Copy)
+    } else if is_contact_number_member(member) {
+        Some(Recipients::Number)
     } else {
         None
     }
-}
-
-/// `share_with`, `shareWith` and `Share-With` alike; `None` for a key longer
-/// than any member these lists name.
-fn bare_member(member: &str) -> Option<String> {
-    (member.len() <= 32).then(|| {
-        member
-            .chars()
-            .filter(|c| !matches!(c, '_' | '-'))
-            .map(|c| c.to_ascii_lowercase())
-            .collect()
-    })
 }
 
 /// Whether a recipient member's value names anyone: not null, empty text,
@@ -934,33 +896,44 @@ fn recipient_at(pointer: &str, values: &[&Value]) -> Option<String> {
     Some(pointer.to_string())
 }
 
-/// Where a recipient object holds its address, below it.
+/// Where a recipient object says the person is reached, below it: its
+/// address, else its one contact number. An object with an address and a
+/// number, or with several numbers, is shown whole: any of them may be used.
 fn address_in(object: &serde_json::Map<String, Value>) -> Option<String> {
-    let is_address = |member: &str| {
-        bare_member(member).is_some_and(|bare| ADDRESS_MEMBERS.contains(&bare.as_str()))
-    };
+    let is_address = |member: &str| ADDRESS_MEMBERS.contains(&bare_member(member).as_str());
     let text = |value: &Value| value.as_str().is_some_and(|text| !text.trim().is_empty());
+    let mut address = None;
+    let mut numbers = Vec::new();
     for (member, value) in object.iter().take(MAX_RECIPIENT_OBJECT_MEMBERS) {
-        if !is_address(member) {
+        if is_contact_number_member(member) {
+            if names_someone(value) {
+                numbers.push(member);
+            }
+            continue;
+        }
+        if address.is_some() || !is_address(member) {
             continue;
         }
         if text(value) {
-            return Some(format!("/{}", escape(member)));
-        }
-        if let Value::Object(inner) = value
-            && let Some((address, _)) = inner
+            address = Some(format!("/{}", escape(member)));
+        } else if let Value::Object(inner) = value
+            && let Some((inner_address, _)) = inner
                 .iter()
                 .take(MAX_RECIPIENT_OBJECT_MEMBERS)
                 .find(|(inner, value)| is_address(inner) && text(value))
         {
-            return Some(format!("/{}/{}", escape(member), escape(address)));
+            address = Some(format!("/{}/{}", escape(member), escape(inner_address)));
         }
     }
-    None
+    match (address, numbers.as_slice()) {
+        (Some(address), []) => Some(address),
+        (None, [number]) => Some(format!("/{}", escape(number))),
+        _ => None,
+    }
 }
 
-/// Every member naming recipients, shallowest first, at most
-/// [`MAX_RECIPIENT_MEMBERS`] of them.
+/// Every member naming recipients or holding a contact number, shallowest
+/// first, at most [`MAX_RECIPIENT_MEMBERS`] of them.
 pub fn recipient_members(arguments: &Value) -> Vec<RecipientMember> {
     let mut found = Vec::new();
     find(arguments, Skip::Targets, |pointer, member, values| {
