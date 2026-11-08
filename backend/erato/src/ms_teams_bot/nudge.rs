@@ -505,7 +505,7 @@ impl DeliveryProducer for InactivityNudgeProducer {
             .to_string();
         let token = Uuid::new_v4();
         store_action_token(db, row, token).await?;
-        let lang = text_language::of_user(db, row.user_id, &self.default_language).await?;
+        let lang = text_language::of_user(db, row.user_id, None, &self.default_language).await?;
         let app = [("app", self.app_name.as_str())];
         let links = self
             .public_base_url

@@ -45,17 +45,19 @@ impl Lang {
     }
 }
 
-/// The language for a message that answers nothing the user sent, such as a
-/// reminder or a tip: the stored one, else the deployment's default.
+/// The language to write to a user in, as [`Lang::resolve`] picks it.
+/// `client` is `None` for a message that answers nothing the user sent, such
+/// as a reminder or a tip.
 pub async fn of_user(
     db: &DatabaseConnection,
     user_id: Uuid,
+    client: Option<&str>,
     default: &str,
 ) -> Result<Lang, Report> {
     let stored = get_user_preferences(db, &user_id)
         .await?
         .and_then(|prefs| prefs.language);
-    Ok(Lang::resolve(stored.as_deref(), None, default))
+    Ok(Lang::resolve(stored.as_deref(), client, default))
 }
 
 #[cfg(test)]

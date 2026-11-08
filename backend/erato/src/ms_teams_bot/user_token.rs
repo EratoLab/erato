@@ -213,6 +213,7 @@ pub fn sign_in_activity(
     activity: &Activity,
     connection_name: &str,
     resource: &SignInResource,
+    app_name: &str,
     lang: Lang,
 ) -> Result<Value, Report> {
     let recipient = activity
@@ -223,7 +224,12 @@ pub fn sign_in_activity(
     Ok(json!({
         "type": "message",
         "recipient": recipient,
-        "attachments": [oauth_card(connection_name, resource, Msg::SignInText.text(lang), lang)],
+        "attachments": [oauth_card(
+            connection_name,
+            resource,
+            &Msg::SignInText.fill(lang, &[("app", app_name)]),
+            lang,
+        )],
     }))
 }
 
@@ -249,7 +255,8 @@ mod tests {
                 sign_in_link: "https://token.botframework.com/signin".into(),
                 token_exchange_resource: Some(json!({"id": "exchange-1", "uri": "api://bot"})),
             };
-            let outgoing = sign_in_activity(&activity, "graph-sso", &resource, Lang::En).unwrap();
+            let outgoing =
+                sign_in_activity(&activity, "graph-sso", &resource, "Erato", Lang::En).unwrap();
             assert_eq!(outgoing["recipient"]["id"], "29:user");
             assert_ne!(
                 outgoing["recipient"]["id"],
@@ -270,7 +277,7 @@ mod tests {
             sign_in_link: "https://token.botframework.com/signin".into(),
             token_exchange_resource: None,
         };
-        let outgoing = sign_in_activity(&incoming(), "graph", &resource, Lang::De).unwrap();
+        let outgoing = sign_in_activity(&incoming(), "graph", &resource, "Hugo", Lang::De).unwrap();
         assert!(outgoing["attachments"][0]["content"]["tokenExchangeResource"].is_null());
         assert_eq!(
             outgoing["attachments"][0]["content"]["buttons"][0]["title"],
@@ -278,7 +285,7 @@ mod tests {
         );
         assert_eq!(
             outgoing["attachments"][0]["content"]["text"],
-            "Melden Sie sich an, damit Erato auf Ihre Microsoft-365-Daten zugreifen kann."
+            "Melden Sie sich an, damit Hugo auf Ihre Microsoft-365-Daten zugreifen kann."
         );
         assert_eq!(
             outgoing["attachments"][0]["content"]["buttons"][0]["value"],
@@ -304,6 +311,7 @@ mod tests {
                     sign_in_link: "link".into(),
                     token_exchange_resource: None,
                 },
+                "Erato",
                 Lang::En,
             )
             .is_err()

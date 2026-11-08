@@ -17,6 +17,7 @@ use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
 use super::texts::{Lang, Msg};
 use super::user_token::sign_in_activity;
+use crate::db::entity::users;
 use crate::services::scheduled_items::{self, Refusal, wording};
 use axum::http::StatusCode;
 use chrono::Utc;
@@ -38,6 +39,10 @@ mod generation_tests;
 #[cfg(test)]
 mod sign_in_tests;
 
+/// The sender as Erato knows them by Entra object id, looked up once per
+/// activity. A failed lookup only fails what needs the user.
+type Sender = Result<Option<users::Model>, Report>;
+
 struct UserContext {
     session: Session,
     identity: GraphIdentity,
@@ -49,40 +54,45 @@ pub(super) async fn on_message(bot: Arc<TeamsBot>, host: Host, activity: Activit
 }
 
 async fn handle_message(bot: Arc<TeamsBot>, host: Host, activity: Activity, allow_sign_in: bool) {
-    let lang = reply_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };
-    if let Err(error) = process_message(&bot, &host, &activity, &target, allow_sign_in).await {
+    if let Err(error) =
+        process_message(&bot, &host, &activity, &target, sender, allow_sign_in).await
+    {
         tracing::error!(error = %error, "Teams message handling failed");
         let _ = target.send_text(Msg::SomethingWentWrong.text(lang)).await;
     }
 }
 
-/// The language to answer an activity in. What the sender's client reports
-/// is stored first, so the stored language that decides is never older than
-/// this activity and the bot does not switch language from one reply to the
-/// next.
-async fn reply_language(bot: &TeamsBot, host: &Host, activity: &Activity) -> Lang {
-    let user = match activity.from_aad_object_id() {
-        Some(entra_object_id) => host
-            .find_user(entra_object_id)
-            .await
-            .unwrap_or_else(|error| {
-                tracing::warn!(%error, "Could not look up the sender of a Teams activity");
-                None
-            }),
-        None => None,
+/// The sender, and the language to answer them in. What the sender's client
+/// reports is stored first, so the stored language that decides is never
+/// older than this activity and the bot does not switch language from one
+/// reply to the next.
+async fn sender_and_language(bot: &TeamsBot, host: &Host, activity: &Activity) -> (Sender, Lang) {
+    let sender = match activity.from_aad_object_id() {
+        Some(entra_object_id) => host.find_user(entra_object_id).await,
+        None => Ok(None),
     };
-    if let Some(user) = &user {
-        remember_client_locale(host, user.id, activity).await;
+    let user_id = match &sender {
+        Ok(user) => user.as_ref().map(|user| user.id),
+        Err(error) => {
+            tracing::warn!(%error, "Could not look up the sender of a Teams activity");
+            None
+        }
+    };
+    if let Some(user_id) = user_id {
+        remember_client_locale(host, user_id, activity).await;
     }
-    host.reply_language(
-        user.map(|user| user.id),
-        activity.client_locale().locale.as_deref(),
-        &bot.settings.default_language,
-    )
-    .await
+    let lang = host
+        .reply_language(
+            user_id,
+            activity.client_locale().locale.as_deref(),
+            &bot.settings.default_language,
+        )
+        .await;
+    (sender, lang)
 }
 
 async fn process_message(
@@ -90,33 +100,37 @@ async fn process_message(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
     allow_sign_in: bool,
 ) -> Result<(), Report> {
     let kind = activity.conversation_kind();
     let lang = target.lang;
     if let Some(submit) = activity.value.as_ref().and_then(ApprovalSubmit::from_value) {
-        return on_approval(bot, host, activity, target, submit, allow_sign_in).await;
+        return on_approval(bot, host, activity, target, sender, submit, allow_sign_in).await;
     }
     if let Some(submit) = activity
         .value
         .as_ref()
         .and_then(controls::Submit::from_value)
     {
-        return on_control(bot, host, activity, target, submit, allow_sign_in).await;
+        return on_control(bot, host, activity, target, sender, submit, allow_sign_in).await;
     }
     if let Some(submit) = activity
         .value
         .as_ref()
         .and_then(nudge::DeliverySubmit::from_value)
     {
-        return on_delivery_action(bot, host, activity, target, submit).await;
+        return on_delivery_action(bot, host, activity, target, sender, submit).await;
     }
 
     let text = activity.text_without_bot_mention();
     let files = activity.incoming_files();
     if text.is_empty() && files.is_empty() {
         if kind.is_personal() {
-            target.send_text(Msg::SendAMessage.text(lang)).await?;
+            let app = &bot.settings.app_name;
+            target
+                .send_text(&Msg::SendAMessage.fill(lang, &[("app", app)]))
+                .await?;
         }
         return Ok(());
     }
@@ -124,7 +138,7 @@ async fn process_message(
     // An unsubscribe must not depend on Graph consent: the activity is
     // verified at the route, and the sender is known by Entra object id.
     if let Some(tips_on) = nudge::reminders_command(&text) {
-        if let Some(user) = known_user(bot, host, activity, target).await? {
+        if let Some(user) = known_user(bot, activity, target, sender).await? {
             host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
             target
                 .send_text(&reminders_text(bot, tips_on, lang))
@@ -133,7 +147,7 @@ async fn process_message(
         return Ok(());
     }
 
-    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
         return Ok(());
     };
     let (conversation_id, service_url, from_id) = routing(activity)?;
@@ -266,10 +280,11 @@ async fn on_approval(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
     submit: ApprovalSubmit,
     allow_sign_in: bool,
 ) -> Result<(), Report> {
-    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
         return Ok(());
     };
     let lang = target.lang;
@@ -287,7 +302,7 @@ async fn on_approval(
             return match host.pending_approvals(&user.session, message_id).await? {
                 Some(set) => {
                     target.send_text(Msg::ApprovalsChanged.text(lang)).await?;
-                    send_approval_card(target, &set).await
+                    send_approval_card(target, &set, &bot.settings.app_name).await
                 }
                 None => {
                     target
@@ -296,25 +311,7 @@ async fn on_approval(
                 }
             };
         }
-        Err(StartError::AlreadyDecided) => {
-            return target
-                .send_text(Msg::ApprovalAlreadyDecided.text(lang))
-                .await;
-        }
-        Err(StartError::Rejected(message)) => {
-            tracing::debug!(%message, "Teams approval refused");
-            // Someone else's card, or a chat the user cannot continue.
-            return target
-                .send_text(Msg::ApprovalNotOpenForYou.text(lang))
-                .await;
-        }
-        Err(StartError::Refused(reason)) => {
-            tracing::debug!(?reason, "Teams approval refused");
-            return target
-                .send_text(Msg::ApprovalNotOpenForYou.text(lang))
-                .await;
-        }
-        Err(error) => return reply_start_error(target, error).await,
+        Err(error) => return target.send_text(&approval_error_text(error, lang)).await,
     };
     // Replace the card so it cannot be answered twice.
     if let Some(card_activity_id) = activity.reply_to_id.as_deref() {
@@ -347,13 +344,27 @@ async fn on_approval(
     render_generation(bot, host, target, updates, stream, request).await
 }
 
+/// The reply to an approval answer that did not continue the response.
+fn approval_error_text(error: StartError, lang: Lang) -> String {
+    match error {
+        StartError::AlreadyDecided => Msg::ApprovalAlreadyDecided.text(lang).to_string(),
+        StartError::Rejected(message) => {
+            tracing::debug!(%message, "Teams approval refused");
+            // Someone else's card, or a chat the user cannot continue.
+            Msg::ApprovalNotOpenForYou.text(lang).to_string()
+        }
+        StartError::Refused(reason) => reason.text(lang).to_string(),
+        error => start_error_text(error, lang),
+    }
+}
+
 /// An edit is only a proposal. It never starts a generation or repeats tools.
 pub(super) async fn on_message_edit(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
-    let lang = reply_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };
-    if let Err(error) = offer_edited_question(&bot, &host, &activity, &target).await {
+    if let Err(error) = offer_edited_question(&bot, &host, &activity, &target, sender).await {
         tracing::warn!(%error, "Teams edited question could not be offered");
     }
 }
@@ -363,6 +374,7 @@ async fn offer_edited_question(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
 ) -> Result<(), Report> {
     let (Some(source_id), Some(edited_at), Some(conversation)) = (
         activity.id.as_deref(),
@@ -371,16 +383,17 @@ async fn offer_edited_question(
     ) else {
         return Ok(());
     };
-    let Some(user) = authenticate(bot, host, activity, target, false).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, sender, false).await? else {
         return Ok(());
     };
+    let app = [("app", bot.settings.app_name.as_str())];
     let Some(request) = host
         .request_for_activity(&user.session, conversation, source_id)
         .await?
     else {
         return if activity.conversation_kind().is_personal() {
             target
-                .send_text(Msg::EditSavedResend.text(target.lang))
+                .send_text(&Msg::EditSavedResend.fill(target.lang, &app))
                 .await
         } else {
             Ok(())
@@ -388,7 +401,7 @@ async fn offer_edited_question(
     };
     if !host.request_is_current(&user.session, &request).await? {
         return target
-            .send_text(Msg::EditSavedNotLatest.text(target.lang))
+            .send_text(&Msg::EditSavedNotLatest.fill(target.lang, &app))
             .await;
     }
     let text = activity.text_without_bot_mention();
@@ -406,10 +419,11 @@ async fn on_control(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
     submit: controls::Submit,
     allow_sign_in: bool,
 ) -> Result<(), Report> {
-    let Some(user) = authenticate(bot, host, activity, target, allow_sign_in).await? else {
+    let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
         return Ok(());
     };
     let lang = target.lang;
@@ -495,13 +509,14 @@ async fn on_delivery_action(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
     submit: nudge::DeliverySubmit,
 ) -> Result<(), Report> {
     let lang = target.lang;
     let Some(command) = submit.command() else {
         return target.send_text(Msg::ButtonNotSupported.text(lang)).await;
     };
-    let Some(user) = known_user(bot, host, activity, target).await? else {
+    let Some(user) = known_user(bot, activity, target, sender).await? else {
         return Ok(());
     };
     let conversation_id = activity.conversation_id().unwrap_or_default();
@@ -601,14 +616,14 @@ fn reminder_button_gone_text(scheduled_url: Option<&str>, lang: Lang) -> String 
 /// settings that must not depend on a Graph token.
 async fn known_user(
     bot: &TeamsBot,
-    host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
-) -> Result<Option<crate::db::entity::users::Model>, Report> {
-    let Some(entra_object_id) = activity.from_aad_object_id() else {
+    sender: Sender,
+) -> Result<Option<users::Model>, Report> {
+    if activity.from_aad_object_id().is_none() {
         return Ok(None);
-    };
-    let Some(user) = host.find_user(entra_object_id).await? else {
+    }
+    let Some(user) = sender? else {
         target
             .send_text(&unknown_user_text(bot, target.lang))
             .await?;
@@ -766,6 +781,7 @@ async fn authenticate(
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
+    sender: Sender,
     allow_sign_in: bool,
 ) -> Result<Option<UserContext>, Report> {
     let (Some(entra_object_id), Some(from)) =
@@ -773,7 +789,7 @@ async fn authenticate(
     else {
         return Ok(None);
     };
-    let Some(user) = host.find_user(entra_object_id).await? else {
+    let Some(user) = sender? else {
         target
             .send_text(&unknown_user_text(bot, target.lang))
             .await?;
@@ -884,6 +900,7 @@ async fn send_sign_in(
         &personal,
         bot.user_tokens.connection_name(),
         &resource,
+        &bot.settings.app_name,
         lang,
     )?;
     if host.remember_sign_in(&scope, exchange_id, activity).await?
@@ -1242,7 +1259,7 @@ async fn render_generation(
     let sources = citation_sources(host, &completion).await;
     let delivered = stream
         .finish_with_sources(
-            &completion_text(&completion, link.as_deref(), lang),
+            &completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang),
             &completion.earlier_text,
             &sources,
             bot.settings.public_base_url.as_deref(),
@@ -1259,7 +1276,7 @@ async fn render_generation(
         return delivered.and(stopped);
     }
     let approvals = match (&delivered, &completion.approvals) {
-        (Ok(()), Some(set)) => send_approval_card(target, set).await,
+        (Ok(()), Some(set)) => send_approval_card(target, set, &bot.settings.app_name).await,
         _ => Ok(()),
     };
     if let Some(request) = &request {
@@ -1285,6 +1302,7 @@ async fn citation_sources(
 pub(super) fn completion_text(
     completion: &Completion,
     chat_link: Option<&str>,
+    app_name: &str,
     lang: Lang,
 ) -> String {
     let mut text = completion.text.clone();
@@ -1296,11 +1314,12 @@ pub(super) fn completion_text(
         };
     }
     if completion.needs_client {
+        let app = ("app", app_name);
         let open = match chat_link {
-            Some(link) => Msg::OpenChatToContinue.fill(lang, &[("link", link)]),
-            None => Msg::OpenChatToContinuePlain.text(lang).to_string(),
+            Some(link) => Msg::OpenChatToContinue.fill(lang, &[app, ("link", link)]),
+            None => Msg::OpenChatToContinuePlain.fill(lang, &[app]),
         };
-        text = format!("{text}\n\n_{}_ {open}", Msg::NeedsApp.text(lang));
+        text = format!("{text}\n\n_{}_ {open}", Msg::NeedsApp.fill(lang, &[app]));
     }
     if text.trim().is_empty() {
         text = Msg::NoText.text(lang).to_string();
@@ -1312,9 +1331,10 @@ pub(super) fn completion_text(
 async fn send_approval_card(
     target: &ReplyTarget<'_>,
     set: &cards::PendingApprovalSet,
+    app_name: &str,
 ) -> Result<(), Report> {
-    let card = cards::approval_card(set, target.lang);
-    let summary = cards::approval_summary(set, target.lang);
+    let card = cards::approval_card(set, app_name, target.lang);
+    let summary = cards::approval_summary(set, app_name, target.lang);
     target.send(&render::card_message(card, &summary)).await?;
     Ok(())
 }
@@ -1328,7 +1348,14 @@ async fn reply_start_error(target: &ReplyTarget<'_>, error: StartError) -> Resul
 fn start_error_text(error: StartError, lang: Lang) -> String {
     match error {
         StartError::Busy => Msg::Busy.text(lang).to_string(),
-        StartError::Rejected(message) => Msg::CouldNotStart.fill(lang, &[("reason", &message)]),
+        // Erato words its own refusals in English only.
+        StartError::Rejected(message) => match lang {
+            Lang::En => Msg::CouldNotStart.fill(lang, &[("reason", &message)]),
+            Lang::De => {
+                tracing::debug!(%message, "Teams request refused");
+                Msg::CouldNotStartPlain.text(lang).to_string()
+            }
+        },
         StartError::Refused(reason) => {
             Msg::CouldNotStart.fill(lang, &[("reason", reason.text(lang))])
         }
@@ -1367,7 +1394,7 @@ pub(super) async fn deliver_proactive(
         let text = format!(
             "**{}**\n\n{}",
             Msg::TaskFinished.text(lang),
-            completion_text(&completion, link.as_deref(), lang)
+            completion_text(&completion, link.as_deref(), &bot.settings.app_name, lang)
         );
         let target = ReplyTarget {
             connector: &bot.connector,
@@ -1387,7 +1414,7 @@ pub(super) async fn deliver_proactive(
             )
             .await?;
         if let Some(set) = &completion.approvals {
-            send_approval_card(&target, set).await?;
+            send_approval_card(&target, set, &bot.settings.app_name).await?;
         }
     }
     Ok(())
@@ -1415,14 +1442,11 @@ fn unknown_user_text(bot: &TeamsBot, lang: Lang) -> String {
 /// Someone has the bot in a personal chat for the first time: greet them and,
 /// if Erato does not know them yet, say what to do before the first question.
 pub(super) async fn on_bot_added(bot: Arc<TeamsBot>, host: Host, activity: Activity) {
-    let lang = reply_language(&bot, &host, &activity).await;
+    let (sender, lang) = sender_and_language(&bot, &host, &activity).await;
     let Some(target) = reply_target(&bot, &activity, lang) else {
         return;
     };
-    let known_user = match activity.from_aad_object_id() {
-        Some(object_id) => host.find_user(object_id).await.ok().flatten(),
-        None => None,
-    };
+    let known_user = sender.ok().flatten();
     // Remember the personal conversation now, so a user the app was installed
     // for by policy can be reached (tips, reminders) before they ever write.
     if let Some(user) = &known_user
@@ -1554,8 +1578,13 @@ mod tests {
         let mut client = completion("Teilantwort");
         client.needs_client = true;
         assert_eq!(
-            completion_text(&client, Some("https://erato.example/chat/1"), Lang::De),
-            "Teilantwort\n\n_Dieser Schritt erfordert die Erato-App._ [Öffnen Sie den Chat in Erato](https://erato.example/chat/1), um fortzufahren."
+            completion_text(
+                &client,
+                Some("https://hugo.example/chat/1"),
+                "Hugo",
+                Lang::De
+            ),
+            "Teilantwort\n\n_Dieser Schritt erfordert die Hugo-App._ [Öffnen Sie den Chat in Hugo](https://hugo.example/chat/1), um fortzufahren."
         );
         assert_eq!(
             start_error_text(StartError::Refused(Msg::ToolsMayHaveRun), Lang::De),
@@ -1564,6 +1593,43 @@ mod tests {
         assert_eq!(
             reminder_refusal_note(Refusal::NothingToSnooze).text(Lang::De),
             "Nicht zurückgestellt: Der nächste Termin dieser Erinnerung liegt davor."
+        );
+    }
+
+    #[test]
+    fn erato_refusals_keep_their_english_details_out_of_german_replies() {
+        let rejected = || {
+            StartError::Rejected(
+                "Only one audio transcription attachment is allowed per message.".into(),
+            )
+        };
+        assert_eq!(
+            start_error_text(rejected(), Lang::En),
+            "I could not start this request: Only one audio transcription attachment is allowed per message."
+        );
+        assert_eq!(
+            start_error_text(rejected(), Lang::De),
+            "Ich konnte diese Anfrage nicht starten."
+        );
+    }
+
+    #[test]
+    fn a_refused_approval_says_why_in_the_users_language() {
+        assert_eq!(
+            approval_error_text(StartError::Refused(Msg::ApprovalInParentChat), Lang::De),
+            "Diese Genehmigung wird in dem Chat erteilt, der die Aufgabe gestartet hat."
+        );
+        assert_eq!(
+            approval_error_text(StartError::Refused(Msg::ContinuesOnItsOwn), Lang::En),
+            "This response continues on its own once its tasks finish."
+        );
+        assert_eq!(
+            approval_error_text(StartError::Rejected("Chat not found".into()), Lang::De),
+            "Diese Genehmigung ist für Sie nicht mehr offen."
+        );
+        assert_eq!(
+            approval_error_text(StartError::AlreadyDecided, Lang::En),
+            "This approval was already decided."
         );
     }
 
@@ -1589,17 +1655,22 @@ mod tests {
             }],
         });
         assert_eq!(
-            completion_text(&waiting, None, Lang::En),
+            completion_text(&waiting, None, "Erato", Lang::En),
             "I need your approval before I continue."
         );
         let mut client = completion("Partial answer");
         client.needs_client = true;
         assert_eq!(
-            completion_text(&client, Some("https://erato.example/chat/1"), Lang::En),
+            completion_text(
+                &client,
+                Some("https://erato.example/chat/1"),
+                "Erato",
+                Lang::En
+            ),
             "Partial answer\n\n_This step needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) to continue."
         );
         assert_eq!(
-            completion_text(&completion(""), None, Lang::En),
+            completion_text(&completion(""), None, "Erato", Lang::En),
             "(The answer contained no text.)"
         );
     }

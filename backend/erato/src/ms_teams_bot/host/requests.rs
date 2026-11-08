@@ -645,6 +645,7 @@ impl Host {
             started.events,
             Some(started.client_stream_guard),
             session.lang,
+            self.app_name(),
         ))
     }
 }

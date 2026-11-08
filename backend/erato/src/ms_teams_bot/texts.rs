@@ -39,12 +39,12 @@ texts! {
     PlaceTabOrLink => "the {tab} tab at the top of this chat or {link}", "den Tab {tab} oben in diesem Chat oder {link}";
     PlaceTab => "the {tab} tab at the top of this chat", "den Tab {tab} oben in diesem Chat";
     SignIn => "Sign in", "Anmelden";
-    SignInText => "Sign in to let Erato access your Microsoft 365 data.",
-        "Melden Sie sich an, damit Erato auf Ihre Microsoft-365-Daten zugreifen kann.";
+    SignInText => "Sign in to let {app} access your Microsoft 365 data.",
+        "Melden Sie sich an, damit {app} auf Ihre Microsoft-365-Daten zugreifen kann.";
 
     // Messages and their progress
-    SendAMessage => "Send me a message to start a chat with Erato.",
-        "Senden Sie mir eine Nachricht, um einen Chat mit Erato zu beginnen.";
+    SendAMessage => "Send me a message to start a chat with {app}.",
+        "Senden Sie mir eine Nachricht, um einen Chat mit {app} zu beginnen.";
     NewChatStarted => "Started a new chat. Send your next message when you are ready.",
         "Ein neuer Chat ist gestartet. Senden Sie Ihre nächste Nachricht, wenn Sie so weit sind.";
     NothingToStop => "There is no active response to stop in this chat.",
@@ -66,7 +66,7 @@ texts! {
         "{tool} ist fertig. Die Antwort wird vorbereitet…";
     ToolFailed => "{tool} failed. Preparing the response…",
         "{tool} ist fehlgeschlagen. Die Antwort wird vorbereitet…";
-    NeedsAppProgress => "This step needs the Erato app…", "Dieser Schritt erfordert die Erato-App…";
+    NeedsAppProgress => "This step needs the {app} app…", "Dieser Schritt erfordert die {app}-App…";
     Stopped => "Stopped.", "Gestoppt.";
     Stopping => "Stopping…", "Wird gestoppt…";
     Finished => "Finished.", "Fertig.";
@@ -78,11 +78,11 @@ texts! {
         "Bevor ich weitermache, brauche ich Ihre Genehmigung.";
     ApprovalNeededToContinue => "Approval needed to continue.",
         "Zum Fortfahren ist eine Genehmigung nötig.";
-    NeedsApp => "This step needs the Erato app.", "Dieser Schritt erfordert die Erato-App.";
-    OpenChatToContinue => "[Open the chat in Erato]({link}) to continue.",
-        "[Öffnen Sie den Chat in Erato]({link}), um fortzufahren.";
-    OpenChatToContinuePlain => "Open the chat in Erato to continue.",
-        "Öffnen Sie den Chat in Erato, um fortzufahren.";
+    NeedsApp => "This step needs the {app} app.", "Dieser Schritt erfordert die {app}-App.";
+    OpenChatToContinue => "[Open the chat in {app}]({link}) to continue.",
+        "[Öffnen Sie den Chat in {app}]({link}), um fortzufahren.";
+    OpenChatToContinuePlain => "Open the chat in {app} to continue.",
+        "Öffnen Sie den Chat in {app}, um fortzufahren.";
     NoText => "(The answer contained no text.)", "(Die Antwort enthielt keinen Text.)";
     UnavailableFile => "Unavailable file", "Nicht verfügbare Datei";
     File => "File", "Datei";
@@ -98,12 +98,26 @@ texts! {
         "Entschuldigung, etwas ist schiefgelaufen: {reason}";
     AnswerNotGenerated => "The answer could not be generated.",
         "Die Antwort konnte nicht erstellt werden.";
+    ContentFiltered => "The response was filtered because the request triggered the content policy.",
+        "Die Antwort wurde gefiltert, weil die Anfrage gegen die Inhaltsrichtlinien verstößt.";
+    RateLimited => "The rate limit or quota was exceeded. This can also happen when the input is too large. Please try again in a minute.",
+        "Das Anfragelimit oder Kontingent wurde überschritten. Das kann auch passieren, wenn die Eingabe zu groß ist. Bitte versuchen Sie es in einer Minute noch einmal.";
+    RepetitionLoop => "The answer kept repeating itself and was stopped. Please try again.",
+        "Die Antwort hat sich ständig wiederholt und wurde abgebrochen. Bitte versuchen Sie es noch einmal.";
     NoAnswer => "Sorry, I did not get an answer this time.",
         "Entschuldigung, diesmal habe ich keine Antwort bekommen.";
     Busy => "I'm still working on your previous message.",
         "Ich arbeite noch an Ihrer vorherigen Nachricht.";
     CouldNotStart => "I could not start this request: {reason}",
         "Ich konnte diese Anfrage nicht starten: {reason}";
+    CouldNotStartPlain => "I could not start this request.",
+        "Ich konnte diese Anfrage nicht starten.";
+    ChatArchived => "This chat is archived and cannot receive new messages. Send /new to start a fresh chat.",
+        "Dieser Chat ist archiviert und kann keine neuen Nachrichten empfangen. Senden Sie /new, um einen neuen Chat zu beginnen.";
+    TaskStillRunning => "This task is still running and cannot receive new messages yet.",
+        "Diese Aufgabe läuft noch und kann noch keine neuen Nachrichten empfangen.";
+    TooManyAttachments => "This message has too many attachments. Please send fewer files at once.",
+        "Diese Nachricht hat zu viele Anhänge. Bitte senden Sie weniger Dateien auf einmal.";
     StartFailed => "Something went wrong while starting this request. Please try again.",
         "Beim Starten dieser Anfrage ist etwas schiefgelaufen. Bitte versuchen Sie es noch einmal.";
     StartFailedTryButton => "Something went wrong while starting this. Please try the button again.",
@@ -115,8 +129,8 @@ texts! {
     ApprovalNeeded => "Approval needed", "Genehmigung erforderlich";
     ToolCallsNeedApproval => "{count} tool calls need approval",
         "{count} Tool-Aufrufe brauchen eine Genehmigung";
-    TasksToStart => "Erato wants to start {count} task(s)",
-        "Erato möchte {count} Aufgabe(n) starten";
+    TasksToStart => "{app} wants to start {count} task(s)",
+        "{app} möchte {count} Aufgabe(n) starten";
     SubTasksWaiting => "Sub-tasks are waiting for approval",
         "Teilaufgaben warten auf eine Genehmigung";
     ToolCallLimitReached => "Tool-call limit reached", "Limit für Tool-Aufrufe erreicht";
@@ -136,8 +150,8 @@ texts! {
     ContinueToolCalls => "Continue tool calls", "Tool-Aufrufe fortsetzen";
     AnswerNow => "Generate answer now", "Jetzt Antwort erstellen";
     Stop => "Stop", "Stoppen";
-    OmittedDetails => "Some details are not shown because Teams limits card size. Open the chat in Erato to see them.",
-        "Einige Details fehlen, weil Teams die Größe von Karten begrenzt. Öffnen Sie den Chat in Erato, um sie zu sehen.";
+    OmittedDetails => "Some details are not shown because Teams limits card size. Open the chat in {app} to see them.",
+        "Einige Details fehlen, weil Teams die Größe von Karten begrenzt. Öffnen Sie den Chat in {app}, um sie zu sehen.";
     ApprovedBy => "{tool} was approved by {person}.", "{tool} wurde von {person} genehmigt.";
     DeniedBy => "{tool} was denied by {person}.", "{tool} wurde von {person} abgelehnt.";
     StoppedBy => "{tool} was stopped by {person}.", "{tool} wurde von {person} gestoppt.";
@@ -186,10 +200,10 @@ texts! {
         "An dieser Anfrage waren Tools beteiligt. Senden Sie eine neue Anweisung, um fortzufahren, ohne deren Arbeit automatisch zu wiederholen.";
     SendNewMessage => "Send a new message to continue.",
         "Senden Sie eine neue Nachricht, um fortzufahren.";
-    EditSavedResend => "That edit was saved in Teams. I can regenerate questions sent after this update; please send this question again or edit it in Erato.",
-        "Die Änderung ist in Teams gespeichert. Neu beantworten kann ich nur Fragen, die nach diesem Update gesendet wurden. Bitte senden Sie die Frage noch einmal oder bearbeiten Sie sie in Erato.";
-    EditSavedNotLatest => "That edit was saved in Teams. Only the latest question can be regenerated here; open Erato to edit an earlier turn.",
-        "Die Änderung ist in Teams gespeichert. Hier lässt sich nur die letzte Frage neu beantworten. Öffnen Sie Erato, um eine frühere Frage zu bearbeiten.";
+    EditSavedResend => "That edit was saved in Teams. I can regenerate questions sent after this update; please send this question again or edit it in {app}.",
+        "Die Änderung ist in Teams gespeichert. Neu beantworten kann ich nur Fragen, die nach diesem Update gesendet wurden. Bitte senden Sie die Frage noch einmal oder bearbeiten Sie sie in {app}.";
+    EditSavedNotLatest => "That edit was saved in Teams. Only the latest question can be regenerated here; open {app} to edit an earlier turn.",
+        "Die Änderung ist in Teams gespeichert. Hier lässt sich nur die letzte Frage neu beantworten. Öffnen Sie {app}, um eine frühere Frage zu bearbeiten.";
     NotLatestQuestion => "This question is no longer the latest question in this chat.",
         "Diese Frage ist nicht mehr die letzte Frage in diesem Chat.";
     NoAnswerToRetry => "There is no saved answer to retry.",

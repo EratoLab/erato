@@ -40,7 +40,9 @@ The bot's own texts are English or German, German in the formal "Sie": the welco
 - **Replies** use the sender's stored `user_preferences.language`, then the language their client reports, then `i18n.language.default_language`. The client's report is stored before the reply is worded, so the bot never switches language from one reply to the next.
 - **Messages that answer nothing** (a reminder, a tip, a background task's result) use the stored language, then the default.
 - **Dates** on cards read `9:30`, `morgen 9:00` or `Freitag, 13. Nov., 9:00`, with `(Ortszeit New York)` only when the reminder's zone is not the user's stored one.
-- **Not translated:** the model's answers, the tips as the admin enters them, and error details that Erato's API gives in English (shown after "Ich konnte diese Anfrage nicht starten:").
+- **Errors.** Erato's own refusal and error details are English only. Those the bot knows (archived chat, a task still running, too many attachments, the stale question, content filter, rate limit, a repeating answer) it words itself in both languages; any other detail shows only in English replies, and German replies say that the request could not start or the answer could not be generated.
+- **Names.** Texts that name the bot or the web app use the Teams app's short name (`manifest.short_name`), not "Erato".
+- **Not translated:** the model's answers and the tips as the admin enters them.
 
 The card samples `ms_teams_bot/nudge/snapshots/scheduled_reminder_card.snap.json` and `scheduled_reminder_card_de.snap.json` show the reminder card in both languages.
 

@@ -15271,6 +15271,10 @@ async fn validate_file_uploads_for_message_submit(
     Ok(())
 }
 
+pub(crate) const ARCHIVED_CHAT_MESSAGE: &str = "Chat is archived and cannot receive new messages";
+pub(crate) const DELEGATED_RUN_RUNNING_MESSAGE: &str =
+    "Delegated run is still in progress and cannot receive new messages";
+
 /// Reject a write into an archived chat with 409 CONFLICT.
 ///
 /// Every write entry point calls this after resolving its target chat, so an
@@ -15283,7 +15287,7 @@ pub(crate) fn reject_if_archived(
     if chat.archived_at.is_some() {
         return Err((
             axum::http::StatusCode::CONFLICT,
-            "Chat is archived and cannot receive new messages".to_string(),
+            ARCHIVED_CHAT_MESSAGE.to_string(),
         ));
     }
     Ok(())
@@ -15335,7 +15339,7 @@ async fn accept_user_write_into_delegated_run(
     if local_task_running || lease_running {
         return Err((
             axum::http::StatusCode::CONFLICT,
-            "Delegated run is still in progress and cannot receive new messages".to_string(),
+            DELEGATED_RUN_RUNNING_MESSAGE.to_string(),
         ));
     }
 

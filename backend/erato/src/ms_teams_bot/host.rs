@@ -31,10 +31,12 @@ use crate::server::api::v1beta::me_profile_middleware::{
     MeProfile, UserProfile, complete_user_profile,
 };
 use crate::server::api::v1beta::message_streaming::{
-    ContinueStreamRequest, MessageSubmitRequest, STALE_REVISION_MESSAGE, StreamRouteError,
-    ToolApprovalDecision, detached_generation_event_sink, start_continuation, start_message_submit,
+    ARCHIVED_CHAT_MESSAGE, ContinueStreamRequest, DELEGATED_RUN_RUNNING_MESSAGE,
+    MessageSubmitRequest, STALE_REVISION_MESSAGE, StreamRouteError, ToolApprovalDecision,
+    detached_generation_event_sink, start_continuation, start_message_submit,
 };
 use crate::services::background_tasks::{ClientStreamGuard, StreamingEvent, ToolCallStatus};
+use crate::services::text_language;
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use sea_orm::prelude::*;
@@ -105,10 +107,12 @@ impl From<StreamRouteError> for StartError {
             StreamRouteError::PlainText(status, message) if status.is_server_error() => {
                 StartError::internal("start the generation", message)
             }
-            StreamRouteError::PlainText(_, message) if message == STALE_REVISION_MESSAGE => {
-                StartError::Refused(Msg::NotLatestQuestion)
-            }
-            StreamRouteError::PlainText(_, message) => StartError::Rejected(message),
+            StreamRouteError::PlainText(_, message) => match message.as_str() {
+                STALE_REVISION_MESSAGE => StartError::Refused(Msg::NotLatestQuestion),
+                ARCHIVED_CHAT_MESSAGE => StartError::Refused(Msg::ChatArchived),
+                DELEGATED_RUN_RUNNING_MESSAGE => StartError::Refused(Msg::TaskStillRunning),
+                _ => StartError::Rejected(message),
+            },
             StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
             StreamRouteError::CoveredByParent(_) => StartError::Refused(Msg::ApprovalInParentChat),
@@ -212,6 +216,18 @@ impl Host {
         self.app_state.config.integrations.sharepoint.enabled
     }
 
+    /// The bot's name, from the same setting as `TeamsBotSettings::app_name`.
+    fn app_name(&self) -> String {
+        self.app_state
+            .config
+            .integrations
+            .ms_office
+            .teams
+            .manifest
+            .short_name
+            .clone()
+    }
+
     pub fn max_upload_bytes(&self) -> usize {
         self.app_state
             .config
@@ -241,27 +257,23 @@ impl Host {
     }
 
     /// The language to answer in: the user's stored language, else the one
-    /// their client reports, else the deployment's default.
+    /// their client reports, else the deployment's default. A failed read
+    /// answers anyway, without the stored language.
     pub async fn reply_language(
         &self,
         user_id: Option<Uuid>,
         client: Option<&str>,
         default: &str,
     ) -> Lang {
-        let stored = match user_id {
-            Some(user_id) => crate::models::user_preference::get_user_preferences(
-                &self.app_state.db,
-                &user_id,
-            )
+        let Some(user_id) = user_id else {
+            return Lang::resolve(None, client, default);
+        };
+        text_language::of_user(&self.app_state.db, user_id, client, default)
             .await
             .unwrap_or_else(|error| {
                 tracing::warn!(%error, "Could not read the stored language of a Teams user");
-                None
+                Lang::resolve(None, client, default)
             })
-            .and_then(|prefs| prefs.language),
-            None => None,
-        };
-        Lang::resolve(stored.as_deref(), client, default)
     }
 
     /// The language for a message nobody asked for, such as a task result.
@@ -549,6 +561,10 @@ impl Host {
         text: String,
         file_ids: Vec<Uuid>,
     ) -> Result<mpsc::Receiver<GenerationUpdate>, StartError> {
+        // Erato refuses the same in English; this says it in the user's language.
+        if file_ids.len() > self.app_state.config.frontend.max_files {
+            return Err(StartError::Refused(Msg::TooManyAttachments));
+        }
         let previous_message_id =
             crate::models::message::get_active_thread_tip(&self.app_state.db, &chat_id)
                 .await
@@ -569,6 +585,7 @@ impl Host {
             started.events,
             Some(started.client_stream_guard),
             session.lang,
+            self.app_name(),
         ))
     }
 
@@ -604,6 +621,7 @@ impl Host {
             started.events,
             None,
             session.lang,
+            self.app_name(),
         ))
     }
 
@@ -699,6 +717,7 @@ fn translate(
     mut events: broadcast::Receiver<StreamingEvent>,
     guard: Option<ClientStreamGuard>,
     lang: Lang,
+    app_name: String,
 ) -> mpsc::Receiver<GenerationUpdate> {
     let (tx, rx) = mpsc::channel(64);
     tokio::spawn(async move {
@@ -833,9 +852,9 @@ fn translate(
                     completed,
                     total,
                 )),
-                Ok(StreamingEvent::ClientToolCall { .. }) => {
-                    GenerationUpdate::Status(Msg::NeedsAppProgress.text(lang).into())
-                }
+                Ok(StreamingEvent::ClientToolCall { .. }) => GenerationUpdate::Status(
+                    Msg::NeedsAppProgress.fill(lang, &[("app", &app_name)]),
+                ),
                 Ok(StreamingEvent::AssistantMessageCompleted {
                     message_id,
                     content,
@@ -1002,15 +1021,29 @@ fn answer_text(content: &[ContentPart]) -> (String, String) {
     (join(content), String::new())
 }
 
+/// Why the answer failed: the bot's words for the kinds the web app words
+/// too, else Erato's details, which are English only.
 fn error_message(error: Option<&Value>, lang: Lang) -> String {
-    error
-        .and_then(|error| {
-            ["error_description", "message", "error"]
-                .iter()
-                .find_map(|key| error.get(*key).and_then(Value::as_str))
-        })
-        .unwrap_or(Msg::AnswerNotGenerated.text(lang))
-        .to_string()
+    let kind = match error
+        .and_then(|error| error.get("error_type"))
+        .and_then(Value::as_str)
+    {
+        Some("content_filter") => Some(Msg::ContentFiltered),
+        Some("rate_limit") => Some(Msg::RateLimited),
+        Some("hallucination_loop") => Some(Msg::RepetitionLoop),
+        _ => None,
+    };
+    let details = error.and_then(|error| {
+        ["error_description", "message", "error"]
+            .iter()
+            .find_map(|key| error.get(*key).and_then(Value::as_str))
+    });
+    match (kind, details) {
+        (Some(kind), _) => kind.text(lang),
+        (None, Some(details)) if lang == Lang::En => details,
+        (None, _) => Msg::AnswerNotGenerated.text(lang),
+    }
+    .to_string()
 }
 
 #[cfg(test)]
@@ -1043,12 +1076,61 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn erato_refusals_the_bot_knows_are_worded_by_the_bot() {
+        for (message, expected) in [
+            (ARCHIVED_CHAT_MESSAGE, Msg::ChatArchived),
+            (DELEGATED_RUN_RUNNING_MESSAGE, Msg::TaskStillRunning),
+        ] {
+            let error = StartError::from(StreamRouteError::PlainText(
+                axum::http::StatusCode::CONFLICT,
+                message.into(),
+            ));
+            assert!(
+                matches!(error, StartError::Refused(msg) if msg == expected),
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_failed_answer_is_explained_without_english_details_in_german() {
+        let rate_limit = json!({
+            "error_type": "rate_limit",
+            "error_description": "Requests to the ChatCompletions_Create Operation have exceeded the limit.",
+        });
+        assert_eq!(
+            error_message(Some(&rate_limit), Lang::De),
+            Msg::RateLimited.text(Lang::De)
+        );
+        assert_eq!(
+            error_message(Some(&rate_limit), Lang::En),
+            Msg::RateLimited.text(Lang::En)
+        );
+        let provider = json!({
+            "error_type": "provider_error",
+            "error_description": "upstream connect error",
+        });
+        assert_eq!(
+            error_message(Some(&provider), Lang::En),
+            "upstream connect error"
+        );
+        assert_eq!(
+            error_message(Some(&provider), Lang::De),
+            "Die Antwort konnte nicht erstellt werden."
+        );
+        assert_eq!(
+            error_message(None, Lang::En),
+            "The answer could not be generated."
+        );
+    }
+
     #[tokio::test]
     async fn translates_thinking_and_tool_progress_including_continuations() {
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(chat_id, receiver, None, Lang::En);
+        let mut updates = translate(chat_id, receiver, None, Lang::En, "Erato".into());
         // A continuation need not repeat AssistantMessageStarted.
         sender
             .send(StreamingEvent::ReasoningDelta {
@@ -1393,7 +1475,7 @@ mod tests {
     async fn tool_boundary_replaces_narration_and_late_progress_keeps_the_answer() {
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(Uuid::new_v4(), receiver, None, Lang::En);
+        let mut updates = translate(Uuid::new_v4(), receiver, None, Lang::En, "Erato".into());
         let text = |index, text: &str| StreamingEvent::TextDelta {
             message_id,
             content_index: index,

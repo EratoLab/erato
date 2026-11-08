@@ -25,6 +25,7 @@ pub mod wording;
 use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
+use crate::models::chat::chat_title;
 use crate::models::user_preference::user_time_zone;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
@@ -1056,16 +1057,16 @@ impl DeliveryProducer for ReminderProducer {
                 .filter(|chat| chat.owner_user_id == item.user_id.to_string()),
             _ => None,
         };
-        let lang = text_language::of_user(db, item.user_id, &self.default_language).await?;
+        let lang = text_language::of_user(db, item.user_id, None, &self.default_language).await?;
         let links = chat
             .zip(self.public_base_url.as_deref())
             .map(|(chat, base)| DeliveryLink {
-                title: [&chat.title_by_user_provided, &chat.title_by_summary]
-                    .into_iter()
-                    .flatten()
-                    .find(|title| !title.trim().is_empty())
-                    .cloned()
-                    .unwrap_or_else(|| wording::untitled_chat(lang).to_string()),
+                title: chat_title(
+                    chat.title_by_user_provided.as_deref(),
+                    chat.title_by_summary.as_deref(),
+                )
+                .unwrap_or(wording::untitled_chat(lang))
+                .to_string(),
                 url: format!("{base}/chat/{}", chat.id),
             })
             .into_iter()

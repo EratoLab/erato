@@ -799,11 +799,19 @@ pub fn resolve_chat_display_name(
     title_by_user_provided: Option<&str>,
     title_by_summary: Option<&str>,
 ) -> String {
+    chat_title(title_by_user_provided, title_by_summary)
+        .unwrap_or("Untitled Chat")
+        .to_string()
+}
+
+/// The chat's own title, if it has one: the user's, else the summary's.
+pub fn chat_title<'a>(
+    title_by_user_provided: Option<&'a str>,
+    title_by_summary: Option<&'a str>,
+) -> Option<&'a str> {
     title_by_user_provided
         .filter(|name| !name.trim().is_empty())
         .or(title_by_summary.filter(|name| !name.trim().is_empty()))
-        .unwrap_or("Untitled Chat")
-        .to_string()
 }
 
 #[derive(Debug, FromQueryResult)]
