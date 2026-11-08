@@ -428,6 +428,7 @@ mod tests {
             progress: None,
             total: None,
             output: Some(json!({ "text": "SHOULD-NOT-LEAK" })),
+            result_details: None,
         }
     }
 
@@ -591,6 +592,7 @@ mod tests {
             progress: None,
             total: None,
             output: Some(output),
+            result_details: None,
         }
     }
 

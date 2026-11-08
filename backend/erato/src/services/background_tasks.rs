@@ -2028,6 +2028,12 @@ pub enum StreamingEvent {
         total: Option<f64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         output: Option<JsonValue>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "crate::models::message::readable_or_none"
+        )]
+        result_details: Option<crate::models::message::ToolResultDetails>,
     },
     /// The model called a facet `client_tool`: the loop is now SUSPENDED
     /// awaiting the client to execute it and POST the result back. Distinct
@@ -2305,6 +2311,37 @@ impl Drop for ClientStreamGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Shared events are read back by every node; one with result details this
+    /// version cannot read must still replay.
+    #[test]
+    fn a_shared_tool_update_with_unreadable_result_details_still_reads() {
+        let event = |details: JsonValue| {
+            serde_json::from_value::<StreamingEvent>(serde_json::json!({
+                "message_type": "tool_call_update", "message_id": Uuid::nil(),
+                "content_index": 0, "tool_call_id": "call-1", "tool_name": "create_row",
+                "status": "success", "output": "Created.", "result_details": details,
+            }))
+            .expect("the event stays readable")
+        };
+        for details in [
+            serde_json::json!(5),
+            serde_json::json!({"links": [{"uri": "https://records.example.test/"}]}),
+        ] {
+            let StreamingEvent::ToolCallUpdate {
+                result_details,
+                output,
+                ..
+            } = event(details)
+            else {
+                panic!("expected a tool update");
+            };
+            assert_eq!(
+                (result_details, output),
+                (None, Some(serde_json::json!("Created.")))
+            );
+        }
+    }
 
     #[tokio::test]
     async fn transport_lookup_error_does_not_signal_disconnect() {

@@ -10851,6 +10851,10 @@
           "progress_message": {
             "type": "string"
           },
+          "result_details": {
+            "$ref": "#/components/schemas/ToolResultDetails",
+            "description": "The stored part's `result_details`; set on the terminal update only."
+          },
           "status": {
             "$ref": "#/components/schemas/ToolCallStatus"
           },
@@ -13591,6 +13595,46 @@
           }
         }
       },
+      "ToolResultDetails": {
+        "type": "object",
+        "description": "What a tool row keeps of an MCP result besides `output`: at most ten of its\nlinks. Its structured content and embedded resources are not kept.",
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolResultLink"
+            }
+          }
+        }
+      },
+      "ToolResultLink": {
+        "type": "object",
+        "description": "A resource link from the result. Only `https` links with a host, without\nuser info and at most 512 bytes long are kept; the name and title are\ndisplay-cleaned and capped like a tool title.",
+        "required": [
+          "uri",
+          "host",
+          "matches_server_host"
+        ],
+        "properties": {
+          "host": {
+            "type": "string",
+            "description": "The link's host as the URL parser reads it: lowercase, and punycode for\na non-ASCII name, so a lookalike host reads as `xn--…`."
+          },
+          "matches_server_host": {
+            "type": "boolean",
+            "description": "Whether `host` is the host of the MCP server's configured URL, ignoring\ncase and port. Never true for a server without a URL."
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        }
+      },
       "ToolUse": {
         "type": "object",
         "properties": {
@@ -13644,6 +13688,15 @@
             "type": [
               "string",
               "null"
+            ],
+            "default": null
+          },
+          "result_details": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolResultDetails",
+                "description": "The links of an MCP result. For the UI only: replay drops it, so the\nmodel never sees it."
+              }
             ],
             "default": null
           },

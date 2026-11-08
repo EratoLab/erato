@@ -2967,6 +2967,7 @@ export type MessageSubmitStreamingResponseToolCallUpdate = {
    */
   progress?: number;
   progress_message?: string;
+  result_details?: ToolResultDetails;
   status: ToolCallStatus;
   tool_call_id: string;
   tool_name: string;
@@ -4589,6 +4590,35 @@ export type ToolDisplayMetadata = {
   title: string;
 };
 
+/**
+ * What a tool row keeps of an MCP result besides `output`: at most ten of its
+ * links. Its structured content and embedded resources are not kept.
+ */
+export type ToolResultDetails = {
+  links?: ToolResultLink[];
+};
+
+/**
+ * A resource link from the result. Only `https` links with a host, without
+ * user info and at most 512 bytes long are kept; the name and title are
+ * display-cleaned and capped like a tool title.
+ */
+export type ToolResultLink = {
+  /**
+   * The link's host as the URL parser reads it: lowercase, and punycode for
+   * a non-ASCII name, so a lookalike host reads as `xn--…`.
+   */
+  host: string;
+  /**
+   * Whether `host` is the host of the MCP server's configured URL, ignoring
+   * case and port. Never true for a server without a URL.
+   */
+  matches_server_host: boolean;
+  name?: string;
+  title?: string;
+  uri: string;
+};
+
 export type ToolUse = {
   /**
    * @default null
@@ -4615,6 +4645,10 @@ export type ToolUse = {
    * @default null
    */
   progress_message?: string | null | undefined;
+  /**
+   * @default null
+   */
+  result_details?: ToolResultDetails;
   /**
    * @default null
    */

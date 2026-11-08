@@ -1,8 +1,11 @@
 use crate::models::message::{
     ContentPart, ContentPartImageFilePointer, ContentPartTextFilePointer, GenerationErrorType,
+    ToolResultDetails, ToolResultLink,
 };
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
+use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
+use crate::services::prompt_composition::replay_policy::MAX_RECEIPT_FIELD_BYTES;
 use crate::state::AppState;
 use eyre::{Report, WrapErr, eyre};
 use genai::chat::{ToolCall, ToolResponse};
@@ -37,7 +40,14 @@ pub struct McpToolPostProcessResult {
     pub tool_response: ToolResponse,
     pub output_value: Option<JsonValue>,
     pub file_content_parts: Vec<ContentPart>,
+    pub result_details: Option<ToolResultDetails>,
 }
+
+/// Links kept per result.
+const MAX_RESULT_LINKS: usize = 10;
+/// Link blocks read per result, kept or not, so thousands of them cost a
+/// bounded number of URL parses.
+const MAX_RESULT_LINK_CANDIDATES: usize = 100;
 
 fn json_pointer_escape(segment: &str) -> String {
     segment.replace('~', "~0").replace('/', "~1")
@@ -487,6 +497,68 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+/// The result's `https` links, bounded. Structured content and embedded
+/// resources are not kept: nothing reads them, and a shared chat would hand
+/// them to its viewers.
+fn mcp_result_details(
+    content: &[rmcp::model::ContentBlock],
+    server_url: Option<&str>,
+) -> Option<ToolResultDetails> {
+    let server_host = server_url.and_then(url_host);
+    let links: Vec<_> = content
+        .iter()
+        .filter_map(|block| match block {
+            rmcp::model::ContentBlock::ResourceLink(resource) => Some(resource),
+            _ => None,
+        })
+        .take(MAX_RESULT_LINK_CANDIDATES)
+        .filter_map(|resource| https_link(resource, server_host.as_deref()))
+        .take(MAX_RESULT_LINKS)
+        .collect();
+    (!links.is_empty()).then_some(ToolResultDetails { links })
+}
+
+fn https_link(
+    resource: &rmcp::model::Resource,
+    server_host: Option<&str>,
+) -> Option<ToolResultLink> {
+    // Before parsing, so a URI of any length costs nothing to drop.
+    if resource.uri.len() > MAX_RECEIPT_FIELD_BYTES {
+        return None;
+    }
+    let url = url::Url::parse(&resource.uri).ok()?;
+    let host = url.host_str().filter(|host| !host.is_empty())?.to_owned();
+    // Userinfo lets `https://trusted.example@other.example/` read as the
+    // wrong host, and would store any credentials in it.
+    let kept = url.scheme() == "https"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.as_str().len() <= MAX_RECEIPT_FIELD_BYTES;
+    if !kept {
+        return None;
+    }
+    Some(ToolResultLink {
+        matches_server_host: server_host.is_some_and(|server| server.eq_ignore_ascii_case(&host)),
+        host,
+        uri: url.into(),
+        name: display_name(Some(&resource.name)),
+        title: display_name(resource.title.as_deref()),
+    })
+}
+
+fn url_host(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()?
+        .host_str()
+        .filter(|host| !host.is_empty())
+        .map(str::to_owned)
+}
+
+fn display_name(text: Option<&str>) -> Option<String> {
+    text.map(|text| sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS).text)
+        .filter(|text| !text.is_empty())
+}
+
 fn mcp_tool_output_value(
     tool_call_result: &rmcp::model::CallToolResult,
     tool_response_content: &str,
@@ -581,6 +653,9 @@ pub fn parse_content_filter_error_from_mcp_tool_result(
     None
 }
 
+/// `server_url` is the MCP server's configured URL, if it has one; a result
+/// link on its host is marked as the server's own.
+#[allow(clippy::too_many_arguments)]
 pub async fn post_process_mcp_tool_result(
     app_state: &AppState,
     policy: &PolicyEngine,
@@ -589,6 +664,7 @@ pub async fn post_process_mcp_tool_result(
     unfinished_tool_call: &ToolCall,
     output_schema: Option<&std::sync::Arc<rmcp::model::JsonObject>>,
     tool_call_result: &rmcp::model::CallToolResult,
+    server_url: Option<&str>,
 ) -> Result<McpToolPostProcessResult, Report> {
     let mut tool_response_content = mcp_result_to_text(tool_call_result);
     let mut output_value = serde_json::from_str(&tool_response_content)
@@ -616,6 +692,7 @@ pub async fn post_process_mcp_tool_result(
         }
     }
 
+    let result_details = mcp_result_details(&tool_call_result.content, server_url);
     Ok(McpToolPostProcessResult {
         tool_response: ToolResponse {
             fn_name: Some(unfinished_tool_call.fn_name.clone()),
@@ -624,6 +701,7 @@ pub async fn post_process_mcp_tool_result(
         },
         output_value,
         file_content_parts,
+        result_details,
     })
 }
 
@@ -747,36 +825,354 @@ mod tests {
                 "timed_out": false,
                 "output_truncated": false
             }),
+            json!({ "success": true, "stdout": "x".repeat(64 * 1024) }),
         ] {
             for is_error in [false, true] {
-                for structured in [false, true] {
-                    let mut result = if structured {
-                        CallToolResult::structured(original.clone())
-                    } else {
-                        CallToolResult::success(vec![ContentBlock::text(original.to_string())])
-                    };
-                    result.is_error = Some(is_error);
-                    let processed = post_process_mcp_tool_result(
-                        &app_state,
-                        &policy,
-                        &subject,
-                        Uuid::new_v4(),
-                        &tool_call,
-                        Some(&schema),
-                        &result,
-                    )
-                    .await
-                    .expect("omitted optional files are valid");
-                    assert!(processed.file_content_parts.is_empty());
-                    assert_eq!(processed.output_value, Some(original.clone()));
-                    assert_eq!(processed.tool_response.call_id, tool_call.call_id);
-                    let output: Value =
-                        serde_json::from_str(&processed.tool_response.content).unwrap();
-                    assert_eq!(output, original);
-                    assert!(output.get("files").is_none());
+                for (structured, text) in [(false, true), (true, true), (true, false)] {
+                    for beside_text in [false, true] {
+                        let mut result = if structured {
+                            CallToolResult::structured(original.clone())
+                        } else {
+                            CallToolResult::success(vec![ContentBlock::text(original.to_string())])
+                        };
+                        if !text {
+                            result.content.clear();
+                        }
+                        if beside_text {
+                            result.content.extend(blocks_beside_text());
+                        }
+                        result.is_error = Some(is_error);
+                        let processed = post_process_mcp_tool_result(
+                            &app_state,
+                            &policy,
+                            &subject,
+                            Uuid::new_v4(),
+                            &tool_call,
+                            Some(&schema),
+                            &result,
+                            Some(SERVER_URL),
+                        )
+                        .await
+                        .expect("omitted optional files are valid");
+                        assert!(processed.file_content_parts.is_empty());
+                        assert_eq!(processed.output_value, Some(original.clone()));
+                        assert_eq!(processed.tool_response.call_id, tool_call.call_id);
+                        let output: Value =
+                            serde_json::from_str(&processed.tool_response.content).unwrap();
+                        assert_eq!(output, original);
+                        assert!(output.get("files").is_none());
+                        assert_eq!(
+                            processed.result_details,
+                            beside_text.then(details_beside_text)
+                        );
+                    }
                 }
             }
         }
+    }
+
+    const SERVER_URL: &str = "https://Records.Example.Test:8443/mcp";
+
+    fn blocks_beside_text() -> Vec<ContentBlock> {
+        serde_json::from_value(json!([
+            {"type": "resource_link", "uri": "https://records.example.test/rows/1", "name": "row-1",
+             "title": "Synthetic\u{202E} row", "mimeType": "text/html"},
+            {"type": "resource", "resource": {"uri": "records://rows/1",
+             "mimeType": "application/json", "text": "{\"title\":\"SYNTHETIC-RESOURCE\"}"}},
+            {"type": "resource", "resource": {"uri": "records://rows/1/chart",
+             "mimeType": "image/png", "blob": "iVBORw0KGgo="}},
+            {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"},
+        ]))
+        .unwrap()
+    }
+
+    fn details_beside_text() -> ToolResultDetails {
+        ToolResultDetails {
+            links: vec![ToolResultLink {
+                uri: "https://records.example.test/rows/1".into(),
+                host: "records.example.test".into(),
+                matches_server_host: true,
+                name: Some("row-1".into()),
+                title: Some("Synthetic row".into()),
+            }],
+        }
+    }
+
+    async fn details_of(
+        result: Value,
+        server_url: Option<&str>,
+    ) -> (McpToolPostProcessResult, Option<Value>) {
+        let result: CallToolResult = serde_json::from_value(result).unwrap();
+        let tool_call = ToolCall {
+            call_id: "create-call".into(),
+            fn_name: "create_row".into(),
+            fn_arguments: json!({}),
+            thought_signatures: None,
+        };
+        let processed = post_process_mcp_tool_result(
+            &app_state_without_storage(),
+            &PolicyEngine::new(),
+            &Subject::User(Uuid::new_v4().to_string()),
+            Uuid::new_v4(),
+            &tool_call,
+            None,
+            &result,
+            server_url,
+        )
+        .await
+        .unwrap();
+        let details = processed
+            .result_details
+            .as_ref()
+            .map(|details| serde_json::to_value(details).unwrap());
+        (processed, details)
+    }
+
+    fn link(uri: impl Into<String>, name: impl Into<String>) -> Value {
+        json!({"type": "resource_link", "uri": uri.into(), "name": name.into()})
+    }
+
+    #[tokio::test]
+    async fn only_the_links_of_a_result_are_kept_beside_its_output() {
+        let row = json!({"id": "row-1", "title": "SYNTHETIC-STRUCTURED"});
+        let mut content = vec![json!({"type": "text", "text": "Created row row-1."})];
+        content.extend(
+            serde_json::to_value(blocks_beside_text())
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .clone(),
+        );
+        let (processed, details) = details_of(
+            json!({"content": content, "structuredContent": row}),
+            Some(SERVER_URL),
+        )
+        .await;
+        assert_eq!(processed.output_value, Some(json!("Created row row-1.")));
+        assert_eq!(processed.tool_response.content, "Created row row-1.");
+        assert_eq!(
+            details,
+            Some(serde_json::to_value(details_beside_text()).unwrap())
+        );
+        let stored = details.unwrap().to_string();
+        for left_out in [
+            "SYNTHETIC-STRUCTURED",
+            "SYNTHETIC-RESOURCE",
+            "records://",
+            "iVBOR",
+            "mime",
+        ] {
+            assert!(!stored.contains(left_out), "{left_out} was kept: {stored}");
+        }
+
+        for result in [
+            json!({"content": [], "structuredContent": row}),
+            json!({"content": [{"type": "text", "text": row.to_string()}], "structuredContent": row}),
+            json!({"content": [{"type": "text", "text": "Done."}]}),
+        ] {
+            let (_, details) = details_of(result.clone(), Some(SERVER_URL)).await;
+            assert_eq!(details, None, "{result}");
+        }
+    }
+
+    #[tokio::test]
+    async fn only_https_links_with_a_host_and_no_user_info_are_kept() {
+        let long_path = "a".repeat(MAX_RECEIPT_FIELD_BYTES);
+        let (processed, details) = details_of(
+            json!({"content": [
+                {"type": "text", "text": "Done."},
+                link("http://records.example.test/rows/1", "plain"),
+                link("javascript:alert(1)", "script"),
+                link("JavaScript://records.example.test/%0Aalert(1)", "script host"),
+                link("https://records.example.test@other.example.test/rows/1", "lookalike"),
+                link("https://user:token@records.example.test/rows/1", "credentials"),
+                link("ui://records/view", "app"),
+                link("data:text/html,<p>x</p>", "data"),
+                link(format!("https://records.example.test/{long_path}"), "long"),
+                link("https://", "empty"),
+                link("https:", "no host"),
+                link("https://[::1", "malformed"),
+                link("https://exa mple.test/", "space"),
+                link("https://records.example.test:99999/", "port"),
+                link("//records.example.test/rows/1", "relative"),
+                link("", "blank"),
+                link("HTTPS://Records.Example.Test/rows/2", "\u{2066}row-2\u{2069}"),
+                link("https://records.example.test/rows/\u{202E}3", "row-3"),
+                link("https://records.example.test/rows/\n4", "\u{0}\u{7}\u{202E}"),
+            ]}),
+            None,
+        )
+        .await;
+        assert_eq!(processed.output_value, Some(json!("Done.")));
+        assert_eq!(processed.tool_response.content, "Done.");
+        let host = "records.example.test";
+        assert_eq!(
+            details,
+            Some(json!({"links": [
+                {"uri": "https://records.example.test/rows/2", "host": host,
+                 "matches_server_host": false, "name": "row-2"},
+                {"uri": "https://records.example.test/rows/%E2%80%AE3", "host": host,
+                 "matches_server_host": false, "name": "row-3"},
+                {"uri": "https://records.example.test/rows/4", "host": host,
+                 "matches_server_host": false},
+            ]}))
+        );
+    }
+
+    #[test]
+    fn a_link_matches_the_server_host_by_host_alone_ignoring_case() {
+        let content: Vec<ContentBlock> = serde_json::from_value(json!([
+            link("https://records.example.test/rows/1", "same"),
+            link(
+                "https://RECORDS.example.test:8443/rows/2",
+                "same, other port"
+            ),
+            link("https://api.records.example.test/rows/3", "subdomain"),
+            link("https://records.example.test.other.test/rows/4", "suffix"),
+            link("https://r\u{0435}cords.example.test/rows/5", "lookalike"),
+        ]))
+        .unwrap();
+        let matches = |server_url: Option<&str>| {
+            mcp_result_details(&content, server_url)
+                .unwrap()
+                .links
+                .iter()
+                .map(|link| link.matches_server_host)
+                .collect::<Vec<_>>()
+        };
+        for server_url in [SERVER_URL, "http://records.example.test:8080/sse"] {
+            assert_eq!(
+                matches(Some(server_url)),
+                [true, true, false, false, false],
+                "{server_url}"
+            );
+        }
+        for server_url in [
+            None,
+            Some(""),
+            Some("not a url"),
+            Some("records.example.test/mcp"),
+            Some("file:///records.example.test"),
+            Some("mailto:ops@records.example.test"),
+        ] {
+            assert_eq!(matches(server_url), [false; 5], "{server_url:?}");
+        }
+
+        let links = mcp_result_details(&content, None).unwrap().links;
+        let lookalike = &links[4].host;
+        assert!(
+            lookalike.starts_with("xn--") && lookalike.is_ascii(),
+            "{lookalike}"
+        );
+        assert_eq!(links[1].host, "records.example.test");
+
+        let content: Vec<ContentBlock> = serde_json::from_value(json!([
+            link("https://127.0.0.1/rows/1", "loopback"),
+            link("https://127.0.0.2/rows/1", "other address"),
+            link("https://B\u{00DC}CHER.example/rows/1", "idn"),
+        ]))
+        .unwrap();
+        let links = |server_url| {
+            mcp_result_details(&content, Some(server_url))
+                .unwrap()
+                .links
+        };
+        let by_address = links("http://127.0.0.1:44321/mcp");
+        assert_eq!(
+            by_address
+                .iter()
+                .map(|link| link.matches_server_host)
+                .collect::<Vec<_>>(),
+            [true, false, false]
+        );
+        let by_name = links("https://b\u{00FC}cher.example/mcp");
+        assert_eq!(by_name[2].host, "xn--bcher-kva.example");
+        assert!(by_name[2].matches_server_host);
+    }
+
+    #[tokio::test]
+    async fn hostile_results_keep_their_output_and_at_most_bounded_links() {
+        let nested: Value =
+            serde_json::from_str(&format!("{}{}", "[".repeat(120), "]".repeat(120))).unwrap();
+        for structured in [
+            json!(true),
+            json!(1.5),
+            json!("not an object"),
+            json!([]),
+            json!({}),
+            json!({"a/b": 1, "~0": 2, "~1/": 3, "\u{202E}": 4, "\u{0}\u{7}": 5, "": 6}),
+            nested,
+            json!({"body": "x".repeat(2 * 1024 * 1024)}),
+        ] {
+            let (processed, details) = details_of(
+                json!({"content": [{"type": "text", "text": "not json {"}],
+                       "structuredContent": structured}),
+                Some(SERVER_URL),
+            )
+            .await;
+            assert_eq!(processed.output_value, Some(json!("not json {")));
+            assert_eq!(processed.tool_response.content, "not json {");
+            assert_eq!(details, None);
+        }
+
+        let many: Vec<Value> = (0..5_000)
+            .map(|i| {
+                link(
+                    format!("https://records.example.test/rows/{i}"),
+                    format!("row-{i}"),
+                )
+            })
+            .collect();
+        let (_, details) = details_of(json!({"content": many}), Some(SERVER_URL)).await;
+        let links = details.unwrap()["links"].as_array().unwrap().clone();
+        assert_eq!(links.len(), MAX_RESULT_LINKS);
+        assert_eq!(links[0]["uri"], "https://records.example.test/rows/0");
+
+        for skipped in [
+            MAX_RESULT_LINK_CANDIDATES - 1,
+            MAX_RESULT_LINK_CANDIDATES,
+            5_000,
+        ] {
+            let mut content: Vec<Value> = (0..skipped)
+                .map(|i| link(format!("http://records.example.test/rows/{i}"), "plain"))
+                .collect();
+            content.push(link("https://records.example.test/rows/last", "last"));
+            let (_, details) = details_of(json!({"content": content}), None).await;
+            assert_eq!(
+                details.is_some(),
+                skipped < MAX_RESULT_LINK_CANDIDATES,
+                "{skipped} links before"
+            );
+        }
+
+        let huge = "x".repeat(1024 * 1024);
+        let full: Vec<Value> = (0..MAX_RESULT_LINKS + 1)
+            .flat_map(|i| {
+                [
+                    link(format!("https://records.example.test/{huge}"), "huge"),
+                    json!({"type": "resource_link",
+                           "uri": format!("https://records.example.test/{i}/{}", "a".repeat(MAX_RECEIPT_FIELD_BYTES - 40)),
+                           "name": huge, "title": "\u{1F600}".repeat(MAX_DISPLAY_NAME_CHARS * 2)}),
+                ]
+            })
+            .collect();
+        let (_, details) = details_of(json!({"content": full}), Some(SERVER_URL)).await;
+        let details = details.unwrap();
+        let links = details["links"].as_array().unwrap();
+        assert_eq!(links.len(), MAX_RESULT_LINKS);
+        for link in links {
+            assert!(link["uri"].as_str().unwrap().len() <= MAX_RECEIPT_FIELD_BYTES);
+            assert_eq!(
+                link["name"].as_str().unwrap().chars().count(),
+                MAX_DISPLAY_NAME_CHARS
+            );
+            assert_eq!(
+                link["title"].as_str().unwrap().chars().count(),
+                MAX_DISPLAY_NAME_CHARS
+            );
+        }
+        let per_link = 2 * MAX_RECEIPT_FIELD_BYTES + 2 * 4 * MAX_DISPLAY_NAME_CHARS + 128;
+        assert!(details.to_string().len() <= MAX_RESULT_LINKS * per_link);
     }
 
     #[test]
@@ -884,6 +1280,7 @@ mod tests {
                 &tool_call,
                 Some(&schema),
                 &result,
+                None,
             )
             .await
             .err()
