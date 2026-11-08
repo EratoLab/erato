@@ -19,8 +19,16 @@
 //! per key. Everything that asks for the item's open occurrence sees the
 //! re-delivery too, and the producer leaves the item alone until it settles.
 
+mod checks;
 pub mod recurrence;
 pub mod wording;
+
+pub use checks::{
+    Checked, DeliveryChannelStatus, ItemRequest, MAX_MESSAGE_CHARS, MAX_NAME_CHARS, Refused,
+    ScheduledItemErrorCode, ScheduledItemType, TimeZoneSource, cancel_checked, checked_input,
+    create_checked, default_zone, entry_zone, teams_channel_available, teams_status,
+    update_checked,
+};
 
 use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
@@ -49,7 +57,7 @@ use std::collections::HashMap;
 use utoipa::ToSchema;
 
 pub const REMINDER: &str = "reminder";
-/// Upcoming items a user may have, as for the reminder tool.
+/// Upcoming items a user may have, on the page and through the chat tools.
 pub const MAX_ACTIVE_ITEMS: u64 = 10;
 /// Items one `produce` pass advances; the rest wait for the next tick.
 const PRODUCE_BATCH: i64 = 200;
