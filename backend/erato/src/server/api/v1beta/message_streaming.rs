@@ -7410,16 +7410,18 @@ async fn stream_generate_chat_completion<'a>(
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
-            let mcp_row_display = available_mcp_tools_by_name
+            // Built once per call: the in-progress update, a budget refusal and
+            // the MCP dispatch below all show this one.
+            let mcp_display = available_mcp_tools_by_name
                 .get(unfinished_tool_call.fn_name.as_str())
                 .map(|managed| {
-                    tool_row_display(&crate::services::tool_display::mcp_tool_call_display(
+                    crate::services::tool_display::mcp_tool_call_display(
                         &mcp.config,
                         &managed.server_id,
                         &managed.tool,
                         &unfinished_tool_call.fn_arguments,
                         managed.approval_argument.as_deref(),
-                    ))
+                    )
                 });
             // Emit event for tool call proposed
             {
@@ -7432,7 +7434,7 @@ async fn stream_generate_chat_completion<'a>(
                         assistant_message_id,
                         tool_index,
                         &unfinished_tool_call,
-                        mcp_row_display.clone(),
+                        mcp_display.as_ref().map(tool_row_display),
                         ToolCallStatus::InProgress,
                         None,
                         streaming_task,
@@ -7499,7 +7501,7 @@ async fn stream_generate_chat_completion<'a>(
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         status: MessageToolCallStatus::Error,
                         tool_name: unfinished_tool_call.fn_name.clone(),
-                        display: mcp_row_display,
+                        display: mcp_display.as_ref().map(tool_row_display),
                         input: Some(unfinished_tool_call.fn_arguments.clone()),
                         progress_message: None,
                         progress: None,
@@ -9065,11 +9067,12 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
 
-            let managed_tool = match available_mcp_tools_by_name
-                .get(unfinished_tool_call.fn_name.as_str())
-            {
-                Some(managed_tool) => managed_tool.clone(),
-                None => {
+            let (managed_tool, display) = match (
+                available_mcp_tools_by_name.get(unfinished_tool_call.fn_name.as_str()),
+                mcp_display,
+            ) {
+                (Some(managed_tool), Some(display)) => (managed_tool.clone(), display),
+                _ => {
                     tool_call_started_at.remove(&unfinished_tool_call.call_id);
                     let error = eyre!(
                         "Failed to resolve MCP tool call '{}': tool was not in the prepared MCP tool set",
@@ -9091,13 +9094,6 @@ async fn stream_generate_chat_completion<'a>(
                     }
                 }),
             };
-            let display = crate::services::tool_display::mcp_tool_call_display(
-                &mcp.config,
-                &managed_tool_call.server_id,
-                &managed_tool_call.tool,
-                &managed_tool_call.tool_call.fn_arguments,
-                managed_tool.approval_argument.as_deref(),
-            );
             let row_display = tool_row_display(&display);
 
             // MCP approval is a durable stop, not an in-memory park. Persist
