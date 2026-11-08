@@ -16,6 +16,7 @@ let mockedCollapsedMode = "hidden";
 let mockedLogoPath: string | null = null;
 let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
+let mockedScheduledEnabled = false;
 const mockUseChatDetail = vi.fn();
 
 vi.mock("@/components/providers/ThemeProvider", () => ({
@@ -51,6 +52,7 @@ vi.mock("@/providers/FeatureConfigProvider", () => ({
     showRecentItems: false,
     showRecentItemsCollapsible: false,
   }),
+  useScheduledFeature: () => ({ enabled: mockedScheduledEnabled }),
   useSidebarFeature: () => ({
     collapsedMode: mockedCollapsedMode,
     logoPath: mockedLogoPath,
@@ -173,6 +175,7 @@ describe("ChatHistorySidebar", () => {
     mockedLogoPath = null;
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
+    mockedScheduledEnabled = false;
     mockUseChatDetail.mockReset();
     mockUseChatDetail.mockReturnValue({ data: undefined });
     localStorage.clear();
@@ -706,6 +709,66 @@ describe("ChatHistorySidebar", () => {
       "sidebar-row-selected",
     );
     expect(assistantsItem?.closest("a")).toBeNull();
+  });
+
+  const renderSidebarAt = async (path: string) => {
+    const { i18n } = await import("@lingui/core");
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <I18nProvider i18n={i18n}>
+          <ChatHistorySidebar
+            sessions={sessions}
+            currentSessionId="chat-1"
+            onSessionSelect={vi.fn()}
+            onSessionArchive={vi.fn()}
+            onSessionUnarchive={vi.fn()}
+            isLoading={false}
+          />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  };
+
+  it("hides the Scheduled entry while its flag is off", async () => {
+    mockedScheduledEnabled = false;
+    const { container } = await renderSidebarAt("/chat/new");
+
+    expect(
+      container.querySelector('[data-ui="sidebar-scheduled-item"]'),
+    ).toBeNull();
+    expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
+  });
+
+  it("links the Scheduled entry after Assistants when its flag is on", async () => {
+    mockedScheduledEnabled = true;
+    mockedAssistantsEnabled = true;
+    const { container } = await renderSidebarAt("/chat/new");
+
+    const scheduledItem = container.querySelector(
+      '[data-ui="sidebar-scheduled-item"]',
+    );
+    const assistantsItem = container.querySelector(
+      '[data-ui="sidebar-assistants-item"]',
+    );
+
+    expect(scheduledItem?.closest("a")).toHaveAttribute("href", "/scheduled");
+    expect(scheduledItem).toHaveTextContent("Scheduled");
+    expect(
+      assistantsItem!.compareDocumentPosition(scheduledItem!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("marks the Scheduled entry active on its page", async () => {
+    mockedScheduledEnabled = true;
+    const { container } = await renderSidebarAt("/scheduled");
+
+    const scheduledItem = container.querySelector(
+      '[data-ui="sidebar-scheduled-item"]',
+    );
+
+    expect(scheduledItem).toHaveClass("sidebar-row-selected");
+    expect(scheduledItem?.closest("a")).toBeNull();
   });
 
   it("hosts the filter menu in the first group header in grouped mode", async () => {

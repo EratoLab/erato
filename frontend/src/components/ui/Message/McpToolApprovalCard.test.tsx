@@ -2874,7 +2874,7 @@ describe("gist cards", () => {
     );
   });
 
-  it("shows an ID no earlier result named as a short ID, apart from text as written", () => {
+  it("shows an ID no earlier result named whole, apart from text as written", () => {
     renderCard(
       <McpToolApprovalCard
         messageId="message-1"
@@ -2905,9 +2905,173 @@ describe("gist cards", () => {
     const id = screen
       .getByTestId("tool-call-gist-line")
       .querySelector('[data-origin="id"]');
-    expect(id).toHaveTextContent("9b1d5f2e…");
-    expect(id).toHaveAttribute("title", DATA_SOURCE_ID);
+    expect(id?.textContent).toBe(DATA_SOURCE_ID);
+    expect(id).not.toHaveAttribute("title");
     expect(id).toHaveClass("font-mono");
+  });
+
+  describe("IDs that start alike", () => {
+    const FIRST = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
+    const SECOND = "9b1d5f2e-77d0-4e19-9c3b-5f6a7b8c9d0e";
+    const deleteRows = (resolved?: string) => {
+      const input = { ids: [FIRST, SECOND] };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "delete_rows",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "delete",
+                object_kind: "row",
+                source: "rules",
+                arguments: viewOf(input),
+                items: [
+                  {
+                    id: {
+                      pointer: "/ids/*",
+                      values: [FIRST, SECOND].map((text, index) => ({
+                        path: `/ids/${index}`,
+                        text,
+                        resolved,
+                      })),
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+    };
+    const rowTexts = () =>
+      Array.from(
+        screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+        (row) => row.textContent,
+      );
+
+    it("shows each ID of a batch whole, so the rows differ", () => {
+      deleteRows();
+
+      expect(rowTexts()).toEqual([FIRST, SECOND]);
+      expect(
+        screen.queryByTestId("tool-call-other-arguments"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("puts each whole ID beside the one name both resolved to", () => {
+      deleteRows("Northwind");
+
+      expect(rowTexts()).toEqual([
+        `Northwind written as <${FIRST}>`,
+        `Northwind written as <${SECOND}>`,
+      ]);
+      for (const written of screen.getAllByTestId("tool-call-gist-written")) {
+        expect(written.querySelector(".font-mono")).not.toHaveAttribute(
+          "title",
+        );
+      }
+    });
+
+    it("shows a field's IDs whole", () => {
+      const input = {
+        recordId: "r1",
+        owner_id: FIRST,
+        reviewer_id: SECOND,
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "update_row",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "update",
+                object_kind: "row",
+                source: "rules",
+                arguments: viewOf(input),
+                items: [
+                  {
+                    id: {
+                      pointer: "/recordId",
+                      values: [
+                        { path: "/recordId", text: "r1", resolved: "Acme" },
+                      ],
+                    },
+                    fields: ["owner_id", "reviewer_id"].map((name) => ({
+                      pointer: `/${name}`,
+                      name,
+                      values: [
+                        {
+                          path: `/${name}`,
+                          text: input[name as "owner_id" | "reviewer_id"],
+                        },
+                      ],
+                    })),
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const ids = Array.from(
+        screen
+          .getByTestId("tool-call-gist-values")
+          .querySelectorAll('[data-origin="id"]'),
+        (id) => id.textContent,
+      );
+      expect(ids).toEqual([FIRST, SECOND]);
+    });
+
+    it("shows IDs whole on the generic card", () => {
+      const input = { source_id: FIRST, target_id: SECOND };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "link_records",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "other",
+                object_kind: "other",
+                source: "generic",
+                arguments: {
+                  path: "",
+                  kind: "group",
+                  children: [
+                    { path: "/source_id", kind: "id" },
+                    { path: "/target_id", kind: "id" },
+                  ],
+                },
+              },
+            },
+          }}
+        />,
+      );
+
+      const values = Array.from(
+        screen.getByTestId("tool-argument-view").querySelectorAll("dd"),
+        (value) => value.textContent,
+      );
+      expect(values).toEqual([FIRST, SECOND]);
+      expect(
+        screen.getByTestId("tool-argument-view").querySelector(".font-mono"),
+      ).not.toHaveAttribute("title");
+    });
   });
 
   it("lines a batch's fields up only under the names' own arrays, and lists the rest once", () => {
@@ -3648,16 +3812,17 @@ describe("gist cards", () => {
       );
     });
 
-    it("puts the short ID the call writes beside a name, with the whole ID on hover", () => {
+    it("puts the whole ID the call writes beside a name", () => {
       cardFor(createRowInput, createRowLabel);
 
       const line = screen.getByTestId("tool-call-gist-line");
-      expect(line).toHaveTextContent("in Companies written as <9b1d5f2e…>");
+      expect(line).toHaveTextContent(
+        `in Companies written as <${DATA_SOURCE_ID}>`,
+      );
       const id = within(line)
         .getByTestId("tool-call-gist-written")
         .querySelector(".font-mono");
-      expect(id).toHaveTextContent("9b1d5f2e…");
-      expect(id).toHaveAttribute("title", DATA_SOURCE_ID);
+      expect(id?.textContent).toBe(DATA_SOURCE_ID);
     });
 
     it("lists the whole value a name stands for when the label cut it", () => {
@@ -3762,6 +3927,59 @@ describe("gist cards", () => {
           screen.getByRole("button", { name: "Allow once" }),
         ) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+    });
+
+    it("shows emoji text as written without a warning", () => {
+      const input = { status: "Sunny \u2600\uFE0F", note: "I \u2764\uFE0F it" };
+      cardFor(input, genericLabel(input));
+
+      const view = screen.getByTestId("tool-argument-view");
+      expect(view).toHaveTextContent("Sunny \u2600\uFE0F");
+      expect(view).toHaveTextContent("I \u2764\uFE0F it");
+      expect(hiddenNote()).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [
+        "variation selectors after an emoji",
+        "Hi \u{1F600}\uFE01\u{E0110}",
+        "Hi \u{1F600}",
+      ],
+      ["a soft hyphen", "pay\u00ADpal", "paypal"],
+      ["a Hangul filler", "pay\u3164pal", "paypal"],
+    ])("warns about %s it removed", (_name, note, shown) => {
+      const input = { note };
+      cardFor(input, genericLabel(input));
+
+      expect(
+        screen.getByTestId("tool-argument-view").querySelector("dd")
+          ?.textContent,
+      ).toBe(shown);
+      expect(hiddenNote()).toBeInTheDocument();
+    });
+
+    it("warns about hidden characters in a field name it took from the call", () => {
+      const input = { ...emailInput, "prio\u200Brity": "high" };
+      cardFor(input, {
+        ...emailLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...emailLabel.items[0],
+            fields: [
+              {
+                pointer: "/prio\u200Brity",
+                values: [{ path: "/prio\u200Brity", text: "high" }],
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(screen.getByTestId("tool-call-gist-values")).toHaveTextContent(
+        "priority",
+      );
+      expect(hiddenNote()).toBeInTheDocument();
     });
   });
 

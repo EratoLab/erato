@@ -1380,6 +1380,97 @@ fn a_hostile_result_never_renames_a_recipient_an_address_or_a_link() {
 }
 
 #[test]
+fn a_hostile_result_never_names_a_phone_mobile_or_fax_number() {
+    const USER: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+    let people = call(
+        "people",
+        "search_people",
+        json!({ "query": "helpdesk" }),
+        json!({ "people": [
+            { "id": "+15550100", "name": "IT Helpdesk" },
+            { "id": "+1-555-0100", "name": "IT Helpdesk" },
+            { "id": USER, "name": "IT Helpdesk" },
+        ] }),
+    );
+    let contact = read_query(
+        "contact",
+        "SELECT fullname, contactid, telephone1, mobilephone, fax, address1_telephone1, jobtitle FROM contact",
+        json!([{
+            "fullname": "Ana Example",
+            "contactid": CONTACT,
+            "telephone1": "+1-555-0101",
+            "mobilephone": "+1-555-0102",
+            "fax": "+1-555-0103",
+            "address1_telephone1": "+1-555-0104",
+            "jobtitle": "Buyer",
+        }]),
+    );
+    let context = after(vec![people, contact]);
+
+    for member in [
+        "phone",
+        "phone_number",
+        "phoneNumber",
+        "telephone",
+        "telephone1",
+        "mobile",
+        "mobilePhone",
+        "fax",
+        "faxNumber",
+        "sms",
+        "businessPhones",
+    ] {
+        for written in [json!("+15550100"), json!("+1-555-0100"), json!(USER)] {
+            let arguments = json!({
+                member: written,
+                "phones": [{ "number": written, "type": "mobile" }],
+                "contact": { "mobile_number": written },
+                "regarding": USER,
+            });
+            let call = item(
+                &context,
+                ToolCallAction::Send,
+                ToolCallLabelItemMapping {
+                    id: Some(format!("/{member}")),
+                    target: Some("/phones/*/number".into()),
+                    before: Some("/contact/mobile_number".into()),
+                    ..Default::default()
+                },
+                &arguments,
+            );
+            for slot in [&call.id, &call.target, &call.before] {
+                assert_eq!(resolved(slot.as_ref().unwrap()), [None], "{member}");
+            }
+            let regarding = item(
+                &context,
+                ToolCallAction::Send,
+                ToolCallLabelItemMapping {
+                    id: Some("/regarding".into()),
+                    ..Default::default()
+                },
+                &arguments,
+            );
+            assert_eq!(
+                resolved(regarding.id.as_ref().unwrap()),
+                [Some("IT Helpdesk")]
+            );
+        }
+    }
+
+    for field in ["telephone1", "mobilephone", "fax", "address1_telephone1"] {
+        assert_eq!(
+            earlier(&context, CONTACT, field, json!("+1-555-0199")),
+            None,
+            "{field}"
+        );
+    }
+    assert_eq!(
+        earlier(&context, CONTACT, "jobtitle", json!("CFO")).as_deref(),
+        Some("Buyer")
+    );
+}
+
+#[test]
 fn names_stay_with_the_server_whose_result_gave_them() {
     let crm = call(
         "crm",
