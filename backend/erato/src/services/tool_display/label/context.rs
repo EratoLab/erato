@@ -8,7 +8,7 @@
 
 use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
 use super::pointer;
-use super::recipients::is_recipient_member;
+use super::recipients::{is_phone_shaped, is_recipient_member};
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
@@ -133,8 +133,9 @@ impl ToolResultContext {
     /// `target` and `before`, and on an update each field's earlier value,
     /// read from the one record the item's `id` names. Only results of
     /// `server`, the name the call's own tool rows carry, are used. A miss
-    /// stays `None`, and so does every value below a recipient member and
-    /// every value past [`MAX_RESOLVED_BYTES`] of resolved text.
+    /// stays `None`, and so does every value below a recipient member, every
+    /// ID shaped like a phone number and every value past
+    /// [`MAX_RESOLVED_BYTES`] of resolved text.
     pub fn resolve(&self, label: &mut ToolCallLabel, arguments: &Value, server: &str) {
         let update = label.action == ToolCallAction::Update;
         let mut budget = MAX_RESOLVED_BYTES;
@@ -471,8 +472,8 @@ fn result_server(tool: &ToolUse) -> Option<&str> {
 }
 
 /// IDs the index never holds. Digits: every table numbers its own records,
-/// so `7` could be anything. Addresses and links: a call writing one must
-/// show it as written, never as a name a result gave it.
+/// so `7` could be anything. Addresses, phone numbers and links: a call
+/// writing one must show it as written, never as a name a result gave it.
 fn indexable(id: &str) -> bool {
     const LINK_PREFIXES: [&str; 6] = ["mailto:", "tel:", "sms:", "data:", "javascript:", "www."];
     let link_prefix = |prefix: &&str| {
@@ -480,6 +481,7 @@ fn indexable(id: &str) -> bool {
             .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
     };
     !id.bytes().all(|byte| byte.is_ascii_digit())
+        && !is_phone_shaped(id)
         && !id.contains('@')
         && !id.contains("://")
         && !LINK_PREFIXES.iter().any(link_prefix)
