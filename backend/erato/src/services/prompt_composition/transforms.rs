@@ -804,7 +804,10 @@ pub(crate) fn replay_assistant_content(
                 tool_use.result_details = None;
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
-                    content: ContentPart::ToolUse(tool_use.clone()),
+                    content: ContentPart::ToolUse(crate::models::message::ToolUse {
+                        display: None,
+                        ..tool_use.clone()
+                    }),
                 });
                 input_messages.push(InputMessage {
                     role: MessageRole::Tool,
@@ -868,9 +871,32 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
 /// it inside an untrusted-data frame, and from this turn on it is this value,
 /// not the envelope, that becomes the tool response. Without the re-frame the
 /// containment would last exactly one turn.
+///
+/// The display is the UI's too, and a replay is stored with every generation:
+/// only the label's action and the server name stay, never the label's values
+/// or argument tree. The next turn's name index keys results by that server.
 fn strip_ui_only_tool_output(
     mut tool_use: crate::models::message::ToolUse,
 ) -> crate::models::message::ToolUse {
+    tool_use.display = tool_use
+        .display
+        .filter(|display| display.label.is_some() || display.server_name.is_some())
+        .map(|display| crate::models::message::ToolDisplayMetadata {
+            title: String::new(),
+            description: None,
+            description_truncated: false,
+            server_name: display.server_name,
+            label: display
+                .label
+                .map(|label| crate::models::message::ToolCallLabel {
+                    action: label.action,
+                    object_kind: Default::default(),
+                    items: Vec::new(),
+                    arguments: None,
+                    warnings: Vec::new(),
+                    source: Default::default(),
+                }),
+        });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
     if let Some(output) = tool_use.output.as_mut() {
         if let Some(object) = output.as_object_mut() {
