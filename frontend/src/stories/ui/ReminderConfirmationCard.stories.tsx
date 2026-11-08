@@ -128,6 +128,11 @@ export const WithoutScheduledPage: Story = {
   args: { showOpenScheduled: false },
 };
 
+/** A shared chat: what was stored, without the owner's status or actions. */
+export const SharedChat: Story = {
+  args: { status: undefined, readOnly: true },
+};
+
 const storedItem: ScheduledItem = {
   id: english.itemId,
   type: "reminder",

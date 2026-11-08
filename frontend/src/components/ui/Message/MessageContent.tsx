@@ -142,6 +142,11 @@ interface MessageContentProps {
   mentionedAssistants?: AssistantMention[];
   /** The delegated task result this reply answers, drawn above the reply. */
   taskResult?: ContentPartTaskResult;
+  /**
+   * A shared, read-only view: cards show what was stored, without the live
+   * state and actions that belong to the chat's owner.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -1285,6 +1290,7 @@ export const MessageContent = memo(function MessageContent({
   outlookArtifact,
   mentionedAssistants,
   taskResult,
+  readOnly = false,
 }: MessageContentProps) {
   // The deprecated prop is honored as a fallback for one release; every
   // artifact-driven path below reads this single resolved value.
@@ -1750,6 +1756,7 @@ export const MessageContent = memo(function MessageContent({
                   <ReminderConfirmationCard
                     key={`reminder-${confirmation.itemId}`}
                     confirmation={confirmation}
+                    readOnly={readOnly}
                   />
                 ) : null;
               })}

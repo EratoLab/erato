@@ -2520,6 +2520,26 @@ describe("reminders scheduled from the chat", () => {
     ).toBeTruthy();
   });
 
+  it("shows a shared chat's card without the owner's live state", () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        readOnly
+        content={[createReminder("success")]}
+      />,
+    );
+
+    expect(screen.getByTestId("reminder-confirmation")).toHaveTextContent(
+      "Follow up on the offer",
+    );
+    expect(
+      screen.queryByTestId("reminder-confirmation-cancel"),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("shows no card for a refused reminder", () => {
     renderWithQueryClient(
       <MessageContent

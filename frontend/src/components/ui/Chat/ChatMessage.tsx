@@ -239,6 +239,7 @@ export const useChatMessageRenderer = ({
       // "@Name" is quoting, not addressing, so it never highlights.
       mentionedAssistants: isUser ? message.mentioned_assistants : undefined,
       taskResult,
+      readOnly: !!controlsContext.isSharedDialog,
     },
     controlsProps: {
       messageId: message.id,

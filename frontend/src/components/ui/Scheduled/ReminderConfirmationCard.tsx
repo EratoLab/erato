@@ -18,12 +18,17 @@ export interface ReminderConfirmationCardViewProps {
   confirmation: ReminderConfirmation;
   /** What became of the reminder; unknown while it loads or cannot be read. */
   status?: ReminderConfirmationStatus;
-  onCancel: () => void;
+  onCancel?: () => void;
   isCancelling?: boolean;
   /** Why Cancel was refused. */
   cancelError?: string | null;
   /** Off where the app has no Scheduled page. */
   showOpenScheduled?: boolean;
+  /**
+   * A shared, read-only chat: only what was stored. The viewer may not be
+   * the reminder's owner, so its status and actions would be theirs.
+   */
+  readOnly?: boolean;
 }
 
 const OPEN_SCHEDULED_CLASS = controlSurfaceClassName({ variant: "secondary" });
@@ -74,23 +79,35 @@ export function ReminderConfirmationCardView({
   isCancelling = false,
   cancelError = null,
   showOpenScheduled = true,
+  readOnly = false,
 }: ReminderConfirmationCardViewProps) {
   const cardRef = useRef<HTMLElement | null>(null);
   const cancellable =
-    status === undefined || status === "scheduled" || status === "snoozed";
+    !readOnly &&
+    (status === undefined || status === "scheduled" || status === "snoozed");
+  const showOpen = showOpenScheduled && !readOnly;
 
   // Cancel unmounts once it worked; focus would otherwise drop to <body>.
-  const wasCancellable = useRef(cancellable);
+  // Only after a Cancel from this card: a reloaded chat whose reminder turns
+  // out to be over must not pull focus into its history.
+  const cancelStarted = useRef(false);
   useLayoutEffect(() => {
-    const card = cardRef.current;
-    if (wasCancellable.current && !cancellable && card) {
+    if (!cancelStarted.current) return;
+    if (!cancellable) {
+      cancelStarted.current = false;
       const active = document.activeElement;
       if (active === null || active === document.body) {
-        card.focus({ preventScroll: true });
+        cardRef.current?.focus({ preventScroll: true });
       }
+    } else if (!isCancelling) {
+      cancelStarted.current = false;
     }
-    wasCancellable.current = cancellable;
-  }, [cancellable]);
+  }, [cancellable, isCancelling]);
+
+  const startCancel = () => {
+    cancelStarted.current = true;
+    onCancel?.();
+  };
 
   const { heading, name } = confirmation;
 
@@ -142,20 +159,20 @@ export function ReminderConfirmationCardView({
           {cancelError}
         </p>
       )}
-      {(cancellable || showOpenScheduled) && (
+      {(cancellable || showOpen) && (
         <div className="flex flex-wrap gap-2">
           {cancellable && (
             <Button
               variant="secondary"
               size="sm"
-              onClick={isCancelling ? undefined : onCancel}
+              onClick={isCancelling ? undefined : startCancel}
               busy={isCancelling}
               data-testid="reminder-confirmation-cancel"
             >
               {confirmation.cancelLabel}
             </Button>
           )}
-          {showOpenScheduled && (
+          {showOpen && (
             <OpenScheduledLink path={confirmation.scheduledPath}>
               {confirmation.openScheduledLabel}
             </OpenScheduledLink>
@@ -166,8 +183,25 @@ export function ReminderConfirmationCardView({
   );
 }
 
-/** The card for one confirmation, with the reminder's live status and Cancel. */
+/**
+ * The card for one confirmation, with the reminder's live status and Cancel;
+ * in a read-only chat, only what was stored.
+ */
 export function ReminderConfirmationCard({
+  confirmation,
+  readOnly = false,
+}: {
+  confirmation: ReminderConfirmation;
+  readOnly?: boolean;
+}) {
+  return readOnly ? (
+    <ReminderConfirmationCardView confirmation={confirmation} readOnly />
+  ) : (
+    <LiveReminderConfirmationCard confirmation={confirmation} />
+  );
+}
+
+function LiveReminderConfirmationCard({
   confirmation,
 }: {
   confirmation: ReminderConfirmation;

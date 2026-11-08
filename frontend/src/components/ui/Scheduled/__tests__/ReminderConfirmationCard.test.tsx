@@ -60,8 +60,11 @@ const json = (body: unknown, status = 200) =>
 const renderCard = ({
   scheduledPage = true,
   router = true,
-}: { scheduledPage?: boolean; router?: boolean } = {}) => {
-  const card = <ReminderConfirmationCard confirmation={confirmation} />;
+  readOnly = false,
+}: { scheduledPage?: boolean; router?: boolean; readOnly?: boolean } = {}) => {
+  const card = (
+    <ReminderConfirmationCard confirmation={confirmation} readOnly={readOnly} />
+  );
   const withRouter = (ui: ReactNode) =>
     router ? (
       <MemoryRouter initialEntries={["/chat/chat-1"]}>
@@ -165,6 +168,7 @@ describe("ReminderConfirmationCard", () => {
     expect(
       screen.queryByRole("button", { name: "Cancel" }),
     ).not.toBeInTheDocument();
+    expect(card).toHaveFocus();
     expect(screen.getByTestId("reminder-confirmation-open")).toHaveTextContent(
       "Open in Scheduled",
     );
@@ -203,6 +207,7 @@ describe("ReminderConfirmationCard", () => {
     expect(
       screen.queryByRole("button", { name: "Cancel" }),
     ).not.toBeInTheDocument();
+    expect(card).not.toHaveFocus();
   });
 
   it("keeps Cancel on a snoozed reminder, which is still upcoming", async () => {
@@ -225,6 +230,24 @@ describe("ReminderConfirmationCard", () => {
     expect(
       screen.queryByRole("button", { name: "Cancel" }),
     ).not.toBeInTheDocument();
+    expect(screen.getByTestId("reminder-confirmation")).not.toHaveFocus();
+  });
+
+  it("shows only what was stored in a read-only chat, without looking it up", () => {
+    current = null;
+    renderCard({ readOnly: true });
+
+    const card = screen.getByTestId("reminder-confirmation");
+    expect(card).toHaveTextContent("Follow up on the offer");
+    expect(card).toHaveTextContent("Friday, 13 Nov, 10:00 (New York time)");
+    expect(card).not.toHaveAttribute("data-status");
+    expect(
+      screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("reminder-confirmation-open"),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("opens the Scheduled page inside the app", async () => {

@@ -704,6 +704,19 @@ describe("ChatMessage", () => {
       ).not.toBeInTheDocument();
     });
 
+    it("hands a shared chat's content over as read-only", async () => {
+      await renderAssistantMessage({}, { isSharedDialog: true });
+      expect(messageContentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ readOnly: true }),
+      );
+
+      messageContentMock.mockClear();
+      await renderAssistantMessage({});
+      expect(messageContentMock).toHaveBeenCalledWith(
+        expect.objectContaining({ readOnly: false }),
+      );
+    });
+
     it("keeps the notice but suppresses Connect where no Router is mounted", async () => {
       await renderAssistantMessage(
         { mcp_servers_needing_auth: ["github-server"] },
