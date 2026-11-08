@@ -417,6 +417,48 @@ mod tests {
     }
 
     #[test]
+    fn emoji_text_shows_without_a_warning_and_selector_runs_or_soft_hyphens_warn() {
+        let arguments = json!({
+            "pages": [{"properties": {"Name": "Launch \u{1F680} \u{2764}\u{FE0F}", "Stage": "Hot \u{2600}\u{FE0F}"}}],
+            "smuggled": "\u{1F600}\u{FE0F}\u{E0169}\u{E0167}\u{FE0E}",
+            "parent": "p1",
+            "Sta\u{00AD}ge": "Lead",
+        });
+        let mapping = |title: &str, fields: &[&str]| ToolCallLabelMapping {
+            items: vec![ToolCallLabelItemMapping {
+                title: Some(title.into()),
+                target: Some("/parent".into()),
+                fields: fields.iter().map(|field| field.to_string()).collect(),
+                ..Default::default()
+            }],
+            ..create_rows()
+        };
+
+        let emoji = resolve_label(
+            &mapping("/pages/*/properties/Name", &["/pages/*/properties/Stage"]),
+            &arguments,
+        )
+        .unwrap();
+        assert_eq!(
+            texts(emoji.items[0].title.as_ref().unwrap()),
+            ["Launch \u{1F680} \u{2764}\u{FE0F}"]
+        );
+        assert_eq!(texts(&emoji.items[0].fields[0]), ["Hot \u{2600}\u{FE0F}"]);
+        assert!(emoji.warnings.is_empty());
+
+        let smuggled = resolve_label(&mapping("/smuggled", &[]), &arguments).unwrap();
+        assert_eq!(
+            texts(smuggled.items[0].title.as_ref().unwrap()),
+            ["\u{1F600}\u{FE0F}"]
+        );
+        assert_eq!(smuggled.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+
+        let soft = resolve_label(&mapping("/parent", &["/Sta\u{00AD}ge"]), &arguments).unwrap();
+        assert_eq!(soft.items[0].fields[0].name.as_deref(), Some("Stage"));
+        assert_eq!(soft.warnings, [ToolCallLabelWarning::HiddenCharacters]);
+    }
+
+    #[test]
     fn one_core_pointer_that_reaches_nothing_drops_the_label() {
         let arguments = notion_batch();
         for part in ["title", "id", "target", "before", "after"] {
