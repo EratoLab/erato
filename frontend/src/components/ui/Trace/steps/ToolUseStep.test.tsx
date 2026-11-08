@@ -302,6 +302,22 @@ describe("ToolUseStep decision row", () => {
     expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 
+  it("shows no note for a reason from a newer version, and a call it ran as Failed", () => {
+    settled(
+      {
+        allowed_by: "other",
+        output: {
+          status: "rejected",
+          error: "record locked",
+        } as unknown as ToolUse["output"],
+      },
+      "error",
+    );
+
+    expect(decisionRow()).not.toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+  });
+
   it.each([
     [{ status: "approved", alwaysAllow: true }, "You chose “Always allow”"],
     [
@@ -383,9 +399,15 @@ describe("ToolUseStep decision row", () => {
   it.each(
     (Object.keys(STEP_STATUS) as (keyof typeof STEP_STATUS)[]).flatMap(
       (rowStatus) =>
-        [undefined, null, "policy", "always_allow", "later_reason", 7].map(
-          (allowedBy) => [rowStatus, allowedBy] as const,
-        ),
+        [
+          undefined,
+          null,
+          "policy",
+          "always_allow",
+          "other",
+          "later_reason",
+          7,
+        ].map((allowedBy) => [rowStatus, allowedBy] as const),
     ),
   )(
     "renders one call with at most one decision row for status %s and allowed_by %o",
