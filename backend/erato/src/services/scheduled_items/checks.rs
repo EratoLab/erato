@@ -13,9 +13,10 @@ use crate::state::AppState;
 use chrono_tz::Tz;
 use eyre::Report;
 use sea_orm::prelude::Uuid;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 
 pub const MAX_NAME_CHARS: usize = 200;
@@ -199,12 +200,34 @@ pub async fn teams_status(
     })
 }
 
-async fn owns_chat(app_state: &AppState, user_id: Uuid, chat_id: Uuid) -> Result<bool, Report> {
-    Ok(Chats::find_by_id(chat_id)
+/// The user's own chats among `ids`, the only ones an item may link to: a
+/// chat shared with the user is not theirs.
+pub async fn owned_chats(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    ids: Vec<Uuid>,
+) -> Result<HashMap<Uuid, chats::Model>, Report> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    Ok(Chats::find()
+        .filter(chats::Column::Id.is_in(ids))
         .filter(chats::Column::OwnerUserId.eq(user_id.to_string()))
-        .one(&app_state.db)
+        .all(db)
         .await?
-        .is_some())
+        .into_iter()
+        .map(|chat| (chat.id, chat))
+        .collect())
+}
+
+pub async fn owns_chat(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    chat_id: Uuid,
+) -> Result<bool, Report> {
+    Ok(owned_chats(db, user_id, vec![chat_id])
+        .await?
+        .contains_key(&chat_id))
 }
 
 /// Check a request and turn it into an item whose times are read in `zone`.
@@ -246,7 +269,7 @@ pub async fn checked_input(
         )));
     }
     if let Some(chat_id) = request.linked_chat_id
-        && !owns_chat(app_state, user_id, chat_id).await?
+        && !owns_chat(&app_state.db, user_id, chat_id).await?
     {
         return Ok(Err(Refused::new(
             Code::LinkedChatNotFound,

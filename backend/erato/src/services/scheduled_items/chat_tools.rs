@@ -7,14 +7,12 @@
 //! chat and the Teams bot both show as the confirmation card, so the user sees
 //! what was stored rather than the model's paraphrase of it.
 
-use super::recurrence::{Trigger, local_time};
+use super::recurrence::{Trigger, local_time, resolve_local};
 use super::wording;
 use super::{
-    DisplayStatus, ItemRequest, ItemView, MAX_ACTIVE_ITEMS, Refused, ScheduledItemErrorCode,
-    ScheduledItemType, cancel_checked, create_checked, entry_zone,
+    DisplayStatus, ItemRequest, ItemView, MAX_ACTIVE_ITEMS, Model, Refused, ScheduledItemErrorCode,
+    ScheduledItemType, cancel_checked, create_checked, entry_zone, owned_chats, owns_chat,
 };
-use crate::db::entity::chats;
-use crate::db::entity::prelude::Chats;
 use crate::models::chat::chat_title;
 use crate::models::user_preference::user_time_zone;
 use crate::ms_teams_bot::nudge::CHANNEL as TEAMS_CHANNEL;
@@ -25,7 +23,6 @@ use chrono_tz::Tz;
 use eyre::{Report, eyre};
 use genai::chat::{Tool, ToolName};
 use sea_orm::prelude::Uuid;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -243,12 +240,21 @@ impl TriggerArguments {
                     .ok_or_else(|| {
                         format!("`in` needs `minutes` between 1 and {MAX_IN_MINUTES}")
                     })?;
-                let at = local_time(zone, now + Duration::minutes(minutes));
+                let due = now + Duration::minutes(minutes);
+                let at = local_time(zone, due);
                 let at = if at.second() > 0 || at.nanosecond() > 0 {
                     at.trunc_subsecs(0).with_second(0).unwrap_or(at) + Duration::minutes(1)
                 } else {
                     at
                 };
+                // The stored local time keeps no offset, and one in the
+                // repeated autumn hour reads as its first instance: an hour
+                // early, or in the past. Such a time moves to the end of
+                // that hour, so `in` is never early.
+                let at = (0..=24 * 60)
+                    .map(|minute| at + Duration::minutes(minute))
+                    .find(|local| resolve_local(zone, *local) >= due)
+                    .unwrap_or(at);
                 json!({"kind": "once", "date": at.date(), "time": at.format("%H:%M").to_string()})
             }
             "once" => {
@@ -296,11 +302,9 @@ async fn create(
         }
     };
     // A chat shared with the user is not theirs to link.
-    let linked_chat_id = Chats::find_by_id(call.chat_id)
-        .filter(chats::Column::OwnerUserId.eq(call.user_id.to_string()))
-        .one(&app_state.db)
+    let linked_chat_id = owns_chat(&app_state.db, call.user_id, call.chat_id)
         .await?
-        .map(|chat| chat.id);
+        .then_some(call.chat_id);
     let request = ItemRequest {
         item_type: ScheduledItemType::Reminder,
         name: arguments.name,
@@ -327,21 +331,38 @@ async fn create(
         }
         Err(refused) => return Ok(CallResult::refused(refused)),
     };
-    let view = super::get(&app_state.db, call.user_id, item.id)
-        .await?
-        .ok_or_else(|| eyre!("the reminder just created is gone"))?;
-    let lang = stored_language(app_state, call.user_id).await?;
-    let user_zone = user_time_zone(&app_state.db, &call.user_id).await?;
-    let now = Utc::now();
-    let titles = chat_titles(app_state, call.user_id, &[&view]).await?;
+    // The reminder is stored and will arrive, so a failure from here on must
+    // not read as a failed create.
+    let output = match created_output(app_state, call.user_id, &item).await {
+        Ok(output) => output,
+        Err(error) => {
+            tracing::warn!(%error, item_id = %item.id, "A reminder was created but could not be described");
+            json!({"status": "created", "reminder": {"id": item.id, "name": item.name}})
+        }
+    };
     Ok(CallResult {
         succeeded: true,
-        output: json!({
-            "status": "created",
-            "reminder": summary(&view, &titles, user_zone, now, lang)?,
-            "confirmation": Confirmation::of(&view, user_zone, now, lang)?,
-        }),
+        output,
     })
+}
+
+async fn created_output(
+    app_state: &AppState,
+    user_id: Uuid,
+    item: &Model,
+) -> Result<Value, Report> {
+    let view = super::get(&app_state.db, user_id, item.id)
+        .await?
+        .ok_or_else(|| eyre!("the reminder just created is gone"))?;
+    let lang = stored_language(app_state, user_id).await?;
+    let user_zone = user_time_zone(&app_state.db, &user_id).await?;
+    let now = Utc::now();
+    let titles = chat_titles(app_state, user_id, &[&view]).await?;
+    Ok(json!({
+        "status": "created",
+        "reminder": summary(&view, &titles, user_zone, now, lang)?,
+        "confirmation": Confirmation::of(&view, user_zone, now, lang)?,
+    }))
 }
 
 async fn list(app_state: &AppState, user_id: Uuid) -> Result<CallResult, Report> {
@@ -415,19 +436,13 @@ async fn chat_titles(
     user_id: Uuid,
     views: &[&ItemView],
 ) -> Result<HashMap<Uuid, String>, Report> {
-    let ids: Vec<Uuid> = views
+    let ids = views
         .iter()
         .filter_map(|view| view.item.linked_chat_id)
         .collect();
-    if ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    Ok(Chats::find()
-        .filter(chats::Column::Id.is_in(ids))
-        .filter(chats::Column::OwnerUserId.eq(user_id.to_string()))
-        .all(&app_state.db)
+    Ok(owned_chats(&app_state.db, user_id, ids)
         .await?
-        .into_iter()
+        .into_values()
         .map(|chat| {
             let title = chat_title(
                 chat.title_by_user_provided.as_deref(),
@@ -576,6 +591,27 @@ mod tests {
         );
         assert!(trigger(json!({"kind": "in", "minutes": 0})).is_err());
         assert!(trigger(json!({"kind": "in"})).is_err());
+    }
+
+    #[test]
+    fn later_in_the_repeated_autumn_hour_is_never_early() {
+        // Berlin goes back from 03:00 CEST to 02:00 CET at 01:00Z.
+        let due = |now: &str, minutes: i64| {
+            let arguments: TriggerArguments =
+                serde_json::from_value(json!({"kind": "in", "minutes": minutes})).unwrap();
+            let Trigger::Once { date, time } = arguments.resolve(BERLIN, utc(now)).unwrap() else {
+                panic!("not a one-off");
+            };
+            resolve_local(BERLIN, date.and_time(time.naive()))
+        };
+        // 02:30 CET, whose first instance is 00:30Z.
+        assert_eq!(
+            due("2026-10-24T23:30:00Z", 120),
+            utc("2026-10-25T02:00:00Z")
+        );
+        // 02:15 CET, whose first instance is before now.
+        assert_eq!(due("2026-10-25T00:45:00Z", 30), utc("2026-10-25T02:00:00Z"));
+        assert_eq!(due("2026-10-25T00:10:00Z", 20), utc("2026-10-25T00:30:00Z"));
     }
 
     #[test]

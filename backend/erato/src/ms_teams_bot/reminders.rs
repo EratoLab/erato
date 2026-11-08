@@ -111,7 +111,7 @@ pub fn created_reminders(content: &[crate::models::message::ContentPart]) -> Vec
             {
                 tool.output
                     .as_ref()?
-                    .pointer("/confirmation/item_id")?
+                    .pointer("/reminder/id")?
                     .as_str()
                     .and_then(|id| Uuid::parse_str(id).ok())
             }
@@ -166,7 +166,7 @@ mod tests {
             tool_call_id: id.to_string(),
             status: ToolCallStatus::Success,
             tool_name: CREATE_REMINDER.into(),
-            output: Some(json!({"status": "created", "confirmation": {"item_id": id}})),
+            output: Some(json!({"status": "created", "reminder": {"id": id}})),
             ..Default::default()
         })
     }

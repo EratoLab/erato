@@ -1242,7 +1242,7 @@ async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(po
             .delivered,
         1
     );
-    run_delivery_tick(&state.db, &executor(), &registry).await;
+    // Pressed before the producer's next tick ends the delivered one-off.
     on_message(
         bot.clone(),
         host.clone(),
@@ -1255,6 +1255,7 @@ async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(po
         "This reminder already happened. You can find it on the [Scheduled page](https://erato.example.com/scheduled)."
     );
     assert_eq!(buttons(&settled), ["Open in Scheduled"]);
+    run_delivery_tick(&state.db, &executor(), &registry).await;
     let ended = scheduled_items::get(&state.db, user.id, happened.id)
         .await
         .unwrap()

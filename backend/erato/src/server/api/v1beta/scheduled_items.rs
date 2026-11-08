@@ -7,7 +7,6 @@
 //! created are listed: system deliveries such as the Teams inactivity nudge
 //! are not scheduled items.
 
-use crate::db::entity::prelude::Chats;
 use crate::db::entity::{chats, scheduled_deliveries};
 use crate::models::chat::resolve_chat_display_name;
 use crate::ms_teams_bot::nudge::CHANNEL as TEAMS_CHANNEL;
@@ -31,7 +30,6 @@ use chrono_tz::Tz;
 use erato_config::config::{ScheduledTemplateType, ScheduledTemplatesConfig};
 use eyre::Report;
 use sea_orm::prelude::Uuid;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use utoipa::{IntoParams, ToSchema};
@@ -259,25 +257,6 @@ async fn teams_status(
         .map_err(internal)
 }
 
-async fn linked_chats(
-    app_state: &AppState,
-    user_id: Uuid,
-    ids: Vec<Uuid>,
-) -> Result<HashMap<Uuid, chats::Model>, ApiError> {
-    if ids.is_empty() {
-        return Ok(HashMap::new());
-    }
-    Ok(Chats::find()
-        .filter(chats::Column::Id.is_in(ids))
-        .filter(chats::Column::OwnerUserId.eq(user_id.to_string()))
-        .all(&app_state.db)
-        .await
-        .map_err(|error| internal(error.into()))?
-        .into_iter()
-        .map(|chat| (chat.id, chat))
-        .collect())
-}
-
 /// Whole seconds: a retry or a snooze stores the database's microseconds,
 /// which the page would otherwise show in `local`.
 fn occurrence_time(zone: Tz, at: DateTime<Utc>) -> OccurrenceTime {
@@ -373,7 +352,9 @@ async fn respond_with(
         .iter()
         .filter_map(|view| view.item.linked_chat_id)
         .collect();
-    let chats = linked_chats(app_state, user_id, chat_ids).await?;
+    let chats = scheduled_items::owned_chats(&app_state.db, user_id, chat_ids)
+        .await
+        .map_err(internal)?;
     let now = Utc::now();
     views
         .into_iter()

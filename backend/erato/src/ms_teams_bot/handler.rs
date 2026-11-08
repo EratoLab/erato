@@ -1337,6 +1337,7 @@ async fn render_generation(
 
     if stop_requested || host.stop_was_requested(request.as_ref()).await {
         let finished = stream.finish_stopped().await;
+        confirm_unfinished_turn(bot, host, target, user_id, completion.as_ref(), generation).await;
         if let Some(request) = &request {
             settle_controls(host, target, request, RequestState::Stopped).await;
         }
@@ -1349,6 +1350,7 @@ async fn render_generation(
             None => Msg::NoAnswer.text(lang).to_string(),
         };
         let finished = stream.finish(&text).await;
+        confirm_unfinished_turn(bot, host, target, user_id, completion.as_ref(), generation).await;
         if let Some(request) = &request {
             settle_controls(host, target, request, RequestState::Failed).await;
         }
@@ -1373,6 +1375,7 @@ async fn render_generation(
             host.stop_generation(chat_id, message_id).await;
         }
         let stopped = stream.finish_stopped().await;
+        send_reminder_confirmations(bot, host, target, user_id, &completion.reminders).await;
         if let Some(request) = &request {
             settle_controls(host, target, request, RequestState::Stopped).await;
         }
@@ -1389,6 +1392,33 @@ async fn render_generation(
         settle_controls(host, target, request, RequestState::Completed).await;
     }
     delivered.and(approvals)
+}
+
+/// Confirm the reminders a stopped or failed turn already scheduled: they are
+/// stored and arrive either way. A turn that ended without its final event
+/// has them in its saved message.
+async fn confirm_unfinished_turn(
+    bot: &TeamsBot,
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    completion: Option<&Completion>,
+    generation: Option<(Uuid, Uuid)>,
+) {
+    let reminders = match (completion, generation) {
+        (Some(completion), _) => completion.reminders.clone(),
+        (None, Some((chat_id, message_id))) => {
+            match host.completion_for_message(chat_id, message_id).await {
+                Ok(stored) => stored.map(|stored| stored.reminders).unwrap_or_default(),
+                Err(error) => {
+                    tracing::warn!(%error, %message_id, "Could not read the reminders a turn scheduled");
+                    return;
+                }
+            }
+        }
+        (None, None) => return,
+    };
+    send_reminder_confirmations(bot, host, target, user_id, &reminders).await;
 }
 
 async fn citation_sources(

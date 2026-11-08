@@ -6174,6 +6174,8 @@ async fn settle_or_park_delegation_slot<
 
 /// Preparation and execution share an identity, but only `client_tool_call`
 /// authorizes a host executor. These updates are display-only on both SSE paths.
+/// `output` settles a tool that ran on the server, so a client can render its
+/// result without reloading the message.
 #[allow(clippy::too_many_arguments)]
 async fn send_tool_generation_update<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
@@ -6183,6 +6185,7 @@ async fn send_tool_generation_update<
     call: &genai::chat::ToolCall,
     status: ToolCallStatus,
     progress: Option<f64>,
+    output: Option<&JsonValue>,
     task: Option<&Arc<StreamingTask>>,
     tx: &Sender<Result<Event, Report>>,
 ) -> Result<(), Report> {
@@ -6205,7 +6208,7 @@ async fn send_tool_generation_update<
                 progress_message: None,
                 progress,
                 total: None,
-                output: None,
+                output: output.cloned(),
             },
             "broadcast tool generation progress",
         )
@@ -6221,60 +6224,7 @@ async fn send_tool_generation_update<
         progress_message: None,
         progress,
         total: None,
-        output: None,
-    }
-    .into();
-    send_generation_event(&message, tx.clone()).await
-}
-
-/// The settling update of a tool that ran on the server, with its output, so
-/// a client can render the result without reloading the message.
-async fn send_tool_result_update<
-    MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
->(
-    message_id: Uuid,
-    content_index: usize,
-    call: &genai::chat::ToolCall,
-    status: ToolCallStatus,
-    output: &JsonValue,
-    task: Option<&Arc<StreamingTask>>,
-    tx: &Sender<Result<Event, Report>>,
-) -> Result<(), Report> {
-    if let Some(task) = task {
-        send_background_event(
-            task,
-            StreamingEvent::ToolCallUpdate {
-                message_id,
-                content_index,
-                tool_call_id: call.call_id.clone(),
-                tool_name: call.fn_name.clone(),
-                input: Some(call.fn_arguments.clone()),
-                status: match status {
-                    ToolCallStatus::Preparing => BgToolCallStatus::Preparing,
-                    ToolCallStatus::InProgress => BgToolCallStatus::InProgress,
-                    ToolCallStatus::Success => BgToolCallStatus::Success,
-                    ToolCallStatus::Error => BgToolCallStatus::Error,
-                },
-                progress_message: None,
-                progress: None,
-                total: None,
-                output: Some(output.clone()),
-            },
-            "broadcast tool result",
-        )
-        .await;
-    }
-    let message: MSG = MessageSubmitStreamingResponseToolCallUpdate {
-        message_id,
-        content_index,
-        tool_call_id: call.call_id.clone(),
-        tool_name: call.fn_name.clone(),
-        input: Some(call.fn_arguments.clone()),
-        status,
-        progress_message: None,
-        progress: None,
-        total: None,
-        output: Some(output.clone()),
+        output: output.cloned(),
     }
     .into();
     send_generation_event(&message, tx.clone()).await
@@ -7514,6 +7464,7 @@ async fn stream_generate_chat_completion<'a>(
                         &unfinished_tool_call,
                         ToolCallStatus::InProgress,
                         None,
+                        None,
                         streaming_task,
                         &tx,
                     )
@@ -7725,6 +7676,7 @@ async fn stream_generate_chat_completion<'a>(
                     &unfinished_tool_call,
                     status,
                     None,
+                    None,
                     streaming_task,
                     &tx,
                 )
@@ -7815,6 +7767,7 @@ async fn stream_generate_chat_completion<'a>(
                     &unfinished_tool_call,
                     status,
                     None,
+                    None,
                     streaming_task,
                     &tx,
                 )
@@ -7900,12 +7853,13 @@ async fn stream_generate_chat_completion<'a>(
                         ..Default::default()
                     },
                 );
-                send_tool_result_update::<GenerationStreamingMessage>(
+                send_tool_generation_update::<GenerationStreamingMessage>(
                     assistant_message_id,
                     tool_index,
                     &unfinished_tool_call,
                     status,
-                    &output,
+                    None,
+                    Some(&output),
                     streaming_task,
                     &tx,
                 )
@@ -10909,6 +10863,7 @@ async fn stream_generate_chat_completion<'a>(
                                 &preview_call,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
+                                None,
                                 streaming_task,
                                 &tx,
                             )
