@@ -5,7 +5,11 @@
  * row, trimmed and capped.
  */
 
-import { isEmoji, isExtendedPictographic } from "./emojiProperties";
+import {
+  isEmoji,
+  isExtendedPictographic,
+  isKeycapBase,
+} from "./emojiProperties";
 
 /** The backend's cap for a tool's name or title. */
 export const MAX_SERVER_TEXT_CHARS = 200;
@@ -61,6 +65,7 @@ const isSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdfff;
 
 const EMOJI_PRESENTATION_SELECTOR = 0xfe0f;
 const ZERO_WIDTH_JOINER = 0x200d;
+const COMBINING_ENCLOSING_KEYCAP = 0x20e3;
 
 const isEmojiModifier = (code: number | undefined): boolean =>
   code !== undefined && code >= 0x1f3fb && code <= 0x1f3ff;
@@ -71,11 +76,28 @@ const isEmojiAt = (code: number | undefined): boolean =>
 const isPictographAt = (code: number | undefined): boolean =>
   code !== undefined && isExtendedPictographic(code);
 
+const isKeycapBaseAt = (code: number | undefined): boolean =>
+  code !== undefined && isKeycapBase(code);
+
 const selectorStylesEmoji = (
   twoBack: number | undefined,
   previous: number | undefined,
-): boolean =>
-  isEmojiModifier(previous) ? isEmojiAt(twoBack) : isEmojiAt(previous);
+  selector: number,
+  next: number | undefined,
+): boolean => {
+  if (isEmojiModifier(previous)) {
+    return isEmojiAt(twoBack) && !isKeycapBaseAt(twoBack);
+  }
+  // Plain text unless it starts a keycap: a selector on one would let two IDs
+  // differ by a mark nobody sees.
+  if (isKeycapBaseAt(previous)) {
+    return (
+      selector === EMOJI_PRESENTATION_SELECTOR &&
+      next === COMBINING_ENCLOSING_KEYCAP
+    );
+  }
+  return isEmojiAt(previous);
+};
 
 const joinerFollowsEmoji = (
   twoBack: number | undefined,
@@ -92,8 +114,9 @@ const joinerFollowsEmoji = (
  * The backend's `mark_hidden_chars` for one code point, from the raw code
  * points around it: an invisible character, except two that are emoji text
  * where they sit. A text or emoji presentation selector (U+FE0E, U+FE0F)
- * stays right after an `Emoji` character, as in "❤️" or "1️⃣", or after a skin
- * tone that follows one; a zero-width joiner stays between two
+ * stays right after an `Emoji` character, as in "❤️", or after a skin tone
+ * that follows one; after 0-9, `#` or `*` only a U+FE0F with U+20E3 right
+ * after it stays, as in "1️⃣". A zero-width joiner stays between two
  * `Extended_Pictographic` characters, the first optionally followed by a
  * kept U+FE0F or a skin tone, as in "👨‍👩‍👧" or "🏳️‍🌈". Tag characters always hide.
  */
@@ -105,7 +128,7 @@ const isHiddenAt = (
 ): boolean => {
   if (!isInvisibleFormatChar(code)) return false;
   if (code === 0xfe0e || code === EMOJI_PRESENTATION_SELECTOR) {
-    return !selectorStylesEmoji(twoBack, previous);
+    return !selectorStylesEmoji(twoBack, previous, code, next);
   }
   if (code === ZERO_WIDTH_JOINER) {
     return !(joinerFollowsEmoji(twoBack, previous) && isPictographAt(next));

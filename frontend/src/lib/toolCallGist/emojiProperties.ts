@@ -81,3 +81,7 @@ export const isEmoji = (code: number): boolean => inRanges(EMOJI, code);
 
 export const isExtendedPictographic = (code: number): boolean =>
   inRanges(EXTENDED_PICTOGRAPHIC, code);
+
+/** 0-9, `#` and `*`: `Emoji` by Unicode, but plain text unless a keycap follows. */
+export const isKeycapBase = (code: number): boolean =>
+  (code >= 0x30 && code <= 0x39) || code === 0x23 || code === 0x2a;

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isEmoji, isExtendedPictographic } from "./emojiProperties";
+import {
+  isEmoji,
+  isExtendedPictographic,
+  isKeycapBase,
+} from "./emojiProperties";
 
 const hex = (code: number) => `U+${code.toString(16).toUpperCase()}`;
 
@@ -24,6 +28,15 @@ describe("emoji properties", () => {
       [0x1faf9, false],
     ] as const) {
       expect(isEmoji(code), hex(code)).toBe(expected);
+    }
+  });
+
+  it("counts 0-9, # and * as keycap bases, and nothing next to them", () => {
+    for (const char of "0123456789#*") {
+      expect(isKeycapBase(char.codePointAt(0)!), char).toBe(true);
+    }
+    for (const code of [0x22, 0x24, 0x29, 0x2b, 0x2f, 0x3a, 0x61, 0xff11]) {
+      expect(isKeycapBase(code), hex(code)).toBe(false);
     }
   });
 

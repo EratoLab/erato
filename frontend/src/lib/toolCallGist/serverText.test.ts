@@ -163,6 +163,8 @@ describe("cleanServerText", () => {
     "\u2764\uFE0E as text",
     "Sunny \u2600\uFE0F, 25\u00B0C",
     "Press 1\uFE0F\u20E3 or #\uFE0F\u20E3",
+    "1\uFE0F\u20E3",
+    "*\uFE0F\u20E3",
     "\u263A\uFE0F\u2764\uFE0F",
     "\u{1F44D}\u{1F3FD} done",
     "\u{1F44D}\u{1F3FD}\uFE0F",
@@ -192,6 +194,15 @@ describe("cleanServerText", () => {
     // A skin tone styles nothing after a letter, so neither does a selector
     // after it.
     ["a\u{1F3FD}\uFE0F", "a\u{1F3FD}"],
+    // A digit, # or * is plain text unless a keycap mark follows it.
+    ["p_1\uFE0F", "p_1"],
+    ["1\uFE0Fx", "1x"],
+    ["p_1\uFE0E", "p_1"],
+    ["#\uFE0F", "#"],
+    ["INV-1\uFE0F2\uFE0E3", "INV-123"],
+    ["1\uFE0E\u20E3", "1\u20E3"],
+    ["1\uFE0F\uFE0F\u20E3", "1\u20E3"],
+    ["1\u{1F3FD}\uFE0F", "1\u{1F3FD}"],
     ["a\u200Db", "ab"],
     ["\u{1F468}\u200D", "\u{1F468}"],
     ["\u{1F468}\u200Da", "\u{1F468}a"],
@@ -235,6 +246,17 @@ describe("cleanServerText", () => {
       truncated: false,
       hiddenCharacters: true,
     });
+  });
+
+  it("sees the keycap mark past a selector the scan ends on", () => {
+    // Two characters scan eight code units, the selector the last of them.
+    const scanned = "x".repeat(6);
+    expect(cleanServerText(`${scanned}1\uFE0F\u20E3`, 2).hiddenCharacters).toBe(
+      false,
+    );
+    expect(cleanServerText(`${scanned}1\uFE0Fy`, 2).hiddenCharacters).toBe(
+      true,
+    );
   });
 
   it("keeps a joiner the scan ends on when an emoji follows past it", () => {
