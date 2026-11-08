@@ -7342,6 +7342,11 @@ msgstr "The linked chat no longer exists. Pick another one."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nextOccurrenceFirst"
+msgstr "Not snoozed: this reminder is due again by then, or already was."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.refusal.notFinished"
 msgstr "Only items that are over can be deleted."
 

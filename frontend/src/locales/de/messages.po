@@ -7342,6 +7342,11 @@ msgstr "Der verknüpfte Chat existiert nicht mehr. Wählen Sie einen anderen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nextOccurrenceFirst"
+msgstr "Nicht zurückgestellt: Diese Erinnerung ist bis dahin ohnehin wieder fällig oder war es schon."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.refusal.notFinished"
 msgstr "Nur Einträge, die vorbei sind, können gelöscht werden."
 

@@ -229,6 +229,8 @@ texts! {
     TipsOff => "All right, {app} will not send you any more tips. Send /reminders on to get them again.",
         "In Ordnung, {app} sendet Ihnen keine Tipps mehr. Senden Sie /erinnerungen an, um sie wieder zu erhalten.";
     ButtonNotSupported => "This button is not supported.", "Diese Schaltfläche wird nicht unterstützt.";
+    ButtonFailed => "Something went wrong. Please try the button again.",
+        "Etwas ist schiefgelaufen. Bitte versuchen Sie es mit der Schaltfläche noch einmal.";
     ButtonGone => "This button was already used or has expired.",
         "Diese Schaltfläche wurde bereits verwendet oder ist abgelaufen.";
     ReminderButtonGone => "This button was already used or has expired. You can find your reminders on the {page}.",
@@ -240,8 +242,8 @@ texts! {
     ReminderCancelled => "This reminder was cancelled.", "Diese Erinnerung wurde abgebrochen.";
     ReminderArriving => "Not snoozed: this reminder is arriving right now.",
         "Nicht zurückgestellt: Diese Erinnerung wird gerade zugestellt.";
-    NextTimeComesFirst => "Not snoozed: its next time comes before then.",
-        "Nicht zurückgestellt: Der nächste Termin dieser Erinnerung liegt davor.";
+    DueAgainFirst => "Not snoozed: this reminder is due again by then, or already was.",
+        "Nicht zurückgestellt: Diese Erinnerung ist bis dahin ohnehin wieder fällig oder war es schon.";
     TimeHasPassed => "Not snoozed: that time has passed.",
         "Nicht zurückgestellt: Dieser Zeitpunkt ist schon vorbei.";
     ReminderUnchangeable => "This reminder cannot be changed right now.",

@@ -201,6 +201,7 @@ fn status_of(code: ScheduledItemErrorCode) -> StatusCode {
         | Code::Finished
         | Code::InFlight
         | Code::NothingToSnooze
+        | Code::NextOccurrenceFirst
         | Code::NotFinished => StatusCode::CONFLICT,
         Code::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         Code::InvalidRequest
@@ -565,7 +566,7 @@ pub async fn delete_scheduled_item(
         (status = OK, body = ScheduledItem),
         (status = NOT_FOUND, body = ScheduledItemError),
         (status = UNPROCESSABLE_ENTITY, body = ScheduledItemError, description = "`until` is not in the future (`trigger_in_past`)"),
-        (status = CONFLICT, body = ScheduledItemError, description = "The item is over, nothing is waiting to be delivered, or a reminder snoozed after delivery would not come back before its next regular time")
+        (status = CONFLICT, body = ScheduledItemError, description = "The item is over (`finished`), nothing is waiting to be delivered (`nothing_to_snooze`), or a reminder snoozed after delivery would not come back before its next regular time (`next_occurrence_first`)")
     ),
     security(("bearer_auth" = []))
 )]

@@ -140,9 +140,11 @@ pub enum Refusal {
     /// Its occurrence is being delivered right now, and the change would
     /// leave nothing after it.
     InFlight,
-    /// There is no open occurrence to snooze, or a reminder snoozed after
-    /// delivery would not come back before the next regular occurrence.
+    /// There is no open occurrence to snooze.
     NothingToSnooze,
+    /// A reminder snoozed after delivery would not come back before its next
+    /// regular occurrence, or that occurrence already came.
+    NextOccurrenceFirst,
     /// The item may still deliver something, so it cannot be deleted.
     NotFinished,
 }
@@ -364,7 +366,7 @@ pub async fn snooze_occurrence(
             .await?
             .allows(until)
     {
-        return Ok(Err(Refusal::NothingToSnooze));
+        return Ok(Err(Refusal::NextOccurrenceFirst));
     }
     if !snooze(&txn, row.id, until).await? {
         return Ok(Err(Refusal::NothingToSnooze));
@@ -483,7 +485,7 @@ pub async fn snooze_delivered(
         .await?
         .allows(until)
     {
-        return Ok(Err(Refusal::NothingToSnooze));
+        return Ok(Err(Refusal::NextOccurrenceFirst));
     }
     let redelivery = match lock_open_occurrences(&txn, &item).await?.1 {
         Some(open) if !open.state.is_open() => return Ok(Err(Refusal::InFlight)),
