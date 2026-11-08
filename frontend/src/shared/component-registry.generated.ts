@@ -423,6 +423,7 @@ export { TaskPlanApprovalCard } from "@/components/ui/Message/TaskPlanApprovalCa
 export { WaitingTaskItem } from "@/components/ui/Message/WaitingTaskItem";
 export { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
+export { CANCEL_REMINDER_TOOL_NAME } from "@/components/ui/Scheduled/reminderConfirmation";
 export { CREATE_REMINDER_TOOL_NAME } from "@/components/ui/Scheduled/reminderConfirmation";
 export { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 export type { ReminderConfirmation } from "@/components/ui/Scheduled/reminderConfirmation";

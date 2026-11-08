@@ -5,6 +5,9 @@ import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 /** The model's tool that schedules a reminder from a chat (ERMAIN-902). */
 export const CREATE_REMINDER_TOOL_NAME = "create_reminder";
 
+/** The model's tool that cancels one of the user's reminders. */
+export const CANCEL_REMINDER_TOOL_NAME = "cancel_reminder";
+
 /**
  * The confirmation card after a reminder was scheduled from a chat, as the
  * backend renders it from the stored item. Every text is already in the
