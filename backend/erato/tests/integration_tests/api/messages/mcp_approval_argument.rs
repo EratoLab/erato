@@ -64,6 +64,29 @@ async fn mcp(State(fixture): State<Fixture>, Json(request): Json<Value>) -> Resp
     Json(json!({"jsonrpc": "2.0", "id": request["id"], "result": result})).into_response()
 }
 
+/// The paths of a stored display's readable argument view.
+fn shown_argument_paths(display: &Value) -> Vec<String> {
+    fn walk(node: &Value, out: &mut Vec<String>) {
+        out.push(node["path"].as_str().unwrap().to_string());
+        for child in node["children"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let mut paths = Vec::new();
+    walk(&display["label"]["arguments"], &mut paths);
+    paths
+}
+
+fn stored_tool_row(raw_message: &Value) -> Value {
+    raw_message["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "delete_record")
+        .unwrap_or_else(|| panic!("tool row stored: {raw_message}"))
+        .clone()
+}
+
 async fn setup(
     gate_enabled: bool,
 ) -> (
@@ -200,6 +223,15 @@ async fn consent_argument_is_hidden_asked_for_and_filled(pool: Pool<Postgres>) {
         .expect("parked on an approval request")
         .clone();
     assert_eq!(request["allow_always"], false, "{request}");
+    // The model's claim is in the stored input, but the card does not list it
+    // as something the call writes.
+    assert_eq!(request["input"][ARGUMENT], true, "{request}");
+    assert_eq!(
+        shown_argument_paths(&request["display"]),
+        ["", "/recordId"],
+        "{request}"
+    );
+    assert_eq!(request["approvals"][0]["display"], request["display"]);
 
     server
         .post("/api/v1beta/me/messages/continuestream")
@@ -212,6 +244,18 @@ async fn consent_argument_is_hidden_asked_for_and_filled(pool: Pool<Postgres>) {
     assert_eq!(calls[0]["name"], "delete_record");
     assert_eq!(calls[0]["arguments"]["recordId"], "r1");
     assert_eq!(calls[0]["arguments"][ARGUMENT], true, "{calls:?}");
+    let row = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let tool = stored_tool_row(&row.raw_message);
+    assert_eq!(tool["status"], "success", "{tool}");
+    assert_eq!(
+        shown_argument_paths(&tool["display"]),
+        ["", "/recordId"],
+        "{tool}"
+    );
     handle.abort();
 }
 
@@ -226,15 +270,31 @@ async fn without_the_gate_the_server_receives_false(pool: Pool<Postgres>) {
         .unwrap();
     let server = app_server(state.clone());
 
-    server
+    let response = server
         .post("/api/v1beta/me/messages/submitstream")
         .with_bearer_token(TEST_JWT_TOKEN)
         .json(&json!({"user_message": "Delete record r1"}))
-        .await
-        .assert_status_ok();
+        .await;
+    response.assert_status_ok();
     let calls = fixture.calls.lock().unwrap().clone();
     assert_eq!(calls.len(), 1, "{calls:?}");
     assert_eq!(calls[0]["arguments"]["recordId"], "r1");
     assert_eq!(calls[0]["arguments"][ARGUMENT], false, "{calls:?}");
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+        &response,
+    )))
+    .unwrap();
+    let row = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let tool = stored_tool_row(&row.raw_message);
+    assert_eq!(tool["input"][ARGUMENT], true, "{tool}");
+    assert_eq!(
+        shown_argument_paths(&tool["display"]),
+        ["", "/recordId"],
+        "{tool}"
+    );
     handle.abort();
 }

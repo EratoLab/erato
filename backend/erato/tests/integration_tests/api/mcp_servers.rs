@@ -772,7 +772,7 @@ async fn test_list_mcp_server_tools_separates_policy_decision_and_effect(pool: P
 }
 
 /// Vendor text reaches the client as inert, bounded plain text: markup stays
-/// literal, bidi and control characters are gone, and an oversized
+/// literal, bidi, invisible and control characters are gone, and an oversized
 /// description is cut at the cap and flagged.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) {
@@ -831,7 +831,9 @@ async fn test_list_mcp_server_tools_sanitizes_vendor_text(pool: Pool<Postgres>) 
         )),
         "{description:?}"
     );
-    assert!(!description.contains(['\u{202E}', '\u{202C}', '\u{7}']));
+    assert!(!description.contains([
+        '\u{202E}', '\u{202C}', '\u{7}', '\u{200D}', '\u{FEFF}', '\u{061C}'
+    ]));
     assert_eq!(description.chars().count(), 4_000);
     assert!(description.ends_with('ä'));
     assert_eq!(untrusted["description_truncated"], true);

@@ -9307,6 +9307,21 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
         "the partial answer must still come back: {output}"
     );
     assert!(extract_full_text_answer(&events).contains("PARENT-BUDGET-FINAL"));
+
+    let child = delegated_child_chat(&app_state.db, Uuid::parse_str(&chat).unwrap()).await;
+    let refused = chat_messages_by_created_at(&app_state.db, child.id)
+        .await
+        .into_iter()
+        .flat_map(|row| {
+            row.raw_message["content"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .find(|part| part["tool_name"] == "publish_approval_probe")
+        .expect("the refused call keeps its row");
+    assert_eq!(refused["status"], "error");
+    assert_eq!(refused["display"]["label"]["source"], "generic");
 }
 
 /// A task that is still running is already on disk, at the slot it will settle
@@ -15807,6 +15822,12 @@ async fn task_child_parks_and_parent_surfaces_one_delegated_task_approval(pool: 
         "tool_approval_request",
         "the child keeps its own request: that row, not the copy, is what a \
          continuation decides against"
+    );
+    assert_eq!(child_ref["display"]["label"]["source"], "generic");
+    assert_eq!(
+        child_ref["display"],
+        child_content.last().unwrap()["display"],
+        "the parent's card shows the child's own label"
     );
     assert!(
         extract_full_text_answer(&events).is_empty(),

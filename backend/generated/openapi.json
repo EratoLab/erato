@@ -10815,6 +10815,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "display": {
+            "$ref": "#/components/schemas/ToolDisplayMetadata",
+            "description": "The same display, label included, that the stored `ToolUse` part gets.\nOf a call's progress updates only the first carries it."
+          },
           "input": {
             "oneOf": [
               {
@@ -13334,6 +13338,219 @@
           "client_tool"
         ]
       },
+      "ToolArgumentKind": {
+        "type": "string",
+        "description": "How the readable view shows one argument.",
+        "enum": [
+          "group",
+          "list",
+          "id",
+          "text",
+          "value"
+        ]
+      },
+      "ToolArgumentNode": {
+        "type": "object",
+        "description": "One argument in the readable view. A member's name is the last segment of\nits path; the value is read from `input` at `path`. Both are raw: the\nreader unescapes the segment and cleans and caps both like other server text.",
+        "required": [
+          "path",
+          "kind"
+        ],
+        "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolArgumentNode"
+            },
+            "description": "A group's members or a list's entries, in argument order."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ToolArgumentKind"
+          },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Members or entries left out of `children`.",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string",
+            "description": "A JSON pointer into `input`; the empty pointer is the whole input."
+          }
+        }
+      },
+      "ToolCallAction": {
+        "type": "string",
+        "description": "What a call does. Reads, and anything none of the verbs fits, are `other`.",
+        "enum": [
+          "create",
+          "update",
+          "delete",
+          "move",
+          "send",
+          "comment",
+          "other"
+        ]
+      },
+      "ToolCallLabel": {
+        "type": "object",
+        "description": "What a tool call does to what, and where, read from its arguments by code.\nThe verb and the kind come from closed lists, never from argument text, and\nevery value keeps the pointer it was read through. Shown only: it never\ndecides whether a call needs approval or which decisions a card offers.",
+        "required": [
+          "action",
+          "object_kind",
+          "source"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ToolCallAction"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/ToolArgumentNode",
+            "description": "The arguments for the generic card: paths into the call's `input` and\nhow to show each, never the values themselves."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelItem"
+            },
+            "description": "What the call acts on; empty on a `generic` label."
+          },
+          "object_kind": {
+            "$ref": "#/components/schemas/ToolCallObjectKind"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ToolCallLabelSource"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelWarning"
+            }
+          }
+        }
+      },
+      "ToolCallLabelItem": {
+        "type": "object",
+        "description": "One thing a call acts on, each part read through its own pointer.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/ToolCallLabelSlot"
+          },
+          "before": {
+            "$ref": "#/components/schemas/ToolCallLabelSlot"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelSlot"
+            },
+            "description": "Key values worth showing, each with its argument's `name`."
+          },
+          "id": {
+            "$ref": "#/components/schemas/ToolCallLabelSlot"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ToolCallLabelSlot",
+            "description": "Where the item goes or lives: a parent, folder, channel or recipient."
+          },
+          "title": {
+            "$ref": "#/components/schemas/ToolCallLabelSlot"
+          }
+        }
+      },
+      "ToolCallLabelSlot": {
+        "type": "object",
+        "description": "The values one pointer reached in a call's arguments.",
+        "required": [
+          "pointer"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The argument's name, display-cleaned; set on fields."
+          },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Values the pointer reached beyond those kept.",
+            "minimum": 0
+          },
+          "pointer": {
+            "type": "string",
+            "description": "A JSON pointer into the call's `input` where `*` stands for every\nelement. A lookup key, never shown."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelValue"
+            }
+          }
+        }
+      },
+      "ToolCallLabelSource": {
+        "type": "string",
+        "description": "Who chose a label's pointers. Values are always read by code.",
+        "enum": [
+          "own_mapping",
+          "rules",
+          "model",
+          "generic"
+        ]
+      },
+      "ToolCallLabelValue": {
+        "type": "object",
+        "description": "One value as the call wrote it.",
+        "required": [
+          "path",
+          "text"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Where the value sits in `input`, with indices in place of `*`."
+          },
+          "resolved": {
+            "type": "string",
+            "description": "What earlier results in the chat call this value, such as a record's\nname or a field's old value; never taken from the call itself."
+          },
+          "text": {
+            "type": "string",
+            "description": "Display-cleaned and capped; an object reads as compact JSON."
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ToolCallLabelWarning": {
+        "type": "string",
+        "description": "Something the card says next to a label.",
+        "enum": [
+          "arguments_truncated",
+          "hidden_characters",
+          "other"
+        ]
+      },
+      "ToolCallObjectKind": {
+        "type": "string",
+        "description": "What kind of thing a call acts on.",
+        "enum": [
+          "page",
+          "row",
+          "database",
+          "folder",
+          "note",
+          "comment",
+          "paragraph",
+          "document",
+          "email",
+          "message",
+          "event",
+          "file",
+          "task",
+          "other"
+        ]
+      },
       "ToolCallStatus": {
         "type": "string",
         "enum": [
@@ -13345,7 +13562,7 @@
       },
       "ToolDisplayMetadata": {
         "type": "object",
-        "description": "Inert display text from the tool descriptor, captured when approval is\nrequested. Never used to select a tool, evaluate policy or execute a call.",
+        "description": "Inert display text for a tool call, captured with the call: the tool\ndescriptor's text, the server's name and the call's label. Never used to\nselect a tool, evaluate policy or execute a call.",
         "required": [
           "title",
           "description_truncated"
@@ -13359,6 +13576,10 @@
           },
           "description_truncated": {
             "type": "boolean"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ToolCallLabel",
+            "description": "What this call does to what, and where. Absent on client tools and\nolder rows, which render as before."
           },
           "server_name": {
             "type": "string",
@@ -13379,7 +13600,7 @@
               },
               {
                 "$ref": "#/components/schemas/ToolDisplayMetadata",
-                "description": "Set on MCP calls; copied from the approval item when the call was gated."
+                "description": "Set on MCP calls, label included and description left out: only\napproval cards show that."
               }
             ],
             "default": null

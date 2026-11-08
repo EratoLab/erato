@@ -1723,6 +1723,7 @@ impl DelegationProgressEmitter<'_> {
                 content_index: parent.content_index,
                 tool_call_id: self.tool_call_id.clone(),
                 tool_name: self.tool_name.clone(),
+                display: None,
                 input: Some(self.input.clone()),
                 status: crate::services::background_tasks::ToolCallStatus::InProgress,
                 progress_message: None,

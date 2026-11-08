@@ -90,10 +90,10 @@ pub fn validate_mcp_server_ids(
         if server
             .display_name
             .as_deref()
-            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
+            .is_some_and(|name| !is_valid_display_name(name) || has_hidden_chars(name))
         {
             return Err(eyre!(
-                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
     }
@@ -105,15 +105,126 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// Bidi marks, embeddings, overrides and isolates: any of them can make the
-/// rendered order of a string differ from its logical order. Tool text from MCP
-/// servers is stripped of them and MCP server display names may not contain
-/// them, since the server name is shown right next to that text.
-pub fn is_bidi_control(c: char) -> bool {
+/// Unicode's default-ignorable code points (as of Unicode 16): bidi controls,
+/// which can reorder a string, and zero-width, joiner, soft hyphen, filler,
+/// variation selector, byte order mark and tag characters, which render as
+/// nothing and can hide text in it.
+pub fn is_invisible_format_char(c: char) -> bool {
     matches!(
         c,
-        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        '\u{00AD}'
+            | '\u{034F}'
+            | '\u{061C}'
+            | '\u{115F}'..='\u{1160}'
+            | '\u{17B4}'..='\u{17B5}'
+            | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{3164}'
+            | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}'
+            | '\u{FFA0}'
+            | '\u{FFF0}'..='\u{FFF8}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}'
     )
+}
+
+const ZERO_WIDTH_JOINER: char = '\u{200D}';
+
+/// Each character of `text` with whether it is an invisible character that MCP
+/// tool text is stripped of and an MCP server display name, shown next to that
+/// text, may not hold. Two of them are ordinary emoji text where they sit:
+///
+/// - a text or emoji presentation selector (U+FE0E, U+FE0F) directly after a
+///   character with the Unicode `Emoji` property, as in "❤️" or "1️⃣", or after
+///   a skin tone (U+1F3FB–U+1F3FF) that follows one;
+/// - a zero-width joiner between two `Extended_Pictographic` characters, the
+///   first one optionally followed by a kept U+FE0F or a skin tone, as in
+///   "👨‍👩‍👧" or "🏳️‍🌈".
+///
+/// Anywhere else, such as after a letter or in a run, they can carry hidden
+/// data. A client mirrors this with JavaScript's `/\p{Emoji}/u` and
+/// `/\p{Extended_Pictographic}/u` (Unicode 16 here).
+pub fn mark_hidden_chars(
+    text: impl IntoIterator<Item = char>,
+) -> impl Iterator<Item = (char, bool)> {
+    let mut chars = text.into_iter().peekable();
+    let (mut two_back, mut previous) = (None, None);
+    std::iter::from_fn(move || {
+        let c = chars.next()?;
+        let hidden = is_hidden_at(two_back, previous, c, chars.peek().copied());
+        (two_back, previous) = (previous, Some(c));
+        Some((c, hidden))
+    })
+}
+
+/// Whether `text` holds a character [`mark_hidden_chars`] marks hidden.
+pub fn has_hidden_chars(text: &str) -> bool {
+    mark_hidden_chars(text.chars()).any(|(_, hidden)| hidden)
+}
+
+fn is_hidden_at(
+    two_back: Option<char>,
+    previous: Option<char>,
+    c: char,
+    next: Option<char>,
+) -> bool {
+    if !is_invisible_format_char(c) {
+        return false;
+    }
+    match c {
+        '\u{FE0E}' | '\u{FE0F}' => !selector_styles_emoji(two_back, previous),
+        ZERO_WIDTH_JOINER => {
+            !(joiner_follows_emoji(two_back, previous)
+                && next.is_some_and(is_extended_pictographic))
+        }
+        // Tag characters stay hidden even in subdivision flags such as
+        // England's: they spell out ASCII nobody sees, the main way to smuggle
+        // text past a reader.
+        _ => true,
+    }
+}
+
+fn selector_styles_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+    match previous {
+        Some(modifier) if is_emoji_modifier(modifier) => two_back.is_some_and(is_emoji),
+        Some(previous) => is_emoji(previous),
+        None => false,
+    }
+}
+
+/// A U+FE0F after a pictograph is kept exactly when the pictograph is `Emoji`.
+fn joiner_follows_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+    match previous {
+        Some('\u{FE0F}') => {
+            two_back.is_some_and(|emoji| is_extended_pictographic(emoji) && is_emoji(emoji))
+        }
+        Some(modifier) if is_emoji_modifier(modifier) => {
+            two_back.is_some_and(is_extended_pictographic)
+        }
+        Some(previous) => is_extended_pictographic(previous),
+        None => false,
+    }
+}
+
+fn is_emoji_modifier(c: char) -> bool {
+    matches!(c, '\u{1F3FB}'..='\u{1F3FF}')
+}
+
+fn is_emoji(c: char) -> bool {
+    static EMOJI: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"\A\p{Emoji}\z").expect("valid class"));
+    EMOJI.is_match(c.encode_utf8(&mut [0; 4]))
+}
+
+fn is_extended_pictographic(c: char) -> bool {
+    static PICTOGRAPHIC: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"\A\p{Extended_Pictographic}\z").expect("valid class")
+    });
+    PICTOGRAPHIC.is_match(c.encode_utf8(&mut [0; 4]))
 }
 
 /// `web_access` reads as "Web access": separators become spaces and the first
@@ -3841,9 +3952,9 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
-    /// Name shown to users for this server, at most 128 bytes without control
-    /// or bidi formatting characters. When omitted, the server id is shown
-    /// tidied up.
+    /// Name shown to users for this server, at most 128 bytes without control,
+    /// bidi or invisible formatting characters. When omitted, the server id is
+    /// shown tidied up.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub display_name: Option<String>,

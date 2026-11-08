@@ -1028,7 +1028,7 @@ pub const UNTRUSTED_TEXT_BODY_CHARS: usize = 6_000;
 
 fn untrusted_text_tool() -> rmcp::model::Tool {
     let description = format!(
-        "{UNTRUSTED_TEXT_MARKUP} \u{202E}reversed\u{202C}\n\n\n\nbody follows\n{}",
+        "{UNTRUSTED_TEXT_MARKUP} \u{202E}rev\u{200D}ersed\u{202C}\u{FEFF}\u{061C}\n\n\n\nbody follows\n{}",
         "ä".repeat(UNTRUSTED_TEXT_BODY_CHARS)
     );
     let mut tool = rmcp::model::Tool::new(
@@ -1036,13 +1036,15 @@ fn untrusted_text_tool() -> rmcp::model::Tool {
         description,
         rmcp::model::JsonObject::new(),
     );
-    tool.title = Some(format!("{UNTRUSTED_TEXT_MARKUP} \u{202E}eltit\u{7}"));
+    tool.title = Some(format!(
+        "{UNTRUSTED_TEXT_MARKUP} \u{202E}el\u{200B}tit\u{7}\u{2060}\u{E0001}\u{E0068}\u{E007F}"
+    ));
     tool
 }
 
-/// Tools whose vendor text carries markup, bidi overrides, control
-/// characters and an oversized body, so a client's display hardening can be
-/// exercised end to end.
+/// Tools whose vendor text carries markup, bidi overrides, invisible and
+/// control characters and an oversized body, so a client's display hardening
+/// can be exercised end to end.
 #[derive(Clone)]
 struct UntrustedTextServer;
 
@@ -1455,7 +1457,7 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
         },
         MechanismSummary {
             name: "Untrusted text server",
-            description: "Tool text with markup, bidi overrides, control characters and an oversized body",
+            description: "Tool text with markup, bidi overrides, invisible and control characters and an oversized body",
             endpoint: "Streamable HTTP /mcp/untrusted-text",
             tools: &[
                 UNTRUSTED_TEXT_TOOL_NAME,

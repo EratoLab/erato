@@ -1,5 +1,6 @@
 use erato_config::config::{
-    McpProtocolMode, McpRuntimeConfig, McpServerConfig, validate_mcp_server_ids,
+    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_invisible_format_char,
+    mark_hidden_chars, validate_mcp_server_ids,
 };
 use std::collections::HashMap;
 
@@ -52,6 +53,25 @@ fn display_names_are_optional_validated_and_fall_back_to_the_tidied_id() {
         "display_name = \"bad\\nname\"".to_string(),
         format!("display_name = '{}'", "ä".repeat(65)),
         "display_name = \"CRM\u{202E}evil\"".to_string(),
+        "display_name = \"CRM\u{061C}\"".to_string(),
+        "display_name = \"C\u{200B}RM\"".to_string(),
+        "display_name = \"C\u{200D}RM\"".to_string(),
+        "display_name = \"C\u{2060}RM\"".to_string(),
+        "display_name = \"\u{FEFF}CRM\"".to_string(),
+        "display_name = \"CRM\u{E0001}\u{E0065}\u{E0076}\u{E0069}\u{E006C}\u{E007F}\"".to_string(),
+        "display_name = \"\u{200B}\"".to_string(),
+        "display_name = \"CRM\u{00AD}\"".to_string(),
+        "display_name = \"C\u{034F}RM\"".to_string(),
+        "display_name = \"\u{3164}\"".to_string(),
+        "display_name = \"CRM\u{115F}\"".to_string(),
+        "display_name = \"CRM\u{180E}\"".to_string(),
+        "display_name = \"CRM\u{2064}\"".to_string(),
+        "display_name = \"CRM\u{1D173}\"".to_string(),
+        "display_name = \"CRM\u{FE00}\"".to_string(),
+        "display_name = \"CRM\u{E0100}\"".to_string(),
+        "display_name = \"\u{FE0F}CRM\"".to_string(),
+        "display_name = \"CRM \u{FE0F}\"".to_string(),
+        "display_name = \"CRM \u{2600}\u{FE0F}\u{FE0F}\"".to_string(),
     ] {
         let server = parse(&invalid).unwrap();
         assert!(
@@ -59,4 +79,117 @@ fn display_names_are_optional_validated_and_fall_back_to_the_tidied_id() {
             "{invalid}"
         );
     }
+}
+
+/// Default_Ignorable_Code_Point in Unicode 16's DerivedCoreProperties.txt.
+const DEFAULT_IGNORABLE: [(u32, u32); 17] = [
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+];
+
+#[test]
+fn invisible_formatting_characters_are_exactly_the_default_ignorable_ones() {
+    for c in (0..=0x10FFFF).filter_map(char::from_u32) {
+        let listed = DEFAULT_IGNORABLE
+            .iter()
+            .any(|(start, end)| (*start..=*end).contains(&u32::from(c)));
+        assert_eq!(
+            is_invisible_format_char(c),
+            listed,
+            "U+{:04X}",
+            u32::from(c)
+        );
+    }
+    let named = parse("display_name = \"Café 365 \u{1F600}\"").unwrap();
+    assert!(validate_mcp_server_ids(&HashMap::from([("crm".into(), named)])).is_ok());
+}
+
+fn hidden_positions(text: &str) -> Vec<usize> {
+    mark_hidden_chars(text.chars())
+        .enumerate()
+        .filter_map(|(index, (_, hidden))| hidden.then_some(index))
+        .collect()
+}
+
+#[test]
+fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
+    // Keycap bases, regional indicators and Unicode 16's newest emoji
+    // (harp, fingerprint, face with bags under eyes) all have Emoji=Yes.
+    for base in "#*0123456789".chars().chain([
+        '\u{00A9}',
+        '\u{2764}',
+        '\u{1F1E6}',
+        '\u{1F1FF}',
+        '\u{1FA89}',
+        '\u{1FAC6}',
+        '\u{1FAE9}',
+    ]) {
+        for selector in ['\u{FE0E}', '\u{FE0F}'] {
+            assert_eq!(
+                hidden_positions(&format!("{base}{selector}")),
+                [] as [usize; 0],
+                "U+{:04X}",
+                u32::from(base)
+            );
+        }
+    }
+    for base in ['a', 'Z', '\u{00E9}', '\u{4E2D}', '\u{1F000}', '\u{20E3}'] {
+        assert_eq!(
+            hidden_positions(&format!("{base}\u{FE0F}")),
+            [1],
+            "U+{:04X}",
+            u32::from(base)
+        );
+    }
+
+    for (text, hidden) in [
+        ("1\u{FE0F}\u{20E3}", vec![]),
+        ("\u{1F44D}\u{1F3FD}\u{FE0F}", vec![]),
+        ("a\u{1F3FD}\u{FE0F}", vec![2]),
+        ("\u{1F3FD}\u{FE0F}", vec![1]),
+        ("\u{2764}\u{FE0F}\u{FE0E}", vec![2]),
+        ("\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}", vec![]),
+        ("\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}", vec![]),
+        ("\u{1F469}\u{1F3FD}\u{200D}\u{1F4BB}", vec![]),
+        ("\u{1F000}\u{FE0F}\u{200D}\u{1F469}", vec![1, 2]),
+        ("\u{1F1E9}\u{200D}\u{1F1EA}", vec![1]),
+        ("\u{1F468}\u{200D}a", vec![1]),
+        ("a\u{200D}b", vec![1]),
+        ("\u{1F3F4}\u{E0067}\u{E0062}\u{E007F}", vec![1, 2, 3]),
+    ] {
+        assert_eq!(hidden_positions(text), hidden, "{text:?}");
+    }
+
+    let valid = |name: &str| {
+        let server = parse(&format!("display_name = \"{name}\"")).unwrap();
+        validate_mcp_server_ids(&HashMap::from([("crm".into(), server)])).is_ok()
+    };
+    for name in [
+        "Weather \u{2600}\u{FE0F}",
+        "Team \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+        "Pride \u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+    ] {
+        assert!(valid(name), "{name:?}");
+    }
+    for name in ["Wea\u{FE0F}ther", "CRM\u{FE0E}", "C\u{200D}RM"] {
+        assert!(!valid(name), "{name:?}");
+    }
+    assert!(!has_hidden_chars(
+        "I \u{2764}\u{FE0F} it, 1\u{FE0F}\u{20E3}"
+    ));
 }

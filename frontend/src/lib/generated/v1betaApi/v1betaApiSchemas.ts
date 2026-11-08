@@ -2955,6 +2955,7 @@ export type MessageSubmitStreamingResponseToolCallUpdate = {
    * @minimum 0
    */
   content_index: number;
+  display?: ToolDisplayMetadata;
   input?: null | Value;
   /**
    * @format uuid
@@ -4417,15 +4418,166 @@ export type ToolApprovalKind =
   | "tool_call_limit"
   | "client_tool";
 
+/**
+ * How the readable view shows one argument.
+ */
+export type ToolArgumentKind = "group" | "list" | "id" | "text" | "value";
+
+/**
+ * One argument in the readable view. A member's name is the last segment of
+ * its path; the value is read from `input` at `path`. Both are raw: the
+ * reader unescapes the segment and cleans and caps both like other server text.
+ */
+export type ToolArgumentNode = {
+  /**
+   * A group's members or a list's entries, in argument order.
+   */
+  children?: ToolArgumentNode[];
+  kind: ToolArgumentKind;
+  /**
+   * Members or entries left out of `children`.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
+  /**
+   * A JSON pointer into `input`; the empty pointer is the whole input.
+   */
+  path: string;
+};
+
+/**
+ * What a call does. Reads, and anything none of the verbs fits, are `other`.
+ */
+export type ToolCallAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "move"
+  | "send"
+  | "comment"
+  | "other";
+
+/**
+ * What a tool call does to what, and where, read from its arguments by code.
+ * The verb and the kind come from closed lists, never from argument text, and
+ * every value keeps the pointer it was read through. Shown only: it never
+ * decides whether a call needs approval or which decisions a card offers.
+ */
+export type ToolCallLabel = {
+  action: ToolCallAction;
+  arguments?: ToolArgumentNode;
+  /**
+   * What the call acts on; empty on a `generic` label.
+   */
+  items?: ToolCallLabelItem[];
+  object_kind: ToolCallObjectKind;
+  source: ToolCallLabelSource;
+  warnings?: ToolCallLabelWarning[];
+};
+
+/**
+ * One thing a call acts on, each part read through its own pointer.
+ */
+export type ToolCallLabelItem = {
+  after?: ToolCallLabelSlot;
+  before?: ToolCallLabelSlot;
+  /**
+   * Key values worth showing, each with its argument's `name`.
+   */
+  fields?: ToolCallLabelSlot[];
+  id?: ToolCallLabelSlot;
+  target?: ToolCallLabelSlot;
+  title?: ToolCallLabelSlot;
+};
+
+/**
+ * The values one pointer reached in a call's arguments.
+ */
+export type ToolCallLabelSlot = {
+  /**
+   * The argument's name, display-cleaned; set on fields.
+   */
+  name?: string;
+  /**
+   * Values the pointer reached beyond those kept.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
+  /**
+   * A JSON pointer into the call's `input` where `*` stands for every
+   * element. A lookup key, never shown.
+   */
+  pointer: string;
+  values?: ToolCallLabelValue[];
+};
+
+/**
+ * Who chose a label's pointers. Values are always read by code.
+ */
+export type ToolCallLabelSource = "own_mapping" | "rules" | "model" | "generic";
+
+/**
+ * One value as the call wrote it.
+ */
+export type ToolCallLabelValue = {
+  /**
+   * Where the value sits in `input`, with indices in place of `*`.
+   */
+  path: string;
+  /**
+   * What earlier results in the chat call this value, such as a record's
+   * name or a field's old value; never taken from the call itself.
+   */
+  resolved?: string;
+  /**
+   * Display-cleaned and capped; an object reads as compact JSON.
+   */
+  text: string;
+  truncated?: boolean;
+};
+
+/**
+ * Something the card says next to a label.
+ */
+export type ToolCallLabelWarning =
+  | "arguments_truncated"
+  | "hidden_characters"
+  | "other";
+
+/**
+ * What kind of thing a call acts on.
+ */
+export type ToolCallObjectKind =
+  | "page"
+  | "row"
+  | "database"
+  | "folder"
+  | "note"
+  | "comment"
+  | "paragraph"
+  | "document"
+  | "email"
+  | "message"
+  | "event"
+  | "file"
+  | "task"
+  | "other";
+
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
 
 /**
- * Inert display text from the tool descriptor, captured when approval is
- * requested. Never used to select a tool, evaluate policy or execute a call.
+ * Inert display text for a tool call, captured with the call: the tool
+ * descriptor's text, the server's name and the call's label. Never used to
+ * select a tool, evaluate policy or execute a call.
  */
 export type ToolDisplayMetadata = {
   description?: string | null | undefined;
   description_truncated: boolean;
+  label?: ToolCallLabel;
   /**
    * The MCP server as the operator named it, else its id tidied up; never
    * text from the server itself. Absent on client tools and older rows.

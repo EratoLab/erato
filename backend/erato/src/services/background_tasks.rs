@@ -2015,6 +2015,8 @@ pub enum StreamingEvent {
         content_index: usize,
         tool_call_id: String,
         tool_name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        display: Option<crate::models::message::ToolDisplayMetadata>,
         #[serde(skip_serializing_if = "Option::is_none")]
         input: Option<JsonValue>,
         status: ToolCallStatus,
