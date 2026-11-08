@@ -16,6 +16,13 @@ import {
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
+import {
+  commentChangeRow,
+  commentChangesMore,
+  isMixedCommentProposal,
+  ownProposalLine,
+} from "@/lib/toolCallGist/ownProposalLabels";
 import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
 import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
@@ -32,6 +39,7 @@ import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
 import type { CleanText } from "@/lib/toolCallGist/serverText";
+import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
@@ -109,6 +117,38 @@ const GistRowDetails = ({
   </div>
 );
 
+/** Rows a mixed comment batch lists; the rest are counted. */
+const MAX_CHANGE_ROWS = 50;
+
+/** A mixed comment batch's changes, one row each, by operation only. */
+const CommentChangeRows = ({
+  changes,
+}: {
+  changes: readonly (WordCommentOp | "other")[];
+}) => {
+  const more = changes.length - MAX_CHANGE_ROWS;
+  return (
+    <ol
+      className="list-decimal space-y-0.5 pl-5 pt-2 text-xs text-theme-fg-secondary"
+      data-testid="tool-call-proposal-changes"
+    >
+      {changes.slice(0, MAX_CHANGE_ROWS).map((op, index) => (
+        <li key={index} data-op={op}>
+          {commentChangeRow(op)}
+        </li>
+      ))}
+      {more > 0 && (
+        <li
+          className="list-none text-theme-fg-muted"
+          data-testid="tool-call-proposal-changes-more"
+        >
+          {commentChangesMore(more)}
+        </li>
+      )}
+    </ol>
+  );
+};
+
 // The server's cap; rows and events from other writers get it here.
 const MAX_PROGRESS_CHARS = 200;
 
@@ -137,7 +177,15 @@ const PlainToolUseStep = ({
   const notRun =
     decision?.status === "denied" || refusedWithoutDecision(part, decision);
   const label = part.display?.label;
-  const gist = useMemo(() => gistOf(label, part.input), [label, part.input]);
+  // Erato's own proposals have cards of their own: the row only names them.
+  const proposal = useMemo(
+    () => ownProposalOf(label, part.input),
+    [label, part.input],
+  );
+  const gist = useMemo(
+    () => (proposal ? undefined : gistOf(label, part.input)),
+    [proposal, label, part.input],
+  );
   const serverName = textOf(part.display?.server_name);
   const lead = gist?.items[0];
   const phase: GistPhase = notRun
@@ -184,19 +232,24 @@ const PlainToolUseStep = ({
         )}
       </div>
     ) : undefined;
+  const proposalLine = proposal && ownProposalLine(proposal, phase);
   // A gist row's title is the line, so the tool it ran is named in the body.
-  const body = gist ? (
-    <>
-      <ToolCallIdentity
-        className="pt-2"
-        toolName={toolName}
-        server={serverName}
-      />
-      {payload}
-    </>
-  ) : (
-    payload
-  );
+  const body =
+    proposal || gist ? (
+      <>
+        {proposal?.kind === "comments" && isMixedCommentProposal(proposal) && (
+          <CommentChangeRows changes={proposal.changes} />
+        )}
+        <ToolCallIdentity
+          className="pt-2"
+          toolName={toolName}
+          server={serverName}
+        />
+        {payload}
+      </>
+    ) : (
+      payload
+    );
 
   return (
     // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the
@@ -215,7 +268,11 @@ const PlainToolUseStep = ({
         hasTrailingRailLine={!isLastStep}
         title={
           <>
-            {gist && lead ? (
+            {proposalLine ? (
+              <span title={proposalLine} data-testid="tool-call-proposal-line">
+                {proposalLine}
+              </span>
+            ) : gist && lead ? (
               <span
                 title={gistPlainLine(gist, lead, phase)}
                 data-testid="tool-call-gist-line"

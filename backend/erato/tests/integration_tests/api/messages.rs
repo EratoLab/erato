@@ -4081,6 +4081,15 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     assert_eq!(updates[0]["status"], "success");
     assert_eq!(updates[0]["output"]["status"], "proposed");
     assert_eq!(updates[0]["output"]["action"], "outlook.reply");
+    // The second proposal names the action it was refused for.
+    for update in &updates {
+        let label = &update["display"]["label"];
+        assert_eq!(
+            (&label["action"], &label["object_kind"], &label["source"]),
+            (&json!("send"), &json!("email"), &json!("own_mapping")),
+            "Got: {update}"
+        );
+    }
     assert_eq!(
         updates[1]["tool_call_id"],
         generated_tool_call_id(&assistant_message_id, 1, "call_second")
@@ -4130,6 +4139,10 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     );
     assert_eq!(rejected[0]["status"], "error");
     assert_eq!(tool_use_parts.len(), 2);
+    assert_eq!(
+        proposed[0]["display"]["label"],
+        updates[0]["display"]["label"]
+    );
 
     // The model received both corrective tool responses on the next turn.
     let corrective_bodies = corrective_request_recorder.bodies();
@@ -4255,6 +4268,25 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
     );
     assert_eq!(tool_use_parts[1]["output"]["status"], "proposed");
     assert_eq!(tool_use_parts[1]["output"]["action"], "outlook.reply_all");
+    // An action the table does not know is a proposal of some action.
+    let labels: Vec<_> = tool_use_parts
+        .iter()
+        .map(|part| {
+            let label = &part["display"]["label"];
+            (
+                label["action"].clone(),
+                label["object_kind"].clone(),
+                label["source"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            (json!("other"), json!("other"), json!("own_mapping")),
+            (json!("send"), json!("email"), json!("own_mapping")),
+        ]
+    );
 }
 
 /// A call to a tool that was never offered (no facet ⇒ empty allow-list)
@@ -8404,6 +8436,7 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -8805,6 +8838,7 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -9359,6 +9393,7 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -9952,6 +9987,7 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -11627,6 +11663,7 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                label: None,
                 durable: None,
                 child_access: Default::default(),
                 host_context: None,
@@ -11697,6 +11734,7 @@ async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                label: None,
                 durable: None,
                 child_access: Default::default(),
                 host_context: None,

@@ -242,6 +242,42 @@ export const jsonPreview = (value: unknown, maxChars: number): string => {
   return out;
 };
 
+/** Values a label pointer may reach before it counts as reaching too many. */
+export const MAX_POINTER_VALUES = 10_000;
+
+/**
+ * Every value a label pointer reaches, where `*` stands for every element of
+ * an array or member of an object, in document order. `undefined` once more
+ * than `limit` would be reached, so wildcards over a wide input stay cheap.
+ */
+export const readPointerAll = (
+  document: unknown,
+  pointer: unknown,
+  limit: number = MAX_POINTER_VALUES,
+): unknown[] | undefined => {
+  if (typeof pointer !== "string" || !pointer.startsWith("/")) return [];
+  let reached: unknown[] = [document];
+  for (const raw of pointer.slice(1).split("/")) {
+    const next: unknown[] = [];
+    for (const value of reached) {
+      if (raw !== "*") {
+        const child = readPointer(value, `/${raw}`);
+        if (child !== undefined) next.push(child);
+        continue;
+      }
+      const children = Array.isArray(value)
+        ? value
+        : isRecord(value)
+          ? Object.values(value)
+          : [];
+      if (next.length + children.length > limit) return undefined;
+      for (const child of children) next.push(child);
+    }
+    reached = next;
+  }
+  return reached;
+};
+
 /**
  * What a failed call's server said, in its own words: a text result, or the
  * `error` or `message` of a JSON one. `undefined` when the result holds no

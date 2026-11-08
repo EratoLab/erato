@@ -858,6 +858,20 @@ chat_provider_ids = ["test-token-limit"]
 # # keep_input_fields = ["$.lookahead_days"]
 # # keep_output_fields = ["$.status", "$.error"]
 #
+# # Optional, for a tool that stages a proposal: one line in the trace saying
+# # what the call proposes, instead of the tool's name. action is create,
+# # update, delete, move, send or comment; object_kind is page, row, database,
+# # folder, note, comment, paragraph, document, email, message, event, file,
+# # task or other. The chat has words for update/document, send/email,
+# # create/event and comment, update or delete with comment; any other pair
+# # reads "Proposed an action". Up to 4 fields are `$.key.key` paths into the
+# # arguments, where `key[*]` is every element of an array; a comment
+# # proposal's `op` field gives each change's operation.
+# # [client_tools.tools.word_submit_comment_changes.label]
+# # action = "comment"
+# # object_kind = "comment"
+# # fields = ["$.changes[*].op"]
+#
 # # Optional: with durable_operations_enabled, a call whose stream drops or
 # # times out parks durably for the same device and Outlook mailbox instead of
 # # ending as a timeout; the turn resumes when that add-in answers. Not allowed

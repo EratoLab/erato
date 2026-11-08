@@ -39,6 +39,7 @@ import {
 } from "@/lib/delegation/taskBrief";
 import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
 import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   WORD_EDITS_FENCE,
   WORD_INSERT_FENCE,
@@ -726,6 +727,13 @@ const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "image_file_pointer" ||
   part.content_type === "audio_file_pointer";
 
+// Outside Word, the accepted submission stays as the one trace step that says
+// what was proposed; a row saved before proposal labels folds as before.
+const isWordProposalStep = (part: ContentPart): boolean =>
+  part.content_type === "tool_use" &&
+  isAcceptedWordSubmission(part) &&
+  ownProposalOf(part.display?.label, part.input) !== undefined;
+
 const contentPartToImage = (
   part: ContentPart,
   index: number,
@@ -1325,7 +1333,9 @@ export const MessageContent = memo(function MessageContent({
   const content = React.useMemo(
     () =>
       foldsWordPlan
-        ? messageContent.filter((part) => !isWordPlanToolPart(part))
+        ? messageContent.filter(
+            (part) => !isWordPlanToolPart(part) || isWordProposalStep(part),
+          )
         : messageContent,
     [foldsWordPlan, messageContent],
   );

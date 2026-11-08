@@ -6953,6 +6953,56 @@ composed. History that an earlier request already stored in full stays full. Eac
 receipts the model received, so switching `mode` back to `full` restores only calls
 from the latest earlier turn. Older calls in that chat stay compacted.
 
+### A summary line for proposal tools
+
+A client tool that stages a proposal for the user, such as a document change or
+comment changes, shows its name in the chat's trace by default. Add a `label`
+table to show one line about what the call proposes instead, such as "Proposed
+changes to the document" or "Proposed replies to 3 comments". The tool's own card
+still carries the details, and the raw arguments and result stay one click away.
+
+```toml
+[client_tools.tools.submit_comment_changes]
+name = "submit_comment_changes"
+namespace = "editor"
+description = "Stage comment changes on a card for the user to confirm."
+parameters = '''{"type":"object","properties":{"changes":{"type":"array","items":{"type":"object","properties":{"op":{"type":"string","enum":["add","reply","resolve","reopen","edit","delete"]},"thread":{"type":["string","null"]}}}}},"required":["changes"]}'''
+
+[client_tools.tools.submit_comment_changes.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.changes[*].op"]
+```
+
+{/* erato_toml_config_key: client_tools.tools.<key>.label.action */}
+{/* erato_toml_config_key: client_tools.tools.<key>.label.object_kind */}
+{/* erato_toml_config_key: client_tools.tools.<key>.label.fields.[] */}
+
+- **`action`** _(required)_ - What a call proposes: `create`, `update`, `delete`, `move`, `send` or `comment`.
+- **`object_kind`** _(required)_ - What it acts on: `page`, `row`, `database`, `folder`, `note`, `comment`, `paragraph`, `document`, `email`, `message`, `event`, `file`, `task` or `other`.
+- **`fields`** _(default: `[]`)_ - Up to 4 paths to key values. One that reaches nothing in a call is left out. For a comment proposal, a field named `op` gives each change's operation (`add`, `reply`, `resolve`, `reopen`, `edit` or `delete`), so the line counts them.
+
+The chat has words for these pairs:
+
+| `action` | `object_kind` | Line |
+| --- | --- | --- |
+| `update` | `document` | Proposed changes to the document |
+| `comment`, `update` or `delete` | `comment` | Proposed a new comment, replies to 3 comments, 2 comment changes, ... (counted from `op`) |
+| `send` | `email` | Proposed an email |
+| `create` | `event` | Proposed an appointment |
+
+Any other pair reads "Proposed an action". Fields other than `op` are stored with
+the call but not shown.
+
+Paths are `$.key.key` paths into the call's arguments, like the replay fields,
+where `key[*]` stands for every element of an array. The backend reads every value
+through them; the label never holds text of its own. A table the backend cannot
+use is left out with a startup warning, and the tool loads and shows its name as
+before: an invalid path, more than 4 fields, any other key or value in the table
+(such as one written for a newer release), and the tables of client tools that
+share a model-facing name across namespaces but not the same `label`. Calls stored
+before a tool had a label show as before.
+
 ### `budget`
 
 {/* erato_toml_config_key: budget */}

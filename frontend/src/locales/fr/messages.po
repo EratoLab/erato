@@ -8700,6 +8700,7 @@ msgstr "{count, plural, one {tâche} other {# tâches}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
+#: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.more"
 msgstr "{more, plural, one {+# autre} other {+# autres}}"
 
@@ -8732,6 +8733,146 @@ msgstr "Certaines valeurs de cet appel contiennent des caractères cachés, reti
 #: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Autres arguments"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.action"
+msgstr "une action"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.ask"
+msgstr "Proposition : {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.add"
+msgstr "Nouveau commentaire"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.delete"
+msgstr "Supprimer"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.edit"
+msgstr "Modifier"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.other"
+msgstr "Autre modification"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.reopen"
+msgstr "Rouvrir"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.reply"
+msgstr "Répondre"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.change.resolve"
+msgstr "Résoudre"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.add"
+msgstr "{count, plural, one {un nouveau commentaire} other {# nouveaux commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.delete"
+msgstr "{count, plural, one {supprimer un commentaire} other {supprimer # commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.edit"
+msgstr "{count, plural, one {une modification d’un commentaire} other {des modifications de # commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.mixed"
+msgstr "{count, plural, one {une modification de commentaire} other {# modifications de commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.reopen"
+msgstr "{count, plural, one {rouvrir un commentaire} other {rouvrir # commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.reply"
+msgstr "{count, plural, one {une réponse à un commentaire} other {des réponses à # commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.resolve"
+msgstr "{count, plural, one {résoudre un commentaire} other {résoudre # commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.comments.unknown"
+msgstr "des modifications de commentaires"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.add"
+msgstr "{count, plural, one {# nouveau} other {# nouveaux}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.delete"
+msgstr "{count, plural, one {# supprimé} other {# supprimés}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.edit"
+msgstr "{count, plural, one {# modifié} other {# modifiés}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.reopen"
+msgstr "{count, plural, one {# rouvert} other {# rouverts}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.reply"
+msgstr "{count, plural, one {# réponse} other {# réponses}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.count.resolve"
+msgstr "{count, plural, one {# résolu} other {# résolus}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.document"
+msgstr "des modifications du document"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.done"
+msgstr "Proposé : {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.email"
+msgstr "un e-mail"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.event"
+msgstr "un rendez-vous"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/ownProposalLabels.ts
+msgid "toolGist.proposal.failed"
+msgstr "Échec de la proposition : {what}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

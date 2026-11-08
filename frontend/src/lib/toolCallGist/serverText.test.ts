@@ -6,6 +6,7 @@ import {
   jsonPreview,
   lastPointerSegment,
   readPointer,
+  readPointerAll,
   serverFailureMessage,
 } from "./serverText";
 
@@ -313,6 +314,41 @@ describe("pointers", () => {
     expect(readPointer(input, "")).toBe(input);
     expect(readPointer(input, "/missing")).toBeUndefined();
     expect(readPointer(input, "/list/01")).toBeUndefined();
+  });
+
+  it("reads every element a wildcard stands for, and skips what is missing", () => {
+    const input = {
+      changes: [{ op: "reply" }, { op: null }, {}, { op: "resolve" }],
+      ids: { a: "x", b: "y" },
+    };
+    expect(readPointerAll(input, "/changes/*/op")).toEqual([
+      "reply",
+      null,
+      "resolve",
+    ]);
+    expect(readPointerAll(input, "/ids/*")).toEqual(["x", "y"]);
+    expect(readPointerAll(input, "/changes/3/op")).toEqual(["resolve"]);
+    expect(readPointerAll(input, "/missing/*")).toEqual([]);
+    expect(readPointerAll(input, "changes")).toEqual([]);
+  });
+
+  it("reads any pointer, and gives up on one that reaches too many values", () => {
+    for (const pointer of [undefined, null, 42, ["/a"], { "/": 1 }]) {
+      expect(readPointerAll({ a: 1 }, pointer)).toEqual([]);
+    }
+    const odd = { "a/b": { "~": ["x"] }, "": "empty", "\u202E": "bidi" };
+    expect(readPointerAll(odd, "/a~1b/~0/*")).toEqual(["x"]);
+    expect(readPointerAll(odd, "/")).toEqual(["empty"]);
+    expect(readPointerAll(odd, "/\u202E")).toEqual(["bidi"]);
+    const wide = {
+      rows: Array.from({ length: 200 }, () =>
+        Array.from({ length: 200 }, (_, index) => index),
+      ),
+    };
+    expect(readPointerAll(wide, "/rows/*")).toHaveLength(200);
+    expect(readPointerAll(wide, "/rows/*/*")).toBeUndefined();
+    expect(readPointerAll(wide, "/rows/*/*", 40_000)).toHaveLength(40_000);
+    expect(readPointerAll(wide, "/rows/*", 199)).toBeUndefined();
   });
 
   it("names the last segment unescaped", () => {
