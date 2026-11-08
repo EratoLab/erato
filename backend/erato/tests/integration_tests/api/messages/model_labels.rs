@@ -490,8 +490,8 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
 }
 
 /// A label that arrives after the card was approved leaves the message as
-/// the continuation stored it, and a label for another call never touches
-/// the card.
+/// the continuation stored it: the card's write refuses the call once its
+/// card is answered, as it refuses another call's label on an open card.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -557,7 +557,18 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
         "tool_approval_request"
     );
 
-    let label = app_state
+    let late = ToolCallLabel {
+        source: ToolCallLabelSource::Model,
+        ..label
+    };
+    assert!(
+        !upgrade_open_approval_label(&app_state.db, message_id, CALL_ID, &late)
+            .await
+            .unwrap()
+    );
+    assert_eq!(message_content(&app_state, message_id).await, stored);
+
+    let mapping = app_state
         .tool_label_cache
         .get_or_compute(
             key,
@@ -567,10 +578,9 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
             async { None },
         )
         .await
-        .expect("the model's label");
-    assert_eq!(label.source, ToolCallLabelSource::Model);
-    // The labeller tries the card right after its label resolves.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+        .expect("the model's mapping");
+    assert_eq!(mapping.source, ToolCallLabelSource::Model);
+    // Secondary: the labeller's own attempt may not have run yet.
     assert_eq!(message_content(&app_state, message_id).await, stored);
     assert!(
         stored
@@ -781,8 +791,15 @@ async fn nothing_goes_to_the_labeller(
     if busy {
         app_state.tool_label_permits = std::sync::Arc::new(tokio::sync::Semaphore::new(0));
     }
+    let permits = app_state.tool_label_permits.available_permits();
     let (chat_id, message_id, _events) = submit(&app_state).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // The gate takes a labelling's permit before the turn parks and the
+    // labelling holds it until its request is answered, so once every permit
+    // is back nothing is in flight and anything sent has been recorded.
+    eventually("no labelling in flight", || async {
+        (app_state.tool_label_permits.available_permits() == permits).then_some(())
+    })
+    .await;
     assert!(recorder.bodies().is_empty(), "{:?}", recorder.bodies());
     let card = card(&app_state, message_id).await;
     assert_eq!(card["display"]["label"]["source"], "rules");

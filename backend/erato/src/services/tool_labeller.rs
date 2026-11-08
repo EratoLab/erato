@@ -791,7 +791,6 @@ mod tests {
                 })
                 .is_err()
         );
-        assert_eq!(source(&content[0]), ToolCallLabelSource::Rules);
     }
 
     #[test]

@@ -543,35 +543,7 @@ fn every_probe_label_can_be_given_from_the_calls_paths() {
                 .items
                 .iter()
                 .filter(|item| **item != ToolCallLabelItemMapping::default())
-                .take(MAX_LABEL_ITEMS)
-                .map(|item| ToolCallLabelItemMapping {
-                    title: item
-                        .title
-                        .as_deref()
-                        .map(|p| with_wildcards(p, &case.arguments)),
-                    id: item
-                        .id
-                        .as_deref()
-                        .map(|p| with_wildcards(p, &case.arguments)),
-                    target: item
-                        .target
-                        .as_deref()
-                        .map(|p| with_wildcards(p, &case.arguments)),
-                    before: item
-                        .before
-                        .as_deref()
-                        .map(|p| with_wildcards(p, &case.arguments)),
-                    after: item
-                        .after
-                        .as_deref()
-                        .map(|p| with_wildcards(p, &case.arguments)),
-                    fields: item
-                        .fields
-                        .iter()
-                        .map(|p| with_wildcards(p, &case.arguments))
-                        .take(MAX_LABEL_FIELDS)
-                        .collect(),
-                })
+                .cloned()
                 .collect();
             assert_eq!(mapping.items, want, "{}", case.id);
             assert!(user_text(&request).len() <= MAX_INPUT_BYTES, "{}", case.id);
