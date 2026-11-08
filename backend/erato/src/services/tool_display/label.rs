@@ -4,6 +4,7 @@
 //! (by hand, by rules or a model) cannot put text of its own on the card.
 
 mod arguments;
+pub mod cache;
 pub mod context;
 pub mod own;
 pub mod pointer;
@@ -37,7 +38,7 @@ pub const MAX_LABEL_VALUE_BYTES: usize = 16 * 1024;
 /// Where a label's parts sit in a call's arguments: pointers and closed-list
 /// choices, never values, so one mapping fits every call of the same shape
 /// and holds nothing of any one call.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, erato_memory::HeapSize)]
 pub struct ToolCallLabelMapping {
     pub action: ToolCallAction,
     pub object_kind: ToolCallObjectKind,
@@ -48,7 +49,7 @@ pub struct ToolCallLabelMapping {
 
 /// Pointers for one item. `title`, `id`, `target`, `before` and `after` are
 /// core: each one set must reach a value.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, erato_memory::HeapSize)]
 #[serde(default)]
 pub struct ToolCallLabelItemMapping {
     pub title: Option<String>,
@@ -96,28 +97,93 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
     }
 }
 
-/// The label an MCP call shows: the rules' when the cross-check agrees with
-/// it, else the generic one. `tool` carries the resolved annotations, and
+/// The rules' verdict on an MCP call. A bug in them gives the generic
+/// mapping, marked sure so that no cached mapping stands in for it.
 /// `approval_argument` is the server's consent argument.
-pub fn mcp_call_label(
+pub fn guarded_rules(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+) -> rules::RulesLabel {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        rules::rules_label(
+            &tool.name,
+            arguments,
+            tool.annotations.as_ref(),
+            approval_argument,
+        )
+    }))
+    .unwrap_or_else(|_| {
+        tracing::error!("Showing the generic label for a tool call: its rules panicked");
+        rules::RulesLabel {
+            mapping: ToolCallLabelMapping {
+                action: ToolCallAction::Other,
+                object_kind: ToolCallObjectKind::Other,
+                items: Vec::new(),
+                source: ToolCallLabelSource::Generic,
+            },
+            unsure: None,
+        }
+    })
+}
+
+/// The mapping an MCP call is labelled from: the rules', unless they are
+/// unsure and a model mapped a call of the same shape for this user before.
+/// `tool` carries the resolved annotations, and `approval_argument` is the
+/// server's consent argument. A cache that fails or is slow only costs the
+/// call the cached mapping.
+pub async fn mcp_call_mapping(
+    cache: &cache::ToolLabelCache,
+    user_id: &str,
     server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
     approval_argument: Option<&str>,
-) -> ToolCallLabel {
-    let rules = rules::rules_label(
-        &tool.name,
-        arguments,
-        tool.annotations.as_ref(),
-        approval_argument,
-    );
-    checked_label(
+) -> ToolCallLabelMapping {
+    let rules = guarded_rules(tool, arguments, approval_argument);
+    if rules.unsure.is_none() {
+        return rules.mapping;
+    }
+    let lookup = cached_mapping(
+        cache,
+        user_id,
         server_id,
         tool,
         arguments,
-        &rules.mapping,
         approval_argument,
-    )
+    );
+    match cache::bounded(lookup).await {
+        Ok(Some(mapping)) => mapping,
+        Ok(None) => rules.mapping,
+        Err(failure) => {
+            tracing::warn!(
+                server_id = %server_id,
+                tool_name = ?logged_tool_name(&tool.name),
+                failure,
+                "Labelling a tool call by the rules: looking up its cached mapping failed"
+            );
+            rules.mapping
+        }
+    }
+}
+
+async fn cached_mapping(
+    cache: &cache::ToolLabelCache,
+    user_id: &str,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+) -> Option<ToolCallLabelMapping> {
+    let key = cache::ToolLabelCacheKey::new(user_id, server_id, tool, arguments);
+    let mapping = cache.lookup(&key, arguments, approval_argument).await?;
+    if rules::cross_check(tool, arguments, mapping.action).is_empty() {
+        return Some(mapping);
+    }
+    // For one key only the annotations can change the verdict, so the
+    // entry would be rejected on every later call too.
+    cache.forget(&key).await;
+    None
 }
 
 /// A mapping's label, whatever its source, once the cross-check agrees with
@@ -1136,6 +1202,22 @@ mod tests {
         tool
     }
 
+    /// The label a call shows with no model mapping kept for it.
+    fn mcp_call_label(
+        server_id: &str,
+        tool: &rmcp::model::Tool,
+        arguments: &Value,
+        approval_argument: Option<&str>,
+    ) -> ToolCallLabel {
+        checked_label(
+            server_id,
+            tool,
+            arguments,
+            &guarded_rules(tool, arguments, approval_argument).mapping,
+            approval_argument,
+        )
+    }
+
     #[test]
     fn an_mcp_call_shows_the_rules_label_unless_its_resolved_hints_disagree() {
         let arguments = json!({"title": "Secret plan", "parent_id": "secret-parent"});
@@ -1247,6 +1329,204 @@ mod tests {
         let (label, log) = logged(|| checked_label("word", &word, &changes, &creating, None));
         assert_eq!(label, generic_label(&changes));
         assert!(log.contains("field_verb"), "{log}");
+    }
+
+    #[tokio::test]
+    async fn a_models_mapping_labels_a_call_only_where_the_rules_are_unsure_and_for_its_user() {
+        let mut tool = rmcp::model::Tool::new(
+            "crm_records",
+            "Works on CRM records.",
+            json!({"type": "object", "properties": {"recordId": {"type": "string"}}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        let first = json!({"recordId": "rec-1", "stage": "won"});
+        let rules = rules::rules_label(&tool.name, &first, None, None);
+        assert!(rules.unsure.is_some(), "{rules:?}");
+        let model = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/stage".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let cache = cache::ToolLabelCache::default();
+        let key = cache::ToolLabelCacheKey::new("user-a", "crm", &tool, &first);
+        cache
+            .get_or_compute(key, &first, None, async { Some(model.clone()) })
+            .await;
+
+        let second = json!({"recordId": "rec-2", "stage": "lost"});
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
+        assert_eq!(mapping, model);
+        let label = checked_label("crm", &tool, &second, &mapping, None);
+        assert_eq!(label.source, ToolCallLabelSource::Model);
+        assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
+        assert_eq!(
+            mcp_call_mapping(&cache, "user-b", "crm", &tool, &second, None).await,
+            rules::rules_label(&tool.name, &second, None, None).mapping
+        );
+
+        let hints = |read_only, destructive| {
+            Some(rmcp::model::ToolAnnotations::from_raw(
+                None,
+                read_only,
+                destructive,
+                None,
+                None,
+            ))
+        };
+        tool.annotations = hints(Some(true), None);
+        let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
+        assert_eq!(read.source, ToolCallLabelSource::Rules);
+        tool.annotations = None;
+        assert_eq!(
+            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await,
+            model
+        );
+
+        // An operator's later override drops a mapping it rules out.
+        let create = ToolCallLabelMapping {
+            action: ToolCallAction::Create,
+            ..model.clone()
+        };
+        let key = cache::ToolLabelCacheKey::new("user-c", "crm", &tool, &first);
+        cache
+            .get_or_compute(key.clone(), &first, None, async { Some(create.clone()) })
+            .await;
+        tool.annotations = hints(None, Some(true));
+        let rules_mapping =
+            rules::rules_label(&tool.name, &second, tool.annotations.as_ref(), None).mapping;
+        assert_eq!(
+            mcp_call_mapping(&cache, "user-c", "crm", &tool, &second, None).await,
+            rules_mapping
+        );
+        assert!(cache.entries().get(&key).await.is_none());
+        assert_eq!(
+            checked_label("crm", &tool, &second, &rules_mapping, None).source,
+            ToolCallLabelSource::Rules
+        );
+    }
+
+    /// A model's mapping cached for an earlier call of the same shape.
+    async fn cached(
+        cache: &cache::ToolLabelCache,
+        tool: &rmcp::model::Tool,
+        arguments: &Value,
+        mapping: ToolCallLabelMapping,
+    ) {
+        let key = cache::ToolLabelCacheKey::new("user-a", "crm", tool, arguments);
+        let kept = cache
+            .get_or_compute(key, arguments, None, async { Some(mapping) })
+            .await;
+        assert!(kept.is_some());
+    }
+
+    #[tokio::test]
+    async fn a_misled_cached_mapping_shows_no_more_than_the_checks_on_each_call_allow() {
+        let tool = rmcp::model::Tool::new(
+            "outbox",
+            "Works on the outbox.",
+            rmcp::model::JsonObject::new(),
+        );
+        let cache = cache::ToolLabelCache::default();
+        let earlier = json!({"recordId": "r_0", "hasUserApproved": false, "stage": "open"});
+        assert!(
+            rules::rules_label("outbox", &earlier, None, None)
+                .unsure
+                .is_some()
+        );
+        cached(
+            &cache,
+            &tool,
+            &earlier,
+            ToolCallLabelMapping {
+                action: ToolCallAction::Update,
+                object_kind: ToolCallObjectKind::Row,
+                items: vec![ToolCallLabelItemMapping {
+                    id: Some("/recordId".into()),
+                    fields: vec!["/hasUserApproved".into(), "/stage".into()],
+                    ..Default::default()
+                }],
+                source: ToolCallLabelSource::Model,
+            },
+        )
+        .await;
+        let call = json!({"recordId": "r_1", "hasUserApproved": true, "stage": "won"});
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None).await;
+        let label = checked_label("crm", &tool, &call, &mapping, None);
+        assert_eq!(label.source, ToolCallLabelSource::Model);
+        let fields: Vec<_> = label.items[0]
+            .fields
+            .iter()
+            .map(|field| field.pointer.as_str())
+            .collect();
+        assert_eq!(fields, ["/stage"]);
+
+        let earlier: serde_json::Map<String, Value> =
+            ["to", "cc", "bcc", "attendees", "invitees", "participants"]
+                .into_iter()
+                .map(|member| (member.to_string(), json!(["x@example.com"])))
+                .chain([("subject".to_string(), json!("Q3"))])
+                .collect();
+        let earlier = Value::Object(earlier);
+        cached(
+            &cache,
+            &tool,
+            &earlier,
+            ToolCallLabelMapping {
+                action: ToolCallAction::Send,
+                object_kind: ToolCallObjectKind::Email,
+                items: vec![ToolCallLabelItemMapping {
+                    title: Some("/subject".into()),
+                    target: Some("/to".into()),
+                    ..Default::default()
+                }],
+                source: ToolCallLabelSource::Model,
+            },
+        )
+        .await;
+        let mut call = earlier.clone();
+        call["bcc"] = json!(["hidden@example.com"]);
+        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None).await;
+        assert_eq!(mapping.source, ToolCallLabelSource::Model);
+        assert_eq!(
+            checked_label("crm", &tool, &call, &mapping, None),
+            generic_label(&call)
+        );
+    }
+
+    #[tokio::test]
+    async fn any_tool_or_arguments_get_a_mapping_without_failing_the_call() {
+        let cache = cache::ToolLabelCache::default();
+        let deep = (0..1_000).fold(json!("leaf"), |inner, _| json!({"op": "x", "next": inner}));
+        let mut tool = rmcp::model::Tool::new(
+            "records",
+            "Works on records.",
+            json!({"type": "object", "properties": {"deep": deep.clone()}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
+        tool.name = format!("upd\u{202E}ate\n{}", "\u{0}".repeat(512 * 1024)).into();
+        for arguments in [
+            json!("not json {"),
+            json!(null),
+            json!(42),
+            json!([{"recordId": "r_1"}]),
+            json!({"a/b": {"~0": "\u{202E}"}, "\u{0}": [], "": {"": null}}),
+            json!({"recordId": "r_1", "deep": deep.clone()}),
+            json!({"items": (0..20_000).map(|n| json!({"id": n})).collect::<Vec<_>>()}),
+        ] {
+            let rules = guarded_rules(&tool, &arguments, None);
+            let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &arguments, None).await;
+            assert_eq!(mapping, rules.mapping, "{:.80}", arguments.to_string());
+            checked_label("crm", &tool, &arguments, &mapping, None);
+        }
     }
 
     fn update_record() -> rmcp::model::Tool {

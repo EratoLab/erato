@@ -5672,6 +5672,110 @@ async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgr
     assert!(status.get("resolved").is_none(), "{status}");
 }
 
+/// A call the rules are unsure of shows the mapping a model gave an earlier
+/// call of the same shape for the same user, with this call's values.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(pool: Pool<Postgres>) {
+    use erato::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+    use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
+    use erato::services::tool_display::label::cache::ToolLabelCacheKey;
+    use erato::services::tool_display::label::{ToolCallLabelItemMapping, ToolCallLabelMapping};
+    const ASK: &str = "Reject the record";
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_update",
+            "update_record",
+            json!({"status": "Rejected"}),
+        )]),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let tools = McpServers::new(&app_state.config)
+        .list_tools_for_server_ids(
+            Uuid::new_v4(),
+            Some(&std::collections::HashSet::from(["records".to_string()])),
+            &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
+                oidc_token: None,
+                access_token: None,
+            },
+        )
+        .await
+        .unwrap();
+    let update = tools
+        .iter()
+        .find(|tool| tool.tool.name == "update_record")
+        .unwrap();
+    let earlier = json!({"status": "Approved"});
+    let model = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: vec![ToolCallLabelItemMapping {
+            fields: vec!["/status".into()],
+            ..Default::default()
+        }],
+        source: ToolCallLabelSource::Model,
+    };
+    app_state
+        .tool_label_cache
+        .get_or_compute(
+            ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &earlier),
+            &earlier,
+            None,
+            async { Some(model) },
+        )
+        .await
+        .expect("the model's mapping is kept");
+
+    let response = app_server(app_state.clone())
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": ASK }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = &card["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("model"), &json!("update"), &json!("row"))
+    );
+    assert_eq!(
+        label_field(label, "status")["values"][0]["text"],
+        "Rejected"
+    );
+    let running = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["status"] == "in_progress"
+                && json["tool_call_id"] == card["tool_call_id"]
+        })
+        .expect("the streamed call goes in progress");
+    assert_eq!(&running["display"]["label"], label);
+}
+
 /// A turn that ran two calls before the gate stopped it must hand the model
 /// BOTH of them when it is resumed. The continuation used to rebuild the
 /// context from the single gated call, so everything the turn had already done

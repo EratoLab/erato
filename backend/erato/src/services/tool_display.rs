@@ -36,11 +36,8 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
     }
 }
 
-/// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
-/// the server's name from the live config and the call's label, with the IDs
-/// it names resolved from earlier results in the chat, stored with the call's
-/// parts. `approval_argument` is the tool's consent argument, which the label
-/// leaves out; the server's configured one is a consent flag on any tool.
+/// What a call of an MCP tool shows wherever it appears, labelled by the rules
+/// alone; see [`mcp_tool_call_display_from`].
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -49,24 +46,102 @@ pub fn mcp_tool_call_display(
     approval_argument: Option<&str>,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
-    let arguments = without_approval_argument(arguments, approval_argument);
-    let consent = approval_argument.or_else(|| {
-        config
-            .mcp_servers
-            .get(server_id)
-            .and_then(|server| server.approval_argument.as_deref())
-    });
+    let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
+    let rules = label::guarded_rules(tool, &labelled.arguments, labelled.consent);
+    labelled_display(config, server_id, tool, &labelled, &rules.mapping, context)
+}
+
+/// The mapping a call of an MCP tool is labelled from: the rules', or a
+/// model's this user's earlier call of the same shape got where they are
+/// unsure; see [`label::mcp_call_mapping`].
+pub async fn mcp_tool_call_mapping(
+    cache: &label::cache::ToolLabelCache,
+    user_id: &str,
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
+) -> label::ToolCallLabelMapping {
+    let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
+    label::mcp_call_mapping(
+        cache,
+        user_id,
+        server_id,
+        tool,
+        &labelled.arguments,
+        labelled.consent,
+    )
+    .await
+}
+
+/// What a call of an MCP tool shows wherever it appears: the tool's descriptor,
+/// the server's name from the live config and the label `mapping` gives once
+/// the cross-check agrees with it, with the IDs it names resolved from earlier
+/// results in the chat, stored with the call's parts. `approval_argument` is
+/// the tool's consent argument, which the label leaves out; the server's
+/// configured one is a consent flag on any tool.
+pub fn mcp_tool_call_display_from(
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    arguments: &serde_json::Value,
+    approval_argument: Option<&str>,
+    mapping: &label::ToolCallLabelMapping,
+    context: &label::ToolResultContext,
+) -> ToolDisplayMetadata {
+    let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
+    labelled_display(config, server_id, tool, &labelled, mapping, context)
+}
+
+/// A call's arguments as its label reads them, and the consent argument the
+/// label treats as a flag: the tool's, else the server's configured one.
+struct LabelledArguments<'a> {
+    arguments: std::borrow::Cow<'a, serde_json::Value>,
+    consent: Option<&'a str>,
+}
+
+impl<'a> LabelledArguments<'a> {
+    fn new(
+        config: &'a McpRuntimeConfig,
+        server_id: &str,
+        arguments: &'a serde_json::Value,
+        approval_argument: Option<&'a str>,
+    ) -> Self {
+        Self {
+            arguments: without_approval_argument(arguments, approval_argument),
+            consent: approval_argument.or_else(|| {
+                config
+                    .mcp_servers
+                    .get(server_id)
+                    .and_then(|server| server.approval_argument.as_deref())
+            }),
+        }
+    }
+}
+
+fn labelled_display(
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool: &rmcp::model::Tool,
+    labelled: &LabelledArguments<'_>,
+    mapping: &label::ToolCallLabelMapping,
+    context: &label::ToolResultContext,
+) -> ToolDisplayMetadata {
+    let (arguments, consent) = (&*labelled.arguments, labelled.consent);
     let scope = names_scope(config, server_id);
     // Names only add to a label, so a resolver bug costs the names, not the label.
     let label = label::guarded(|| {
-        let mut label = label::mcp_call_label(server_id, tool, &arguments, consent);
+        let mut label = label::checked_label(server_id, tool, arguments, mapping, consent);
         if let Some(server) = &scope {
-            context.resolve(&mut label, &arguments, server);
+            context.resolve(&mut label, arguments, server);
         }
         label
     })
-    .or_else(|| label::guarded(|| label::mcp_call_label(server_id, tool, &arguments, consent)))
-    .or_else(|| label::guarded(|| label::generic_label(&arguments)));
+    .or_else(|| {
+        label::guarded(|| label::checked_label(server_id, tool, arguments, mapping, consent))
+    })
+    .or_else(|| label::guarded(|| label::generic_label(arguments)));
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
@@ -629,6 +704,100 @@ mod tests {
             fields("crm"),
             ["/userConfirmed", "/marketing_consent", "/statuscode"]
         );
+    }
+
+    #[tokio::test]
+    async fn a_cached_mapping_is_found_and_checked_on_the_arguments_the_label_reads() {
+        use label::cache::{ToolLabelCache, ToolLabelCacheKey};
+        let server = |approval_argument: &str| {
+            serde_json::json!({
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+                "approval_argument": approval_argument,
+            })
+        };
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {"dv": server("hasUserApproved"), "crm": server("userConfirmed")}
+        }))
+        .unwrap();
+        let tool = Tool::new("crm_records", "Works on CRM records.", JsonObject::new());
+        let cache = ToolLabelCache::default();
+        let model = label::ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![label::ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/stage".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let earlier = serde_json::json!({"recordId": "rec-1", "stage": "won"});
+        let key = ToolLabelCacheKey::new("user-a", "dv", &tool, &earlier);
+        let model_mapping = model.clone();
+        cache
+            .get_or_compute(key, &earlier, Some("hasUserApproved"), async {
+                Some(model_mapping)
+            })
+            .await
+            .unwrap();
+
+        // The tool's consent argument the model sent anyway changes no shape.
+        let call =
+            serde_json::json!({"recordId": "rec-2", "stage": "lost", "hasUserApproved": true});
+        let approval_argument = Some("hasUserApproved");
+        let mapping = mcp_tool_call_mapping(
+            &cache,
+            "user-a",
+            &config,
+            "dv",
+            &tool,
+            &call,
+            approval_argument,
+        )
+        .await;
+        assert_eq!(mapping, model);
+        let label = mcp_tool_call_display_from(
+            &config,
+            "dv",
+            &tool,
+            &call,
+            approval_argument,
+            &mapping,
+            &Default::default(),
+        )
+        .label
+        .unwrap();
+        assert_eq!(label.source, ToolCallLabelSource::Model);
+        assert_eq!(
+            label.arguments,
+            label::generic_label(&serde_json::json!({"recordId": "rec-2", "stage": "lost"}))
+                .arguments
+        );
+
+        // Kept before the operator configured the consent argument this tool
+        // does not declare.
+        let confirm = label::ToolCallLabelMapping {
+            items: vec![label::ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                title: Some("/userConfirmed".into()),
+                ..Default::default()
+            }],
+            ..model
+        };
+        let flagged = serde_json::json!({"recordId": "rec-3", "userConfirmed": "yes"});
+        let key = ToolLabelCacheKey::new("user-a", "crm", &tool, &flagged);
+        cache
+            .get_or_compute(key.clone(), &flagged, None, async { Some(confirm) })
+            .await
+            .unwrap();
+        let rules = label::guarded_rules(&tool, &flagged, Some("userConfirmed"));
+        assert!(rules.unsure.is_some(), "{rules:?}");
+        assert_eq!(
+            mcp_tool_call_mapping(&cache, "user-a", &config, "crm", &tool, &flagged, None).await,
+            rules.mapping
+        );
+        assert!(cache.entries().get(&key).await.is_none());
     }
 
     #[test]

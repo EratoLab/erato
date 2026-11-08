@@ -134,6 +134,8 @@ pub struct AppState {
     pub file_contents_cache: Cache<FileCacheKey, crate::metrics::owned::Cached<String>>,
     /// Cache mapping file_contents -> token count
     pub token_count_cache: Cache<String, crate::metrics::owned::Cached<usize>>,
+    /// Model label mappings per user, tool and argument shape.
+    pub tool_label_cache: crate::services::tool_display::label::cache::ToolLabelCache,
     /// Global limiter for file processing work on cache misses.
     pub file_processing_semaphore: Arc<Semaphore>,
     /// Global limiter for end-to-end per-file processing concurrency.
@@ -185,6 +187,7 @@ impl std::fmt::Debug for AppState {
             .field("file_bytes_cache", &"<Cache>")
             .field("file_contents_cache", &"<Cache>")
             .field("token_count_cache", &"<Cache>")
+            .field("tool_label_cache", &"<Cache>")
             .field("file_processing_semaphore", &"<Semaphore>")
             .field("file_processing_pipeline_semaphore", &"<Semaphore>")
             .field("file_processor", &"<FileProcessor>")
@@ -360,6 +363,7 @@ impl AppState {
             file_bytes_cache,
             file_contents_cache,
             token_count_cache,
+            tool_label_cache: Default::default(),
             file_processing_semaphore,
             file_processing_pipeline_semaphore,
             file_processor,
@@ -1277,6 +1281,7 @@ impl Clone for AppState {
             file_bytes_cache: self.file_bytes_cache.clone(),
             file_contents_cache: self.file_contents_cache.clone(),
             token_count_cache: self.token_count_cache.clone(),
+            tool_label_cache: self.tool_label_cache.clone(),
             file_processing_semaphore: self.file_processing_semaphore.clone(),
             file_processing_pipeline_semaphore: self.file_processing_pipeline_semaphore.clone(),
             file_processor: self.file_processor.clone(),
@@ -1357,6 +1362,11 @@ impl AppState {
             c,
             "shared.token_count_cache.bookkeeping",
             &self.token_count_cache,
+        );
+        report.opaque(
+            c,
+            "shared.tool_label_cache.bookkeeping",
+            self.tool_label_cache.entries(),
         );
         report.opaque(c, "shared.file_processor", &self.file_processor);
         if let Some(detector) = &self.file_type_detector {

@@ -7470,18 +7470,31 @@ async fn stream_generate_chat_completion<'a>(
             tool_result_context.observe(&current_message_content);
             // Built once per call: the in-progress update, a budget refusal and
             // the MCP dispatch below all show this one.
-            let mcp_display = available_mcp_tools_by_name
-                .get(unfinished_tool_call.fn_name.as_str())
-                .map(|managed| {
-                    crate::services::tool_display::mcp_tool_call_display(
-                        &mcp.config,
-                        &managed.server_id,
-                        &managed.tool,
-                        &unfinished_tool_call.fn_arguments,
-                        managed.approval_argument.as_deref(),
-                        &tool_result_context,
-                    )
-                });
+            let mcp_display =
+                match available_mcp_tools_by_name.get(unfinished_tool_call.fn_name.as_str()) {
+                    Some(managed) => {
+                        let label_mapping = crate::services::tool_display::mcp_tool_call_mapping(
+                            &app_state.tool_label_cache,
+                            &user_id,
+                            &mcp.config,
+                            &managed.server_id,
+                            &managed.tool,
+                            &unfinished_tool_call.fn_arguments,
+                            managed.approval_argument.as_deref(),
+                        )
+                        .await;
+                        Some(crate::services::tool_display::mcp_tool_call_display_from(
+                            &mcp.config,
+                            &managed.server_id,
+                            &managed.tool,
+                            &unfinished_tool_call.fn_arguments,
+                            managed.approval_argument.as_deref(),
+                            &label_mapping,
+                            &tool_result_context,
+                        ))
+                    }
+                    None => None,
+                };
             // Emit event for tool call proposed
             {
                 let unfinished_tool_call = unfinished_tool_call.clone();

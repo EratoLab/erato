@@ -756,6 +756,7 @@ mod tests {
             file_bytes_cache: moka::future::Cache::new(0),
             file_contents_cache: moka::future::Cache::new(0),
             token_count_cache: moka::future::Cache::new(0),
+            tool_label_cache: Default::default(),
             file_processing_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             file_processing_pipeline_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
             file_processor: crate::services::file_processor::create_file_processor(
