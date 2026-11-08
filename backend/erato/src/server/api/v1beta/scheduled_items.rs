@@ -224,6 +224,9 @@ pub enum ScheduledItemErrorCode {
     InFlight,
     /// The item has no occurrence waiting to be snoozed.
     NothingToSnooze,
+    /// A reminder snoozed after delivery would not come back before its next
+    /// regular occurrence, or that occurrence already came.
+    NextOccurrenceFirst,
     /// Only done, failed or cancelled items can be deleted.
     NotFinished,
     Internal,
@@ -288,6 +291,11 @@ fn refusal(refusal: Refusal) -> ApiError {
             StatusCode::CONFLICT,
             Code::NothingToSnooze,
             "Nothing of this item is waiting to be delivered.",
+        ),
+        Refusal::NextOccurrenceFirst => refuse(
+            StatusCode::CONFLICT,
+            Code::NextOccurrenceFirst,
+            "Not snoozed: this reminder is due again by then, or already was.",
         ),
         Refusal::NotFinished => refuse(
             StatusCode::CONFLICT,
@@ -794,7 +802,7 @@ pub async fn delete_scheduled_item(
         (status = OK, body = ScheduledItem),
         (status = NOT_FOUND, body = ScheduledItemError),
         (status = UNPROCESSABLE_ENTITY, body = ScheduledItemError, description = "`until` is not in the future (`trigger_in_past`)"),
-        (status = CONFLICT, body = ScheduledItemError, description = "The item is over, nothing is waiting to be delivered, or a reminder snoozed after delivery would not come back before its next regular time")
+        (status = CONFLICT, body = ScheduledItemError, description = "The item is over (`finished`), nothing is waiting to be delivered (`nothing_to_snooze`), or a reminder snoozed after delivery would not come back before its next regular time (`next_occurrence_first`)")
     ),
     security(("bearer_auth" = []))
 )]

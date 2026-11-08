@@ -590,9 +590,13 @@ fn reminder_refusal_note(refusal: Refusal) -> &'static str {
         Refusal::NotFound => "This reminder no longer exists.",
         Refusal::Finished => "This reminder was cancelled.",
         Refusal::InFlight => "Not snoozed: this reminder is arriving right now.",
-        Refusal::NothingToSnooze => "Not snoozed: its next time comes before then.",
+        Refusal::NextOccurrenceFirst => {
+            "Not snoozed: this reminder is due again by then, or already was."
+        }
         Refusal::NoFutureOccurrence => "Not snoozed: that time has passed.",
-        Refusal::NotFinished => "This reminder cannot be changed right now.",
+        Refusal::NothingToSnooze | Refusal::NotFinished => {
+            "This reminder cannot be changed right now."
+        }
     }
 }
 
@@ -1524,6 +1528,13 @@ mod tests {
         assert!(reminder_button_gone_text(None).ends_with("on the Scheduled page."));
     }
 
+    #[test]
+    fn a_snooze_after_the_next_occurrence_is_refused_as_due_again() {
+        assert_eq!(
+            reminder_refusal_note(Refusal::NextOccurrenceFirst),
+            "Not snoozed: this reminder is due again by then, or already was."
+        );
+    }
 
     #[test]
     fn recognizes_new_chat_commands() {

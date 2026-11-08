@@ -721,7 +721,7 @@ async fn a_snooze_after_delivery_comes_before_the_next_occurrence(pool: Pool<Pos
             snooze_delivered(&db, user.id, first.id, choice)
                 .await
                 .unwrap(),
-            Err(Refusal::NothingToSnooze)
+            Err(Refusal::NextOccurrenceFirst)
         );
     }
 
@@ -771,7 +771,7 @@ async fn a_snooze_after_delivery_comes_before_the_next_occurrence(pool: Pool<Pos
         snooze_delivered(&db, user.id, old.id, SnoozeChoice::HalfAnHour)
             .await
             .unwrap(),
-        Err(Refusal::NothingToSnooze)
+        Err(Refusal::NextOccurrenceFirst)
     );
 }
 
@@ -805,7 +805,7 @@ async fn the_pages_snooze_keeps_a_snoozed_reminder_before_the_next_occurrence(
             snooze_occurrence(&db, user.id, item.id, later)
                 .await
                 .unwrap(),
-            Err(Refusal::NothingToSnooze)
+            Err(Refusal::NextOccurrenceFirst)
         );
     }
     assert_eq!(utc(open(&db, &item).await.unwrap().due_at), until);
@@ -829,6 +829,13 @@ async fn the_pages_snooze_keeps_a_snoozed_reminder_before_the_next_occurrence(
     let first = open(&db, &item).await.unwrap();
     make_due(&db, first.id).await;
     run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(
+        snooze_occurrence(&db, user.id, item.id, Utc::now() + Duration::hours(1))
+            .await
+            .unwrap(),
+        Err(Refusal::NothingToSnooze),
+        "nothing is waiting yet"
+    );
     snooze_delivered(&db, user.id, first.id, SnoozeChoice::HalfAnHour)
         .await
         .unwrap()
@@ -838,7 +845,7 @@ async fn the_pages_snooze_keeps_a_snoozed_reminder_before_the_next_occurrence(
         snooze_occurrence(&db, user.id, item.id, next)
             .await
             .unwrap(),
-        Err(Refusal::NothingToSnooze)
+        Err(Refusal::NextOccurrenceFirst)
     );
     snooze_occurrence(&db, user.id, item.id, next - Duration::minutes(1))
         .await

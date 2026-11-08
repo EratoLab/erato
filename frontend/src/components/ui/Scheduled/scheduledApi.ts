@@ -213,6 +213,12 @@ export function scheduledRefusalMessage(code: string | null): string {
         id: "scheduled.refusal.nothingToSnooze",
         message: "Nothing of this item is waiting to be delivered.",
       });
+    case "next_occurrence_first":
+      return t({
+        id: "scheduled.refusal.nextOccurrenceFirst",
+        message:
+          "Not snoozed: this reminder is due again by then, or already was.",
+      });
     case "not_finished":
       return t({
         id: "scheduled.refusal.notFinished",

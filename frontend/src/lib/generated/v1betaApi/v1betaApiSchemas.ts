@@ -3798,6 +3798,7 @@ export type ScheduledItemErrorCode =
   | "finished"
   | "in_flight"
   | "nothing_to_snooze"
+  | "next_occurrence_first"
   | "not_finished"
   | "internal";
 
