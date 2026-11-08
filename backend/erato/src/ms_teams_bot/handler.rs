@@ -16,7 +16,9 @@ use super::nudge;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
+use crate::services::scheduled_items::{self, wording};
 use axum::http::StatusCode;
+use chrono::Utc;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
@@ -454,11 +456,13 @@ async fn on_control(
     }
 }
 
-/// A button on a delivered card (a tip's "Don't remind me"). The token is
-/// claimed once, for the user who got the card in the conversation it was
-/// sent to, so a forwarded or replayed card does nothing. No sign-in: an
-/// unsubscribe must work for someone whose Graph consent never completes,
-/// and the token already binds recipient and conversation.
+/// A button on a delivered card (a tip's "Don't remind me", a reminder's
+/// Done and snooze buttons). The token is claimed once, for the user who got
+/// the card in the conversation it was sent to, so a forwarded or replayed
+/// card does nothing. No sign-in: an unsubscribe must work for someone whose
+/// Graph consent never completes, and the token already binds recipient and
+/// conversation. A reminder's buttons call the services the Scheduled page
+/// calls and show the outcome on the card itself, which loses its buttons.
 async fn on_delivery_action(
     bot: &TeamsBot,
     host: &Host,
@@ -477,16 +481,69 @@ async fn on_delivery_action(
         .claim_delivery_action(user.id, conversation_id, &submit)
         .await?
     {
-        return target
-            .send_text("This button was already used or has expired.")
-            .await;
+        let text = match command {
+            nudge::DeliveryCommand::OptOut => {
+                "This button was already used or has expired.".to_string()
+            }
+            _ => wording::button_gone(scheduled_page_url(bot).as_deref()),
+        };
+        return target.send_text(&text).await;
     }
-    match command {
+    let note = match command {
         nudge::DeliveryCommand::OptOut => {
             host.set_teams_nudges_opt_out(user.id, true).await?;
-            target.send_text(&reminders_text(bot, false)).await
+            return target.send_text(&reminders_text(bot, false)).await;
+        }
+        nudge::DeliveryCommand::Done => {
+            match host
+                .acknowledge_reminder(user.id, submit.delivery_id)
+                .await?
+            {
+                Ok(_) => wording::DONE_NOTE.to_string(),
+                Err(refusal) => wording::refusal_note(refusal).to_string(),
+            }
+        }
+        nudge::DeliveryCommand::Snooze(choice) => match host
+            .snooze_delivered_reminder(user.id, submit.delivery_id, choice)
+            .await?
+        {
+            Ok((item, until)) => wording::snoozed_note(
+                until,
+                scheduled_items::zone_of(&item)?,
+                host.stored_time_zone(user.id).await?,
+                Utc::now(),
+            ),
+            Err(refusal) => wording::refusal_note(refusal).to_string(),
+        },
+    };
+    settle_delivered_card(host, target, submit.delivery_id, &note).await
+}
+
+/// Replace a delivered card with its settled form; when that fails, the note
+/// goes out as a message.
+async fn settle_delivered_card(
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    delivery_id: Uuid,
+    note: &str,
+) -> Result<(), Report> {
+    if let Some((activity_id, content)) = host.delivered_card(delivery_id).await? {
+        let card = nudge::settled_delivery_card(&content, delivery_id, note);
+        match target.update(&activity_id, card).await {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                tracing::warn!(%error, %delivery_id, "Could not replace a delivered card")
+            }
         }
     }
+    target.send_text(note).await
+}
+
+fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+    bot.settings
+        .public_base_url
+        .as_deref()
+        .map(|base| format!("{}/scheduled", base.trim_end_matches('/')))
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
