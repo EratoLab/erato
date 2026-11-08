@@ -5,11 +5,13 @@
 //! item ([`Confirmation`]), the same content the web chat shows. Cancel works
 //! for as long as the reminder is upcoming, with no token that could expire:
 //! the button names the item, and the press is checked against the Teams
-//! user's own items before the shared cancel runs.
+//! user's own items before the shared cancel runs. It first asks, as the
+//! Scheduled page does, since a repeating reminder stops for good.
 
 use super::cards;
 use super::host::Host;
 use super::render;
+use super::texts::Msg;
 use crate::db::entity::scheduled_items::Model as ScheduledItem;
 use crate::models::user_preference::user_time_zone;
 use crate::services::scheduled_items::chat_tools::{CREATE_REMINDER, Confirmation};
@@ -21,26 +23,36 @@ use sea_orm::prelude::Uuid;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-/// `data.action` of a confirmation card's Cancel.
+/// `data.action` of "Cancel it" in the question a confirmation card's Cancel
+/// opens.
 pub const CANCEL_ACTION: &str = "erato_reminder_cancel";
+/// `data.action` of "Keep it" there.
+pub const KEEP_ACTION: &str = "erato_reminder_keep";
 
-/// A press of Cancel on a confirmation card.
+/// A press of "Cancel it" or "Keep it" on a confirmation card.
 #[derive(Debug, Deserialize)]
-pub struct CancelSubmit {
+pub struct CardSubmit {
     action: String,
     pub item_id: Uuid,
 }
 
-impl CancelSubmit {
+impl CardSubmit {
     pub fn from_value(value: &Value) -> Option<Self> {
         let submit: Self = serde_json::from_value(value.clone()).ok()?;
-        (submit.action == CANCEL_ACTION).then_some(submit)
+        [CANCEL_ACTION, KEEP_ACTION]
+            .contains(&submit.action.as_str())
+            .then_some(submit)
+    }
+
+    pub fn keeps(&self) -> bool {
+        self.action == KEEP_ACTION
     }
 }
 
 /// The confirmation card: heading, name, time, repeat and where it arrives,
 /// then Cancel (while `cancellable`) and Open in Scheduled (with a public
-/// base URL). A `note` says what happened to it.
+/// base URL). Cancel opens a question whose "Cancel it" cancels. A `note`
+/// says what happened to it.
 pub fn confirmation_card(
     confirmation: &Confirmation,
     scheduled_url: Option<&str>,
@@ -75,9 +87,33 @@ pub fn confirmation_card(
     }
     let mut actions = Vec::new();
     if cancellable {
+        let lang = Lang::from_tag(&confirmation.language);
+        let press = |action: &str, title: Msg| {
+            json!({
+                "type": "Action.Submit", "title": title.text(lang),
+                "data": {"action": action, "item_id": confirmation.item_id},
+            })
+        };
         actions.push(json!({
-            "type": "Action.Submit", "title": confirmation.cancel_label,
-            "data": {"action": CANCEL_ACTION, "item_id": confirmation.item_id},
+            "type": "Action.ShowCard", "title": confirmation.cancel_label,
+            "card": {
+                "type": "AdaptiveCard",
+                "body": [
+                    {
+                        "type": "TextBlock", "wrap": true, "weight": "Bolder",
+                        "text": Msg::CancelReminderQuestion
+                            .fill(lang, &[("name", &confirmation.name)]),
+                    },
+                    {
+                        "type": "TextBlock", "wrap": true, "isSubtle": true,
+                        "text": Msg::CancelReminderExplained.text(lang),
+                    },
+                ],
+                "actions": [
+                    press(CANCEL_ACTION, Msg::CancelReminderConfirm),
+                    press(KEEP_ACTION, Msg::KeepReminder),
+                ],
+            },
         }));
     }
     if let Some(url) = scheduled_url {
@@ -233,12 +269,18 @@ mod tests {
     }
 
     #[test]
-    fn cancel_presses_parse_only_with_their_action() {
+    fn card_presses_parse_only_with_their_action() {
         let id = Uuid::new_v4();
         let submit =
-            CancelSubmit::from_value(&json!({"action": CANCEL_ACTION, "item_id": id})).unwrap();
+            CardSubmit::from_value(&json!({"action": CANCEL_ACTION, "item_id": id})).unwrap();
         assert_eq!(submit.item_id, id);
-        assert!(CancelSubmit::from_value(&json!({"action": "other", "item_id": id})).is_none());
-        assert!(CancelSubmit::from_value(&json!({"action": CANCEL_ACTION})).is_none());
+        assert!(!submit.keeps());
+        assert!(
+            CardSubmit::from_value(&json!({"action": KEEP_ACTION, "item_id": id}))
+                .unwrap()
+                .keeps()
+        );
+        assert!(CardSubmit::from_value(&json!({"action": "other", "item_id": id})).is_none());
+        assert!(CardSubmit::from_value(&json!({"action": CANCEL_ACTION})).is_none());
     }
 }

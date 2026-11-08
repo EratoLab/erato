@@ -1130,14 +1130,39 @@ fn card_texts(activity: &Value) -> Vec<String> {
         .collect()
 }
 
-fn cancel_data(activity: &Value) -> Value {
+/// The data of the card's button with this `action`, also when it sits in
+/// the question another button opens.
+fn action_data(activity: &Value, action: &str) -> Value {
     activity["attachments"][0]["content"]["actions"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|action| action["data"]["action"] == CANCEL_ACTION)
-        .unwrap_or_else(|| panic!("no Cancel on {activity}"))["data"]
+        .flat_map(|button| {
+            std::iter::once(button)
+                .chain(button["card"]["actions"].as_array().into_iter().flatten())
+        })
+        .find(|button| button["data"]["action"] == action)
+        .unwrap_or_else(|| panic!("no `{action}` button on {activity}"))["data"]
         .clone()
+}
+
+fn cancel_data(activity: &Value) -> Value {
+    action_data(activity, CANCEL_ACTION)
+}
+
+/// The question Cancel opens: its texts, then its buttons.
+fn cancel_question(activity: &Value) -> (Vec<String>, Vec<String>) {
+    let cancel = &activity["attachments"][0]["content"]["actions"][0];
+    assert_eq!(cancel["type"], "Action.ShowCard", "{activity}");
+    let texts = |key: &str, field: &str| -> Vec<String> {
+        cancel["card"][key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry[field].as_str().unwrap().to_string())
+            .collect()
+    };
+    (texts("body", "text"), texts("actions", "title"))
 }
 
 /// After the answer, the card confirms the stored reminder with Cancel and
@@ -1310,6 +1335,65 @@ async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(po
     assert_eq!(sent[4]["text"], "This reminder no longer exists.");
 }
 
+/// Cancel ends a repeating reminder for good, so it first asks, as the
+/// Scheduled page does. Keep it folds the question away by putting the card
+/// back as it is, and changes nothing.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_on_the_confirmation_card_asks_first(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000a5c5";
+    let (user, item) = confirmed_reminder(&state, &host, &base, "asked", OID, None).await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    assert_eq!(buttons(&card), ["Cancel", "Open in Scheduled"]);
+    assert_eq!(
+        cancel_question(&card),
+        (
+            vec![
+                "Cancel “Follow up on the offer”?".to_string(),
+                "It will no longer be delivered. You can still find it under Past on the Scheduled page."
+                    .to_string(),
+            ],
+            vec!["Cancel it".to_string(), "Keep it".to_string()],
+        )
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(
+            &base,
+            OID,
+            "activity-1",
+            action_data(&card, "erato_reminder_keep"),
+        ),
+    )
+    .await;
+    let (_, activity_id, kept) = shared.lock().unwrap().updated[0].clone();
+    assert_eq!(activity_id, "activity-1");
+    assert_eq!(kept["attachments"], card["attachments"]);
+    assert_eq!(shared.lock().unwrap().outgoing.len(), 1, "nothing is said");
+    let upcoming = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(upcoming.item.status, ItemStatus::Active);
+}
+
 /// A reminder the same turn created and then cancelled is confirmed as
 /// cancelled, without Cancel, as the web card shows it.
 ///
@@ -1438,6 +1522,16 @@ async fn a_german_user_gets_the_confirmation_in_german(pool: sqlx::PgPool) {
     assert!(texts[2].ends_with(", 10:00"), "{texts:?}");
     assert_eq!(texts[3], "Zustellung per Teams-Chat");
     assert_eq!(buttons(&card), ["Abbrechen"], "no public base URL, no link");
+    assert_eq!(
+        cancel_question(&card),
+        (
+            vec![
+                "„Follow up on the offer“ abbrechen?".to_string(),
+                "Die Erinnerung wird nicht mehr zugestellt. Sie finden sie weiterhin unter „Vergangen“ auf der Seite „Geplant“.".to_string(),
+            ],
+            vec!["Ja, abbrechen".to_string(), "Behalten".to_string()],
+        )
+    );
     on_message(
         bot.clone(),
         host.clone(),

@@ -46,11 +46,42 @@
         ],
         "actions": [
           {
-            "type": "Action.Submit",
+            "type": "Action.ShowCard",
             "title": "Abbrechen",
-            "data": {
-              "action": "erato_reminder_cancel",
-              "item_id": "ITEM_ID"
+            "card": {
+              "type": "AdaptiveCard",
+              "body": [
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "weight": "Bolder",
+                  "text": "„Wochenbericht senden“ abbrechen?"
+                },
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "isSubtle": true,
+                  "text": "Die Erinnerung wird nicht mehr zugestellt. Sie finden sie weiterhin unter „Vergangen“ auf der Seite „Geplant“."
+                }
+              ],
+              "actions": [
+                {
+                  "type": "Action.Submit",
+                  "title": "Ja, abbrechen",
+                  "data": {
+                    "action": "erato_reminder_cancel",
+                    "item_id": "ITEM_ID"
+                  }
+                },
+                {
+                  "type": "Action.Submit",
+                  "title": "Behalten",
+                  "data": {
+                    "action": "erato_reminder_keep",
+                    "item_id": "ITEM_ID"
+                  }
+                }
+              ]
             }
           },
           {
