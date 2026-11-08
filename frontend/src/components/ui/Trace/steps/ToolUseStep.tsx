@@ -1,11 +1,23 @@
 import { t } from "@lingui/core/macro";
+import { useMemo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 
-import { ToolCallInput, ToolCallOutput } from "@/components/ui/ToolCall";
+import {
+  ToolCallGistLine,
+  ToolCallGistValues,
+  ToolCallIdentity,
+  ToolCallInput,
+  ToolCallOutput,
+} from "@/components/ui/ToolCall";
 import {
   isDelegationToolName,
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
+import { gistOf } from "@/lib/toolCallGist/gist";
+import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
+import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -17,11 +29,85 @@ import { ToolStatusPill } from "./ToolStatusPill";
 import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
+import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
+import type { CleanText } from "@/lib/toolCallGist/serverText";
 
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
   decision?: ToolDecision;
 }
+
+/**
+ * A result's link, named after the server only when it points at the
+ * server's own host; any other link says where it goes.
+ */
+const ResultLink = ({
+  link,
+  server,
+}: {
+  link: ResultLinkData;
+  server: string | undefined;
+}) => {
+  const host = link.host;
+  return (
+    <a
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={link.title}
+      dir="auto"
+      className="shrink-0 px-1 text-xs text-theme-fg-accent [unicode-bidi:isolate] hover:underline"
+      data-testid="tool-result-link"
+    >
+      {link.onServer && server
+        ? t({ id: "trace.tool.openIn", message: `Open in ${server}` })
+        : t({ id: "trace.tool.openLinkHost", message: `Open link - ${host}` })}
+    </a>
+  );
+};
+
+const textOf = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
+
+const hasRowValues = (item: GistItem) =>
+  item.fields.length > 0 || item.before.length > 0 || item.count > 1;
+
+/**
+ * What stays visible under a gist row: the key values and old → new of each
+ * item, further items' own lines, and a failed call's message from its server.
+ */
+const GistRowDetails = ({
+  gist,
+  phase,
+  failure,
+}: {
+  gist: Gist;
+  phase: GistPhase;
+  failure: CleanText | undefined;
+}) => (
+  <div className="space-y-1">
+    {gist.items.map((item, index) => (
+      <div key={index} className="space-y-1">
+        {index > 0 && (
+          <p className="text-xs text-theme-fg-secondary">
+            <ToolCallGistLine gist={gist} item={item} phase={phase} />
+          </p>
+        )}
+        {hasRowValues(item) && <ToolCallGistValues item={item} variant="row" />}
+      </div>
+    ))}
+    {failure && (
+      <p
+        dir="auto"
+        className="whitespace-pre-wrap break-words text-xs text-theme-error-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]"
+        data-testid="tool-failure-message"
+      >
+        {failure.truncated ? `${failure.text}…` : failure.text}
+      </p>
+    )}
+  </div>
+);
 
 // The server's cap; rows and events from other writers get it here.
 const MAX_PROGRESS_CHARS = 200;
@@ -47,6 +133,32 @@ const PlainToolUseStep = ({
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
   const toolCallId = part.tool_call_id;
+  // A denied or refused call never ran: its decision row says so.
+  const notRun =
+    decision?.status === "denied" || refusedWithoutDecision(part, decision);
+  const label = part.display?.label;
+  const gist = useMemo(() => gistOf(label, part.input), [label, part.input]);
+  const serverName = textOf(part.display?.server_name);
+  const lead = gist?.items[0];
+  const phase: GistPhase = notRun
+    ? "ask"
+    : part.status === "success"
+      ? "done"
+      : part.status === "error"
+        ? "failed"
+        : "ask";
+  const failure =
+    gist && phase === "failed" ? serverFailureMessage(part.output) : undefined;
+  const showsDetails =
+    gist !== undefined &&
+    (failure !== undefined ||
+      gist.items.length > 1 ||
+      gist.items.some(hasRowValues));
+  const link = useMemo(
+    () =>
+      part.status === "success" ? resultLinkOf(part.result_details) : undefined,
+    [part.status, part.result_details],
+  );
   const progress = progressText(part.progress_message);
 
   // The sidecar's on-device steps are the step's body: rows like the main
@@ -57,7 +169,7 @@ const PlainToolUseStep = ({
   const hasTrace =
     useSidecarLocalTrace(toolCallId, toolName, part.output) !== undefined;
 
-  const body =
+  const payload =
     toolCallId && hasTrace ? (
       <SidecarLocalTraceSubtree
         toolCallId={toolCallId}
@@ -72,6 +184,19 @@ const PlainToolUseStep = ({
         )}
       </div>
     ) : undefined;
+  // A gist row's title is the line, so the tool it ran is named in the body.
+  const body = gist ? (
+    <>
+      <ToolCallIdentity
+        className="pt-2"
+        toolName={toolName}
+        server={serverName}
+      />
+      {payload}
+    </>
+  ) : (
+    payload
+  );
 
   return (
     // The `data-testid`/`data-tool-name`/`data-tool-status` attributes on the
@@ -90,7 +215,16 @@ const PlainToolUseStep = ({
         hasTrailingRailLine={!isLastStep}
         title={
           <>
-            {toolName}
+            {gist && lead ? (
+              <span
+                title={gistPlainLine(gist, lead, phase)}
+                data-testid="tool-call-gist-line"
+              >
+                <ToolCallGistLine gist={gist} item={lead} phase={phase} />
+              </span>
+            ) : (
+              toolName
+            )}
             {part.display?.server_name && (
               <span
                 dir="auto"
@@ -111,9 +245,7 @@ const PlainToolUseStep = ({
           </>
         }
         titleSlot={
-          // A denied or refused call never ran: its decision row says so.
-          decision?.status === "denied" ||
-          refusedWithoutDecision(part, decision) ? undefined : (
+          notRun ? undefined : (
             <ToolStatusPill
               status={status}
               label={
@@ -123,6 +255,12 @@ const PlainToolUseStep = ({
               }
             />
           )
+        }
+        headerSlot={link && <ResultLink link={link} server={serverName} />}
+        detailSlot={
+          gist && showsDetails ? (
+            <GistRowDetails gist={gist} phase={phase} failure={failure} />
+          ) : undefined
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}
@@ -135,6 +273,28 @@ const PlainToolUseStep = ({
   );
 };
 
+/** The call as rows saved before labels show it: no gist and no result link. */
+const withoutLabel = (
+  part: ToolUseStepProps["part"],
+): ToolUseStepProps["part"] => {
+  const display: unknown = part.display;
+  return {
+    ...part,
+    display: isRecord(display)
+      ? {
+          title: textOf(display.title) ?? part.tool_name ?? "",
+          description_truncated: false,
+          server_name: textOf(display.server_name),
+          read_only:
+            typeof display.read_only === "boolean"
+              ? display.read_only
+              : undefined,
+        }
+      : undefined,
+    result_details: undefined,
+  };
+};
+
 // A refusal, and every frame before the first progress update, has no run to
 // show — those render as the plain tool call. Branching at this level rather
 // than inside keeps each rendering free to hold its own hooks.
@@ -145,6 +305,13 @@ export const ToolUseStep = (props: ToolUseStepProps) => {
   return envelope ? (
     <DelegationStep {...props} envelope={envelope} />
   ) : (
-    <PlainToolUseStep {...props} />
+    // A label or result this build cannot render leaves the row as it was
+    // before labels, never a broken message.
+    <ErrorBoundary
+      resetKeys={[props.part]}
+      fallback={<PlainToolUseStep {...props} part={withoutLabel(props.part)} />}
+    >
+      <PlainToolUseStep {...props} />
+    </ErrorBoundary>
   );
 };

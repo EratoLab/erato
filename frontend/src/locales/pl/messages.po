@@ -3261,8 +3261,7 @@ msgid "chatInput.mentions.sectionHeader"
 msgstr "Asystenci"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/OwnCallApprovalItem.tsx
-#: src/components/ui/Message/ParkedChildItem.tsx
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "clientToolApproval.thisDevice"
 msgstr ""
 
@@ -8505,6 +8504,21 @@ msgid "toolApproval.withdraw.hint"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolArgumentView.tsx
+msgid "toolArguments.none"
+msgstr "Brak argumentów"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolArgumentView.tsx
+msgid "toolArguments.omitted"
+msgstr "{omitted, plural, one {Pominięto: #} few {Pominięto: #} many {Pominięto: #} other {Pominięto: #}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolArguments.truncated"
+msgstr "Niektóre argumenty nie są tu pokazane. Wszystkie są w szczegółach technicznych."
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallInput.tsx
 msgid "toolcall.input.title"
 msgstr "Parametry wejściowe"
@@ -8518,6 +8532,21 @@ msgstr "Wyjście błędu"
 #: src/components/ui/ToolCall/ToolCallOutput.tsx
 msgid "toolcall.output.title"
 msgstr "Wyjście"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolCall.technicalDetails"
+msgstr "Szczegóły techniczne"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallIdentity.tsx
+msgid "toolCall.technicalDetails.server"
+msgstr "Serwer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallIdentity.tsx
+msgid "toolCall.technicalDetails.tool"
+msgstr "Narzędzie"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
@@ -8543,6 +8572,231 @@ msgstr "Zatrzymaj"
 #: src/components/ui/Message/McpToolApprovalCard.tsx
 msgid "toolCallLimit.title"
 msgstr "Osiągnięto limit wywołań narzędzi"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.changesTo"
+msgstr "zmienia się na"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.comment.ask"
+msgstr "{shape, select, full {Skomentuj: {kind} {title} w {where}} titled {Skomentuj: {kind} {title}} placed {Skomentuj: {kind} w {where}} other {Skomentuj: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.comment.done"
+msgstr "{shape, select, full {Skomentowano: {kind} {title} w {where}} titled {Skomentowano: {kind} {title}} placed {Skomentowano: {kind} w {where}} other {Skomentowano: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.comment.failed"
+msgstr "{shape, select, full {Nie udało się skomentować: {kind} {title} w {where}} titled {Nie udało się skomentować: {kind} {title}} placed {Nie udało się skomentować: {kind} w {where}} other {Nie udało się skomentować: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.content"
+msgstr "Treść"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.create.ask"
+msgstr "{shape, select, full {Utwórz: {kind} {title} w {where}} titled {Utwórz: {kind} {title}} placed {Utwórz: {kind} w {where}} other {Utwórz: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.create.done"
+msgstr "{shape, select, full {Utworzono: {kind} {title} w {where}} titled {Utworzono: {kind} {title}} placed {Utworzono: {kind} w {where}} other {Utworzono: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.create.failed"
+msgstr "{shape, select, full {Nie udało się utworzyć: {kind} {title} w {where}} titled {Nie udało się utworzyć: {kind} {title}} placed {Nie udało się utworzyć: {kind} w {where}} other {Nie udało się utworzyć: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.delete.ask"
+msgstr "{shape, select, full {Usuń: {kind} {title} z {where}} titled {Usuń: {kind} {title}} placed {Usuń: {kind} z {where}} other {Usuń: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.delete.done"
+msgstr "{shape, select, full {Usunięto: {kind} {title} z {where}} titled {Usunięto: {kind} {title}} placed {Usunięto: {kind} z {where}} other {Usunięto: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.delete.failed"
+msgstr "{shape, select, full {Nie udało się usunąć: {kind} {title} z {where}} titled {Nie udało się usunąć: {kind} {title}} placed {Nie udało się usunąć: {kind} z {where}} other {Nie udało się usunąć: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.comment"
+msgstr "{count, plural, one {komentarz} few {# komentarze} many {# komentarzy} other {# komentarza}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.database"
+msgstr "{count, plural, one {baza danych} few {# bazy danych} many {# baz danych} other {# bazy danych}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.document"
+msgstr "{count, plural, one {dokument} few {# dokumenty} many {# dokumentów} other {# dokumentu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.email"
+msgstr "{count, plural, one {e-mail} few {# e-maile} many {# e-maili} other {# e-maila}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.event"
+msgstr "{count, plural, one {wydarzenie} few {# wydarzenia} many {# wydarzeń} other {# wydarzenia}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.file"
+msgstr "{count, plural, one {plik} few {# pliki} many {# plików} other {# pliku}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.folder"
+msgstr "{count, plural, one {folder} few {# foldery} many {# folderów} other {# folderu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.message"
+msgstr "{count, plural, one {wiadomość} few {# wiadomości} many {# wiadomości} other {# wiadomości}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.note"
+msgstr "{count, plural, one {notatka} few {# notatki} many {# notatek} other {# notatki}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.other"
+msgstr "{count, plural, one {element} few {# elementy} many {# elementów} other {# elementu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.page"
+msgstr "{count, plural, one {strona} few {# strony} many {# stron} other {# strony}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.paragraph"
+msgstr "{count, plural, one {akapit} few {# akapity} many {# akapitów} other {# akapitu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.row"
+msgstr "{count, plural, one {wiersz} few {# wiersze} many {# wierszy} other {# wiersza}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.task"
+msgstr "{count, plural, one {zadanie} few {# zadania} many {# zadań} other {# zadania}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.more"
+msgstr "{more, plural, one {+# więcej} few {+# więcej} many {+# więcej} other {+# więcej}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.move.ask"
+msgstr "{shape, select, full {Przenieś: {kind} {title} do {where}} titled {Przenieś: {kind} {title}} placed {Przenieś: {kind} do {where}} other {Przenieś: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.move.done"
+msgstr "{shape, select, full {Przeniesiono: {kind} {title} do {where}} titled {Przeniesiono: {kind} {title}} placed {Przeniesiono: {kind} do {where}} other {Przeniesiono: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.move.failed"
+msgstr "{shape, select, full {Nie udało się przenieść: {kind} {title} do {where}} titled {Nie udało się przenieść: {kind} {title}} placed {Nie udało się przenieść: {kind} do {where}} other {Nie udało się przenieść: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "Wywołanie samo ustawiło wartość zatwierdzenia, której tu nie pokazano. Liczy się tylko Twoja decyzja na tej karcie."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Niektóre wartości w tym wywołaniu zawierają ukryte znaki, które tu usunięto. To, co zapisze wywołanie, może się różnić od tego, co widzisz."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.otherArguments"
+msgstr "Pozostałe argumenty"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.send.ask"
+msgstr "{shape, select, full {Wyślij: {kind} {title} do {where}} titled {Wyślij: {kind} {title}} placed {Wyślij: {kind} do {where}} other {Wyślij: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.send.done"
+msgstr "{shape, select, full {Wysłano: {kind} {title} do {where}} titled {Wysłano: {kind} {title}} placed {Wysłano: {kind} do {where}} other {Wysłano: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.send.failed"
+msgstr "{shape, select, full {Nie udało się wysłać: {kind} {title} do {where}} titled {Nie udało się wysłać: {kind} {title}} placed {Nie udało się wysłać: {kind} do {where}} other {Nie udało się wysłać: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.textChange"
+msgstr "Zmiana tekstu"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.textChanges"
+msgstr "{changes, plural, one {# zmiana tekstu} few {# zmiany tekstu} many {# zmian tekstu} other {# zmiany tekstu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.update.ask"
+msgstr "{shape, select, full {Zaktualizuj: {kind} {title} w {where}} titled {Zaktualizuj: {kind} {title}} placed {Zaktualizuj: {kind} w {where}} other {Zaktualizuj: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.update.done"
+msgstr "{shape, select, full {Zaktualizowano: {kind} {title} w {where}} titled {Zaktualizowano: {kind} {title}} placed {Zaktualizowano: {kind} w {where}} other {Zaktualizowano: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.update.failed"
+msgstr "{shape, select, full {Nie udało się zaktualizować: {kind} {title} w {where}} titled {Nie udało się zaktualizować: {kind} {title}} placed {Nie udało się zaktualizować: {kind} w {where}} other {Nie udało się zaktualizować: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.earlier"
+msgstr "Wartość z wcześniejszego wyniku w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.resolved"
+msgstr "Nazwa z wcześniejszego wyniku w tym czacie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "zapisane jako"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.warning.public"
+msgstr "Publiczne: każdy może to zobaczyć."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.warning.sharedWithWorkspace"
+msgstr "Udostępnione w Twoim obszarze roboczym: każdy w nim może to zobaczyć."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -8881,6 +9135,21 @@ msgstr "Niepowodzenie"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.interrupted"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openIn"
+msgstr "Otwórz w {server}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+#~ msgid "trace.tool.openLink"
+#~ msgstr "Otwórz link"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.openLinkHost"
+msgstr "Otwórz link - {host}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallItem.tsx

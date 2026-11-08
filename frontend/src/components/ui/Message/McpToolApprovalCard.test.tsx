@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,12 +27,19 @@ import { FrontendRequestError } from "@/utils/errorReport";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
 import type { ToolApprovalStatus } from "../Trace/Trace";
-import type { ApprovalScope } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type {
+  ApprovalScope,
+  ToolArgumentNode,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { ReactNode } from "react";
 
 vi.mock("@/auth/tokenStore", () => ({
   getIdToken: () => null,
+}));
+
+vi.mock("@/hooks/ui/useThemedIcon", () => ({
+  useThemedIcon: () => "icon-id",
 }));
 
 const archived: { value: boolean | undefined } = { value: false };
@@ -2726,5 +2734,1544 @@ describe("document and response approvals", () => {
     } finally {
       pane.cleanup();
     }
+  });
+});
+
+describe("gist cards", () => {
+  /** The readable view the backend sends for an input, member by member. */
+  const viewOf = (value: unknown, path = ""): ToolArgumentNode =>
+    Array.isArray(value)
+      ? {
+          path,
+          kind: "list",
+          children: value.map((entry, index) =>
+            viewOf(entry, `${path}/${index}`),
+          ),
+        }
+      : typeof value === "object" && value !== null
+        ? {
+            path,
+            kind: "group",
+            children: Object.entries(value).map(([name, member]) =>
+              viewOf(
+                member,
+                `${path}/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`,
+              ),
+            ),
+          }
+        : { path, kind: "value" };
+
+  const DATA_SOURCE_ID = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
+  const createRowInput = {
+    parent: { data_source_id: DATA_SOURCE_ID },
+    pages: [{ properties: { Name: "Northwind", Status: "Lead" } }],
+  };
+  const createRowLabel = {
+    action: "create" as const,
+    object_kind: "row" as const,
+    source: "rules" as const,
+    arguments: viewOf(createRowInput),
+    items: [
+      {
+        title: {
+          pointer: "/pages/*/properties/Name",
+          values: [{ path: "/pages/0/properties/Name", text: "Northwind" }],
+        },
+        target: {
+          pointer: "/parent/data_source_id",
+          values: [
+            {
+              path: "/parent/data_source_id",
+              text: DATA_SOURCE_ID,
+              resolved: "Companies",
+            },
+          ],
+        },
+        fields: [
+          {
+            pointer: "/pages/*/properties/Status",
+            name: "Status",
+            values: [{ path: "/pages/0/properties/Status", text: "Lead" }],
+          },
+        ],
+      },
+    ],
+  };
+  const createRowDisplay = {
+    title: "Create pages",
+    description: "Creates pages in a data source.",
+    description_truncated: false,
+    server_name: "Records",
+    label: createRowLabel,
+  };
+  const gistRequest = {
+    ...approvalRequest,
+    tool_name: "create_pages",
+    mcp_server_id: "records",
+    input: createRowInput,
+    display: createRowDisplay,
+  };
+
+  const openTechnicalDetails = (within: HTMLElement = document.body) =>
+    fireEvent.click(
+      Array.from(within.querySelectorAll("button")).find(
+        (button) => button.textContent === "Technical details",
+      )!,
+    );
+
+  it("reads a labelled call as one line with its key values and keeps the raw call one click away", async () => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={gistRequest}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+
+    const line = screen.getByTestId("tool-call-gist-line");
+    expect(line).toHaveTextContent("Create row Northwind in Companies");
+    const written = line.querySelector('[data-origin="written"]');
+    expect(written?.tagName).toBe("Q");
+    expect(written).toHaveAttribute("dir", "auto");
+    const resolved = line.querySelector('[data-origin="resolved"]');
+    expect(resolved).toHaveTextContent("Companies");
+    expect(resolved).toHaveAttribute(
+      "title",
+      "Name from an earlier result in this chat",
+    );
+    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Lead")).toBeInTheDocument();
+    expect(screen.getByText("Records")).toBeInTheDocument();
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
+    expect(screen.queryByText("create_pages")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Creates pages in a data source."),
+    ).not.toBeInTheDocument();
+
+    openTechnicalDetails();
+    expect(screen.getByText("create_pages")).toBeInTheDocument();
+    expect(screen.getByText("records")).toBeInTheDocument();
+    expect(
+      screen.getByText("Creates pages in a data source."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText(`"${DATA_SOURCE_ID}"`)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: "create_pages",
+          mcpServerId: "records",
+          toolInput: createRowInput,
+        }),
+      ),
+    );
+  });
+
+  it("shows an ID no earlier result named whole, apart from text as written", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          display: {
+            ...createRowDisplay,
+            label: {
+              ...createRowLabel,
+              items: [
+                {
+                  ...createRowLabel.items[0],
+                  target: {
+                    pointer: "/parent/data_source_id",
+                    values: [
+                      { path: "/parent/data_source_id", text: DATA_SOURCE_ID },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    const id = screen
+      .getByTestId("tool-call-gist-line")
+      .querySelector('[data-origin="id"]');
+    expect(id?.textContent).toBe(DATA_SOURCE_ID);
+    expect(id).not.toHaveAttribute("title");
+    expect(id).toHaveClass("font-mono");
+  });
+
+  describe("IDs that start alike", () => {
+    const FIRST = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
+    const SECOND = "9b1d5f2e-77d0-4e19-9c3b-5f6a7b8c9d0e";
+    const deleteRows = (resolved?: string) => {
+      const input = { ids: [FIRST, SECOND] };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "delete_rows",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "delete",
+                object_kind: "row",
+                source: "rules",
+                arguments: viewOf(input),
+                items: [
+                  {
+                    id: {
+                      pointer: "/ids/*",
+                      values: [FIRST, SECOND].map((text, index) => ({
+                        path: `/ids/${index}`,
+                        text,
+                        resolved,
+                      })),
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+    };
+    const rowTexts = () =>
+      Array.from(
+        screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+        (row) => row.textContent,
+      );
+
+    it("shows each ID of a batch whole, so the rows differ", () => {
+      deleteRows();
+
+      expect(rowTexts()).toEqual([FIRST, SECOND]);
+      expect(
+        screen.queryByTestId("tool-call-other-arguments"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("puts each whole ID beside the one name both resolved to", () => {
+      deleteRows("Northwind");
+
+      expect(rowTexts()).toEqual([
+        `Northwind written as <${FIRST}>`,
+        `Northwind written as <${SECOND}>`,
+      ]);
+      for (const written of screen.getAllByTestId("tool-call-gist-written")) {
+        expect(written.querySelector(".font-mono")).not.toHaveAttribute(
+          "title",
+        );
+      }
+    });
+
+    it("shows a field's IDs whole", () => {
+      const input = {
+        recordId: "r1",
+        owner_id: FIRST,
+        reviewer_id: SECOND,
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "update_row",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "update",
+                object_kind: "row",
+                source: "rules",
+                arguments: viewOf(input),
+                items: [
+                  {
+                    id: {
+                      pointer: "/recordId",
+                      values: [
+                        { path: "/recordId", text: "r1", resolved: "Acme" },
+                      ],
+                    },
+                    fields: ["owner_id", "reviewer_id"].map((name) => ({
+                      pointer: `/${name}`,
+                      name,
+                      values: [
+                        {
+                          path: `/${name}`,
+                          text: input[name as "owner_id" | "reviewer_id"],
+                        },
+                      ],
+                    })),
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const ids = Array.from(
+        screen
+          .getByTestId("tool-call-gist-values")
+          .querySelectorAll('[data-origin="id"]'),
+        (id) => id.textContent,
+      );
+      expect(ids).toEqual([FIRST, SECOND]);
+    });
+
+    it("shows IDs whole on the generic card", () => {
+      const input = { source_id: FIRST, target_id: SECOND };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "link_records",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: {
+                action: "other",
+                object_kind: "other",
+                source: "generic",
+                arguments: {
+                  path: "",
+                  kind: "group",
+                  children: [
+                    { path: "/source_id", kind: "id" },
+                    { path: "/target_id", kind: "id" },
+                  ],
+                },
+              },
+            },
+          }}
+        />,
+      );
+
+      const values = Array.from(
+        screen.getByTestId("tool-argument-view").querySelectorAll("dd"),
+        (value) => value.textContent,
+      );
+      expect(values).toEqual([FIRST, SECOND]);
+      expect(
+        screen.getByTestId("tool-argument-view").querySelector(".font-mono"),
+      ).not.toHaveAttribute("title");
+    });
+  });
+
+  describe("a 4,000-character ID", () => {
+    const LONG_ID = `${"a1b2c3d4".repeat(499)}tail0001`;
+    const OTHER_ID = `${"a1b2c3d4".repeat(499)}tail0002`;
+    const cardWith = (input: unknown, label: unknown) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            input,
+            display: {
+              ...createRowDisplay,
+              label: label as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    const createIn = (resolved?: string) => {
+      const input = { ...createRowInput, parent: { data_source_id: LONG_ID } };
+      cardWith(input, {
+        ...createRowLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...createRowLabel.items[0],
+            target: {
+              pointer: "/parent/data_source_id",
+              values: [
+                { path: "/parent/data_source_id", text: LONG_ID, resolved },
+              ],
+            },
+          },
+        ],
+      });
+    };
+    const scrollBoxOf = (node: Element) =>
+      node.closest<HTMLElement>(".overflow-y-auto");
+    const expectButtons = () => {
+      expect(
+        screen.getByRole("button", { name: "Allow once" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Deny once" }),
+      ).toBeInTheDocument();
+    };
+
+    it("shows it whole in the line, which scrolls in a box of its own", () => {
+      createIn();
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      const id = line.querySelector('[data-origin="id"]')!;
+      expect(id.textContent).toBe(LONG_ID);
+      expect(scrollBoxOf(id)).toBe(line);
+      expect(line).toHaveClass("max-h-32");
+      expectButtons();
+    });
+
+    it("shows it whole beside a resolved name, inside the line's box", () => {
+      createIn("Companies");
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      const id = within(line)
+        .getByTestId("tool-call-gist-written")
+        .querySelector(".font-mono")!;
+      expect(id.textContent).toBe(LONG_ID);
+      expect(scrollBoxOf(id)).toBe(line);
+      expectButtons();
+    });
+
+    it("shows each in a batch whole, every row in a box of its own", () => {
+      const input = { ids: [LONG_ID, OTHER_ID] };
+      cardWith(input, {
+        action: "delete",
+        object_kind: "row",
+        source: "rules",
+        arguments: viewOf(input),
+        items: [
+          {
+            id: {
+              pointer: "/ids/*",
+              values: input.ids.map((text, index) => ({
+                path: `/ids/${index}`,
+                text,
+              })),
+            },
+          },
+        ],
+      });
+
+      const rows = Array.from(
+        screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+      );
+      expect(rows.map((row) => row.textContent)).toEqual([LONG_ID, OTHER_ID]);
+      for (const row of rows) {
+        const box = scrollBoxOf(row.querySelector('[data-origin="id"]')!);
+        expect(row).toContainElement(box);
+        expect(box).toHaveClass("max-h-24");
+      }
+      expectButtons();
+    });
+
+    it("shows it whole in a field, whose value scrolls in a box of its own", () => {
+      const input = { recordId: "r1", owner_id: LONG_ID };
+      cardWith(input, {
+        action: "update",
+        object_kind: "row",
+        source: "rules",
+        arguments: viewOf(input),
+        items: [
+          {
+            id: {
+              pointer: "/recordId",
+              values: [{ path: "/recordId", text: "r1", resolved: "Acme" }],
+            },
+            fields: [
+              {
+                pointer: "/owner_id",
+                name: "owner_id",
+                values: [{ path: "/owner_id", text: LONG_ID }],
+              },
+            ],
+          },
+        ],
+      });
+
+      const id = screen
+        .getByTestId("tool-call-gist-values")
+        .querySelector('[data-origin="id"]')!;
+      expect(id.textContent).toBe(LONG_ID);
+      const box = scrollBoxOf(id);
+      expect(box?.tagName).toBe("DD");
+      expect(box).toHaveClass("max-h-24");
+      expectButtons();
+    });
+  });
+
+  it("lines a batch's fields up only under the names' own arrays, and lists the rest once", () => {
+    const field = (pointer: string, values: [string, string][]) => ({
+      pointer,
+      values: values.map(([path, text]) => ({ path, text })),
+    });
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          display: {
+            ...createRowDisplay,
+            label: {
+              action: "update",
+              object_kind: "paragraph",
+              source: "rules",
+              items: [
+                {
+                  id: field("/entries/*/source/*/id", [
+                    ["/entries/0/source/0/id", "p-1"],
+                    ["/entries/0/source/1/id", "p-2"],
+                    ["/entries/1/source/0/id", "p-3"],
+                  ]),
+                  fields: [
+                    field("/entries/*/source/*/tags/*", [
+                      ["/entries/0/source/1/tags/0", "legal"],
+                    ]),
+                    field("/entries/*/kind", [
+                      ["/entries/0/kind", "replace"],
+                      ["/entries/1/kind", "keep"],
+                    ]),
+                    field("/deleted/*/source/*", [
+                      ["/deleted/0/source/0", "d-17"],
+                      ["/deleted/0/source/1", "d-18"],
+                    ]),
+                    field("/other/*/x", [
+                      ["/other/0/x", "alpha"],
+                      ["/other/1/x", "beta"],
+                    ]),
+                  ],
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    const rows = Array.from(
+      screen.getByTestId("tool-call-gist-rows").querySelectorAll("li"),
+    );
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "p-1",
+      "p-2tagslegal",
+      "p-3",
+    ]);
+    const values = screen.getByTestId("tool-call-gist-values");
+    for (const text of ["replace", "keep", "d-17", "d-18", "alpha", "beta"]) {
+      expect(values).toHaveTextContent(text);
+    }
+  });
+
+  it("warns when the call shares what it creates with the workspace, past the label's fields", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          input: {
+            title: "Hiring",
+            description: "Open roles",
+            color: "blue",
+            icon: "briefcase",
+            parent: "root",
+            visibility: "workspace",
+          },
+          display: {
+            ...createRowDisplay,
+            label: {
+              action: "create",
+              object_kind: "folder",
+              source: "rules",
+              items: [
+                {
+                  title: {
+                    pointer: "/title",
+                    values: [{ path: "/title", text: "Hiring" }],
+                  },
+                  fields: ["description", "color", "icon", "parent"].map(
+                    (name) => ({
+                      pointer: `/${name}`,
+                      name,
+                      values: [{ path: `/${name}`, text: name }],
+                    }),
+                  ),
+                },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Create folder Hiring",
+    );
+    expect(
+      screen.getByText(
+        "Shared with your workspace: everyone in it can see this.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a generic label's arguments as names and values, as inert text", () => {
+    const input = {
+      channel: "release",
+      "a/b": "escaped name",
+      hasUserApproved: true,
+      note: "[notes](https://example.com) <b>raw</b>\u202E",
+    };
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...approvalRequest,
+          input,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+            label: {
+              action: "other",
+              object_kind: "other",
+              source: "generic",
+              arguments: {
+                path: "",
+                kind: "group",
+                children: [
+                  { path: "/channel", kind: "value" },
+                  { path: "/a~1b", kind: "value" },
+                  { path: "/hasUserApproved", kind: "value" },
+                  { path: "/note", kind: "value" },
+                ],
+                omitted: 2,
+              },
+              warnings: ["arguments_truncated"],
+            },
+          },
+        }}
+      />,
+    );
+
+    const view = screen.getByTestId("tool-argument-view");
+    expect(view).toHaveTextContent("channel");
+    expect(view).toHaveTextContent("release");
+    expect(view).toHaveTextContent("a/b");
+    expect(view).not.toHaveTextContent("hasUserApproved");
+    expect(view).toHaveTextContent("2 more not shown");
+    const note = screen.getByText("[notes](https://example.com) <b>raw</b>");
+    expect(note).toHaveAttribute("dir", "auto");
+    expect(
+      screen.queryByRole("link", { name: "notes" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Publish approval demo")).toBeInTheDocument();
+    expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
+    expect(screen.getByText("Approval Probe")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Some arguments are not shown here. Technical details has all of them.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
+
+    openTechnicalDetails();
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText("hasUserApproved")).toBeInTheDocument();
+  });
+
+  it("shows the raw input once for a label without a readable view", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...approvalRequest,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+            label: { action: "other", object_kind: "other", source: "rules" },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
+    openTechnicalDetails();
+    expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
+      "publish_approval_probe",
+    );
+  });
+
+  it("renders a request saved before labels exactly as before", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...approvalRequest,
+          display: {
+            title: "Publish approval demo",
+            description_truncated: false,
+            server_name: "Approval Probe",
+          },
+        }}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+    expect(screen.getByText(/"release"/)).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("approval-technical-details"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reads a parked child's labelled call as its gist under the task", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...delegatedTaskRequest,
+          approvals: [
+            {
+              ...delegatedTaskRequest.approvals[0],
+              child: {
+                ...childApprovalRef,
+                tool_name: "create_pages",
+                mcp_server_id: "records",
+                input: createRowInput,
+                display: createRowDisplay,
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const item = screen.getByTestId("delegated-task-approval-item");
+    expect(item).toHaveTextContent("Summarize the release notes");
+    expect(
+      item.querySelector('[data-testid="tool-call-gist-line"]'),
+    ).toHaveTextContent("Create row Northwind in Companies");
+    expect(item).not.toHaveTextContent("Input Parameters");
+    openTechnicalDetails(item);
+    expect(item).toHaveTextContent("create_pages");
+    expect(item).toHaveTextContent("Input Parameters");
+  });
+
+  it("reads the turn's own call in a queue by the label on its item", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        resolution={null}
+        request={{
+          ...gistRequest,
+          kind: "mcp_tool" as const,
+          requested_at: "2026-08-06T00:00:00Z",
+          approvals: [
+            {
+              approval_id: "tool-call-1",
+              tool_call_id: "tool-call-1",
+              tool_name: "create_pages",
+              input: createRowInput,
+              display: createRowDisplay,
+              child: null,
+            },
+            {
+              approval_id: "task-a",
+              tool_call_id: "task-a",
+              tool_name: "delegate_task",
+              input: { task: "Summarize the release notes" },
+              child: {
+                ...childApprovalRef,
+                requested_at: "2026-08-06T00:00:09Z",
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    const item = screen.getByTestId("mcp-tool-approval-item");
+    expect(item).toHaveAttribute("data-tool-name", "create_pages");
+    expect(
+      item.querySelector('[data-testid="tool-call-gist-line"]'),
+    ).toHaveTextContent("Create row Northwind in Companies");
+  });
+
+  describe("arguments the summary does not show", () => {
+    const emailInput = {
+      to: ["ana@example.com"],
+      bcc: ["leak@example.net"],
+      subject: "Q3 numbers",
+      body: "Attached.",
+    };
+    const sendEmailLabel = {
+      action: "send" as const,
+      object_kind: "email" as const,
+      source: "model" as const,
+      arguments: viewOf(emailInput),
+      items: [
+        {
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: "Q3 numbers" }],
+          },
+          target: {
+            pointer: "/to/*",
+            values: [{ path: "/to/0", text: "ana@example.com" }],
+          },
+          after: {
+            pointer: "/body",
+            values: [{ path: "/body", text: "Attached." }],
+          },
+        },
+      ],
+    };
+    const emailRequest = {
+      ...approvalRequest,
+      tool_name: "send_email",
+      mcp_server_id: "mail",
+      input: emailInput,
+      display: {
+        title: "Send email",
+        description_truncated: false,
+        server_name: "Mail",
+        label: sendEmailLabel,
+      },
+    };
+
+    const otherArguments = () =>
+      screen.queryByTestId("tool-call-other-arguments");
+
+    /** Whether `node` comes before the card's first decision button. */
+    const isAboveButtons = (node: HTMLElement) =>
+      Boolean(
+        node.compareDocumentPosition(
+          screen.getByRole("button", { name: "Allow once" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+
+    it("lists a bcc the summary leaves out under the gist, above the buttons and without a click", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={emailRequest}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+        "Send email Q3 numbers to ana@example.com",
+      );
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("Other arguments");
+      expect(rest).toHaveTextContent("bcc");
+      expect(rest).toHaveTextContent("leak@example.net");
+      expect(rest).not.toHaveTextContent("subject");
+      expect(rest).not.toHaveTextContent("ana@example.com");
+      expect(rest).not.toHaveTextContent("Attached.");
+      expect(isAboveButtons(rest)).toBe(true);
+      expect(rest.closest('div[style*="0fr"]')).toBeNull();
+    });
+
+    it("lists recipients past the values a field shows, arrays included", () => {
+      const input = {
+        subject: "Offsite",
+        to: ["a@x.example"],
+        cc: ["b@x.example", "c@x.example", "d@x.example", "e@x.example"],
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    title: sendEmailLabel.items[0].title,
+                    target: {
+                      pointer: "/to/*",
+                      values: [{ path: "/to/0", text: "a@x.example" }],
+                    },
+                    fields: [
+                      {
+                        pointer: "/cc/*",
+                        name: "cc",
+                        values: input.cc.map((text, index) => ({
+                          path: `/cc/${index}`,
+                          text,
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("e@x.example");
+      expect(rest).not.toHaveTextContent("b@x.example");
+      expect(rest.querySelector("ul")).not.toBeNull();
+    });
+
+    it("shows no list when the summary shows every argument", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={gistRequest}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist")).toBeInTheDocument();
+      expect(otherArguments()).toBeNull();
+    });
+
+    it("keeps every argument in view when a generic card turns into a gist", async () => {
+      const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+      const card = (label: unknown) =>
+        withChatContext(
+          <McpToolApprovalCard
+            messageId="message-1"
+            resolution={null}
+            request={{
+              ...emailRequest,
+              display: {
+                ...emailRequest.display,
+                label: label as typeof sendEmailLabel,
+              },
+            }}
+          />,
+          "chat-1",
+          { continueToolApproval },
+        );
+      const { rerender, queryClient } = renderCard(
+        card({
+          action: "other",
+          object_kind: "other",
+          source: "generic",
+          arguments: viewOf(emailInput),
+        }),
+      );
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "leak@example.net",
+      );
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {card(sendEmailLabel)}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(otherArguments()).toHaveTextContent("leak@example.net");
+      fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+      await waitFor(() =>
+        expect(continueToolApproval).toHaveBeenCalledWith(
+          expect.objectContaining({ toolInput: emailInput }),
+        ),
+      );
+    });
+
+    it("shows the raw arguments under a gist whose label has no readable view", () => {
+      const { arguments: _view, ...withoutView } = sendEmailLabel;
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            display: { ...emailRequest.display, label: withoutView },
+          }}
+        />,
+      );
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+      expect(screen.getByText(/leak@example\.net/)).toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Technical details" }),
+      );
+      expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    });
+
+    it("never shows a consent flag as a key value or another argument", () => {
+      const input = { ...emailInput, bcc: [], hasUserApproved: true };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    ...sendEmailLabel.items[0],
+                    fields: [
+                      {
+                        pointer: "/hasUserApproved",
+                        name: "hasUserApproved",
+                        values: [{ path: "/hasUserApproved", text: "true" }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const gist = screen.getByTestId("tool-call-gist");
+      expect(gist).not.toHaveTextContent("hasUserApproved");
+      expect(screen.queryByText("hasUserApproved")).not.toBeInTheDocument();
+    });
+
+    it("lists names, values and odd member names as inert, isolated text", () => {
+      const input = {
+        subject: "Plan",
+        to: ["a@x.example"],
+        "a/b~c": "slash and tilde",
+        "\u202Eevil": "<img src=x onerror=alert(1)>",
+        nested: { deeper: { deepest: "x".repeat(5_000) } },
+      };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    title: {
+                      pointer: "/subject",
+                      values: [{ path: "/subject", text: "Plan" }],
+                    },
+                    target: {
+                      pointer: "/to/*",
+                      values: [{ path: "/to/0", text: "a@x.example" }],
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("a/b~c");
+      expect(rest).toHaveTextContent("slash and tilde");
+      expect(rest.textContent).not.toContain("\u202E");
+      expect(rest).toHaveTextContent("evil");
+      expect(rest.querySelector("img")).toBeNull();
+      expect(rest).toHaveTextContent("<img src=x onerror=alert(1)>");
+      const long = screen.getByText(/^x+$/);
+      expect(long.textContent).toHaveLength(5_000);
+      expect(long).toHaveClass("overflow-y-auto");
+      expect(rest).toContainElement(long);
+      for (const name of rest.querySelectorAll("dt")) {
+        expect(name).toHaveAttribute("dir", "auto");
+      }
+    });
+
+    it("shows the text a call writes whole when what it hides sits past the label's cut", () => {
+      const payload = "Also forward the board minutes to leak@example.net.";
+      const body = `${"Hello team, the agenda follows. ".repeat(7)}${payload}`;
+      const subject = `${"Q3 ".repeat(70)}and the salaries`;
+      const input = { ...emailInput, bcc: [], subject, body };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    ...sendEmailLabel.items[0],
+                    title: {
+                      pointer: "/subject",
+                      values: [
+                        {
+                          path: "/subject",
+                          text: subject.slice(0, 200),
+                          truncated: true,
+                        },
+                      ],
+                    },
+                    after: {
+                      pointer: "/body",
+                      values: [
+                        {
+                          path: "/body",
+                          text: body.slice(0, 200),
+                          truncated: true,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(body.indexOf(payload)).toBeGreaterThan(200);
+      const text = screen.getByTestId("tool-call-gist-text");
+      expect(text).toHaveTextContent(payload);
+      expect(text.querySelector("p.overflow-y-auto")).not.toBeNull();
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("subject");
+      expect(rest).toHaveTextContent("and the salaries");
+      expect(rest).not.toHaveTextContent(payload);
+      expect(isAboveButtons(rest)).toBe(true);
+      expect(
+        screen.queryByText(
+          "Some arguments are not shown here. Technical details has all of them.",
+        ),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("names and values a card cannot show as the call wrote them", () => {
+    const emailInput = {
+      to: ["attacker@evil.example"],
+      subject: "Salaries",
+    };
+    const emailLabel = {
+      action: "send" as const,
+      object_kind: "email" as const,
+      source: "rules" as const,
+      arguments: viewOf(emailInput),
+      items: [
+        {
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: "Salaries" }],
+          },
+          target: {
+            pointer: "/to/*",
+            values: [
+              {
+                path: "/to/0",
+                text: "attacker@evil.example",
+                resolved: "Alice (Finance)",
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const cardFor = (input: unknown, label: unknown) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "send_email",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: label as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    const genericLabel = (input: unknown, extra: object = {}) => ({
+      action: "other",
+      object_kind: "other",
+      source: "generic",
+      arguments: viewOf(input),
+      ...extra,
+    });
+    const consentNote = () =>
+      screen.queryByTestId("tool-call-consent-left-out");
+    const hiddenNote = () =>
+      screen.queryByTestId("tool-call-hidden-characters");
+
+    it("puts the address the call writes beside a name an earlier result gave it", () => {
+      cardFor(emailInput, emailLabel);
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      expect(line).toHaveTextContent(
+        "Send email Salaries to Alice (Finance) written as <attacker@evil.example>",
+      );
+      const written = within(line).getByTestId("tool-call-gist-written");
+      expect(written).toHaveTextContent("<attacker@evil.example>");
+      expect(written.querySelector('[dir="auto"]')).toHaveClass(
+        "[unicode-bidi:isolate]",
+      );
+    });
+
+    it("puts the whole ID the call writes beside a name", () => {
+      cardFor(createRowInput, createRowLabel);
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      expect(line).toHaveTextContent(
+        `in Companies written as <${DATA_SOURCE_ID}>`,
+      );
+      const id = within(line)
+        .getByTestId("tool-call-gist-written")
+        .querySelector(".font-mono");
+      expect(id?.textContent).toBe(DATA_SOURCE_ID);
+    });
+
+    it("lists the whole value a name stands for when the label cut it", () => {
+      const address = `${"a".repeat(195)}@evil.example`;
+      const input = { ...emailInput, to: [address] };
+      cardFor(input, {
+        ...emailLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...emailLabel.items[0],
+            target: {
+              pointer: "/to/*",
+              values: [
+                {
+                  path: "/to/0",
+                  text: address.slice(0, 200),
+                  resolved: "Alice (Finance)",
+                  truncated: true,
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      expect(
+        within(screen.getByTestId("tool-call-gist-line")).getByTestId(
+          "tool-call-gist-written",
+        ),
+      ).toHaveTextContent("…");
+      expect(screen.getByTestId("tool-call-other-arguments")).toHaveTextContent(
+        address,
+      );
+    });
+
+    it("leaves out only well-known consent flags, says so, and shows other consent fields", () => {
+      const input = {
+        recordId: "r1",
+        hasUserApproved: true,
+        marketing_consent: true,
+        user_confirmed: "yes",
+      };
+      cardFor(input, genericLabel(input));
+
+      const view = screen.getByTestId("tool-argument-view");
+      expect(view).not.toHaveTextContent("hasUserApproved");
+      expect(view).toHaveTextContent("marketing_consent");
+      expect(view).toHaveTextContent("user_confirmed");
+      expect(consentNote()).toHaveTextContent(
+        "The call set an approval value of its own, which is not shown. Only your decision on this card counts.",
+      );
+    });
+
+    it("says so when the backend left the server's approval argument out", () => {
+      const input = { recordId: "r1", confirmed: true };
+      cardFor(input, {
+        ...genericLabel({ recordId: "r1" }),
+      });
+
+      expect(screen.getByTestId("tool-argument-view")).not.toHaveTextContent(
+        "confirmed",
+      );
+      expect(consentNote()).toBeInTheDocument();
+    });
+
+    it("says a gist left a consent flag out of its other arguments", () => {
+      const input = { ...emailInput, hasUserApproved: true };
+      cardFor(input, { ...emailLabel, arguments: viewOf(input) });
+
+      expect(screen.getByTestId("tool-call-gist")).toBeInTheDocument();
+      expect(screen.queryByText("hasUserApproved")).not.toBeInTheDocument();
+      expect(consentNote()).toBeInTheDocument();
+    });
+
+    it("notes nothing when the card leaves nothing out", () => {
+      cardFor(emailInput, emailLabel);
+
+      expect(consentNote()).not.toBeInTheDocument();
+      expect(hiddenNote()).not.toBeInTheDocument();
+    });
+
+    it("warns about hidden characters the backend removed, on the gist", () => {
+      cardFor(emailInput, { ...emailLabel, warnings: ["hidden_characters"] });
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(hiddenNote()).toHaveTextContent(
+        "Some values in this call contain hidden characters, which are removed here. What the call writes may differ from what you see.",
+      );
+    });
+
+    it("warns about hidden characters it removed from a value it read itself", () => {
+      const input = { iban: "DE89\u200B3704\u20600044", note: "ok" };
+      cardFor(input, genericLabel(input));
+
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "DE8937040044",
+      );
+      expect(hiddenNote()).toBeInTheDocument();
+      expect(
+        hiddenNote()!.compareDocumentPosition(
+          screen.getByRole("button", { name: "Allow once" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it("shows emoji text as written without a warning", () => {
+      const input = { status: "Sunny \u2600\uFE0F", note: "I \u2764\uFE0F it" };
+      cardFor(input, genericLabel(input));
+
+      const view = screen.getByTestId("tool-argument-view");
+      expect(view).toHaveTextContent("Sunny \u2600\uFE0F");
+      expect(view).toHaveTextContent("I \u2764\uFE0F it");
+      expect(hiddenNote()).not.toBeInTheDocument();
+    });
+
+    it.each([
+      [
+        "variation selectors after an emoji",
+        "Hi \u{1F600}\uFE01\u{E0110}",
+        "Hi \u{1F600}",
+      ],
+      ["a soft hyphen", "pay\u00ADpal", "paypal"],
+      ["a Hangul filler", "pay\u3164pal", "paypal"],
+    ])("warns about %s it removed", (_name, note, shown) => {
+      const input = { note };
+      cardFor(input, genericLabel(input));
+
+      expect(
+        screen.getByTestId("tool-argument-view").querySelector("dd")
+          ?.textContent,
+      ).toBe(shown);
+      expect(hiddenNote()).toBeInTheDocument();
+    });
+
+    it("warns about member names that differ only by a selector after a letter", () => {
+      const input = { status: "open", "status\uFE0F": "closed" };
+      cardFor(input, genericLabel(input));
+
+      expect(
+        Array.from(
+          screen.getByTestId("tool-argument-view").querySelectorAll("dt"),
+          (name) => name.textContent,
+        ),
+      ).toEqual(["status", "status"]);
+      expect(hiddenNote()).toBeInTheDocument();
+    });
+
+    it("warns about hidden characters in a field name it took from the call", () => {
+      const input = { ...emailInput, "prio\u200Brity": "high" };
+      cardFor(input, {
+        ...emailLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...emailLabel.items[0],
+            fields: [
+              {
+                pointer: "/prio\u200Brity",
+                values: [{ path: "/prio\u200Brity", text: "high" }],
+              },
+            ],
+          },
+        ],
+      });
+
+      expect(screen.getByTestId("tool-call-gist-values")).toHaveTextContent(
+        "priority",
+      );
+      expect(hiddenNote()).toBeInTheDocument();
+    });
+  });
+
+  describe("labels this build cannot read", () => {
+    it.each<[string, unknown]>([
+      ["a label that is text", "create row"],
+      ["a label whose verb is a number", { ...createRowLabel, action: 5 }],
+      [
+        "a label whose items are not a list",
+        { ...createRowLabel, items: "Northwind" },
+      ],
+      [
+        "items of the wrong types",
+        {
+          ...createRowLabel,
+          items: [null, 7, "x", { title: 5, fields: { a: 1 } }],
+        },
+      ],
+      [
+        "values of the wrong types",
+        {
+          ...createRowLabel,
+          items: [
+            {
+              title: {
+                pointer: "/pages/*/properties/Name",
+                values: [
+                  null,
+                  { path: 3, text: "x" },
+                  { path: "/pages/0/properties/Name", text: { a: 1 } },
+                  {
+                    path: "/pages/0/properties/Name",
+                    text: "Northwind",
+                    resolved: { name: "x" },
+                  },
+                ],
+                omitted: "lots",
+              },
+              fields: [{ pointer: {}, values: "x" }],
+            },
+          ],
+        },
+      ],
+      [
+        "a readable view of the wrong shape",
+        {
+          ...createRowLabel,
+          arguments: {
+            path: "",
+            kind: "group",
+            children: [null, { path: 7 }, { path: "/x", kind: "table" }],
+            omitted: -3,
+          },
+        },
+      ],
+      [
+        "a source from a newer server",
+        { ...createRowLabel, source: "adapter" },
+      ],
+      [
+        "a warning from a newer server",
+        { ...createRowLabel, warnings: ["lookup_name"] },
+      ],
+      [
+        "warnings that are not a list",
+        { ...createRowLabel, warnings: "other" },
+      ],
+    ])(
+      "renders %s without breaking the card or its buttons",
+      async (_name, label) => {
+        const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+        renderCard(
+          withChatContext(
+            <McpToolApprovalCard
+              messageId="message-1"
+              resolution={null}
+              request={{
+                ...gistRequest,
+                display: {
+                  ...createRowDisplay,
+                  label: label as typeof createRowLabel,
+                },
+              }}
+            />,
+            "chat-1",
+            { continueToolApproval },
+          ),
+        );
+
+        expect(screen.getByText("Records")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+        await waitFor(() => expect(continueToolApproval).toHaveBeenCalled());
+      },
+    );
+
+    it("gives a label with a verb or kind this build has no words for the generic card", () => {
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            display: {
+              ...createRowDisplay,
+              label: {
+                ...createRowLabel,
+                object_kind: "invoice" as typeof createRowLabel.object_kind,
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "Northwind",
+      );
+    });
+
+    it("shows a label that throws when read as a row saved before labels", () => {
+      const label = { ...createRowLabel };
+      Object.defineProperty(label, "items", {
+        get() {
+          throw new Error("unreadable");
+        },
+      });
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            display: { ...createRowDisplay, label },
+          }}
+        />,
+      );
+
+      expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+      expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Allow once" }),
+      ).toBeInTheDocument();
+    });
   });
 });
