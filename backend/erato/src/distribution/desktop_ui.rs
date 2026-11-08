@@ -4,10 +4,11 @@
 //! `crates/erato-desktop-sidecar-ui` contract; DISTRIBUTION.md section 8
 //! describes what the deployment package adds.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
-use std::io::Read;
+use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -60,6 +61,15 @@ const KITS_PATH: &str = "public/component-kits";
 const TOKEN_PURPOSE: &str = "desktop-ui-package";
 const TOKEN_KEY_LABEL: &[u8] = b"erato-desktop-ui-package-token";
 const MAX_UNPACKED_BYTES: u64 = 64 * 1024 * 1024;
+/// The most an archive's decompressed tar stream may hold: the files plus
+/// 2 MiB for headers, padding and extension records. The `tar` crate reads
+/// long names and PAX records into memory, so this is what bounds them.
+const MAX_UNPACKED_STREAM_BYTES: u64 = MAX_UNPACKED_BYTES + 2 * 1024 * 1024;
+/// The most entries an archive may hold, directories included.
+const MAX_ARCHIVE_ENTRIES: usize = 20_000;
+/// The package file that repeats the manifest's `composition`. It is listed
+/// like any other file, so the digest over the file table covers it.
+const COMPOSITION_PATH: &str = "public/platform-desktop-ui/composition.json";
 /// Raw archive bytes per relayed chunk (`sidecar.install_ui_package.v1`
 /// `content_base64`, decoded).
 const RELAY_CHUNK_BYTES: u64 = 131_072;
@@ -216,14 +226,66 @@ impl DesktopUiBundle {
     }
 }
 
+/// Unpacks a gzip tar in memory. The decompressed stream stops at
+/// [`MAX_UNPACKED_STREAM_BYTES`], extension records included, so no archive
+/// makes this hold more than about that much.
 fn unpack(archive: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
-    let mut archive = tar::Archive::new(GzDecoder::new(archive));
+    let exceeded = Cell::new(false);
+    let stream = Capped {
+        inner: GzDecoder::new(archive),
+        remaining: MAX_UNPACKED_STREAM_BYTES,
+        exceeded: &exceeded,
+    };
+    unpack_stream(stream).map_err(|error| {
+        if exceeded.get() {
+            eyre!("the archive unpacks to more than {MAX_UNPACKED_STREAM_BYTES} bytes")
+        } else {
+            error
+        }
+    })
+}
+
+/// A reader that yields at most `remaining` bytes of `inner` and fails,
+/// noting it in `exceeded`, when `inner` holds more.
+struct Capped<'a, R> {
+    inner: R,
+    remaining: u64,
+    exceeded: &'a Cell<bool>,
+}
+
+impl<R: Read> Read for Capped<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        if self.remaining == 0 {
+            let mut probe = [0_u8; 1];
+            if self.inner.read(&mut probe)? == 0 {
+                return Ok(0);
+            }
+            self.exceeded.set(true);
+            return Err(io::Error::other("the archive unpacks past its limit"));
+        }
+        let room = usize::try_from(self.remaining).unwrap_or(usize::MAX);
+        let length = buffer.len().min(room);
+        let read = self.inner.read(&mut buffer[..length])?;
+        self.remaining -= read as u64;
+        Ok(read)
+    }
+}
+
+fn unpack_stream(stream: impl Read) -> Result<BTreeMap<String, Vec<u8>>> {
+    let mut archive = tar::Archive::new(stream);
     let mut files = BTreeMap::new();
     let mut unpacked = 0_u64;
-    for entry in archive
+    let entries = archive
         .entries()
-        .wrap_err("the archive is not a gzip tar")?
-    {
+        .wrap_err("the archive is not a gzip tar")?;
+    for (index, entry) in entries.enumerate() {
+        ensure!(
+            index < MAX_ARCHIVE_ENTRIES,
+            "the archive holds more than {MAX_ARCHIVE_ENTRIES} entries"
+        );
         let mut entry = entry.wrap_err("the archive is not a gzip tar")?;
         let path = entry
             .path()
@@ -241,7 +303,8 @@ fn unpack(archive: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
         if entry_type.is_dir() {
             continue;
         }
-        unpacked = unpacked.saturating_add(entry.header().size().unwrap_or(0));
+        // Not the header's size: a PAX record overrides it.
+        unpacked = unpacked.saturating_add(entry.size());
         ensure!(
             unpacked <= MAX_UNPACKED_BYTES,
             "the archive unpacks to more than {MAX_UNPACKED_BYTES} bytes"
@@ -631,6 +694,17 @@ pub fn assemble(
         }
     };
 
+    let composition = json!({
+        "env": env,
+        "importMap": import_map,
+        "kits": kits,
+        "windows": bundle.windows(),
+    });
+    assembly.insert(
+        COMPOSITION_PATH.to_owned(),
+        serde_json::to_vec(&composition)?,
+    )?;
+
     let mut entries = Vec::with_capacity(assembly.files.len());
     let mut total_bytes = 0_u64;
     for (path, file) in &assembly.files {
@@ -659,15 +733,7 @@ pub fn assemble(
     let mut manifest = bundle.manifest.clone();
     manifest.insert("files".into(), serde_json::to_value(&entries)?);
     manifest.insert("totalBytes".into(), json!(total_bytes));
-    manifest.insert(
-        "composition".into(),
-        json!({
-            "env": env,
-            "importMap": import_map,
-            "kits": kits,
-            "windows": bundle.windows(),
-        }),
-    );
+    manifest.insert("composition".into(), composition);
     manifest.insert(
         "parts".into(),
         json!({
@@ -1365,6 +1431,113 @@ pub(crate) mod tests {
                 "kits": [{ "name": "example" }],
             })
         );
+    }
+
+    #[test]
+    fn a_change_to_the_composition_alone_changes_the_digest() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut config, distribution) = deployment(dir.path());
+        let assembled = |config: &AppConfig| {
+            assemble(
+                &fixture_artifact(),
+                config,
+                &distribution,
+                &DistributionBundle::default(),
+                PACKAGE_BUDGET_BYTES,
+                PACKAGE_MAX_ARCHIVE_BYTES,
+            )
+            .unwrap()
+        };
+        // Neither path resolves to a file, so only the composition differs.
+        config.frontend.sidebar_logo_dark_path = Some("/not-packaged-a.svg".into());
+        let first = assembled(&config);
+        config.frontend.sidebar_logo_dark_path = Some("/not-packaged-b.svg".into());
+        let second = assembled(&config);
+        assert_ne!(first.digest, second.digest);
+
+        let manifest = manifest_of(&second);
+        let served = DesktopUiBundle::from_archive(&second.archive).unwrap();
+        let composition: Value =
+            serde_json::from_slice(served.file_bytes(COMPOSITION_PATH).unwrap()).unwrap();
+        assert_eq!(composition, manifest["composition"]);
+    }
+
+    /// A gzip tar with the entries `build` appends.
+    fn archive_of(build: impl FnOnce(&mut tar::Builder<GzEncoder<Vec<u8>>>)) -> Vec<u8> {
+        let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
+        build(&mut builder);
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    fn append_entry(
+        builder: &mut tar::Builder<GzEncoder<Vec<u8>>>,
+        entry_type: tar::EntryType,
+        path: &str,
+        size: u64,
+        data: impl Read,
+    ) {
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(entry_type);
+        header.set_size(size);
+        header.set_mode(0o644);
+        builder.append_data(&mut header, path, data).unwrap();
+    }
+
+    #[test]
+    fn extension_records_cannot_unpack_past_the_stream_limit() {
+        let size = MAX_UNPACKED_STREAM_BYTES + 1;
+        let archive = archive_of(|builder| {
+            append_entry(
+                builder,
+                tar::EntryType::GNULongName,
+                "././@LongLink",
+                size,
+                io::repeat(0).take(size),
+            );
+        });
+        let error = unpack(&archive).unwrap_err().to_string();
+        assert!(error.contains("unpacks to more than"), "{error}");
+    }
+
+    #[test]
+    fn a_pax_size_counts_against_the_unpacked_limit() {
+        let record = format!("17 size={}\n", MAX_UNPACKED_BYTES + 1);
+        assert_eq!(record.len(), 17);
+        let archive = archive_of(|builder| {
+            append_entry(
+                builder,
+                tar::EntryType::XHeader,
+                "package/PaxHeaders/big",
+                record.len() as u64,
+                record.as_bytes(),
+            );
+            append_entry(
+                builder,
+                tar::EntryType::Regular,
+                "package/big",
+                0,
+                io::empty(),
+            );
+        });
+        let error = unpack(&archive).unwrap_err().to_string();
+        assert!(error.contains("unpacks to more than"), "{error}");
+    }
+
+    #[test]
+    fn an_archive_with_too_many_entries_is_refused() {
+        let archive = archive_of(|builder| {
+            for index in 0..=MAX_ARCHIVE_ENTRIES {
+                append_entry(
+                    builder,
+                    tar::EntryType::Regular,
+                    &format!("package/file-{index}"),
+                    0,
+                    io::empty(),
+                );
+            }
+        });
+        let error = unpack(&archive).unwrap_err().to_string();
+        assert!(error.contains("entries"), "{error}");
     }
 
     #[test]

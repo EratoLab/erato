@@ -17,6 +17,7 @@ import edits from "@/lib/wordReview/__tests__/fixtures/history-edits.json";
 import noAccepted from "@/lib/wordReview/__tests__/fixtures/history-no-accepted.json";
 import retryAccepted from "@/lib/wordReview/__tests__/fixtures/history-retry-accepted.json";
 import * as wordHistory from "@/lib/wordReview/wordHistory";
+import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
@@ -151,6 +152,22 @@ async function expectRejectedAttempts() {
   expect(toolNames()).toContain("submit_document_plan");
 }
 
+/** The display a proposal's call stores once its tool has a hand-written label. */
+const proposalDisplay = (
+  part: ContentPart,
+  label: { action: "update" | "send"; object_kind: "document" | "email" },
+): ContentPart =>
+  part.content_type === "tool_use"
+    ? {
+        ...part,
+        display: {
+          title: "Proposal",
+          description_truncated: false,
+          label: { ...label, source: "own_mapping" },
+        },
+      }
+    : part;
+
 const planFence = (plan: unknown) =>
   text(
     `Done.\n\n\`\`\`erato-word-document-plan\n${JSON.stringify(plan)}\n\`\`\``,
@@ -183,6 +200,73 @@ describe("Word chats shown outside Word", () => {
       within(card).getByRole("button", { name: "Copy text" }),
     ).toBeVisible();
     expect(within(card).queryByText(/^Saved draft/)).toBeNull();
+  });
+
+  it("keeps the accepted submission as the one step that names the proposal", async () => {
+    const messages = messagesOf(retryAccepted);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      isAcceptedWordSubmission(part)
+        ? proposalDisplay(part, { action: "update", object_kind: "document" })
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual(["submit_document_plan"]);
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveTextContent(
+      "Proposed changes to the document",
+    );
+  });
+
+  it("renders the chat when a stored proposal label is malformed", async () => {
+    const messages = messagesOf(retryAccepted);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      isAcceptedWordSubmission(part) && part.content_type === "tool_use"
+        ? ({
+            ...part,
+            display: {
+              title: "Proposal",
+              description_truncated: false,
+              label: {
+                action: "comment",
+                object_kind: "comment",
+                source: "own_mapping",
+                items: [null, { fields: { name: "op" } }],
+              },
+            },
+          } as unknown as ContentPart)
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual(["submit_document_plan"]);
+    expect(screen.getByTestId("tool-call-proposal-line")).toHaveTextContent(
+      "Proposed comment changes",
+    );
+  });
+
+  it("folds an accepted submission whose display has no proposal label", async () => {
+    const messages = messagesOf(retryAccepted);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      isAcceptedWordSubmission(part) && part.content_type === "tool_use"
+        ? {
+            ...part,
+            display: {
+              title: "submit_document_plan",
+              description_truncated: false,
+            },
+          }
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-plan");
+    expect(toolNames()).toEqual([]);
+    expect(screen.queryByTestId("tool-call-proposal-line")).toBeNull();
   });
 
   it("rebuilds the review from reads stored in an earlier message", async () => {
@@ -290,6 +374,26 @@ describe("Word chats shown outside Word", () => {
     expect(within(card).getByText("From Word")).toBeVisible();
     expect(toolNames()).toEqual(["propose_client_action"]);
     expect(document.querySelector("pre.message-content-code-block")).toBeNull();
+  });
+
+  it("names a labelled client action proposal in one line beside its card", async () => {
+    const messages = messagesOf(edits);
+    const answer = messages[messages.length - 1];
+    answer.content = answer.content.map((part) =>
+      part.content_type === "tool_use" &&
+      part.tool_name === "propose_client_action"
+        ? proposalDisplay(part, { action: "update", object_kind: "document" })
+        : part,
+    );
+    renderChat(messages);
+
+    await screen.findByTestId("word-history-edits");
+    expect(toolNames()).toEqual(["propose_client_action"]);
+    const line = screen.getByTestId("tool-call-proposal-line");
+    expect(line).toHaveTextContent("Proposed changes to the document");
+    expect(
+      screen.getByRole("button", { name: /Proposed changes/ }),
+    ).not.toHaveTextContent("propose_client_action");
   });
 
   it("shows an insert fence as the text to insert", async () => {

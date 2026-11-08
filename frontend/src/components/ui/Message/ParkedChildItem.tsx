@@ -1,15 +1,13 @@
 import { plural, select, t } from "@lingui/core/macro";
 
-import { ToolCallInput } from "@/components/ui/ToolCall";
 import {
   TASK_BRIEF_PREVIEW_CHARS,
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
 
-import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { stagedItemPresentation } from "./ApprovalDecisionActions";
-import { ApprovalToolHeading } from "./ApprovalToolHeading";
+import { ApprovalReferent, ApprovalTechnicalDetails } from "./ApprovalReferent";
 
 import type { ApprovalItemPart, ApprovalScopeOffer } from "./approvalItems";
 import type { ToolApprovalDecision } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -154,34 +152,16 @@ export const ParkedChildItem = ({
       </p>
       {child ? (
         <>
-          <ApprovalToolHeading
+          <ApprovalReferent
             className="mt-1"
             toolName={child.tool_name}
             display={child.display}
-            icon={
-              isClientTool ? (
-                <ComputerIcon className="size-4 shrink-0 text-theme-fg-secondary" />
-              ) : (
-                <ResolvedIcon
-                  iconId="simpleicons-modelcontextprotocol"
-                  className="size-4 shrink-0 text-theme-fg-secondary"
-                />
-              )
-            }
-            source={
-              isClientTool
-                ? t({
-                    id: "clientToolApproval.thisDevice",
-                    message: "This device",
-                  })
-                : (child.display?.server_name ?? child.mcp_server_id)
-            }
+            input={child.input}
+            serverId={child.mcp_server_id}
+            isClientTool={isClientTool}
             // The task brief above is this item's heading.
             titleClassName="font-normal"
           />
-          <div className="mt-2 max-h-48 overflow-y-auto">
-            <ToolCallInput input={child.input} />
-          </div>
           {/* A client tool declares no annotations of its own. */}
           {!isClientTool && child.annotations.openWorldHint && (
             <p className="mt-1 text-xs text-theme-fg-muted">
@@ -237,6 +217,15 @@ export const ParkedChildItem = ({
         scrollIntoViewOnMount={scrollIntoViewOnMount}
         data-testid="delegated-task-approval-item-card"
       />
+      {child && (
+        <ApprovalTechnicalDetails
+          toolName={child.tool_name}
+          display={child.display}
+          input={child.input}
+          serverId={child.mcp_server_id}
+          isClientTool={isClientTool}
+        />
+      )}
     </div>
   );
 };

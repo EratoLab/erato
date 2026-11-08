@@ -67,6 +67,9 @@ import {
   ChatLines,
   Calendar,
   Attachment,
+  Shield,
+  ShieldCheck,
+  ShieldXmark,
   Bell,
   Clock,
   Play,
@@ -191,6 +194,18 @@ export const WarningCircleIcon = ({ className, ...props }: IconProps) => (
 
 export const CheckCircleIcon = ({ className, ...props }: IconProps) => (
   <CheckCircle className={className} {...props} />
+);
+
+export const ShieldIcon = ({ className, ...props }: IconProps) => (
+  <Shield className={className} {...props} />
+);
+
+export const ShieldCheckIcon = ({ className, ...props }: IconProps) => (
+  <ShieldCheck className={className} {...props} />
+);
+
+export const ShieldXmarkIcon = ({ className, ...props }: IconProps) => (
+  <ShieldXmark className={className} {...props} />
 );
 
 export const CodeIcon = ({ className, ...props }: IconProps) => (

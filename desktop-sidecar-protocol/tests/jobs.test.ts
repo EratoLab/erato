@@ -359,6 +359,13 @@ describe("job envelope", () => {
     await expect(
       client.invoke("jobs.review.v1", { handle: started.handle }),
     ).resolves.toEqual({ handle: started.handle, state: "ready_for_review" });
+    // Naming the client is optional and changes nothing about the job.
+    await expect(
+      client.invoke("jobs.review.v1", {
+        handle: started.handle,
+        client: { platform: "web", locale: "de" },
+      }),
+    ).resolves.toEqual({ handle: started.handle, state: "ready_for_review" });
     await expect(
       client.invoke("jobs.read.v1", { handle: started.handle }),
     ).rejects.toMatchObject({ kind: "invalid_params" });

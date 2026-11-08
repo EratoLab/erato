@@ -139,6 +139,57 @@ describe("applyToolUseUpdate", () => {
     expect(ids(content)).toEqual(["call-a", "call-b"]);
   });
 
+  it("keeps what allowed a call and its display from the first progress update to the result", () => {
+    const display = {
+      title: "create_record",
+      description_truncated: false,
+      server_name: "Dynamics 365",
+    };
+    let content = insertProposedToolUse([], proposed("call-a", 0));
+    content = applyToolUseUpdate(content, {
+      ...update("call-a", 0, null),
+      status: "in_progress",
+      progress: 1,
+      display,
+      allowed_by: "policy",
+    } as unknown as MessageSubmitStreamingResponseToolCallUpdate);
+    content = applyToolUseUpdate(content, {
+      ...update("call-a", 0, null),
+      status: "in_progress",
+      progress: 2,
+    } as unknown as MessageSubmitStreamingResponseToolCallUpdate);
+    expect(content[0]).toMatchObject({ allowed_by: "policy", display });
+
+    content = applyToolUseUpdate(content, update("call-a", 0, { ok: true }));
+    expect(content[0]).toMatchObject({
+      status: "success",
+      allowed_by: "policy",
+      display,
+    });
+  });
+
+  it("keeps a result's links from the final update until the refetch", () => {
+    const resultDetails = {
+      links: [
+        {
+          uri: "https://records.example/row-1",
+          host: "records.example",
+          matches_server_host: true,
+          title: "Northwind",
+        },
+      ],
+    };
+    let content = insertProposedToolUse([], proposed("call-a", 0));
+    content = applyToolUseUpdate(content, {
+      ...update("call-a", 0, { ok: true }),
+      result_details: resultDetails,
+    });
+    expect(content[0]).toMatchObject({ result_details: resultDetails });
+
+    content = applyToolUseUpdate(content, update("call-a", 0, { ok: true }));
+    expect(content[0]).toMatchObject({ result_details: resultDetails });
+  });
+
   it("inserts at the reserved index when the update arrives with no proposal", () => {
     let content: ContentPart[] = [];
     content = insertProposedToolUse(content, proposed("call-a", 0));

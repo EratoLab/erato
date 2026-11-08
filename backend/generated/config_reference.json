@@ -1479,6 +1479,24 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "client_tools.tools.<key>.label.action": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.label.fields.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "client_tools.tools.<key>.label.object_kind": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "client_tools.tools.<key>.name": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",
@@ -4688,6 +4706,24 @@
     "introduced_in": "0.6.0",
     "security_relevance": "unknown",
     "stability": "unstable"
+  },
+  "tool_labels.allow_other_provider": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "high",
+    "stability": "alpha"
+  },
+  "tool_labels.chat_provider_id": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "tool_labels.enabled": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
   },
   "user_preferences.data_tab_enabled": {
     "default_value_security": "unknown",

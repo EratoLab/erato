@@ -95,6 +95,15 @@ chat_provider_ids = ["test-token-limit"]
 # # prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Optional fallback" }
 # # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
+# Tool-call labels from a model where the generic rules are unsure (off by default).
+# A skeleton of the call (member names, text lengths, verb fields and values the
+# tool's schema lists) goes to this provider, only on turns that run on it unless
+# allow_other_provider is set, and only for users whose model permissions allow it.
+# [tool_labels]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+# allow_other_provider = false
+
 # From ./run_mcp_server.sh
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
 # [mcp_servers_global]
@@ -857,6 +866,20 @@ chat_provider_ids = ["test-token-limit"]
 # # mode = "receipt"
 # # keep_input_fields = ["$.lookahead_days"]
 # # keep_output_fields = ["$.status", "$.error"]
+#
+# # Optional, for a tool that stages a proposal: one line in the trace saying
+# # what the call proposes, instead of the tool's name. action is create,
+# # update, delete, move, send or comment; object_kind is page, row, database,
+# # folder, note, comment, paragraph, document, email, message, event, file,
+# # task or other. The chat has words for update/document, send/email,
+# # create/event and comment, update or delete with comment; any other pair
+# # reads "Proposed an action". Up to 4 fields are `$.key.key` paths into the
+# # arguments, where `key[*]` is every element of an array; a comment
+# # proposal's `op` field gives each change's operation.
+# # [client_tools.tools.word_submit_comment_changes.label]
+# # action = "comment"
+# # object_kind = "comment"
+# # fields = ["$.changes[*].op"]
 #
 # # Optional: with durable_operations_enabled, a call whose stream drops or
 # # times out parks durably for the same device and Outlook mailbox instead of
