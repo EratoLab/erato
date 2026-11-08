@@ -253,6 +253,20 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
         user_preference_assistant_custom_instructions: Option<&str>,
         user_preference_assistant_additional_information: Option<&str>,
     ) -> Result<Option<String>, Report> {
+        // The chat owner's zone, so the "now" placeholders show their local
+        // date and time.
+        let time_zone = match Uuid::parse_str(self.subject.user_id()) {
+            Ok(user_id) => crate::models::user_preference::user_time_zone(
+                &self.app_state.db,
+                &user_id,
+            )
+            .await
+            .unwrap_or_else(|error| {
+                tracing::warn!(%error, "Could not read the user's time zone for the system prompt");
+                None
+            }),
+            Err(_) => None,
+        };
         self.app_state
             .get_system_prompt(
                 chat_provider_config,
@@ -261,6 +275,7 @@ impl<'a> PromptProvider for AppStatePromptProvider<'a> {
                 user_preference_job_title,
                 user_preference_assistant_custom_instructions,
                 user_preference_assistant_additional_information,
+                time_zone,
             )
             .await
     }

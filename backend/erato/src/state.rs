@@ -984,6 +984,7 @@ impl AppState {
         user_preference_job_title: Option<&str>,
         user_preference_assistant_custom_instructions: Option<&str>,
         user_preference_assistant_additional_information: Option<&str>,
+        time_zone: Option<chrono_tz::Tz>,
     ) -> Result<Option<String>, Report> {
         let ctx = SystemPromptContext {
             preferred_language,
@@ -991,6 +992,7 @@ impl AppState {
             user_preference_job_title,
             user_preference_assistant_custom_instructions,
             user_preference_assistant_additional_information,
+            time_zone,
         };
 
         // If a system prompt is configured, resolve, render, and return it
@@ -1050,6 +1052,7 @@ impl AppState {
             user_preference_job_title,
             user_preference_assistant_custom_instructions,
             user_preference_assistant_additional_information,
+            time_zone: None,
         };
 
         let Some(config) = config else {

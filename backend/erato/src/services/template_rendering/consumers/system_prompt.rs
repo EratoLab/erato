@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use handlebars::Handlebars;
 use serde_json::{Map, Value};
 
@@ -86,12 +87,18 @@ impl SystemPromptRenderer {
     }
 }
 
-pub(crate) fn render_now_date(_ctx: &SystemPromptContext) -> String {
-    Utc::now().format("%Y-%m-%d").to_string()
+pub(crate) fn render_now_date(ctx: &SystemPromptContext) -> String {
+    now_in(ctx, Utc::now()).format("%Y-%m-%d").to_string()
 }
 
-pub(crate) fn render_now_datetime(_ctx: &SystemPromptContext) -> String {
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+/// RFC 3339 with the zone's offset, so the local time and the instant are
+/// both readable; `Z` without a stored zone.
+pub(crate) fn render_now_datetime(ctx: &SystemPromptContext) -> String {
+    now_in(ctx, Utc::now()).to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+fn now_in(ctx: &SystemPromptContext, now: DateTime<Utc>) -> DateTime<Tz> {
+    now.with_timezone(&ctx.time_zone.unwrap_or(Tz::UTC))
 }
 
 pub(crate) fn language_code_to_english_name(ctx: &SystemPromptContext) -> String {
@@ -184,6 +191,36 @@ mod tests {
         assert!(datetime.ends_with('Z'));
         // Should be parseable as RFC3339
         assert!(chrono::DateTime::parse_from_rfc3339(&datetime).is_ok());
+    }
+
+    #[test]
+    fn now_renders_in_the_users_stored_zone() {
+        // 23:30 UTC on 8 Nov is already 9 Nov in Berlin.
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-08T23:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let berlin = SystemPromptContext {
+            time_zone: Some(chrono_tz::Europe::Berlin),
+            ..SystemPromptContext::default()
+        };
+        assert_eq!(
+            now_in(&berlin, now).format("%Y-%m-%d").to_string(),
+            "2026-11-09"
+        );
+        assert_eq!(
+            now_in(&berlin, now).to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "2026-11-09T00:30:00.000+01:00"
+        );
+        let unset = SystemPromptContext::default();
+        assert_eq!(
+            now_in(&unset, now).to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "2026-11-08T23:30:00.000Z"
+        );
+        let datetime = render_now_datetime(&berlin);
+        assert!(
+            datetime.ends_with("+01:00") || datetime.ends_with("+02:00"),
+            "{datetime}"
+        );
     }
 
     #[test]
