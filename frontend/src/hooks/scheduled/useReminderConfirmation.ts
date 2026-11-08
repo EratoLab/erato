@@ -54,17 +54,22 @@ export function useReminderConfirmation(
     [mutate, itemId],
   );
 
-  const status: ReminderConfirmationStatus | undefined =
-    cancelled?.status ??
-    live.data?.status ??
-    (scheduledRefusalCode(live.error) === "not_found" ? "gone" : undefined);
+  // Before any cached status: a failed refetch keeps the last data, and a
+  // deleted item's id never comes back.
+  const gone =
+    scheduledRefusalCode(live.error) === "not_found" ||
+    scheduledRefusalCode(error) === "not_found";
+  const status: ReminderConfirmationStatus | undefined = gone
+    ? "gone"
+    : (cancelled?.status ?? live.data?.status);
 
   return {
     status,
     isCancelling: isPending,
-    cancelError: error
-      ? scheduledRefusalMessage(scheduledRefusalCode(error))
-      : null,
+    cancelError:
+      error && !gone
+        ? scheduledRefusalMessage(scheduledRefusalCode(error))
+        : null,
     cancel,
   };
 }

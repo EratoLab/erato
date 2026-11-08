@@ -1,7 +1,13 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
   afterEach,
@@ -62,6 +68,9 @@ const renderCard = ({
   router = true,
   readOnly = false,
 }: { scheduledPage?: boolean; router?: boolean; readOnly?: boolean } = {}) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const card = (
     <ReminderConfirmationCard confirmation={confirmation} readOnly={readOnly} />
   );
@@ -76,21 +85,20 @@ const renderCard = ({
     ) : (
       ui
     );
-  return render(
-    <I18nProvider i18n={i18n}>
-      <StaticFeatureConfigProvider
-        config={{ scheduled: { enabled: scheduledPage } }}
-      >
-        <QueryClientProvider
-          client={
-            new QueryClient({ defaultOptions: { queries: { retry: false } } })
-          }
+  return {
+    queryClient,
+    ...render(
+      <I18nProvider i18n={i18n}>
+        <StaticFeatureConfigProvider
+          config={{ scheduled: { enabled: scheduledPage } }}
         >
-          {withRouter(card)}
-        </QueryClientProvider>
-      </StaticFeatureConfigProvider>
-    </I18nProvider>,
-  );
+          <QueryClientProvider client={queryClient}>
+            {withRouter(card)}
+          </QueryClientProvider>
+        </StaticFeatureConfigProvider>
+      </I18nProvider>,
+    ),
+  };
 };
 
 describe("ReminderConfirmationCard", () => {
@@ -231,6 +239,43 @@ describe("ReminderConfirmationCard", () => {
       screen.queryByRole("button", { name: "Cancel" }),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("reminder-confirmation")).not.toHaveFocus();
+  });
+
+  it("turns gone when a refetch finds the loaded reminder deleted", async () => {
+    const { queryClient } = renderCard();
+    const card = screen.getByTestId("reminder-confirmation");
+    await waitFor(() =>
+      expect(card).toHaveAttribute("data-status", "scheduled"),
+    );
+
+    current = null;
+    await act(() => queryClient.invalidateQueries());
+
+    await waitFor(() => expect(card).toHaveAttribute("data-status", "gone"));
+    expect(card).toHaveTextContent("This reminder no longer exists.");
+    expect(
+      screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("turns gone when Cancel finds the loaded reminder deleted", async () => {
+    cancelResponse = () => json({ code: "not_found", message: "Gone." }, 404);
+    renderCard();
+    const card = screen.getByTestId("reminder-confirmation");
+    await waitFor(() =>
+      expect(card).toHaveAttribute("data-status", "scheduled"),
+    );
+
+    current = null;
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(card).toHaveAttribute("data-status", "gone"));
+    expect(card).toHaveTextContent("This reminder no longer exists.");
+    // The card already says so; the refusal would repeat it.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows only what was stored in a read-only chat, without looking it up", () => {
