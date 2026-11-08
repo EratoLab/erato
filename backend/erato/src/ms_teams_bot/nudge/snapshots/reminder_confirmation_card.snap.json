@@ -40,11 +40,42 @@
         ],
         "actions": [
           {
-            "type": "Action.Submit",
+            "type": "Action.ShowCard",
             "title": "Cancel",
-            "data": {
-              "action": "erato_reminder_cancel",
-              "item_id": "ITEM_ID"
+            "card": {
+              "type": "AdaptiveCard",
+              "body": [
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "weight": "Bolder",
+                  "text": "Cancel “Follow up on the offer”?"
+                },
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "isSubtle": true,
+                  "text": "It will no longer be delivered. You can still find it under Past on the Scheduled page."
+                }
+              ],
+              "actions": [
+                {
+                  "type": "Action.Submit",
+                  "title": "Cancel it",
+                  "data": {
+                    "action": "erato_reminder_cancel",
+                    "item_id": "ITEM_ID"
+                  }
+                },
+                {
+                  "type": "Action.Submit",
+                  "title": "Keep it",
+                  "data": {
+                    "action": "erato_reminder_keep",
+                    "item_id": "ITEM_ID"
+                  }
+                }
+              ]
             }
           },
           {

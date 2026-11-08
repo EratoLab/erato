@@ -18,9 +18,10 @@ use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply};
 use super::texts::{Lang, Msg};
 use super::user_token::sign_in_activity;
-use crate::db::entity::scheduled_items::ItemStatus;
 use crate::db::entity::users;
-use crate::services::scheduled_items::{self, Refusal, ScheduledItemErrorCode, wording};
+use crate::services::scheduled_items::{
+    self, DisplayStatus, Refusal, ScheduledItemErrorCode, wording,
+};
 use axum::http::StatusCode;
 use chrono::Utc;
 use chrono_tz::Tz;
@@ -128,8 +129,11 @@ async fn process_message(
     if let Some(submit) = activity
         .value
         .as_ref()
-        .and_then(reminders::CancelSubmit::from_value)
+        .and_then(reminders::CardSubmit::from_value)
     {
+        if submit.keeps() {
+            return on_reminder_keep(bot, host, activity, target, sender, submit).await;
+        }
         return on_reminder_cancel(bot, host, activity, target, sender, submit).await;
     }
 
@@ -628,17 +632,18 @@ pub(super) async fn settle_delivered_card(
     target.send_text(note).await
 }
 
-/// Cancel on a confirmation card. It works while the reminder is upcoming,
-/// for the user whose reminder it is, with no sign-in, as the delivered
-/// card's buttons. The outcome replaces the card in place, which keeps Open
-/// in Scheduled; someone else's press only gets a reply.
+/// "Cancel it" on a confirmation card. It works while the reminder is
+/// upcoming, for the user whose reminder it is, with no sign-in, as the
+/// delivered card's buttons. The outcome replaces the card in place, which
+/// keeps Open in Scheduled; someone else's press only gets a reply that it is
+/// not theirs to cancel.
 async fn on_reminder_cancel(
     bot: &TeamsBot,
     host: &Host,
     activity: &Activity,
     target: &ReplyTarget<'_>,
     sender: Sender,
-    submit: reminders::CancelSubmit,
+    submit: reminders::CardSubmit,
 ) -> Result<(), Report> {
     let lang = target.lang;
     let Some(user) = known_user(bot, activity, target, sender).await? else {
@@ -649,22 +654,23 @@ async fn on_reminder_cancel(
         Ok(_) => Msg::ReminderCancelled.text(lang).to_string(),
         Err(refused) => match refused.code {
             ScheduledItemErrorCode::NotFound => {
-                return target.send_text(Msg::ReminderGone.text(lang)).await;
+                let reply = if host.reminder_exists(submit.item_id).await? {
+                    Msg::ReminderNotYours
+                } else {
+                    Msg::ReminderGone
+                };
+                return target.send_text(reply.text(lang)).await;
             }
-            ScheduledItemErrorCode::Finished => {
-                match host.reminder_status(user.id, submit.item_id).await? {
-                    Some(ItemStatus::Cancelled) => Msg::ReminderCancelled.text(lang).to_string(),
-                    _ => Msg::ReminderAlreadyHappened.fill(
-                        lang,
-                        &[("page", &scheduled_page_link(scheduled_url.as_deref(), lang))],
-                    ),
-                }
-            }
+            ScheduledItemErrorCode::Finished => settled_note(
+                host.reminder_status(user.id, submit.item_id).await?,
+                scheduled_url.as_deref(),
+                lang,
+            ),
             _ => Msg::ReminderUnchangeable.text(lang).to_string(),
         },
     };
     if let Some(card_id) = activity.reply_to_id.as_deref()
-        && let Some(confirmation) = host
+        && let Some((confirmation, _)) = host
             .reminder_confirmation(user.id, submit.item_id, lang)
             .await?
     {
@@ -684,9 +690,75 @@ async fn on_reminder_cancel(
     target.send_text(&note).await
 }
 
+/// "Keep it" under a confirmation card's Cancel: the card goes back as it
+/// stands, which folds the question away. Nothing is said, and someone
+/// else's press changes nothing.
+async fn on_reminder_keep(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CardSubmit,
+) -> Result<(), Report> {
+    let (Ok(Some(user)), Some(card_id)) = (sender, activity.reply_to_id.as_deref()) else {
+        return Ok(());
+    };
+    let scheduled_url = scheduled_page_url(bot);
+    if let Some(card) = current_confirmation_card(
+        host,
+        user.id,
+        submit.item_id,
+        scheduled_url.as_deref(),
+        target.lang,
+    )
+    .await?
+        && let Err(error) = target.update(card_id, card).await
+    {
+        tracing::warn!(%error, "Could not put back a reminder's confirmation card");
+    }
+    Ok(())
+}
+
+/// The line a confirmation card ends with once its reminder is no longer
+/// upcoming, as the web card's status reads.
+fn settled_note(status: Option<DisplayStatus>, scheduled_url: Option<&str>, lang: Lang) -> String {
+    let page = scheduled_page_link(scheduled_url, lang);
+    match status {
+        Some(DisplayStatus::Cancelled) => Msg::ReminderCancelled.text(lang).to_string(),
+        Some(DisplayStatus::Failed) => Msg::ReminderNotDelivered.fill(lang, &[("page", &page)]),
+        _ => Msg::ReminderAlreadyHappened.fill(lang, &[("page", &page)]),
+    }
+}
+
+/// The confirmation card of one of the user's reminders as it stands now:
+/// Cancel while it is upcoming, otherwise its status instead. `None` when it
+/// is not theirs or no longer exists.
+async fn current_confirmation_card(
+    host: &Host,
+    user_id: Uuid,
+    item_id: Uuid,
+    scheduled_url: Option<&str>,
+    lang: Lang,
+) -> Result<Option<Value>, Report> {
+    let Some((confirmation, status)) = host.reminder_confirmation(user_id, item_id, lang).await?
+    else {
+        return Ok(None);
+    };
+    let upcoming = matches!(status, DisplayStatus::Scheduled | DisplayStatus::Snoozed);
+    let note = (!upcoming).then(|| settled_note(Some(status), scheduled_url, lang));
+    Ok(Some(reminders::confirmation_card(
+        &confirmation,
+        scheduled_url,
+        note.as_deref(),
+        note.is_none(),
+    )))
+}
+
 /// One confirmation card per reminder the turn scheduled, after its answer.
-/// A card that cannot be built or sent is logged: the reminder is stored and
-/// the answer already went out.
+/// A reminder the turn also cancelled is confirmed as cancelled. A card that
+/// cannot be built or sent is logged: the reminder is stored and the answer
+/// already went out.
 pub(super) async fn send_reminder_confirmations(
     bot: &TeamsBot,
     host: &Host,
@@ -696,13 +768,16 @@ pub(super) async fn send_reminder_confirmations(
 ) {
     let scheduled_url = scheduled_page_url(bot);
     for item_id in reminders {
-        let card = match host
-            .reminder_confirmation(user_id, *item_id, target.lang)
-            .await
+        let card = match current_confirmation_card(
+            host,
+            user_id,
+            *item_id,
+            scheduled_url.as_deref(),
+            target.lang,
+        )
+        .await
         {
-            Ok(Some(confirmation)) => {
-                reminders::confirmation_card(&confirmation, scheduled_url.as_deref(), None, true)
-            }
+            Ok(Some(card)) => card,
             Ok(None) => continue,
             Err(error) => {
                 tracing::warn!(%error, %item_id, "Could not build a reminder's confirmation card");

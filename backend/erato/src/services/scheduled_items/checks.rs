@@ -288,7 +288,7 @@ pub async fn checked_input(
         DeliveryChannelStatus::NotSetUp => {
             return Ok(Err(Refused::new(
                 Code::ChannelNotSetUp,
-                "Erato can't reach you in Teams yet. Open the Erato app in Teams once, then this channel works.",
+                not_set_up_reason(app_state),
             )));
         }
         DeliveryChannelStatus::Unavailable => {
@@ -307,6 +307,20 @@ pub async fn checked_input(
         trigger,
         time_zone: zone,
     }))
+}
+
+/// The chat tools hand this reason to the model, which tells the user, so it
+/// names the app as the deployment's Teams app is called.
+fn not_set_up_reason(app_state: &AppState) -> String {
+    match &app_state.ms_teams_bot {
+        Some(bot) => {
+            let app = &bot.settings.app_name;
+            format!(
+                "{app} can't reach you in Teams yet. Open the {app} app in Teams once, then this channel works."
+            )
+        }
+        None => "Reminders can't reach you in Teams yet. Open the assistant's app in Teams once, then this channel works.".to_string(),
+    }
 }
 
 /// Schedule an item, read in the user's entry zone. Refused, with nothing
