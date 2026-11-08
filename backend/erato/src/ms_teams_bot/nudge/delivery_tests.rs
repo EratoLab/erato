@@ -27,8 +27,10 @@ use crate::services::scheduled_items::chat_tools::Confirmation;
 use crate::services::scheduled_items::recurrence::{DayOfWeek, Frequency, RepeatEnd, RepeatRule};
 use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
 use crate::services::scheduled_items::{
-    self, ItemInput, REMINDER, ReminderProducer, current_occurrence,
+    self, ItemInput, ItemRequest, REMINDER, ReminderProducer, ScheduledItemErrorCode,
+    ScheduledItemType, current_occurrence,
 };
+
 use crate::services::text_language::Lang;
 use crate::state::AppState;
 use axum::{
@@ -1370,6 +1372,47 @@ async fn a_failed_reminder_posts_nothing_into_a_chat(pool: sqlx::PgPool) {
     let fake = shared.lock().unwrap();
     assert_eq!(fake.outgoing.len(), 1, "only the failed attempt");
     assert!(fake.updated.is_empty());
+}
+
+/// The refusal for a user without a Teams chat reaches the user through the
+/// model, so it names the deployment's Teams app.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_user_without_a_teams_chat_is_told_the_configured_app_name(pool: sqlx::PgPool) {
+    let (mut state, mut bot, _shared, _base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.app_name = "Hugo".into();
+    state.config.scheduled_deliveries.enabled = true;
+    state.scheduled_deliveries = Arc::new(reminder_registry(bot.clone()));
+    state.ms_teams_bot = Some(bot);
+    let user = get_or_create_user(&state.db, "https://issuer.example", "not-set-up", None)
+        .await
+        .unwrap();
+    let refused = scheduled_items::create_checked(
+        &state,
+        user.id,
+        ItemRequest {
+            item_type: ScheduledItemType::Reminder,
+            name: "Call back".into(),
+            message: "About the offer.".into(),
+            linked_chat_id: None,
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(2),
+                time: LocalTime::new(10, 0).unwrap(),
+            },
+        },
+        json!({"via": "chat"}),
+    )
+    .await
+    .unwrap()
+    .unwrap_err();
+    assert_eq!(refused.code, ScheduledItemErrorCode::ChannelNotSetUp);
+    assert_eq!(
+        refused.message,
+        "Hugo can't reach you in Teams yet. Open the Hugo app in Teams once, then this channel works."
+    );
 }
 
 /// A press whose service call fails changes nothing and gives the token
