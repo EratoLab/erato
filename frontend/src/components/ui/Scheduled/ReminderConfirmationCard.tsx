@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useInRouterContext } from "react-router-dom";
 
 import { useReminderConfirmation } from "@/hooks/scheduled/useReminderConfirmation";
@@ -9,6 +9,7 @@ import { useScheduledFeature } from "@/providers/FeatureConfigProvider";
 import { ScheduledStatusPill } from "./ScheduledStatusPill";
 import { Card } from "../Container/Card";
 import { Button, controlSurfaceClassName } from "../Controls/Button";
+import { ConfirmationDialog } from "../Modal/ConfirmationDialog";
 
 import type { ReminderConfirmation } from "./reminderConfirmation";
 import type { ReminderConfirmationStatus } from "@/hooks/scheduled/useReminderConfirmation";
@@ -104,7 +105,11 @@ export function ReminderConfirmationCardView({
     }
   }, [cancellable, isCancelling]);
 
+  // Asks first, like the Scheduled page: a cancel ends a whole series and
+  // cannot be undone, and the card stays in the chat for weeks.
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const startCancel = () => {
+    setConfirmingCancel(false);
     cancelStarted.current = true;
     onCancel?.();
   };
@@ -165,7 +170,9 @@ export function ReminderConfirmationCardView({
             <Button
               variant="secondary"
               size="sm"
-              onClick={isCancelling ? undefined : startCancel}
+              onClick={
+                isCancelling ? undefined : () => setConfirmingCancel(true)
+              }
               busy={isCancelling}
               data-testid="reminder-confirmation-cancel"
             >
@@ -179,6 +186,29 @@ export function ReminderConfirmationCardView({
           )}
         </div>
       )}
+      <ConfirmationDialog
+        isOpen={confirmingCancel && cancellable}
+        onClose={() => setConfirmingCancel(false)}
+        onConfirm={startCancel}
+        title={t({
+          id: "scheduled.item.cancel.confirmTitle",
+          message: `Cancel “${name}”?`,
+        })}
+        message={t({
+          id: "scheduled.item.cancel.confirmMessage",
+          message:
+            "It will not be carried out. You can still find it under Past.",
+        })}
+        confirmButtonText={t({
+          id: "scheduled.item.cancel.confirm",
+          message: "Cancel it",
+        })}
+        cancelButtonText={t({
+          id: "scheduled.item.cancel.keep",
+          message: "Keep it",
+        })}
+        confirmButtonVariant="danger"
+      />
     </Card>
   );
 }

@@ -7131,21 +7131,25 @@ msgid "scheduled.item.actions.aria"
 msgstr "Aktionen für {name}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirm"
 msgstr "Ja, abbrechen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmMessage"
 msgstr "Es wird nicht ausgeführt. Sie finden es weiterhin unter „Vergangen“."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmTitle"
 msgstr "„{name}“ abbrechen?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
 msgstr "Behalten"

@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import {
@@ -62,6 +63,16 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { "content-type": "application/json" },
   });
+
+const cancelDialog = () =>
+  screen.findByRole("dialog", { name: "Cancel “Follow up on the offer”?" });
+
+const cancelAndConfirm = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(
+    within(await cancelDialog()).getByRole("button", { name: "Cancel it" }),
+  );
+};
 
 const renderCard = ({
   scheduledPage = true,
@@ -164,10 +175,20 @@ describe("ReminderConfirmationCard", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const dialog = await cancelDialog();
+    expect(dialog).toHaveTextContent(
+      "It will not be carried out. You can still find it under Past.",
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/cancel$/),
+      expect.anything(),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel it" }));
 
     await waitFor(() =>
       expect(card).toHaveAttribute("data-status", "cancelled"),
     );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1beta/me/scheduled-items/item-1/cancel",
       expect.objectContaining({ method: "POST" }),
@@ -182,6 +203,27 @@ describe("ReminderConfirmationCard", () => {
     );
   });
 
+  it("keeps the reminder when the user keeps it", async () => {
+    renderCard();
+    const card = screen.getByTestId("reminder-confirmation");
+    await waitFor(() =>
+      expect(card).toHaveAttribute("data-status", "scheduled"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      within(await cancelDialog()).getByRole("button", { name: "Keep it" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(card).toHaveAttribute("data-status", "scheduled");
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/cancel$/),
+      expect.anything(),
+    );
+  });
+
   it("says why Cancel was refused and stops offering it once over", async () => {
     cancelResponse = () => {
       current = "done";
@@ -193,7 +235,7 @@ describe("ReminderConfirmationCard", () => {
       expect(card).toHaveAttribute("data-status", "scheduled"),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await cancelAndConfirm();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This item is already over.",
@@ -267,7 +309,7 @@ describe("ReminderConfirmationCard", () => {
     );
 
     current = null;
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await cancelAndConfirm();
 
     await waitFor(() => expect(card).toHaveAttribute("data-status", "gone"));
     expect(card).toHaveTextContent("This reminder no longer exists.");
