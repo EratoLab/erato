@@ -550,10 +550,11 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     if let Some(action) = actions_of(name).first() {
         return found(*action, VerbSource::Name);
     }
-    if let (Some(first), Some(Value::Object(members))) = (name.first(), arguments)
+    if let (Some(first), Some(arguments)) = (name.first(), arguments)
+        && arguments.is_object()
         && SAVE_VERBS.contains(&first.as_str())
     {
-        let action = if members.get("id").is_some_and(is_text_or_number) {
+        let action = if holds_an_id(arguments) {
             ToolCallAction::Update
         } else {
             ToolCallAction::Create

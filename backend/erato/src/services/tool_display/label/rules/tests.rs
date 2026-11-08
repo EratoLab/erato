@@ -284,6 +284,25 @@ fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
     let saved = label("save_issue", json!({"id": "ISSUE-1", "state": "Done"}));
     assert_eq!(saved.mapping.action, ToolCallAction::Update);
     assert_eq!(saved.unsure, None);
+    let page = label("save_page", json!({"page_id": "p_1", "title": "Plan"})).mapping;
+    assert_eq!(page.action, ToolCallAction::Update);
+    assert_eq!(
+        (page.items[0].id.as_deref(), page.items[0].fields.as_slice()),
+        (Some("/page_id"), ["/title".to_string()].as_slice())
+    );
+    for arguments in [
+        json!({"title": "Plan"}),
+        json!({"title": "Plan", "parent_id": "p_0"}),
+        json!({"title": "Plan", "source": "web_form"}),
+    ] {
+        let page = label("save_page", arguments.clone()).mapping;
+        assert_eq!(page.action, ToolCallAction::Create, "{arguments}");
+        assert_eq!(
+            page.items[0].title.as_deref(),
+            Some("/title"),
+            "{arguments}"
+        );
+    }
 }
 
 #[test]
