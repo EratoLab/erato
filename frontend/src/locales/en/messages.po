@@ -8731,6 +8731,11 @@ msgstr "Some values in this call contain hidden characters, which are removed he
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.otherArguments"
+msgstr "This call's other arguments are at the end of the list below."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Other arguments"
 
@@ -8873,6 +8878,31 @@ msgstr "an appointment"
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.failed"
 msgstr "Could not propose {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.arguments"
+msgstr "Scrollable arguments of this call"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.card"
+msgstr "Scrollable details of this call"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.description"
+msgstr "Scrollable tool description"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.line"
+msgstr "Scrollable summary of this call"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.value"
+msgstr "Scrollable value"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

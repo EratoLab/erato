@@ -8731,6 +8731,11 @@ msgstr "Niektóre wartości w tym wywołaniu zawierają ukryte znaki, które tu 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.otherArguments"
+msgstr "Pozostałe argumenty tego wywołania znajdują się na końcu poniższej listy."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Pozostałe argumenty"
 
@@ -8873,6 +8878,31 @@ msgstr "spotkanie"
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.failed"
 msgstr "Nie udało się zaproponować: {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.arguments"
+msgstr "Przewijane argumenty tego wywołania"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.card"
+msgstr "Przewijane szczegóły tego wywołania"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.description"
+msgstr "Przewijany opis narzędzia"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.line"
+msgstr "Przewijane podsumowanie tego wywołania"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.value"
+msgstr "Przewijana wartość"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

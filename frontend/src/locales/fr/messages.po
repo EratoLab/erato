@@ -8731,6 +8731,11 @@ msgstr "Certaines valeurs de cet appel contiennent des caractères cachés, reti
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.otherArguments"
+msgstr "Les autres arguments de cet appel se trouvent à la fin de la liste ci-dessous."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Autres arguments"
 
@@ -8873,6 +8878,31 @@ msgstr "un rendez-vous"
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.failed"
 msgstr "Échec de la proposition : {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.arguments"
+msgstr "Zone défilante : arguments de cet appel"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.card"
+msgstr "Zone défilante : détails de cet appel"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.description"
+msgstr "Zone défilante : description de l’outil"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.line"
+msgstr "Zone défilante : résumé de cet appel"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.value"
+msgstr "Zone défilante : valeur"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

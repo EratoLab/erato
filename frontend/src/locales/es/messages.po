@@ -8731,6 +8731,11 @@ msgstr "Algunos valores de esta llamada contienen caracteres ocultos, que aquí 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.otherArguments"
+msgstr "Los demás argumentos de esta llamada están al final de la lista de abajo."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Otros argumentos"
 
@@ -8873,6 +8878,31 @@ msgstr "una cita"
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.failed"
 msgstr "No se pudo proponer: {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.arguments"
+msgstr "Argumentos desplazables de esta llamada"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.card"
+msgstr "Detalles desplazables de esta llamada"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.description"
+msgstr "Descripción desplazable de la herramienta"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.line"
+msgstr "Resumen desplazable de esta llamada"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.value"
+msgstr "Valor desplazable"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
