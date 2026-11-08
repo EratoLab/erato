@@ -8,7 +8,7 @@
 
 use unicode_normalization::UnicodeNormalization;
 
-use crate::config::is_hidden_char;
+use crate::config::mark_hidden_chars;
 
 /// Cap for a tool's name or title.
 pub const MAX_DISPLAY_NAME_CHARS: usize = 200;
@@ -38,17 +38,14 @@ pub struct SanitizedDisplayText {
 pub fn sanitize_display_text(text: &str, max_chars: usize) -> SanitizedDisplayText {
     let mut newline_run = 0usize;
     let hidden = std::cell::Cell::new(false);
-    let mut previous = None;
-    let mut cleaned = text
-        .chars()
-        .filter(|&c| {
-            let hides = is_hidden_char(previous, c);
-            previous = Some(c);
+    let mut cleaned = mark_hidden_chars(text.chars())
+        .filter(|&(c, hides)| {
             if hides {
                 hidden.set(true);
             }
             !(hides || (c.is_control() && c != '\n' && c != '\t'))
         })
+        .map(|(c, _)| c)
         // Stream-safe input keeps the normalizer's buffer small whatever the
         // run of combining marks.
         .stream_safe()
@@ -133,8 +130,7 @@ mod tests {
             clean(&format!("Invoice\u{E0001}{hidden}\u{E007F}")),
             "Invoice"
         );
-        // Joined emoji fall apart into their parts rather than hide a joiner.
-        assert_eq!(clean("👨\u{200D}👩\u{200D}👧"), "👨👩👧");
+        assert_eq!(clean("👨\u{200D}a\u{200D}👧"), "👨a👧");
         assert_eq!(clean("\u{200B}\u{FEFF}\u{2060}"), "");
         assert_eq!(clean("hair\u{200A}space"), "hair\u{200A}space");
     }
@@ -150,7 +146,7 @@ mod tests {
             format!("Invoice{tags}"),
             "pay\u{200B}pal".into(),
             "a\u{200C}b".into(),
-            "👨\u{200D}👩".into(),
+            "a\u{200D}b".into(),
             "word\u{2060}joiner".into(),
             "\u{FEFF}BOM".into(),
             "Arabic\u{061C} mark".into(),
@@ -170,6 +166,7 @@ mod tests {
             "line\r\nnext\ttab",
             "a\u{0}b\u{7}c\u{1B}[31m",
             "e\u{301} and \u{2764}\u{FE0F}",
+            "\u{1F468}\u{200D}\u{1F469}",
             "hair\u{200A}space",
             "\n\n  trimmed  \n\n\n",
             "",
@@ -326,14 +323,20 @@ mod tests {
     }
 
     #[test]
-    fn a_presentation_selector_right_after_a_character_is_kept_without_a_warning() {
+    fn emoji_selectors_and_joiners_stay_without_a_warning() {
         for text in [
             "I \u{2764}\u{FE0F} it",
             "\u{2764}\u{FE0E} as text",
             "Sunny \u{2600}\u{FE0F}, 25\u{00B0}C",
-            "Press 1\u{FE0F}\u{20E3}",
+            "Press 1\u{FE0F}\u{20E3} or #\u{FE0F}\u{20E3}",
             "\u{263A}\u{FE0F}\u{2764}\u{FE0F}",
             "\u{1F44D}\u{1F3FD} done",
+            "\u{1F44D}\u{1F3FD}\u{FE0F}",
+            "\u{1F1E9}\u{1F1EA}\u{FE0F}",
+            "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}",
+            "\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}",
+            "\u{1F469}\u{1F3FD}\u{200D}\u{1F4BB}",
+            "\u{2764}\u{FE0F}\u{200D}\u{1F525}",
         ] {
             let cleaned = sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS);
             assert_eq!(
@@ -342,14 +345,41 @@ mod tests {
                 "{text:?}"
             );
         }
+    }
+
+    #[test]
+    fn selectors_and_joiners_outside_emoji_are_stripped_and_reported() {
         for (text, kept) in [
+            ("a\u{FE0F}b\u{FE0E}c", "abc"),
             ("\u{FE0F}start", "start"),
             ("a \u{FE0F}b", "a b"),
             ("line\n\u{FE0E}next", "line\nnext"),
+            ("\u{00E9}\u{FE0F}", "\u{00E9}"),
             ("\u{2764}\u{FE0F}\u{FE0F}", "\u{2764}\u{FE0F}"),
             ("a\u{200B}\u{FE0F}", "a"),
             ("a\u{7}\u{FE0F}b", "ab"),
             ("\u{2764}\u{FE00}", "\u{2764}"),
+            // A skin tone styles nothing after a letter, so neither does a
+            // selector after it.
+            ("a\u{1F3FD}\u{FE0F}", "a\u{1F3FD}"),
+            ("a\u{200D}b", "ab"),
+            ("\u{1F468}\u{200D}", "\u{1F468}"),
+            ("\u{1F468}\u{200D}a", "\u{1F468}a"),
+            ("a\u{200D}\u{1F469}", "a\u{1F469}"),
+            ("\u{1F468}\u{200D}\u{200D}\u{1F469}", "\u{1F468}\u{1F469}"),
+            ("\u{1F468}\u{200B}\u{200D}\u{1F469}", "\u{1F468}\u{1F469}"),
+            (
+                "\u{1F468}\u{FE0E}\u{200D}\u{1F469}",
+                "\u{1F468}\u{FE0E}\u{1F469}",
+            ),
+            // A mahjong tile is a pictograph without the Emoji property: the
+            // selector after it goes, and so does the joiner it would lead to.
+            ("\u{1F000}\u{FE0F}\u{200D}\u{1F469}", "\u{1F000}\u{1F469}"),
+            ("1\u{1F3FD}\u{200D}\u{1F469}", "1\u{1F3FD}\u{1F469}"),
+            (
+                "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}",
+                "\u{1F3F4}",
+            ),
         ] {
             let cleaned = sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS);
             assert_eq!(
