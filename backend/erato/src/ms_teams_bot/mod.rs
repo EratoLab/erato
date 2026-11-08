@@ -4,6 +4,7 @@
 //! - protocol, no Erato dependencies: [`activity`], [`inbound_auth`],
 //!   [`connector`], [`user_token`], [`graph`], [`cards`], [`render`],
 //!   [`streaming`]
+//! - [`texts`]: the bot's own wording in English and German
 //! - [`handler`]: what the bot does with each activity, in terms of [`host`]
 //! - [`host`]: the only file that touches Erato internals
 //!
@@ -24,6 +25,7 @@ pub mod inbound_auth;
 pub mod nudge;
 pub mod render;
 pub mod streaming;
+pub mod texts;
 pub mod user_token;
 
 use crate::state::AppState;
