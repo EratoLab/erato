@@ -5,10 +5,16 @@
 //! the card in place.
 use super::*;
 use crate::config::AppConfig;
+use crate::models::message::{
+    ContentPart, ContentPartText, ContentPartToolApprovalRequest, ToolApprovalAnnotations,
+    ToolApprovalKind,
+};
 use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::{record_client_locale, teams_nudges_opted_out};
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
-use crate::ms_teams_bot::handler::{on_bot_added, on_message, settle_delivered_card};
+use crate::ms_teams_bot::handler::{
+    deliver_proactive, on_bot_added, on_message, settle_delivered_card,
+};
 use crate::ms_teams_bot::streaming::ReplyTarget;
 use crate::services::scheduled_deliveries::{
     ExecutorSettings, NewDelivery, run_delivery_tick, schedule,
@@ -1105,4 +1111,114 @@ async fn a_note_goes_out_as_a_message_when_the_card_cannot_be_read(pool: sqlx::P
     let sent = replies(&shared, 2).await;
     assert_eq!(sent[1]["text"], "Snoozed until 9:30.");
     assert!(shared.lock().unwrap().updated.is_empty());
+}
+
+/// A background task's result has no inbound activity to take a language
+/// from: its heading, answer and approval card follow the stored language.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_task_result_arrives_in_the_stored_language(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "hintergrund", None)
+        .await
+        .unwrap();
+    record_client_locale(&state.db, &user.id, None, Some("de-DE"))
+        .await
+        .unwrap();
+    let conversation = host
+        .upsert_conversation(
+            "a:personal",
+            ConversationKind::Personal,
+            user.id,
+            &base,
+            "29:user",
+        )
+        .await
+        .unwrap();
+    let chat_id = Uuid::new_v4();
+    let message_id = Uuid::new_v4();
+    let approval = ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
+        tool_call_id: "call-1".into(),
+        tool_name: "send_mail".into(),
+        display: None,
+        mcp_server_id: "mail".into(),
+        input: json!({}),
+        annotations: ToolApprovalAnnotations {
+            read_only_hint: false,
+            destructive_hint: false,
+            idempotent_hint: false,
+            open_world_hint: true,
+        },
+        preset: String::new(),
+        allow_always: false,
+        requested_at: String::new(),
+        kind: ToolApprovalKind::McpTool,
+        approvals: Vec::new(),
+        pending_tool_calls: Vec::new(),
+        approval_scope: None,
+        labels_updated_at: None,
+    });
+    let raw_message = json!({
+        "role": "assistant",
+        "content": [
+            ContentPart::Text(ContentPartText { text: "Der Bericht ist fertig.".into() }),
+            approval,
+        ],
+    });
+    for (sql, values) in [
+        (
+            "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+            vec![chat_id.into(), user.id.to_string().into()],
+        ),
+        (
+            "INSERT INTO messages (id, chat_id, raw_message) VALUES ($1, $2, $3)",
+            vec![message_id.into(), chat_id.into(), raw_message.into()],
+        ),
+    ] {
+        state
+            .db
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                values,
+            ))
+            .await
+            .unwrap();
+    }
+    host.set_current_chat(&conversation, Some(chat_id))
+        .await
+        .unwrap();
+
+    deliver_proactive(&bot, &host, chat_id, message_id)
+        .await
+        .unwrap();
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[0]["text"],
+        "**Eine Hintergrundaufgabe ist abgeschlossen.**\n\nDer Bericht ist fertig.\n\n**Zum Fortfahren ist eine Genehmigung nötig.**"
+    );
+    assert_eq!(
+        sent[1]["summary"],
+        "Genehmigung erforderlich, um send_mail auszuführen."
+    );
+    assert_eq!(
+        sent[1]["attachments"][0]["content"]["body"][0]["text"],
+        "Genehmigung erforderlich"
+    );
+
+    record_client_locale(&state.db, &user.id, None, Some("en-US"))
+        .await
+        .unwrap();
+    deliver_proactive(&bot, &host, chat_id, message_id)
+        .await
+        .unwrap();
+    let sent = replies(&shared, 4).await;
+    assert_eq!(
+        sent[2]["text"],
+        "**A background task finished.**\n\nDer Bericht ist fertig.\n\n**Approval needed to continue.**"
+    );
+    assert_eq!(sent[3]["summary"], "Approval needed to run send_mail.");
 }
