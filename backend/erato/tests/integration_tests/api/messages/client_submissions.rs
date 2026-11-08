@@ -714,6 +714,7 @@ struct ScenarioOptions {
     responses: bool,
     check_metadata: bool,
     withdraw_submission_on_approval: bool,
+    label: Option<erato::config::ClientToolLabelConfig>,
 }
 
 impl Default for ScenarioOptions {
@@ -730,6 +731,7 @@ impl Default for ScenarioOptions {
             responses: false,
             check_metadata: false,
             withdraw_submission_on_approval: false,
+            label: None,
         }
     }
 }
@@ -752,6 +754,7 @@ async fn run_scenario(
         responses,
         check_metadata,
         withdraw_submission_on_approval,
+        label,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -846,11 +849,13 @@ async fn run_scenario(
         parameters: json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}).to_string(),
         timeout_ms: Some(timeout_ms),
         submission: (max_attempts > 0).then_some(ClientToolSubmissionConfig { max_attempts, max_recovery_reads: recovery_reads, recovery_read_tools: vec!["client/read_context".into()], ..Default::default() }),
+        label,
         ..Default::default()
     });
     for name in ["read_context", "unrelated_work", "other_submission"] {
         let mut tool = config.client_tools.tools["draft"].clone();
         tool.name = name.into();
+        tool.label = None;
         if name != "other_submission" {
             tool.submission = None;
         }
@@ -1265,6 +1270,87 @@ async fn timed_out_submission_finishes_without_retrying_the_host(pool: Pool<Post
     );
 }
 
+fn document_label() -> erato::config::ClientToolLabelConfig {
+    erato::config::ClientToolLabelConfig {
+        action: erato::config::ClientToolLabelAction::Update,
+        object_kind: erato::config::ClientToolLabelObjectKind::Document,
+        fields: vec![],
+    }
+}
+
+fn completed_tool_rows(events: &[Value]) -> &[Value] {
+    let completed = events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "assistant_message_completed")
+        .expect("completed message");
+    completed["message"]["content"].as_array().unwrap()
+}
+
+fn assert_document_proposal(display: &Value) {
+    let label = &display["label"];
+    assert_eq!(
+        (&label["action"], &label["object_kind"], &label["source"]),
+        (&json!("update"), &json!("document"), &json!("own_mapping")),
+        "Got: {display}"
+    );
+    assert_eq!(display["title"], "submit_draft");
+    assert!(label.get("arguments").is_none(), "Got: {display}");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_labelled_submission_names_its_proposal_on_its_update_and_its_row(pool: Pool<Postgres>) {
+    let (_, events) = run_scenario(
+        pool,
+        vec![submission("call_accept", json!("Draft A"))],
+        vec![json!({"result":{"draft_id":"draft-1"}})],
+        ScenarioOptions {
+            label: Some(document_label()),
+            ..Default::default()
+        },
+    )
+    .await;
+    let update = events
+        .iter()
+        .rev()
+        .find(|event| event["message_type"] == "tool_call_update" && event["status"] == "success")
+        .expect("settled submission");
+    assert_document_proposal(&update["display"]);
+    let row = completed_tool_rows(&events)
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .unwrap();
+    assert_eq!(row["display"], update["display"]);
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_refused_labelled_submission_keeps_its_label_on_its_row(pool: Pool<Postgres>) {
+    let mut denied = rejected("repair_arguments");
+    denied["deny_tool"] = json!("client/submit_draft");
+    let (_, events) = run_scenario(
+        pool,
+        vec![
+            submission("call_first", json!("Draft A")),
+            submission("call_refused", json!("Draft B")),
+        ],
+        vec![denied],
+        ScenarioOptions {
+            label: Some(document_label()),
+            ..Default::default()
+        },
+    )
+    .await;
+    let refused = completed_tool_rows(&events)
+        .iter()
+        .find(|part| {
+            part["output"]["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("disabled the tool"))
+        })
+        .expect("refused submission row");
+    assert_document_proposal(&refused["display"]);
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>) {
     let (requests, events) = run_submission(
@@ -1295,6 +1381,7 @@ async fn ordinary_client_tools_still_continue_after_success(pool: Pool<Postgres>
             .iter()
             .any(|event| event["output"].get("submission").is_some())
     );
+    assert!(events.iter().all(|event| event.get("display").is_none()));
 }
 
 /// Client files must survive the full tool loop, completion SSE and persisted

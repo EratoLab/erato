@@ -1,6 +1,8 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+
 export interface McpToolDescriptionProps {
   description: string;
   /** Whether the backend cut the description at its display cap. */
@@ -26,7 +28,11 @@ export const McpToolDescription = ({
     <div
       dir="auto"
       data-testid={dataTestId}
-      className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-theme-fg-secondary [overflow-wrap:anywhere] [unicode-bidi:isolate]"
+      {...scrollBoxProps("description")}
+      className={clsx(
+        SCROLL_BOX_CLASS,
+        "max-h-48 whitespace-pre-wrap text-xs text-theme-fg-secondary [overflow-wrap:anywhere] [unicode-bidi:isolate]",
+      )}
     >
       {description}
     </div>

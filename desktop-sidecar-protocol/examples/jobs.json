@@ -104,7 +104,9 @@
         "jsonrpc": "2.0",
         "id": "c-job-ack",
         "method": "jobs.ack.v1",
-        "params": { "handle": "job-handle-0123456789abcdefghijklmnopqrstuv" }
+        "params": {
+          "handle": "job-handle-0123456789abcdefghijklmnopqrstuv"
+        }
       }
     },
     {
@@ -115,6 +117,32 @@
         "result": {
           "handle": "job-handle-0123456789abcdefghijklmnopqrstuv",
           "state": "acked"
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-review",
+        "method": "jobs.review.v1",
+        "params": {
+          "handle": "job-handle-review-0123456789abcdefghijklmn",
+          "client": {
+            "platform": "web",
+            "locale": "de"
+          }
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-job-review",
+        "result": {
+          "handle": "job-handle-review-0123456789abcdefghijklmn",
+          "state": "ready_for_review"
         }
       }
     }

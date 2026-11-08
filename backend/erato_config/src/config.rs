@@ -90,10 +90,10 @@ pub fn validate_mcp_server_ids(
         if server
             .display_name
             .as_deref()
-            .is_some_and(|name| !is_valid_display_name(name) || name.chars().any(is_bidi_control))
+            .is_some_and(|name| !is_valid_display_name(name) || has_hidden_chars(name))
         {
             return Err(eyre!(
-                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control or bidi formatting characters"
+                "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
     }
@@ -105,15 +105,145 @@ fn is_valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.len() <= 128 && !name.chars().any(char::is_control)
 }
 
-/// Bidi marks, embeddings, overrides and isolates: any of them can make the
-/// rendered order of a string differ from its logical order. Tool text from MCP
-/// servers is stripped of them and MCP server display names may not contain
-/// them, since the server name is shown right next to that text.
-pub fn is_bidi_control(c: char) -> bool {
+/// Unicode's default-ignorable code points (as of Unicode 16): bidi controls,
+/// which can reorder a string, and zero-width, joiner, soft hyphen, filler,
+/// variation selector, byte order mark and tag characters, which render as
+/// nothing and can hide text in it.
+pub fn is_invisible_format_char(c: char) -> bool {
     matches!(
         c,
-        '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        '\u{00AD}'
+            | '\u{034F}'
+            | '\u{061C}'
+            | '\u{115F}'..='\u{1160}'
+            | '\u{17B4}'..='\u{17B5}'
+            | '\u{180B}'..='\u{180F}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{3164}'
+            | '\u{FE00}'..='\u{FE0F}'
+            | '\u{FEFF}'
+            | '\u{FFA0}'
+            | '\u{FFF0}'..='\u{FFF8}'
+            | '\u{1BCA0}'..='\u{1BCA3}'
+            | '\u{1D173}'..='\u{1D17A}'
+            | '\u{E0000}'..='\u{E0FFF}'
     )
+}
+
+const ZERO_WIDTH_JOINER: char = '\u{200D}';
+const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
+
+/// Each character of `text` with whether it is an invisible character that MCP
+/// tool text is stripped of and an MCP server display name, shown next to that
+/// text, may not hold. Two of them are ordinary emoji text where they sit:
+///
+/// - a text or emoji presentation selector (U+FE0E, U+FE0F) directly after a
+///   character with the Unicode `Emoji` property, as in "❤️", or after a
+///   skin tone (U+1F3FB–U+1F3FF) that follows one. 0-9, `#` and `*` have that
+///   property too, but only a U+FE0F with U+20E3 right after it stays on one,
+///   as in "1️⃣";
+/// - a zero-width joiner between two `Extended_Pictographic` characters, the
+///   first one optionally followed by a kept U+FE0F or a skin tone, as in
+///   "👨‍👩‍👧" or "🏳️‍🌈".
+///
+/// Anywhere else, such as after a letter or in a run, they can carry hidden
+/// data. A client mirrors this with JavaScript's `/\p{Emoji}/u` and
+/// `/\p{Extended_Pictographic}/u` (Unicode 16 here).
+pub fn mark_hidden_chars(
+    text: impl IntoIterator<Item = char>,
+) -> impl Iterator<Item = (char, bool)> {
+    let mut chars = text.into_iter().peekable();
+    let (mut two_back, mut previous) = (None, None);
+    std::iter::from_fn(move || {
+        let c = chars.next()?;
+        let hidden = is_hidden_at(two_back, previous, c, chars.peek().copied());
+        (two_back, previous) = (previous, Some(c));
+        Some((c, hidden))
+    })
+}
+
+/// Whether `text` holds a character [`mark_hidden_chars`] marks hidden.
+pub fn has_hidden_chars(text: &str) -> bool {
+    mark_hidden_chars(text.chars()).any(|(_, hidden)| hidden)
+}
+
+fn is_hidden_at(
+    two_back: Option<char>,
+    previous: Option<char>,
+    c: char,
+    next: Option<char>,
+) -> bool {
+    if !is_invisible_format_char(c) {
+        return false;
+    }
+    match c {
+        '\u{FE0E}' | '\u{FE0F}' => !selector_styles_emoji(two_back, previous, c, next),
+        ZERO_WIDTH_JOINER => {
+            !(joiner_follows_emoji(two_back, previous)
+                && next.is_some_and(is_extended_pictographic))
+        }
+        // Tag characters stay hidden even in subdivision flags such as
+        // England's: they spell out ASCII nobody sees, the main way to smuggle
+        // text past a reader.
+        _ => true,
+    }
+}
+
+fn selector_styles_emoji(
+    two_back: Option<char>,
+    previous: Option<char>,
+    selector: char,
+    next: Option<char>,
+) -> bool {
+    match previous {
+        Some(modifier) if is_emoji_modifier(modifier) => {
+            two_back.is_some_and(|base| is_emoji(base) && !is_keycap_base(base))
+        }
+        // Plain text unless it starts a keycap: a selector on one would let
+        // two IDs differ by a mark nobody sees.
+        Some(base) if is_keycap_base(base) => {
+            selector == '\u{FE0F}' && next == Some(COMBINING_ENCLOSING_KEYCAP)
+        }
+        Some(previous) => is_emoji(previous),
+        None => false,
+    }
+}
+
+fn is_keycap_base(c: char) -> bool {
+    matches!(c, '0'..='9' | '#' | '*')
+}
+
+/// A U+FE0F after a pictograph is kept exactly when the pictograph is `Emoji`.
+fn joiner_follows_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+    match previous {
+        Some('\u{FE0F}') => {
+            two_back.is_some_and(|emoji| is_extended_pictographic(emoji) && is_emoji(emoji))
+        }
+        Some(modifier) if is_emoji_modifier(modifier) => {
+            two_back.is_some_and(is_extended_pictographic)
+        }
+        Some(previous) => is_extended_pictographic(previous),
+        None => false,
+    }
+}
+
+fn is_emoji_modifier(c: char) -> bool {
+    matches!(c, '\u{1F3FB}'..='\u{1F3FF}')
+}
+
+fn is_emoji(c: char) -> bool {
+    static EMOJI: std::sync::LazyLock<Regex> =
+        std::sync::LazyLock::new(|| Regex::new(r"\A\p{Emoji}\z").expect("valid class"));
+    EMOJI.is_match(c.encode_utf8(&mut [0; 4]))
+}
+
+fn is_extended_pictographic(c: char) -> bool {
+    static PICTOGRAPHIC: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+        Regex::new(r"\A\p{Extended_Pictographic}\z").expect("valid class")
+    });
+    PICTOGRAPHIC.is_match(c.encode_utf8(&mut [0; 4]))
 }
 
 /// `web_access` reads as "Web access": separators become spaces and the first
@@ -691,6 +821,14 @@ pub struct AppConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub chat_history_compaction: ChatHistoryCompactionConfig,
+
+    /// A model that labels the MCP calls the generic rules cannot.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    #[facet(erato_config::security_relevance(level = "medium"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub tool_labels: ToolLabelsConfig,
 
     // User preferences feature configuration.
     #[serde(default)]
@@ -1475,6 +1613,10 @@ impl AppConfig {
             panic!("Invalid chat history compaction configuration: {}", e);
         }
 
+        if let Err(e) = config.validate_tool_labels() {
+            panic!("Invalid tool labels configuration: {}", e);
+        }
+
         // Validate model permissions configuration
         if let Err(e) = config.model_permissions.validate() {
             panic!("Invalid model permissions configuration: {}", e);
@@ -1829,6 +1971,7 @@ impl AppConfig {
         // schema. The collision check against runtime MCP tool names cannot run
         // here (MCP servers are not known at config load) and stays at request
         // assembly.
+        drop_unusable_client_tool_labels(&mut config.client_tools.tools);
         let mut seen_qualified_names = std::collections::HashSet::new();
         let mut replay_by_name = HashMap::new();
         let mut child_context_arg_by_host: HashMap<&str, (String, String)> = HashMap::new();
@@ -2480,6 +2623,19 @@ impl AppConfig {
                 .ok_or_else(|| {
                     eyre!("chat_history_compaction.chat_provider_id is required when enabled")
                 })?;
+            self.resolve_chat_provider_id(id)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_tool_labels(&self) -> Result<(), eyre::Report> {
+        if self.tool_labels.enabled {
+            let id = self
+                .tool_labels
+                .chat_provider_id
+                .as_deref()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| eyre!("tool_labels.chat_provider_id is required when enabled"))?;
             self.resolve_chat_provider_id(id)?;
         }
         Ok(())
@@ -3379,6 +3535,21 @@ impl Default for ChatHistoryCompactionConfig {
     }
 }
 
+/// Off by default. When enabled, a skeleton of the calls the rules are unsure
+/// of goes to the chosen provider: by default only on turns that already run
+/// on that provider, and only for users whose model permissions allow it.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ToolLabelsConfig {
+    pub enabled: bool,
+    /// Explicit provider, required when enabled.
+    pub chat_provider_id: Option<String>,
+    /// Also label the calls of turns that run on another provider.
+    #[facet(erato_config::security_relevance(level = "high"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub allow_other_provider: bool,
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct PromptOptimizerConfig {
     // Whether the prompt optimizer is enabled.
@@ -3841,9 +4012,9 @@ pub enum McpProtocolMode {
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerConfig {
-    /// Name shown to users for this server, at most 128 bytes without control
-    /// or bidi formatting characters. When omitted, the server id is shown
-    /// tidied up.
+    /// Name shown to users for this server, at most 128 bytes without control,
+    /// bidi or invisible formatting characters. When omitted, the server id is
+    /// shown tidied up.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub display_name: Option<String>,
@@ -6276,6 +6447,18 @@ pub struct ClientToolConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub replay: ClientToolReplayConfig,
 
+    /// How the chat names this tool's calls: what the call proposes, written
+    /// by hand for one of Erato's own proposal tools. Without the table, the
+    /// calls show the tool's name as before. A table that cannot be used is
+    /// left out with a startup warning, and the tool loads without it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_client_tool_label"
+    )]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub label: Option<ClientToolLabelConfig>,
+
     /// Opt this tool into durable client operations. While
     /// `client_tools.durable_operations_enabled` is on, a call whose stream
     /// drops or times out parks durably for the same device and host context
@@ -6523,6 +6706,13 @@ pub enum ClientToolReplayMode {
 /// Upper bound on each receipt field list.
 pub const MAX_CLIENT_TOOL_RECEIPT_FIELDS: usize = 32;
 
+fn is_field_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 /// Parses a receipt field path (`$.a.b`) into its object keys. Only object
 /// member access is supported: no array indices, wildcards or quoting.
 pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
@@ -6531,11 +6721,7 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
     };
     rest.split('.')
         .map(|key| {
-            if !key.is_empty()
-                && key
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-            {
+            if is_field_key(key) {
                 Ok(key.to_string())
             } else {
                 Err(format!(
@@ -6544,6 +6730,171 @@ pub fn parse_receipt_field_path(path: &str) -> Result<Vec<String>, String> {
             }
         })
         .collect()
+}
+
+/// `[client_tools.tools.<id>.label]`. What a call of the tool proposes, as a
+/// verb and a kind from closed lists, plus key values read from the call's
+/// arguments. Values are always read through the paths, never written here.
+/// Paths are `$.key` paths, where `key[*]` stands for every element of an
+/// array (`$.changes[*].op`).
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct ClientToolLabelConfig {
+    pub action: ClientToolLabelAction,
+    pub object_kind: ClientToolLabelObjectKind,
+    /// Key values, at most 4. One that reaches nothing in a call is left out.
+    /// On a comment proposal, a field named `op` gives each change's operation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
+}
+
+/// `client_tools.tools.<id>.label.action`: what a call proposes. Erato's own
+/// tools only ever propose, so there is no verb for a read.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolLabelAction {
+    Create,
+    Update,
+    Delete,
+    Move,
+    Send,
+    Comment,
+}
+
+/// `client_tools.tools.<id>.label.object_kind`: what a call acts on.
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Copy, Facet, HeapSize)]
+#[facet(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[repr(C)]
+pub enum ClientToolLabelObjectKind {
+    Page,
+    Row,
+    Database,
+    Folder,
+    Note,
+    Comment,
+    Paragraph,
+    Document,
+    Email,
+    Message,
+    Event,
+    File,
+    Task,
+    Other,
+}
+
+/// Upper bound on a client tool label's fields.
+pub const MAX_CLIENT_TOOL_LABEL_FIELDS: usize = 4;
+
+/// Characters of an unreadable label table a startup warning quotes.
+const MAX_LOGGED_LABEL_TABLE_CHARS: usize = 200;
+
+// A label only names a tool's calls in the chat, so a table this version
+// cannot read, such as one written for a newer release, costs only the label.
+fn deserialize_client_tool_label<'de, D: de::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<ClientToolLabelConfig>, D::Error> {
+    let Some(table) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    match ClientToolLabelConfig::deserialize(&table) {
+        Ok(label) => Ok(Some(label)),
+        Err(error) => {
+            let quoted: String = table
+                .to_string()
+                .chars()
+                .take(MAX_LOGGED_LABEL_TABLE_CHARS)
+                .collect();
+            startup_log::warn_preinit(format!(
+                "Ignoring a client tool label table that cannot be read ({error}): {quoted}. \
+                 The tool loads, and its calls show its name."
+            ));
+            Ok(None)
+        }
+    }
+}
+
+/// Leaves out, with a startup warning, each label table the chat cannot use:
+/// one with more than [`MAX_CLIENT_TOOL_LABEL_FIELDS`] fields or a path that
+/// does not parse, and the tables of tools that share a model-facing name
+/// across namespaces without agreeing on one label.
+fn drop_unusable_client_tool_labels(tools: &mut HashMap<String, ClientToolConfig>) {
+    for tool in tools.values_mut() {
+        let Some(label) = &tool.label else {
+            continue;
+        };
+        let problem = if label.fields.len() > MAX_CLIENT_TOOL_LABEL_FIELDS {
+            Some(format!(
+                "it lists more than {MAX_CLIENT_TOOL_LABEL_FIELDS} fields"
+            ))
+        } else {
+            label
+                .fields
+                .iter()
+                .find_map(|path| parse_label_pointer(path).err())
+        };
+        if let Some(problem) = problem {
+            startup_log::warn_preinit(format!(
+                "Ignoring the label of client tool '{}/{}': {problem}. The tool loads, and its \
+                 calls show its name.",
+                tool.namespace_or_default(),
+                tool.name
+            ));
+            tool.label = None;
+        }
+    }
+    let mut label_by_name: HashMap<&str, &Option<ClientToolLabelConfig>> = HashMap::new();
+    let mut disagreeing = std::collections::BTreeSet::new();
+    for tool in tools.values() {
+        let name = tool.name.trim();
+        if let Some(previous) = label_by_name.insert(name, &tool.label)
+            && *previous != tool.label
+        {
+            disagreeing.insert(name.to_string());
+        }
+    }
+    for name in &disagreeing {
+        startup_log::warn_preinit(format!(
+            "Ignoring the labels of the client tools named '{name}': tools that share the name \
+             across namespaces must use the same label. The tools load, and their calls show \
+             their name."
+        ));
+    }
+    for tool in tools.values_mut() {
+        if disagreeing.contains(tool.name.trim()) {
+            tool.label = None;
+        }
+    }
+}
+
+/// Parses a label pointer (`$.a.b`, with `key[*]` for every element of an
+/// array) into the JSON pointer the label resolver reads, e.g. `/a/*/b`.
+pub fn parse_label_pointer(path: &str) -> Result<String, String> {
+    let Some(rest) = path.strip_prefix("$.") else {
+        return Err(format!("'{path}' must start with '$.'"));
+    };
+    let mut pointer = String::new();
+    for segment in rest.split('.') {
+        let mut key = segment;
+        let mut arrays = 0;
+        while let Some(stripped) = key.strip_suffix("[*]") {
+            key = stripped;
+            arrays += 1;
+        }
+        if !is_field_key(key) {
+            return Err(format!(
+                "'{path}' has an invalid key '{segment}'; keys use [A-Za-z0-9_-], optionally followed by [*]"
+            ));
+        }
+        pointer.push('/');
+        pointer.push_str(key);
+        for _ in 0..arrays {
+            pointer.push_str("/*");
+        }
+    }
+    Ok(pointer)
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, Facet, HeapSize)]
@@ -10477,5 +10828,154 @@ mod client_tool_replay_serialization_tests {
             serde_json::from_value::<ClientToolReplayConfig>(serde_json::json!({})).unwrap(),
             ClientToolReplayConfig::default()
         );
+    }
+}
+
+#[cfg(test)]
+mod client_tool_label_tests {
+    use super::*;
+
+    #[test]
+    fn label_pointers_read_every_array_element_and_nothing_else() {
+        for (path, pointer) in [
+            ("$.snapshot", "/snapshot"),
+            ("$.changes[*].op", "/changes/*/op"),
+            ("$.entries[*].source[*]", "/entries/*/source/*"),
+            ("$.rows[*][*].cell", "/rows/*/*/cell"),
+        ] {
+            assert_eq!(parse_label_pointer(path).as_deref(), Ok(pointer), "{path}");
+        }
+        for path in [
+            "$",
+            "changes",
+            "$.changes[0].op",
+            "$.changes[*]op",
+            "$.[*]",
+            "$.a..b",
+            "$.a/b",
+        ] {
+            assert!(parse_label_pointer(path).is_err(), "{path}");
+        }
+        assert!(parse_receipt_field_path("$.changes[*].op").is_err());
+    }
+
+    #[test]
+    fn label_config_round_trips_and_refuses_what_the_chat_does_not_show() {
+        let label: ClientToolLabelConfig = serde_json::from_value(serde_json::json!({
+            "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
+        }))
+        .unwrap();
+        let json = serde_json::to_value(&label).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "action": "comment", "object_kind": "comment", "fields": ["$.changes[*].op"]
+            })
+        );
+        for refused in [
+            serde_json::json!({"action": "read", "object_kind": "comment"}),
+            serde_json::json!({"action": "create", "object_kind": "row", "title": "$.name"}),
+        ] {
+            assert!(
+                serde_json::from_value::<ClientToolLabelConfig>(refused.clone()).is_err(),
+                "{refused}"
+            );
+        }
+    }
+
+    fn client_tool(id: &str, namespace: &str, label: serde_json::Value) -> ClientToolConfig {
+        serde_json::from_value(serde_json::json!({
+            "name": id,
+            "namespace": namespace,
+            "description": "d",
+            "parameters": "{}",
+            "label": label,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_label_table_that_cannot_be_read_costs_only_the_label() {
+        for unreadable in [
+            serde_json::json!("update the document"),
+            serde_json::json!(42),
+            serde_json::json!([]),
+            serde_json::json!({}),
+            serde_json::json!({"action": "share", "object_kind": "document"}),
+            serde_json::json!({"action": "update", "object_kind": "spreadsheet"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "title": "$.t"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "fields": "$.a"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "fields": [1]}),
+            serde_json::json!({"action": ["update"], "object_kind": "document"}),
+            serde_json::json!({"action": "update", "object_kind": "document", "x".repeat(100_000): 1}),
+        ] {
+            let tool = client_tool("plan", "word", unreadable.clone());
+            assert_eq!(tool.label, None, "{unreadable}");
+            assert_eq!(tool.name, "plan");
+        }
+        let tool = client_tool("plan", "word", serde_json::Value::Null);
+        assert_eq!(tool.label, None);
+        let tool = client_tool(
+            "plan",
+            "word",
+            serde_json::json!({"action": "update", "object_kind": "document"}),
+        );
+        assert_eq!(
+            tool.label.map(|label| (label.action, label.object_kind)),
+            Some((
+                ClientToolLabelAction::Update,
+                ClientToolLabelObjectKind::Document
+            ))
+        );
+    }
+
+    #[test]
+    fn unusable_label_tables_are_left_out_and_every_tool_stays() {
+        let fields = |fields: &[&str]| serde_json::json!({"action": "comment", "object_kind": "comment", "fields": fields});
+        let mut tools: HashMap<String, ClientToolConfig> = [
+            (
+                "indexed",
+                client_tool("indexed", "word", fields(&["$.changes[0].op"])),
+            ),
+            (
+                "five",
+                client_tool("five", "word", fields(&["$.a", "$.b", "$.c", "$.d", "$.e"])),
+            ),
+            (
+                "bidi",
+                client_tool("bidi", "word", fields(&["$.\u{202E}op"])),
+            ),
+            (
+                "slash",
+                client_tool("slash", "word", fields(&["$.a/b", "$.~1"])),
+            ),
+            (
+                "huge",
+                client_tool(
+                    "huge",
+                    "word",
+                    fields(&[&format!("$.{}", "a.".repeat(50_000))]),
+                ),
+            ),
+            (
+                "kept",
+                client_tool("kept", "word", fields(&["$.changes[*].op"])),
+            ),
+            ("a", client_tool("shared", "word", fields(&["$.x"]))),
+            ("b", client_tool("shared", "outlook", fields(&["$.y"]))),
+            ("c", client_tool("alike", "word", fields(&["$.x"]))),
+            ("d", client_tool("alike", "outlook", fields(&["$.x"]))),
+        ]
+        .into_iter()
+        .map(|(id, tool)| (id.to_string(), tool))
+        .collect();
+        drop_unusable_client_tool_labels(&mut tools);
+        assert_eq!(tools.len(), 10);
+        let labelled: std::collections::BTreeSet<_> = tools
+            .iter()
+            .filter(|(_, tool)| tool.label.is_some())
+            .map(|(id, _)| id.as_str())
+            .collect();
+        assert_eq!(labelled, ["c", "d", "kept"].into());
     }
 }

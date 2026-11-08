@@ -6,6 +6,7 @@ mod client_tool_decisions;
 mod client_tool_operations;
 mod mcp_approval_argument;
 mod mcp_file_outputs;
+mod model_labels;
 mod preparation_failures;
 mod reminder_tools;
 mod token_usage_tool_parts;
@@ -4082,6 +4083,15 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     assert_eq!(updates[0]["status"], "success");
     assert_eq!(updates[0]["output"]["status"], "proposed");
     assert_eq!(updates[0]["output"]["action"], "outlook.reply");
+    // The second proposal names the action it was refused for.
+    for update in &updates {
+        let label = &update["display"]["label"];
+        assert_eq!(
+            (&label["action"], &label["object_kind"], &label["source"]),
+            (&json!("send"), &json!("email"), &json!("own_mapping")),
+            "Got: {update}"
+        );
+    }
     assert_eq!(
         updates[1]["tool_call_id"],
         generated_tool_call_id(&assistant_message_id, 1, "call_second")
@@ -4131,6 +4141,10 @@ async fn test_client_action_parallel_proposals_first_wins(pool: Pool<Postgres>) 
     );
     assert_eq!(rejected[0]["status"], "error");
     assert_eq!(tool_use_parts.len(), 2);
+    assert_eq!(
+        proposed[0]["display"]["label"],
+        updates[0]["display"]["label"]
+    );
 
     // The model received both corrective tool responses on the next turn.
     let corrective_bodies = corrective_request_recorder.bodies();
@@ -4256,6 +4270,25 @@ async fn test_client_action_invalid_proposal_then_valid_retry_succeeds(pool: Poo
     );
     assert_eq!(tool_use_parts[1]["output"]["status"], "proposed");
     assert_eq!(tool_use_parts[1]["output"]["action"], "outlook.reply_all");
+    // An action the table does not know is a proposal of some action.
+    let labels: Vec<_> = tool_use_parts
+        .iter()
+        .map(|part| {
+            let label = &part["display"]["label"];
+            (
+                label["action"].clone(),
+                label["object_kind"].clone(),
+                label["source"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            (json!("other"), json!("other"), json!("own_mapping")),
+            (json!("send"), json!("email"), json!("own_mapping")),
+        ]
+    );
 }
 
 /// A call to a tool that was never offered (no facet ⇒ empty allow-list)
@@ -4721,6 +4754,8 @@ async fn continuestream_resumes_a_parked_tool_approval(
     assert_eq!(approval_request["tool_name"], "publish_approval_probe");
     assert_eq!(approval_request["mcp_server_id"], "mock_mcp_approval");
     assert_eq!(approval_request["display"]["server_name"], "Approval Probe");
+    assert_eq!(approval_request["display"]["label"]["source"], "rules");
+    assert_eq!(approval_request["display"]["label"]["action"], "send");
     assert_eq!(approval_request["preset"], "restrictive");
     // The gated call is also recorded as a decision the client can name.
     assert_eq!(approval_request["kind"], "mcp_tool");
@@ -4880,12 +4915,23 @@ async fn continuestream_resumes_a_parked_tool_approval(
         resumed_content[0]["display"]["server_name"],
         "Approval Probe"
     );
+    assert_eq!(
+        resumed_content[0]["display"]["label"]["source"], "generic",
+        "a call that ran without asking is labelled too"
+    );
     assert_eq!(resumed_content[2]["tool_call_id"], probe_id);
     assert_eq!(resumed_content[2]["always_allow"], false);
     // The decision names the approval it answered, whichever body carried it.
     assert_eq!(resumed_content[2]["approval_id"], probe_id);
     assert_eq!(resumed_content[3]["status"], "success");
-    assert_eq!(resumed_content[3]["display"], approval_request["display"]);
+    let mut row_display = approval_request["display"].clone();
+    assert!(row_display["description"].is_string());
+    row_display.as_object_mut().unwrap().remove("description");
+    row_display["description_truncated"] = json!(false);
+    assert_eq!(
+        resumed_content[3]["display"], row_display,
+        "the row keeps the card's display, label included, but not its description"
+    );
     assert!(
         serde_json::to_string(&resumed_content[3]["output"])
             .unwrap()
@@ -5173,6 +5219,24 @@ async fn park_a_turn_on_the_approval_gate_with_config(
     mocks: MockSet,
     configure: impl FnOnce(&mut erato::config::AppConfig),
 ) -> (erato::state::AppState, TestServer, Uuid, Uuid, Value) {
+    let (app_state, server, chat_id, assistant_message_id, content, _events) =
+        park_a_turn_and_keep_its_events(pool, mocks, configure).await;
+    (app_state, server, chat_id, assistant_message_id, content)
+}
+
+/// The same park, for a test that also reads what the turn streamed.
+async fn park_a_turn_and_keep_its_events(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> (
+    erato::state::AppState,
+    TestServer,
+    Uuid,
+    Uuid,
+    Value,
+    Vec<crate::test_utils::Event>,
+) {
     let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
     with_approval_probe_server(&mut app_config);
     configure(&mut app_config);
@@ -5200,7 +5264,570 @@ async fn park_a_turn_on_the_approval_gate_with_config(
     let content = parked.raw_message["content"].clone();
     // The mock server is deliberately left out of the return: every test below
     // drops it and reads the row instead.
-    (app_state, server, chat_id, assistant_message_id, content)
+    (
+        app_state,
+        server,
+        chat_id,
+        assistant_message_id,
+        content,
+        events,
+    )
+}
+
+/// Every MCP call is stored with a label, the call that ran without asking as
+/// well as the gated one, and a call's live updates, the first running one as
+/// well as the final one, carry the display its row is stored with. The rules
+/// label the gated call from its name and arguments; the read gives them
+/// nothing to say and stays generic. The readable view names the arguments by
+/// path without copying their values, and the approval fields stay what the
+/// gate decided.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
+    let arguments = json!({
+        "destination": {"page_id": "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b"},
+        "pages": [{"title": "Quarterly plan", "body": "Line one.\nLine two."}],
+        "notify": true,
+    });
+    let mut mocks = MockSet::new();
+    {
+        let arguments = arguments.clone();
+        mocks.mock(move |when, then| {
+            when.post().path("/v1/chat/completions");
+            mock_llm_sse_response(
+                then,
+                build_openai_tool_calls_streaming_response(&[
+                    ("call_read", "read_approval_fixture", json!({})),
+                    ("call_probe", "publish_approval_probe", arguments.clone()),
+                ]),
+            );
+        });
+    }
+    let (_app_state, _server, _chat_id, _assistant_message_id, content, events) =
+        park_a_turn_and_keep_its_events(pool, mocks, |_| {}).await;
+    let content = content.as_array().unwrap();
+    assert_eq!(content.len(), 2, "{content:?}");
+
+    let read = &content[0];
+    assert_eq!(read["content_type"], "tool_use");
+    assert_eq!(read["status"], "success");
+    assert_eq!(
+        read["display"]["label"],
+        json!({
+            "action": "other",
+            "object_kind": "other",
+            "arguments": {"path": "", "kind": "group"},
+            "source": "generic",
+        })
+    );
+    let read_updates: Vec<_> = terminal_tool_call_update_events(&events)
+        .into_iter()
+        .filter(|update| update["tool_call_id"] == read["tool_call_id"])
+        .collect();
+    assert_eq!(read_updates.len(), 1, "{read_updates:?}");
+    assert_eq!(read_updates[0]["display"], read["display"]);
+    let first_running_update = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["status"] == "in_progress"
+                && json["tool_call_id"] == read["tool_call_id"]
+        })
+        .expect("Expected the streamed call to go in progress");
+    assert_eq!(first_running_update["display"], read["display"]);
+
+    let request = &content[1];
+    assert_eq!(request["content_type"], "tool_approval_request");
+    assert_eq!(request["approvals"][0]["display"], request["display"]);
+    assert_eq!(request["input"], arguments);
+    assert_eq!(request["preset"], "restrictive");
+    let label = &request["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"]),
+        (&json!("rules"), &json!("send"))
+    );
+    let item = &label["items"][0];
+    assert_eq!(item["title"]["pointer"], "/pages/*/title");
+    assert_eq!(item["title"]["values"][0]["text"], "Quarterly plan");
+    assert_eq!(item["target"]["pointer"], "/destination/page_id");
+    assert_eq!(item["after"]["pointer"], "/pages/*/body");
+    fn walk<'a>(node: &'a Value, out: &mut Vec<(&'a str, &'a str)>) {
+        out.push((
+            node["path"].as_str().unwrap(),
+            node["kind"].as_str().unwrap(),
+        ));
+        for child in node["children"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let mut view = Vec::new();
+    walk(&label["arguments"], &mut view);
+    assert_eq!(
+        view,
+        [
+            ("", "group"),
+            ("/destination", "group"),
+            ("/destination/page_id", "id"),
+            ("/pages", "list"),
+            ("/pages/0", "group"),
+            ("/pages/0/title", "value"),
+            ("/pages/0/body", "text"),
+            ("/notify", "value"),
+        ]
+    );
+    let stored = serde_json::to_string(&label["arguments"]).unwrap();
+    assert!(
+        !stored.contains("Quarterly plan") && !stored.contains("9b1d5f2e"),
+        "the view holds paths, the values stay in the input: {stored}"
+    );
+}
+
+/// The records server, served in-process so these tests carry their own
+/// fixture, and gated by the restrictive preset.
+async fn records_app_state(pool: Pool<Postgres>, mocks: MockSet) -> erato::state::AppState {
+    records_app_state_with(pool, mocks, |_| {}).await
+}
+
+/// The same records setup, for a test that also needs something in the app
+/// config.
+async fn records_app_state_with(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    configure: impl FnOnce(&mut erato::config::AppConfig),
+) -> erato::state::AppState {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock MCP listener");
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, mock_mcp_server::app()).await.unwrap() });
+    let (mut app_config, _llm) = setup_mock_llm_server_with_mocks(mocks).await;
+    app_config.mcp_servers.insert(
+        "records".to_string(),
+        mcp_server_config(
+            &base_url,
+            "/mcp/records",
+            McpServerAuthenticationConfig::None,
+        ),
+    );
+    app_config.mcp_server_permissions.rules.insert(
+        "allow-records".to_string(),
+        erato::config::McpServerPermissionRule::AllowAll {
+            mcp_server_ids: vec!["records".to_string()],
+        },
+    );
+    app_config.mcp_servers_global.approval = erato::config::McpToolApprovalConfig {
+        enabled: true,
+        preset: erato::config::McpToolApprovalPreset::Restrictive,
+        allow_always: false,
+    };
+    configure(&mut app_config);
+    let app_state = test_app_state(app_config, pool).await;
+    get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .expect("Failed to create user");
+    app_state
+}
+
+fn answers_with(
+    mocks: &mut MockSet,
+    contains: &'static [&'static str],
+    excludes: &'static [&'static str],
+    actions: Vec<BodyAction>,
+) {
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(contains, excludes));
+        mock_llm_sse_response(then, actions.clone());
+    });
+}
+
+async fn message_content(app_state: &erato::state::AppState, message_id: Uuid) -> Vec<Value> {
+    Messages::find_by_id(message_id)
+        .one(&app_state.db)
+        .await
+        .unwrap()
+        .expect("Expected the assistant message")
+        .raw_message["content"]
+        .as_array()
+        .unwrap()
+        .clone()
+}
+
+/// The label's field named `name` on its one item.
+fn label_field<'a>(label: &'a Value, name: &str) -> &'a Value {
+    label["items"][0]["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|field| field["name"] == name)
+        .unwrap_or_else(|| panic!("no field {name} in {label}"))
+}
+
+/// A gated update of a record an earlier turn read is labelled by the rules
+/// and named from that read: the approval card shows the record's name for
+/// its ID and the value the field held, and the row the approved call is
+/// stored as keeps that label.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_gated_update_names_the_record_an_earlier_turn_read(pool: Pool<Postgres>) {
+    use mock_mcp_server::{RECORD_ID, RECORD_NAME, RECORD_STATUS};
+    const READ_ASK: &str = "Show me the record";
+    const UPDATE_ASK: &str = "Approve the record";
+    const UPDATED: &str = "updated to Approved";
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[READ_ASK],
+        &[RECORD_NAME, UPDATE_ASK],
+        build_openai_tool_calls_streaming_response(&[("call_read", "read_record", json!({}))]),
+    );
+    answers_with(
+        &mut mocks,
+        &[RECORD_NAME],
+        &[UPDATE_ASK],
+        build_openai_text_streaming_response(&["READ-ANSWER"]),
+    );
+    answers_with(
+        &mut mocks,
+        &[UPDATE_ASK],
+        &[UPDATED],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_update",
+            "update_record",
+            json!({"id": RECORD_ID, "status": "Approved"}),
+        )]),
+    );
+    answers_with(
+        &mut mocks,
+        &[UPDATED],
+        &[],
+        build_openai_text_streaming_response(&["UPDATE-ANSWER"]),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let read = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": READ_ASK }))
+        .await;
+    read.assert_status_ok();
+    let read_events = parse_sse_events(&read);
+    assert_eq!(extract_full_text(&read_events), "READ-ANSWER");
+    let read_message_id = assistant_message_id_from_events(&read_events);
+
+    let update = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": UPDATE_ASK, "previous_message_id": read_message_id }))
+        .await;
+    update.assert_status_ok();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+        &update,
+    )))
+    .unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = &card["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("rules"), &json!("update"), &json!("row"))
+    );
+    let id = &label["items"][0]["id"]["values"][0];
+    assert_eq!(
+        (&id["text"], &id["resolved"]),
+        (&json!(RECORD_ID), &json!(RECORD_NAME))
+    );
+    let status = &label_field(label, "status")["values"][0];
+    assert_eq!(
+        (&status["text"], &status["resolved"]),
+        (&json!("Approved"), &json!(RECORD_STATUS))
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    assert_eq!(
+        extract_full_text(&parse_sse_events(&continued)),
+        "UPDATE-ANSWER"
+    );
+    let row = message_content(&app_state, message_id)
+        .await
+        .into_iter()
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "update_record")
+        .expect("the approved call's row");
+    assert_eq!(row["status"], "success");
+    assert_eq!(row["display"]["label"], *label);
+}
+
+/// The same within one turn that reads, parks on the update and resumes. The
+/// card names the record from the read the turn just ran, and the approved
+/// call's row keeps the card's label. After the resume a second update still
+/// names the record, from the turn's own calls replayed once each, but shows
+/// no earlier status: the first update changed it, and reading the replayed
+/// read again would bring back the stale one.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgres>) {
+    use mock_mcp_server::{RECORD_ID, RECORD_NAME, RECORD_STATUS};
+    const ASK: &str = "Approve, then archive the record";
+    const APPROVED: &str = "updated to Approved";
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[APPROVED],
+        build_openai_tool_calls_streaming_response(&[
+            ("call_read", "read_record", json!({})),
+            (
+                "call_approve",
+                "update_record",
+                json!({"id": RECORD_ID, "status": "Approved"}),
+            ),
+        ]),
+    );
+    answers_with(
+        &mut mocks,
+        &[APPROVED],
+        &[],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_archive",
+            "update_record",
+            json!({"id": RECORD_ID, "status": "Archived"}),
+        )]),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+
+    let parked = server
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": ASK }))
+        .await;
+    parked.assert_status_ok();
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+        &parked,
+    )))
+    .unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = card["display"]["label"].clone();
+    assert_eq!(
+        label["items"][0]["id"]["values"][0]["resolved"],
+        RECORD_NAME
+    );
+    assert_eq!(
+        label_field(&label, "status")["values"][0]["resolved"],
+        RECORD_STATUS
+    );
+
+    let continued = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .await;
+    continued.assert_status_ok();
+    let content = message_content(&app_state, message_id).await;
+    let approved = content
+        .iter()
+        .find(|part| {
+            part["content_type"] == "tool_use"
+                && part["tool_call_id"] == generated_tool_call_id(message_id, 1, "call_approve")
+        })
+        .expect("the approved call's row");
+    assert_eq!(approved["status"], "success");
+    assert_eq!(approved["display"]["label"], label);
+
+    let second = content.last().unwrap();
+    assert_eq!(second["content_type"], "tool_approval_request");
+    assert_eq!(
+        second["tool_call_id"],
+        generated_tool_call_id(message_id, 2, "call_archive")
+    );
+    let second_label = &second["display"]["label"];
+    assert_eq!(
+        second_label["items"][0]["id"]["values"][0]["resolved"],
+        RECORD_NAME
+    );
+    let status = &label_field(second_label, "status")["values"][0];
+    assert_eq!(status["text"], "Archived");
+    assert!(status.get("resolved").is_none(), "{status}");
+}
+
+/// A call the rules are unsure of shows the mapping a model gave an earlier
+/// call of the same shape for the same user, with this call's values.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(pool: Pool<Postgres>) {
+    let (label, _) = label_of_a_call_with_a_cached_mapping(pool, true).await;
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("model"), &json!("update"), &json!("row"))
+    );
+    assert_eq!(
+        label_field(&label, "status")["values"][0]["text"],
+        "Rejected"
+    );
+}
+
+/// Only the labeller keeps mappings, so while tool labels are off a call
+/// shows the rules' label without looking one up, whatever the cache holds.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn while_tool_labels_are_off_a_cached_mapping_is_not_looked_up(pool: Pool<Postgres>) {
+    let (label, rules) = label_of_a_call_with_a_cached_mapping(pool, false).await;
+    assert_eq!(label, rules);
+    assert_eq!(label["source"], "rules");
+}
+
+/// The label the card and the call's in-progress update show for a call the
+/// rules are unsure of, whose shape has a model's mapping kept for its user,
+/// and the label the rules alone give it.
+async fn label_of_a_call_with_a_cached_mapping(
+    pool: Pool<Postgres>,
+    tool_labels: bool,
+) -> (Value, Value) {
+    use erato::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
+    use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
+    use erato::services::tool_display::label::cache::ToolLabelCacheKey;
+    use erato::services::tool_display::label::{ToolCallLabelItemMapping, ToolCallLabelMapping};
+    const ASK: &str = "Reject the record";
+    let arguments = json!({"status": "Rejected"});
+    let mut mocks = MockSet::new();
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[],
+        build_openai_tool_calls_streaming_response(&[(
+            "call_update",
+            "update_record",
+            arguments.clone(),
+        )]),
+    );
+    let app_state = records_app_state_with(pool, mocks, |config| {
+        config.tool_labels.enabled = tool_labels;
+        config.tool_labels.chat_provider_id = Some("mock-llm".into());
+    })
+    .await;
+    let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+        .await
+        .unwrap();
+    let tools = McpServers::new(&app_state.config)
+        .list_tools_for_server_ids(
+            Uuid::new_v4(),
+            Some(&std::collections::HashSet::from(["records".to_string()])),
+            &McpRequestAuthContext {
+                app_state: None,
+                user_id: None,
+                oidc_token: None,
+                access_token: None,
+            },
+        )
+        .await
+        .unwrap();
+    let update = tools
+        .iter()
+        .find(|tool| tool.tool.name == "update_record")
+        .unwrap();
+    let earlier = json!({"status": "Approved"});
+    let model = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: vec![ToolCallLabelItemMapping {
+            fields: vec!["/status".into()],
+            ..Default::default()
+        }],
+        source: ToolCallLabelSource::Model,
+    };
+    app_state
+        .tool_label_cache
+        .get_or_compute(
+            ToolLabelCacheKey::new(&user.id.to_string(), "records", &update.tool, &earlier),
+            &update.tool,
+            &earlier,
+            None,
+            async { Some(model) },
+        )
+        .await
+        .expect("the model's mapping is kept");
+
+    let response = app_server(app_state.clone())
+        .post("/api/v1beta/me/messages/submitstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "user_message": ASK }))
+        .await;
+    response.assert_status_ok();
+    let events = parse_sse_events(&response);
+    let message_id = Uuid::parse_str(&assistant_message_id_from_events(&events)).unwrap();
+    let card = message_content(&app_state, message_id)
+        .await
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(card["content_type"], "tool_approval_request");
+    let label = card["display"]["label"].clone();
+    let running = events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .find(|json| {
+            json["message_type"] == "tool_call_update"
+                && json["status"] == "in_progress"
+                && json["tool_call_id"] == card["tool_call_id"]
+        })
+        .expect("the streamed call goes in progress");
+    assert_eq!(running["display"]["label"], label);
+    let rules = erato::services::tool_display::mcp_tool_call_display(
+        &app_state.mcp_state().await.config,
+        "records",
+        &update.tool,
+        &arguments,
+        update.approval_argument.as_deref(),
+        &Default::default(),
+    );
+    (label, serde_json::to_value(rules.label).unwrap())
 }
 
 /// A turn that ran two calls before the gate stopped it must hand the model
@@ -6876,6 +7503,12 @@ async fn test_continuestream_numbers_deltas_after_the_decision_and_call_parts(
             .iter()
             .map(|part| part["content_type"].as_str().unwrap())
             .collect();
+        let settled = &resumed.raw_message["content"][3];
+        assert_eq!(settled["display"]["label"]["source"], "rules", "{decision}");
+        assert_eq!(
+            tool_updates[0]["display"], settled["display"],
+            "{decision}: the live update carries the display the row is stored with"
+        );
         let expected_decision_part = if decision == "reject" {
             "tool_rejection"
         } else {
@@ -7961,6 +8594,7 @@ async fn test_denied_mcp_tool_does_not_promote_a_same_named_client_tool(pool: Po
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -8362,6 +8996,7 @@ async fn test_writes_off_withholds_client_actions_but_keeps_client_tools(pool: P
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -8916,6 +9551,7 @@ async fn test_disabled_mcp_server_does_not_promote_a_same_named_client_tool(pool
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -9509,6 +10145,7 @@ async fn test_disabled_mcp_tool_does_not_promote_a_same_named_client_tool(pool: 
             timeout_ms: None,
             submission: None,
             replay: Default::default(),
+            label: None,
             durable: None,
             child_access: Default::default(),
             host_context: None,
@@ -9923,6 +10560,19 @@ async fn generation_state(db: &sea_orm::DatabaseConnection, chat_id: Uuid) -> Op
         .generation_state
 }
 
+/// The `allowed_by` of every settled `tool_call_update`.
+fn tool_update_allowed_by(events: &[crate::test_utils::Event]) -> Vec<Value> {
+    events
+        .iter()
+        .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
+        .filter(|event| {
+            event["message_type"] == "tool_call_update"
+                && matches!(event["status"].as_str(), Some("success" | "error"))
+        })
+        .map(|event| event["allowed_by"].clone())
+        .collect()
+}
+
 /// A user's "ask" decision escalates a tool the policy would run unasked:
 /// the read-only, closed-world fixture tool is auto under the permissive
 /// preset, yet the turn parks on the approval card, and `continuestream`
@@ -10287,6 +10937,12 @@ async fn test_approve_always_replaces_an_ask_decision(pool: Pool<Postgres>) {
         vec!["tool_approval_request", "tool_approval", "tool_use", "text"]
     );
     assert_eq!(resumed.raw_message["content"][1]["always_allow"], true);
+    // The card is the record of this decision.
+    assert!(
+        resumed.raw_message["content"][2]
+            .get("allowed_by")
+            .is_none()
+    );
     assert_eq!(
         erato::models::user_tool_approval_setting::find_active_decision(
             &db,
@@ -10374,6 +11030,8 @@ async fn test_ask_decision_is_inert_while_approvals_are_disabled(pool: Pool<Post
         .expect("Expected the assistant message");
     assert_eq!(content_types(&completed), vec!["tool_use", "text"]);
     assert_eq!(completed.raw_message["content"][0]["status"], "success");
+    assert_eq!(completed.raw_message["content"][0]["allowed_by"], "policy");
+    assert_eq!(tool_update_allowed_by(&events), vec![json!("policy")]);
     assert_eq!(
         generation_state(&db, chat_id).await.as_deref(),
         Some("completed")
@@ -10457,6 +11115,11 @@ async fn test_always_allow_bypasses_a_policy_ask_tool(pool: Pool<Postgres>) {
             .unwrap()
             .contains(TOOL_RESULT)
     );
+    assert_eq!(
+        completed.raw_message["content"][0]["allowed_by"],
+        "always_allow"
+    );
+    assert_eq!(tool_update_allowed_by(&events), vec![json!("always_allow")]);
     assert_eq!(
         generation_state(&db, chat_id).await.as_deref(),
         Some("completed")
@@ -11158,6 +11821,7 @@ async fn test_optional_client_tools_follow_registration_without_changing_legacy_
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                label: None,
                 durable: None,
                 child_access: Default::default(),
                 host_context: None,
@@ -11228,6 +11892,7 @@ async fn test_never_allowed_client_tool_is_not_offered(pool: Pool<Postgres>) {
                 timeout_ms: None,
                 submission: None,
                 replay: Default::default(),
+                label: None,
                 durable: None,
                 child_access: Default::default(),
                 host_context: None,

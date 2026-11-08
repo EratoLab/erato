@@ -1,24 +1,26 @@
 # Strict mode and the job envelope
 
-Status: package 0.1.44. Transport protocol remains 1.0. This document is the
+Status: package 0.1.48. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
 ## Trust model
 
 The frontend (the web app and the Office add-in) is trusted to relay faithfully;
 hardening against a malicious frontend is out of scope. The perimeter is the
-native sidecar process: content the user has not approved never reaches web
-code. Under strict mode, content RPCs are denied and the job envelope is the
-only content path; the native plain-text review starts with an empty selection
-and no RPC can approve it; the tool enumeration is closed; and the mode comes
-only from the installed bootstrap. The Origin allowlist is the single trust
+sidecar process: content the user has not approved never reaches the frontend
+or the backend. Under strict mode, content RPCs are denied and the job envelope
+is the only content path; the review window starts with an empty selection and
+no RPC can approve it; the tool enumeration is closed; and the mode comes only
+from the installed bootstrap. The Origin allowlist is the single trust
 anchor: bootstrap `allowed_origins` admits only canonical `http` or `https`
 origins without userinfo, path, query, fragment or default port, and the
 `--allow-origin` opt-in stays development-only. A strict sidecar refuses to
 start when its native review is unavailable and never falls back to normal
 mode. A relayed desktop UI package (`sidecar.install_ui_package.v1`) comes from
 the frontend of the Origin that offered it and is verified like a downloaded
-one; this relies on the same trust in the frontend.
+one; this relies on the same trust in the frontend. The review window renders
+the deployment's own code under that trust; see
+[Review window code](#review-window-code).
 
 ## Job envelope
 
@@ -139,10 +141,11 @@ stay native.
 
 Under strict, a job that calls a content tool freezes its calls' results as the
 job's snapshot when they have run: later source changes cannot change what the
-user reviews or what is exported. `jobs.review.v1` opens the native plain-text
-review window. It lists the items each call's selection names, with their item
-metadata and any text the result already holds (message bodies, text blocks),
-and shows no remote resources or document scripts. The selection starts empty.
+user reviews or what is exported. `jobs.review.v1` opens the sidecar's review
+window. It lists the items each call's selection names, with their item
+metadata and any text the result already holds (message bodies, text blocks) as
+plain text, and shows no remote resources or document scripts. The selection
+starts empty.
 Upload-policy checks run on the text of the selected items, not on the whole
 snapshot, and gate "Approve selected". The decision is made only in the window:
 no RPC submits it, repeated `jobs.review.v1` calls focus the open window, and
@@ -150,6 +153,15 @@ closing a pane neither cancels the job nor decides it. A review has no
 client-side deadline: a client polls the job until the user decides or the job
 ends. A policy guide whose decision provider is remote sends it the selected
 items' text.
+
+`jobs.review.v1` may carry `client` (package 0.1.48): `platform`, the client's
+`X-Erato-Platform` value (`web`, `outlook`, ...), and `locale`, its active
+language as a BCP-47 tag. This is display data the sidecar does not check. The
+window names the client and uses its language, and falls back to a generic name
+and the operating system's language; a value the sidecar cannot use is dropped,
+not refused. The window never names the Origin, because the web app and the
+add-ins share it. When several callers share a job, the window names the one
+that opened it: a repeated request only focuses the window.
 
 Approval exports each call filtered to its approved items: the array at `items`
 keeps only the approved items, the values at `resultMetadata` are kept, an
@@ -171,6 +183,32 @@ when the user opens an item; pinning a digest at approval and re-reading the
 source at export; attachment-stripping rules for `.eml` exports; batched
 loading for select-all; shaping the decision model's input; and the
 `awaiting_approval` state for effectful tools.
+
+### Review window code
+
+From package 0.1.48 the review window renders the deployment's desktop UI
+package ([section 8 of DISTRIBUTION.md](DISTRIBUTION.md#8-desktop-ui-package)):
+the app, the deployment's theme, catalogs and translation overrides, and its
+component kits. A sidecar with no installed package, and one built before
+0.1.48, renders the seed compiled into its binary.
+
+This code renders the items under review, so it sees content the user has not
+approved, and it could post the window's actions itself. It comes from the
+deployment, like the frontend, and carries the same trust: the page is not a
+boundary against the deployment's own code. What the sidecar enforces for every
+package:
+
+- The window reaches nothing outside the package. Its content security policy
+  admits only the package's own paths and inline data, so the page makes no
+  network requests and loads no remote resources. Navigation away, new windows,
+  downloads, permission requests and developer tools are refused.
+- The decision stays in the sidecar process. No RPC approves a review. The
+  window's approve action names items, and the sidecar accepts only items of
+  the job's frozen snapshot, and only once the upload-policy checks completed
+  for exactly that selection.
+- A package cannot take the review away. A package whose review window does not
+  speak the sidecar's message contract, or whose page does not report ready in
+  time, is replaced by the seed.
 
 ## Versioning
 

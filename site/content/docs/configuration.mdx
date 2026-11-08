@@ -4295,7 +4295,7 @@ To show chat connectors while hiding preferences, set `show_frontend_tab = false
 
 The name users see for this server on approval cards (in the web app, for delegated tasks and in Microsoft Teams), in the tool steps of a response and in the Servers & Tools preferences tab. The name always comes from this configuration, never from the MCP server itself.
 
-**Type:** optional `string`, not blank, at most 128 bytes, without control or bidi formatting characters
+**Type:** optional `string`, not blank, at most 128 bytes, without control, bidi or invisible formatting characters (Unicode's default-ignorable characters, such as zero-width spaces and joiners, soft hyphens, Hangul fillers, variation selectors, the byte order mark or tag characters, also in subdivision flags such as England's). Emoji text is allowed: a text or emoji presentation selector (U+FE0E or U+FE0F) directly after an emoji, and a zero-width joiner between two emoji, as in "Weather ☀️" or "Team 👨‍👩‍👧".
 
 **Default:** the server ID tidied up: underscores and hyphens become spaces and the first letter is capitalized, so `web_access` is shown as "Web access". Messages saved before this setting existed keep showing the server ID.
 
@@ -5039,6 +5039,59 @@ Show the suggestion when estimated context usage reaches this inclusive percenta
 {/* erato_toml_config_key: chat_history_compaction.target_compaction_token_limit_percentage */}
 
 Soft target for the resulting context as a percentage of the selected conversation model's context limit. **Default:** `10`. **Range:** `0–100`. Summaries are not cut to meet this target. Persistent instructions and retained files may keep the measured context above it. If the conversation and previews do not fit the summarizer's context window, the operation fails without changing history.
+
+### `tool_labels`
+
+{/* erato_toml_config_key: tool_labels */}
+
+Approval cards and the trace show what an MCP call does to what, and where. Generic rules label most calls from the tool's name and the shape of its arguments. When the rules are unsure, a configured model can pick the label instead. The card never waits for it: it shows the rules' label first and the model's label when it arrives, usually within a few seconds. A parked approval card picks up the new label on the next poll of parked chats; only the label changes, never the card's buttons, its approval or anything else stored with it.
+
+The model only chooses: pointers into the call's real argument paths, and an action and a kind from closed lists. Erato reads every value it shows through those pointers, so the model cannot put text of its own on the card. A reply that names a path the call does not have, fails to parse, is longer than 16 KiB or takes longer than 10 seconds is dropped, and the card keeps the rules' label. The same checks as for the rules hold the model's label: its verb must agree with the tool's name and annotations, consent flags and the names inside lookup objects are never shown as facts, and a label must show every recipient; otherwise the card shows the generic label. A model's label is kept per user, tool and argument shape, so later calls of the same shape reuse it without another request.
+
+**What leaves Erato.** For each call the rules are unsure of, the model receives:
+
+- the tool's name;
+- an argument skeleton: member names and the first three entries of each array, with every text value replaced by its length (`<str len=12>`) and every number by `<number>`. Only two kinds of values go as they are: the values of `command`, `op`, `kind`, `action`, `mode` and `operation` members that read as identifiers, and values the tool's input schema lists for that member in an `enum` or `const` (up to 64 characters, without control or invisible characters). Booleans and nulls go as they are;
+- the list of the call's argument paths.
+
+The server's tool description, the tool's schema and every other argument value stay in Erato. By default the model only labels the calls of turns that already run on the labeller's provider, so nothing reaches a provider the chat did not already use; `allow_other_provider` lifts that. The labeller is never used for a user whose [`model_permissions`](#model_permissions) do not include its provider.
+
+Each backend replica runs at most four labeller requests at a time and a turn starts at most 32. A call past either limit is not queued: it keeps the rules' label, and a later call of the same shape asks again. Labeller requests share the provider's rate limits with chat turns. Provider errors are logged by kind (for example `rate_limited` or `server_error`) without the provider's response.
+
+Labeller requests are traced in Langfuse like chat history compaction, as `tool_labels.label`. Their tokens are not counted against user budgets.
+
+```toml
+[tool_labels]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+```
+
+#### `tool_labels.enabled`
+
+{/* erato_toml_config_key: tool_labels.enabled */}
+
+Ask the model where the rules are unsure. **Default:** `false`.
+
+#### `tool_labels.chat_provider_id`
+
+{/* erato_toml_config_key: tool_labels.chat_provider_id */}
+
+Explicit provider used to label calls, required when enabled. It must identify a configured chat provider; there is no fallback to the highest-priority provider. Unless `allow_other_provider` is set, only turns that run on this provider get model labels. Point it at a small, fast model whose provider entry has low or no `reasoning_effort`, since the provider's model settings carry over. The JSON schema of the reply is sent to providers of kind `openai`, `azure_openai`, `openai_responses`, `azure_openai_responses`, `gemini` and `vertex_ai`; other kinds get the instruction only, and every reply is checked either way. Run a local model as `provider_kind = "openai"` on its `/v1` endpoint rather than as `ollama`.
+
+Before enabling it on a deployment, compare the chosen model's labels with the rules' on calls of the MCP servers it serves, and enable it where it does not make the labels worse.
+
+#### `tool_labels.allow_other_provider`
+
+{/* erato_toml_config_key: tool_labels.allow_other_provider */}
+
+Also label the calls of turns that run on another provider. The skeleton of those calls then goes to the labeller's provider, which the chat itself did not use; enable it only when that provider may see the data your MCP servers work with. Model permissions still apply. **Default:** `false`.
+
+```toml
+[tool_labels]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+allow_other_provider = true
+```
 
 ### `prompt_optimizer`
 
@@ -6952,6 +7005,56 @@ the full arguments and results. A call is compacted when the next user message i
 composed. History that an earlier request already stored in full stays full. Each request's stored input records the
 receipts the model received, so switching `mode` back to `full` restores only calls
 from the latest earlier turn. Older calls in that chat stay compacted.
+
+### A summary line for proposal tools
+
+A client tool that stages a proposal for the user, such as a document change or
+comment changes, shows its name in the chat's trace by default. Add a `label`
+table to show one line about what the call proposes instead, such as "Proposed
+changes to the document" or "Proposed replies to 3 comments". The tool's own card
+still carries the details, and the raw arguments and result stay one click away.
+
+```toml
+[client_tools.tools.submit_comment_changes]
+name = "submit_comment_changes"
+namespace = "editor"
+description = "Stage comment changes on a card for the user to confirm."
+parameters = '''{"type":"object","properties":{"changes":{"type":"array","items":{"type":"object","properties":{"op":{"type":"string","enum":["add","reply","resolve","reopen","edit","delete"]},"thread":{"type":["string","null"]}}}}},"required":["changes"]}'''
+
+[client_tools.tools.submit_comment_changes.label]
+action = "comment"
+object_kind = "comment"
+fields = ["$.changes[*].op"]
+```
+
+{/* erato_toml_config_key: client_tools.tools.<key>.label.action */}
+{/* erato_toml_config_key: client_tools.tools.<key>.label.object_kind */}
+{/* erato_toml_config_key: client_tools.tools.<key>.label.fields.[] */}
+
+- **`action`** _(required)_ - What a call proposes: `create`, `update`, `delete`, `move`, `send` or `comment`.
+- **`object_kind`** _(required)_ - What it acts on: `page`, `row`, `database`, `folder`, `note`, `comment`, `paragraph`, `document`, `email`, `message`, `event`, `file`, `task` or `other`.
+- **`fields`** _(default: `[]`)_ - Up to 4 paths to key values. One that reaches nothing in a call is left out. For a comment proposal, a field named `op` gives each change's operation (`add`, `reply`, `resolve`, `reopen`, `edit` or `delete`), so the line counts them.
+
+The chat has words for these pairs:
+
+| `action` | `object_kind` | Line |
+| --- | --- | --- |
+| `update` | `document` | Proposed changes to the document |
+| `comment`, `update` or `delete` | `comment` | Proposed a new comment, replies to 3 comments, 2 comment changes, ... (counted from `op`) |
+| `send` | `email` | Proposed an email |
+| `create` | `event` | Proposed an appointment |
+
+Any other pair reads "Proposed an action". Fields other than `op` are stored with
+the call but not shown.
+
+Paths are `$.key.key` paths into the call's arguments, like the replay fields,
+where `key[*]` stands for every element of an array. The backend reads every value
+through them; the label never holds text of its own. A table the backend cannot
+use is left out with a startup warning, and the tool loads and shows its name as
+before: an invalid path, more than 4 fields, any other key or value in the table
+(such as one written for a newer release), and the tables of client tools that
+share a model-facing name across namespaces but not the same `label`. Calls stored
+before a tool had a label show as before.
 
 ### `budget`
 

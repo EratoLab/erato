@@ -9,6 +9,7 @@ import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { groupIntoTraceClusters, Trace } from "./Trace";
 
+import type { ToolDecision } from "./Trace";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -60,12 +61,19 @@ const delegationToolUsePart = (): ContentPart =>
     ended_at: null,
   }) as unknown as ContentPart;
 
+const ALLOWED_ONCE: ToolDecision = { status: "approved", alwaysAllow: false };
+const DENIED_ONCE: ToolDecision = {
+  status: "denied",
+  neverAllow: false,
+  withdrawn: false,
+};
+
 const renderTrace = (
   parts: ContentPart[],
   overrides: {
     maskReasoningText?: boolean;
     isStreaming?: boolean;
-    toolApprovalStatuses?: Record<string, "approved" | "denied">;
+    toolDecisions?: Record<string, ToolDecision>;
   } = {},
 ) => {
   mockUseTraceFeature.mockReturnValue({
@@ -81,7 +89,7 @@ const renderTrace = (
           hasLaterContent={false}
           renderMarkdown={(text) => <span>{text}</span>}
           durationMs={null}
-          toolApprovalStatuses={overrides.toolApprovalStatuses}
+          toolDecisions={overrides.toolDecisions}
         />
       </I18nProvider>
     </QueryClientProvider>,
@@ -204,20 +212,26 @@ describe("Trace — masked mode (cold-load / done state)", () => {
     expect(screen.getByText("web_search")).toBeInTheDocument();
   });
 
-  it("shows an Approved badge beside an approved MCP tool call", () => {
-    renderTrace([toolUsePart()], {
-      toolApprovalStatuses: { "tool-abc": "approved" },
+  it("shows an approved call that failed as failed, with the approval on its own row", () => {
+    renderTrace([toolUsePart("error")], {
+      toolDecisions: { "tool-abc": ALLOWED_ONCE },
     });
 
-    expect(screen.getByText("Approved")).toBeInTheDocument();
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      "You allowed this once",
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.queryByText("Approved")).not.toBeInTheDocument();
   });
 
-  it("shows Denied instead of Failed for a rejected MCP tool call", () => {
+  it("shows a rejected call's denial, not Failed", () => {
     renderTrace([toolUsePart("error")], {
-      toolApprovalStatuses: { "tool-abc": "denied" },
+      toolDecisions: { "tool-abc": DENIED_ONCE },
     });
 
-    expect(screen.getByText("Denied")).toBeInTheDocument();
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      "You denied this",
+    );
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
@@ -225,23 +239,51 @@ describe("Trace — masked mode (cold-load / done state)", () => {
     // A delegated decision names the child it was taken for, which is the only
     // id shared with the slot once the parent's call id has been rewritten.
     renderTrace([delegationToolUsePart()], {
-      toolApprovalStatuses: { "child-chat-7": "approved" },
+      toolDecisions: { "child-chat-7": ALLOWED_ONCE },
     });
 
-    expect(screen.getByText("Approved")).toBeInTheDocument();
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      "You allowed this once",
+    );
   });
 
   it("prefers the call's own decision over the child's", () => {
     renderTrace([delegationToolUsePart()], {
-      toolApprovalStatuses: {
-        "call-delegate": "denied",
-        "child-chat-7": "approved",
+      toolDecisions: {
+        "call-delegate": DENIED_ONCE,
+        "child-chat-7": ALLOWED_ONCE,
       },
     });
 
-    expect(screen.getByText("Denied")).toBeInTheDocument();
-    expect(screen.queryByText("Approved")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      "You denied this",
+    );
+    expect(screen.queryByText("You allowed this once")).not.toBeInTheDocument();
   });
+
+  it.each(["status", "neverAllow"])(
+    "reads only a decision recorded under the call's own id %s",
+    (id) => {
+      const decisions: Record<string, ToolDecision> = {};
+      // How a plain map takes a decision recorded under the id `__proto__`.
+      decisions["__proto__"] = DENIED_ONCE;
+      renderTrace(
+        [
+          {
+            ...toolUsePart("error"),
+            tool_call_id: id,
+            output: { status: "rejected" },
+          } as unknown as ContentPart,
+        ],
+        { toolDecisions: decisions },
+      );
+
+      expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+        /^Not run$/,
+      );
+      expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    },
+  );
 });
 
 const budgetRequest = (): ContentPart =>

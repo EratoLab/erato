@@ -270,9 +270,7 @@ describe("delegation step", () => {
     expect(openRun).toHaveBeenCalledWith("chat-7");
   });
 
-  it("says the detachment even over an approval decision", () => {
-    // ToolStatusPill gives an approval decision top priority; the background
-    // branch must win before it ever gets the chance.
+  it("says the detachment on its pill and the decision on a row of its own", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <ToolUseStep
@@ -281,12 +279,15 @@ describe("delegation step", () => {
           isStreaming={false}
           isCollapsed={false}
           isLastStep
-          approvalStatus="approved"
+          decision={{ status: "approved", alwaysAllow: false }}
         />
       </QueryClientProvider>,
     );
 
     expect(screen.getByText("Sent to background")).toBeInTheDocument();
+    expect(screen.getByTestId("tool-decision-row")).toHaveTextContent(
+      "You allowed this once",
+    );
     expect(screen.queryByText("Approved")).toBeNull();
   });
 

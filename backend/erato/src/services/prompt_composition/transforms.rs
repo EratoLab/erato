@@ -794,15 +794,22 @@ pub(crate) fn replay_assistant_content(
             | ContentPart::ToolApproval(_)
             | ContentPart::ToolRejection(_)
             | ContentPart::CompactionMarker(_) => {}
-            ContentPart::ToolUse(tool_use) => {
+            ContentPart::ToolUse(mut tool_use) => {
                 // Synthetic client-action proposals never replay
                 // — see is_client_action_tool_use_message.
                 if is_synthetic_client_action_tool_use(&tool_use) {
                     continue;
                 }
+                // For the UI only; the snapshot stores both copies, so both drop it.
+                // The Tool copy keeps `allowed_by`: the label context reads it.
+                tool_use.result_details = None;
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
-                    content: ContentPart::ToolUse(tool_use.clone()),
+                    content: ContentPart::ToolUse(crate::models::message::ToolUse {
+                        display: None,
+                        allowed_by: None,
+                        ..tool_use.clone()
+                    }),
                 });
                 input_messages.push(InputMessage {
                     role: MessageRole::Tool,
@@ -866,9 +873,33 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
 /// it inside an untrusted-data frame, and from this turn on it is this value,
 /// not the envelope, that becomes the tool response. Without the re-frame the
 /// containment would last exactly one turn.
+///
+/// The display is the UI's too, and a replay is stored with every generation:
+/// only the label's action and the server name stay, never the label's values
+/// or argument tree. The next turn's name index keys results by that server.
 fn strip_ui_only_tool_output(
     mut tool_use: crate::models::message::ToolUse,
 ) -> crate::models::message::ToolUse {
+    tool_use.display = tool_use
+        .display
+        .filter(|display| display.label.is_some() || display.server_name.is_some())
+        .map(|display| crate::models::message::ToolDisplayMetadata {
+            title: String::new(),
+            description: None,
+            description_truncated: false,
+            server_name: display.server_name,
+            read_only: false,
+            label: display
+                .label
+                .map(|label| crate::models::message::ToolCallLabel {
+                    action: label.action,
+                    object_kind: Default::default(),
+                    items: Vec::new(),
+                    arguments: None,
+                    warnings: Vec::new(),
+                    source: Default::default(),
+                }),
+        });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
     if let Some(output) = tool_use.output.as_mut() {
         if let Some(object) = output.as_object_mut() {
@@ -1057,7 +1088,9 @@ pub fn to_concrete_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::message::{ToolCallStatus, ToolUse};
+    use crate::models::message::{
+        ToolAllowedBy, ToolCallStatus, ToolResultDetails, ToolResultLink, ToolUse,
+    };
     use crate::services::delegation::{
         DELEGATE_TO_ASSISTANT_TOOL_NAME, DelegationResultEnvelope, DelegationRunStatus,
     };
@@ -1091,6 +1124,8 @@ mod tests {
             total: None,
             input: None,
             output: Some(output),
+            result_details: None,
+            allowed_by: None,
             started_at: None,
             ended_at: None,
         }
@@ -1145,6 +1180,68 @@ mod tests {
                 .get(crate::services::delegation::DELEGATION_LOCAL_TRACE_KEY)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_replayed_tool_result_drops_its_result_details() {
+        let mut stored = part("create_row", serde_json::json!("Created row row-1."));
+        stored.result_details = Some(ToolResultDetails {
+            links: vec![ToolResultLink {
+                uri: "https://records.example.test/rows/1".to_string(),
+                host: "records.example.test".to_string(),
+                matches_server_host: false,
+                name: Some("row-1".to_string()),
+                title: Some("SYNTHETIC-LINK-TITLE".to_string()),
+            }],
+        });
+
+        let replayed = replay_assistant_content(
+            &MessageRole::Assistant,
+            vec![ContentPart::ToolUse(stored.clone())],
+        );
+        assert_eq!(replayed.len(), 2);
+        for message in &replayed {
+            let ContentPart::ToolUse(tool_use) = &message.content else {
+                panic!("not a tool use: {message:?}");
+            };
+            assert_eq!(tool_use.result_details, None);
+            assert_eq!(tool_use.output, stored.output);
+        }
+        let snapshot = serde_json::to_string(&replayed).unwrap();
+        assert!(!snapshot.contains("SYNTHETIC-LINK-TITLE"), "{snapshot}");
+        assert!(!snapshot.contains("records.example.test"), "{snapshot}");
+    }
+
+    #[test]
+    fn a_replayed_tool_call_keeps_its_allowed_by_on_the_tool_copy_only() {
+        for allowed_by in [
+            ToolAllowedBy::Policy,
+            ToolAllowedBy::AlwaysAllow,
+            ToolAllowedBy::Other,
+        ] {
+            let stored = ToolUse {
+                allowed_by: Some(allowed_by),
+                ..part("update_row", serde_json::json!("Updated row row-1."))
+            };
+            let replayed = replay_assistant_content(
+                &MessageRole::Assistant,
+                vec![ContentPart::ToolUse(stored)],
+            );
+            let kept: Vec<_> = replayed
+                .iter()
+                .map(|message| match &message.content {
+                    ContentPart::ToolUse(tool_use) => (message.role.clone(), tool_use.allowed_by),
+                    other => panic!("not a tool use: {other:?}"),
+                })
+                .collect();
+            assert_eq!(
+                kept,
+                vec![
+                    (MessageRole::Assistant, None),
+                    (MessageRole::Tool, Some(allowed_by)),
+                ]
+            );
+        }
     }
 
     /// Framing keys on the tool that produced the part. Another tool's output

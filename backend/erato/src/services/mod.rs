@@ -14,6 +14,7 @@ pub mod submission_correction;
 pub(crate) mod tool_arguments;
 pub(crate) mod tool_call_budget;
 pub mod tool_display;
+pub mod tool_labeller;
 
 pub mod display_text;
 pub(crate) mod embedded_images;

@@ -21,9 +21,10 @@ import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
 import { NestedTraceView } from "../NestedTraceView";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
+import { ToolDecisionRow } from "./ToolDecisionRow";
 import { SettledInfoPill, ToolStatusPill } from "./ToolStatusPill";
 
-import type { ToolApprovalStatus } from "../Trace";
+import type { ToolDecision } from "../Trace";
 import type { BaseStepProps, TraceStepStatus } from "../types";
 import type { DelegationEnvelope } from "@/lib/delegation/delegationEnvelope";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -32,7 +33,7 @@ import type { ChatAttentionStatus } from "@/utils/chatHistoryGrouping";
 interface DelegationStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
   envelope: DelegationEnvelope;
-  approvalStatus?: ToolApprovalStatus;
+  decision?: ToolDecision;
 }
 
 const stepLabel = (id: string): string =>
@@ -239,7 +240,7 @@ export const DelegationStep = ({
   isStreaming,
   isCollapsed,
   isLastStep,
-  approvalStatus,
+  decision,
   envelope,
 }: DelegationStepProps) => {
   const trace = useSidecarLocalTrace(
@@ -367,6 +368,7 @@ export const DelegationStep = ({
       data-tool-name={part.tool_name ?? ""}
       data-tool-status={part.status}
     >
+      <ToolDecisionRow part={part} decision={decision} />
       <TraceStep
         railIcon={railIconFor(part.content_type, stepStatus)}
         hasTrailingRailLine={!isLastStep}
@@ -378,26 +380,18 @@ export const DelegationStep = ({
         )}
         titleSlot={
           envelope.background ? (
-            // The detachment is the one thing worth saying about this step —
-            // it outranks even an approval decision.
+            // The detachment is the one thing worth saying about this step.
             <SettledInfoPill {...backgroundPill(liveStatus)} />
           ) : stepStatus === "interrupted" ? (
             // The envelope is frozen at whatever the dying writer last wrote,
             // so "Queued" or "Running a task" is exactly the claim that is no
             // longer true. The interrupted pill outranks it: a stale
             // self-description is worse here than no description.
-            <ToolStatusPill
-              status={stepStatus}
-              approvalStatus={approvalStatus}
-            />
+            <ToolStatusPill status={stepStatus} />
           ) : pending !== undefined ? (
             <SettledInfoPill {...pending} />
           ) : (
-            <ToolStatusPill
-              status={stepStatus}
-              approvalStatus={approvalStatus}
-              label={outcome}
-            />
+            <ToolStatusPill status={stepStatus} label={outcome} />
           )
         }
         headerSlot={

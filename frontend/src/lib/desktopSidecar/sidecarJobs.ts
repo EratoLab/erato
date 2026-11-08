@@ -4,6 +4,9 @@ import {
   SidecarClientError,
   SidecarRpcError,
 } from "@erato/desktop-sidecar-protocol";
+import { i18n } from "@lingui/core";
+
+import { getClientPlatform } from "@/lib/clientPlatform";
 
 import { markAwaitingReview } from "./sidecarReviewStore";
 
@@ -20,6 +23,17 @@ import type {
  * this cadence.
  */
 export const JOB_POLL_INTERVAL_MS = 1_500;
+
+/**
+ * Who asks for a review, as the review window names it: this surface and its
+ * active language. Display data; a sidecar built before it ignores the field.
+ */
+function reviewClient(): { platform: string; locale?: string } {
+  return {
+    platform: getClientPlatform(),
+    ...(i18n.locale ? { locale: i18n.locale } : {}),
+  };
+}
 
 const PENDING_STATES = new Set<JobStatus["state"]>([
   "queued",
@@ -173,7 +187,11 @@ export async function runSidecarJob(
         if (chatId) reviewEnded = markAwaitingReview(chatId, toolCallId);
         // The decision is made only in the native window; this opens it.
         if (client.supports("jobs.review.v1"))
-          await client.invoke("jobs.review.v1", { handle }, { signal });
+          await client.invoke(
+            "jobs.review.v1",
+            { handle, client: reviewClient() },
+            { signal },
+          );
         onReview?.();
       }
       const early = JOB_POLL_INTERVAL_MS - (Date.now() - askedAt);
