@@ -261,6 +261,29 @@ mod tests {
         }
         assert_eq!(label.arguments, None);
 
+        let texted = json!({"subject": "Q3", "sms_number": "+49 30 1234"});
+        let label = own_label("stage_email", &mapping, &texted);
+        assert_eq!(label.source, ToolCallLabelSource::OwnMapping);
+        let shown: Vec<_> = label.items[0]
+            .fields
+            .iter()
+            .map(|field| {
+                let values: Vec<_> = field
+                    .values
+                    .iter()
+                    .map(|value| value.text.as_str())
+                    .collect();
+                (field.pointer.as_str(), values)
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("/sms_number", vec!["+49 30 1234"]),
+                ("/subject", vec!["Q3"])
+            ]
+        );
+
         let crowded = json!({
             "to": ["a@example.com"],
             "cc": ["b@example.com"],
