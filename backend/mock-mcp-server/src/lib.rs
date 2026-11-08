@@ -1014,6 +1014,87 @@ impl ServerHandler for ApprovalPolicyServer {
     }
 }
 
+/// The one record the records server holds.
+pub const RECORD_ID: &str = "5f0c2a10-0000-4000-8000-0000000e0001";
+pub const RECORD_NAME: &str = "Quarterly plan";
+pub const RECORD_STATUS: &str = "Draft";
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct UpdateRecordParams {
+    id: String,
+    status: String,
+}
+
+/// A record that a closed-world read returns and an open-world update
+/// changes, so a label can name the record and its earlier value.
+#[derive(Clone)]
+struct RecordsServer {
+    #[allow(dead_code)]
+    tool_router: ToolRouter<Self>,
+}
+
+impl RecordsServer {
+    fn new() -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+        }
+    }
+}
+
+#[tool_router]
+impl RecordsServer {
+    #[tool(
+        description = "Reads the record",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    fn read_record(&self) -> String {
+        json!({"id": RECORD_ID, "name": RECORD_NAME, "status": RECORD_STATUS}).to_string()
+    }
+
+    #[tool(
+        description = "Updates the record's status",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    fn update_record(
+        &self,
+        Parameters(UpdateRecordParams { id, status }): Parameters<UpdateRecordParams>,
+    ) -> String {
+        format!("record {id} updated to {status}")
+    }
+}
+
+impl ServerHandler for RecordsServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
+        call_tool_from_router(self, &self.tool_router, request, context)
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(list_tools_from_router(&self.tool_router)))
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        server_info("Mock MCP records server")
+    }
+}
+
 /// Name of the tool whose text is deliberately hostile to a user interface.
 pub const UNTRUSTED_TEXT_TOOL_NAME: &str = "render_untrusted_text";
 /// Name of the plainly described tool on the same server.
@@ -1028,7 +1109,7 @@ pub const UNTRUSTED_TEXT_BODY_CHARS: usize = 6_000;
 
 fn untrusted_text_tool() -> rmcp::model::Tool {
     let description = format!(
-        "{UNTRUSTED_TEXT_MARKUP} \u{202E}reversed\u{202C}\n\n\n\nbody follows\n{}",
+        "{UNTRUSTED_TEXT_MARKUP} \u{202E}rev\u{200D}ersed\u{202C}\u{FEFF}\u{061C}\n\n\n\nbody follows\n{}",
         "ä".repeat(UNTRUSTED_TEXT_BODY_CHARS)
     );
     let mut tool = rmcp::model::Tool::new(
@@ -1036,13 +1117,15 @@ fn untrusted_text_tool() -> rmcp::model::Tool {
         description,
         rmcp::model::JsonObject::new(),
     );
-    tool.title = Some(format!("{UNTRUSTED_TEXT_MARKUP} \u{202E}eltit\u{7}"));
+    tool.title = Some(format!(
+        "{UNTRUSTED_TEXT_MARKUP} \u{202E}el\u{200B}tit\u{7}\u{2060}\u{E0001}\u{E0068}\u{E007F}"
+    ));
     tool
 }
 
-/// Tools whose vendor text carries markup, bidi overrides, control
-/// characters and an oversized body, so a client's display hardening can be
-/// exercised end to end.
+/// Tools whose vendor text carries markup, bidi overrides, invisible and
+/// control characters and an oversized body, so a client's display hardening
+/// can be exercised end to end.
 #[derive(Clone)]
 struct UntrustedTextServer;
 
@@ -1454,8 +1537,14 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["read_approval_fixture", "publish_approval_probe"],
         },
         MechanismSummary {
+            name: "Records server",
+            description: "A closed-world read and an open-world update of one record",
+            endpoint: "Streamable HTTP /mcp/records",
+            tools: &["read_record", "update_record"],
+        },
+        MechanismSummary {
             name: "Untrusted text server",
-            description: "Tool text with markup, bidi overrides, control characters and an oversized body",
+            description: "Tool text with markup, bidi overrides, invisible and control characters and an oversized body",
             endpoint: "Streamable HTTP /mcp/untrusted-text",
             tools: &[
                 UNTRUSTED_TEXT_TOOL_NAME,
@@ -1548,6 +1637,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
         "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/approval-policy".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/records".bright_yellow()
     );
     println!(
         "  {} {}",
@@ -1667,6 +1761,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
     let approval_policy_service =
         create_streamable_http_service(mode, || Ok(ApprovalPolicyServer::new()));
     let untrusted_text_service = create_streamable_http_service(mode, || Ok(UntrustedTextServer));
+    let records_service = create_streamable_http_service(mode, || Ok(RecordsServer::new()));
 
     let none_auth_service = create_streamable_http_service(mode, || Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service =
@@ -1694,6 +1789,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
         .nest_service("/deep-research", deep_research_service)
         .nest_service("/approval-policy", approval_policy_service)
         .nest_service("/untrusted-text", untrusted_text_service)
+        .nest_service("/records", records_service)
         .route(
             "/auth-none",
             any(move |request| {

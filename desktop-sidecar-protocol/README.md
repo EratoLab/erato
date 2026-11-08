@@ -37,6 +37,13 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 ## Quick start
 
+Package 0.1.48 lets a review name who asks: `jobs.review.v1` gains the optional
+`client` `{platform, locale}`, so the review window names the client and uses
+its language. A sidecar built earlier ignores the field. It also records that
+the review window renders the deployment's desktop UI package, component kits
+included. See [Strict review](DELEGATION.md#strict-review) and
+[Review window code](DELEGATION.md#review-window-code).
+
 Package 0.1.47 reports whether the sidecar installed the desktop UI package
 and lets the client relay it: on a sidecar that hosts the desktop UI,
 `sidecar.status.v1` adds `ui_package` (`state` `current`, `pending` or

@@ -421,12 +421,15 @@ mod tests {
             content_index: 0,
             tool_call_id: tool_call_id.to_string(),
             tool_name: "search_web".to_string(),
+            display: None,
             input: None,
             status,
             progress_message: Some("SHOULD-NOT-LEAK".to_string()),
             progress: None,
             total: None,
             output: Some(json!({ "text": "SHOULD-NOT-LEAK" })),
+            result_details: None,
+            allowed_by: None,
         }
     }
 
@@ -583,12 +586,15 @@ mod tests {
             content_index: 0,
             tool_call_id: tool_call_id.to_string(),
             tool_name: "read_document_blocks".to_string(),
+            display: None,
             input: Some(json!({"snapshot": "SHOULD-NOT-LEAK", "part": "intro", "limit": 3})),
             status,
             progress_message: None,
             progress: None,
             total: None,
             output: Some(output),
+            result_details: None,
+            allowed_by: None,
         }
     }
 

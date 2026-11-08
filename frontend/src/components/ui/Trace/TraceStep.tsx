@@ -24,6 +24,11 @@ interface TraceStepProps {
    */
   headerSlot?: ReactNode;
   /**
+   * Optional node under the header that stays visible when the body is
+   * folded, e.g. the key values of a tool call.
+   */
+  detailSlot?: ReactNode;
+  /**
    * Body content — collapsed by default after streaming finishes. A step
    * without body content renders as a plain row: no chevron, no toggle.
    */
@@ -63,6 +68,7 @@ export const TraceStep = ({
   title,
   titleSlot,
   headerSlot,
+  detailSlot,
   children,
   defaultOpen = false,
   autoExpand = false,
@@ -124,6 +130,9 @@ export const TraceStep = ({
           )}
           {headerSlot}
         </div>
+        {detailSlot != null && (
+          <div className="pb-1 pl-2.5 text-sm">{detailSlot}</div>
+        )}
         {children != null && (
           <TraceCollapse isOpen={isOpen}>
             <div className="pl-2.5 pt-0.5 text-sm text-theme-fg-primary">
