@@ -1032,10 +1032,18 @@ describe("what a card notes about values it leaves out or changes", () => {
   });
 
   it("notes nothing for emoji text, and data smuggled in selectors after it", () => {
-    const emoji = { note: "Sunny \u2600\uFE0F", status: "I \u2764\uFE0F it" };
+    const emoji = {
+      note: "Sunny \u2600\uFE0F",
+      status: "I \u2764\uFE0F it",
+      press: "Press 1\uFE0F\u20E3",
+    };
     expect(notesOf(generic(viewOf(emoji), emoji))?.hiddenCharacters).toBe(
       false,
     );
+    const keycapBase = { invoice: "INV-1\uFE0F2\uFE0E3" };
+    expect(
+      notesOf(generic(viewOf(keycapBase), keycapBase))?.hiddenCharacters,
+    ).toBe(true);
     const smuggled = { note: "Hi \u{1F600}\uFE01\u{E0110}\u{E0120}" };
     expect(notesOf(generic(viewOf(smuggled), smuggled))?.hiddenCharacters).toBe(
       true,

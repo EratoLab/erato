@@ -128,9 +128,9 @@ fn hidden_positions(text: &str) -> Vec<usize> {
 
 #[test]
 fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
-    // Keycap bases, regional indicators and Unicode 16's newest emoji
-    // (harp, fingerprint, face with bags under eyes) all have Emoji=Yes.
-    for base in "#*0123456789".chars().chain([
+    // Regional indicators and Unicode 16's newest emoji (harp, fingerprint,
+    // face with bags under eyes) all have Emoji=Yes.
+    for base in [
         '\u{00A9}',
         '\u{2764}',
         '\u{1F1E6}',
@@ -138,7 +138,7 @@ fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
         '\u{1FA89}',
         '\u{1FAC6}',
         '\u{1FAE9}',
-    ]) {
+    ] {
         for selector in ['\u{FE0E}', '\u{FE0F}'] {
             assert_eq!(
                 hidden_positions(&format!("{base}{selector}")),
@@ -147,6 +147,27 @@ fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
                 u32::from(base)
             );
         }
+    }
+    // Keycap bases have Emoji=Yes too, but read as plain text: a selector on
+    // one could tell two IDs apart unseen, unless it makes a real keycap.
+    for base in "#*0123456789".chars() {
+        for selector in ['\u{FE0E}', '\u{FE0F}'] {
+            for text in [format!("{base}{selector}"), format!("{base}{selector}x")] {
+                assert_eq!(hidden_positions(&text), [1], "{text:?}");
+            }
+        }
+        assert_eq!(
+            hidden_positions(&format!("{base}\u{FE0F}\u{20E3}")),
+            [] as [usize; 0],
+            "U+{:04X}",
+            u32::from(base)
+        );
+        assert_eq!(
+            hidden_positions(&format!("{base}\u{FE0E}\u{20E3}")),
+            [1],
+            "U+{:04X}",
+            u32::from(base)
+        );
     }
     for base in ['a', 'Z', '\u{00E9}', '\u{4E2D}', '\u{1F000}', '\u{20E3}'] {
         assert_eq!(
@@ -159,6 +180,14 @@ fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
 
     for (text, hidden) in [
         ("1\u{FE0F}\u{20E3}", vec![]),
+        ("#\u{FE0F}\u{20E3}", vec![]),
+        ("p_1\u{FE0F}", vec![3]),
+        ("1\u{FE0F}x", vec![1]),
+        ("p_1\u{FE0E}", vec![3]),
+        ("#\u{FE0F}", vec![1]),
+        ("INV-1\u{FE0F}2\u{FE0E}3", vec![5, 7]),
+        ("1\u{FE0F}\u{FE0F}\u{20E3}", vec![1, 2]),
+        ("1\u{1F3FD}\u{FE0F}", vec![2]),
         ("\u{1F44D}\u{1F3FD}\u{FE0F}", vec![]),
         ("a\u{1F3FD}\u{FE0F}", vec![2]),
         ("\u{1F3FD}\u{FE0F}", vec![1]),
@@ -186,7 +215,12 @@ fn a_selector_or_joiner_is_hidden_only_where_it_styles_or_joins_no_emoji() {
     ] {
         assert!(valid(name), "{name:?}");
     }
-    for name in ["Wea\u{FE0F}ther", "CRM\u{FE0E}", "C\u{200D}RM"] {
+    for name in [
+        "Wea\u{FE0F}ther",
+        "CRM\u{FE0E}",
+        "C\u{200D}RM",
+        "CRM 1\u{FE0F}",
+    ] {
         assert!(!valid(name), "{name:?}");
     }
     assert!(!has_hidden_chars(

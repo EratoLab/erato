@@ -2,6 +2,7 @@ import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { isConsentClaim } from "@/lib/toolCallGist/consent";
+import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 import {
   cleanServerText,
   lastPointerSegment,
@@ -47,8 +48,10 @@ const Scalar = ({ node, values, compact }: NodeProps) => {
   return isLongText(node.kind, shown) ? (
     <p
       dir="auto"
+      {...scrollBoxProps("value")}
       className={clsx(
-        "overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+        SCROLL_BOX_CLASS,
+        "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
         compact ? "max-h-24" : "max-h-32",
         isId && "font-mono",
         ISOLATED,

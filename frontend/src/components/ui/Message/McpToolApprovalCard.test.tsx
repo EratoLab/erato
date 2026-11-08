@@ -3205,9 +3205,234 @@ describe("gist cards", () => {
         .querySelector('[data-origin="id"]')!;
       expect(id.textContent).toBe(LONG_ID);
       const box = scrollBoxOf(id);
-      expect(box?.tagName).toBe("DD");
+      expect(box?.parentElement?.tagName).toBe("DD");
       expect(box).toHaveClass("max-h-24");
       expectButtons();
+    });
+  });
+
+  describe("a card a batch could make very tall", () => {
+    const SCROLL_BOX = ".overflow-y-auto";
+    const FIELDS = ["owner", "stage", "region", "note"];
+    const LONG = "x".repeat(600);
+    const hostileInput = {
+      visibility: "workspace",
+      smuggled: "kept for the list at the end",
+      batches: [0, 1, 2].map((item) => ({
+        rows: Array.from({ length: 10 }, (_, row) => ({
+          name: `row ${item}-${row}`,
+          ...Object.fromEntries(FIELDS.map((f) => [f, `${f} ${LONG}`])),
+        })),
+      })),
+    };
+    const hostileItem = (item: number) => ({
+      title: {
+        pointer: `/batches/${item}/rows/*/name`,
+        values: hostileInput.batches[item].rows.map((row, index) => ({
+          path: `/batches/${item}/rows/${index}/name`,
+          text: row.name,
+        })),
+      },
+      fields: FIELDS.map((field) => ({
+        pointer: `/batches/${item}/rows/*/${field}`,
+        name: field,
+        values: hostileInput.batches[item].rows.map((_, index) => ({
+          path: `/batches/${item}/rows/${index}/${field}`,
+          text: `${field} ${LONG}`,
+        })),
+      })),
+    });
+    const hostileView = (input: unknown) => {
+      const view = viewOf(input);
+      return {
+        ...view,
+        children: view.children?.filter((child) => child.path !== "/batches"),
+      };
+    };
+    const hostileLabel = (input: typeof hostileInput) => ({
+      action: "create",
+      object_kind: "row",
+      source: "rules",
+      arguments: hostileView(input),
+      items: [0, 1, 2].map(hostileItem),
+    });
+    const cardWith = (input: unknown, label: unknown) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            input,
+            display: {
+              ...createRowDisplay,
+              label: label as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    const buttons = () => [
+      screen.getByRole("button", { name: "Allow once" }),
+      screen.getByRole("button", { name: "Deny once" }),
+    ];
+    const comesBefore = (first: Element, second: Element) =>
+      (first.compareDocumentPosition(second) &
+        Node.DOCUMENT_POSITION_FOLLOWING) !==
+      0;
+
+    it("keeps the whole batch in one bounded box, with the buttons right after it", () => {
+      cardWith(hostileInput, hostileLabel(hostileInput));
+
+      const box = screen.getByTestId("tool-call-gist-scroll");
+      expect(box).toHaveClass("max-h-[50vh]", "overflow-y-auto");
+      expect(document.querySelectorAll('[class*="max-h-[50vh]"]')).toHaveLength(
+        1,
+      );
+      const lines = screen.getAllByTestId("tool-call-gist-line");
+      expect(lines).toHaveLength(3);
+      const rows = Array.from(
+        document.querySelectorAll('[data-testid="tool-call-gist-rows"] > li'),
+      );
+      expect(rows).toHaveLength(30);
+      for (const inside of [...lines, ...rows]) {
+        expect(box).toContainElement(inside as HTMLElement);
+      }
+      expect(box).toHaveTextContent("row 2-9");
+      expect(box).toContainElement(
+        screen.getByTestId("tool-call-other-arguments"),
+      );
+      for (const button of buttons()) {
+        expect(box).not.toContainElement(button);
+        expect(comesBefore(box, button)).toBe(true);
+      }
+    });
+
+    it("says what it warns about above the values, however long they are", () => {
+      const input = {
+        ...hostileInput,
+        hasUserApproved: true,
+        invoice: "INV-1\uFE0F2",
+      };
+      cardWith(input, {
+        ...hostileLabel(input),
+        warnings: ["arguments_truncated"],
+      });
+
+      const box = screen.getByTestId("tool-call-gist-scroll");
+      const above = [
+        screen.getByText(/Shared with your workspace/),
+        screen.getByTestId("tool-call-hidden-characters"),
+        screen.getByTestId("tool-call-consent-left-out"),
+        screen.getByText(/Some arguments are not shown here/),
+        screen.getByTestId("tool-call-other-arguments-note"),
+      ];
+      for (const note of above) {
+        expect(box).not.toContainElement(note);
+        expect(comesBefore(note, box)).toBe(true);
+      }
+    });
+
+    it("has no note about other arguments when the card has none", () => {
+      const input = { ...createRowInput };
+      cardWith(input, { ...createRowLabel, arguments: viewOf({}) });
+
+      expect(
+        screen.queryByTestId("tool-call-other-arguments-note"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("tool-call-other-arguments"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lets a keyboard reach and name every box that scrolls, and shows where focus is", () => {
+      const input = {
+        ...hostileInput,
+        body: `${"line\n".repeat(50)}end`,
+      };
+      cardWith(input, {
+        ...hostileLabel(input),
+        items: [
+          ...hostileLabel(input).items,
+          {
+            title: {
+              pointer: "/visibility",
+              values: [{ path: "/visibility", text: "workspace" }],
+            },
+            after: {
+              pointer: "/body",
+              values: [{ path: "/body", text: input.body }],
+            },
+          },
+        ],
+      });
+
+      const boxes = Array.from(document.querySelectorAll(SCROLL_BOX));
+      // The outer box, 3 + 1 lines, 30 rows of a name and four fields, the
+      // written text, the other arguments' list and their long text.
+      expect(boxes.length).toBeGreaterThan(150);
+      for (const box of boxes) {
+        expect(box).toHaveAttribute("tabindex", "0");
+        expect(box).toHaveAttribute("role", "group");
+        expect(box.getAttribute("aria-label")).toMatch(/^Scrollable /);
+        expect(box).toHaveClass("focus-ring-inset");
+      }
+      for (const label of [
+        "Scrollable details of this call",
+        "Scrollable summary of this call",
+        "Scrollable value",
+        "Scrollable arguments of this call",
+      ]) {
+        expect(
+          screen.getAllByRole("group", { name: label }).length,
+        ).toBeGreaterThan(0);
+      }
+    });
+
+    it("keeps notes above the arguments on a generic card, and focusable boxes there too", () => {
+      const input = { note: `Hello\u200B ${LONG}`, count: 3 };
+      cardWith(input, {
+        action: "generic",
+        object_kind: "other",
+        source: "generic",
+        arguments: viewOf(input),
+        warnings: ["arguments_truncated"],
+      });
+
+      const view = screen.getByTestId("tool-argument-view");
+      const box = view.closest(SCROLL_BOX)!;
+      expect(box).toHaveClass("max-h-48", "focus-ring-inset");
+      expect(box).toHaveAttribute("tabindex", "0");
+      expect(box).toHaveAccessibleName("Scrollable arguments of this call");
+      for (const note of [
+        screen.getByTestId("tool-call-hidden-characters"),
+        screen.getByText(/Some arguments are not shown here/),
+      ]) {
+        expect(comesBefore(note, box)).toBe(true);
+      }
+      expect(screen.getByTestId("tool-argument-text")).toHaveAttribute(
+        "tabindex",
+        "0",
+      );
+      const description = document.querySelector(
+        '[aria-label="Scrollable tool description"]',
+      );
+      expect(description).toHaveAttribute("tabindex", "0");
+    });
+
+    it("keeps a generic card's notes above raw arguments when it has no readable view", () => {
+      const input = { note: "Hello\u200B" };
+      cardWith(input, {
+        action: "generic",
+        object_kind: "other",
+        source: "generic",
+        warnings: ["hidden_characters"],
+      });
+
+      const note = screen.getByTestId("tool-call-hidden-characters");
+      const box = screen.getByRole("group", {
+        name: "Scrollable arguments of this call",
+      });
+      expect(comesBefore(note, box)).toBe(true);
     });
   });
 

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/ToolCall";
 import { toolCallCardOf } from "@/lib/toolCallGist/gist";
 import { gistAskLineSlots } from "@/lib/toolCallGist/gistLabels";
+import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 import { isRecord } from "@/lib/toolCallGist/serverText";
 
 import { ComputerIcon, ResolvedIcon } from "../icons";
@@ -25,6 +26,7 @@ import type {
   ToolDisplayMetadata,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ToolCallCard, ToolCallCardNotes } from "@/lib/toolCallGist/gist";
+import type { ReactNode } from "react";
 
 interface ApprovalReferentProps {
   toolName: string;
@@ -83,7 +85,7 @@ const showsRawInput = (card: ToolCallCard) =>
   (card.kind === "gist" && card.rest.kind === "raw");
 
 const TruncatedArgumentsNote = () => (
-  <Alert type="info" role="none" className="mt-2">
+  <Alert type="info" role="none">
     {t({
       id: "toolArguments.truncated",
       message:
@@ -102,7 +104,6 @@ const CardNotes = ({ notes }: { notes: ToolCallCardNotes }) => (
       <Alert
         type="warning"
         role="none"
-        className="mt-2"
         data-testid="tool-call-hidden-characters"
       >
         {t({
@@ -113,12 +114,7 @@ const CardNotes = ({ notes }: { notes: ToolCallCardNotes }) => (
       </Alert>
     )}
     {notes.leavesOutConsent && (
-      <Alert
-        type="info"
-        role="none"
-        className="mt-2"
-        data-testid="tool-call-consent-left-out"
-      >
+      <Alert type="info" role="none" data-testid="tool-call-consent-left-out">
         {t({
           id: "toolGist.note.consentLeftOut",
           message:
@@ -133,7 +129,16 @@ type ResolvedReferentProps = Omit<ApprovalReferentProps, "display"> & {
   display: ToolDisplayMetadata | null;
 };
 
-/** Today's referent: the tool heading and the raw input. */
+const ArgumentsScrollBox = ({ children }: { children: ReactNode }) => (
+  <div
+    {...scrollBoxProps("arguments")}
+    className={clsx(SCROLL_BOX_CLASS, "max-h-48")}
+  >
+    {children}
+  </div>
+);
+
+/** Today's referent: the tool heading, any `notes`, and the raw input. */
 const RawReferent = ({
   toolName,
   display,
@@ -142,7 +147,8 @@ const RawReferent = ({
   isClientTool,
   titleClassName,
   className,
-}: ResolvedReferentProps) => (
+  notes,
+}: ResolvedReferentProps & { notes?: ReactNode }) => (
   <>
     <ApprovalToolHeading
       className={className}
@@ -152,8 +158,11 @@ const RawReferent = ({
       source={referentSource(display, serverId, isClientTool)}
       titleClassName={titleClassName}
     />
-    <div className="mt-2 max-h-48 overflow-y-auto">
-      <ToolCallInput input={input} />
+    <div className="mt-2 space-y-2">
+      {notes}
+      <ArgumentsScrollBox>
+        <ToolCallInput input={input} />
+      </ArgumentsScrollBox>
     </div>
   </>
 );
@@ -188,33 +197,58 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
             {referentSource(display, serverId, isClientTool)}
           </span>
         </div>
-        <ToolCallGist gist={card.gist} phase="ask" />
-        {rest.kind === "raw" ? (
-          <div className="max-h-48 overflow-y-auto">
-            <ToolCallInput input={input} />
-          </div>
-        ) : (
-          rest.view && (
-            <div className="space-y-1" data-testid="tool-call-other-arguments">
-              <p className="text-xs text-theme-fg-muted">
-                {t({
-                  id: "toolGist.otherArguments",
-                  message: "Other arguments",
-                })}
-              </p>
-              <div className="max-h-48 overflow-y-auto">
-                <ToolArgumentView
-                  view={rest.view}
-                  values={rest.values}
-                  compact
-                  data-testid="tool-call-other-arguments-view"
-                />
+        <ToolCallGist
+          gist={card.gist}
+          phase="ask"
+          notes={
+            <>
+              <CardNotes notes={card.notes} />
+              {rest.kind === "view" && rest.truncated && (
+                <TruncatedArgumentsNote />
+              )}
+              {(rest.kind === "raw" || rest.view) && (
+                <p
+                  className="text-xs text-theme-fg-muted"
+                  data-testid="tool-call-other-arguments-note"
+                >
+                  {t({
+                    id: "toolGist.note.otherArguments",
+                    message:
+                      "This call's other arguments are at the end of the list below.",
+                  })}
+                </p>
+              )}
+            </>
+          }
+        >
+          {rest.kind === "raw" ? (
+            <ArgumentsScrollBox>
+              <ToolCallInput input={input} />
+            </ArgumentsScrollBox>
+          ) : (
+            rest.view && (
+              <div
+                className="space-y-1"
+                data-testid="tool-call-other-arguments"
+              >
+                <p className="text-xs text-theme-fg-muted">
+                  {t({
+                    id: "toolGist.otherArguments",
+                    message: "Other arguments",
+                  })}
+                </p>
+                <ArgumentsScrollBox>
+                  <ToolArgumentView
+                    view={rest.view}
+                    values={rest.values}
+                    compact
+                    data-testid="tool-call-other-arguments-view"
+                  />
+                </ArgumentsScrollBox>
               </div>
-            </div>
-          )
-        )}
-        {rest.kind === "view" && rest.truncated && <TruncatedArgumentsNote />}
-        <CardNotes notes={card.notes} />
+            )
+          )}
+        </ToolCallGist>
       </div>
     );
   }
@@ -230,19 +264,21 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           source={referentSource(display, serverId, isClientTool)}
           titleClassName={props.titleClassName}
         />
-        <div className="mt-2 max-h-48 overflow-y-auto">
-          <ToolArgumentView view={card.view} values={card.values} />
+        <div className="mt-2 space-y-2">
+          <CardNotes notes={card.notes} />
+          {card.truncated && <TruncatedArgumentsNote />}
+          <ArgumentsScrollBox>
+            <ToolArgumentView view={card.view} values={card.values} />
+          </ArgumentsScrollBox>
         </div>
-        {card.truncated && <TruncatedArgumentsNote />}
-        <CardNotes notes={card.notes} />
       </>
     );
   }
   return (
-    <>
-      <RawReferent {...props} />
-      {card.kind === "generic" && <CardNotes notes={card.notes} />}
-    </>
+    <RawReferent
+      {...props}
+      notes={card.kind === "generic" && <CardNotes notes={card.notes} />}
+    />
   );
 };
 

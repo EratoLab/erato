@@ -11,6 +11,7 @@ import {
   gistLineSentence,
   gistWarningLabel,
 } from "@/lib/toolCallGist/gistLabels";
+import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 
 import type {
   Gist,
@@ -20,6 +21,7 @@ import type {
   GistPhase,
   GistValue,
 } from "@/lib/toolCallGist/gist";
+import type { ReactNode } from "react";
 
 const ISOLATED = "[unicode-bidi:isolate]";
 
@@ -267,12 +269,20 @@ const FieldList = ({
           >
             {field.name}
           </dt>
-          <dd className="max-h-24 min-w-0 overflow-y-auto break-words text-theme-fg-primary [overflow-wrap:anywhere]">
-            <FieldValues
-              values={field.values}
-              omitted={field.omitted}
-              wholeId={wholeId}
-            />
+          <dd className="min-w-0">
+            <div
+              {...scrollBoxProps("value")}
+              className={clsx(
+                SCROLL_BOX_CLASS,
+                "max-h-24 break-words text-theme-fg-primary [overflow-wrap:anywhere]",
+              )}
+            >
+              <FieldValues
+                values={field.values}
+                omitted={field.omitted}
+                wholeId={wholeId}
+              />
+            </div>
           </dd>
         </Fragment>
       ))}
@@ -292,7 +302,13 @@ const BatchRows = ({
   <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
     {rows.map(({ name, fields }, index) => (
       <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
-        <div className="max-h-24 overflow-y-auto text-sm text-theme-fg-primary">
+        <div
+          {...scrollBoxProps("value")}
+          className={clsx(
+            SCROLL_BOX_CLASS,
+            "max-h-24 text-sm text-theme-fg-primary",
+          )}
+        >
           <GistValueText value={name} showWritten={onCard} wholeId={onCard} />
         </div>
         {fields.length > 0 && (
@@ -322,8 +338,10 @@ const TextBlock = ({
       <p
         key={index}
         dir="auto"
+        {...scrollBoxProps("value")}
         className={clsx(
-          "max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-xs [overflow-wrap:anywhere]",
+          SCROLL_BOX_CLASS,
+          "max-h-32 whitespace-pre-wrap break-words text-xs [overflow-wrap:anywhere]",
           ISOLATED,
           className,
         )}
@@ -401,39 +419,57 @@ export const ToolCallGistValues = ({
 };
 
 /**
- * The gist a card shows before approval: each item's line and values, and
- * the warnings the values the call writes call for. Values show whole, so a
- * long line, field value or row scrolls in a box of its own and the buttons
- * below stay in view.
+ * The gist a card shows before approval: the warnings its values call for
+ * and the card's `notes` first, then each item's line and values and what
+ * else the card lists (`children`) in one bounded box. Values show whole, so
+ * a long line, field value or row also scrolls in a box of its own; however
+ * long a batch, what the card warns about stays on top and the buttons below
+ * stay close.
  */
 export const ToolCallGist = ({
   gist,
   phase,
+  notes,
+  children,
 }: {
   gist: Gist;
   phase: GistPhase;
+  notes?: ReactNode;
+  children?: ReactNode;
 }) => (
   <div className="space-y-2" data-testid="tool-call-gist">
-    {gist.items.map((item, index) => (
-      <div key={index} className="space-y-1">
-        <p
-          className="max-h-32 overflow-y-auto break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
-          data-testid="tool-call-gist-line"
-        >
-          <ToolCallGistLine
-            gist={gist}
-            item={item}
-            phase={phase}
-            variant="card"
-          />
-        </p>
-        <ToolCallGistValues item={item} variant="card" />
-      </div>
-    ))}
     {gist.warnings.map((warning) => (
       <Alert key={warning} type="warning" role="none">
         {gistWarningLabel(warning)}
       </Alert>
     ))}
+    {notes}
+    <div
+      {...scrollBoxProps("card")}
+      className={clsx(SCROLL_BOX_CLASS, "max-h-[50vh] min-w-0 space-y-2")}
+      data-testid="tool-call-gist-scroll"
+    >
+      {gist.items.map((item, index) => (
+        <div key={index} className="space-y-1">
+          <p
+            {...scrollBoxProps("line")}
+            className={clsx(
+              SCROLL_BOX_CLASS,
+              "max-h-32 break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]",
+            )}
+            data-testid="tool-call-gist-line"
+          >
+            <ToolCallGistLine
+              gist={gist}
+              item={item}
+              phase={phase}
+              variant="card"
+            />
+          </p>
+          <ToolCallGistValues item={item} variant="card" />
+        </div>
+      ))}
+      {children}
+    </div>
   </div>
 );

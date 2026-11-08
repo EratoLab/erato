@@ -133,14 +133,17 @@ pub fn is_invisible_format_char(c: char) -> bool {
 }
 
 const ZERO_WIDTH_JOINER: char = '\u{200D}';
+const COMBINING_ENCLOSING_KEYCAP: char = '\u{20E3}';
 
 /// Each character of `text` with whether it is an invisible character that MCP
 /// tool text is stripped of and an MCP server display name, shown next to that
 /// text, may not hold. Two of them are ordinary emoji text where they sit:
 ///
 /// - a text or emoji presentation selector (U+FE0E, U+FE0F) directly after a
-///   character with the Unicode `Emoji` property, as in "❤️" or "1️⃣", or after
-///   a skin tone (U+1F3FB–U+1F3FF) that follows one;
+///   character with the Unicode `Emoji` property, as in "❤️", or after a
+///   skin tone (U+1F3FB–U+1F3FF) that follows one. 0-9, `#` and `*` have that
+///   property too, but only a U+FE0F with U+20E3 right after it stays on one,
+///   as in "1️⃣";
 /// - a zero-width joiner between two `Extended_Pictographic` characters, the
 ///   first one optionally followed by a kept U+FE0F or a skin tone, as in
 ///   "👨‍👩‍👧" or "🏳️‍🌈".
@@ -176,7 +179,7 @@ fn is_hidden_at(
         return false;
     }
     match c {
-        '\u{FE0E}' | '\u{FE0F}' => !selector_styles_emoji(two_back, previous),
+        '\u{FE0E}' | '\u{FE0F}' => !selector_styles_emoji(two_back, previous, c, next),
         ZERO_WIDTH_JOINER => {
             !(joiner_follows_emoji(two_back, previous)
                 && next.is_some_and(is_extended_pictographic))
@@ -188,12 +191,28 @@ fn is_hidden_at(
     }
 }
 
-fn selector_styles_emoji(two_back: Option<char>, previous: Option<char>) -> bool {
+fn selector_styles_emoji(
+    two_back: Option<char>,
+    previous: Option<char>,
+    selector: char,
+    next: Option<char>,
+) -> bool {
     match previous {
-        Some(modifier) if is_emoji_modifier(modifier) => two_back.is_some_and(is_emoji),
+        Some(modifier) if is_emoji_modifier(modifier) => {
+            two_back.is_some_and(|base| is_emoji(base) && !is_keycap_base(base))
+        }
+        // Plain text unless it starts a keycap: a selector on one would let
+        // two IDs differ by a mark nobody sees.
+        Some(base) if is_keycap_base(base) => {
+            selector == '\u{FE0F}' && next == Some(COMBINING_ENCLOSING_KEYCAP)
+        }
         Some(previous) => is_emoji(previous),
         None => false,
     }
+}
+
+fn is_keycap_base(c: char) -> bool {
+    matches!(c, '0'..='9' | '#' | '*')
 }
 
 /// A U+FE0F after a pictograph is kept exactly when the pictograph is `Emoji`.

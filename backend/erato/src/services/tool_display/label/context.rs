@@ -19,6 +19,7 @@ use serde_json::{Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::sync::Arc;
+use unicode_normalization::UnicodeNormalization;
 
 /// Records kept for one turn; the ones seen least recently go first.
 pub const MAX_RECORDS: usize = 500;
@@ -544,16 +545,17 @@ fn result_server(tool: &ToolUse) -> Option<&str> {
         .filter(|name| !name.is_empty())
 }
 
-/// IDs the index never holds. Digits: every table numbers its own records,
-/// so `7` could be anything. Addresses, phone numbers and links: a call
-/// writing one must show it as written, never as a name a result gave it.
+/// IDs the index never holds. Digits, of any script: every table numbers its
+/// own records, so `7` could be anything. Addresses, phone numbers and links:
+/// a call writing one must show it as written, never as a name a result gave
+/// it.
 fn indexable(id: &str) -> bool {
     const LINK_PREFIXES: [&str; 6] = ["mailto:", "tel:", "sms:", "data:", "javascript:", "www."];
     let link_prefix = |prefix: &&str| {
         id.get(..prefix.len())
             .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
     };
-    !id.bytes().all(|byte| byte.is_ascii_digit())
+    !id.nfkc().all(char::is_numeric)
         && !is_phone_shaped(id)
         && !id.contains('@')
         && !id.contains("://")

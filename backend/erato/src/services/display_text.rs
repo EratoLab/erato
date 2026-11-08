@@ -329,6 +329,8 @@ mod tests {
             "\u{2764}\u{FE0E} as text",
             "Sunny \u{2600}\u{FE0F}, 25\u{00B0}C",
             "Press 1\u{FE0F}\u{20E3} or #\u{FE0F}\u{20E3}",
+            "1\u{FE0F}\u{20E3}",
+            "*\u{FE0F}\u{20E3}",
             "\u{263A}\u{FE0F}\u{2764}\u{FE0F}",
             "\u{1F44D}\u{1F3FD} done",
             "\u{1F44D}\u{1F3FD}\u{FE0F}",
@@ -362,6 +364,14 @@ mod tests {
             // A skin tone styles nothing after a letter, so neither does a
             // selector after it.
             ("a\u{1F3FD}\u{FE0F}", "a\u{1F3FD}"),
+            // A digit, # or * is plain text unless a keycap mark follows it.
+            ("p_1\u{FE0F}", "p_1"),
+            ("1\u{FE0F}x", "1x"),
+            ("p_1\u{FE0E}", "p_1"),
+            ("#\u{FE0F}", "#"),
+            ("INV-1\u{FE0F}2\u{FE0E}3", "INV-123"),
+            ("1\u{FE0E}\u{20E3}", "1\u{20E3}"),
+            ("1\u{1F3FD}\u{FE0F}", "1\u{1F3FD}"),
             ("a\u{200D}b", "ab"),
             ("\u{1F468}\u{200D}", "\u{1F468}"),
             ("\u{1F468}\u{200D}a", "\u{1F468}a"),

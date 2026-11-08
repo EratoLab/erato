@@ -8731,6 +8731,11 @@ msgstr "Einige Werte in diesem Aufruf enthalten versteckte Zeichen, die hier ent
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.otherArguments"
+msgstr "Die weiteren Argumente dieses Aufrufs stehen am Ende der Liste unten."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Weitere Argumente"
 
@@ -8873,6 +8878,31 @@ msgstr "ein Termin"
 #: src/lib/toolCallGist/ownProposalLabels.ts
 msgid "toolGist.proposal.failed"
 msgstr "Nicht vorgeschlagen: {what}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.arguments"
+msgstr "Scrollbare Argumente dieses Aufrufs"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.card"
+msgstr "Scrollbare Details dieses Aufrufs"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.description"
+msgstr "Scrollbare Tool-Beschreibung"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.line"
+msgstr "Scrollbare Zusammenfassung dieses Aufrufs"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/scrollBox.ts
+msgid "toolGist.scrollBox.value"
+msgstr "Scrollbarer Wert"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
