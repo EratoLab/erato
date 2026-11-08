@@ -39,6 +39,12 @@ export interface SidebarNavigationItemProps {
   /** Selected, non-interactive presentation for the page currently shown. */
   active?: boolean;
   isSlimMode?: boolean;
+  /**
+   * Why the row needs attention, shown as a warning dot on the icon. The dot is
+   * visual only, so the reason joins the accessible name and the slim-mode
+   * tooltip.
+   */
+  warning?: string;
   /** Test/theme hook on the row container. */
   "data-ui"?: string;
 }
@@ -59,6 +65,7 @@ export const SidebarNavigationItem = ({
   href,
   active = false,
   isSlimMode = false,
+  warning,
   "data-ui": dataUi,
 }: SidebarNavigationItemProps) => {
   const labelNode = (
@@ -74,7 +81,8 @@ export const SidebarNavigationItem = ({
 
   // `active` wins over `href`: the current page gets no link at all.
   const isLink = !active && href != null;
-  const tooltip = isSlimMode ? label : undefined;
+  const accessibleName = warning ? `${label}, ${warning}` : label;
+  const tooltip = isSlimMode ? accessibleName : undefined;
 
   const row = (
     <Row
@@ -91,12 +99,24 @@ export const SidebarNavigationItem = ({
       className={sidebarNavigationRowClassName}
       // In the linked branch the <a> is what focus lands on, so it carries the
       // name and the slim-mode tooltip and the row would only repeat them.
-      aria-label={isLink ? undefined : label}
+      aria-label={isLink ? undefined : accessibleName}
       title={isLink ? undefined : tooltip}
       onClick={active || isLink ? undefined : () => onClick?.()}
       data-ui={dataUi}
     >
-      {icon}
+      {warning ? (
+        // The dot sits on the icon so it stays visible in slim mode.
+        <span className="relative flex shrink-0">
+          {icon}
+          <span
+            aria-hidden="true"
+            className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-theme-warning-fg ring-2 ring-theme-bg-sidebar"
+            data-testid="sidebar-navigation-warning"
+          />
+        </span>
+      ) : (
+        icon
+      )}
       {labelNode}
     </Row>
   );
@@ -116,7 +136,7 @@ export const SidebarNavigationItem = ({
             onClick?.();
           }}
           className={sidebarLinkClassName}
-          aria-label={label}
+          aria-label={accessibleName}
           title={tooltip}
         >
           {row}

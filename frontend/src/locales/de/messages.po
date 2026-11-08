@@ -7218,6 +7218,11 @@ msgstr "Geplante Einträge werden geladen..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.failed"
+msgstr "etwas konnte nicht ausgeführt werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "scheduled.navigation.label"
 msgstr "Geplant"
 

@@ -7218,6 +7218,11 @@ msgstr "Loading scheduled items..."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.failed"
+msgstr "something could not be carried out"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
 msgid "scheduled.navigation.label"
 msgstr "Scheduled"
 

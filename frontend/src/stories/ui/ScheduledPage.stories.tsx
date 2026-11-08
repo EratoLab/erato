@@ -1,15 +1,23 @@
 import { action } from "@storybook/addon-actions";
 import { userEvent, within } from "@storybook/test";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { ChatHistorySidebar } from "@/components/ui";
 import {
   createScheduledItemFixtures,
   SCHEDULED_TEMPLATE_FIXTURES,
 } from "@/components/ui/Scheduled/scheduledFixtures";
+import { listScheduledItemsQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ScheduledPageView } from "@/pages/ScheduledPage";
 import { FeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
+import type {
+  ScheduledItem,
+  ScheduledItemsResponse,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Meta, StoryObj } from "@storybook/react";
+import type { ReactNode } from "react";
 
 const meta = {
   title: "Pages/Scheduled",
@@ -169,20 +177,81 @@ export const LoadError: Story = {
   args: { items: [], error: new Error("Network error") },
 };
 
+const SidebarPreview = () => (
+  <FeatureConfigProvider
+    config={{ scheduled: { enabled: true }, assistants: { enabled: true } }}
+  >
+    <ChatHistorySidebar
+      sessions={[]}
+      currentSessionId=""
+      onSessionSelect={action("Session selected")}
+      onSessionArchive={action("Session archived")}
+      onSessionUnarchive={action("Session unarchived")}
+      isLoading={false}
+    />
+  </FeatureConfigProvider>
+);
+
 /** The sidebar entry, after Assistants, with the Scheduled flag on. */
 export const SidebarEntry: Story = {
+  render: () => <SidebarPreview />,
+};
+
+const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+const failedItem: ScheduledItem = {
+  id: "fixture-failed",
+  type: "reminder",
+  name: "Call back about the delivery date",
+  message: "",
+  trigger: { kind: "once", date: yesterday.slice(0, 10), time: "09:00" },
+  time_zone: "Europe/Berlin",
+  status: "failed",
+  occurrence_count: 1,
+  channel: "teams_personal",
+  channel_status: "connected",
+  last_delivery: {
+    due: { at: yesterday, local: yesterday.slice(0, 19) },
+    outcome: "failed",
+  },
+  created_at: yesterday,
+  updated_at: yesterday,
+};
+
+const listOf = (items: ScheduledItem[]): ScheduledItemsResponse => ({
+  items,
+  upcoming_count: 0,
+  past_count: items.length,
+  time_zone: "Europe/Berlin",
+  time_zone_source: "user",
+  channels: [{ channel: "teams_personal", status: "connected" }],
+  max_upcoming: 10,
+});
+
+/** Seeds the page's two lists, which the sidebar entry reads too. */
+const SeedFailedDelivery = ({ children }: { children: ReactNode }) => {
+  const queryClient = useQueryClient();
+  useState(() => {
+    queryClient.setQueryData(
+      listScheduledItemsQuery({ queryParams: { tab: "upcoming" } }).queryKey,
+      listOf([]),
+    );
+    queryClient.setQueryData(
+      listScheduledItemsQuery({ queryParams: { tab: "past" } }).queryKey,
+      listOf([failedItem]),
+    );
+  });
+  return <>{children}</>;
+};
+
+/**
+ * A delivery failed yesterday: the entry carries the warning dot for as long
+ * as the page shows its failure alert.
+ */
+export const SidebarEntryWithFailure: Story = {
   render: () => (
-    <FeatureConfigProvider
-      config={{ scheduled: { enabled: true }, assistants: { enabled: true } }}
-    >
-      <ChatHistorySidebar
-        sessions={[]}
-        currentSessionId=""
-        onSessionSelect={action("Session selected")}
-        onSessionArchive={action("Session archived")}
-        onSessionUnarchive={action("Session unarchived")}
-        isLoading={false}
-      />
-    </FeatureConfigProvider>
+    <SeedFailedDelivery>
+      <SidebarPreview />
+    </SeedFailedDelivery>
   ),
 };

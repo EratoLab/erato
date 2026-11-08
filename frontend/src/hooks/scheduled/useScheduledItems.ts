@@ -9,6 +9,7 @@ import {
   scheduledRefusalCode,
   scheduledRefusalMessage,
 } from "@/components/ui/Scheduled/scheduledApi";
+import { scheduledFailureAlertItems } from "@/components/ui/Scheduled/scheduledItems";
 import { snoozeUntil } from "@/components/ui/Scheduled/scheduledTime";
 import { usePageErrorToast } from "@/components/ui/Toast/usePageErrorToast";
 import {
@@ -24,6 +25,7 @@ import type {
   ScheduledItem,
   ScheduledTemplate,
 } from "@/components/ui/Scheduled/scheduledItems";
+import type { ScheduledItemsResponse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 export interface ScheduledItemsState {
   /** Both tabs' items; each carries the tab the API listed it under. */
@@ -40,6 +42,18 @@ export interface ScheduledItemsState {
   snooze: (item: ScheduledItem) => void;
   cancel: (item: ScheduledItem) => void;
   remove: (item: ScheduledItem) => void;
+}
+
+function bothTabs(
+  upcoming: ScheduledItemsResponse | undefined,
+  past: ScheduledItemsResponse | undefined,
+): ScheduledItem[] {
+  return [
+    ...(upcoming?.items ?? []).map((item) =>
+      scheduledItemFromApi(item, "upcoming"),
+    ),
+    ...(past?.items ?? []).map((item) => scheduledItemFromApi(item, "past")),
+  ];
 }
 
 const asError = (error: unknown): Error | null =>
@@ -91,14 +105,7 @@ export function useScheduledItems(): ScheduledItemsState {
   const timeZone = latest?.time_zone;
 
   const items = useMemo(
-    () => [
-      ...(upcoming.data?.items ?? []).map((item) =>
-        scheduledItemFromApi(item, "upcoming"),
-      ),
-      ...(past.data?.items ?? []).map((item) =>
-        scheduledItemFromApi(item, "past"),
-      ),
-    ],
+    () => bothTabs(upcoming.data, past.data),
     [upcoming.data, past.data],
   );
 
@@ -179,6 +186,25 @@ export function useScheduledItems(): ScheduledItemsState {
     cancel,
     remove,
   };
+}
+
+/**
+ * Whether the Scheduled page shows its failure alert, for the warning dot on
+ * the sidebar entry. It reads the page's own two lists from the shared cache
+ * and the same condition, so the dot and the alert always agree; a list that
+ * failed to load shows the page's load error instead, so no dot either.
+ */
+export function useScheduledFailureAlertShown(): boolean {
+  const upcoming = useListScheduledItems({ queryParams: { tab: "upcoming" } });
+  const past = useListScheduledItems({ queryParams: { tab: "past" } });
+  const failed = upcoming.error != null || past.error != null;
+  return useMemo(
+    () =>
+      !failed &&
+      scheduledFailureAlertItems(bothTabs(upcoming.data, past.data), new Date())
+        .length > 0,
+    [failed, upcoming.data, past.data],
+  );
 }
 
 const NO_TEMPLATES: ScheduledTemplate[] = [];
