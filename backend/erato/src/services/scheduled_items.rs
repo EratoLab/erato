@@ -707,6 +707,11 @@ pub async fn get(
     Ok(views(db, user_id, vec![item]).await?.pop())
 }
 
+/// Whether an item with this id exists, whoever's it is.
+pub async fn exists(db: &DatabaseConnection, item_id: Uuid) -> Result<bool, Report> {
+    Ok(ScheduledItems::find_by_id(item_id).one(db).await?.is_some())
+}
+
 /// How many upcoming and past items the user has.
 pub async fn counts(db: &DatabaseConnection, user_id: Uuid) -> Result<(u64, u64), Report> {
     #[derive(FromQueryResult)]

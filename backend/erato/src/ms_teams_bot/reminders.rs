@@ -10,10 +10,10 @@
 use super::cards;
 use super::host::Host;
 use super::render;
-use crate::db::entity::scheduled_items::{ItemStatus, Model as ScheduledItem};
+use crate::db::entity::scheduled_items::Model as ScheduledItem;
 use crate::models::user_preference::user_time_zone;
 use crate::services::scheduled_items::chat_tools::{CREATE_REMINDER, Confirmation};
-use crate::services::scheduled_items::{self, Checked};
+use crate::services::scheduled_items::{self, Checked, DisplayStatus};
 use crate::services::text_language::Lang;
 use chrono::Utc;
 use eyre::Report;
@@ -122,19 +122,24 @@ pub fn created_reminders(content: &[crate::models::message::ContentPart]) -> Vec
 
 impl Host {
     /// The confirmation of one of the user's reminders, from what is stored
-    /// now; `None` when it is not theirs or no longer exists.
+    /// now, with the status the Scheduled page shows; `None` when it is not
+    /// theirs or no longer exists.
     pub async fn reminder_confirmation(
         &self,
         user_id: Uuid,
         item_id: Uuid,
         lang: Lang,
-    ) -> Result<Option<Confirmation>, Report> {
+    ) -> Result<Option<(Confirmation, DisplayStatus)>, Report> {
         let db = &self.app_state.db;
         let Some(view) = scheduled_items::get(db, user_id, item_id).await? else {
             return Ok(None);
         };
         let user_zone = user_time_zone(db, &user_id).await?;
-        Ok(Some(Confirmation::of(&view, user_zone, Utc::now(), lang)?))
+        let now = Utc::now();
+        Ok(Some((
+            Confirmation::of(&view, user_zone, now, lang)?,
+            scheduled_items::display_status(&view, now),
+        )))
     }
 
     /// The shared cancel, for the user's own reminder only.
@@ -142,14 +147,20 @@ impl Host {
         scheduled_items::cancel_checked(&self.app_state, user_id, item_id).await
     }
 
+    /// The status the Scheduled page shows for one of the user's reminders.
     pub async fn reminder_status(
         &self,
         user_id: Uuid,
         item_id: Uuid,
-    ) -> Result<Option<ItemStatus>, Report> {
+    ) -> Result<Option<DisplayStatus>, Report> {
         Ok(scheduled_items::get(&self.app_state.db, user_id, item_id)
             .await?
-            .map(|view| view.item.status))
+            .map(|view| scheduled_items::display_status(&view, Utc::now())))
+    }
+
+    /// Whether the reminder exists, whoever's it is.
+    pub async fn reminder_exists(&self, item_id: Uuid) -> Result<bool, Report> {
+        scheduled_items::exists(&self.app_state.db, item_id).await
     }
 }
 

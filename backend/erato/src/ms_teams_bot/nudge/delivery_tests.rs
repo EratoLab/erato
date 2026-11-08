@@ -30,7 +30,6 @@ use crate::services::scheduled_items::{
     self, ItemInput, ItemRequest, REMINDER, ReminderProducer, ScheduledItemErrorCode,
     ScheduledItemType, current_occurrence,
 };
-
 use crate::services::text_language::Lang;
 use crate::state::AppState;
 use axum::{
@@ -1142,11 +1141,12 @@ fn cancel_data(activity: &Value) -> Value {
 }
 
 /// After the answer, the card confirms the stored reminder with Cancel and
-/// Open in Scheduled. Someone else's press changes nothing; the owner's
-/// cancels through the shared cancel and replaces the card in place, which
-/// keeps the link to the Scheduled page. Once a reminder happened, Cancel
-/// says so and points to the Scheduled page. No token is involved, so the
-/// button has no expiry.
+/// Open in Scheduled. Someone else's press changes nothing and is told whose
+/// reminder it is; the owner's cancels through the shared cancel and
+/// replaces the card in place, which keeps the link to the Scheduled page.
+/// Once a reminder happened, Cancel says so and points to the Scheduled
+/// page, and once it was deleted, that it no longer exists. No token is
+/// involved, so the button has no expiry.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -1194,7 +1194,10 @@ async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(po
     )
     .await;
     let sent = replies(&shared, 2).await;
-    assert_eq!(sent[1]["text"], "This reminder no longer exists.");
+    assert_eq!(
+        sent[1]["text"],
+        "Only the person who scheduled this reminder can cancel it."
+    );
     assert!(shared.lock().unwrap().updated.is_empty());
     let upcoming = scheduled_items::get(&state.db, user.id, item.id)
         .await
@@ -1292,6 +1295,119 @@ async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(po
         ItemStatus::Ended,
         "nothing was cancelled"
     );
+
+    scheduled_items::delete(&state.db, user.id, happened.id)
+        .await
+        .unwrap()
+        .unwrap();
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OID, "activity-1", cancel_data(&second_card)),
+    )
+    .await;
+    let sent = replies(&shared, 5).await;
+    assert_eq!(sent[4]["text"], "This reminder no longer exists.");
+}
+
+/// A reminder the same turn created and then cancelled is confirmed as
+/// cancelled, without Cancel, as the web card shows it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_cancelled_in_the_same_turn_is_confirmed_as_cancelled(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    let (user, item) = confirmed_reminder(
+        &state,
+        &host,
+        &base,
+        "changed-mind",
+        "4a1b3c5d-0000-4000-8000-0000000c4a9d",
+        None,
+    )
+    .await;
+    scheduled_items::cancel(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    let texts = card_texts(&card);
+    assert_eq!(texts[1], "Follow up on the offer");
+    assert_eq!(texts.last().unwrap(), "This reminder was cancelled.");
+    assert_eq!(buttons(&card), ["Open in Scheduled"]);
+}
+
+/// Cancel on the card of a reminder whose delivery failed for good says it
+/// was not delivered, as the Scheduled page shows it as failed, both before
+/// and after the producer's next tick ends it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_after_a_failed_delivery_says_it_was_not_delivered(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-0000000fa11e";
+    let (user, item) = confirmed_reminder(&state, &host, &base, "undelivered", OID, None).await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    shared.lock().unwrap().answer = Some((
+        403,
+        json!({"error": {"code": "MessageWritesBlocked", "message": "blocked"}}),
+    ));
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(&state, occurrence.id).await;
+    let registry = reminder_registry(bot.clone());
+    let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
+    assert_eq!(tick.failed, 1, "{tick:?}");
+    shared.lock().unwrap().answer = None;
+
+    for (index, ended) in [false, true].into_iter().enumerate() {
+        if ended {
+            run_delivery_tick(&state.db, &executor(), &registry).await;
+        }
+        on_message(
+            bot.clone(),
+            host.clone(),
+            press_on_card(&base, OID, "activity-1", cancel_data(&card)),
+        )
+        .await;
+        let settled = shared.lock().unwrap().updated[index].2.clone();
+        assert_eq!(
+            card_texts(&settled).last().unwrap(),
+            "This reminder could not be delivered. You can find it on the [Scheduled page](https://erato.example.com/scheduled).",
+            "ended: {ended}"
+        );
+        assert_eq!(buttons(&settled), ["Open in Scheduled"]);
+    }
+    let view = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.item.status, ItemStatus::Ended, "nothing was cancelled");
 }
 
 /// A German user gets the confirmation and the replies to Cancel in German,

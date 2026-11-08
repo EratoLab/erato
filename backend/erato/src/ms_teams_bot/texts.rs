@@ -250,6 +250,10 @@ texts! {
         "Diese Erinnerung lässt sich gerade nicht ändern.";
     ReminderAlreadyHappened => "This reminder already happened. You can find it on the {page}.",
         "Diese Erinnerung hat bereits stattgefunden. Sie finden sie auf der Seite {page}.";
+    ReminderNotDelivered => "This reminder could not be delivered. You can find it on the {page}.",
+        "Diese Erinnerung konnte nicht zugestellt werden. Sie finden sie auf der Seite {page}.";
+    ReminderNotYours => "Only the person who scheduled this reminder can cancel it.",
+        "Nur die Person, die diese Erinnerung geplant hat, kann sie abbrechen.";
 }
 
 impl Msg {
