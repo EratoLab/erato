@@ -281,7 +281,7 @@ describe("DropdownMenu", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
-  it("labels the confirmation buttons for a row whose action is Cancel", async () => {
+  it("names the confirmation buttons by their labels for a row whose action is Cancel", async () => {
     const onCancel = vi.fn();
     render(
       <DropdownMenu
@@ -303,10 +303,10 @@ describe("DropdownMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Cancel" }));
 
-    const keep = await screen.findByRole("button", { name: "Cancel action" });
-    const confirm = screen.getByRole("button", { name: "Confirm action" });
-    expect(keep).toHaveTextContent("Keep it");
-    expect(confirm).toHaveTextContent("Cancel it");
+    expect(
+      await screen.findByRole("button", { name: "Keep it" }),
+    ).toBeInTheDocument();
+    const confirm = screen.getByRole("button", { name: "Cancel it" });
     expect(onCancel).not.toHaveBeenCalled();
 
     fireEvent.click(confirm);

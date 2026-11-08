@@ -85,6 +85,21 @@ export const handlers = [
     return HttpResponse.json(response);
   }),
 
+  // The profile provider reports the browser's zone and language here.
+  http.put("/api/v1beta/me/profile/preferences", async ({ request }) => {
+    const update =
+      (await request.json()) as Schemas.UpdateProfilePreferencesRequest;
+    const response: Schemas.UserProfile = {
+      id: "user123",
+      preferred_language: "en",
+      groups: [],
+      organization_group_ids: [],
+      preference_time_zone: update.preference_time_zone,
+      preference_language: update.preference_language,
+    };
+    return HttpResponse.json(response);
+  }),
+
   // Mock GET /api/v1beta/me/recent_chats
   http.get("/api/v1beta/me/recent_chats", () => {
     const response: Schemas.RecentChatsResponse = {

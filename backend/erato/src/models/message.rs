@@ -679,9 +679,9 @@ pub enum ToolCallLabelSource {
 pub enum ToolCallLabelWarning {
     /// The readable arguments leave some out; the raw input has them all.
     ArgumentsTruncated,
-    /// A value or field name the label read had invisible characters (bidi
-    /// controls, zero-width, byte order mark or tag characters) removed; the
-    /// raw input still has them.
+    /// A value or field name the label read had invisible characters (such as
+    /// bidi controls or zero-width, filler, variation selector or tag
+    /// characters) removed; the raw input still has them.
     HiddenCharacters,
     /// A warning from a newer version; clients skip it.
     #[serde(other)]

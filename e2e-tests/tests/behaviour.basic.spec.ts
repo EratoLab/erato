@@ -346,8 +346,14 @@ test(
       0,
     );
 
-    await expect.poll(() => preferenceUpdates.length).toBeGreaterThan(0);
-    expect(preferenceUpdates[0]).toEqual({
+    // The app also reports the browser's time zone through this route on load,
+    // so pick the write the dialog made rather than the first one.
+    const dialogUpdate = () =>
+      preferenceUpdates.find(
+        (update) => update !== undefined && "preference_nickname" in update,
+      );
+    await expect.poll(dialogUpdate).toBeDefined();
+    expect(dialogUpdate()).toEqual({
       preference_nickname: nickname,
       preference_job_title: jobTitle,
       preference_assistant_custom_instructions: customInstructions,

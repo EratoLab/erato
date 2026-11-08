@@ -127,6 +127,7 @@ describe("FeatureConfigProvider", () => {
       msalAuthority: null,
       maskReasoningTraceText: false,
       desktopSidecarSettingsTabEnabled: false,
+      scheduledEnabled: false,
     });
   });
 
@@ -248,6 +249,9 @@ describe("FeatureConfigProvider", () => {
         },
         trace: {
           maskReasoningText: false,
+        },
+        scheduled: {
+          enabled: false,
         },
       });
     });

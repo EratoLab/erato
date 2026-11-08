@@ -209,7 +209,7 @@ describe("AssistantHubMyPage", () => {
 
     const withdraw = screen.getByRole("button", { name: "Withdraw" });
     fireEvent.click(withdraw);
-    fireEvent.click(screen.getByRole("button", { name: "Confirm action" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     await settle();
 
     expect(withdrawVersion).toHaveBeenCalledTimes(1);
