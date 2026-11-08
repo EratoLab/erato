@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { Fragment } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { gistItemLayout, listedValues } from "@/lib/toolCallGist/gist";
+import { gistItemLayout, listedValues, shortId } from "@/lib/toolCallGist/gist";
 import {
   GIST_SLOTS,
   GIST_TITLE_SLOT,
@@ -23,13 +23,51 @@ import type {
 
 const ISOLATED = "[unicode-bidi:isolate]";
 
+/** What the call writes where a name stands for it: the value, or its ID short. */
+const WrittenBeside = ({ value }: { value: GistValue }) => {
+  if (value.written === undefined) return null;
+  const written = value.writtenId
+    ? shortId(value.written)
+    : value.truncated
+      ? `${value.written}…`
+      : value.written;
+  return (
+    <span className="text-theme-fg-muted" data-testid="tool-call-gist-written">
+      {" "}
+      <span className="sr-only">
+        {t({ id: "toolGist.value.writtenAs", message: "written as" })}{" "}
+      </span>
+      <span aria-hidden="true">&lt;</span>
+      <span
+        dir="auto"
+        title={value.writtenId ? value.written : undefined}
+        className={clsx(value.writtenId && "font-mono text-[0.9em]", ISOLATED)}
+      >
+        {written}
+      </span>
+      <span aria-hidden="true">&gt;</span>
+    </span>
+  );
+};
+
 /**
  * One value as inert, direction-isolated text that shows where it came from:
  * quoted as the call wrote it, underlined when an earlier result named or
- * held it, monospace when it is an ID.
+ * held it, monospace when it is an ID. With `showWritten`, as on an approval
+ * card, a name has the value the call writes beside it, so a name from an
+ * earlier result never stands in for it.
  */
-export const GistValueText = ({ value }: { value: GistValue }) => {
-  const text = value.truncated ? `${value.text}…` : value.text;
+export const GistValueText = ({
+  value,
+  showWritten = false,
+}: {
+  value: GistValue;
+  showWritten?: boolean;
+}) => {
+  const text =
+    value.truncated && value.origin !== "resolved"
+      ? `${value.text}…`
+      : value.text;
   switch (value.origin) {
     case "written":
       return (
@@ -40,27 +78,32 @@ export const GistValueText = ({ value }: { value: GistValue }) => {
     case "resolved":
     case "earlier":
       return (
-        <span
-          dir="auto"
-          data-origin={value.origin}
-          title={
-            value.origin === "resolved"
-              ? t({
-                  id: "toolGist.value.resolved",
-                  message: "Name from an earlier result in this chat",
-                })
-              : t({
-                  id: "toolGist.value.earlier",
-                  message: "Value from an earlier result in this chat",
-                })
-          }
-          className={clsx(
-            "underline decoration-dotted underline-offset-2",
-            ISOLATED,
+        <>
+          <span
+            dir="auto"
+            data-origin={value.origin}
+            title={
+              value.origin === "resolved"
+                ? t({
+                    id: "toolGist.value.resolved",
+                    message: "Name from an earlier result in this chat",
+                  })
+                : t({
+                    id: "toolGist.value.earlier",
+                    message: "Value from an earlier result in this chat",
+                  })
+            }
+            className={clsx(
+              "underline decoration-dotted underline-offset-2",
+              ISOLATED,
+            )}
+          >
+            {text}
+          </span>
+          {showWritten && value.origin === "resolved" && (
+            <WrittenBeside value={value} />
           )}
-        >
-          {text}
-        </span>
+        </>
       );
     case "id":
       return (
@@ -85,9 +128,11 @@ const moreLabel = (more: number) =>
 const GistValueList = ({
   values,
   omitted = 0,
+  showWritten,
 }: {
   values: GistValue[];
   omitted?: number;
+  showWritten: boolean;
 }) => {
   const shown = listedValues(values);
   const more = values.length - shown.length + omitted;
@@ -96,7 +141,7 @@ const GistValueList = ({
       {shown.map((value, index) => (
         <Fragment key={index}>
           {index > 0 && ", "}
-          <GistValueText value={value} />
+          <GistValueText value={value} showWritten={showWritten} />
         </Fragment>
       ))}
       {more > 0 && (
@@ -106,7 +151,10 @@ const GistValueList = ({
   );
 };
 
-/** What one item does to what, and where, as one sentence. */
+/**
+ * What one item does to what, and where, as one sentence. Before approval a
+ * name has the value the call writes beside it.
+ */
 export const ToolCallGistLine = ({
   gist,
   item,
@@ -121,12 +169,17 @@ export const ToolCallGistLine = ({
       .split(GIST_SLOTS)
       .map((part, index) =>
         part === GIST_TITLE_SLOT ? (
-          <GistValueList key={index} values={item.names} />
+          <GistValueList
+            key={index}
+            values={item.names}
+            showWritten={phase === "ask"}
+          />
         ) : part === GIST_WHERE_SLOT ? (
           <GistValueList
             key={index}
             values={item.where}
             omitted={item.whereOmitted}
+            showWritten={phase === "ask"}
           />
         ) : (
           <Fragment key={index}>{part}</Fragment>
@@ -195,15 +248,17 @@ const FieldList = ({ fields }: { fields: GistField[] }) =>
 const BatchRows = ({
   item,
   rows,
+  showWritten,
 }: {
   item: GistItem;
   rows: GistBatchRow[];
+  showWritten: boolean;
 }) => (
   <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
     {rows.map(({ name, fields }, index) => (
       <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
         <span className="text-sm text-theme-fg-primary">
-          <GistValueText value={name} />
+          <GistValueText value={name} showWritten={showWritten} />
         </span>
         {fields.length > 0 && (
           <div className="mt-0.5 pl-3">
@@ -238,7 +293,15 @@ const TextBlock = ({
           className,
         )}
       >
-        {value.truncated ? `${value.text}…` : value.text}
+        {value.origin === "written" ? (
+          value.truncated ? (
+            `${value.text}…`
+          ) : (
+            value.text
+          )
+        ) : (
+          <GistValueText value={value} showWritten />
+        )}
       </p>
     ))}
   </>
@@ -270,7 +333,8 @@ const textChangeCount = (item: GistItem) =>
 /**
  * The values under an item's line: its key values with old → new where an
  * earlier result had the old one, a batch row by row, and on a card the text
- * it writes. A trace row counts text changes instead of repeating them.
+ * it writes and the values names stand for. A trace row counts text changes
+ * instead of repeating them.
  */
 export const ToolCallGistValues = ({
   item,
@@ -283,7 +347,9 @@ export const ToolCallGistValues = ({
   const changes = textChangeCount(item);
   return (
     <div className="space-y-2" data-testid="tool-call-gist-values">
-      {rows && <BatchRows item={item} rows={rows} />}
+      {rows && (
+        <BatchRows item={item} rows={rows} showWritten={variant === "card"} />
+      )}
       <FieldList fields={shared} />
       {variant === "card" ? (
         <TextChange item={item} />

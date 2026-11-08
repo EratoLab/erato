@@ -24,7 +24,7 @@ import type {
   ToolCallLabel,
   ToolDisplayMetadata,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { ToolCallCard } from "@/lib/toolCallGist/gist";
+import type { ToolCallCard, ToolCallCardNotes } from "@/lib/toolCallGist/gist";
 
 interface ApprovalReferentProps {
   toolName: string;
@@ -90,6 +90,43 @@ const TruncatedArgumentsNote = () => (
         "Some arguments are not shown here. Technical details has all of them.",
     })}
   </Alert>
+);
+
+/**
+ * What the card says about values it cannot show as the call wrote them:
+ * removed hidden characters, and a consent flag the call set itself.
+ */
+const CardNotes = ({ notes }: { notes: ToolCallCardNotes }) => (
+  <>
+    {notes.hiddenCharacters && (
+      <Alert
+        type="warning"
+        role="none"
+        className="mt-2"
+        data-testid="tool-call-hidden-characters"
+      >
+        {t({
+          id: "toolGist.note.hiddenCharacters",
+          message:
+            "Some values in this call contain hidden characters, which are removed here. What the call writes may differ from what you see.",
+        })}
+      </Alert>
+    )}
+    {notes.leavesOutConsent && (
+      <Alert
+        type="info"
+        role="none"
+        className="mt-2"
+        data-testid="tool-call-consent-left-out"
+      >
+        {t({
+          id: "toolGist.note.consentLeftOut",
+          message:
+            "The call set an approval value of its own, which is not shown. Only your decision on this card counts.",
+        })}
+      </Alert>
+    )}
+  </>
 );
 
 type ResolvedReferentProps = Omit<ApprovalReferentProps, "display"> & {
@@ -168,7 +205,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
               <div className="max-h-48 overflow-y-auto">
                 <ToolArgumentView
                   view={rest.view}
-                  input={input}
+                  values={rest.values}
                   compact
                   data-testid="tool-call-other-arguments-view"
                 />
@@ -177,6 +214,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           )
         )}
         {rest.kind === "view" && rest.truncated && <TruncatedArgumentsNote />}
+        <CardNotes notes={card.notes} />
       </div>
     );
   }
@@ -193,13 +231,19 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           titleClassName={props.titleClassName}
         />
         <div className="mt-2 max-h-48 overflow-y-auto">
-          <ToolArgumentView view={card.view} input={input} />
+          <ToolArgumentView view={card.view} values={card.values} />
         </div>
         {card.truncated && <TruncatedArgumentsNote />}
+        <CardNotes notes={card.notes} />
       </>
     );
   }
-  return <RawReferent {...props} />;
+  return (
+    <>
+      <RawReferent {...props} />
+      {card.kind === "generic" && <CardNotes notes={card.notes} />}
+    </>
+  );
 };
 
 /**

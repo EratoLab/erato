@@ -42,6 +42,19 @@ describe("Alert", () => {
     expect(alert.getAttribute("style")).toBeNull();
   });
 
+  it("hides its icon from assistive tech", () => {
+    render(
+      <Alert type="warning" icon={<span data-testid="glyph">!</span>}>
+        Alert content
+      </Alert>,
+    );
+
+    expect(screen.getByTestId("glyph").parentElement).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
   it("supports opt-in message geometry for chat surfaces", () => {
     render(
       <Alert type="error" geometryVariant="message">
@@ -58,5 +71,31 @@ describe("Alert", () => {
     expect(alert).not.toHaveClass("gap-3");
     expect(alert).not.toHaveClass("p-3");
     expect(alert.getAttribute("style")).toBeNull();
+  });
+
+  it("renders an action under the message inside the alert", () => {
+    render(
+      <Alert
+        type="error"
+        title="1 item could not be carried out"
+        action={<button type="button">Show it in Past</button>}
+      >
+        The reminder could not be delivered.
+      </Alert>,
+    );
+
+    const alert = screen.getByRole("alert");
+    const action = screen.getByRole("button", { name: "Show it in Past" });
+
+    expect(alert).toContainElement(action);
+    expect(action.closest('[data-ui="alert-action"]')).not.toBeNull();
+  });
+
+  it("leaves the action row out when there is no action", () => {
+    render(<Alert type="info">Alert content</Alert>);
+
+    expect(
+      screen.getByRole("alert").querySelector('[data-ui="alert-action"]'),
+    ).toBeNull();
   });
 });

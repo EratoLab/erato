@@ -313,11 +313,12 @@ pub struct RecipientMember {
 
 /// The rules' label for one call. `annotations` are the resolved hints, with
 /// absent ones left absent; a read-only hint only tells a read apart from a
-/// call with no verb.
+/// call with no verb. `approval_argument` is the server's consent argument.
 pub fn rules_label(
     tool_name: &str,
     arguments: &Value,
     annotations: Option<&ToolAnnotations>,
+    approval_argument: Option<&str>,
 ) -> RulesLabel {
     let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
@@ -351,7 +352,13 @@ pub fn rules_label(
                 .flatten()
         });
     }
-    item.fields = fields(arguments, action, &item, table.as_deref());
+    item.fields = fields(
+        arguments,
+        action,
+        &item,
+        table.as_deref(),
+        approval_argument,
+    );
 
     let read = has(&name, &READ_VERBS);
     let unsure = if action == ToolCallAction::Other {
@@ -1077,6 +1084,7 @@ fn fields(
     action: ToolCallAction,
     item: &ToolCallLabelItemMapping,
     table: Option<&str>,
+    approval_argument: Option<&str>,
 ) -> Vec<String> {
     let mut used: Vec<&str> = [
         &item.title,
@@ -1124,7 +1132,7 @@ fn fields(
                 };
                 // Recipients that name no one are no field beside the title.
                 if covers(&used, &pointer)
-                    || is_consent(member, &values)
+                    || is_consent_member(member, approval_argument)
                     || recipients_in(member).is_some()
                 {
                     continue;
@@ -1135,7 +1143,15 @@ fn fields(
             }
         }
         ToolCallAction::Update | ToolCallAction::Comment => {
-            changed_members("", &[arguments], 0, &used, &mut budget, &mut out);
+            changed_members(
+                "",
+                &[arguments],
+                0,
+                &used,
+                approval_argument,
+                &mut budget,
+                &mut out,
+            );
         }
         _ => {}
     }
@@ -1155,6 +1171,7 @@ fn changed_members(
     values: &[&Value],
     depth: usize,
     used: &[&str],
+    approval_argument: Option<&str>,
     budget: &mut usize,
     out: &mut Vec<String>,
 ) {
@@ -1168,7 +1185,7 @@ fn changed_members(
         let Some(path) = child_pointer(pointer, member) else {
             continue;
         };
-        if used.contains(&path.as_str()) || is_consent(member, &values) {
+        if used.contains(&path.as_str()) || is_consent_member(member, approval_argument) {
             continue;
         }
         if let Some(id) = values.iter().find_map(|value| {
@@ -1199,12 +1216,28 @@ fn changed_members(
             .flat_map(|entries| entries.iter().take(MAX_LIST_ENTRIES))
             .collect();
         if !objects.is_empty() {
-            changed_members(&path, &objects, depth + 1, used, budget, out);
+            changed_members(
+                &path,
+                &objects,
+                depth + 1,
+                used,
+                approval_argument,
+                budget,
+                out,
+            );
         }
         if !entries.is_empty()
             && let Some(each) = child_pointer(&path, "*")
         {
-            changed_members(&each, &entries, depth + 1, used, budget, out);
+            changed_members(
+                &each,
+                &entries,
+                depth + 1,
+                used,
+                approval_argument,
+                budget,
+                out,
+            );
         }
     }
 }
@@ -1372,46 +1405,36 @@ fn is_short_scalar(value: &Value) -> bool {
     }
 }
 
-/// `hasUserApproved: true` or `user_confirmed: "yes"` says what the model
-/// claims about the user, never what the call does. `approved: true` on an
-/// expense is the change itself.
-fn is_consent(member: &str, values: &[&Value]) -> bool {
-    is_consent_member(member) && values.iter().copied().any(is_yes_or_no)
-}
-
-fn is_consent_member(member: &str) -> bool {
-    if member.len() > MAX_NAME_BYTES {
+/// A member that holds what the model says the user decided: the server's
+/// configured approval argument, or `hasUserApproved` in any letter case
+/// with or without `_` or `-`. A name that only mentions consent or approval,
+/// such as `marketing_consent` or `approved`, is data the call writes.
+fn is_consent_member(member: &str, approval_argument: Option<&str>) -> bool {
+    const FLAGS: [&str; 1] = ["hasuserapproved"];
+    if approval_argument == Some(member) {
+        return true;
+    }
+    if member.len() > 32 {
         return false;
     }
-    let lower = member.to_ascii_lowercase();
-    lower.contains("consent")
-        || (lower.contains("user")
-            && ["approv", "confirm", "agree"]
-                .iter()
-                .any(|word| lower.contains(word)))
-}
-
-fn is_yes_or_no(value: &Value) -> bool {
-    match value {
-        Value::Bool(_) => true,
-        Value::String(text) => ["true", "false", "yes", "no"]
-            .iter()
-            .any(|word| text.trim().eq_ignore_ascii_case(word)),
-        _ => false,
-    }
+    let bare: String = member
+        .chars()
+        .filter(|c| !matches!(c, '_' | '-'))
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    FLAGS.contains(&bare.as_str())
 }
 
 /// The claim the value at `path` in the arguments would make on a card: a
-/// consent flag at or above it, or a lookup's name. The arguments' top is the
-/// call itself and never a lookup.
-pub fn claim(arguments: &Value, path: &str, value: &Value) -> Option<Claim> {
+/// consent flag at or above it, whatever it holds, or a lookup's name. The
+/// arguments' top is the call itself and never a lookup.
+pub fn claim(arguments: &Value, path: &str, approval_argument: Option<&str>) -> Option<Claim> {
     if path.len() > pointer::MAX_PATH_BYTES {
         return None;
     }
-    if is_yes_or_no(value)
-        && pointer::member_names(path)
-            .iter()
-            .any(|member| is_consent_member(member))
+    if pointer::member_names(path)
+        .iter()
+        .any(|member| is_consent_member(member, approval_argument))
     {
         return Some(Claim::Consent);
     }

@@ -36,6 +36,17 @@ pub struct ResolvedMcpTool {
     pub sources: McpToolAnnotationSources,
     /// Original hints, retained separately from operator assertions.
     pub server_annotations: Option<ToolAnnotations>,
+    /// The server's consent argument, when this tool declares it: Erato owns
+    /// that argument from here on (see `McpServerConfig::approval_argument`).
+    pub approval_argument: Option<String>,
+}
+
+/// Whether the tool's input schema declares a top-level property of this name.
+pub fn tool_declares_argument(tool: &Tool, name: &str) -> bool {
+    tool.input_schema
+        .get("properties")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|properties| properties.contains_key(name))
 }
 
 pub fn resolve_tool_annotations(
@@ -98,6 +109,12 @@ pub fn resolve_tool_annotations(
         annotations.open_world_hint = open_world;
     }
 
+    let approval_argument = server
+        .approval_argument
+        .as_deref()
+        .filter(|name| tool_declares_argument(&tool, name))
+        .map(str::to_string);
+
     ResolvedMcpTool {
         tool,
         sources: McpToolAnnotationSources {
@@ -107,6 +124,7 @@ pub fn resolve_tool_annotations(
             open_world_hint: open_world_source,
         },
         server_annotations,
+        approval_argument,
     }
 }
 
@@ -139,6 +157,46 @@ mod tests {
             idempotent_hint: value,
             open_world_hint: value,
         }
+    }
+
+    fn declaring(name: &'static str) -> Tool {
+        Tool::new(
+            name,
+            "fixture",
+            serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(json!({
+                "type": "object",
+                "properties": {"hasUserApproved": {"type": "boolean"}}
+            }))
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn the_consent_argument_is_taken_over_only_where_the_tool_declares_it() {
+        let defaults = McpToolAnnotationsConfig::default();
+        let mut configured = server();
+        configured.approval_argument = Some("hasUserApproved".to_string());
+        assert!(tool_declares_argument(
+            &declaring("delete"),
+            "hasUserApproved"
+        ));
+        assert!(!tool_declares_argument(&tool(None), "hasUserApproved"));
+        assert_eq!(
+            resolve_tool_annotations(declaring("delete"), &configured, &defaults, &defaults)
+                .approval_argument
+                .as_deref(),
+            Some("hasUserApproved")
+        );
+        assert_eq!(
+            resolve_tool_annotations(tool(None), &configured, &defaults, &defaults)
+                .approval_argument,
+            None
+        );
+        assert_eq!(
+            resolve_tool_annotations(declaring("delete"), &server(), &defaults, &defaults)
+                .approval_argument,
+            None
+        );
     }
 
     #[test]
@@ -273,6 +331,7 @@ mod tests {
                     allow_always: false,
                 },
                 &resolved.tool,
+                None,
             );
             assert!(!verdict.requires_approval);
             assert!(verdict.annotations.read_only_hint);

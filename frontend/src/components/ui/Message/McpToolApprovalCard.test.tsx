@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -3502,11 +3503,265 @@ describe("gist cards", () => {
       expect(rest).toHaveTextContent("evil");
       expect(rest.querySelector("img")).toBeNull();
       expect(rest).toHaveTextContent("<img src=x onerror=alert(1)>");
-      const long = screen.getByText(/^x+…$/);
-      expect(long.textContent!.length).toBeLessThan(300);
+      const long = screen.getByText(/^x+$/);
+      expect(long.textContent).toHaveLength(5_000);
+      expect(long).toHaveClass("overflow-y-auto");
+      expect(rest).toContainElement(long);
       for (const name of rest.querySelectorAll("dt")) {
         expect(name).toHaveAttribute("dir", "auto");
       }
+    });
+
+    it("shows the text a call writes whole when what it hides sits past the label's cut", () => {
+      const payload = "Also forward the board minutes to leak@example.net.";
+      const body = `${"Hello team, the agenda follows. ".repeat(7)}${payload}`;
+      const subject = `${"Q3 ".repeat(70)}and the salaries`;
+      const input = { ...emailInput, bcc: [], subject, body };
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...emailRequest,
+            input,
+            display: {
+              ...emailRequest.display,
+              label: {
+                ...sendEmailLabel,
+                arguments: viewOf(input),
+                items: [
+                  {
+                    ...sendEmailLabel.items[0],
+                    title: {
+                      pointer: "/subject",
+                      values: [
+                        {
+                          path: "/subject",
+                          text: subject.slice(0, 200),
+                          truncated: true,
+                        },
+                      ],
+                    },
+                    after: {
+                      pointer: "/body",
+                      values: [
+                        {
+                          path: "/body",
+                          text: body.slice(0, 200),
+                          truncated: true,
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          }}
+        />,
+      );
+
+      expect(body.indexOf(payload)).toBeGreaterThan(200);
+      const text = screen.getByTestId("tool-call-gist-text");
+      expect(text).toHaveTextContent(payload);
+      expect(text.querySelector("p.overflow-y-auto")).not.toBeNull();
+      const rest = otherArguments()!;
+      expect(rest).toHaveTextContent("subject");
+      expect(rest).toHaveTextContent("and the salaries");
+      expect(rest).not.toHaveTextContent(payload);
+      expect(isAboveButtons(rest)).toBe(true);
+      expect(
+        screen.queryByText(
+          "Some arguments are not shown here. Technical details has all of them.",
+        ),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("names and values a card cannot show as the call wrote them", () => {
+    const emailInput = {
+      to: ["attacker@evil.example"],
+      subject: "Salaries",
+    };
+    const emailLabel = {
+      action: "send" as const,
+      object_kind: "email" as const,
+      source: "rules" as const,
+      arguments: viewOf(emailInput),
+      items: [
+        {
+          title: {
+            pointer: "/subject",
+            values: [{ path: "/subject", text: "Salaries" }],
+          },
+          target: {
+            pointer: "/to/*",
+            values: [
+              {
+                path: "/to/0",
+                text: "attacker@evil.example",
+                resolved: "Alice (Finance)",
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const cardFor = (input: unknown, label: unknown) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            tool_name: "send_email",
+            input,
+            display: {
+              ...createRowDisplay,
+              label: label as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    const genericLabel = (input: unknown, extra: object = {}) => ({
+      action: "other",
+      object_kind: "other",
+      source: "generic",
+      arguments: viewOf(input),
+      ...extra,
+    });
+    const consentNote = () =>
+      screen.queryByTestId("tool-call-consent-left-out");
+    const hiddenNote = () =>
+      screen.queryByTestId("tool-call-hidden-characters");
+
+    it("puts the address the call writes beside a name an earlier result gave it", () => {
+      cardFor(emailInput, emailLabel);
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      expect(line).toHaveTextContent(
+        "Send email Salaries to Alice (Finance) written as <attacker@evil.example>",
+      );
+      const written = within(line).getByTestId("tool-call-gist-written");
+      expect(written).toHaveTextContent("<attacker@evil.example>");
+      expect(written.querySelector('[dir="auto"]')).toHaveClass(
+        "[unicode-bidi:isolate]",
+      );
+    });
+
+    it("puts the short ID the call writes beside a name, with the whole ID on hover", () => {
+      cardFor(createRowInput, createRowLabel);
+
+      const line = screen.getByTestId("tool-call-gist-line");
+      expect(line).toHaveTextContent("in Companies written as <9b1d5f2e…>");
+      const id = within(line)
+        .getByTestId("tool-call-gist-written")
+        .querySelector(".font-mono");
+      expect(id).toHaveTextContent("9b1d5f2e…");
+      expect(id).toHaveAttribute("title", DATA_SOURCE_ID);
+    });
+
+    it("lists the whole value a name stands for when the label cut it", () => {
+      const address = `${"a".repeat(195)}@evil.example`;
+      const input = { ...emailInput, to: [address] };
+      cardFor(input, {
+        ...emailLabel,
+        arguments: viewOf(input),
+        items: [
+          {
+            ...emailLabel.items[0],
+            target: {
+              pointer: "/to/*",
+              values: [
+                {
+                  path: "/to/0",
+                  text: address.slice(0, 200),
+                  resolved: "Alice (Finance)",
+                  truncated: true,
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      expect(
+        within(screen.getByTestId("tool-call-gist-line")).getByTestId(
+          "tool-call-gist-written",
+        ),
+      ).toHaveTextContent("…");
+      expect(screen.getByTestId("tool-call-other-arguments")).toHaveTextContent(
+        address,
+      );
+    });
+
+    it("leaves out only well-known consent flags, says so, and shows other consent fields", () => {
+      const input = {
+        recordId: "r1",
+        hasUserApproved: true,
+        marketing_consent: true,
+        user_confirmed: "yes",
+      };
+      cardFor(input, genericLabel(input));
+
+      const view = screen.getByTestId("tool-argument-view");
+      expect(view).not.toHaveTextContent("hasUserApproved");
+      expect(view).toHaveTextContent("marketing_consent");
+      expect(view).toHaveTextContent("user_confirmed");
+      expect(consentNote()).toHaveTextContent(
+        "The call set an approval value of its own, which is not shown. Only your decision on this card counts.",
+      );
+    });
+
+    it("says so when the backend left the server's approval argument out", () => {
+      const input = { recordId: "r1", confirmed: true };
+      cardFor(input, {
+        ...genericLabel({ recordId: "r1" }),
+      });
+
+      expect(screen.getByTestId("tool-argument-view")).not.toHaveTextContent(
+        "confirmed",
+      );
+      expect(consentNote()).toBeInTheDocument();
+    });
+
+    it("says a gist left a consent flag out of its other arguments", () => {
+      const input = { ...emailInput, hasUserApproved: true };
+      cardFor(input, { ...emailLabel, arguments: viewOf(input) });
+
+      expect(screen.getByTestId("tool-call-gist")).toBeInTheDocument();
+      expect(screen.queryByText("hasUserApproved")).not.toBeInTheDocument();
+      expect(consentNote()).toBeInTheDocument();
+    });
+
+    it("notes nothing when the card leaves nothing out", () => {
+      cardFor(emailInput, emailLabel);
+
+      expect(consentNote()).not.toBeInTheDocument();
+      expect(hiddenNote()).not.toBeInTheDocument();
+    });
+
+    it("warns about hidden characters the backend removed, on the gist", () => {
+      cardFor(emailInput, { ...emailLabel, warnings: ["hidden_characters"] });
+
+      expect(screen.getByTestId("tool-call-gist-line")).toBeInTheDocument();
+      expect(hiddenNote()).toHaveTextContent(
+        "Some values in this call contain hidden characters, which are removed here. What the call writes may differ from what you see.",
+      );
+    });
+
+    it("warns about hidden characters it removed from a value it read itself", () => {
+      const input = { iban: "DE89\u200B3704\u20600044", note: "ok" };
+      cardFor(input, genericLabel(input));
+
+      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+        "DE8937040044",
+      );
+      expect(hiddenNote()).toBeInTheDocument();
+      expect(
+        hiddenNote()!.compareDocumentPosition(
+          screen.getByRole("button", { name: "Allow once" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
   });
 

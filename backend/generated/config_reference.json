@@ -3981,6 +3981,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers.<server-id>.approval_argument": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.8.1",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers.<server-id>.authentication": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
@@ -4410,6 +4416,48 @@
   "runtime_configuration.enabled": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.priority_order.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.description": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.message": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.name": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.title": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "scheduled.templates.templates.<template-id>.type": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
     "security_relevance": "unknown",
     "stability": "unstable"
   },

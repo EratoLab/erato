@@ -3,6 +3,8 @@ import { forwardRef } from "react";
 
 import type React from "react";
 
+export type InputGeometry = "input" | "control";
+
 export interface InputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
   /**
@@ -29,7 +31,23 @@ export interface InputProps
    * Input type
    * @default "text"
    */
-  type?: "text" | "email" | "url" | "password" | "search" | "tel" | "number";
+  type?:
+    | "text"
+    | "email"
+    | "url"
+    | "password"
+    | "search"
+    | "tel"
+    | "number"
+    | "date"
+    | "time";
+  /**
+   * `input` is the roomy form-field size. `control` takes the corner, height,
+   * padding and type size of a `Select` or `Button`, for a field that shares a
+   * row with them.
+   * @default "input"
+   */
+  geometry?: InputGeometry;
   /**
    * Additional CSS classes
    */
@@ -65,6 +83,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       error,
       disabled = false,
       type = "text",
+      geometry = "input",
       className,
       "aria-label": ariaLabel,
       "aria-describedby": ariaDescribedBy,
@@ -95,9 +114,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           className={clsx(
             // Base styles
             "w-full",
-            "[border-radius:var(--theme-radius-input)]",
-            "[padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
-            "text-base text-theme-fg-primary placeholder:text-theme-fg-muted",
+            geometry === "control"
+              ? "text-sm [border-radius:var(--theme-radius-control)] [min-height:var(--theme-spacing-control-min-height)] [padding:var(--theme-spacing-control-padding-y)_var(--theme-spacing-control-padding-x)]"
+              : "text-base [border-radius:var(--theme-radius-input)] [padding:var(--theme-spacing-input-padding-y)_var(--theme-spacing-input-padding-x)]",
+            "text-theme-fg-primary placeholder:text-theme-fg-muted",
             "theme-transition",
             // Background and border
             "border bg-theme-bg-secondary",

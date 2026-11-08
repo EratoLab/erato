@@ -1,0 +1,175 @@
+{
+  "name": "relay the desktop UI package after a proxy refused the sidecar's download (chunk content abbreviated: each full chunk carries 131072 bytes)",
+  "messages": [
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-configure",
+        "method": "sidecar.configure.v1",
+        "params": {
+          "user_configuration": {},
+          "organization_configuration": {},
+          "ui_package": {
+            "url": "https://chat.example.com/api/v1beta/desktop-sidecar/ui-package",
+            "token": "1762560000.dGhpcyBpcyBub3QgYSByZWFsIHNpZ25hdHVyZQ",
+            "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+            "host_api": 1
+          }
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": { "jsonrpc": "2.0", "id": "c-configure", "result": {} }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-1",
+        "method": "sidecar.status.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-1",
+        "result": {
+          "permissions": { "macos_full_disk_access": "granted" },
+          "ui_package": {
+            "state": "pending",
+            "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+            "attempted_at": "2026-11-07T10:15:00Z",
+            "relay": false
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-2",
+        "method": "sidecar.status.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-2",
+        "result": {
+          "permissions": { "macos_full_disk_access": "granted" },
+          "ui_package": {
+            "state": "failed",
+            "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+            "reason": "proxy",
+            "attempted_at": "2026-11-07T10:15:00Z",
+            "relay": true
+          }
+        }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-0",
+        "method": "sidecar.install_ui_package.v1",
+        "params": {
+          "upload_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 262147,
+          "chunk_index": 0,
+          "chunk_count": 3,
+          "content_base64": "H4sIAAAAAAAAAw=="
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-0",
+        "result": { "state": "continue", "next_chunk_index": 1 }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-1",
+        "method": "sidecar.install_ui_package.v1",
+        "params": {
+          "upload_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 262147,
+          "chunk_index": 1,
+          "chunk_count": 3,
+          "content_base64": "AAAAAAAAAAAA"
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-1",
+        "result": { "state": "continue", "next_chunk_index": 2 }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-2",
+        "method": "sidecar.install_ui_package.v1",
+        "params": {
+          "upload_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+          "total_bytes": 262147,
+          "chunk_index": 2,
+          "chunk_count": 3,
+          "content_base64": "AAAA"
+        }
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-chunk-2",
+        "result": { "state": "installed" }
+      }
+    },
+    {
+      "direction": "client-to-sidecar",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-3",
+        "method": "sidecar.status.v1",
+        "params": {}
+      }
+    },
+    {
+      "direction": "sidecar-to-client",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": "c-status-3",
+        "result": {
+          "permissions": { "macos_full_disk_access": "granted" },
+          "ui_package": {
+            "state": "current",
+            "digest": "9c56cc51b374c3ba189210d5b6d4bf57790d351c96c47c02190ecf1e430635ab",
+            "attempted_at": "2026-11-07T10:15:00Z",
+            "relay": false
+          }
+        }
+      }
+    }
+  ]
+}

@@ -6568,6 +6568,31 @@ msgid "profile.menu.preferences"
 msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.cancelled"
+msgstr "Abgebrochen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.done"
+msgstr "Erledigt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.failed"
+msgstr "Fehlgeschlagen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.scheduled"
+msgstr "Geplant"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledStatusPill.tsx
+msgid "scheduled.status.snoozed"
+msgstr "Zurückgestellt"
+
+#. js-lingui-explicit-id
 #: src/pages/SearchPage.tsx
 msgid "search.page.subtitle"
 msgstr "Finde Unterhaltungen und Nachrichten in deinem Chatverlauf"
@@ -7303,6 +7328,61 @@ msgid "sidecar.permissions.unknown"
 msgstr "Unbekannt"
 
 #. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.current"
+msgstr "Oberfläche der Desktop-App: aktuell"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.failed"
+msgstr "Oberfläche der Desktop-App: Aktualisierung fehlgeschlagen ({reason})"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.pending"
+msgstr "Oberfläche der Desktop-App: wird aktualisiert…"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.network"
+msgstr "Netzwerkfehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.notFound"
+msgstr "kein Paket auf dem Server"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.other"
+msgstr "unerwarteter Fehler"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.proxy"
+msgstr "der Proxy hat die Verbindung abgelehnt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.storage"
+msgstr "konnte auf diesem Gerät nicht gespeichert werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.tls"
+msgstr "Zertifikat nicht vertrauenswürdig"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.unauthorized"
+msgstr "Zugriff verweigert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
+msgid "sidecar.uiPackage.reason.verification"
+msgstr "das Paket konnte nicht verifiziert werden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""
@@ -7798,6 +7878,16 @@ msgstr "{shape, select, full {Verschieben fehlgeschlagen: {kind} {title} nach {w
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.consentLeftOut"
+msgstr "Der Aufruf hat selbst einen Zustimmungswert gesetzt, der hier nicht angezeigt wird. Es zählt nur Ihre Entscheidung auf dieser Karte."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
+msgid "toolGist.note.hiddenCharacters"
+msgstr "Einige Werte in diesem Aufruf enthalten versteckte Zeichen, die hier entfernt sind. Was der Aufruf schreibt, kann von dem abweichen, was Sie sehen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalReferent.tsx
 msgid "toolGist.otherArguments"
 msgstr "Weitere Argumente"
 
@@ -7990,6 +8080,11 @@ msgstr "Wert aus einem früheren Ergebnis in diesem Chat"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.resolved"
 msgstr "Name aus einem früheren Ergebnis in diesem Chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallGist.tsx
+msgid "toolGist.value.writtenAs"
+msgstr "geschrieben als"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

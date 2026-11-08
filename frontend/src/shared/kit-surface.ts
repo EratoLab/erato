@@ -42,6 +42,31 @@ export type {
 } from "@/components/ui/Controls/PopoverPanel";
 export { Row } from "@/components/ui/Controls/Row";
 export type { RowProps } from "@/components/ui/Controls/Row";
+// Review-window primitives (surface 1.25). Kits apply in every window, so an
+// override elsewhere can build on the same checkbox, row, bar and fields.
+export { Checkbox } from "@/components/ui/Controls/Checkbox";
+export type { CheckboxProps } from "@/components/ui/Controls/Checkbox";
+export {
+  SELECTABLE_ROW_CHECKBOX_SELECTOR,
+  SelectableRow,
+} from "@/components/ui/Controls/SelectableRow";
+export type {
+  SelectableRowLayout,
+  SelectableRowProps,
+  SelectableRowTone,
+} from "@/components/ui/Controls/SelectableRow";
+export { ProgressBar } from "@/components/ui/Feedback/ProgressBar";
+export type {
+  ProgressBarProps,
+  ProgressBarSize,
+  ProgressBarTone,
+} from "@/components/ui/Feedback/ProgressBar";
+export { DetailFields } from "@/components/ui/Container/DetailFields";
+export type {
+  DetailField,
+  DetailFieldsLayout,
+  DetailFieldsProps,
+} from "@/components/ui/Container/DetailFields";
 export { TabRail } from "@/components/ui/Controls/TabRail";
 export type {
   TabRailOption,
@@ -304,6 +329,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ChatHistoryRowPresentation",
   "ChatInputAudioTranscriptionControls",
   "ChatMessageRendererState",
+  "Checkbox",
+  "CheckboxProps",
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
@@ -319,6 +346,10 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "CountBadgeVariant",
   "DefaultComposerContextChipFace",
   "DefaultMessageControls",
+  "DetailField",
+  "DetailFields",
+  "DetailFieldsLayout",
+  "DetailFieldsProps",
   "DisclosureChevron",
   "DisclosureChevronProps",
   "DisclosureChevronSize",
@@ -375,13 +406,22 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "PopoverSectionHeaderProps",
   "PopoverSeparator",
   "PopoverSeparatorProps",
+  "ProgressBar",
+  "ProgressBarProps",
+  "ProgressBarSize",
+  "ProgressBarTone",
   "RadioCard",
   "RadioCardProps",
   "ResolvedIcon",
   "Row",
   "RowProps",
+  "SELECTABLE_ROW_CHECKBOX_SELECTOR",
   "Select",
   "SelectProps",
+  "SelectableRow",
+  "SelectableRowLayout",
+  "SelectableRowProps",
+  "SelectableRowTone",
   "ShareIcon",
   "SidebarBand",
   "SidebarBandEdge",

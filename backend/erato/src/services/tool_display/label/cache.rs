@@ -96,15 +96,16 @@ impl ToolLabelCache {
     }
 
     /// The mapping kept for `key` when it is a model's within the caps and its
-    /// core pointers all reach a value in `arguments`. One that does not is
-    /// dropped.
+    /// core pointers all reach a value in `arguments` that is no consent flag,
+    /// `approval_argument` being the server's. One that does not is dropped.
     pub async fn lookup(
         &self,
         key: &ToolLabelCacheKey,
         arguments: &Value,
+        approval_argument: Option<&str>,
     ) -> Option<ToolCallLabelMapping> {
         let mapping = self.entries.get(key).await?;
-        if keepable(&mapping) && resolve_label(&mapping, arguments).is_ok() {
+        if keepable(&mapping) && resolve_label(&mapping, arguments, approval_argument).is_ok() {
             return Some((*mapping).clone());
         }
         self.entries.invalidate(key).await;
@@ -118,14 +119,16 @@ impl ToolLabelCache {
     /// The mapping for `key`, from `compute` on a miss; concurrent misses of
     /// one key wait for one computation. What `compute` returns is kept only
     /// when it is a model's, within the caps, and fits the `arguments` it was
-    /// made for. A panic in `compute` or the cache gives `None`.
+    /// made for as [`Self::lookup`] checks. A panic in `compute` or the cache
+    /// gives `None`.
     pub async fn get_or_compute(
         &self,
         key: ToolLabelCacheKey,
         arguments: &Value,
+        approval_argument: Option<&str>,
         compute: impl Future<Output = Option<ToolCallLabelMapping>>,
     ) -> Option<ToolCallLabelMapping> {
-        AssertUnwindSafe(self.fill(key, arguments, compute))
+        AssertUnwindSafe(self.fill(key, arguments, approval_argument, compute))
             .catch_unwind()
             .await
             .unwrap_or_else(|_| {
@@ -140,9 +143,10 @@ impl ToolLabelCache {
         &self,
         key: ToolLabelCacheKey,
         arguments: &Value,
+        approval_argument: Option<&str>,
         compute: impl Future<Output = Option<ToolCallLabelMapping>>,
     ) -> Option<ToolCallLabelMapping> {
-        if let Some(mapping) = self.lookup(&key, arguments).await {
+        if let Some(mapping) = self.lookup(&key, arguments, approval_argument).await {
             return Some(mapping);
         }
         let owner = key.clone();
@@ -157,13 +161,14 @@ impl ToolLabelCache {
                     item.fields.truncate(MAX_FIELD_POINTERS);
                     item.fields.shrink_to_fit();
                 }
-                (keepable(&mapping) && resolve_label(&mapping, arguments).is_ok())
+                let fits = resolve_label(&mapping, arguments, approval_argument).is_ok();
+                (keepable(&mapping) && fits)
                     .then(|| Cached::with_key(MEMORY_OWNER, mapping, &owner))
             })
             .await?;
         // Filled meanwhile by a call of the same shape whose pointers this
         // call's arguments may not have.
-        resolve_label(&mapping, arguments)
+        resolve_label(&mapping, arguments, approval_argument)
             .is_ok()
             .then(|| (*mapping).clone())
     }
@@ -413,7 +418,9 @@ mod tests {
         arguments: &Value,
     ) -> Option<ToolCallLabelMapping> {
         let key = ToolLabelCacheKey::new(user_id, "crm", tool, arguments);
-        cache.get_or_compute(key, arguments, labeller.label()).await
+        cache
+            .get_or_compute(key, arguments, None, labeller.label())
+            .await
     }
 
     #[tokio::test]
@@ -480,10 +487,10 @@ mod tests {
         assert_eq!(key, ToolLabelCacheKey::new("user-a", "crm", &records, &one));
 
         label(&cache, &labeller, "user-a", &records, &two).await;
-        assert!(cache.lookup(&key, &two).await.is_some());
-        assert_eq!(cache.lookup(&key, &one).await, None);
+        assert!(cache.lookup(&key, &two, None).await.is_some());
+        assert_eq!(cache.lookup(&key, &one, None).await, None);
         assert!(cache.entries.get(&key).await.is_none());
-        assert_eq!(cache.lookup(&key, &two).await, None);
+        assert_eq!(cache.lookup(&key, &two, None).await, None);
 
         label(&cache, &labeller, "user-a", &records, &two).await;
         assert_eq!(labeller.runs(), 2);
@@ -514,7 +521,7 @@ mod tests {
         let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
         assert_eq!(
             cache
-                .get_or_compute(key.clone(), &arguments, async { None })
+                .get_or_compute(key.clone(), &arguments, None, async { None })
                 .await,
             None
         );
@@ -694,8 +701,8 @@ mod tests {
         );
         // Cutting what no label tries changes no label.
         assert_eq!(
-            resolve_label(&kept, &arguments),
-            resolve_label(&wide, &arguments)
+            resolve_label(&kept, &arguments, None),
+            resolve_label(&wide, &arguments, None)
         );
 
         let mut tried = model("/records/*/recordId");
@@ -725,7 +732,7 @@ mod tests {
         let arguments = json!({member: "Acme"});
         let key = ToolLabelCacheKey::new(&"u".repeat(36), "crm", &records, &arguments);
         let kept = cache
-            .get_or_compute(key.clone(), &arguments, async { Some(largest) })
+            .get_or_compute(key.clone(), &arguments, None, async { Some(largest) })
             .await;
         assert!(kept.is_some());
         let entry = cache.entries.get(&key).await.unwrap();
@@ -736,7 +743,7 @@ mod tests {
     async fn an_entry_no_model_wrote_or_past_the_caps_is_dropped_on_lookup() {
         let cache = ToolLabelCache::default();
         let records = tool(schema());
-        let arguments = json!({"mode": "upsert", "hasUserApproved": true, "records": [
+        let arguments = json!({"mode": "upsert", "hasUserApproved": true, "confirm": "yes", "records": [
             {"recordId": "rec-0", "company": "Acme"},
         ]});
         let key = ToolLabelCacheKey::new("user-a", "crm", &records, &arguments);
@@ -769,7 +776,11 @@ mod tests {
                     Cached::with_key(MEMORY_OWNER, mapping.clone(), &key),
                 )
                 .await;
-            assert_eq!(cache.lookup(&key, &arguments).await, None, "{mapping:?}");
+            assert_eq!(
+                cache.lookup(&key, &arguments, None).await,
+                None,
+                "{mapping:?}"
+            );
             assert!(cache.entries.get(&key).await.is_none(), "{mapping:?}");
         }
         cache
@@ -779,7 +790,32 @@ mod tests {
                 Cached::with_key(MEMORY_OWNER, fitting.clone(), &key),
             )
             .await;
-        assert_eq!(cache.lookup(&key, &arguments).await, Some(fitting));
+        assert_eq!(cache.lookup(&key, &arguments, None).await, Some(fitting));
+
+        // A server's configured consent argument is a flag for that server only.
+        let mut confirm = model("/records/*/recordId");
+        confirm.items[0].title = Some("/confirm".into());
+        for (approval_argument, kept) in [(None, Some(confirm.clone())), (Some("confirm"), None)] {
+            cache
+                .entries
+                .insert(
+                    key.clone(),
+                    Cached::with_key(MEMORY_OWNER, confirm.clone(), &key),
+                )
+                .await;
+            assert_eq!(
+                cache.lookup(&key, &arguments, approval_argument).await,
+                kept
+            );
+        }
+        assert!(cache.entries.get(&key).await.is_none());
+        let filled = cache
+            .get_or_compute(key.clone(), &arguments, Some("confirm"), async {
+                Some(confirm.clone())
+            })
+            .await;
+        assert_eq!(filled, None);
+        assert!(cache.entries.get(&key).await.is_none());
     }
 
     #[tokio::test]
@@ -794,20 +830,20 @@ mod tests {
         };
         let labeller = Labeller::new(model("/records/*/recordId"));
         let (failed, labelled) = tokio::join!(
-            cache.get_or_compute(key.clone(), &arguments, panicking),
-            cache.get_or_compute(key.clone(), &arguments, labeller.label()),
+            cache.get_or_compute(key.clone(), &arguments, None, panicking),
+            cache.get_or_compute(key.clone(), &arguments, None, labeller.label()),
         );
         assert_eq!(failed, None);
         assert_eq!(labelled, Some(model("/records/*/recordId")));
         assert_eq!(labeller.runs(), 1);
         assert_eq!(
-            cache.lookup(&key, &arguments).await,
+            cache.lookup(&key, &arguments, None).await,
             Some(model("/records/*/recordId"))
         );
         cache.forget(&key).await;
         assert_eq!(
             cache
-                .get_or_compute(key.clone(), &arguments, async { panic!("again") })
+                .get_or_compute(key.clone(), &arguments, None, async { panic!("again") })
                 .await,
             None
         );

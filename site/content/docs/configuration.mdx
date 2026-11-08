@@ -3574,6 +3574,8 @@ A "Did you know…?" tip for users who have not used Erato for a while, sent as 
 
 **Default values:** disabled; `inactive_after` is `"7d"`; `repeat` is `false`; Monday to Friday, `8` to `18`, `Europe/Berlin`; no tips; everyone; `200`.
 
+With [`runtime_configuration`](#runtime_configuration) enabled, this section can be changed while Erato runs, for example from the admin panel: it is reloaded with the other runtime sources and applies to the next producer run and to tips already scheduled. A section that fails validation is ignored and the previous settings stay. `integrations.ms_office.teams.bot.enabled` and `scheduled_deliveries.enabled` are still read at startup only.
+
 ##### `integrations.ms_office.teams.bot` (optional behavior)
 
 {/* erato_toml_config_key: integrations.ms_office.teams.bot.sso_enabled */}
@@ -4402,6 +4404,21 @@ List of wildcard patterns selecting tools to remove from the tools permitted by 
 ```toml
 allow_tools = ["get_*"]
 exclude_tools = ["get_secret_*"]
+```
+
+#### `mcp_servers.<server-id>.approval_argument`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.approval_argument */}
+
+Name of a tool argument through which this server asks for the user's consent to a call, such as `hasUserApproved` on the Dataverse MCP server's `delete_record`. For every tool whose input schema declares the argument, Erato removes it from the schema the model sees and drops any value the model sends, asks the user before each call while `mcp_servers_global.approval.enabled` is on (the preset and a stored "Always allow" do not apply to such tools, and the approval card offers no standing grant), and sets the argument when the call is dispatched: `true` after the user approved the call, `false` otherwise (for example with the approval gate disabled). Tools that do not declare the argument are unaffected.
+
+**Type:** `string | None`
+
+**Example:**
+
+```toml
+[mcp_servers.dynamics]
+approval_argument = "hasUserApproved"
 ```
 
 ### MCP tool annotation defaults and overrides
@@ -7225,6 +7242,60 @@ The executor that delivers scheduled messages, which Erato owes a user at a due 
 ```toml
 [scheduled_deliveries]
 enabled = true
+```
+
+### `scheduled`
+
+{/* erato_toml_config_key: scheduled */}
+
+The web app's Scheduled page, where users see and manage their reminders. The page and its sidebar entry are shown when the [`scheduled_deliveries`](#scheduled_deliveries) executor is enabled (`scheduled_deliveries.enabled = true`).
+
+#### `scheduled.templates`
+
+{/* erato_toml_config_key: scheduled.templates */}
+{/* erato_toml_config_key: scheduled.templates.enabled */}
+{/* erato_toml_config_key: scheduled.templates.priority_order */}
+{/* erato_toml_config_key: scheduled.templates.priority_order.[] */}
+{/* erato_toml_config_key: scheduled.templates.templates */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.type */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.title */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.description */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.name */}
+{/* erato_toml_config_key: scheduled.templates.templates.<template-id>.message */}
+
+Templates offered on the Scheduled page while the user has no items, shaped like [`starter_prompts`](#starter_prompts). Clicking one opens the form filled with the template's name and message; the user still chooses when and presses Schedule. Erato ships no templates: without this section, or with `enabled = false`, none are offered.
+
+- `enabled`: whether templates are offered.
+- `priority_order`: template ids in display order. Templates not listed follow, sorted by id; ids without a template are ignored.
+- `templates.<template-id>`: one template.
+  - `type`: what the template creates. Only `reminder` for now, which is also the default.
+  - `title`: the label of the template's button.
+  - `description`: a short line shown with the button. Optional.
+  - `name`: the reminder name the form is filled with.
+  - `message`: the reminder message the form is filled with. Optional.
+
+**Default values:** disabled; no templates.
+
+**Example**
+
+```toml
+[scheduled.templates]
+enabled = true
+priority_order = ["follow_up_offer", "prepare_meeting", "before_deadline", "continue_chat"]
+
+[scheduled.templates.templates.follow_up_offer]
+type = "reminder"
+title = "Follow up on an offer"
+description = "Check whether the customer has answered"
+name = "Follow up on the offer"
+message = "Has the customer answered? If not, send a short follow-up."
+
+[scheduled.templates.templates.prepare_meeting]
+type = "reminder"
+title = "Prepare for a meeting"
+description = "Time to read up before it starts"
+name = "Prepare for the meeting"
+message = "Go through the agenda and the open points."
 ```
 
 ### `generation_status`
