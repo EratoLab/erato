@@ -802,7 +802,10 @@ pub(crate) fn replay_assistant_content(
                 }
                 input_messages.push(InputMessage {
                     role: MessageRole::Assistant,
-                    content: ContentPart::ToolUse(tool_use.clone()),
+                    content: ContentPart::ToolUse(crate::models::message::ToolUse {
+                        display: None,
+                        ..tool_use.clone()
+                    }),
                 });
                 input_messages.push(InputMessage {
                     role: MessageRole::Tool,
@@ -866,9 +869,29 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
 /// it inside an untrusted-data frame, and from this turn on it is this value,
 /// not the envelope, that becomes the tool response. Without the re-frame the
 /// containment would last exactly one turn.
+///
+/// The display is the UI's too, and a replay is stored with every generation:
+/// only the label's action stays, never its values or argument tree.
 fn strip_ui_only_tool_output(
     mut tool_use: crate::models::message::ToolUse,
 ) -> crate::models::message::ToolUse {
+    tool_use.display = tool_use
+        .display
+        .and_then(|display| display.label)
+        .map(|label| crate::models::message::ToolDisplayMetadata {
+            title: String::new(),
+            description: None,
+            description_truncated: false,
+            server_name: None,
+            label: Some(crate::models::message::ToolCallLabel {
+                action: label.action,
+                object_kind: Default::default(),
+                items: Vec::new(),
+                arguments: None,
+                warnings: Vec::new(),
+                source: Default::default(),
+            }),
+        });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);
     if let Some(output) = tool_use.output.as_mut() {
         if let Some(object) = output.as_object_mut() {
