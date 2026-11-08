@@ -6637,6 +6637,11 @@ msgid "scheduled.channel.teamsChat.unavailable"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
+msgid "scheduled.confirmation.gone"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/hooks/scheduled/useScheduledItems.ts
 msgid "scheduled.delete.failed"
 msgstr ""

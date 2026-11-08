@@ -6637,6 +6637,11 @@ msgid "scheduled.channel.teamsChat.unavailable"
 msgstr "Die Zustellung per Teams-Chat ist hier nicht verfügbar. Wenden Sie sich an Ihre Administration."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
+msgid "scheduled.confirmation.gone"
+msgstr "Diese Erinnerung existiert nicht mehr."
+
+#. js-lingui-explicit-id
 #: src/hooks/scheduled/useScheduledItems.ts
 msgid "scheduled.delete.failed"
 msgstr "„{name}“ konnte nicht gelöscht werden"

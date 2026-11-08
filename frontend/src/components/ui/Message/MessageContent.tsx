@@ -10,6 +10,8 @@ import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
+import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 import {
   Trace,
   durationFromTraceParts,
@@ -1726,23 +1728,32 @@ export const MessageContent = memo(function MessageContent({
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
           return (
-            <WaitingHostsContext.Provider
-              key={`trace-${cluster.startIndex}`}
-              value={waitingHosts}
-            >
-              <Trace
-                parts={cluster.parts}
-                isStreaming={!!isStreaming}
-                hasLaterContent={hasLaterContent}
-                renderMarkdown={renderMarkdown}
-                durationMs={
-                  durationFromTraceParts(cluster.parts) ??
-                  (traceClusterCount === 1 ? traceDurationMs : null)
-                }
-                hasError={hasError}
-                toolApprovalStatuses={toolApprovalStatuses}
-              />
-            </WaitingHostsContext.Provider>
+            <React.Fragment key={`trace-${cluster.startIndex}`}>
+              <WaitingHostsContext.Provider value={waitingHosts}>
+                <Trace
+                  parts={cluster.parts}
+                  isStreaming={!!isStreaming}
+                  hasLaterContent={hasLaterContent}
+                  renderMarkdown={renderMarkdown}
+                  durationMs={
+                    durationFromTraceParts(cluster.parts) ??
+                    (traceClusterCount === 1 ? traceDurationMs : null)
+                  }
+                  hasError={hasError}
+                  toolApprovalStatuses={toolApprovalStatuses}
+                />
+              </WaitingHostsContext.Provider>
+              {/* Outside the trace, which folds away once the turn ends. */}
+              {cluster.parts.map((tracePart) => {
+                const confirmation = reminderConfirmationOf(tracePart);
+                return confirmation ? (
+                  <ReminderConfirmationCard
+                    key={`reminder-${confirmation.itemId}`}
+                    confirmation={confirmation}
+                  />
+                ) : null;
+              })}
+            </React.Fragment>
           );
         }
 

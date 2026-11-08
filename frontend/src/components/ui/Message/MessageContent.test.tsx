@@ -2455,3 +2455,84 @@ it("renders persisted speech for explicit replay without autoplay", () => {
   expect(audio).toHaveAttribute("controls");
   expect(audio).not.toHaveAttribute("autoplay");
 });
+
+describe("reminders scheduled from the chat", () => {
+  const createReminder = (status: "success" | "error"): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_call_id: "call-reminder",
+      tool_name: "create_reminder",
+      input: { name: "Follow up on the offer" },
+      status,
+      output:
+        status === "success"
+          ? {
+              status: "created",
+              reminder: { id: "item-1" },
+              confirmation: {
+                item_id: "item-1",
+                language: "en",
+                heading: "Reminder scheduled",
+                name: "Follow up on the offer",
+                when: "Friday, 13 Nov, 10:00",
+                repeats: null,
+                delivery: "Delivered via Teams chat",
+                cancel_label: "Cancel",
+                open_scheduled_label: "Open in Scheduled",
+                scheduled_path: "/scheduled",
+              },
+            }
+          : { status: "refused", code: "limit_reached" },
+    }) as unknown as ContentPart;
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the confirmation card below the call, outside the folded trace", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>(() => {})),
+    );
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        createdAt="2026-11-08T12:00:00Z"
+        updatedAt="2026-11-08T12:00:04Z"
+        content={[
+          createReminder("success"),
+          ...textContent("Your reminder is set."),
+        ]}
+      />,
+    );
+
+    const pill = screen.getByRole("button", { name: /Thought for/ });
+    expect(pill).toHaveAttribute("aria-expanded", "false");
+    const card = screen.getByTestId("reminder-confirmation");
+    expect(card).toHaveTextContent("Follow up on the offer");
+    expect(card).toHaveTextContent("Friday, 13 Nov, 10:00");
+    expect(
+      pill.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      card.compareDocumentPosition(screen.getByText("Your reminder is set.")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows no card for a refused reminder", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          createReminder("error"),
+          ...textContent("You have ten already."),
+        ]}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("reminder-confirmation"),
+    ).not.toBeInTheDocument();
+  });
+});
