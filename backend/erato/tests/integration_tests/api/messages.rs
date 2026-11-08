@@ -5695,11 +5695,46 @@ async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgr
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(pool: Pool<Postgres>) {
+    let (label, _) = label_of_a_call_with_a_cached_mapping(pool, true).await;
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("model"), &json!("update"), &json!("row"))
+    );
+    assert_eq!(
+        label_field(&label, "status")["values"][0]["text"],
+        "Rejected"
+    );
+}
+
+/// Only the labeller keeps mappings, so while tool labels are off a call
+/// shows the rules' label without looking one up, whatever the cache holds.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn while_tool_labels_are_off_a_cached_mapping_is_not_looked_up(pool: Pool<Postgres>) {
+    let (label, rules) = label_of_a_call_with_a_cached_mapping(pool, false).await;
+    assert_eq!(label, rules);
+    assert_eq!(label["source"], "rules");
+}
+
+/// The label the card and the call's in-progress update show for a call the
+/// rules are unsure of, whose shape has a model's mapping kept for its user,
+/// and the label the rules alone give it.
+async fn label_of_a_call_with_a_cached_mapping(
+    pool: Pool<Postgres>,
+    tool_labels: bool,
+) -> (Value, Value) {
     use erato::models::message::{ToolCallAction, ToolCallLabelSource, ToolCallObjectKind};
     use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
     use erato::services::tool_display::label::cache::ToolLabelCacheKey;
     use erato::services::tool_display::label::{ToolCallLabelItemMapping, ToolCallLabelMapping};
     const ASK: &str = "Reject the record";
+    let arguments = json!({"status": "Rejected"});
     let mut mocks = MockSet::new();
     answers_with(
         &mut mocks,
@@ -5708,10 +5743,14 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
         build_openai_tool_calls_streaming_response(&[(
             "call_update",
             "update_record",
-            json!({"status": "Rejected"}),
+            arguments.clone(),
         )]),
     );
-    let app_state = records_app_state(pool, mocks).await;
+    let app_state = records_app_state_with(pool, mocks, |config| {
+        config.tool_labels.enabled = tool_labels;
+        config.tool_labels.chat_provider_id = Some("mock-llm".into());
+    })
+    .await;
     let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
         .await
         .unwrap();
@@ -5768,15 +5807,7 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
         .cloned()
         .unwrap();
     assert_eq!(card["content_type"], "tool_approval_request");
-    let label = &card["display"]["label"];
-    assert_eq!(
-        (&label["source"], &label["action"], &label["object_kind"]),
-        (&json!("model"), &json!("update"), &json!("row"))
-    );
-    assert_eq!(
-        label_field(label, "status")["values"][0]["text"],
-        "Rejected"
-    );
+    let label = card["display"]["label"].clone();
     let running = events
         .iter()
         .filter_map(|event| serde_json::from_str::<Value>(&event.data).ok())
@@ -5786,7 +5817,16 @@ async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(poo
                 && json["tool_call_id"] == card["tool_call_id"]
         })
         .expect("the streamed call goes in progress");
-    assert_eq!(&running["display"]["label"], label);
+    assert_eq!(running["display"]["label"], label);
+    let rules = erato::services::tool_display::mcp_tool_call_display(
+        &app_state.mcp_state().await.config,
+        "records",
+        &update.tool,
+        &arguments,
+        update.approval_argument.as_deref(),
+        &Default::default(),
+    );
+    (label, serde_json::to_value(rules.label).unwrap())
 }
 
 /// A turn that ran two calls before the gate stopped it must hand the model

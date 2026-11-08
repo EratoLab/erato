@@ -140,10 +140,11 @@ pub fn guarded_rules(
 /// The mapping an MCP call is labelled from: the rules', unless they are
 /// unsure and a model mapped a call of the same shape for this user before.
 /// `tool` carries the resolved annotations, and `approval_argument` is the
-/// server's consent argument. A cache that fails or is slow only costs the
-/// call the cached mapping, and asks no model for one.
+/// server's consent argument. `cache` is `None` while tool labels are off.
+/// A cache that fails or is slow only costs the call the cached mapping, and
+/// asks no model for one.
 pub async fn mcp_call_mapping(
-    cache: &cache::ToolLabelCache,
+    cache: Option<&cache::ToolLabelCache>,
     user_id: &str,
     server_id: &str,
     tool: &rmcp::model::Tool,
@@ -151,12 +152,12 @@ pub async fn mcp_call_mapping(
     approval_argument: Option<&str>,
 ) -> McpCallMapping {
     let rules = guarded_rules(tool, arguments, approval_argument);
-    if rules.unsure.is_none() {
+    let Some(cache) = cache.filter(|_| rules.unsure.is_some()) else {
         return McpCallMapping {
             mapping: rules.mapping,
             unlabelled: None,
         };
-    }
+    };
     let lookup = cached_mapping(
         cache,
         user_id,
@@ -1391,13 +1392,13 @@ mod tests {
         let McpCallMapping {
             mapping,
             unlabelled,
-        } = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
+        } = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None).await;
         assert_eq!((&mapping, unlabelled), (&model, None));
         let label = checked_label("crm", &tool, &second, &mapping, None);
         assert_eq!(label.source, ToolCallLabelSource::Model);
         assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
         assert_eq!(
-            mcp_call_mapping(&cache, "user-b", "crm", &tool, &second, None).await,
+            mcp_call_mapping(Some(&cache), "user-b", "crm", &tool, &second, None).await,
             McpCallMapping {
                 mapping: rules::rules_label(&tool.name, &second, None, None).mapping,
                 unlabelled: Some(cache::ToolLabelCacheKey::new(
@@ -1416,12 +1417,12 @@ mod tests {
             ))
         };
         tool.annotations = hints(Some(true), None);
-        let read = mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None).await;
+        let read = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None).await;
         assert_eq!(read.mapping.source, ToolCallLabelSource::Rules);
         assert_eq!(read.unlabelled, None);
         tool.annotations = None;
         assert_eq!(
-            mcp_call_mapping(&cache, "user-a", "crm", &tool, &second, None)
+            mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None)
                 .await
                 .mapping,
             model
@@ -1442,7 +1443,7 @@ mod tests {
         let rules_mapping =
             rules::rules_label(&tool.name, &second, tool.annotations.as_ref(), None).mapping;
         assert_eq!(
-            mcp_call_mapping(&cache, "user-c", "crm", &tool, &second, None).await,
+            mcp_call_mapping(Some(&cache), "user-c", "crm", &tool, &second, None).await,
             McpCallMapping {
                 mapping: rules_mapping.clone(),
                 unlabelled: Some(key.clone()),
@@ -1452,6 +1453,45 @@ mod tests {
         assert_eq!(
             checked_label("crm", &tool, &second, &rules_mapping, None).source,
             ToolCallLabelSource::Rules
+        );
+    }
+
+    #[tokio::test]
+    async fn while_tool_labels_are_off_an_unsure_call_is_labelled_by_the_rules_alone() {
+        let tool = rmcp::model::Tool::new(
+            "crm_records",
+            "Works on CRM records.",
+            rmcp::model::JsonObject::new(),
+        );
+        let first = json!({"recordId": "rec-1", "stage": "won"});
+        let model = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                fields: vec!["/stage".into()],
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        let cache = cache::ToolLabelCache::default();
+        cached(&cache, &tool, &first, model.clone()).await;
+        let second = json!({"recordId": "rec-2", "stage": "lost"});
+        let rules = rules::rules_label(&tool.name, &second, None, None);
+        assert!(rules.unsure.is_some(), "{rules:?}");
+
+        assert_eq!(
+            mcp_call_mapping(None, "user-a", "crm", &tool, &second, None).await,
+            McpCallMapping {
+                mapping: rules.mapping,
+                unlabelled: None,
+            }
+        );
+        assert_eq!(
+            mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None)
+                .await
+                .mapping,
+            model
         );
     }
 
@@ -1500,7 +1540,7 @@ mod tests {
         )
         .await;
         let call = json!({"recordId": "r_1", "hasUserApproved": true, "stage": "won"});
-        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None)
+        let mapping = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &call, None)
             .await
             .mapping;
         let label = checked_label("crm", &tool, &call, &mapping, None);
@@ -1537,7 +1577,7 @@ mod tests {
         .await;
         let mut call = earlier.clone();
         call["bcc"] = json!(["hidden@example.com"]);
-        let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &call, None)
+        let mapping = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &call, None)
             .await
             .mapping;
         assert_eq!(mapping.source, ToolCallLabelSource::Model);
@@ -1570,7 +1610,7 @@ mod tests {
             json!({"items": (0..20_000).map(|n| json!({"id": n})).collect::<Vec<_>>()}),
         ] {
             let rules = guarded_rules(&tool, &arguments, None);
-            let mapping = mcp_call_mapping(&cache, "user-a", "crm", &tool, &arguments, None)
+            let mapping = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &arguments, None)
                 .await
                 .mapping;
             assert_eq!(mapping, rules.mapping, "{:.80}", arguments.to_string());

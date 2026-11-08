@@ -65,7 +65,8 @@ pub struct LabelJob {
     pub arguments: Value,
     /// The consent argument the tool declares, which Erato fills at dispatch.
     pub approval_argument: Option<String>,
-    pub context: ToolResultContext,
+    /// The index as the call saw it, shared with the turn until it reads more.
+    pub context: Arc<ToolResultContext>,
     pub tool_call_id: String,
     /// What the call shows until the label arrives.
     pub shown: ToolDisplayMetadata,
@@ -943,7 +944,7 @@ mod tests {
             tool,
             arguments,
             approval_argument: None,
-            context: ToolResultContext::default(),
+            context: Default::default(),
             tool_call_id: "call_a".into(),
             shown: display(ToolCallLabelSource::Rules),
         }

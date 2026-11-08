@@ -6645,7 +6645,7 @@ async fn stream_generate_chat_completion<'a>(
     chat_request: ChatRequest,
     attachment_plans: Vec<crate::services::file_context::PlannedAttachment>,
     mut retrieval_context: crate::services::file_retrieval::RetrievalContext,
-    mut tool_result_context: crate::services::tool_display::label::ToolResultContext,
+    tool_result_context: crate::services::tool_display::label::ToolResultContext,
     langfuse_trace_enrichment: LangfuseTraceEnrichment,
     chat_options: ChatOptions,
     assistant_message_id: Uuid,
@@ -6713,6 +6713,7 @@ async fn stream_generate_chat_completion<'a>(
                 })
         });
     let mcp = app_state.mcp_state().await;
+    let mut tool_result_context = Arc::new(tool_result_context);
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
         &user_id,
         chat_id,
@@ -7561,14 +7562,17 @@ async fn stream_generate_chat_completion<'a>(
             let tool_index =
                 tool_call_content_index(&current_message_content, &unfinished_tool_call.call_id);
             let was_preparing = matches!(current_message_content.get(tool_index), Some(ContentPart::ToolUse(part)) if part.status == MessageToolCallStatus::Preparing);
-            tool_result_context.observe(&current_message_content);
+            crate::services::tool_display::label::ToolResultContext::observe_shared(
+                &mut tool_result_context,
+                &current_message_content,
+            );
             // Built once per call: the in-progress update, a budget refusal and
             // the MCP dispatch below all show this one.
             let (mcp_display, mcp_unlabelled) =
                 match available_mcp_tools_by_name.get(unfinished_tool_call.fn_name.as_str()) {
                     Some(managed) => {
                         let label_mapping = crate::services::tool_display::mcp_tool_call_mapping(
-                            &app_state.tool_label_cache,
+                            app_state.tool_label_mappings(),
                             &user_id,
                             &mcp.config,
                             &managed.server_id,
@@ -9339,7 +9343,7 @@ async fn stream_generate_chat_completion<'a>(
                             managed_tool.approval_argument.as_deref(),
                         ),
                         approval_argument: managed_tool.approval_argument.clone(),
-                        context: tool_result_context.clone(),
+                        context: Arc::clone(&tool_result_context),
                         tool_call_id: unfinished_tool_call.call_id.clone(),
                         shown: display.clone(),
                     }

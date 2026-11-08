@@ -55,7 +55,7 @@ pub fn mcp_tool_call_display(
 /// model's this user's earlier call of the same shape got where they are
 /// unsure; see [`label::mcp_call_mapping`].
 pub async fn mcp_tool_call_mapping(
-    cache: &label::cache::ToolLabelCache,
+    cache: Option<&label::cache::ToolLabelCache>,
     user_id: &str,
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -766,7 +766,7 @@ mod tests {
             serde_json::json!({"recordId": "rec-2", "stage": "lost", "hasUserApproved": true});
         let approval_argument = Some("hasUserApproved");
         let mapping = mcp_tool_call_mapping(
-            &cache,
+            Some(&cache),
             "user-a",
             &config,
             "dv",
@@ -820,7 +820,16 @@ mod tests {
         let rules = label::guarded_rules(&tool, &flagged, Some("userConfirmed"));
         assert!(rules.unsure.is_some(), "{rules:?}");
         assert_eq!(
-            mcp_tool_call_mapping(&cache, "user-a", &config, "crm", &tool, &flagged, None).await,
+            mcp_tool_call_mapping(
+                Some(&cache),
+                "user-a",
+                &config,
+                "crm",
+                &tool,
+                &flagged,
+                None
+            )
+            .await,
             label::McpCallMapping {
                 mapping: rules.mapping,
                 unlabelled: Some(key.clone()),

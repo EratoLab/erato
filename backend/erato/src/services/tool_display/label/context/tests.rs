@@ -680,6 +680,51 @@ fn the_running_turn_is_read_once_per_call_and_only_once_settled() {
 }
 
 #[test]
+fn a_label_job_keeps_the_index_its_call_saw_while_the_turn_reads_on() {
+    let read = read_query(
+        "read",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{ "name": "Line 4 retrofit", "opportunityid": OPPORTUNITY, "risklevel": 1 }]),
+    );
+    let mut turn = std::sync::Arc::new(after(vec![read.clone()]));
+    let job = std::sync::Arc::clone(&turn);
+
+    let running = ToolUse {
+        status: ToolCallStatus::InProgress,
+        ..call(
+            "update",
+            "update_record",
+            json!({ "recordId": OPPORTUNITY, "item": { "risklevel": 2 } }),
+            json!(null),
+        )
+    };
+    let unread = [
+        ContentPart::ToolUse(read.clone()),
+        ContentPart::ToolUse(running.clone()),
+        decision("tool_rejection", "update"),
+    ];
+    ToolResultContext::observe_shared(&mut turn, &unread);
+    assert!(std::sync::Arc::ptr_eq(&turn, &job));
+
+    let settled = ToolUse {
+        status: ToolCallStatus::Success,
+        output: Some(json!("Record updated successfully.")),
+        ..running
+    };
+    ToolResultContext::observe_shared(&mut turn, &[ContentPart::ToolUse(settled)]);
+    assert!(!std::sync::Arc::ptr_eq(&turn, &job));
+    assert_eq!(
+        earlier(&job, OPPORTUNITY, "risklevel", json!(3)).as_deref(),
+        Some("1")
+    );
+    assert_eq!(earlier(&turn, OPPORTUNITY, "risklevel", json!(3)), None);
+
+    let mut approved = std::sync::Arc::clone(&job);
+    ToolResultContext::observe_shared(&mut approved, &[decision("tool_approval", "update")]);
+    assert!(!std::sync::Arc::ptr_eq(&approved, &job));
+}
+
+#[test]
 fn ids_match_in_any_uuid_spelling_and_numbers_or_short_ids_that_name_two_things_miss() {
     let braced = format!("{{{}}}", OPPORTUNITY.to_uppercase());
     let context = after(vec![call(

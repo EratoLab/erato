@@ -542,6 +542,17 @@ impl AppState {
         })
     }
 
+    /// The model mappings MCP calls are labelled from: none while tool labels
+    /// are off, since only the labeller keeps any.
+    pub fn tool_label_mappings(
+        &self,
+    ) -> Option<&crate::services::tool_display::label::cache::ToolLabelCache> {
+        self.config
+            .tool_labels
+            .enabled
+            .then_some(&self.tool_label_cache)
+    }
+
     pub fn chat_provider_for_tool_labels(&self) -> Result<ChatProviderConfigWithId, Report> {
         self.config.validate_tool_labels()?;
         let id = self
