@@ -157,6 +157,9 @@ describe("refusals", () => {
     expect(scheduledRefusalMessage("limit_reached")).toBe(
       "You have the maximum number of upcoming items. Cancel one first.",
     );
+    expect(scheduledRefusalMessage("next_occurrence_first")).toBe(
+      "Not snoozed: this reminder is due again by then, or already was.",
+    );
     expect(scheduledRefusalMessage("something_new")).toBe(
       "Something went wrong. Please try again.",
     );

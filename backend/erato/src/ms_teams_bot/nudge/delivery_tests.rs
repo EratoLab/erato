@@ -677,30 +677,28 @@ async fn make_due(state: &AppState, id: Uuid) {
         .unwrap();
 }
 
-/// Snooze on a delivered reminder replaces the card in place with a
-/// "Snoozed until" line and no buttons, and brings the reminder back as a
-/// card with its own token; Done closes that card and stores
-/// `acknowledged_at`. A used button gets a reply pointing to the Scheduled
-/// page. None of it needs a sign-in.
-///
-/// # Test Categories
-/// - `uses-db`
-#[sqlx::test(migrator = "MIGRATOR")]
-async fn reminder_buttons_replace_the_card_in_place(pool: sqlx::PgPool) {
-    let (state, mut bot, shared, base) = harness(pool).await;
-    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
-        Some("https://erato.example.com/".into());
-    let host = Host::new(state.clone());
+const REMINDER_OID: &str = "4a1b3c5d-0000-4000-8000-00000000f00d";
+
+/// A one-off reminder delivered as a card to a user known by Entra object
+/// id: the item, its occurrence and the card.
+async fn deliver_reminder(
+    state: &AppState,
+    bot: &Arc<TeamsBot>,
+    host: &Host,
+    shared: &Shared,
+    base: &str,
+) -> (ScheduledItem, Model, Value) {
     let user = get_or_create_user(&state.db, "https://issuer.example", "snoozer", None)
         .await
         .unwrap();
-    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000f00d";
-    record_entra_object_id(&state.db, &user, OID).await.unwrap();
+    record_entra_object_id(&state.db, &user, REMINDER_OID)
+        .await
+        .unwrap();
     host.upsert_conversation(
         "a:personal",
         ConversationKind::Personal,
         user.id,
-        &base,
+        base,
         "29:user",
     )
     .await
@@ -726,19 +724,40 @@ async fn reminder_buttons_replace_the_card_in_place(pool: sqlx::PgPool) {
     .unwrap()
     .unwrap();
     let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
-    make_due(&state, occurrence.id).await;
-    let registry = reminder_registry(bot.clone());
-    run_delivery_tick(&state.db, &executor(), &registry).await;
+    make_due(state, occurrence.id).await;
+    run_delivery_tick(&state.db, &executor(), &reminder_registry(bot.clone())).await;
     let card = shared.lock().unwrap().outgoing[0].1.clone();
     assert_eq!(buttons(&card), ["Done", "Snooze 30 min", "Tomorrow 9:00"]);
-    let press = |data: Value| -> Activity {
-        serde_json::from_value(json!({
-            "type": "message", "id": "m1", "serviceUrl": base, "value": data,
-            "from": {"id": "29:user", "aadObjectId": OID}, "recipient": {"id": "28:bot"},
-            "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
-        }))
-        .unwrap()
-    };
+    (item, occurrence, card)
+}
+
+/// The reminder user's press of a card button.
+fn press_on(base: &str, data: Value) -> Activity {
+    serde_json::from_value(json!({
+        "type": "message", "id": "m1", "serviceUrl": base, "value": data,
+        "from": {"id": "29:user", "aadObjectId": REMINDER_OID}, "recipient": {"id": "28:bot"},
+        "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
+    }))
+    .unwrap()
+}
+
+/// Snooze on a delivered reminder replaces the card in place with a
+/// "Snoozed until" line and no buttons, and brings the reminder back as a
+/// card with its own token; Done closes that card and stores
+/// `acknowledged_at`. A used button gets a reply pointing to the Scheduled
+/// page. None of it needs a sign-in.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn reminder_buttons_replace_the_card_in_place(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com/".into());
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    let registry = reminder_registry(bot.clone());
+    let press = |data: Value| press_on(&base, data);
 
     on_message(
         bot.clone(),
@@ -944,4 +963,67 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
         settled["attachments"][0]["content"]["body"][2]["text"],
         "Als erledigt markiert."
     );
+}
+
+/// A press whose service call fails changes nothing and gives the token
+/// back: the card keeps its buttons, and the next press works.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_failed_press_leaves_the_card_usable(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    let set_zone = |zone: &'static str| {
+        let db = state.db.clone();
+        async move {
+            db.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE scheduled_items SET time_zone = $2 WHERE id = $1",
+                [item.id.into(), zone.into()],
+            ))
+            .await
+            .unwrap();
+        }
+    };
+    // The snooze fails inside its transaction on a zone it cannot read.
+    set_zone("Nowhere/Invalid").await;
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "Something went wrong. Please try the button again."
+    );
+    assert!(shared.lock().unwrap().updated.is_empty());
+    let row = find(&state.db, occurrence.id).await.unwrap().unwrap();
+    assert!(
+        row.outcome.get("action_claimed_at").is_none()
+            && row.outcome.get("action_command").is_none(),
+        "{}",
+        row.outcome
+    );
+
+    set_zone("Europe/Berlin").await;
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert!(
+        settled["attachments"][0]["content"]["body"][2]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Snoozed until "),
+        "{settled}"
+    );
+    assert!(buttons(&settled).is_empty());
 }

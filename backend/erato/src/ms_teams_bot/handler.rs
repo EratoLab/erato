@@ -21,6 +21,7 @@ use crate::db::entity::users;
 use crate::services::scheduled_items::{self, Refusal, wording};
 use axum::http::StatusCode;
 use chrono::Utc;
+use chrono_tz::Tz;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
@@ -530,38 +531,65 @@ async fn on_delivery_action(
         };
         return target.send_text(&text).await;
     }
-    let note = match command {
-        nudge::DeliveryCommand::OptOut => {
-            host.set_teams_nudges_opt_out(user.id, true).await?;
-            return target.send_text(&reminders_text(bot, false, lang)).await;
-        }
-        nudge::DeliveryCommand::Done => {
-            match host
-                .acknowledge_reminder(user.id, submit.delivery_id)
-                .await?
-            {
-                Ok(_) => Msg::MarkedDone.text(lang).to_string(),
-                Err(refusal) => reminder_refusal_note(refusal).text(lang).to_string(),
+    let note = match run_delivery_command(host, user.id, submit.delivery_id, command, lang).await {
+        Ok(Some(note)) => note,
+        Ok(None) => return target.send_text(&reminders_text(bot, false, lang)).await,
+        Err(error) => {
+            // Nothing changed, so the press may be tried again.
+            tracing::error!(%error, delivery_id = %submit.delivery_id, "A delivered card's button failed");
+            if let Err(error) = host.release_delivery_action(&submit).await {
+                tracing::warn!(%error, delivery_id = %submit.delivery_id, "Could not release a delivered card's button");
             }
+            return target.send_text(Msg::ButtonFailed.text(lang)).await;
         }
-        nudge::DeliveryCommand::Snooze(choice) => match host
-            .snooze_delivered_reminder(user.id, submit.delivery_id, choice)
-            .await?
-        {
-            Ok((item, until)) => {
-                let time = wording::when(
-                    until,
-                    scheduled_items::zone_of(&item)?,
-                    host.stored_time_zone(user.id).await?,
-                    Utc::now(),
-                    lang,
-                );
-                Msg::SnoozedUntil.fill(lang, &[("time", &time)])
-            }
-            Err(refusal) => reminder_refusal_note(refusal).text(lang).to_string(),
-        },
     };
     settle_delivered_card(host, target, submit.delivery_id, &note).await
+}
+
+/// Call the service behind a claimed button. `Err` only when that call
+/// failed and changed nothing; a refusal is a note like any outcome. `None`
+/// for the opt-out, which answers with a message instead of a note.
+async fn run_delivery_command(
+    host: &Host,
+    user_id: Uuid,
+    delivery_id: Uuid,
+    command: nudge::DeliveryCommand,
+    lang: Lang,
+) -> Result<Option<String>, Report> {
+    let (item, until) = match command {
+        nudge::DeliveryCommand::OptOut => {
+            host.set_teams_nudges_opt_out(user_id, true).await?;
+            return Ok(None);
+        }
+        nudge::DeliveryCommand::Done => {
+            return Ok(Some(
+                match host.acknowledge_reminder(user_id, delivery_id).await? {
+                    Ok(_) => Msg::MarkedDone.text(lang).to_string(),
+                    Err(refusal) => reminder_refusal_note(refusal).text(lang).to_string(),
+                },
+            ));
+        }
+        nudge::DeliveryCommand::Snooze(choice) => match host
+            .snooze_delivered_reminder(user_id, delivery_id, choice)
+            .await?
+        {
+            Ok(snoozed) => snoozed,
+            Err(refusal) => {
+                return Ok(Some(reminder_refusal_note(refusal).text(lang).to_string()));
+            }
+        },
+    };
+    // The snooze is committed; from here on nothing may fail.
+    let user_zone = host
+        .stored_time_zone(user_id)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Could not read the user's time zone");
+            None
+        });
+    let zone = scheduled_items::zone_of(&item).unwrap_or(user_zone.unwrap_or(Tz::UTC));
+    let time = wording::when(until, zone, user_zone, Utc::now(), lang);
+    Ok(Some(Msg::SnoozedUntil.fill(lang, &[("time", &time)])))
 }
 
 /// Replace a delivered card with its settled form; when that fails, the note
@@ -572,14 +600,18 @@ async fn settle_delivered_card(
     delivery_id: Uuid,
     note: &str,
 ) -> Result<(), Report> {
-    if let Some((activity_id, content)) = host.delivered_card(delivery_id).await? {
-        let card = nudge::settled_delivery_card(&content, delivery_id, note);
-        match target.update(&activity_id, card).await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                tracing::warn!(%error, %delivery_id, "Could not replace a delivered card")
+    match host.delivered_card(delivery_id).await {
+        Ok(Some((activity_id, content))) => {
+            let card = nudge::settled_delivery_card(&content, delivery_id, note);
+            match target.update(&activity_id, card).await {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    tracing::warn!(%error, %delivery_id, "Could not replace a delivered card")
+                }
             }
         }
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, %delivery_id, "Could not read a delivered card"),
     }
     target.send_text(note).await
 }
@@ -597,9 +629,9 @@ fn reminder_refusal_note(refusal: Refusal) -> Msg {
         Refusal::NotFound => Msg::ReminderGone,
         Refusal::Finished => Msg::ReminderCancelled,
         Refusal::InFlight => Msg::ReminderArriving,
-        Refusal::NothingToSnooze => Msg::NextTimeComesFirst,
+        Refusal::NextOccurrenceFirst => Msg::DueAgainFirst,
         Refusal::NoFutureOccurrence => Msg::TimeHasPassed,
-        Refusal::NotFinished => Msg::ReminderUnchangeable,
+        Refusal::NothingToSnooze | Refusal::NotFinished => Msg::ReminderUnchangeable,
     }
 }
 
@@ -1591,8 +1623,8 @@ mod tests {
             "Ich konnte diese Anfrage nicht starten: Möglicherweise wurden bereits Tools ausgeführt. Senden Sie eine neue Anweisung, um fortzufahren, ohne deren Wirkung zu wiederholen."
         );
         assert_eq!(
-            reminder_refusal_note(Refusal::NothingToSnooze).text(Lang::De),
-            "Nicht zurückgestellt: Der nächste Termin dieser Erinnerung liegt davor."
+            reminder_refusal_note(Refusal::NextOccurrenceFirst).text(Lang::De),
+            "Nicht zurückgestellt: Diese Erinnerung ist bis dahin ohnehin wieder fällig oder war es schon."
         );
     }
 
@@ -1630,6 +1662,14 @@ mod tests {
         assert_eq!(
             approval_error_text(StartError::AlreadyDecided, Lang::En),
             "This approval was already decided."
+        );
+    }
+
+    #[test]
+    fn a_snooze_after_the_next_occurrence_is_refused_as_due_again() {
+        assert_eq!(
+            reminder_refusal_note(Refusal::NextOccurrenceFirst).text(Lang::En),
+            "Not snoozed: this reminder is due again by then, or already was."
         );
     }
 
