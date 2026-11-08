@@ -18,25 +18,67 @@ export interface CleanText {
   text: string;
   truncated: boolean;
   /**
-   * Whether bidi controls or zero-width, byte order mark or tag characters
-   * were removed, so the text differs from the value in ways nobody can see.
+   * Whether invisible characters such as bidi controls or zero-width, filler,
+   * variation selector or tag characters were removed, so the text differs
+   * from the value in ways nobody can see.
    */
   hiddenCharacters: boolean;
 }
 
+/** Unicode 16's default-ignorable code points, as the backend lists them. */
+const DEFAULT_IGNORABLE: readonly (readonly [number, number])[] = [
+  [0x00ad, 0x00ad],
+  [0x034f, 0x034f],
+  [0x061c, 0x061c],
+  [0x115f, 0x1160],
+  [0x17b4, 0x17b5],
+  [0x180b, 0x180f],
+  [0x200b, 0x200f],
+  [0x202a, 0x202e],
+  [0x2060, 0x206f],
+  [0x3164, 0x3164],
+  [0xfe00, 0xfe0f],
+  [0xfeff, 0xfeff],
+  [0xffa0, 0xffa0],
+  [0xfff0, 0xfff8],
+  [0x1bca0, 0x1bca3],
+  [0x1d173, 0x1d17a],
+  [0xe0000, 0xe0fff],
+];
+
 /** The backend's `is_invisible_format_char`. */
 export const isInvisibleFormatChar = (code: number): boolean =>
-  code === 0x061c ||
-  (code >= 0x200b && code <= 0x200f) ||
-  (code >= 0x202a && code <= 0x202e) ||
-  code === 0x2060 ||
-  (code >= 0x2066 && code <= 0x2069) ||
-  code === 0xfeff ||
-  (code >= 0xe0000 && code <= 0xe007f);
+  code >= 0x00ad &&
+  DEFAULT_IGNORABLE.some(([start, end]) => code >= start && code <= end);
 
 const isControl = (code: number): boolean =>
   (code < 0x20 && code !== 0x0a && code !== 0x09) ||
   (code >= 0x7f && code <= 0x9f);
+
+const isSurrogate = (code: number): boolean => code >= 0xd800 && code <= 0xdfff;
+
+const isPresentationSelector = (code: number): boolean =>
+  code === 0xfe0e || code === 0xfe0f;
+
+/**
+ * The backend's `is_hidden_char`: an invisible character, except a text or
+ * emoji presentation selector right after a visible character, as in "❤️".
+ */
+export const isHiddenChar = (
+  previous: string | undefined,
+  char: string,
+): boolean => {
+  const code = char.codePointAt(0) ?? 0;
+  if (!isInvisibleFormatChar(code)) return false;
+  if (!isPresentationSelector(code) || previous === undefined) return true;
+  const before = previous.codePointAt(0) ?? 0;
+  return (
+    /\s/u.test(previous) ||
+    isControl(before) ||
+    isSurrogate(before) ||
+    isInvisibleFormatChar(before)
+  );
+};
 
 // Enough room for the dropped characters and line breaks a capped text may
 // lose, without walking a megabyte-long string a server sent.
@@ -51,14 +93,17 @@ export const cleanServerText = (
   }
   const scanned = raw.slice(0, maxChars * SCAN_FACTOR);
   let hiddenCharacters = false;
+  let previous: string | undefined;
   const kept = Array.from(scanned)
     .filter((char) => {
-      const code = char.codePointAt(0) ?? 0;
-      if (isInvisibleFormatChar(code)) {
+      const hides = isHiddenChar(previous, char);
+      previous = char;
+      if (hides) {
         hiddenCharacters = true;
         return false;
       }
-      return !isControl(code) && !(code >= 0xd800 && code <= 0xdfff);
+      const code = char.codePointAt(0) ?? 0;
+      return !isControl(code) && !isSurrogate(code);
     })
     .join("")
     .normalize("NFC")

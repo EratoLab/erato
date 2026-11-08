@@ -1574,6 +1574,8 @@ msgstr "Asystent"
 #: src/pages/AssistantsPage.tsx
 #: src/pages/HomePage.tsx
 #: src/pages/NewChatPage.tsx
+#: src/pages/ScheduledItemFormPage.tsx
+#: src/pages/ScheduledPage.tsx
 #: src/pages/SharedChatPage.tsx
 msgid "branding.page_title_suffix"
 msgstr ""
@@ -2965,6 +2967,7 @@ msgstr "Wyślij"
 #. js-lingui-explicit-id
 #: src/components/ui/Assistant/AssistantWelcomeScreen.tsx
 #: src/components/ui/Chat/DelegatedRunsSection.tsx
+#: src/pages/ScheduledItemFormPage.tsx
 #: src/utils/chat/recentChatSession.ts
 msgid "chat.newChat.title"
 msgstr "Nowy Czat"
@@ -6568,6 +6571,801 @@ msgid "profile.menu.preferences"
 msgstr "Ustawienia"
 
 #. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.cancel.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.browser"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.browser.helper"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.comingLater"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.desktop"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.desktop.helper"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.connected"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.notSetUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.status.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.channel.teamsChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.helper"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.notSetUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.delete.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.past.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.past.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.upcoming.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.empty.upcoming.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.error.load"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+#~ msgid "scheduled.failure.many"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.manyUnderPast"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.one"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.showPast"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledFailureAlert.tsx
+msgid "scheduled.failure.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.advanced.summary"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.advanced.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.at"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.backToList"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.cancel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.created"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.date"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.form.deliverVia"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.afterCount"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.count"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.lastDay"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.never"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.onDate"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.ends.times"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.daily"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.monthly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.weekdays"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.frequency.weekly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.current"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.help"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.linkedChat.none"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.loading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.message"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.name"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.name.help"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.reminder"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.reminder.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.save"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.saved"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.schedule.reminder"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.starts"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.again"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.edit"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.new"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.subtitle.template"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.daily"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.endsAfter"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.endsOn"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.incomplete"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.monthly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.noTimeAhead"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.once"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.repeat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.snoozed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.weekdays"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTriggerSummary.tsx
+msgid "scheduled.form.summary.weekly"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.time"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.title.edit"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledItemFormPage.tsx
+msgid "scheduled.form.title.new"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.once"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.trigger.repeat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type.help"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.type.scheduledTaskLater"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.date.past"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.date.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endCount.invalid"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endDate.beforeStart"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.endDate.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.message.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.message.tooLong"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.name.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.name.tooLong"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.repeat.noTimeAhead"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.time.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledForm.ts
+msgid "scheduled.form.validation.weekdays.required"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.weekdays"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemForm.tsx
+msgid "scheduled.form.weekdays.on"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.earlier"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.later"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.today"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.tomorrow"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.group.yesterday"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.cancel"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.delete"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.edit"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.openLinkedChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.scheduleAgain"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.action.snoozeUntilTomorrow"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.actions.aria"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirm"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirmMessage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.confirmTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.cancel.keep"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirm"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmMessage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.delete.confirmTitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.cancelled"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.deliveredVia"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.linkedChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+#~ msgid "scheduled.item.meta.notDeliveredVia"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.snoozedUntil"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.via"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasDue"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.meta.wasPlannedFor"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.loading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.label"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.createWithChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.createWithChat.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.reminder"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.reminder.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.scheduledTask"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.scheduledTask.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.section.inChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledNewMenu.tsx
+msgid "scheduled.new.trigger"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.notice.limitReached"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.body"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.notSetUp.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
+msgid "scheduled.notice.unavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.page.subtitle"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.page.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelNotSetUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.channelUnavailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.finished"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.inFlight"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidRequest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.invalidTrigger"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.limitReached"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.linkedChatNotFound"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFinished"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.notFound"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.nothingToSnooze"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.triggerInPast"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.typeNotAvailable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledApi.ts
+msgid "scheduled.refusal.unknown"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/hooks/scheduled/useScheduledItems.ts
+msgid "scheduled.snooze.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledStatusPill.tsx
 msgid "scheduled.status.cancelled"
 msgstr ""
@@ -6590,6 +7388,51 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledStatusPill.tsx
 msgid "scheduled.status.snoozed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.aria"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.past"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.past.count"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.upcoming"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/ScheduledPage.tsx
+msgid "scheduled.tabs.upcoming.count"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTemplates.tsx
+msgid "scheduled.templates.note"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledTemplates.tsx
+msgid "scheduled.templates.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.type.reminder"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/scheduledItems.ts
+msgid "scheduled.type.scheduledTask"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -9067,8 +9910,8 @@ msgid "Cancel"
 msgstr "Anuluj"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Cancel action"
-msgstr "Anuluj akcję"
+#~ msgid "Cancel action"
+#~ msgstr "Anuluj akcję"
 
 #: src/components/ui/Chat/ChatInput.tsx
 msgid "Cancel queued message"
@@ -9195,8 +10038,8 @@ msgid "Confirm"
 msgstr "Potwierdź"
 
 #: src/components/ui/Modal/ConfirmationDialog.tsx
-msgid "Confirm action"
-msgstr "Potwierdź akcję"
+#~ msgid "Confirm action"
+#~ msgstr "Potwierdź akcję"
 
 #: src/components/ui/Controls/Button.tsx
 #: src/components/ui/Controls/DropdownMenu.tsx

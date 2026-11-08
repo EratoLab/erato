@@ -4295,7 +4295,7 @@ To show chat connectors while hiding preferences, set `show_frontend_tab = false
 
 The name users see for this server on approval cards (in the web app, for delegated tasks and in Microsoft Teams), in the tool steps of a response and in the Servers & Tools preferences tab. The name always comes from this configuration, never from the MCP server itself.
 
-**Type:** optional `string`, not blank, at most 128 bytes, without control, bidi or invisible formatting characters (such as zero-width spaces and joiners, the byte order mark or tag characters)
+**Type:** optional `string`, not blank, at most 128 bytes, without control, bidi or invisible formatting characters (Unicode's default-ignorable characters, such as zero-width spaces and joiners, soft hyphens, Hangul fillers, variation selectors, the byte order mark or tag characters). An emoji's text or emoji presentation selector (U+FE0E or U+FE0F) directly after a character is allowed, as in "Weather ☀️".
 
 **Default:** the server ID tidied up: underscores and hyphens become spaces and the first letter is capitalized, so `web_access` is shown as "Web access". Messages saved before this setting existed keep showing the server ID.
 

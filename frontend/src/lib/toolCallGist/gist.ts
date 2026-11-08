@@ -187,22 +187,35 @@ const readValue = (raw: unknown): LabelValue | undefined => {
   };
 };
 
-const readSlot = (raw: unknown): LabelSlot | undefined => {
+/** The member a pointer names, for a pointer that ends in a wildcard too. */
+const memberName = (pointer: string): string | undefined =>
+  lastPointerSegment(pointer.replace(/\/\*$/, ""));
+
+/** A field without a name of its own is called after the member it reads. */
+const readSlot = (raw: unknown, field = false): LabelSlot | undefined => {
   if (!isRecord(raw) || typeof raw.pointer !== "string") return undefined;
   if (raw.pointer.length > MAX_PATH_CHARS) return undefined;
   const all = listOf(raw.values);
   const kept = all.slice(0, MAX_SLOT_VALUES);
-  const name = cleanServerText(raw.name);
+  const given = cleanServerText(raw.name);
+  const member =
+    field && given.text.length === 0
+      ? cleanServerText(memberName(raw.pointer))
+      : undefined;
+  const name = member ? member.text : given.text;
   const values = kept.flatMap((value) => {
     const read = readValue(value);
     return read ? [read] : [];
   });
   return {
     pointer: raw.pointer,
-    name: name.text.length > 0 ? name.text : undefined,
+    name: name.length > 0 ? name : undefined,
     values,
     omitted: countOf(raw.omitted) + (all.length - kept.length),
-    hidden: name.hiddenCharacters || values.some((value) => value.hidden),
+    hidden:
+      given.hiddenCharacters ||
+      member?.hiddenCharacters === true ||
+      values.some((value) => value.hidden),
   };
 };
 
@@ -217,7 +230,7 @@ const readItem = (raw: unknown): LabelItem | undefined =>
         fields: listOf(raw.fields)
           .slice(0, MAX_GIST_FIELDS)
           .flatMap((slot) => {
-            const read = readSlot(slot);
+            const read = readSlot(slot, true);
             return read ? [read] : [];
           }),
       }
@@ -226,10 +239,6 @@ const readItem = (raw: unknown): LabelItem | undefined =>
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID_NAME = /(^|[_\-.])ids?$|[a-z]Ids?$/;
 const SHORT_ID_CHARS = 8;
-
-/** The member a pointer names, for a pointer that ends in a wildcard too. */
-const memberName = (pointer: string): string | undefined =>
-  lastPointerSegment(pointer.replace(/\/\*$/, ""));
 
 /** Whether a value the call wrote reads as an identifier rather than a name. */
 const looksLikeAnId = (text: string, pointer: string): boolean => {
@@ -426,7 +435,7 @@ const gistField = (
   if (values.length === 0) return undefined;
   return {
     pointer: slot.pointer,
-    name: slot.name ?? cleanServerText(memberName(slot.pointer)).text,
+    name: slot.name ?? "",
     values,
     omitted: slot.omitted,
   };
@@ -583,7 +592,7 @@ const sentenceSlots: GistLineSlots = (_gist, item) => ({
 /**
  * Where the values a gist card shows sit in the call's input, and whether
  * each is shown whole. Mirrors what `ToolCallGist` renders in the ask phase,
- * where a name shows the value written beside it.
+ * where a name shows the value written beside it and an ID shows whole.
  */
 export const gistShownPaths = (
   gist: Gist,
