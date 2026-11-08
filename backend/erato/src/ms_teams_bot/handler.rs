@@ -552,7 +552,7 @@ async fn run_delivery_command(
 
 /// Replace a delivered card with its settled form; when that fails, the note
 /// goes out as a message.
-async fn settle_delivered_card(
+pub(super) async fn settle_delivered_card(
     host: &Host,
     target: &ReplyTarget<'_>,
     delivery_id: Uuid,

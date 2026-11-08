@@ -8,7 +8,8 @@ use crate::config::AppConfig;
 use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::teams_nudges_opted_out;
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
-use crate::ms_teams_bot::handler::{on_bot_added, on_message};
+use crate::ms_teams_bot::handler::{on_bot_added, on_message, settle_delivered_card};
+use crate::ms_teams_bot::streaming::ReplyTarget;
 use crate::services::scheduled_deliveries::{
     ExecutorSettings, NewDelivery, run_delivery_tick, schedule,
 };
@@ -842,4 +843,80 @@ async fn a_failed_press_leaves_the_card_usable(pool: sqlx::PgPool) {
         "{settled}"
     );
     assert!(buttons(&settled).is_empty());
+}
+
+/// A snooze that went through stays a snooze when reading the user's time
+/// zone afterwards fails: the card settles with its "Snoozed until" line
+/// instead of an error reply, and the reminder comes back.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_committed_snooze_is_not_reported_as_an_error(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    // The snooze never reads user preferences; only the note after it does.
+    state
+        .db
+        .execute_unprepared("ALTER TABLE user_preferences RENAME TO user_preferences_gone")
+        .await
+        .unwrap();
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let outgoing: Vec<Value> = shared
+        .lock()
+        .unwrap()
+        .outgoing
+        .iter()
+        .map(|(_, activity)| activity.clone())
+        .collect();
+    assert_eq!(outgoing.len(), 1, "no message is added: {outgoing:?}");
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert!(
+        settled["attachments"][0]["content"]["body"][2]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Snoozed until "),
+        "{settled}"
+    );
+    assert!(buttons(&settled).is_empty());
+    let redelivery = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    assert_ne!(redelivery.id, occurrence.id);
+    assert_eq!(
+        redelivery.dedupe_key.as_deref(),
+        Some(format!("{}:snooze", item.id).as_str())
+    );
+}
+
+/// When the delivered card cannot be read back, its note still reaches the
+/// user, as a message.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_note_goes_out_as_a_message_when_the_card_cannot_be_read(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (_, occurrence, _) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    state.db.close_by_ref().await.unwrap();
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+    };
+
+    settle_delivered_card(&host, &target, occurrence.id, "Snoozed until 9:30.")
+        .await
+        .unwrap();
+    let sent = replies(&shared, 2).await;
+    assert_eq!(sent[1]["text"], "Snoozed until 9:30.");
+    assert!(shared.lock().unwrap().updated.is_empty());
 }
