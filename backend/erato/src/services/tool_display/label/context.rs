@@ -3,10 +3,12 @@
 //! by code from results. What the model wrote into a call never names a
 //! record, a lookup's `name` included; the one exception is the name a create
 //! call gave the record its result reports. Names stay with the MCP server
-//! whose result gave them, and never reach a recipient, an address or a link.
+//! whose result gave them, and never reach a recipient, an address, a phone
+//! number or a link.
 
 use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
 use super::pointer;
+use super::recipients::is_recipient_member;
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
@@ -48,38 +50,6 @@ const MAX_WORD_SCAN_BYTES: usize = 8 * 1024;
 const NAME_KEYS: [&str; 4] = ["name", "title", "subject", "fullname"];
 /// Where a link says its record lives.
 const LINK_TYPE_KEYS: [&str; 4] = ["relatedTable", "LogicalName", "type", "@odata.type"];
-/// Members naming who a message, invite or share is for or copies, and where
-/// a user object holds its address, compared without `_` and `-` and ignoring
-/// case. A value below one shows as written: a name read from a result could
-/// pass an attacker's address off as a colleague.
-const RECIPIENT_MEMBERS: [&str; 26] = [
-    "to",
-    "torecipients",
-    "recipient",
-    "recipients",
-    "attendee",
-    "attendees",
-    "requiredattendees",
-    "invitee",
-    "invitees",
-    "guests",
-    "participants",
-    "sharewith",
-    "sharedwith",
-    "shareto",
-    "sendto",
-    "cc",
-    "ccrecipients",
-    "bcc",
-    "bccrecipients",
-    "optionalattendees",
-    "email",
-    "emailaddress",
-    "address",
-    "mail",
-    "userprincipalname",
-    "upn",
-];
 
 /// Names and field values by ID, from the successful tool results of a chat.
 /// Reads only settled calls: a call still waiting, such as a client tool
@@ -515,20 +485,13 @@ fn indexable(id: &str) -> bool {
         && !LINK_PREFIXES.iter().any(link_prefix)
 }
 
-/// Whether a value's path passes through a recipient or address member. A
-/// path too long to read counts as one.
+/// Whether a value's path passes through a recipient, address or contact
+/// number member. A path too long to read counts as one.
 fn below_a_recipient(path: &str) -> bool {
     path.len() > pointer::MAX_PATH_BYTES
-        || pointer::member_names(path).iter().any(|member| {
-            member.len() <= 32 && {
-                let bare: String = member
-                    .chars()
-                    .filter(|c| !matches!(c, '_' | '-'))
-                    .map(|c| c.to_ascii_lowercase())
-                    .collect();
-                RECIPIENT_MEMBERS.contains(&bare.as_str())
-            }
-        })
+        || pointer::member_names(path)
+            .iter()
+            .any(|member| is_recipient_member(member))
 }
 
 fn is_settled(tool: &ToolUse) -> bool {

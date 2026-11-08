@@ -6,6 +6,7 @@
 mod arguments;
 pub mod context;
 pub mod pointer;
+mod recipients;
 
 pub use arguments::readable_arguments;
 pub use context::ToolResultContext;
