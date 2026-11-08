@@ -4058,7 +4058,8 @@ mod test_cases {
         }
 
         #[tokio::test]
-        async fn a_replayed_call_keeps_only_its_label_action_and_the_model_input_is_unchanged() {
+        async fn a_replayed_call_keeps_only_its_label_action_and_server_and_the_model_input_is_unchanged()
+         {
             let labelled = two_edit_chat(word_policy(), vec![mcp_call(true)], WORD_TOOLS).await;
             let bare = two_edit_chat(word_policy(), vec![mcp_call(false)], WORD_TOOLS).await;
 
@@ -4082,6 +4083,7 @@ mod test_cases {
                         json!({
                             "title": "",
                             "description_truncated": false,
+                            "server_name": "SERVER-NAME",
                             "label": {"action": "create", "object_kind": "other", "source": "generic"},
                         })
                     ),
@@ -4091,7 +4093,6 @@ mod test_cases {
             for kept_out in [
                 "TOOL-TITLE",
                 "TOOL-DESCRIPTION",
-                "SERVER-NAME",
                 "LABEL-VALUE",
                 "RESOLVED-NAME",
                 "/pages/*/title",
