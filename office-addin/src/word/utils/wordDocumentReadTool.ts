@@ -9,6 +9,7 @@ import {
   WORD_READ_TOOL,
 } from "@erato/frontend/word-review";
 
+import { checkWordApprovalScope } from "./wordApprovalScope";
 import { WORD_AUTHORING_CONTRACT } from "./wordAuthoringContract";
 import {
   wordReadableSourceBlock,
@@ -57,6 +58,20 @@ export type WordDocumentReadRequest = Pick<
   ClientToolCallContext,
   "chatId" | "messageId"
 >;
+
+/** A lost capture is final: a new request must capture the document again (contract §6). */
+export const captureUnavailable = (): ClientToolExecutionResult => ({
+  ok: false,
+  error: "The document capture is no longer available.",
+  validationErrors: [
+    {
+      path: "/snapshot",
+      code: "capture-unavailable",
+      message: "Start a new request with the document included.",
+    },
+  ],
+  submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+});
 
 export class WordDocumentReadSession {
   private session: Session | null = null;
@@ -180,7 +195,49 @@ export class WordDocumentReadSession {
   }
 
   execute: ClientToolExecutor = (input, context) =>
-    this.run(input, context, this.access);
+    context?.hostGrant
+      ? this.executeChildRead(input, context)
+      : this.run(input, context, this.access);
+
+  /**
+   * A delegated task's call under the server's grant (contract §7): it reads the capture of the
+   * turn that owns the grant, read-only, while that turn still holds it. The grant is checked
+   * before the document approval, so a foreign or stale call never learns whether the document
+   * changed. The server drops documentIdentity from the call, and the capture fills it and the
+   * snapshot in.
+   */
+  executeChildRead: ClientToolExecutor = async (input, context) => {
+    const grant = context?.hostGrant;
+    const session = this.session;
+    if (
+      !grant ||
+      !context ||
+      !session ||
+      grant.requestingChatId !== context.chatId ||
+      grant.requestingMessageId !== context.messageId ||
+      session.snapshot.revoked ||
+      session.snapshot.used ||
+      grant.contextRef !== session.snapshot.token ||
+      !session.snapshot.ownerMessageId ||
+      grant.ownerMessageId !== session.snapshot.ownerMessageId ||
+      grant.ownerChatId !== session.chatId
+    )
+      return captureUnavailable();
+    const approval = checkWordApprovalScope(grant);
+    if (!approval.read) return approval.result;
+    const { snapshot } = session;
+    const { hostGrant: _grant, ...call } = context;
+    return this.executeReadOnly(
+      input && typeof input === "object" && !Array.isArray(input)
+        ? {
+            ...input,
+            snapshot: snapshot.token,
+            documentIdentity: snapshot.identity,
+          }
+        : input,
+      { ...call, chatId: grant.ownerChatId, messageId: grant.ownerMessageId },
+    );
+  };
 
   /** Reads read-only whatever the session's access, as a call under a host grant must. */
   executeReadOnly: ClientToolExecutor = (input, context) =>
@@ -211,18 +268,7 @@ export class WordDocumentReadSession {
           : result;
         return access === "read-only" ? withReadOnlyFields(fresh) : fresh;
       }
-      return {
-        ok: false,
-        error: "The document capture is no longer available.",
-        validationErrors: [
-          {
-            path: "/snapshot",
-            code: "capture-unavailable",
-            message: "Start a new request with the document included.",
-          },
-        ],
-        submissionFeedback: { terminal: true, recovery: "cannot_continue" },
-      };
+      return captureUnavailable();
     }
     const snapshot = context && this.snapshotForSubmission(context);
     if (

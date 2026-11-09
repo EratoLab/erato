@@ -5,7 +5,7 @@ import {
   registerOperationExecutor,
   requestClientOperationSweep,
 } from "@erato/frontend/library";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { wordDocumentOperationBinding } from "../utils/wordDocumentOperationBinding";
 import {
@@ -16,21 +16,32 @@ import { WORD_SUBMIT_PLAN_TOOL } from "../utils/wordDocumentSubmission";
 
 import type { ExecutorBinding } from "@erato/frontend/library";
 
-export function useWordClientOperations(documentIdentity: string): void {
+/** Registers the pane's operation executors; returns a stable getter of its binding's identity,
+ * the scope id the server derives for a document approval. */
+export function useWordClientOperations(
+  documentIdentity: string,
+): () => string | undefined {
   const current = useRef<
     { documentIdentity: string; binding: ExecutorBinding } | undefined
   >(undefined);
   const identity = useRef(documentIdentity);
   identity.current = documentIdentity;
+  const binding = useCallback(
+    () =>
+      current.current?.documentIdentity === identity.current
+        ? current.current.binding
+        : undefined,
+    [],
+  );
   useEffect(() => {
     let active = true;
     void wordDocumentOperationBinding(
       documentIdentity,
       clientOperationDeviceId(),
     ).then(
-      (binding) => {
-        if (!active || !binding) return;
-        current.current = { documentIdentity, binding };
+      (made) => {
+        if (!active || !made) return;
+        current.current = { documentIdentity, binding: made };
         requestClientOperationSweep();
       },
       () => {},
@@ -41,10 +52,6 @@ export function useWordClientOperations(documentIdentity: string): void {
     };
   }, [documentIdentity]);
   useEffect(() => {
-    const binding = () =>
-      current.current?.documentIdentity === identity.current
-        ? current.current.binding
-        : undefined;
     const dispose = [
       registerOperationExecutor(WORD_READ_TOOL, binding, { yields: true }),
       registerOperationExecutor(WORD_SUBMIT_PLAN_TOOL, binding, {
@@ -61,5 +68,6 @@ export function useWordClientOperations(documentIdentity: string): void {
     return () => {
       dispose.forEach((unregister) => unregister());
     };
-  }, []);
+  }, [binding]);
+  return useCallback(() => binding()?.host_context?.identity, [binding]);
 }

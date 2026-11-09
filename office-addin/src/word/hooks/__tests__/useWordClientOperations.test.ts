@@ -47,8 +47,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Word client operation registration", () => {
-  it("advertises both live tools with one pane binding but claims only reads", async () => {
-    const { rerender, unmount } = renderHook(
+  it("advertises both live tools with one pane binding but claims only reads, and returns the binding's identity", async () => {
+    const { result, rerender, unmount } = renderHook(
       ({ document }) => useWordClientOperations(document),
       { initialProps: { document: "doc-one" } },
     );
@@ -59,6 +59,9 @@ describe("Word client operation registration", () => {
       expect(binding()?.host_context?.kind).toBe("word_document"),
     );
     const original = binding();
+    const identity = result.current;
+    expect(identity()).toBe(original?.host_context?.identity);
+    expect(identity()).toMatch(/^[0-9a-f]{64}$/);
     expect(mocks.register.mock.calls.map(([name]) => name)).toEqual([
       "read_document_blocks",
       "submit_document_plan",
@@ -72,8 +75,12 @@ describe("Word client operation registration", () => {
     expect(handler.binding()).toEqual(original);
     rerender({ document: "doc-two" });
     expect(binding()).toBeUndefined();
+    expect(identity()).toBeUndefined();
+    expect(result.current).toBe(identity);
     await waitFor(() => expect(binding()).toBeDefined());
     expect(binding()).not.toEqual(original);
+    expect(identity()).toBe(binding()?.host_context?.identity);
+    expect(identity()).not.toBe(original?.host_context?.identity);
     unmount();
     expect(binding()).toBeUndefined();
     expect(mocks.unregister).toHaveBeenCalledTimes(3);
