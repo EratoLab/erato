@@ -100,13 +100,10 @@ chat_provider_ids = ["test-token-limit"]
 # call (member names, text lengths, verb fields and values the tool's schema lists) goes
 # to this provider, only on turns that run on it unless allow_other_provider is set, and
 # only for users whose model permissions allow it.
-# organization_email_domains applies with or without the model: approval cards name the
-# recipients outside the signed-in user's own email domain and these domains.
 # [tool_labels]
 # enabled = false
 # chat_provider_id = "test-token-limit"
 # allow_other_provider = false
-# organization_email_domains = ["example.com"]
 
 # From ./run_mcp_server.sh
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
@@ -121,6 +118,9 @@ chat_provider_ids = ["test-token-limit"]
 # enable_wait = false
 # # Maximum wait duration in seconds (default: 60)
 # max_wait_seconds = 60
+# # Domains counted as inside the organisation when approval cards name recipients
+# # outside it, next to the signed-in user's own domain.
+# organization_email_domains = ["example.com"]
 #
 # [mcp_servers.file_provider]
 # # Optional: the name users see (default: the id tidied up, "File provider")

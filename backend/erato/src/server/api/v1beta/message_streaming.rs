@@ -4876,7 +4876,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         )
         .with_organization(
             me_profile_input.email,
-            &app_state.config.tool_labels.organization_email_domains,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
@@ -23391,7 +23394,10 @@ async fn resume_parked_generation(
         )
         .with_organization(
             me_profile_input.email,
-            &app_state.config.tool_labels.organization_email_domains,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(
