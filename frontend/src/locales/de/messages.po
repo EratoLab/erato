@@ -4488,12 +4488,12 @@ msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn d
 #: src/components/ui/Message/OwnCallApprovalItem.tsx
 #: src/components/ui/Message/ParkedChildItem.tsx
 msgid "mcpApproval.openWorldWarning"
-msgstr ""
+msgstr "Dieses Tool kann Daten an einen externen Dienst senden."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/OwnCallApprovalItem.tsx
 msgid "mcpApproval.title"
-msgstr ""
+msgstr "MCP-Tool-Aufruf erlauben?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
@@ -8693,6 +8693,11 @@ msgstr "{replaced, plural, one {Liste ersetzt in # Zeile} other {Liste ersetzt i
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.listsMaybe"
+msgstr "{replaced, plural, one {Liste möglicherweise ersetzt in # Zeile} other {Liste möglicherweise ersetzt in # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "Viele verschiedene Werte {scope}: {samples}"
 
@@ -8725,6 +8730,11 @@ msgstr "{emptying, plural, one {# Zeile leert ein Feld} other {# Zeilen leeren e
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.lists"
 msgstr "{replacing, plural, one {# Zeile ersetzt eine Liste} other {# Zeilen ersetzen eine Liste}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.listsMaybe"
+msgstr "{replacing, plural, one {# Zeile ersetzt möglicherweise eine Liste} other {# Zeilen ersetzen möglicherweise eine Liste}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8842,6 +8852,12 @@ msgstr "{0, plural, one {# geleert} other {# geleert}}"
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listMaybeReplaced"
+msgstr "{0, plural, one {# Liste möglicherweise ersetzt} other {# Listen möglicherweise ersetzt}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listReplaced
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.listReplaced"
 msgstr "{0, plural, one {# Liste ersetzt} other {# Listen ersetzt}}"
 
@@ -8850,6 +8866,11 @@ msgstr "{0, plural, one {# Liste ersetzt} other {# Listen ersetzt}}"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.set"
 msgstr "{0, plural, one {# gesetzt} other {# gesetzt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.text"
+msgstr "{texts, plural, one {# Text} other {# Texte}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: change.counts.unchanged
@@ -8930,6 +8951,11 @@ msgstr "{removed, plural, one {# entfällt} other {# entfallen}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.ifReplaced"
+msgstr "Falls dies die Liste {name} ersetzt: {parts}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.kept"
 msgstr "{name} bleiben"
 
@@ -8952,6 +8978,16 @@ msgstr "{name} gesetzt auf"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.stays"
 msgstr "{kept, plural, one {# bleibt} other {# bleiben}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.wouldGo"
+msgstr "{name}, die entfielen"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.wouldStay"
+msgstr "{name}, die blieben"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8992,6 +9028,11 @@ msgstr "Jeder Wert entspricht dem, was zuvor in diesem Chat gelesen wurde, es sc
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.note.oldValuesFromEarlier"
 msgstr "Alte Werte stammen von früher in diesem Chat und können sich geändert haben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.operatorMarkedDestructive"
+msgstr "Ihre Organisation hat dieses Tool als destruktiv gekennzeichnet."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9156,6 +9197,11 @@ msgstr "{unchanged, plural, one {# unverändert} other {# unverändert}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.setOnNew"
+msgstr "{total, plural, one {# weiteres Feld anzeigen} other {# weitere Felder anzeigen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.unchanged"
 msgstr "{total, plural, one {# unverändertes Feld anzeigen} other {# unveränderte Felder anzeigen}}"
 
@@ -9163,6 +9209,11 @@ msgstr "{total, plural, one {# unverändertes Feld anzeigen} other {# unverände
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.summary.fields"
 msgstr "{changing, plural, one {# Feld ändert sich} other {# Felder ändern sich}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.summary.fieldsSet"
+msgstr "{changing, plural, one {# Feld wird gesetzt} other {# Felder werden gesetzt}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.unchanged
@@ -9184,6 +9235,11 @@ msgstr "Ersetzter Text"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
 msgstr "{lines, plural, one {{name} ersetzt: # Zeile, {size} Zeichen} other {{name} ersetzt: # Zeilen, {size} Zeichen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.text.replacedShort"
+msgstr "{name} ersetzt"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9221,6 +9277,16 @@ msgid "toolChange.value.linkTo"
 msgstr "Verknüpfung mit {name}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.meaning"
+msgstr "{label} ({text})"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.toolSaysMeaning"
+msgstr "{text} (laut Tool: {label})"
+
+#. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.archive.ask"
 msgstr "{shape, select, full {{kind} {title} in {where} archivieren} titled {{kind} {title} archivieren} placed {{kind} in {where} archivieren} other {{kind} archivieren}}"
@@ -9236,6 +9302,7 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Archivieren fehlgeschlagen: {kind} {title} in {where}} titled {Archivieren fehlgeschlagen: {kind} {title}} placed {Archivieren fehlgeschlagen: {kind} in {where}} other {Archivieren fehlgeschlagen: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
 msgstr "wird zu"
