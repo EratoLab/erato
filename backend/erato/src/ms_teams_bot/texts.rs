@@ -265,6 +265,10 @@ texts! {
     CreateReminderConfirm => "Schedule", "Planen";
     CreateReminderDeny => "Don't schedule", "Nicht planen";
     KeepReminder => "Keep it", "Behalten";
+    ContinuingChat => "Your next message here continues “{chat}”.",
+        "Ihre nächste Nachricht hier setzt „{chat}“ fort.";
+    ReminderChatUnavailable => "The chat this reminder came from is no longer available.",
+        "Der Chat, aus dem diese Erinnerung stammt, ist nicht mehr verfügbar.";
 }
 
 impl Msg {

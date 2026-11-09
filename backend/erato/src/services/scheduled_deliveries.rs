@@ -46,6 +46,10 @@ pub struct DeliveryContent {
     #[serde(default)]
     pub title: Option<String>,
     pub text: String,
+    /// A quieter line under the text on how current it is, such as that the
+    /// chat it was written from went on afterwards.
+    #[serde(default)]
+    pub context: Option<String>,
     /// Short plain text for notification previews.
     #[serde(default)]
     pub summary: Option<String>,
@@ -63,6 +67,8 @@ pub struct DeliveryLink {
 
 /// A button that reports back to Erato. `command` is interpreted by the
 /// producer's surface; `token` is single-use and bound to the delivery row.
+/// A button without a token changes nothing that one press must guard, so it
+/// stays on the card after a token button settled it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryAction {
     pub title: String,

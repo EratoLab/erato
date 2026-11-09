@@ -536,6 +536,9 @@ async fn on_delivery_action(
     let Some(user) = known_user(bot, activity, target, sender).await? else {
         return Ok(());
     };
+    if command == nudge::DeliveryCommand::ContinueChat {
+        return continue_reminder_chat(host, activity, target, user.id, submit.delivery_id).await;
+    }
     let conversation_id = activity.conversation_id().unwrap_or_default();
     if !host
         .claim_delivery_action(user.id, conversation_id, &submit)
@@ -562,6 +565,41 @@ async fn on_delivery_action(
     settle_delivered_card(host, target, submit.delivery_id, &note).await
 }
 
+/// Continue here on a delivered reminder: its linked chat becomes this
+/// conversation's current chat, so the next message goes on there. The card
+/// stays as it is, and the press works as often as the user likes.
+async fn continue_reminder_chat(
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    delivery_id: Uuid,
+) -> Result<(), Report> {
+    let lang = target.lang;
+    let kind = activity.conversation_kind();
+    if !kind.is_personal() {
+        return target.send_text(Msg::ButtonNotSupported.text(lang)).await;
+    }
+    let Some(chat) = host.reminder_chat_to_continue(user_id, delivery_id).await? else {
+        return target
+            .send_text(Msg::ReminderChatUnavailable.text(lang))
+            .await;
+    };
+    let (conversation_id, service_url, from_id) = routing(activity)?;
+    let row = host
+        .upsert_conversation(conversation_id, kind, user_id, service_url, from_id)
+        .await?;
+    host.set_current_chat(&row, Some(chat.id)).await?;
+    let title = crate::models::chat::chat_title(
+        chat.title_by_user_provided.as_deref(),
+        chat.title_by_summary.as_deref(),
+    )
+    .unwrap_or(wording::untitled_chat(lang));
+    target
+        .send_text(&Msg::ContinuingChat.fill(lang, &[("chat", title)]))
+        .await
+}
+
 /// Call the service behind a claimed button. `Err` only when that call
 /// failed and changed nothing; a refusal is a note like any outcome. `None`
 /// for the opt-out, which answers with a message instead of a note.
@@ -584,6 +622,9 @@ async fn run_delivery_command(
                     Err(refusal) => reminder_refusal_note(refusal).text(lang).to_string(),
                 },
             ));
+        }
+        nudge::DeliveryCommand::ContinueChat => {
+            return Err(eyre!("Continue here is not a claimed button"));
         }
         nudge::DeliveryCommand::Snooze(choice) => match host
             .snooze_delivered_reminder(user_id, delivery_id, choice)

@@ -52,6 +52,27 @@ pub fn snooze_button(choice: SnoozeChoice, zone: Tz, user_zone: Option<Tz>, lang
     }
 }
 
+/// Makes the linked chat the one the next message continues.
+pub fn continue_button(lang: Lang) -> &'static str {
+    lang.pick("Continue here", "Hier weitermachen")
+}
+
+/// Under a message written from a chat that went on after it was written.
+pub fn as_of_creation(lang: Lang) -> &'static str {
+    lang.pick(
+        "As of when it was set; the chat went on afterwards.",
+        "Stand vom Erstellen; der Chat ging danach weiter.",
+    )
+}
+
+/// Under a message written from a chat that was deleted since.
+pub fn origin_chat_gone(lang: Lang) -> &'static str {
+    lang.pick(
+        "The chat it came from no longer exists.",
+        "Der Chat, aus dem sie stammt, existiert nicht mehr.",
+    )
+}
+
 /// The linked chat's name on the card, when the chat has none.
 pub fn untitled_chat(lang: Lang) -> &'static str {
     lang.pick("Untitled Chat", "Unbenannter Chat")

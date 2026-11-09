@@ -30,6 +30,15 @@
           },
           {
             "type": "Action.Submit",
+            "title": "Hier weitermachen",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "continue"
+            }
+          },
+          {
+            "type": "Action.Submit",
             "title": "Erledigt",
             "data": {
               "action": "erato_delivery_action",
