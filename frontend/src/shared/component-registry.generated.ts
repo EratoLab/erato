@@ -6,6 +6,8 @@ export { TEXT_SIZE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvide
 export { TEXT_SIZE_OPTIONS } from "@/components/providers/ThemeProvider";
 export { THEME_MODE_LOCAL_STORAGE_KEY } from "@/components/providers/ThemeProvider";
 export { ThemeProvider } from "@/components/providers/ThemeProvider";
+export { getSavedTextSize } from "@/components/providers/ThemeProvider";
+export { getSavedTheme } from "@/components/providers/ThemeProvider";
 export { resolveLogoPath } from "@/components/providers/ThemeProvider";
 export { resolveThemeAssetPath } from "@/components/providers/ThemeProvider";
 export { useOptionalTheme } from "@/components/providers/ThemeProvider";
