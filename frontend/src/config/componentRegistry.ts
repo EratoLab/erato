@@ -35,6 +35,9 @@ import type { ChatMessageProps } from "@/components/ui/Chat/ChatMessage";
 import type { ChatTopLeftAccessoryProps } from "@/components/ui/Chat/ChatTopLeftAccessory";
 import type { ComposerContextChipFaceProps } from "@/components/ui/Chat/ComposerContext/types";
 import type { StarterPromptsRendererProps } from "@/components/ui/Chat/StarterPromptsSection";
+import type { DetailPaneProps } from "@/components/ui/Container/DetailPane";
+import type { SelectableRowProps } from "@/components/ui/Controls/SelectableRow";
+import type { AlertProps } from "@/components/ui/Feedback/Alert";
 import type { ChatInputAttachmentPreviewProps } from "@/components/ui/FileUpload/FileAttachmentsPreview";
 import type { FileSourceSelectorProps } from "@/components/ui/FileUpload/FileSourceSelector";
 import type { GroupedFileAttachmentsPreviewProps } from "@/components/ui/FileUpload/GroupedFileAttachmentsPreview";
@@ -330,6 +333,26 @@ export interface ComponentRegistry {
    * With no policy, chat remains available unless the deployment requires one.
    */
   AddinChatAccessProvider: ComponentType<AddinChatAccessProviderProps> | null;
+
+  /**
+   * Override for one row of the desktop review window's list. Receives the
+   * props of `SelectableRow`, the default. The selection stays the host's:
+   * render the checkbox and report through `onSelectedChange`.
+   */
+  DesktopReviewItemRow: ComponentType<SelectableRowProps> | null;
+
+  /**
+   * Override for the notice above the desktop review window's list. Receives
+   * the props of `Alert`, the default. The text is the host's, render it.
+   */
+  DesktopReviewNotice: ComponentType<AlertProps> | null;
+
+  /**
+   * Override for the frame of the desktop review window's preview. Receives
+   * the props of `DetailPane`, the default. The content is the host's and
+   * includes what sharing the item exports, so render `children` unchanged.
+   */
+  DesktopReviewPreview: ComponentType<DetailPaneProps> | null;
 }
 
 type ComponentRegistryComponent<TKey extends keyof ComponentRegistry> = Exclude<
@@ -409,6 +432,9 @@ const emptyComponentRegistry = (): ComponentRegistry => ({
   HostCardCodeBlock: null,
   AddinStartView: null,
   AddinChatAccessProvider: null,
+  DesktopReviewItemRow: null,
+  DesktopReviewNotice: null,
+  DesktopReviewPreview: null,
 });
 
 const UNDECLARED_SURFACE_MINOR = 0;

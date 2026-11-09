@@ -3580,6 +3580,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+#: src/components/ui/Container/DetailPane.tsx
 msgid "common.close"
 msgstr "Zamknij"
 
