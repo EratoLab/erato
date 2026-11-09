@@ -180,7 +180,11 @@ jobs:
       - name: "Component-kit shared surface is up-to-date"
         working-directory: ./frontend
         if: success() || failure()
-        run: pnpm run check:component-registry-shared
+        # The steps above regenerate the file, so the script alone would only
+        # compare it with itself. Compare it with what was committed as well.
+        run: |
+          pnpm run check:component-registry-shared
+          git diff --exit-code -- src/shared/component-registry.generated.ts
 
       - name: "Component-kit imports stay on the shared surface"
         working-directory: ./component-kit-example
