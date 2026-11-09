@@ -15,6 +15,8 @@ import type {
 
 interface Wording {
   title: string;
+  /** What a created reminder will deliver, as the call states it. */
+  message?: string;
   note?: string;
   allowLabel: string;
   denyLabel: string;
@@ -32,28 +34,29 @@ const wordingOf = (
   display: ToolDisplayMetadata | null | undefined,
   input: unknown,
 ): Wording => {
-  const inputName =
+  const fields =
     typeof input === "object" && input !== null
-      ? textOf((input as Record<string, unknown>).name)
-      : undefined;
-  const name = textOf(display?.title) ?? inputName ?? toolName;
+      ? (input as Record<string, unknown>)
+      : {};
+  const name = textOf(display?.title) ?? textOf(fields.name) ?? toolName;
   if (toolName === CANCEL_REMINDER_TOOL_NAME) {
+    // Worded as the reminder card's own Cancel asks it in the same chat.
     return {
       title: t({
         id: "builtinToolApproval.cancelReminder.title",
         message: `Cancel the reminder “${name}”?`,
       }),
       note: t({
-        id: "builtinToolApproval.cancelReminder.note",
+        id: "scheduled.item.cancel.confirmMessage",
         message:
-          "It will no longer be delivered, and a repeating reminder stops for good.",
+          "It will not be carried out. You can still find it under Past.",
       }),
       allowLabel: t({
-        id: "builtinToolApproval.cancelReminder.confirm",
+        id: "scheduled.item.cancel.confirm",
         message: "Cancel it",
       }),
       denyLabel: t({
-        id: "builtinToolApproval.cancelReminder.keep",
+        id: "scheduled.item.cancel.keep",
         message: "Keep it",
       }),
     };
@@ -64,6 +67,8 @@ const wordingOf = (
         id: "builtinToolApproval.createReminder.title",
         message: `Schedule the reminder “${name}”?`,
       }),
+      // Shown because content the model read, not only the user, can fill it.
+      message: textOf(fields.message),
       allowLabel: t({
         id: "builtinToolApproval.createReminder.confirm",
         message: "Schedule",
@@ -86,8 +91,9 @@ const wordingOf = (
 
 /**
  * A call of one of Erato's own tools, such as cancelling a reminder, asked
- * about in what it does: no tool, server or input, and no standing decision,
- * since the card asks every time.
+ * about in what it does: no tool, server or raw input, and no standing
+ * decision, since the card asks every time. A reminder to schedule shows the
+ * message it will deliver.
  */
 export const BuiltinToolApprovalItem = ({
   toolName,
@@ -114,7 +120,7 @@ export const BuiltinToolApprovalItem = ({
     <ActionConfirmationCard
       title={wording.title}
       description={
-        when || wording.note ? (
+        when || wording.message || wording.note ? (
           <div className="space-y-1 text-sm">
             {when && (
               <p
@@ -122,6 +128,14 @@ export const BuiltinToolApprovalItem = ({
                 data-testid="builtin-tool-approval-when"
               >
                 {when}
+              </p>
+            )}
+            {wording.message && (
+              <p
+                className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-theme-border pl-2 text-theme-fg-primary"
+                data-testid="builtin-tool-approval-message"
+              >
+                {wording.message}
               </p>
             )}
             {wording.note && (

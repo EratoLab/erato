@@ -1684,21 +1684,6 @@ msgstr "Allow"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/BuiltinToolApprovalItem.tsx
-msgid "builtinToolApproval.cancelReminder.confirm"
-msgstr "Cancel it"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
-msgid "builtinToolApproval.cancelReminder.keep"
-msgstr "Keep it"
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
-msgid "builtinToolApproval.cancelReminder.note"
-msgstr "It will no longer be delivered, and a repeating reminder stops for good."
-
-#. js-lingui-explicit-id
-#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 msgid "builtinToolApproval.cancelReminder.title"
 msgstr "Cancel the reminder “{name}”?"
 
@@ -7192,12 +7177,14 @@ msgid "scheduled.item.actions.aria"
 msgstr "Actions for {name}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirm"
 msgstr "Cancel it"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmMessage"
@@ -7210,6 +7197,7 @@ msgid "scheduled.item.cancel.confirmTitle"
 msgstr "Cancel “{name}”?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"

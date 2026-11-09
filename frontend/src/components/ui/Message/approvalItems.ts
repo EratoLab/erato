@@ -165,9 +165,13 @@ const subMillisecondOf = (time: string): number => {
  * The open items in the order they were asked: a parked child's by its own
  * request, the turn's own call by the part's. Ties keep row order, the order
  * the server settles them in.
+ *
+ * A built-in call, such as cancelling a reminder, comes first whatever its
+ * time: "Allow all" is offered from the first item on, and must not approve
+ * a call whose question was never shown.
  */
 export const approvalQueueOf = (
-  request: { requested_at: string },
+  request: { requested_at: string; kind?: ToolApprovalKind | null },
   open: ApprovalItemPart[],
 ): ApprovalItemPart[] => {
   const askedAt = (item: ApprovalItemPart) => {
@@ -177,9 +181,22 @@ export const approvalQueueOf = (
       ? { at: Number.POSITIVE_INFINITY, below: 0 }
       : { at, below: subMillisecondOf(time) };
   };
+  const later = (item: ApprovalItemPart) =>
+    request.kind === "builtin_tool" && item.child != null ? 1 : 0;
   return open
-    .map((item, index) => ({ item, index, ...askedAt(item) }))
-    .sort((a, b) => a.at - b.at || a.below - b.below || a.index - b.index)
+    .map((item, index) => ({
+      item,
+      index,
+      later: later(item),
+      ...askedAt(item),
+    }))
+    .sort(
+      (a, b) =>
+        a.later - b.later ||
+        a.at - b.at ||
+        a.below - b.below ||
+        a.index - b.index,
+    )
     .map(({ item }) => item);
 };
 

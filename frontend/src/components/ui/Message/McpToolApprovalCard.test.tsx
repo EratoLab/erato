@@ -1585,7 +1585,10 @@ describe("built-in tool approvals", () => {
       }),
     ).toBeInTheDocument();
     expect(card).toHaveTextContent("Friday, 13 Nov, 10:00");
-    expect(card).toHaveTextContent("a repeating reminder stops for good");
+    expect(card).toHaveTextContent(
+      "It will not be carried out. You can still find it under Past.",
+    );
+    expect(card).not.toHaveTextContent("repeating");
     expect(card).not.toHaveTextContent("cancel_reminder");
     expect(card).not.toHaveTextContent("0b9f3c1e");
     expect(screen.getByRole("button", { name: "Cancel it" })).toBeVisible();
@@ -1649,6 +1652,75 @@ describe("built-in tool approvals", () => {
     expect(
       screen.getByRole("button", { name: "Don't schedule" }),
     ).toBeVisible();
+  });
+
+  it("shows the message a reminder to schedule will deliver", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...cancelRequest,
+          tool_name: "create_reminder",
+          input: {
+            name: "Follow up on the offer",
+            message: "Re-verify at https://example.invalid/login",
+            trigger: { kind: "once", date: "2026-11-13", time: "10:00" },
+          },
+        }}
+        resolution={null}
+      />,
+    );
+
+    expect(
+      screen.getByTestId("builtin-tool-approval-message"),
+    ).toHaveTextContent("Re-verify at https://example.invalid/login");
+    expect(screen.getByTestId("builtin-tool-approval")).not.toHaveTextContent(
+      "2026-11-13",
+    );
+  });
+
+  it("asks about the built-in call first, before a task's call asked earlier", () => {
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={{
+            ...cancelRequest,
+            requested_at: "2026-08-06T00:00:05Z",
+            approvals: [
+              {
+                approval_id: "cancel-call-1",
+                tool_call_id: "cancel-call-1",
+                tool_name: "cancel_reminder",
+                input: cancelRequest.input,
+                display: cancelRequest.display,
+              },
+              {
+                approval_id: "parent-call-1",
+                tool_call_id: "parent-call-1",
+                tool_name: "delegate_task",
+                input: { task: "Summarize the release notes" },
+                child: {
+                  ...childApprovalRef,
+                  requested_at: "2026-08-06T00:00:01Z",
+                },
+              },
+            ],
+          }}
+          resolution={null}
+        />,
+        "chat-1",
+      ),
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveAttribute("data-position", "1");
+    expect(
+      within(queue).getByRole("group", {
+        name: "Cancel the reminder “Follow up on the offer”?",
+      }),
+    ).toBeInTheDocument();
+    expect(within(queue).getByTestId("tool-approval-allow-all")).toBeVisible();
   });
 });
 
