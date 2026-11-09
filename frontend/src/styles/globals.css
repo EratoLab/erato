@@ -988,6 +988,37 @@ body {
      divider colour comes from .selectable-row-skin. The end column fits a
      medium date with a short time in every shipped locale (en is the widest,
      about 143px in Geist at text-sm); a longer value truncates. */
+  /* A list with a detail pane. Not Tailwind's max-* variants: the screens
+     configuration mixes units, so they are not generated. */
+  .master-detail-geometry {
+    position: relative;
+    display: grid;
+    flex: 1 1 0%;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .master-detail-geometry[data-detail-open] {
+    /* Beside the detail the row's title keeps the room. */
+    --selectable-row-meta-width: 6.5rem;
+    --selectable-row-end-width: 6rem;
+    grid-template-columns: minmax(0, 1fr) var(--master-detail-width, 24rem);
+  }
+
+  @media (max-width: 40rem) {
+    .master-detail-geometry[data-detail-open] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .master-detail-geometry > [data-ui="master-detail-detail"] {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0;
+      width: min(100%, 24rem);
+      box-shadow: var(--theme-elevation-modal);
+    }
+  }
+
   .selectable-row-geometry {
     display: grid;
     grid-template-columns:

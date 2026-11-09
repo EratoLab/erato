@@ -65,6 +65,12 @@ window.ERATO_COMPONENT_KITS.push({
 
 ### Outlook Chat availability
 
+Since shared surface **1.26**, kits can reach the desktop app's review window
+through `DesktopReviewItemRow`, `DesktopReviewNotice` and `DesktopReviewPreview`.
+Each receives the props of the host's default component. The window's content
+and its Share and Decline decisions stay with the host, and an override that
+throws is replaced by the host's own component.
+
 Since shared surface **1.24**, a kit can register `AddinChatAccessProvider`
 to control whether users can select Chat in the Outlook add-in. Its props
 are exported from `@erato/frontend/library`:
@@ -283,6 +289,9 @@ components.
 | `MessageControls`               | Every message       | `MessageControlsProps`               | Action buttons below each message                                                                                  |
 | `ChatMessageRenderer`           | Every message       | `ChatMessageProps`                   | Entire message layout                                                                                              |
 | `ChatTopLeftAccessory`          | Chat shell          | `ChatTopLeftAccessoryProps`          | Model picker slot in the chat top bar; the host positions it in flow, the kit owns the control and its inner inset |
+| `DesktopReviewItemRow` | Desktop review window | `SelectableRowProps` | One row of the list of items to review |
+| `DesktopReviewNotice` | Desktop review window | `AlertProps` | The notice above the list |
+| `DesktopReviewPreview` | Desktop review window | `DetailPaneProps` | The frame of the item preview |
 | `EratoEmailCodeBlock`           | Message code block  | `EratoEmailCodeBlockProps`           | Custom renderer for `erato-email` fenced code blocks                                                               |
 | `HostCardCodeBlock`             | Message code block  | `HostCardCodeBlockProps`             | Renderer for fence tags a host lists in `HostArtifact.cardFenceLanguages`; unregistered, they stay code blocks     |
 
