@@ -74,6 +74,8 @@ pub struct Completion {
     pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
     pub needs_client: bool,
+    /// Reminders the turn scheduled that still need their confirmation card.
+    pub reminders: Vec<Uuid>,
 }
 
 #[derive(Debug)]
@@ -983,6 +985,7 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         approvals,
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
+        reminders: super::reminders::created_reminders(content),
     }
 }
 

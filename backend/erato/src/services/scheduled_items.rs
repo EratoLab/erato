@@ -19,10 +19,19 @@
 //! per key. Everything that asks for the item's open occurrence sees the
 //! re-delivery too, and the producer leaves the item alone until it settles.
 
+pub mod chat_tools;
+mod checks;
 pub mod recurrence;
 pub mod wording;
 
-use crate::db::entity::prelude::{Chats, ScheduledItems};
+pub use checks::{
+    Checked, DeliveryChannelStatus, ItemRequest, MAX_MESSAGE_CHARS, MAX_NAME_CHARS, Refused,
+    ScheduledItemErrorCode, ScheduledItemType, TimeZoneSource, cancel_checked, checked_input,
+    create_checked, default_zone, entry_zone, owned_chats, owns_chat, teams_channel_available,
+    teams_status, update_checked,
+};
+
+use crate::db::entity::prelude::ScheduledItems;
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
 use crate::models::chat::chat_title;
@@ -49,7 +58,7 @@ use std::collections::HashMap;
 use utoipa::ToSchema;
 
 pub const REMINDER: &str = "reminder";
-/// Upcoming items a user may have, as for the reminder tool.
+/// Upcoming items a user may have, on the page and through the chat tools.
 pub const MAX_ACTIVE_ITEMS: u64 = 10;
 /// Items one `produce` pass advances; the rest wait for the next tick.
 const PRODUCE_BATCH: i64 = 200;
@@ -302,7 +311,18 @@ pub async fn cancel(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Ch
     if item.status != ItemStatus::Active {
         return Ok(Err(Refusal::Finished));
     }
-    let mut model = item.into_active_model();
+    // A delivered one-off stays active until the producer's next tick ends
+    // it, but nothing of it is left to cancel.
+    let current = current_occurrence(&txn, &item).await?;
+    let view = ItemView {
+        item,
+        current,
+        last: None,
+    };
+    if view.current.is_none() && next_occurrence(&view, Utc::now()).is_none() {
+        return Ok(Err(Refusal::Finished));
+    }
+    let mut model = view.item.into_active_model();
     model.status = ActiveValue::Set(ItemStatus::Cancelled);
     let item = model.update(&txn).await?;
     for key in [item.id.to_string(), redelivery_key(item.id)] {
@@ -687,6 +707,11 @@ pub async fn get(
     Ok(views(db, user_id, vec![item]).await?.pop())
 }
 
+/// Whether an item with this id exists, whoever's it is.
+pub async fn exists(db: &DatabaseConnection, item_id: Uuid) -> Result<bool, Report> {
+    Ok(ScheduledItems::find_by_id(item_id).one(db).await?.is_some())
+}
+
 /// How many upcoming and past items the user has.
 pub async fn counts(db: &DatabaseConnection, user_id: Uuid) -> Result<(u64, u64), Report> {
     #[derive(FromQueryResult)]
@@ -1053,10 +1078,9 @@ impl DeliveryProducer for ReminderProducer {
             .await?
             .ok_or_else(|| eyre!("the item no longer exists"))?;
         let chat = match (item.linked_chat_id, &self.public_base_url) {
-            (Some(chat_id), Some(_)) => Chats::find_by_id(chat_id)
-                .one(db)
+            (Some(chat_id), Some(_)) => owned_chats(db, item.user_id, vec![chat_id])
                 .await?
-                .filter(|chat| chat.owner_user_id == item.user_id.to_string()),
+                .remove(&chat_id),
             _ => None,
         };
         let lang = text_language::of_user(db, item.user_id, None, &self.default_language).await?;

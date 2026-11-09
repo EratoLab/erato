@@ -200,6 +200,7 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
             &bot,
             &host,
             &target,
+            session.user_id(),
             updates,
             stream_for(&bot, &target, ConversationKind::Personal),
             Some(request.clone()),
@@ -251,6 +252,112 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
             .as_array()
             .is_some_and(|actions| actions.iter().any(|action| action["title"] == "Retry"))
     }));
+    server.abort();
+}
+
+/// A turn that fails after `create_reminder` stored a reminder still
+/// confirms it, from the saved message: the reminder arrives either way.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_is_confirmed_when_its_turn_fails(pool: sqlx::PgPool) {
+    use crate::db::entity::messages;
+    use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
+    use crate::services::scheduled_items::{self, ItemInput, REMINDER, chat_tools};
+    use sea_orm::ActiveValue::Set;
+    let Harness {
+        outgoing,
+        base,
+        server,
+        state,
+        host,
+        session,
+        chat_id,
+    } = harness(pool).await;
+    let item = scheduled_items::create(
+        &state.db,
+        session.user_id(),
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Follow up on the offer".into(),
+            message: "Ask whether the offer still stands.".into(),
+            linked_chat_id: Some(chat_id),
+            channel: crate::ms_teams_bot::nudge::CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: chrono::Utc::now().date_naive() + chrono::Duration::days(3),
+                time: LocalTime::new(10, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "chat"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let message_id = Uuid::new_v4();
+    let content = json!({"role": "assistant", "content": [{
+        "content_type": "tool_use", "tool_call_id": "call-1", "status": "success",
+        "tool_name": chat_tools::CREATE_REMINDER, "input": {},
+        "output": {"status": "created", "reminder": {"id": item.id}},
+    }]});
+    Messages::insert(messages::ActiveModel {
+        id: Set(message_id),
+        chat_id: Set(chat_id),
+        raw_message: Set(content),
+        ..Default::default()
+    })
+    .exec(&state.db)
+    .await
+    .unwrap();
+    let (sender, updates) = mpsc::channel(10);
+    sender
+        .send(GenerationUpdate::Started {
+            chat_id,
+            message_id,
+        })
+        .await
+        .unwrap();
+    sender
+        .send(GenerationUpdate::Failed("The model is unavailable.".into()))
+        .await
+        .unwrap();
+    drop(sender);
+    let bot = TeamsBot::for_test(&base, false);
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "conversation",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    render_generation(
+        &bot,
+        &host,
+        &target,
+        session.user_id(),
+        updates,
+        stream_for(&bot, &target, ConversationKind::Personal),
+        None,
+    )
+    .await
+    .unwrap();
+    let delivered = outgoing.lock().unwrap();
+    let card = delivered
+        .iter()
+        .find(|body| body["attachments"][0]["content"]["body"][0]["text"] == "Reminder scheduled")
+        .unwrap_or_else(|| panic!("no confirmation in {delivered:?}"));
+    assert_eq!(
+        card["attachments"][0]["content"]["body"][1]["text"],
+        "Follow up on the offer"
+    );
+    assert!(
+        delivered.iter().any(|body| body["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("The model is unavailable."))),
+        "the failure is still reported: {delivered:?}"
+    );
     server.abort();
 }
 

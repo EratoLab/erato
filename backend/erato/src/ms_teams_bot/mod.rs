@@ -23,6 +23,7 @@ mod handler;
 pub mod host;
 pub mod inbound_auth;
 pub mod nudge;
+pub mod reminders;
 pub mod render;
 pub mod streaming;
 pub mod texts;

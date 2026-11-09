@@ -3237,7 +3237,66 @@ fn file_retrieval_offer_allowed(
     action_facet: Option<&str>,
     mcp_claimed_names: &HashSet<String>,
 ) -> bool {
-    let name = crate::services::file_retrieval::TOOL_NAME;
+    own_tool_offer_allowed(
+        app_state,
+        selected_facets,
+        action_facet,
+        mcp_claimed_names,
+        crate::services::file_retrieval::TOOL_NAME,
+    )
+}
+
+/// Offer the reminder tools when this deployment delivers reminders through
+/// the Teams chat. Never in a delegated run: a task does not schedule things
+/// for its user.
+#[allow(clippy::too_many_arguments)]
+async fn append_reminder_tools(
+    app_state: &AppState,
+    user_id: Option<Uuid>,
+    selected_facets: &[String],
+    action_facet: Option<&str>,
+    mcp_claimed_names: &HashSet<String>,
+    is_delegated_run: bool,
+    omit_strict: bool,
+    tools: &mut Vec<genai::chat::Tool>,
+) -> Result<(), Report> {
+    use crate::services::scheduled_items::{self, chat_tools};
+    let Some(user_id) = user_id else {
+        return Ok(());
+    };
+    if is_delegated_run || !scheduled_items::teams_channel_available(app_state) {
+        return Ok(());
+    }
+    let names: Vec<&str> = chat_tools::TOOL_NAMES
+        .into_iter()
+        .filter(|name| {
+            own_tool_offer_allowed(
+                app_state,
+                selected_facets,
+                action_facet,
+                mcp_claimed_names,
+                name,
+            ) && !tools.iter().any(|tool| tool.name.to_string() == *name)
+        })
+        .collect();
+    if names.is_empty() {
+        return Ok(());
+    }
+    let (zone, _) = scheduled_items::entry_zone(app_state, user_id).await?;
+    tools.extend(chat_tools::tools(&names, zone, Utc::now(), omit_strict));
+    Ok(())
+}
+
+/// Whether one of Erato's own server tools (`erato/<name>`) may be offered: no
+/// MCP or client tool claims its name, and the facets' allowlist, when there
+/// is one, selects it.
+fn own_tool_offer_allowed(
+    app_state: &AppState,
+    selected_facets: &[String],
+    action_facet: Option<&str>,
+    mcp_claimed_names: &HashSet<String>,
+    name: &str,
+) -> bool {
     if mcp_claimed_names.contains(name)
         || app_state
             .config
@@ -5204,6 +5263,17 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     if let Some(tool) = retrieval_context.tool(effective_model_settings.compat_omit_strict) {
         chat_request_tools.push(tool);
     }
+    append_reminder_tools(
+        app_state,
+        me_profile_input.user_id,
+        &effective_selected_facet_ids,
+        user_input.action_facet.as_ref().map(|af| af.id.as_str()),
+        &mcp_claimed_names,
+        is_delegated_run,
+        effective_model_settings.compat_omit_strict,
+        &mut chat_request_tools,
+    )
+    .await?;
     if !chat_request_tools.is_empty() {
         chat_request.tools = Some(chat_request_tools);
     } else {
@@ -6156,6 +6226,8 @@ async fn settle_or_park_delegation_slot<
 
 /// Preparation and execution share an identity, but only `client_tool_call`
 /// authorizes a host executor. These updates are display-only on both SSE paths.
+/// `output` settles a tool that ran on the server, so a client can render its
+/// result without reloading the message.
 #[allow(clippy::too_many_arguments)]
 async fn send_tool_generation_update<
     MSG: SendAsSseEvent + From<MessageSubmitStreamingResponseToolCallUpdate>,
@@ -6166,6 +6238,7 @@ async fn send_tool_generation_update<
     display: Option<crate::models::message::ToolDisplayMetadata>,
     status: ToolCallStatus,
     progress: Option<f64>,
+    output: Option<&JsonValue>,
     task: Option<&Arc<StreamingTask>>,
     tx: &Sender<Result<Event, Report>>,
 ) -> Result<(), Report> {
@@ -6189,7 +6262,7 @@ async fn send_tool_generation_update<
                 progress_message: None,
                 progress,
                 total: None,
-                output: None,
+                output: output.cloned(),
                 result_details: None,
                 allowed_by: None,
             },
@@ -6208,7 +6281,7 @@ async fn send_tool_generation_update<
         progress_message: None,
         progress,
         total: None,
-        output: None,
+        output: output.cloned(),
         result_details: None,
         allowed_by: None,
     }
@@ -7608,6 +7681,7 @@ async fn stream_generate_chat_completion<'a>(
                         mcp_display.as_ref().map(tool_row_display),
                         ToolCallStatus::InProgress,
                         None,
+                        None,
                         streaming_task,
                         &tx,
                     )
@@ -7816,6 +7890,7 @@ async fn stream_generate_chat_completion<'a>(
                     None,
                     status,
                     None,
+                    None,
                     streaming_task,
                     &tx,
                 )
@@ -7907,6 +7982,100 @@ async fn stream_generate_chat_completion<'a>(
                     None,
                     status,
                     None,
+                    None,
+                    streaming_task,
+                    &tx,
+                )
+                .await?;
+                current_turn_tool_responses.push((
+                    batch_position,
+                    genai::chat::ToolResponse {
+                        fn_name: Some(unfinished_tool_call.fn_name.clone()),
+                        call_id: unfinished_tool_call.call_id.clone(),
+                        content: output.to_string(),
+                    },
+                ));
+                continue;
+            }
+
+            if crate::services::scheduled_items::chat_tools::is_reminder_tool(
+                &unfinished_tool_call.fn_name,
+            ) && !offered_client_tools.contains_key(unfinished_tool_call.fn_name.as_str())
+                && !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str())
+            {
+                let started_at = tool_call_started_at
+                    .remove(&unfinished_tool_call.call_id)
+                    .unwrap_or_else(now_timestamp);
+                let result = match Uuid::parse_str(&user_id) {
+                    Ok(user_id) => {
+                        crate::services::scheduled_items::chat_tools::run(
+                            app_state,
+                            crate::services::scheduled_items::chat_tools::CallContext {
+                                user_id,
+                                chat_id,
+                                message_id: assistant_message_id,
+                                platform: Some(&langfuse_trace_enrichment.platform),
+                            },
+                            &unfinished_tool_call.fn_name,
+                            &unfinished_tool_call.fn_arguments,
+                        )
+                        .await
+                    }
+                    Err(error) => Err(error.into()),
+                };
+                let (status, saved_status, output) = match result {
+                    Ok(result) if result.succeeded => (
+                        ToolCallStatus::Success,
+                        MessageToolCallStatus::Success,
+                        result.output,
+                    ),
+                    Ok(result) => (
+                        ToolCallStatus::Error,
+                        MessageToolCallStatus::Error,
+                        result.output,
+                    ),
+                    Err(error) => {
+                        tracing::warn!(%error, tool = %unfinished_tool_call.fn_name, "A reminder tool call failed");
+                        (
+                            ToolCallStatus::Error,
+                            MessageToolCallStatus::Error,
+                            json!({"status": "error", "error": "Something went wrong; nothing was changed."}),
+                        )
+                    }
+                };
+                persist_otel_tool_call(
+                    tracing_client.as_ref(),
+                    &unfinished_tool_call,
+                    Some(output.clone()),
+                    otel_tool_call_start_time,
+                    Some(SystemTime::now()),
+                    tool_call_parent_observation_ids.remove(&unfinished_tool_call.call_id),
+                    assistant_id,
+                    &langfuse_trace_enrichment.platform,
+                    output.get("error").and_then(JsonValue::as_str),
+                )
+                .await;
+                upsert_tool_use(
+                    &mut current_message_content,
+                    ToolUse {
+                        tool_call_id: unfinished_tool_call.call_id.clone(),
+                        tool_name: unfinished_tool_call.fn_name.clone(),
+                        input: Some(unfinished_tool_call.fn_arguments.clone()),
+                        output: Some(output.clone()),
+                        status: saved_status,
+                        started_at: Some(started_at),
+                        ended_at: Some(now_timestamp()),
+                        ..Default::default()
+                    },
+                );
+                send_tool_generation_update::<GenerationStreamingMessage>(
+                    assistant_message_id,
+                    tool_index,
+                    &unfinished_tool_call,
+                    None,
+                    status,
+                    None,
+                    Some(&output),
                     streaming_task,
                     &tx,
                 )
@@ -11019,6 +11188,7 @@ async fn stream_generate_chat_completion<'a>(
                                 None,
                                 ToolCallStatus::Preparing,
                                 Some(progress.bytes as f64),
+                                None,
                                 streaming_task,
                                 &tx,
                             )
@@ -23436,6 +23606,17 @@ async fn resume_parked_generation(
     if let Some(tool) = retrieval_context.tool(compat_omit_strict) {
         continuation_tools.push(tool);
     }
+    append_reminder_tools(
+        app_state,
+        Some(user_id),
+        &effective_selected_facet_ids,
+        generation_parameters.action_facet_id.as_deref(),
+        &mcp_claimed_names,
+        is_delegated_run,
+        compat_omit_strict,
+        &mut continuation_tools,
+    )
+    .await?;
     let answer_without_tools = crate::services::tool_call_budget::choices(&parsed.content)
         .last()
         .is_some_and(|(_, choice)| {

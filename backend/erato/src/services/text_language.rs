@@ -37,6 +37,11 @@ impl Lang {
         Self::from_tag(tag)
     }
 
+    /// The primary tag: `en` or `de`.
+    pub fn code(self) -> &'static str {
+        self.pick("en", "de")
+    }
+
     pub fn pick<T>(self, english: T, german: T) -> T {
         match self {
             Self::En => english,

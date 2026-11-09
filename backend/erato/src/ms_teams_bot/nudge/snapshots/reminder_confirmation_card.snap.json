@@ -1,0 +1,90 @@
+{
+  "type": "message",
+  "summary": "Reminder scheduled: Follow up on the offer",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Reminder scheduled",
+            "wrap": true,
+            "isSubtle": true,
+            "size": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Follow up on the offer",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium",
+            "spacing": "None"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Friday, 7 Mar, 10:00",
+            "wrap": true,
+            "spacing": "Small"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Delivered via Teams chat",
+            "wrap": true,
+            "isSubtle": true,
+            "spacing": "Small"
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.ShowCard",
+            "title": "Cancel",
+            "card": {
+              "type": "AdaptiveCard",
+              "body": [
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "weight": "Bolder",
+                  "text": "Cancel “Follow up on the offer”?"
+                },
+                {
+                  "type": "TextBlock",
+                  "wrap": true,
+                  "isSubtle": true,
+                  "text": "It will no longer be delivered. You can still find it under Past on the Scheduled page."
+                }
+              ],
+              "actions": [
+                {
+                  "type": "Action.Submit",
+                  "title": "Cancel it",
+                  "data": {
+                    "action": "erato_reminder_cancel",
+                    "item_id": "ITEM_ID"
+                  }
+                },
+                {
+                  "type": "Action.Submit",
+                  "title": "Keep it",
+                  "data": {
+                    "action": "erato_reminder_keep",
+                    "item_id": "ITEM_ID"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "Action.OpenUrl",
+            "title": "Open in Scheduled",
+            "url": "https://erato.example.com/scheduled"
+          }
+        ]
+      }
+    }
+  ]
+}

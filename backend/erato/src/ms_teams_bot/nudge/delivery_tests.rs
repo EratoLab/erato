@@ -2,9 +2,12 @@
 //! conversation through the Connector, Connector refusals are mapped, and
 //! installing the app records the conversation for known users. A user
 //! reminder arrives as the committed sample card, and its buttons replace
-//! the card in place.
+//! the card in place. A reminder scheduled in chat is confirmed on a card
+//! whose Cancel works while the reminder is upcoming, and a failed delivery
+//! posts nothing.
 use super::*;
 use crate::config::AppConfig;
+use crate::db::entity::scheduled_items::ItemStatus;
 use crate::models::message::{
     ContentPart, ContentPartText, ContentPartToolApprovalRequest, ToolApprovalAnnotations,
     ToolApprovalKind,
@@ -13,15 +16,19 @@ use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::{record_client_locale, teams_nudges_opted_out};
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
 use crate::ms_teams_bot::handler::{
-    deliver_proactive, on_bot_added, on_message, settle_delivered_card,
+    deliver_proactive, on_bot_added, on_message, send_reminder_confirmations, settle_delivered_card,
 };
+use crate::ms_teams_bot::reminders::{CANCEL_ACTION, confirmation_card};
 use crate::ms_teams_bot::streaming::ReplyTarget;
 use crate::services::scheduled_deliveries::{
     ExecutorSettings, NewDelivery, run_delivery_tick, schedule,
 };
+use crate::services::scheduled_items::chat_tools::Confirmation;
+use crate::services::scheduled_items::recurrence::{DayOfWeek, Frequency, RepeatEnd, RepeatRule};
 use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
 use crate::services::scheduled_items::{
-    self, ItemInput, REMINDER, ReminderProducer, current_occurrence,
+    self, ItemInput, ItemRequest, REMINDER, ReminderProducer, ScheduledItemErrorCode,
+    ScheduledItemType, current_occurrence,
 };
 use crate::services::text_language::Lang;
 use crate::state::AppState;
@@ -970,6 +977,651 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     assert_eq!(
         settled["attachments"][0]["content"]["body"][2]["text"],
         "Als erledigt markiert."
+    );
+}
+
+/// The confirmation card for a reminder scheduled in chat, in English and
+/// German: `snapshots/reminder_confirmation_card.snap.json` and
+/// `reminder_confirmation_card_de.snap.json`. Rendered as of a fixed day so
+/// the samples keep their dates; refresh them with `INSTA_UPDATE=always just
+/// test the_confirmation_card_samples`.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_confirmation_card_samples(pool: sqlx::PgPool) {
+    let (state, _bot, _shared, _base) = harness(pool).await;
+    let user = get_or_create_user(&state.db, "https://issuer.example", "confirmed", None)
+        .await
+        .unwrap();
+    let date = |text: &str| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").unwrap();
+    let samples = [
+        (
+            "reminder_confirmation_card.json",
+            Lang::En,
+            "Follow up on the offer",
+            Trigger::Once {
+                date: date("2036-03-07"),
+                time: LocalTime::new(10, 0).unwrap(),
+            },
+        ),
+        (
+            "reminder_confirmation_card_de.json",
+            Lang::De,
+            "Wochenbericht senden",
+            Trigger::Repeat(RepeatRule {
+                frequency: Frequency::Weekly,
+                weekdays: vec![DayOfWeek::Mon, DayOfWeek::Thu],
+                time: LocalTime::new(9, 0).unwrap(),
+                starts_on: date("2036-03-03"),
+                ends: RepeatEnd::Never,
+            }),
+        ),
+    ];
+    // Sunday 2 March 2036, noon in Berlin.
+    let now = DateTime::parse_from_rfc3339("2036-03-02T11:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    for (name, lang, title, trigger) in samples {
+        let item = scheduled_items::create(
+            &state.db,
+            user.id,
+            ItemInput {
+                kind: REMINDER.into(),
+                name: title.into(),
+                message: "-".into(),
+                linked_chat_id: None,
+                channel: CHANNEL.into(),
+                trigger,
+                time_zone: chrono_tz::Europe::Berlin,
+            },
+            json!({"via": "chat"}),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let view = scheduled_items::get(&state.db, user.id, item.id)
+            .await
+            .unwrap()
+            .unwrap();
+        let confirmation =
+            Confirmation::of(&view, Some(chrono_tz::Europe::Berlin), now, lang).unwrap();
+        let card = confirmation_card(
+            &confirmation,
+            Some("https://erato.example.com/scheduled"),
+            None,
+            true,
+        );
+        let mut sample = serde_json::to_string_pretty(&card)
+            .unwrap()
+            .replace(&item.id.to_string(), "ITEM_ID");
+        sample.push('\n');
+        assert_sample(name, sample);
+    }
+}
+
+/// A user known by Entra object id, in Berlin, with a personal chat with
+/// the bot and one upcoming reminder in three days.
+async fn confirmed_reminder(
+    state: &AppState,
+    host: &Host,
+    base: &str,
+    subject: &str,
+    oid: &str,
+    language: Option<&str>,
+) -> (crate::db::entity::users::Model, ScheduledItem) {
+    let user = get_or_create_user(&state.db, "https://issuer.example", subject, None)
+        .await
+        .unwrap();
+    record_entra_object_id(&state.db, &user, oid).await.unwrap();
+    record_client_locale(&state.db, &user.id, Some("Europe/Berlin"), language)
+        .await
+        .unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let item = scheduled_items::create(
+        &state.db,
+        user.id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Follow up on the offer".into(),
+            message: "Ask whether the offer still stands.".into(),
+            linked_chat_id: None,
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(3),
+                time: LocalTime::new(10, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "chat"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    (user, item)
+}
+
+/// Pressing a confirmation card's button, as Teams sends it: from `oid`, in
+/// reply to the card.
+fn press_on_card(base: &str, oid: &str, card_id: &str, data: Value) -> Activity {
+    serde_json::from_value(json!({
+        "type": "message", "id": "press", "serviceUrl": base, "value": data,
+        "replyToId": card_id,
+        "from": {"id": "29:user", "aadObjectId": oid}, "recipient": {"id": "28:bot"},
+        "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
+    }))
+    .unwrap()
+}
+
+fn card_texts(activity: &Value) -> Vec<String> {
+    activity["attachments"][0]["content"]["body"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|block| block["text"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The data of the card's button with this `action`, also when it sits in
+/// the question another button opens.
+fn action_data(activity: &Value, action: &str) -> Value {
+    activity["attachments"][0]["content"]["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|button| {
+            std::iter::once(button)
+                .chain(button["card"]["actions"].as_array().into_iter().flatten())
+        })
+        .find(|button| button["data"]["action"] == action)
+        .unwrap_or_else(|| panic!("no `{action}` button on {activity}"))["data"]
+        .clone()
+}
+
+fn cancel_data(activity: &Value) -> Value {
+    action_data(activity, CANCEL_ACTION)
+}
+
+/// The question Cancel opens: its texts, then its buttons.
+fn cancel_question(activity: &Value) -> (Vec<String>, Vec<String>) {
+    let cancel = &activity["attachments"][0]["content"]["actions"][0];
+    assert_eq!(cancel["type"], "Action.ShowCard", "{activity}");
+    let texts = |key: &str, field: &str| -> Vec<String> {
+        cancel["card"][key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry[field].as_str().unwrap().to_string())
+            .collect()
+    };
+    (texts("body", "text"), texts("actions", "title"))
+}
+
+/// After the answer, the card confirms the stored reminder with Cancel and
+/// Open in Scheduled. Someone else's press changes nothing and is told whose
+/// reminder it is; the owner's cancels through the shared cancel and
+/// replaces the card in place, which keeps the link to the Scheduled page.
+/// Once a reminder happened, Cancel says so and points to the Scheduled
+/// page, and once it was deleted, that it no longer exists. No token is
+/// involved, so the button has no expiry.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_on_the_confirmation_card_works_while_the_reminder_is_upcoming(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-0000000c0f1e";
+    let (user, item) =
+        confirmed_reminder(&state, &host, &base, "confirmed", OID, Some("en-GB")).await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    let texts = card_texts(&card);
+    assert_eq!(texts[0], "Reminder scheduled");
+    assert_eq!(texts[1], "Follow up on the offer");
+    assert!(texts[2].ends_with(", 10:00"), "{texts:?}");
+    assert_eq!(texts[3], "Delivered via Teams chat");
+    assert_eq!(buttons(&card), ["Cancel", "Open in Scheduled"]);
+    assert_eq!(
+        card["attachments"][0]["content"]["actions"][1]["url"],
+        "https://erato.example.com/scheduled"
+    );
+
+    let other = get_or_create_user(&state.db, "https://issuer.example", "someone", None)
+        .await
+        .unwrap();
+    const OTHER_OID: &str = "4a1b3c5d-0000-4000-8000-0000000b0b0b";
+    record_entra_object_id(&state.db, &other, OTHER_OID)
+        .await
+        .unwrap();
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OTHER_OID, "activity-1", cancel_data(&card)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "Only the person who scheduled this reminder can cancel it."
+    );
+    assert!(shared.lock().unwrap().updated.is_empty());
+    let upcoming = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(upcoming.item.status, ItemStatus::Active);
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OID, "activity-1", cancel_data(&card)),
+    )
+    .await;
+    let (conversation, activity_id, settled) = shared.lock().unwrap().updated[0].clone();
+    assert_eq!(
+        (conversation.as_str(), activity_id.as_str()),
+        ("a:personal", "activity-1")
+    );
+    let texts = card_texts(&settled);
+    assert_eq!(texts[1], "Follow up on the offer");
+    assert!(texts[2].ends_with(", 10:00"), "the time stays: {texts:?}");
+    assert_eq!(texts.last().unwrap(), "This reminder was cancelled.");
+    assert_eq!(buttons(&settled), ["Open in Scheduled"]);
+    assert_eq!(
+        shared.lock().unwrap().outgoing.len(),
+        2,
+        "no message is added"
+    );
+    let cancelled = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cancelled.item.status, ItemStatus::Cancelled);
+    assert!(
+        current_occurrence(&state.db, &cancelled.item)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let happened = scheduled_items::create(
+        &state.db,
+        user.id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Call Alex back".into(),
+            message: "About the rates.".into(),
+            linked_chat_id: None,
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(1),
+                time: LocalTime::new(9, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "chat"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[happened.id]).await;
+    let second_card = shared.lock().unwrap().outgoing[2].1.clone();
+    let occurrence = current_occurrence(&state.db, &happened)
+        .await
+        .unwrap()
+        .unwrap();
+    make_due(&state, occurrence.id).await;
+    let registry = reminder_registry(bot.clone());
+    assert_eq!(
+        run_delivery_tick(&state.db, &executor(), &registry)
+            .await
+            .delivered,
+        1
+    );
+    // Pressed before the producer's next tick ends the delivered one-off.
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OID, "activity-1", cancel_data(&second_card)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[1].2.clone();
+    assert_eq!(
+        card_texts(&settled).last().unwrap(),
+        "This reminder already happened. You can find it on the [Scheduled page](https://erato.example.com/scheduled)."
+    );
+    assert_eq!(buttons(&settled), ["Open in Scheduled"]);
+    run_delivery_tick(&state.db, &executor(), &registry).await;
+    let ended = scheduled_items::get(&state.db, user.id, happened.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        ended.item.status,
+        ItemStatus::Ended,
+        "nothing was cancelled"
+    );
+
+    scheduled_items::delete(&state.db, user.id, happened.id)
+        .await
+        .unwrap()
+        .unwrap();
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OID, "activity-1", cancel_data(&second_card)),
+    )
+    .await;
+    let sent = replies(&shared, 5).await;
+    assert_eq!(sent[4]["text"], "This reminder no longer exists.");
+}
+
+/// Cancel ends a repeating reminder for good, so it first asks, as the
+/// Scheduled page does. Keep it folds the question away by putting the card
+/// back as it is, and changes nothing.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_on_the_confirmation_card_asks_first(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000a5c5";
+    let (user, item) = confirmed_reminder(&state, &host, &base, "asked", OID, None).await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    assert_eq!(buttons(&card), ["Cancel", "Open in Scheduled"]);
+    assert_eq!(
+        cancel_question(&card),
+        (
+            vec![
+                "Cancel “Follow up on the offer”?".to_string(),
+                "It will no longer be delivered. You can still find it under Past on the Scheduled page."
+                    .to_string(),
+            ],
+            vec!["Cancel it".to_string(), "Keep it".to_string()],
+        )
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(
+            &base,
+            OID,
+            "activity-1",
+            action_data(&card, "erato_reminder_keep"),
+        ),
+    )
+    .await;
+    let (_, activity_id, kept) = shared.lock().unwrap().updated[0].clone();
+    assert_eq!(activity_id, "activity-1");
+    assert_eq!(kept["attachments"], card["attachments"]);
+    assert_eq!(shared.lock().unwrap().outgoing.len(), 1, "nothing is said");
+    let upcoming = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(upcoming.item.status, ItemStatus::Active);
+}
+
+/// A reminder the same turn created and then cancelled is confirmed as
+/// cancelled, without Cancel, as the web card shows it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_cancelled_in_the_same_turn_is_confirmed_as_cancelled(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    let (user, item) = confirmed_reminder(
+        &state,
+        &host,
+        &base,
+        "changed-mind",
+        "4a1b3c5d-0000-4000-8000-0000000c4a9d",
+        None,
+    )
+    .await;
+    scheduled_items::cancel(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    let texts = card_texts(&card);
+    assert_eq!(texts[1], "Follow up on the offer");
+    assert_eq!(texts.last().unwrap(), "This reminder was cancelled.");
+    assert_eq!(buttons(&card), ["Open in Scheduled"]);
+}
+
+/// Cancel on the card of a reminder whose delivery failed for good says it
+/// was not delivered, as the Scheduled page shows it as failed, both before
+/// and after the producer's next tick ends it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn cancel_after_a_failed_delivery_says_it_was_not_delivered(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-0000000fa11e";
+    let (user, item) = confirmed_reminder(&state, &host, &base, "undelivered", OID, None).await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang: Lang::En,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    shared.lock().unwrap().answer = Some((
+        403,
+        json!({"error": {"code": "MessageWritesBlocked", "message": "blocked"}}),
+    ));
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(&state, occurrence.id).await;
+    let registry = reminder_registry(bot.clone());
+    let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
+    assert_eq!(tick.failed, 1, "{tick:?}");
+    shared.lock().unwrap().answer = None;
+
+    for (index, ended) in [false, true].into_iter().enumerate() {
+        if ended {
+            run_delivery_tick(&state.db, &executor(), &registry).await;
+        }
+        on_message(
+            bot.clone(),
+            host.clone(),
+            press_on_card(&base, OID, "activity-1", cancel_data(&card)),
+        )
+        .await;
+        let settled = shared.lock().unwrap().updated[index].2.clone();
+        assert_eq!(
+            card_texts(&settled).last().unwrap(),
+            "This reminder could not be delivered. You can find it on the [Scheduled page](https://erato.example.com/scheduled).",
+            "ended: {ended}"
+        );
+        assert_eq!(buttons(&settled), ["Open in Scheduled"]);
+    }
+    let view = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(view.item.status, ItemStatus::Ended, "nothing was cancelled");
+}
+
+/// A German user gets the confirmation and the replies to Cancel in German,
+/// by the stored language alone.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_german_user_gets_the_confirmation_in_german(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    const OID: &str = "4a1b3c5d-0000-4000-8000-0000000d0e0f";
+    let (user, item) =
+        confirmed_reminder(&state, &host, &base, "bestaetigt", OID, Some("de-DE")).await;
+    let lang = host.stored_language(user.id, "en").await;
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+        lang,
+    };
+    send_reminder_confirmations(&bot, &host, &target, user.id, &[item.id]).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    let texts = card_texts(&card);
+    assert_eq!(texts[0], "Erinnerung geplant");
+    assert!(texts[2].ends_with(", 10:00"), "{texts:?}");
+    assert_eq!(texts[3], "Zustellung per Teams-Chat");
+    assert_eq!(buttons(&card), ["Abbrechen"], "no public base URL, no link");
+    assert_eq!(
+        cancel_question(&card),
+        (
+            vec![
+                "„Follow up on the offer“ abbrechen?".to_string(),
+                "Die Erinnerung wird nicht mehr zugestellt. Sie finden sie weiterhin unter „Vergangen“ auf der Seite „Geplant“.".to_string(),
+            ],
+            vec!["Ja, abbrechen".to_string(), "Behalten".to_string()],
+        )
+    );
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(&base, OID, "activity-1", cancel_data(&card)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert_eq!(
+        card_texts(&settled).last().unwrap(),
+        "Diese Erinnerung wurde abgebrochen."
+    );
+}
+
+/// A delivery that fails for good posts nothing into any chat: one attempt
+/// reaches the Connector, the row is failed, and no message or card follows
+/// on later ticks. The Scheduled page shows the failure instead.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_failed_reminder_posts_nothing_into_a_chat(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (_user, item) = confirmed_reminder(
+        &state,
+        &host,
+        &base,
+        "unreachable",
+        "4a1b3c5d-0000-4000-8000-0000000fa11d",
+        None,
+    )
+    .await;
+    shared.lock().unwrap().answer = Some((
+        403,
+        json!({"error": {"code": "MessageWritesBlocked", "message": "blocked"}}),
+    ));
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(&state, occurrence.id).await;
+    let registry = reminder_registry(bot.clone());
+    let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
+    assert_eq!(tick.failed, 1, "{tick:?}");
+    run_delivery_tick(&state.db, &executor(), &registry).await;
+    let failed = find(&state.db, occurrence.id).await.unwrap().unwrap();
+    assert_eq!(
+        failed.state,
+        crate::db::entity::scheduled_deliveries::DeliveryState::Failed
+    );
+    let fake = shared.lock().unwrap();
+    assert_eq!(fake.outgoing.len(), 1, "only the failed attempt");
+    assert!(fake.updated.is_empty());
+}
+
+/// The refusal for a user without a Teams chat reaches the user through the
+/// model, so it names the deployment's Teams app.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_user_without_a_teams_chat_is_told_the_configured_app_name(pool: sqlx::PgPool) {
+    let (mut state, mut bot, _shared, _base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.app_name = "Hugo".into();
+    state.config.scheduled_deliveries.enabled = true;
+    state.scheduled_deliveries = Arc::new(reminder_registry(bot.clone()));
+    state.ms_teams_bot = Some(bot);
+    let user = get_or_create_user(&state.db, "https://issuer.example", "not-set-up", None)
+        .await
+        .unwrap();
+    let refused = scheduled_items::create_checked(
+        &state,
+        user.id,
+        ItemRequest {
+            item_type: ScheduledItemType::Reminder,
+            name: "Call back".into(),
+            message: "About the offer.".into(),
+            linked_chat_id: None,
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(2),
+                time: LocalTime::new(10, 0).unwrap(),
+            },
+        },
+        json!({"via": "chat"}),
+    )
+    .await
+    .unwrap()
+    .unwrap_err();
+    assert_eq!(refused.code, ScheduledItemErrorCode::ChannelNotSetUp);
+    assert_eq!(
+        refused.message,
+        "Hugo can't reach you in Teams yet. Open the Hugo app in Teams once, then this channel works."
     );
 }
 

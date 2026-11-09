@@ -1015,6 +1015,7 @@ impl AppState {
     /// Get the system prompt for a given chat provider configuration.
     /// This resolves either a static system prompt or retrieves one from Langfuse,
     /// and renders any placeholders (e.g., {{erato_inject_preferred_language_code}}).
+    #[allow(clippy::too_many_arguments)]
     pub async fn get_system_prompt(
         &self,
         config: &ChatProviderConfig,
@@ -1023,6 +1024,7 @@ impl AppState {
         user_preference_job_title: Option<&str>,
         user_preference_assistant_custom_instructions: Option<&str>,
         user_preference_assistant_additional_information: Option<&str>,
+        time_zone: Option<chrono_tz::Tz>,
     ) -> Result<Option<String>, Report> {
         let ctx = SystemPromptContext {
             preferred_language,
@@ -1030,6 +1032,7 @@ impl AppState {
             user_preference_job_title,
             user_preference_assistant_custom_instructions,
             user_preference_assistant_additional_information,
+            time_zone,
         };
 
         // If a system prompt is configured, resolve, render, and return it
@@ -1089,6 +1092,7 @@ impl AppState {
             user_preference_job_title,
             user_preference_assistant_custom_instructions,
             user_preference_assistant_additional_information,
+            time_zone: None,
         };
 
         let Some(config) = config else {
