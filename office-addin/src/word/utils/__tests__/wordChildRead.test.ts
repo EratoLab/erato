@@ -136,7 +136,7 @@ describe("a delegated task's read under the server's grant", () => {
     expect(writeState(snapshot)).toEqual(untouchedWriteState);
   });
 
-  it("ends with capture-unavailable once a new Send captured again, and never reads the newer capture", async () => {
+  it("ends with capture-unavailable once a new Send captured again, reads the newer capture only under its own grant, and not once it is cleared", async () => {
     const { child, session, snapshot } = open();
     const ref = sectionRef(snapshot);
     okResult(await child({ section: { ref } }));
@@ -152,8 +152,11 @@ describe("a delegated task's read under the server's grant", () => {
         },
       ),
     );
+    const newerGrant = { ...grantOf(newer), ownerMessageId: "message-B" };
+    const newerRead = { section: { ref: sectionRef(newer) } };
+    okResult(await child(newerRead, newerGrant));
     session.clear();
-    expectLoss(await child({ section: { ref } }, grantOf(newer)));
+    expectLoss(await child(newerRead, newerGrant));
   });
 
   it.each(["used", "revoked"] as const)(
