@@ -9241,6 +9241,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "show_indicator_with_display_name": {
+            "type": "boolean",
+            "description": "Whether this facet's indicator shows its display name. Absent: follow\n`show_facet_indicator_with_display_name` of the global settings."
           }
         }
       },

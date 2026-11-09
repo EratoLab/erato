@@ -7583,6 +7583,7 @@ async fn task_state(
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     tweak(&mut app_config);
@@ -8060,6 +8061,7 @@ fn word_task_config(config: &mut erato::config::AppConfig) {
                 delegation: None,
                 child_chat_provider: None,
                 child_host_context: None,
+                show_indicator_with_display_name: None,
             },
         );
     }
@@ -14682,6 +14684,7 @@ async fn retry_reauthorizes_facets_for_the_owner(pool: Pool<Postgres>) {
                         delegation: None,
                         child_chat_provider: None,
                         child_host_context: None,
+                        show_indicator_with_display_name: None,
                     },
                 );
             }

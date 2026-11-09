@@ -1178,6 +1178,11 @@ pub struct FacetInfo {
     #[schema(nullable = false)]
     icon: Option<String>,
     default_enabled: bool,
+    /// Whether this facet's indicator shows its display name. Absent: follow
+    /// `show_facet_indicator_with_display_name` of the global settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    show_indicator_with_display_name: Option<bool>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1298,6 +1303,7 @@ pub async fn facets(
                 display_name: facet.display_name.clone(),
                 icon: facet.icon.clone(),
                 default_enabled,
+                show_indicator_with_display_name: facet.show_indicator_with_display_name,
             });
             seen.insert(facet_id.clone());
         }
@@ -1320,6 +1326,7 @@ pub async fn facets(
                 display_name: facet.display_name.clone(),
                 icon: facet.icon.clone(),
                 default_enabled,
+                show_indicator_with_display_name: facet.show_indicator_with_display_name,
             });
         }
     }

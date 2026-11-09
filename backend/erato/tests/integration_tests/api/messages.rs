@@ -253,6 +253,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     facets.insert(
@@ -271,6 +272,7 @@ async fn test_facets_persisted_in_generation_parameters(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     app_config.facets = FacetsConfig {
@@ -949,6 +951,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     facets.insert(
@@ -967,6 +970,7 @@ async fn test_facet_prompt_injection_toggle_behavior(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     app_config.facets = FacetsConfig {
