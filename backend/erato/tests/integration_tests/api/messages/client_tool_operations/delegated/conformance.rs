@@ -214,10 +214,7 @@ host_conformance!(
 );
 // A host's row is enabled by the issue that makes its pane take grant calls,
 // so a passing row never stands for a host whose pane would refuse them.
-host_conformance!(
-    word_document: word_document(),
-    ignore = "ERMAIN-1003: enabled once the Word pane takes grant calls"
-);
+host_conformance!(word_document: word_document());
 host_conformance!(
     outlook_mailbox: outlook_mailbox(),
     slow_path,
@@ -802,18 +799,35 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
         "the stored call keeps what the model sent"
     );
     let child_turns = turn_bodies(&child);
-    if let Some(context) = &row.context {
-        let offered = &child_turns[0]["tools"]
-            .as_array()
-            .and_then(|tools| {
-                tools
-                    .iter()
-                    .find(|tool| tool["function"]["name"] == row.read_tool)
-            })
-            .expect("the granted read tool")["function"]["parameters"];
+    let offered = &child_turns[0]["tools"]
+        .as_array()
+        .and_then(|tools| {
+            tools
+                .iter()
+                .find(|tool| tool["function"]["name"] == row.read_tool)
+        })
+        .expect("the granted read tool")["function"]["parameters"];
+    let asked = asked_inputs(offered);
+    let part = row
+        .part
+        .0
+        .trim_start_matches("$.")
+        .split('.')
+        .next()
+        .unwrap();
+    assert!(
+        asked.contains(part),
+        "the task's model is asked for {part}: {offered}"
+    );
+    for field in row
+        .context
+        .iter()
+        .map(|context| context.input)
+        .chain(row.host_inputs.iter().copied())
+    {
         assert!(
-            offered["properties"].get(context.input).is_none(),
-            "the task's model is not asked for the context version the server fills: {offered}"
+            !asked.contains(field),
+            "the task's model is not asked for {field}, which the server or the pane fills: {offered}"
         );
     }
     assert!(child_turns[1].to_string().contains(PANE_TEXT));
@@ -827,6 +841,29 @@ async fn a_granted_call_reaches_the_pane_with_lineage_and_the_server_context_ref
     }
     assert_eq!(row_count(&state, "client_executor_calls").await, 0);
     server.abort();
+}
+
+/// The input fields a schema names, in its properties, its required list and
+/// every alternative it offers.
+fn asked_inputs(schema: &Value) -> BTreeSet<&str> {
+    let mut asked: BTreeSet<&str> = schema["properties"]
+        .as_object()
+        .into_iter()
+        .flat_map(|properties| properties.keys().map(String::as_str))
+        .chain(
+            schema["required"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str),
+        )
+        .collect();
+    for alternatives in ["anyOf", "oneOf", "allOf"] {
+        for variant in schema[alternatives].as_array().into_iter().flatten() {
+            asked.extend(asked_inputs(variant));
+        }
+    }
+    asked
 }
 
 async fn a_child_cannot_call_write_tools_without_child_access_or_invented_tools(
