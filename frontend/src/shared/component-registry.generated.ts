@@ -394,6 +394,7 @@ export { ApprovalQueueCard } from "@/components/ui/Message/ApprovalQueueCard";
 export { ApprovalReferent } from "@/components/ui/Message/ApprovalReferent";
 export { ApprovalTechnicalDetails } from "@/components/ui/Message/ApprovalReferent";
 export { ApprovalToolHeading } from "@/components/ui/Message/ApprovalToolHeading";
+export { BuiltinToolApprovalItem } from "@/components/ui/Message/BuiltinToolApprovalItem";
 export { ClientToolFileApprovals } from "@/components/ui/Message/ClientToolFileApproval";
 export { CollapsibleCodeBlock } from "@/components/ui/Message/CollapsibleCodeBlock";
 export type { CollapsibleCodeBlockProps } from "@/components/ui/Message/CollapsibleCodeBlock";

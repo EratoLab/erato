@@ -5,6 +5,7 @@ import {
   ApprovalBulkActions,
   stagedItemPresentation,
 } from "./ApprovalDecisionActions";
+import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
 import { WaitingTaskItem } from "./WaitingTaskItem";
@@ -180,24 +181,41 @@ export const ApprovalQueueCard = ({
             data-tool-name={current.tool_name}
             className="rounded-md border border-theme-border p-2"
           >
-            <OwnCallApprovalItem
-              toolName={current.tool_name}
-              display={current.display}
-              input={current.input}
-              serverId={request.mcp_server_id}
-              isClientTool={kind === "client_tool"}
-              openWorld={request.annotations.openWorldHint}
-              allowAlways={itemAllowsAlways(current, request)}
-              {...stagedItemPresentation(
-                staged[current.approval_id],
-                isArchived,
-              )}
-              isBusy={isBusy}
-              scrollIntoViewOnMount
-              onDecide={(decision) =>
-                onDecideItem(current.approval_id, decision)
-              }
-            />
+            {kind === "builtin_tool" ? (
+              <BuiltinToolApprovalItem
+                toolName={current.tool_name}
+                display={current.display}
+                input={current.input}
+                {...stagedItemPresentation(
+                  staged[current.approval_id],
+                  isArchived,
+                )}
+                isBusy={isBusy}
+                scrollIntoViewOnMount
+                onDecide={(decision) =>
+                  onDecideItem(current.approval_id, decision)
+                }
+              />
+            ) : (
+              <OwnCallApprovalItem
+                toolName={current.tool_name}
+                display={current.display}
+                input={current.input}
+                serverId={request.mcp_server_id}
+                isClientTool={kind === "client_tool"}
+                openWorld={request.annotations.openWorldHint}
+                allowAlways={itemAllowsAlways(current, request)}
+                {...stagedItemPresentation(
+                  staged[current.approval_id],
+                  isArchived,
+                )}
+                isBusy={isBusy}
+                scrollIntoViewOnMount
+                onDecide={(decision) =>
+                  onDecideItem(current.approval_id, decision)
+                }
+              />
+            )}
           </div>
         ))}
       {!isArchived && itemCount > 0 && (

@@ -1551,6 +1551,107 @@ describe("McpToolApprovalCard", () => {
   });
 });
 
+describe("built-in tool approvals", () => {
+  const cancelRequest = {
+    ...approvalRequest,
+    tool_call_id: "cancel-call-1",
+    tool_name: "cancel_reminder",
+    mcp_server_id: "",
+    input: { reminder_id: "0b9f3c1e-0000-4000-8000-000000000001" },
+    preset: "permissive",
+    allow_always: false,
+    kind: "builtin_tool" as const,
+    display: {
+      title: "Follow up on the offer",
+      description: "Friday, 13 Nov, 10:00",
+      description_truncated: false,
+    },
+  };
+
+  it("asks about the reminder in the user's words, with no standing decision", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={cancelRequest}
+        resolution={null}
+      />,
+    );
+
+    const card = screen.getByTestId("builtin-tool-approval");
+    expect(card).toHaveAttribute("data-approval-kind", "builtin_tool");
+    expect(
+      screen.getByRole("group", {
+        name: "Cancel the reminder “Follow up on the offer”?",
+      }),
+    ).toBeInTheDocument();
+    expect(card).toHaveTextContent("Friday, 13 Nov, 10:00");
+    expect(card).toHaveTextContent("a repeating reminder stops for good");
+    expect(card).not.toHaveTextContent("cancel_reminder");
+    expect(card).not.toHaveTextContent("0b9f3c1e");
+    expect(screen.getByRole("button", { name: "Cancel it" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeVisible();
+    for (const label of ["Always allow", "Never allow", "Allow once"]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
+    expect(screen.queryByTestId("tool-approval-generic")).toBeNull();
+  });
+
+  it.each([
+    ["Cancel it", "approve"],
+    ["Keep it", "reject"],
+  ])("hands %s to the chat as a %s", async (label, decision) => {
+    const continueToolApproval = vi.fn().mockResolvedValue(undefined);
+    renderCard(
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={cancelRequest}
+          resolution={null}
+        />,
+        "chat-1",
+        { continueToolApproval },
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: label }));
+
+    await waitFor(() =>
+      expect(continueToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          decision,
+          kind: "builtin_tool",
+          approvalIds: ["cancel-call-1"],
+        }),
+      ),
+    );
+  });
+
+  it("names a reminder to schedule from the call when the server named none", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{
+          ...cancelRequest,
+          tool_name: "create_reminder",
+          input: { name: "Call back", message: "About the offer." },
+          display: undefined,
+        }}
+        resolution={null}
+      />,
+    );
+
+    expect(
+      screen.getByRole("group", {
+        name: "Schedule the reminder “Call back”?",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Schedule" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Don't schedule" }),
+    ).toBeVisible();
+  });
+});
+
 describe("client tool approvals", () => {
   const clientToolRequest = {
     ...approvalRequest,

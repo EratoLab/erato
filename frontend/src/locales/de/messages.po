@@ -1678,6 +1678,56 @@ msgid "brandingOverview.web"
 msgstr "Webanwendung"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.allow"
+msgstr "Erlauben"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.cancelReminder.confirm"
+msgstr "Ja, abbrechen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.cancelReminder.keep"
+msgstr "Behalten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.cancelReminder.note"
+msgstr "Die Erinnerung wird nicht mehr zugestellt, und eine wiederkehrende endet endgültig."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.cancelReminder.title"
+msgstr "Die Erinnerung „{name}“ abbrechen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.confirm"
+msgstr "Planen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.deny"
+msgstr "Nicht planen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.title"
+msgstr "Die Erinnerung „{name}“ planen?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.deny"
+msgstr "Ablehnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.title"
+msgstr "„{name}“ erlauben?"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
 msgid "chat.ai_usage_advisory"
 msgstr "Sie interagieren mit einem KI-Chatbot. Generierte Antworten können sachliche Fehler enthalten und sollten vor der Verwendung überprüft werden."
