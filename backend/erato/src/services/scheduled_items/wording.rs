@@ -65,6 +65,34 @@ pub fn as_of_creation(lang: Lang) -> &'static str {
     )
 }
 
+/// Under the message when its linked chat was archived, which is why it has
+/// no Continue here.
+pub fn linked_chat_archived(lang: Lang) -> &'static str {
+    lang.pick(
+        "The chat is archived. Restore it to continue there.",
+        "Der Chat ist archiviert. Stellen Sie ihn wieder her, um dort weiterzumachen.",
+    )
+}
+
+/// The linked chat under a reminder's message; `chat` is its title, plain or
+/// as a link.
+pub fn linked_chat_line(chat: &str, lang: Lang) -> String {
+    match lang {
+        Lang::En => format!("Linked chat: {chat}"),
+        Lang::De => format!("Verknüpfter Chat: {chat}"),
+    }
+}
+
+/// A chat's title as a Markdown link to it, or plain without a URL. Square
+/// brackets in a linked title become parentheses: Teams does not reliably
+/// honour escapes, and a bracket would end the link text.
+pub fn chat_link(title: &str, url: Option<&str>) -> String {
+    match url {
+        Some(url) => format!("[{}]({url})", title.replace('[', "(").replace(']', ")")),
+        None => title.to_string(),
+    }
+}
+
 /// Under a message written from a chat that was deleted since.
 pub fn origin_chat_gone(lang: Lang) -> &'static str {
     lang.pick(

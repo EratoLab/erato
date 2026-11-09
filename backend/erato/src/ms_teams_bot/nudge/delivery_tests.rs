@@ -129,6 +129,7 @@ fn content(token: Uuid) -> DeliveryContent {
             title: "Don't remind me".into(),
             command: OPT_OUT_COMMAND.into(),
             token: Some(token),
+            target: None,
         }],
     }
 }
@@ -927,7 +928,6 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     assert_eq!(
         buttons(&card),
         [
-            "Unbenannter Chat",
             "Hier weitermachen",
             "Erledigt",
             "Später (30 Min.)",
@@ -950,10 +950,7 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     )
     .await;
     let settled = shared.lock().unwrap().updated[0].2.clone();
-    let note = settled["attachments"][0]["content"]["body"][2]["text"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let note = body_texts(&settled).last().unwrap().clone();
     assert!(note.starts_with("Zurückgestellt bis "), "{note}");
     assert!(
         !note.contains("tomorrow") && !note.contains("time)"),
@@ -984,7 +981,7 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     .await;
     let settled = shared.lock().unwrap().updated[1].2.clone();
     assert_eq!(
-        settled["attachments"][0]["content"]["body"][2]["text"],
+        body_texts(&settled).last().unwrap(),
         "Als erledigt markiert."
     );
 }
@@ -2006,26 +2003,39 @@ async fn a_reminder_from_a_chat_carries_it(pool: sqlx::PgPool) {
         .await;
     })
     .await;
+    let context = format!(
+        "Linked chat: [Offer for Müller](https://erato.example.com/chat/{chat_id})\n\nAs of when it was set; the chat went on afterwards."
+    );
     assert_eq!(
         body_texts(&card),
         [
             "Offer for Müller",
             "Open: the discount, and whether they need it before Friday.",
-            "As of when it was set; the chat went on afterwards.",
+            context.as_str(),
         ]
     );
     assert_eq!(
         buttons(&card),
-        [
-            "Offer for Müller",
-            "Continue here",
-            "Done",
-            "Snooze 30 min",
-            "Tomorrow 9:00"
-        ]
+        ["Continue here", "Done", "Snooze 30 min", "Tomorrow 9:00"]
     );
     let continue_here = submit_of(&card, CONTINUE_COMMAND);
     assert!(continue_here.get("token").is_none(), "{continue_here}");
+    assert_eq!(continue_here["target"], json!(chat_id));
+
+    // Relinked on the page: the card still continues the chat it names.
+    let other_chat = Uuid::new_v4();
+    execute(
+        &state,
+        "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+        vec![other_chat.into(), user_id.to_string().into()],
+    )
+    .await;
+    execute(
+        &state,
+        "UPDATE scheduled_items SET linked_chat_id = $2 WHERE user_id = $1",
+        vec![user_id.into(), other_chat.into()],
+    )
+    .await;
 
     on_message(
         bot.clone(),
@@ -2053,11 +2063,8 @@ async fn a_reminder_from_a_chat_carries_it(pool: sqlx::PgPool) {
     )
     .await;
     let settled = shared.lock().unwrap().updated[0].2.clone();
-    assert_eq!(buttons(&settled), ["Offer for Müller", "Continue here"]);
-    assert_eq!(
-        body_texts(&settled)[2],
-        "As of when it was set; the chat went on afterwards."
-    );
+    assert_eq!(buttons(&settled), ["Continue here"]);
+    assert_eq!(body_texts(&settled)[2], context);
 
     execute(
         &state,
@@ -2081,7 +2088,8 @@ async fn a_reminder_from_a_chat_carries_it(pool: sqlx::PgPool) {
 /// Once the chat a reminder was asked for in is deleted, the reminder still
 /// arrives with its message, says the chat is gone and offers no Continue
 /// here. A message the user typed into the form gets no such line, even when
-/// its linked chat went on.
+/// its linked chat went on. An archived linked chat is named with a note why
+/// Continue here is missing.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -2135,8 +2143,39 @@ async fn a_reminder_keeps_its_text_when_its_chat_is_gone(pool: sqlx::PgPool) {
         },
     )
     .await;
-    assert_eq!(body_texts(&typed).len(), 2, "{typed}");
-    assert_eq!(buttons(&typed)[..2], ["Untitled Chat", "Continue here"]);
+    assert_eq!(
+        body_texts(&typed)[2],
+        format!("Linked chat: [Untitled Chat](https://erato.example.com/chat/{other_chat})"),
+        "no note on a message the user typed"
+    );
+    assert_eq!(buttons(&typed)[0], "Continue here");
+
+    let archived = deliver_linked(
+        &state,
+        &bot,
+        &shared,
+        user_id,
+        other_chat,
+        false,
+        async || {
+            execute(
+                &state,
+                "UPDATE chats SET archived_at = now() WHERE id = $1",
+                vec![other_chat.into()],
+            )
+            .await;
+        },
+    )
+    .await;
+    assert!(
+        body_texts(&archived)[2]
+            .ends_with("\n\nThe chat is archived. Restore it to continue there."),
+        "{archived}"
+    );
+    assert_eq!(
+        buttons(&archived),
+        ["Done", "Snooze 30 min", "Tomorrow 9:00"]
+    );
 }
 
 /// A text message from `oid` in the personal conversation.

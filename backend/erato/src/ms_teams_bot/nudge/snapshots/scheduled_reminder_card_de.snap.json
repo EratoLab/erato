@@ -20,21 +20,25 @@
             "type": "TextBlock",
             "text": "Fragen, ob die neuen Konditionen vor Freitag gebraucht werden.",
             "wrap": true
+          },
+          {
+            "type": "TextBlock",
+            "text": "Verknüpfter Chat: [Vergleich der Q4-Konditionen](https://erato.example.com/chat/CHAT_ID)",
+            "wrap": true,
+            "isSubtle": true,
+            "size": "Small",
+            "spacing": "Small"
           }
         ],
         "actions": [
-          {
-            "type": "Action.OpenUrl",
-            "title": "Vergleich der Q4-Konditionen",
-            "url": "https://erato.example.com/chat/CHAT_ID"
-          },
           {
             "type": "Action.Submit",
             "title": "Hier weitermachen",
             "data": {
               "action": "erato_delivery_action",
               "delivery_id": "DELIVERY_ID",
-              "command": "continue"
+              "command": "continue",
+              "target": "CHAT_ID"
             }
           },
           {

@@ -528,6 +528,7 @@ impl DeliveryProducer for InactivityNudgeProducer {
                     title: Msg::DontRemindMe.text(lang).to_string(),
                     command: OPT_OUT_COMMAND.to_string(),
                     token: Some(token),
+                    target: None,
                 }],
             },
         })
@@ -543,6 +544,8 @@ pub struct DeliverySubmit {
     /// Absent on buttons that need no single-use guard.
     #[serde(default)]
     pub token: Option<Uuid>,
+    #[serde(default)]
+    pub target: Option<Uuid>,
 }
 
 /// What a card button asks for. Parsed before the token is claimed, so an
@@ -668,6 +671,9 @@ fn card_with_note(content: &DeliveryContent, delivery_id: Uuid, note: Option<&st
         });
         if let Some(token) = action.token {
             data["token"] = json!(token);
+        }
+        if let Some(target) = action.target {
+            data["target"] = json!(target);
         }
         json!({"type": "Action.Submit", "title": action.title, "data": data})
     }));
@@ -860,8 +866,9 @@ impl Host {
         &self,
         user_id: Uuid,
         delivery_id: Uuid,
+        target: Option<Uuid>,
     ) -> Result<Option<chats::Model>, Report> {
-        scheduled_items::chat_to_continue(&self.app_state.db, user_id, delivery_id).await
+        scheduled_items::chat_to_continue(&self.app_state.db, user_id, delivery_id, target).await
     }
 
     pub async fn stored_time_zone(&self, user_id: Uuid) -> Result<Option<Tz>, Report> {
@@ -1014,6 +1021,7 @@ mod tests {
                 title: "Don't remind me".into(),
                 command: OPT_OUT_COMMAND.into(),
                 token: Some(token),
+                target: None,
             }],
         };
         let activity = delivery_card(&content, delivery_id);
@@ -1070,6 +1078,7 @@ mod tests {
                 title: "Done".into(),
                 command: DONE_COMMAND.into(),
                 token: Some(Uuid::new_v4()),
+                target: None,
             }],
         };
         let activity = settled_delivery_card(&content, Uuid::new_v4(), "Marked as done.");

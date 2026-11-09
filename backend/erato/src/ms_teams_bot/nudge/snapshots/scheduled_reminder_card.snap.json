@@ -20,21 +20,25 @@
             "type": "TextBlock",
             "text": "Ask whether they need the revised rates before Friday.",
             "wrap": true
+          },
+          {
+            "type": "TextBlock",
+            "text": "Linked chat: [Q4 rate comparison](https://erato.example.com/chat/CHAT_ID)",
+            "wrap": true,
+            "isSubtle": true,
+            "size": "Small",
+            "spacing": "Small"
           }
         ],
         "actions": [
-          {
-            "type": "Action.OpenUrl",
-            "title": "Q4 rate comparison",
-            "url": "https://erato.example.com/chat/CHAT_ID"
-          },
           {
             "type": "Action.Submit",
             "title": "Continue here",
             "data": {
               "action": "erato_delivery_action",
               "delivery_id": "DELIVERY_ID",
-              "command": "continue"
+              "command": "continue",
+              "target": "CHAT_ID"
             }
           },
           {

@@ -75,6 +75,10 @@ pub struct DeliveryAction {
     pub command: String,
     #[serde(default)]
     pub token: Option<Uuid>,
+    /// What the button acts on, as the card showed it, such as the chat
+    /// Continue here opens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<Uuid>,
 }
 
 /// The producer's send-time answer to "is this still owed?".
