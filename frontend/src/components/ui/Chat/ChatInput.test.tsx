@@ -50,6 +50,7 @@ import type {
   FormEvent,
   HTMLAttributes,
   ReactNode,
+  Ref,
 } from "react";
 
 const mockUseChatContext = vi.fn();
@@ -795,7 +796,10 @@ describe("ChatInput", () => {
         onSelectionChange: (ids: string[]) => void;
       };
 
-    const renderChatInput = async (chatId: string | null) => {
+    const renderChatInput = async (
+      chatId: string | null,
+      ref?: Ref<ChatInputControlsHandle>,
+    ) => {
       const queryClient = new QueryClient({
         defaultOptions: {
           queries: { retry: false },
@@ -807,6 +811,7 @@ describe("ChatInput", () => {
         <QueryClientProvider client={queryClient}>
           <I18nProvider i18n={i18n}>
             <ChatInput
+              ref={ref}
               onSendMessage={vi.fn()}
               handleFileAttachments={vi.fn()}
               chatId={id}
@@ -839,6 +844,36 @@ describe("ChatInput", () => {
       rerender("real-chat-id");
 
       expect(latestFacetProps().selectedFacetIds).toEqual(["facet-1"]);
+    });
+
+    it("keeps facets set from outside, such as a new-chat preset, when the chat acquires its id", async () => {
+      const controls = createRef<ChatInputControlsHandle>();
+      const { rerender } = await renderChatInput(null, controls);
+
+      act(() => {
+        controls.current?.setSelectedFacetIds(["facet-2"]);
+      });
+      rerender("real-chat-id");
+
+      expect(latestFacetProps().selectedFacetIds).toEqual(["facet-2"]);
+    });
+
+    it("keeps a typed draft when a draft is offered only for an empty composer", async () => {
+      const controls = createRef<ChatInputControlsHandle>();
+      await renderChatInput(null, controls);
+      const textarea = screen.getByRole("textbox");
+
+      act(() => {
+        controls.current?.setDraftMessage("Offered", { onlyIfEmpty: true });
+      });
+      expect(textarea).toHaveValue("Offered");
+      fireEvent.change(textarea, { target: { value: "Typed" } });
+      act(() => {
+        controls.current?.setDraftMessage("Offered again", {
+          onlyIfEmpty: true,
+        });
+      });
+      expect(textarea).toHaveValue("Typed");
     });
 
     it("re-initializes facets on a genuine chat switch", async () => {

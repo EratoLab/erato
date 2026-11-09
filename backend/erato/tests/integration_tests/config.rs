@@ -4619,11 +4619,7 @@ fn test_deliverable_reminders_inject_the_builtin_schedule_facet() {
     let schedule = &with.facets.facets["schedule"];
     assert_eq!(schedule.display_name, "Schedule");
     assert_eq!(schedule.show_indicator_with_display_name, Some(true));
-    assert!(
-        schedule
-            .tool_call_allowlist
-            .contains(&"erato/create_reminder".to_string())
-    );
+    assert!(schedule.tool_call_allowlist.is_empty());
 }
 
 const SCHEDULE_FACET_DELIVERABLE: &str = r#"

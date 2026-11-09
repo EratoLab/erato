@@ -6150,25 +6150,45 @@ impl FacetsConfig {
         if !reminders_deliverable {
             return;
         }
+        let builtin = self.builtin_schedule_facet();
         self.facets
             .entry(BUILTIN_SCHEDULE_FACET_ID.to_string())
-            .or_insert_with(builtin_schedule_facet);
+            .or_insert(builtin);
+    }
+
+    /// Whether facets filter tools at all. The built-in alone, unchanged, does
+    /// not: a deployment that configured no facets keeps every tool, as before
+    /// the built-in existed, even when it set a global allowlist for client
+    /// tools.
+    pub fn restrict_tools(&self) -> bool {
+        self.facets.iter().any(|(id, facet)| {
+            id != BUILTIN_SCHEDULE_FACET_ID || *facet != self.builtin_schedule_facet()
+        })
+    }
+
+    fn builtin_schedule_facet(&self) -> FacetConfig {
+        builtin_schedule_facet(!self.tool_call_allowlist.is_empty())
     }
 }
 
-fn builtin_schedule_facet() -> FacetConfig {
+/// Without a global allowlist the reminder tools are offered anyway, and an
+/// allowlist of its own would withdraw every other tool (MCP servers, file
+/// reading) while the facet is selected.
+fn builtin_schedule_facet(global_allowlist: bool) -> FacetConfig {
     FacetConfig {
         display_name: "Schedule".to_string(),
         icon: Some("iconoir-calendar".to_string()),
         additional_system_prompt: Some(PromptSourceSpecification::Static {
             content: BUILTIN_SCHEDULE_FACET_PROMPT.to_string(),
         }),
-        // Selecting the facet must offer the reminder tools even where a
-        // global allowlist leaves them out.
-        tool_call_allowlist: ["create_reminder", "list_reminders", "cancel_reminder"]
-            .into_iter()
-            .map(|name| format!("{RESERVED_TOOL_NAMESPACE}/{name}"))
-            .collect(),
+        tool_call_allowlist: if global_allowlist {
+            ["create_reminder", "list_reminders", "cancel_reminder"]
+                .into_iter()
+                .map(|name| format!("{RESERVED_TOOL_NAMESPACE}/{name}"))
+                .collect()
+        } else {
+            Vec::new()
+        },
         // The prompt names the tools itself; the generic template would list
         // them again under their namespaced names.
         disable_facet_prompt_template: true,
@@ -6202,8 +6222,15 @@ mod builtin_schedule_facet_tests {
         let schedule = &facets.facets[BUILTIN_SCHEDULE_FACET_ID];
         assert_eq!(schedule.display_name, "Schedule");
         assert_eq!(schedule.icon.as_deref(), Some("iconoir-calendar"));
+        assert!(schedule.tool_call_allowlist.is_empty());
+
+        let mut restricted = FacetsConfig {
+            tool_call_allowlist: vec!["search/*".to_string()],
+            ..Default::default()
+        };
+        restricted.inject_builtin_schedule_facet(true);
         assert_eq!(
-            schedule.tool_call_allowlist,
+            restricted.facets[BUILTIN_SCHEDULE_FACET_ID].tool_call_allowlist,
             [
                 "erato/create_reminder",
                 "erato/list_reminders",

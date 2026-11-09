@@ -12739,7 +12739,7 @@ async fn resolve_generation_mcp_tools(
         inputs.effective_selected_facet_ids,
         inputs.action_facet_id,
     );
-    let facets_configured = !app_state.config.facets.facets.is_empty();
+    let facets_configured = app_state.config.facets.restrict_tools();
     let server_filter_from_allowlist = match (
         derive_requested_server_ids_from_allowlist(facet_allowlist.as_deref(), facets_configured),
         derive_requested_server_ids_from_allowlist(inputs.parent_mcp_allowlist, facets_configured),
@@ -13690,6 +13690,9 @@ mod tests {
             tool_call_allowlist: vec!["search/*".to_string()],
             ..Default::default()
         };
+        facets
+            .facets
+            .insert("research".to_string(), Default::default());
         facets.inject_builtin_schedule_facet(true);
         let allowed = |selected: &[String], namespace: &str, name: &str| {
             build_mcp_tool_allowlist(&facets, selected).is_none_or(|allowlist| {
@@ -13709,19 +13712,47 @@ mod tests {
     }
 
     #[test]
-    fn builtin_schedule_facet_alone_restricts_mcp_tools_while_selected() {
+    fn builtin_schedule_facet_keeps_every_tool_without_a_global_allowlist() {
         use crate::services::prompt_composition::build_mcp_tool_allowlist;
         use erato_config::config::{BUILTIN_SCHEDULE_FACET_ID, FacetsConfig};
 
-        let mut facets = FacetsConfig::default();
-        facets.inject_builtin_schedule_facet(true);
+        let selected = [BUILTIN_SCHEDULE_FACET_ID.to_string()];
+        let mut alone = FacetsConfig::default();
+        alone.inject_builtin_schedule_facet(true);
+        assert!(!alone.restrict_tools());
+        assert_eq!(build_mcp_tool_allowlist(&alone, &selected), None);
 
+        let mut with_others = FacetsConfig::default();
+        with_others
+            .facets
+            .insert("research".to_string(), Default::default());
+        with_others.inject_builtin_schedule_facet(true);
+        assert_eq!(build_mcp_tool_allowlist(&with_others, &selected), None);
+    }
+
+    /// A global allowlist meant for client tools stays without effect on MCP
+    /// and Erato's own tools while no facet of the deployment's own exists.
+    #[test]
+    fn the_builtin_alone_does_not_turn_on_a_global_allowlist() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use erato_config::config::FacetsConfig;
+
+        let mut facets = FacetsConfig {
+            tool_call_allowlist: vec!["outlook/*".to_string()],
+            ..Default::default()
+        };
+        facets.inject_builtin_schedule_facet(true);
+        assert!(!facets.restrict_tools());
         assert_eq!(build_mcp_tool_allowlist(&facets, &[]), None);
-        let allowlist =
-            build_mcp_tool_allowlist(&facets, &[BUILTIN_SCHEDULE_FACET_ID.to_string()]).unwrap();
-        assert!(!super::is_qualified_tool_allowed(
-            "search", "web", &allowlist
-        ));
+        facets
+            .facets
+            .get_mut(erato_config::config::BUILTIN_SCHEDULE_FACET_ID)
+            .unwrap()
+            .display_name = "Planen".to_string();
+        assert!(
+            facets.restrict_tools(),
+            "a changed built-in is the deployment's"
+        );
     }
 
     #[test]

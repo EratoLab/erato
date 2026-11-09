@@ -45,6 +45,7 @@ import { ChatInput } from "./ChatInput";
 import {
   ChatInputControlsProvider,
   type ChatInputControlsHandle,
+  type DraftMessageOptions,
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatShareDialog } from "./ChatShareDialog";
@@ -248,7 +249,7 @@ export const Chat = ({
   const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
   const chatInputControls = useMemo(
     () => ({
-      setDraftMessage: (message: string, options?: { focus?: boolean }) => {
+      setDraftMessage: (message: string, options?: DraftMessageOptions) => {
         chatInputControlsRef.current?.setDraftMessage(message, options);
       },
       focusInput: () => {

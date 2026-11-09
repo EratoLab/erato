@@ -81,7 +81,10 @@ export function useApplyComposerPreset(
     }
     controls.setSelectedFacetIds(preset.facetIds);
     if (preset.draft !== undefined) {
-      controls.setDraftMessage(preset.draft, { focus: false });
+      controls.setDraftMessage(preset.draft, {
+        focus: false,
+        onlyIfEmpty: true,
+      });
     }
     controls.focusInput();
     navigate(

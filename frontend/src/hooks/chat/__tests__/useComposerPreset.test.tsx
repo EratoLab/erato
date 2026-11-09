@@ -75,6 +75,7 @@ describe("useApplyComposerPreset", () => {
     expect(controls.setSelectedFacetIds).toHaveBeenCalledWith(["schedule"]);
     expect(controls.setDraftMessage).toHaveBeenCalledWith("Remind me", {
       focus: false,
+      onlyIfEmpty: true,
     });
     expect(controls.focusInput).toHaveBeenCalled();
     expect(readLocation()).toEqual({ path: "/chat/new", state: { other: 1 } });

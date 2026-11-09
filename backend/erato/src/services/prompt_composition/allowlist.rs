@@ -10,7 +10,7 @@ pub fn build_mcp_tool_allowlist(
     facets: &FacetsConfig,
     selected_facet_ids: &[String],
 ) -> Option<Vec<String>> {
-    if facets.facets.is_empty() {
+    if !facets.restrict_tools() {
         return None;
     }
 

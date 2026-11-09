@@ -4,6 +4,8 @@ import type { FileUploadItem } from "@/lib/generated/v1betaApi/v1betaApiSchemas"
 
 export type DraftMessageOptions = {
   focus?: boolean;
+  /** Keep what the user already typed instead of replacing it. */
+  onlyIfEmpty?: boolean;
 };
 
 export interface ChatInputControls {
