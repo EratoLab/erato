@@ -119,6 +119,7 @@ fn content(token: Uuid) -> DeliveryContent {
     DeliveryContent {
         title: None,
         text: "Did you know you can attach files?".into(),
+        context: None,
         summary: Some("A tip from Erato".into()),
         links: vec![DeliveryLink {
             title: "Open Erato".into(),
@@ -128,6 +129,7 @@ fn content(token: Uuid) -> DeliveryContent {
             title: "Don't remind me".into(),
             command: OPT_OUT_COMMAND.into(),
             token: Some(token),
+            target: None,
         }],
     }
 }
@@ -919,7 +921,7 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     assert_eq!(
         buttons(&card),
         [
-            "Unbenannter Chat",
+            "Hier weitermachen",
             "Erledigt",
             "Später (30 Min.)",
             "Morgen 9:00"
@@ -941,10 +943,7 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     )
     .await;
     let settled = shared.lock().unwrap().updated[0].2.clone();
-    let note = settled["attachments"][0]["content"]["body"][2]["text"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let note = body_texts(&settled).last().unwrap().clone();
     assert!(note.starts_with("Zurückgestellt bis "), "{note}");
     assert!(
         !note.contains("tomorrow") && !note.contains("time)"),
@@ -975,7 +974,7 @@ async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::P
     .await;
     let settled = shared.lock().unwrap().updated[1].2.clone();
     assert_eq!(
-        settled["attachments"][0]["content"]["body"][2]["text"],
+        body_texts(&settled).last().unwrap(),
         "Als erledigt markiert."
     );
 }
@@ -1873,4 +1872,301 @@ async fn a_task_result_arrives_in_the_stored_language(pool: sqlx::PgPool) {
         "**A background task finished.**\n\nDer Bericht ist fertig.\n\n**Approval needed to continue.**"
     );
     assert_eq!(sent[3]["summary"], "Approval needed to run send_mail.");
+}
+
+/// A user known by `REMINDER_OID` with a personal conversation and an owned
+/// chat with this title.
+async fn user_with_chat(state: &AppState, host: &Host, base: &str, title: &str) -> (Uuid, Uuid) {
+    let user = get_or_create_user(&state.db, "https://issuer.example", "carrier", None)
+        .await
+        .unwrap();
+    record_entra_object_id(&state.db, &user, REMINDER_OID)
+        .await
+        .unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let chat_id = Uuid::new_v4();
+    execute(
+        state,
+        "INSERT INTO chats (id, owner_user_id, title_by_user_provided) VALUES ($1, $2, $3)",
+        vec![chat_id.into(), user.id.to_string().into(), title.into()],
+    )
+    .await;
+    (user.id, chat_id)
+}
+
+async fn execute(state: &AppState, sql: &str, values: Vec<sea_orm::Value>) {
+    state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            sql,
+            values,
+        ))
+        .await
+        .unwrap();
+}
+
+/// A reminder for tomorrow linked to `chat_id`, asked for in that chat or
+/// entered on the page, delivered now; returns the posted card.
+async fn deliver_linked(
+    state: &AppState,
+    bot: &Arc<TeamsBot>,
+    shared: &Shared,
+    user_id: Uuid,
+    chat_id: Uuid,
+    via_chat: bool,
+    before_delivery: impl AsyncFnOnce(),
+) -> Value {
+    let origin = if via_chat {
+        json!({"via": "chat", "chat_id": chat_id, "linked": true})
+    } else {
+        json!({"via": "web"})
+    };
+    let item = scheduled_items::create(
+        &state.db,
+        user_id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Offer for Müller".into(),
+            message: "Open: the discount, and whether they need it before Friday.".into(),
+            linked_chat_id: Some(chat_id),
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(1),
+                time: LocalTime::new(9, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        origin,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    before_delivery().await;
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(state, occurrence.id).await;
+    let tick = run_delivery_tick(&state.db, &executor(), &reminder_registry(bot.clone())).await;
+    assert_eq!(tick.delivered, 1, "{tick:?}");
+    let mut fake = shared.lock().unwrap();
+    fake.outgoing.pop().unwrap().1
+}
+
+fn body_texts(activity: &Value) -> Vec<String> {
+    activity["attachments"][0]["content"]["body"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|block| block["text"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+/// A reminder asked for in a chat arrives with its message as written, says
+/// it is as of its creation once the user wrote in that chat again, and
+/// offers Continue here, which makes that chat the personal conversation's
+/// current chat. Continue here needs no token: it stays on the card after
+/// Done and works again; once the chat is archived it says the chat is no
+/// longer available.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_from_a_chat_carries_it(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    let (user_id, chat_id) = user_with_chat(&state, &host, &base, "Offer for Müller").await;
+    let card = deliver_linked(&state, &bot, &shared, user_id, chat_id, true, async || {
+        execute(
+            &state,
+            "INSERT INTO messages (chat_id, raw_message) VALUES ($1, $2)",
+            vec![
+                chat_id.into(),
+                json!({"role": "user", "content": []}).into(),
+            ],
+        )
+        .await;
+    })
+    .await;
+    let context = format!(
+        "Linked chat: [Offer for Müller](https://erato.example.com/chat/{chat_id})\n\nAs of when it was set; the chat went on afterwards."
+    );
+    assert_eq!(
+        body_texts(&card),
+        [
+            "Offer for Müller",
+            "Open: the discount, and whether they need it before Friday.",
+            context.as_str(),
+        ]
+    );
+    assert_eq!(
+        buttons(&card),
+        ["Continue here", "Done", "Snooze 30 min", "Tomorrow 9:00"]
+    );
+    let continue_here = submit_of(&card, CONTINUE_COMMAND);
+    assert!(continue_here.get("token").is_none(), "{continue_here}");
+    assert_eq!(continue_here["target"], json!(chat_id));
+
+    // Relinked on the page: the card still continues the chat it names.
+    let other_chat = Uuid::new_v4();
+    execute(
+        &state,
+        "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+        vec![other_chat.into(), user_id.to_string().into()],
+    )
+    .await;
+    execute(
+        &state,
+        "UPDATE scheduled_items SET linked_chat_id = $2 WHERE user_id = $1",
+        vec![user_id.into(), other_chat.into()],
+    )
+    .await;
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, continue_here.clone()),
+    )
+    .await;
+    let sent = replies(&shared, 1).await;
+    assert_eq!(
+        sent[0]["text"],
+        "Your next message here continues “Offer for Müller”."
+    );
+    let conversation = MsTeamsConversations::find()
+        .filter(ms_teams_conversations::Column::ConversationId.eq("a:personal"))
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(conversation.current_chat_id, Some(chat_id));
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, DONE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert_eq!(buttons(&settled), ["Continue here"]);
+    assert_eq!(body_texts(&settled)[2], context);
+
+    execute(
+        &state,
+        "UPDATE chats SET archived_at = now() WHERE id = $1",
+        vec![chat_id.into()],
+    )
+    .await;
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&settled, CONTINUE_COMMAND)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "The chat this reminder came from is no longer available."
+    );
+}
+
+/// Once the chat a reminder was asked for in is deleted, the reminder still
+/// arrives with its message, says the chat is gone and offers no Continue
+/// here. A message the user typed into the form gets no such line, even when
+/// its linked chat went on. An archived linked chat is named with a note why
+/// Continue here is missing.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_keeps_its_text_when_its_chat_is_gone(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (user_id, chat_id) = user_with_chat(&state, &host, &base, "Offer for Müller").await;
+    let card = deliver_linked(&state, &bot, &shared, user_id, chat_id, true, async || {
+        execute(
+            &state,
+            "DELETE FROM chats WHERE id = $1",
+            vec![chat_id.into()],
+        )
+        .await;
+    })
+    .await;
+    assert_eq!(
+        body_texts(&card)[1..],
+        [
+            "Open: the discount, and whether they need it before Friday.",
+            "The chat it came from no longer exists.",
+        ]
+    );
+    assert_eq!(buttons(&card), ["Done", "Snooze 30 min", "Tomorrow 9:00"]);
+
+    let other_chat = Uuid::new_v4();
+    execute(
+        &state,
+        "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+        vec![other_chat.into(), user_id.to_string().into()],
+    )
+    .await;
+    let typed = deliver_linked(
+        &state,
+        &bot,
+        &shared,
+        user_id,
+        other_chat,
+        false,
+        async || {
+            execute(
+                &state,
+                "INSERT INTO messages (chat_id, raw_message) VALUES ($1, $2)",
+                vec![
+                    other_chat.into(),
+                    json!({"role": "user", "content": []}).into(),
+                ],
+            )
+            .await;
+        },
+    )
+    .await;
+    assert_eq!(
+        body_texts(&typed)[2],
+        format!("Linked chat: [Untitled Chat](https://erato.example.com/chat/{other_chat})"),
+        "no note on a message the user typed"
+    );
+    assert_eq!(buttons(&typed)[0], "Continue here");
+
+    let archived = deliver_linked(
+        &state,
+        &bot,
+        &shared,
+        user_id,
+        other_chat,
+        false,
+        async || {
+            execute(
+                &state,
+                "UPDATE chats SET archived_at = now() WHERE id = $1",
+                vec![other_chat.into()],
+            )
+            .await;
+        },
+    )
+    .await;
+    assert!(
+        body_texts(&archived)[2]
+            .ends_with("\n\nThe chat is archived. Restore it to continue there."),
+        "{archived}"
+    );
+    assert_eq!(
+        buttons(&archived),
+        ["Done", "Snooze 30 min", "Tomorrow 9:00"]
+    );
 }

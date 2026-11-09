@@ -52,6 +52,55 @@ pub fn snooze_button(choice: SnoozeChoice, zone: Tz, user_zone: Option<Tz>, lang
     }
 }
 
+/// Makes the linked chat the one the next message continues.
+pub fn continue_button(lang: Lang) -> &'static str {
+    lang.pick("Continue here", "Hier weitermachen")
+}
+
+/// Under a message written from a chat that went on after it was written.
+pub fn as_of_creation(lang: Lang) -> &'static str {
+    lang.pick(
+        "As of when it was set; the chat went on afterwards.",
+        "Stand vom Erstellen; der Chat ging danach weiter.",
+    )
+}
+
+/// Under the message when its linked chat was archived, which is why it has
+/// no Continue here.
+pub fn linked_chat_archived(lang: Lang) -> &'static str {
+    lang.pick(
+        "The chat is archived. Restore it to continue there.",
+        "Der Chat ist archiviert. Stellen Sie ihn wieder her, um dort weiterzumachen.",
+    )
+}
+
+/// The linked chat under a reminder's message; `chat` is its title, plain or
+/// as a link.
+pub fn linked_chat_line(chat: &str, lang: Lang) -> String {
+    match lang {
+        Lang::En => format!("Linked chat: {chat}"),
+        Lang::De => format!("Verknüpfter Chat: {chat}"),
+    }
+}
+
+/// A chat's title as a Markdown link to it, or plain without a URL. Square
+/// brackets in a linked title become parentheses: Teams does not reliably
+/// honour escapes, and a bracket would end the link text.
+pub fn chat_link(title: &str, url: Option<&str>) -> String {
+    match url {
+        Some(url) => format!("[{}]({url})", title.replace('[', "(").replace(']', ")")),
+        None => title.to_string(),
+    }
+}
+
+/// Under a message written from a chat that was deleted since.
+pub fn origin_chat_gone(lang: Lang) -> &'static str {
+    lang.pick(
+        "The chat it came from no longer exists.",
+        "Der Chat, aus dem sie stammt, existiert nicht mehr.",
+    )
+}
+
 /// The linked chat's name on the card, when the chat has none.
 pub fn untitled_chat(lang: Lang) -> &'static str {
     lang.pick("Untitled Chat", "Unbenannter Chat")

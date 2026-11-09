@@ -31,15 +31,16 @@ pub use checks::{
     teams_status, update_checked,
 };
 
-use crate::db::entity::prelude::ScheduledItems;
+use crate::db::entity::chats;
+use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
 use crate::models::chat::chat_title;
 use crate::models::user_preference::user_time_zone;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
-    self as deliveries, DeliveryAction, DeliveryContent, DeliveryLink, DeliveryProducer,
-    NewDelivery, ResolvedContent, StillDue, cancel_open, schedule, snooze, store_action_token,
+    self as deliveries, DeliveryAction, DeliveryContent, DeliveryProducer, NewDelivery,
+    ResolvedContent, StillDue, cancel_open, schedule, snooze, store_action_token,
 };
 use crate::services::text_language;
 use chrono::{DateTime, NaiveTime, SecondsFormat, SubsecRound, Utc};
@@ -68,6 +69,7 @@ const REDELIVERY_SUFFIX: &str = ":snooze";
 pub const DONE_COMMAND: &str = "done";
 pub const SNOOZE_COMMAND: &str = "snooze";
 pub const TOMORROW_COMMAND: &str = "tomorrow";
+pub const CONTINUE_COMMAND: &str = "continue";
 /// The hour "Tomorrow" brings a reminder back at, as the web's
 /// `SCHEDULED_SNOOZE_HOUR`.
 pub const SNOOZE_HOUR: u32 = 9;
@@ -446,6 +448,41 @@ pub async fn acknowledge(
     ))
     .await?;
     Ok(Ok(item))
+}
+
+/// The chat a delivered reminder's Continue here makes current, while it is
+/// the user's and not archived: the chat the card names (`target`), or for a
+/// card from before buttons named it, the chat the reminder links to now.
+/// Only the user's own chats qualify, so a forged target gains nothing.
+pub async fn chat_to_continue(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    delivery_id: Uuid,
+    target: Option<Uuid>,
+) -> Result<Option<chats::Model>, Report> {
+    let usable = async |chat_id: Uuid| -> Result<Option<chats::Model>, Report> {
+        Ok(owned_chats(db, user_id, vec![chat_id])
+            .await?
+            .remove(&chat_id)
+            .filter(|chat| chat.archived_at.is_none()))
+    };
+    if let Some(chat_id) = target {
+        return usable(chat_id).await;
+    }
+    let Some(row) = deliveries::find(db, delivery_id)
+        .await?
+        .filter(|row| row.user_id == user_id && row.state == DeliveryState::Delivered)
+    else {
+        return Ok(None);
+    };
+    let item = match item_id_of(&row) {
+        Some(item_id) => find(db, user_id, item_id).await?,
+        None => None,
+    };
+    match item.and_then(|item| item.linked_chat_id) {
+        Some(chat_id) => usable(chat_id).await,
+        None => Ok(None),
+    }
 }
 
 /// Bring a delivered reminder back at `choice`'s time, as a re-delivery of
@@ -1077,36 +1114,58 @@ impl DeliveryProducer for ReminderProducer {
             .item_for(db, row)
             .await?
             .ok_or_else(|| eyre!("the item no longer exists"))?;
-        let chat = match (item.linked_chat_id, &self.public_base_url) {
-            (Some(chat_id), Some(_)) => owned_chats(db, item.user_id, vec![chat_id])
+        let chat = match item.linked_chat_id {
+            Some(chat_id) => owned_chats(db, item.user_id, vec![chat_id])
                 .await?
                 .remove(&chat_id),
-            _ => None,
+            None => None,
         };
         let lang = text_language::of_user(db, item.user_id, None, &self.default_language).await?;
-        let links = chat
-            .zip(self.public_base_url.as_deref())
-            .map(|(chat, base)| DeliveryLink {
-                title: chat_title(
+        // The linked chat is named under the message, as a link where the app
+        // has a public URL, followed by how current the message is.
+        let context = [
+            chat.as_ref().map(|chat| {
+                let title = chat_title(
                     chat.title_by_user_provided.as_deref(),
                     chat.title_by_summary.as_deref(),
                 )
-                .unwrap_or(wording::untitled_chat(lang))
-                .to_string(),
-                url: format!("{base}/chat/{}", chat.id),
-            })
-            .into_iter()
-            .collect();
+                .unwrap_or(wording::untitled_chat(lang));
+                let url = self
+                    .public_base_url
+                    .as_deref()
+                    .map(|base| format!("{base}/chat/{}", chat.id));
+                wording::linked_chat_line(&wording::chat_link(title, url.as_deref()), lang)
+            }),
+            chat_note(db, &item, chat.as_ref(), lang).await?,
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        let context = (!context.is_empty()).then(|| context.join("\n\n"));
+        let continue_chat = chat
+            .as_ref()
+            .filter(|chat| chat.archived_at.is_none())
+            .map(|chat| chat.id);
         // One token for the card: the first button pressed wins.
         let token = Uuid::new_v4();
         store_action_token(db, row, token).await?;
         let zone = zone_of(&item)?;
         let user_zone = user_time_zone(db, &item.user_id).await?;
-        let mut actions = vec![DeliveryAction {
+        let mut actions = Vec::new();
+        if let Some(chat_id) = continue_chat {
+            actions.push(DeliveryAction {
+                title: wording::continue_button(lang).to_string(),
+                command: CONTINUE_COMMAND.to_string(),
+                token: None,
+                target: Some(chat_id),
+            });
+        }
+        actions.push(DeliveryAction {
             title: wording::done_button(lang).to_string(),
             command: DONE_COMMAND.to_string(),
             token: Some(token),
-        }];
+            target: None,
+        });
         actions.extend(
             snooze_choices(db, &item, row, Utc::now())
                 .await?
@@ -1115,6 +1174,7 @@ impl DeliveryProducer for ReminderProducer {
                     title: wording::snooze_button(choice, zone, user_zone, lang),
                     command: choice.command().to_string(),
                     token: Some(token),
+                    target: None,
                 }),
         );
         Ok(ResolvedContent {
@@ -1122,10 +1182,67 @@ impl DeliveryProducer for ReminderProducer {
             content: DeliveryContent {
                 title: Some(item.name.clone()),
                 text: item.message.clone(),
+                context,
                 summary: Some(item.name),
-                links,
+                links: Vec::new(),
                 actions,
             },
         })
+    }
+}
+
+/// What the card says about the reminder's chat: that it is archived, which
+/// is why Continue here is missing; for a reminder asked for in chat, whose
+/// message the model wrote from that chat, that it is as of its creation once
+/// the user wrote there again, or that the chat is gone. A message the user
+/// typed into the form is theirs and needs neither.
+async fn chat_note(
+    db: &DatabaseConnection,
+    item: &Model,
+    chat: Option<&chats::Model>,
+    lang: text_language::Lang,
+) -> Result<Option<String>, Report> {
+    if chat.is_some_and(|chat| chat.archived_at.is_some()) {
+        return Ok(Some(wording::linked_chat_archived(lang).to_string()));
+    }
+    let origin = &item.origin;
+    if origin.get("via").and_then(Value::as_str) != Some("chat") {
+        return Ok(None);
+    }
+    let Some(origin_chat) = origin
+        .get("chat_id")
+        .and_then(Value::as_str)
+        .and_then(|id| Uuid::parse_str(id).ok())
+    else {
+        return Ok(None);
+    };
+    match chat {
+        Some(chat) if chat.id == origin_chat => {
+            #[derive(FromQueryResult)]
+            struct Continued {
+                continued: bool,
+            }
+            let continued = Continued::find_by_statement(statement(
+                "scheduled_items.chat_continued",
+                "SELECT EXISTS (
+                     SELECT 1 FROM messages
+                     WHERE chat_id = $1 AND created_at > $2 AND is_message_in_active_thread
+                       AND raw_message->>'role' = 'user'
+                 ) AS continued",
+                vec![chat.id.into(), item.created_at.into()],
+            ))
+            .one(db)
+            .await?
+            .is_some_and(|row| row.continued);
+            Ok(continued.then(|| wording::as_of_creation(lang).to_string()))
+        }
+        // Deleting the chat unlinks it; unlinking it on the page leaves it.
+        None if item.linked_chat_id.is_none()
+            && origin.get("linked").and_then(Value::as_bool) == Some(true)
+            && Chats::find_by_id(origin_chat).one(db).await?.is_none() =>
+        {
+            Ok(Some(wording::origin_chat_gone(lang).to_string()))
+        }
+        _ => Ok(None),
     }
 }
