@@ -1,6 +1,6 @@
 //! Resolve operator hints before approval, write filtering, or enumeration.
 
-use crate::config::{McpServerConfig, McpToolAnnotationsConfig};
+use crate::config::{McpRuntimeConfig, McpServerConfig, McpToolAnnotationsConfig};
 use rmcp::model::{Tool, ToolAnnotations};
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -128,6 +128,32 @@ pub fn resolve_tool_annotations(
     }
 }
 
+/// Whether a destructive hint on this tool is the operator's rather than the
+/// tool's server's: any override that sets one, or a default that says true.
+pub fn destructive_hint_set_by_operator(
+    config: &McpRuntimeConfig,
+    server_id: &str,
+    tool_name: &str,
+) -> bool {
+    let Some(server) = config.mcp_servers.get(server_id) else {
+        return false;
+    };
+    let tool = server.tools.get(tool_name);
+    let global = &config.mcp_servers_global;
+    let overrides = [
+        tool.map(|tool| tool.override_tool_annotations.destructive_hint),
+        Some(server.override_tool_annotations.destructive_hint),
+        Some(global.override_tool_annotations.destructive_hint),
+    ];
+    let defaults = [
+        tool.map(|tool| tool.default_tool_annotations.destructive_hint),
+        Some(server.default_tool_annotations.destructive_hint),
+        Some(global.default_tool_annotations.destructive_hint),
+    ];
+    overrides.iter().flatten().any(Option::is_some)
+        || defaults.iter().flatten().any(|hint| *hint == Some(true))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +195,33 @@ mod tests {
             }))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn only_a_configured_hint_counts_as_the_operators() {
+        let config: McpRuntimeConfig = serde_json::from_value(json!({
+            "mcp_servers": {
+                "marked": {
+                    "transport_type": "streamable_http",
+                    "url": "https://example.com/mcp",
+                    "override_tool_annotations": {"destructive_hint": true},
+                },
+                "untouched": {
+                    "transport_type": "streamable_http",
+                    "url": "https://example.com/mcp",
+                },
+            }
+        }))
+        .unwrap();
+        assert!(destructive_hint_set_by_operator(
+            &config, "marked", "create"
+        ));
+        assert!(!destructive_hint_set_by_operator(
+            &config,
+            "untouched",
+            "create"
+        ));
+        assert!(!destructive_hint_set_by_operator(&config, "gone", "create"));
     }
 
     #[test]

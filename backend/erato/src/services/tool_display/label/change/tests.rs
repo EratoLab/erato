@@ -73,6 +73,7 @@ fn change_with(
             server: Some(SERVER),
             rules_action: label.action,
         },
+            destructive_by_operator: false,
     )
     .expect("a labelled call has a change description")
 }
@@ -123,6 +124,7 @@ fn a_call_with_no_verb_has_no_change_description() {
                 rules_action: label.action,
             },
         )
+                destructive_by_operator: false,
         .is_none()
     );
 }
@@ -800,6 +802,7 @@ fn nothing_panics_on_odd_arguments() {
             },
         );
     }
+                destructive_by_operator: false,
 }
 
 #[test]
@@ -857,6 +860,7 @@ fn a_mapping_from_any_source_is_described_the_same_way() {
     )
     .unwrap();
     assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
+            destructive_by_operator: false,
 }
 
 fn read_of(tool_name: &str, input: Value, output: Value) -> ToolResultContext {
@@ -1784,6 +1788,7 @@ fn the_models_verb_only_words_the_headline_and_never_decides_what_is_lost() {
     assert!(described.is_none(), "{described:?}");
 }
 
+            destructive_by_operator: false,
 #[test]
 fn a_call_with_no_verb_still_says_what_reaches_past_its_values_and_claims_no_loss() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
@@ -2064,3 +2069,72 @@ fn one_old_and_new_text_edit_in_a_list_reads_old_to_new() {
     assert_eq!(edit.effect, ToolCallEffectKind::Changed);
     assert_eq!(edit.old.as_ref().unwrap().text, "a");
 }
+fn with_change(
+    tool: &Tool,
+    arguments: Value,
+    context: &ToolResultContext,
+    destructive_by_operator: bool,
+) -> ToolCallChange {
+    let label = labelled(tool, &arguments, context);
+    describe(
+        &label,
+        ChangeFacts {
+            tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context,
+            server: Some(SERVER),
+            rules_action: label.action,
+            destructive_by_operator,
+        },
+    )
+    .expect("a labelled call has a change description")
+    .0
+}
+
+#[test]
+fn the_destructive_note_only_appears_where_it_says_something_new() {
+    let context = ToolResultContext::default();
+    let notes = |name: &str, arguments: Value, by_operator: bool| {
+        with_change(
+            &tool(name, "", Some(true)),
+            arguments,
+            &context,
+            by_operator,
+        )
+        .notes
+    };
+    let marked = ToolCallChangeNote::MarkedDestructive;
+    assert!(notes("create_record", json!({"name": "x"}), false).contains(&marked));
+    assert!(
+        notes(
+            "send_email",
+            json!({"subject": "x", "to": "a@b.example"}),
+            false
+        )
+        .contains(&marked)
+    );
+    assert!(notes("delete_page", json!({"page_id": "p1"}), false).contains(&marked));
+    for (name, arguments) in [
+        ("update_record", json!({"id": "r1", "name": "x"})),
+        ("patch_record", json!({"id": "r1", "name": "x"})),
+        ("upsert_contact", json!({"name": "x"})),
+        ("save_record", json!({"name": "x"})),
+        ("save_record", json!({"id": "r1", "name": "x"})),
+        ("put_record", json!({"name": "x"})),
+        ("set_labels", json!({"id": "r1", "labels": ["x"]})),
+    ] {
+        let found = notes(name, arguments, false);
+        assert!(
+            !found.iter().any(|note| matches!(
+                note,
+                ToolCallChangeNote::MarkedDestructive
+                    | ToolCallChangeNote::OperatorMarkedDestructive
+            )),
+            "{name}: {found:?}"
+        );
+    }
+    let operator = notes("create_record", json!({"name": "x"}), true);
+    assert_eq!(operator, [ToolCallChangeNote::OperatorMarkedDestructive]);
+}
+

@@ -201,6 +201,9 @@ pub struct ChangeFacts<'a> {
     /// The server whose earlier results may name this call's IDs.
     pub server: Option<&'a str>,
 }
+    /// The operator's configuration, not the server, sets the tool's
+    /// destructive hint.
+    pub destructive_by_operator: bool,
 
 /// The call's change description, and whether cleaning a value or name it
 /// holds removed invisible characters. A call with no verb claims no losses,
@@ -1519,14 +1522,18 @@ impl<'a> Walk<'a> {
         }
         let mut notes = Vec::new();
         let says = &self.says;
-        if facts
+        let marked_destructive = facts
             .tool
             .annotations
             .as_ref()
             .and_then(|hints| hints.destructive_hint)
-            == Some(true)
-        {
-            notes.push(ToolCallChangeNote::MarkedDestructive);
+            == Some(true);
+        if marked_destructive && destructive_mark_adds_something(action, &facts.tool.name) {
+            notes.push(if facts.destructive_by_operator {
+                ToolCallChangeNote::OperatorMarkedDestructive
+            } else {
+                ToolCallChangeNote::MarkedDestructive
+            });
         }
         if matches!(action, ToolCallAction::Delete | ToolCallAction::Archive) {
             match says.keeps_after_delete() {
@@ -1749,6 +1756,22 @@ fn is_behaviour_flag(member: &str) -> bool {
 /// becomes "Owners" for sitting beside other keys.
 fn shared_prefix(members: &Map<String, Value>) -> Option<String> {
     if members.len() < 3 {
+/// Tool names that say the call writes whatever it is given: on these the
+/// destructive mark is on every call, so it says nothing about this one.
+const UPSERT_STYLE_WORDS: [&str; 5] = ["save", "upsert", "put", "set", "sync"];
+
+/// Whether a destructive mark tells someone reading the card something new. A
+/// create or send does not read as if it destroys anything; an update already
+/// lists what it changes, and so says the rest on its own.
+fn destructive_mark_adds_something(action: ToolCallAction, tool_name: &str) -> bool {
+    let words = name_words(text_prefix(tool_name, super::rules::MAX_NAME_BYTES));
+    let upsert_style = words
+        .iter()
+        .any(|word| UPSERT_STYLE_WORDS.contains(&word.as_str()))
+        || (words.iter().any(|word| word == "create") && words.iter().any(|word| word == "update"));
+    !is_update_like(action) && !upsert_style
+}
+
         return None;
     }
     let mut counts: HashMap<&str, usize> = HashMap::new();

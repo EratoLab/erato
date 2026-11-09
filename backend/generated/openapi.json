@@ -13690,6 +13690,7 @@
         "description": "What a card says in a closed sentence: what the tool claims, always as the\ntool's claim, and what nobody can know.",
         "enum": [
           "marked_destructive",
+          "operator_marked_destructive",
           "delete_outcome_unknown",
           "tool_says_permanent",
           "tool_says_restorable",

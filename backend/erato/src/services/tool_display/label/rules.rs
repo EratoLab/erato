@@ -51,7 +51,7 @@ const MAX_VERB_VALUE_CHARS: usize = 40;
 const MAX_SEARCH_VALUES: usize = 5_000;
 /// The start of a tool name or table name that is read for words; MCP names
 /// are far shorter, and a server can send any length.
-const MAX_NAME_BYTES: usize = 256;
+pub(super) const MAX_NAME_BYTES: usize = 256;
 /// Verb fields read from one call's arguments.
 const MAX_VERB_FIELDS: usize = 32;
 const MAX_SEARCH_DEPTH: usize = 6;

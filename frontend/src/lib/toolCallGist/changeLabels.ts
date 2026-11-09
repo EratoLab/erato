@@ -849,3 +849,8 @@ export const changeNoteLabel = (note: ToolCallChangeNote): string => {
 /** A value as plain text, for a trace row's one-line summary. */
 export const plainChangeValue = (value: ChangeValue): string =>
   value.machineId && value.text.length === 0 ? machineIdPhrase() : value.text;
+    case "operator_marked_destructive":
+      return t({
+        id: "toolChange.note.operatorMarkedDestructive",
+        message: "Your organisation has marked this tool as destructive.",
+      });

@@ -4686,6 +4686,7 @@ export type ToolCallChange = {
  */
 export type ToolCallChangeNote =
   | "marked_destructive"
+  | "operator_marked_destructive"
   | "delete_outcome_unknown"
   | "tool_says_permanent"
   | "tool_says_restorable"

@@ -1009,6 +1009,8 @@ pub enum ToolCallChangeNote {
     Default,
     Serialize,
     Deserialize,
+    /// The operator's configuration marks the tool as destructive.
+    OperatorMarkedDestructive,
     PartialEq,
     Eq,
     Hash,

@@ -180,6 +180,7 @@ const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "list_replace_unknown",
   "tool_says_ignored_if_missing",
   "row_count_unknown",
+  "operator_marked_destructive",
   "instruction_outcome_unknown",
   "old_values_from_earlier",
   "nothing_changes",

@@ -191,6 +191,10 @@ fn labelled_display(
             context,
             server: scope.as_deref(),
             rules_action,
+            destructive_by_operator:
+                crate::services::mcp_tool_annotations::destructive_hint_set_by_operator(
+                    config, server_id, &tool.name,
+                ),
         };
         if let Some((change, hidden)) =
             label::change::guarded_describe(|| label::change::describe(&label, facts))

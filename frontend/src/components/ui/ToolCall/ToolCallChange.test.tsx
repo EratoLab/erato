@@ -641,6 +641,19 @@ describe("the scroll box", () => {
     renderCard({ effects: [set(1)], counts: { set: 1 } });
     const box = screen.getByTestId("tool-call-gist-scroll");
     expect(box).toHaveAttribute("tabindex", "0");
+  it("says who marked a tool as destructive", () => {
+    renderCard({
+      effects: [],
+      counts: {},
+      notes: ["operator_marked_destructive"],
+    });
+    expect(
+      screen.getByText(
+        "Your organisation has marked this tool as destructive.",
+      ),
+    ).toBeInTheDocument();
+  });
+
     expect(box).toHaveAccessibleName("Scrollable details of this call");
     scrollHeight.mockRestore();
     clientHeight.mockRestore();
