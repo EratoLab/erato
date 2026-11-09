@@ -83,7 +83,7 @@ describe("bounded body read session", () => {
     },
   );
 
-  it("does not let the first caller, a delayed turn, a child chat or a reaction claim a capture", async () => {
+  it("does not let the first caller, a delayed turn, a child chat or a reaction claim a capture; a child chat reads read-only only under the server's grant", async () => {
     const s = captureWordAuthoringSnapshot(
       packageXml(paragraph("Current private content")),
       "doc",
@@ -114,6 +114,34 @@ describe("bounded body read session", () => {
     }
     expect(s.read.size).toBe(0);
     expect(s.readToken).toBeUndefined();
+    const task = {
+      toolCallId: "task-call",
+      messageId: "task-message",
+      chatId: "child-chat",
+    };
+    const target = { target: { text: "Current private content" } };
+    expect(
+      await session.execute({ snapshot: s.token, ...target }, task),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "wrong-request" }],
+    });
+    const granted = page(
+      await session.execute(target, {
+        ...task,
+        hostGrant: {
+          ownerChatId: context.chatId,
+          ownerMessageId: context.messageId,
+          requestingChatId: task.chatId,
+          requestingMessageId: task.messageId,
+          contextRef: s.token,
+        },
+      }),
+    );
+    expect(granted).toMatchObject({ access: "read-only", status: "ready" });
+    expect(granted).not.toHaveProperty("readToken");
+    expect(s.read.size).toBe(0);
+    expect(s.readScopes?.size ?? 0).toBe(0);
     expect((await call(context)).ok).toBe(true);
   });
 

@@ -1,6 +1,5 @@
 import {
   actionFacetEstimate,
-  registerClientToolExecutor,
   useLiveAnnouncement,
   useProfile,
 } from "@erato/frontend/library";
@@ -50,6 +49,7 @@ import {
   readOnlyText,
   wordAuthoringIssueText,
 } from "../utils/wordAuthoringMessages";
+import { registerWordClientTools } from "../utils/wordClientTools";
 import {
   wordCommentChip,
   wordCommentMapFacet,
@@ -61,10 +61,7 @@ import { wordCommentUserTimeZone } from "../utils/wordCommentEnvelope";
 import { wordCommentHeadingsFromBuild } from "../utils/wordCommentMap";
 import { wordCommentDeploymentSettings } from "../utils/wordCommentPolicy";
 import { wordCommentSelectionCoordinates } from "../utils/wordCommentPositions";
-import {
-  wordCommentReadSession,
-  WORD_READ_COMMENTS_TOOL,
-} from "../utils/wordCommentReadTool";
+import { wordCommentReadSession } from "../utils/wordCommentReadTool";
 import {
   readWordComments,
   wordCommentInventoryFromCapture,
@@ -88,22 +85,11 @@ import {
   wordCommentThreadArgs,
 } from "../utils/wordCommentSend";
 import { showWordComment } from "../utils/wordCommentShow";
-import {
-  createWordCommentSubmissionExecutor,
-  WORD_SUBMIT_COMMENT_CHANGES_TOOL,
-} from "../utils/wordCommentSubmission";
 import { wordComposerNotice } from "../utils/wordComposerNotice";
 import { wordDocumentChip, wordSelectionChip } from "../utils/wordContextChips";
 import { resolveWordDocumentName } from "../utils/wordDocumentIdentity";
 import { bindWordDocumentReadRequest } from "../utils/wordDocumentReadRequest";
-import {
-  wordDocumentReadSession,
-  WORD_READ_TOOL,
-} from "../utils/wordDocumentReadTool";
-import {
-  createWordDocumentSubmissionExecutor,
-  WORD_SUBMIT_PLAN_TOOL,
-} from "../utils/wordDocumentSubmission";
+import { wordDocumentReadSession } from "../utils/wordDocumentReadTool";
 import { wordHostPlatform } from "../utils/wordHostPlatform";
 import { captureWordImageAssets } from "../utils/wordImageAssets";
 import { emptySelectionCapture } from "../utils/wordSelectionAnchor";
@@ -219,7 +205,7 @@ export function WordChatInput({
   stagePendingCapture,
   onOpenWordSettings,
 }: WordChatInputProps) {
-  useWordClientOperations(documentIdentity);
+  const bindingIdentity = useWordClientOperations(documentIdentity);
   const { chatId } = chatInputProps;
   const availableFacetIds = useAvailableActionFacetIds();
   // An unadvertised facet would reject the entire send with HTTP 400.
@@ -629,40 +615,16 @@ export function WordChatInput({
     [],
   );
   useEffect(() => {
-    const unregisterComments = registerClientToolExecutor(
-      WORD_READ_COMMENTS_TOOL,
-      wordCommentReadSession.execute,
-    );
-    const unregisterCommentChanges = registerClientToolExecutor(
-      WORD_SUBMIT_COMMENT_CHANGES_TOOL,
-      createWordCommentSubmissionExecutor(),
-    );
-    const submit = createWordDocumentSubmissionExecutor(
-      wordDocumentReadSession,
-    );
-    const unregisterSubmit = registerClientToolExecutor(
-      WORD_SUBMIT_PLAN_TOOL,
-      (input, context) =>
-        readEnabledRef.current
-          ? submit(input, context)
-          : Promise.resolve({ ok: false, error: "Document inclusion is off." }),
-    );
-    const unregister = registerClientToolExecutor(
-      WORD_READ_TOOL,
-      (input, context) =>
-        readEnabledRef.current
-          ? wordDocumentReadSession.execute(input, context)
-          : Promise.resolve({ ok: false, error: "Document inclusion is off." }),
-    );
+    const unregister = registerWordClientTools({
+      readEnabled: () => readEnabledRef.current,
+      bindingIdentity,
+    });
     return () => {
       unregister();
-      unregisterSubmit();
-      unregisterComments();
-      unregisterCommentChanges();
       clearReadSession();
       clearCommentSession();
     };
-  }, [clearReadSession, clearCommentSession]);
+  }, [clearReadSession, clearCommentSession, bindingIdentity]);
   useEffect(() => clearReadSession, [documentIdentity, clearReadSession]);
   useEffect(() => {
     if (!chipEnabled) {
