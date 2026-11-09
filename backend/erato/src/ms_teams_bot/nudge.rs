@@ -578,19 +578,34 @@ impl DeliverySubmit {
     }
 }
 
-/// `/reminders on|off` (and the German `/erinnerungen an|aus`): `Some(true)`
-/// turns tips on, `Some(false)` off.
-pub fn reminders_command(text: &str) -> Option<bool> {
+/// What a `/reminders` command (German `/erinnerungen`) asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemindersCommand {
+    /// `on|off` (`an|aus`): tips on or off.
+    Tips(bool),
+    /// No argument: the list of upcoming reminders.
+    List,
+}
+
+pub fn reminders_command(text: &str) -> Option<RemindersCommand> {
     let normalized = text.trim().to_lowercase();
     let mut words = normalized.split_whitespace();
     let command = words.next()?;
-    let argument = words.next()?;
+    if !matches!(command, "/reminders" | "/erinnerungen") {
+        return None;
+    }
+    let argument = words.next();
     if words.next().is_some() {
         return None;
     }
     match (command, argument) {
-        ("/reminders", "on") | ("/erinnerungen", "an") => Some(true),
-        ("/reminders", "off") | ("/erinnerungen", "aus") => Some(false),
+        (_, None) => Some(RemindersCommand::List),
+        ("/reminders", Some("on")) | ("/erinnerungen", Some("an")) => {
+            Some(RemindersCommand::Tips(true))
+        }
+        ("/reminders", Some("off")) | ("/erinnerungen", Some("aus")) => {
+            Some(RemindersCommand::Tips(false))
+        }
         _ => None,
     }
 }
@@ -969,13 +984,17 @@ mod tests {
 
     #[test]
     fn reminders_commands_in_both_languages() {
-        assert_eq!(reminders_command(" /reminders off "), Some(false));
-        assert_eq!(reminders_command("/Reminders ON"), Some(true));
-        assert_eq!(reminders_command("/erinnerungen aus"), Some(false));
-        assert_eq!(reminders_command("/erinnerungen an"), Some(true));
-        assert_eq!(reminders_command("/reminders"), None);
+        use RemindersCommand::{List, Tips};
+        assert_eq!(reminders_command(" /reminders off "), Some(Tips(false)));
+        assert_eq!(reminders_command("/Reminders ON"), Some(Tips(true)));
+        assert_eq!(reminders_command("/erinnerungen aus"), Some(Tips(false)));
+        assert_eq!(reminders_command("/erinnerungen an"), Some(Tips(true)));
+        assert_eq!(reminders_command("/reminders"), Some(List));
+        assert_eq!(reminders_command(" /Erinnerungen "), Some(List));
+        assert_eq!(reminders_command("/reminders an"), None);
         assert_eq!(reminders_command("/reminders off please"), None);
         assert_eq!(reminders_command("reminders off"), None);
+        assert_eq!(reminders_command("/remindersx"), None);
     }
 
     #[test]

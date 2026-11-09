@@ -265,6 +265,11 @@ texts! {
     CreateReminderConfirm => "Schedule", "Planen";
     CreateReminderDeny => "Don't schedule", "Nicht planen";
     KeepReminder => "Keep it", "Behalten";
+    UpcomingReminders => "Your upcoming reminders", "Ihre anstehenden Erinnerungen";
+    NoUpcomingReminders => "You have no upcoming reminders. Ask me to schedule one, or use the {page}.",
+        "Sie haben keine anstehenden Erinnerungen. Bitten Sie mich, eine zu planen, oder nutzen Sie die Seite {page}.";
+    LinkedChat => "Linked chat: {chat}", "Verknüpfter Chat: {chat}";
+    NamedReminderCancelled => "“{name}” was cancelled.", "„{name}“ wurde abgebrochen.";
     ContinuingChat => "Your next message here continues “{chat}”.",
         "Ihre nächste Nachricht hier setzt „{chat}“ fort.";
     ReminderChatUnavailable => "The chat this reminder came from is no longer available.",
