@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { CLIENT_ACTION_TOOL_NAME } from "../outlookClientActions";
 import {
   FETCH_AVAILABILITY_TOOL_NAME,
+  OUTLOOK_DELEGATED_SCHEDULING_FACET_ID,
   SCHEDULING_THREAD_MAX_AGE_MS,
   containsFetchAvailabilityToolUse,
   containsSchedulingSignal,
@@ -987,6 +988,36 @@ describe("containsSchedulingSignal", () => {
     );
   });
 
+  const delegateToolUse = (facetIds: unknown): ContentPart =>
+    ({
+      content_type: "tool_use",
+      tool_name: "delegate_task",
+      tool_call_id: "d1",
+      status: "error",
+      input: { brief: "Find 30 min with ana@example.com", facet_ids: facetIds },
+    }) as unknown as ContentPart;
+
+  it("counts a delegate_task handing a meeting to the delegated scheduling facet", () => {
+    expect(
+      containsSchedulingSignal([
+        textPart("Checking each meeting."),
+        delegateToolUse([OUTLOOK_DELEGATED_SCHEDULING_FACET_ID]),
+      ]),
+    ).toBe(true);
+  });
+
+  it("ignores a delegate_task scoped to another facet or without facet ids", () => {
+    expect(containsSchedulingSignal([delegateToolUse(["research"])])).toBe(
+      false,
+    );
+    expect(containsSchedulingSignal([delegateToolUse(undefined)])).toBe(false);
+    expect(
+      containsSchedulingSignal([
+        delegateToolUse(OUTLOOK_DELEGATED_SCHEDULING_FACET_ID),
+      ]),
+    ).toBe(false);
+  });
+
   it("ignores plain text, other fences and other tools", () => {
     expect(containsSchedulingSignal(undefined)).toBe(false);
     expect(
@@ -1045,6 +1076,26 @@ describe("newestSchedulingSignalAt", () => {
         { role: "assistant", content: [fetchToolUse()], createdAt: "t1" },
         { role: "assistant", content: [fetchToolUse()], createdAt: "t2" },
         { role: "assistant", content: [textPart("prose")], createdAt: "t3" },
+      ]),
+    ).toBe("t2");
+  });
+
+  it("moves forward on a turn that only delegated the calendar reads", () => {
+    expect(
+      newestSchedulingSignalAt([
+        { role: "assistant", content: [fetchToolUse()], createdAt: "t1" },
+        {
+          role: "assistant",
+          content: [
+            {
+              content_type: "tool_use",
+              tool_name: "delegate_task",
+              input: { facet_ids: [OUTLOOK_DELEGATED_SCHEDULING_FACET_ID] },
+            } as unknown as ContentPart,
+            textPart("Meeting A: Tue 10:00 or Wed 14:00"),
+          ],
+          createdAt: "t2",
+        },
       ]),
     ).toBe("t2");
   });

@@ -42,6 +42,17 @@ export const OUTLOOK_SCHEDULE_FACET_ID = "outlook_schedule";
  */
 export const FETCH_AVAILABILITY_TOOL_NAME = "fetch_availability";
 
+/**
+ * Child facet (overlay config) a multi-meeting `outlook_schedule` turn hands
+ * each meeting to via `delegate_task`. The task's own fetch_availability call
+ * lands in the child chat, so the parent's `delegate_task` call naming this
+ * facet is the only scheduling signal that turn leaves in the parent history.
+ */
+export const OUTLOOK_DELEGATED_SCHEDULING_FACET_ID =
+  "outlook_delegated_scheduling";
+
+const DELEGATE_TASK_TOOL_NAME = "delegate_task";
+
 const DEFAULT_LOOKAHEAD_DAYS = 14;
 const MAX_LOOKAHEAD_DAYS = 62;
 const HISTORY_WINDOW_DAYS = 21;
@@ -808,9 +819,23 @@ function proposesAppointmentAction(input: unknown): boolean {
   );
 }
 
+/** A `delegate_task` input handing work to the delegated scheduling facet.
+ * No status gate, like the other tool_use arms. */
+function delegatesScheduling(input: unknown): boolean {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return false;
+  }
+  const facetIds = (input as Record<string, unknown>).facet_ids;
+  return (
+    Array.isArray(facetIds) &&
+    facetIds.includes(OUTLOOK_DELEGATED_SCHEDULING_FACET_ID)
+  );
+}
+
 /**
  * Whether an assistant message carries a scheduling-exchange signal: it read
- * the calendar, OR it proposed an appointment — a `propose_client_action`
+ * the calendar (itself, or through `delegate_task` tasks scoped to
+ * {@link OUTLOOK_DELEGATED_SCHEDULING_FACET_ID}), OR it proposed an appointment — a `propose_client_action`
  * tool_use for `outlook.create_appointment`, or an `erato-appointment` fence
  * on its own line. The fence arm stays load-bearing for recovery: on turns
  * where the propose tool wasn't available, confirm/adjust turns contain NO
@@ -832,7 +857,10 @@ export function containsSchedulingSignal(
           APPOINTMENT_FENCE_OPEN.test((part as { text: string }).text)) ||
         (part.content_type === "tool_use" &&
           part.tool_name === CLIENT_ACTION_TOOL_NAME &&
-          proposesAppointmentAction(part.input)),
+          proposesAppointmentAction(part.input)) ||
+        (part.content_type === "tool_use" &&
+          part.tool_name === DELEGATE_TASK_TOOL_NAME &&
+          delegatesScheduling(part.input)),
     )
   );
 }

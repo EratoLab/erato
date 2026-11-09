@@ -505,6 +505,8 @@ Freshness:             readAt; changes none and all-zero counts on every task
                        appointment-form edit is not a change (availability does
                        not depend on the item); no blind spot. The coordinator's
                        own reads stay as they were
+Trace part:            none: no receipt, since the slot-picker card needs the
+                       coordinator's full result (deviation from contract §12)
 Child facet:           outlook_delegated_scheduling (overlay)
 Approval scope:        context; covers the parent turn; nothing on the device
 Outlives the pane:     yes, but the overlay keeps the read live (no durable
