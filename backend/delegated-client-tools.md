@@ -411,12 +411,14 @@ and asks nothing of the user.
 runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
 same fake host without one on `outlook_mailbox`, the `desktop_sidecar` and
-`desktop_sidecar_web` rows (ERMAIN-1034), and the `word_document` and
-`outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
-enable them. A row marked `slow_path` also runs the slow-path cases
+`desktop_sidecar_web` rows (ERMAIN-1034), the `outlook_mailbox` row
+(ERMAIN-1006), and the `word_document` row, which stays ignored until
+ERMAIN-1003 enables it. A row marked `slow_path` also runs the slow-path cases
 (`delegated/slow_path.rs`): the fake host on `outlook_mailbox`, both sidecar
-rows and the ignored `outlook_mailbox` row. A row's `envelope` says how every
-parent-side request of the harness (submit, regenerate, retry) sends its
+rows and the `outlook_mailbox` row. The overlay gives Outlook's
+`fetch_availability` no `durable` table, so its tasks read live; the slow-path
+cases add one and hold the backend to the host's binding. A row's `envelope`
+says how every parent-side request of the harness (submit, regenerate, retry) sends its
 binding, as the shells send it: as `X-Erato-Executor`, in
 `X-Erato-Additional-Executors` beside another `X-Erato-Executor` (the
 `desktop_sidecar` row, with a fake Office binding, as an add-in sends it), or
