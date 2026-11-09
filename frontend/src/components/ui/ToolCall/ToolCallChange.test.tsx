@@ -317,6 +317,68 @@ describe("the change card", () => {
     expect(within(list).getByText("Carl")).toBeInTheDocument();
   });
 
+  it("words a replaced list conditionally when it may only be added to", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/labels",
+          name: "Labels",
+          raw_name: "labels",
+          effect: "list_replaced",
+          values: [{ text: "bug" }],
+          removed: [{ text: "p1" }],
+          kept: [{ text: "bug" }],
+          list: true,
+        },
+        {
+          path: "/owners",
+          name: "Owners",
+          raw_name: "owners",
+          effect: "list_replaced",
+          values: [{ text: "Ann" }],
+          list: true,
+        },
+        set(1),
+      ],
+      counts: { list_replaced: 2, set: 1 },
+      notes: ["list_replace_unknown"],
+    });
+    expect(
+      screen.getByText("If this replaces the list Labels: 1 goes, 1 stays"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/is replaced/)).toBeNull();
+    const [labels, owners] = screen.getAllByTestId("tool-call-change-list");
+    expect(
+      within(labels).getByText("Labels that would go"),
+    ).toBeInTheDocument();
+    expect(
+      within(labels).getByText("Labels that would stay"),
+    ).toBeInTheDocument();
+    expect(within(owners).queryByText("Owners set to")).toBeNull();
+    expect(screen.getByText(/2 lists maybe replaced/)).toBeInTheDocument();
+    expect(screen.queryByText(/lists replaced/)).toBeNull();
+  });
+
+  it("states a known replacement as a fact", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/labels",
+          name: "Labels",
+          raw_name: "labels",
+          effect: "list_replaced",
+          values: [{ text: "bug" }],
+          removed: [{ text: "p1" }],
+          list: true,
+        },
+      ],
+      counts: { list_replaced: 1 },
+      notes: ["tool_says_replaces_list"],
+    });
+    expect(screen.getByText(/is replaced: 1 goes/)).toBeInTheDocument();
+    expect(screen.queryByText(/If this replaces/)).toBeNull();
+  });
+
   it("marks a list the tool says it only adds to as the tool's word", () => {
     renderCard({
       effects: [
@@ -579,68 +641,6 @@ describe("the change card", () => {
   });
 });
 
-describe("a trace row's details", () => {
-  it("names the losses, who it reached and the first values", () => {
-    const change = readAs({
-      effects: [
-        {
-          path: "/owner",
-          name: "Owner",
-          raw_name: "owner",
-          effect: "emptied",
-        },
-        {
-          path: "/stage",
-          name: "Stage",
-          raw_name: "stage",
-          effect: "changed",
-          values: [{ text: "customer" }],
-          old: { text: "lead" },
-        },
-        {
-          path: "/id",
-          name: "Owner ID",
-          raw_name: "owner_id",
-          effect: "changed",
-          values: [{ text: "", machine_id: true }],
-          old: { text: "Tess", machine_id: true },
-        },
-        set(1),
-      ],
-      counts: { emptied: 1, changed: 2, set: 1 },
-      recipients: {
-        total: 2,
-        groups: [],
-        outside: ["a@x.example"],
-        outside_known: true,
-      },
-    });
-    render(
-      <I18nProvider i18n={i18n}>
-        <ToolCallChangeRowDetails change={change} />
-      </I18nProvider>,
-    );
-    const details = screen.getByTestId("tool-call-change-row-details");
-    expect(details).toHaveTextContent("Emptied: Owner");
-    expect(details).toHaveTextContent("To 2 addresses");
-    expect(details).toHaveTextContent("1 address is outside your organisation");
-    expect(details).toHaveTextContent("Stage lead → customer");
-    expect(details).toHaveTextContent("+1");
-    expect(details.textContent).not.toContain(UUID);
-  });
-});
-
-describe("the scroll box", () => {
-  it("becomes a named tab stop only when its content overflows", () => {
-    const scrollHeight = vi
-      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
-      .mockReturnValue(900);
-    const clientHeight = vi
-      .spyOn(HTMLElement.prototype, "clientHeight", "get")
-      .mockReturnValue(300);
-    renderCard({ effects: [set(1)], counts: { set: 1 } });
-    const box = screen.getByTestId("tool-call-gist-scroll");
-    expect(box).toHaveAttribute("tabindex", "0");
 describe("old and new values", () => {
   const changed = (extra: object) => ({
     path: "/priority",
@@ -718,8 +718,144 @@ describe("what sits on the card", () => {
     ).toBeInTheDocument();
   });
 
+});
+describe("a card for something new", () => {
+  const renderCreate = (raw: object) => {
+    const change = readAs(raw);
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={{ ...gistFor(change), action: "create" }}
+          change={change}
+          phase="ask"
+        />
+      </I18nProvider>,
+    );
+  };
+
+  it("says fields are set and counts long text fields", () => {
+    const effects = Array.from({ length: 7 }, (_, index) => set(index));
+    renderCreate({
+      effects,
+      counts: { set: 7 },
+      texts: [
+        {
+          path: "/d",
+          name: "Description",
+          raw_name: "description",
+          text: "Short text.",
+          lines: 1,
+          chars: 11,
+        },
+      ],
+    });
+    expect(screen.getByText("8 fields are set")).toBeInTheDocument();
+    expect(screen.queryByText(/fields change/)).toBeNull();
+  });
+
+  it("never says an old value is unknown or that nothing is emptied", () => {
+    const effects = Array.from({ length: 7 }, (_, index) => set(index));
+    renderCreate({ effects, counts: { set: 7 } });
+    expect(
+      screen.getByRole("button", { name: "See 2 more fields" }),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("old value unknown");
+    expect(document.body.textContent).not.toContain("none is emptied");
+  });
+
+  it("gives the size of long text only", () => {
+    renderCreate({
+      effects: [],
+      counts: {},
+      texts: [
+        {
+          path: "/a",
+          name: "Description",
+          raw_name: "description",
+          text: "Artificial test record, safe to delete.",
+          lines: 1,
+          chars: 39,
+        },
+        {
+          path: "/b",
+          name: "Body",
+          raw_name: "body",
+          text: "x\ny\nz\nw",
+          lines: 4,
+          chars: 300,
+        },
+      ],
+    });
+    const [short, long] = screen.getAllByTestId("tool-call-change-text");
+    expect(short).toHaveTextContent(/^Description/);
+    expect(short).not.toHaveTextContent("39 characters");
+    expect(long).toHaveTextContent("Body: 4 lines, 300 characters");
+  });
     expect(box).toHaveAccessibleName("Scrollable details of this call");
     scrollHeight.mockRestore();
     clientHeight.mockRestore();
   });
+
 });
+
+describe("a trace row's details", () => {
+  it("names the losses, who it reached and the first values", () => {
+    const change = readAs({
+      effects: [
+        {
+          path: "/owner",
+          name: "Owner",
+          raw_name: "owner",
+          effect: "emptied",
+        },
+        {
+          path: "/stage",
+          name: "Stage",
+          raw_name: "stage",
+          effect: "changed",
+          values: [{ text: "customer" }],
+          old: { text: "lead" },
+        },
+        {
+          path: "/id",
+          name: "Owner ID",
+          raw_name: "owner_id",
+          effect: "changed",
+          values: [{ text: "", machine_id: true }],
+          old: { text: "Tess", machine_id: true },
+        },
+        set(1),
+      ],
+      counts: { emptied: 1, changed: 2, set: 1 },
+      recipients: {
+        total: 2,
+        groups: [],
+        outside: ["a@x.example"],
+        outside_known: true,
+      },
+    });
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeRowDetails change={change} />
+      </I18nProvider>,
+    );
+    const details = screen.getByTestId("tool-call-change-row-details");
+    expect(details).toHaveTextContent("Emptied: Owner");
+    expect(details).toHaveTextContent("To 2 addresses");
+    expect(details).toHaveTextContent("1 address is outside your organisation");
+    expect(details).toHaveTextContent("Stage lead → customer");
+    expect(details).toHaveTextContent("+1");
+    expect(details.textContent).not.toContain(UUID);
+  });
+});
+describe("the scroll box", () => {
+  it("becomes a named tab stop only when its content overflows", () => {
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(900);
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockReturnValue(300);
+    renderCard({ effects: [set(1)], counts: { set: 1 } });
+    const box = screen.getByTestId("tool-call-gist-scroll");
+    expect(box).toHaveAttribute("tabindex", "0");

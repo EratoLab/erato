@@ -562,6 +562,11 @@ export const collapsedNames = (
 export const hidesMachineId = (value: ChangeValue): boolean =>
   value.machineId && value.text.length === 0;
 
+/** Whether it is unknown if this call replaces a list or adds to it. */
+export const listReplaceIsUnknown = (change: GistChange): boolean =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  change.notes.includes("list_replace_unknown");
+
 /** Whether the description says something a card should show. */
 export const changeSaysSomething = (change: GistChange): boolean =>
   change.effects.length > 0 ||

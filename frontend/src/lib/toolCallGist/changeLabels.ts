@@ -1,5 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 
+import { listReplaceIsUnknown } from "./change";
+
 import type {
   ChangeBatch,
   ChangeBatchField,
@@ -10,6 +12,7 @@ import type {
   ChangeValue,
   GistChange,
 } from "./change";
+import type { GistAction } from "./gist";
 import type {
   ToolCallAction,
   ToolCallChangeNote,
@@ -24,7 +27,11 @@ import type {
 
 const joinParts = (parts: readonly string[]) => parts.join(", ");
 
-const countParts = (counts: ChangeCounts): string[] =>
+const countParts = (
+  counts: ChangeCounts,
+  texts: number,
+  listsMaybeReplaced: boolean,
+): string[] =>
   [
     counts.emptied > 0
       ? t({
@@ -36,13 +43,21 @@ const countParts = (counts: ChangeCounts): string[] =>
         })
       : undefined,
     counts.listReplaced > 0
-      ? t({
-          id: "toolChange.count.listReplaced",
-          message: plural(counts.listReplaced, {
-            one: "# list replaced",
-            other: "# lists replaced",
-          }),
-        })
+      ? listsMaybeReplaced
+        ? t({
+            id: "toolChange.count.listMaybeReplaced",
+            message: plural(counts.listReplaced, {
+              one: "# list maybe replaced",
+              other: "# lists maybe replaced",
+            }),
+          })
+        : t({
+            id: "toolChange.count.listReplaced",
+            message: plural(counts.listReplaced, {
+              one: "# list replaced",
+              other: "# lists replaced",
+            }),
+          })
       : undefined,
     counts.changed > 0
       ? t({
@@ -68,34 +83,61 @@ const countParts = (counts: ChangeCounts): string[] =>
           }),
         })
       : undefined,
+    texts > 0
+      ? t({
+          id: "toolChange.count.text",
+          message: plural(texts, { one: "# text", other: "# texts" }),
+        })
+      : undefined,
   ].flatMap((part) => (part === undefined ? [] : [part]));
 
-const changingOf = (counts: ChangeCounts) =>
+const changingOf = (counts: ChangeCounts, texts: number) =>
   counts.emptied +
   counts.listReplaced +
   counts.changed +
   counts.set +
-  counts.unreadable;
+  counts.unreadable +
+  texts;
+
+/** A verb that writes over what is there: only there can old values and losses be told. */
+const changesValuesInPlace = (action: GistAction | undefined): boolean =>
+  action === undefined || action === "update" || action === "upsert";
 
 /**
  * The line that says how many values do what, such as "30 fields change: 3
- * emptied, 5 changed, 22 set". One value needs no such line: its row says it.
+ * emptied, 5 changed, 22 set". A create only sets values, so it says that.
+ * One value needs no such line: its row says it.
  */
-export const changeSummaryLine = (change: GistChange): string | undefined => {
+export const changeSummaryLine = (
+  change: GistChange,
+  action?: GistAction,
+): string | undefined => {
   const { counts } = change;
-  const changing = changingOf(counts);
-  const parts = countParts(counts);
+  const texts = change.texts.length;
+  const changing = changingOf(counts, texts);
+  const parts = countParts(counts, texts, listReplaceIsUnknown(change));
   if (changing === 0 || (changing < 2 && counts.unchanged === 0)) {
     return undefined;
   }
-  const head = t({
-    id: "toolChange.summary.fields",
-    message: plural(changing, {
-      one: "# field changes",
-      other: "# fields change",
-    }),
-  });
-  const line = parts.length > 1 ? `${head}: ${joinParts(parts)}` : head;
+  const head = changesValuesInPlace(action)
+    ? t({
+        id: "toolChange.summary.fields",
+        message: plural(changing, {
+          one: "# field changes",
+          other: "# fields change",
+        }),
+      })
+    : t({
+        id: "toolChange.summary.fieldsSet",
+        message: plural(changing, {
+          one: "# field is set",
+          other: "# fields are set",
+        }),
+      });
+  const line =
+    changesValuesInPlace(action) && parts.length > 1
+      ? `${head}: ${joinParts(parts)}`
+      : head;
   if (counts.unchanged === 0) return line;
   const stay = t({
     id: "toolChange.summary.staySame",
@@ -109,7 +151,11 @@ export const changeSummaryLine = (change: GistChange): string | undefined => {
 
 /** The same counts for a trace row, past tense: "3 changed, 10 unchanged". */
 export const changeRowCounts = (change: GistChange): string | undefined => {
-  const parts = countParts(change.counts);
+  const parts = countParts(
+    change.counts,
+    change.texts.length,
+    listReplaceIsUnknown(change),
+  );
   if (change.counts.unchanged > 0) {
     parts.push(
       t({
@@ -132,6 +178,7 @@ export const changeRowCounts = (change: GistChange): string | undefined => {
 export const changeSeeMoreLine = (
   change: GistChange,
   layout: ChangeLayout,
+  action?: GistAction,
 ): string => {
   const { counts } = change;
   const total = layout.collapsed.length + layout.beyondCap;
@@ -155,6 +202,16 @@ export const changeSeeMoreLine = (
       message: plural(total, {
         one: "See # unchanged field",
         other: "See # unchanged fields",
+      }),
+    });
+  }
+  // A new record has no old values to know and nothing to empty.
+  if (set === total && noLoss && !changesValuesInPlace(action)) {
+    return t({
+      id: "toolChange.seeMore.setOnNew",
+      message: plural(total, {
+        one: "See # more field",
+        other: "See # more fields",
       }),
     });
   }
@@ -337,8 +394,38 @@ export const listReplacedLine = (
   });
 };
 
+/** A list that may be replaced or added to: nothing is stated as a fact. */
+export const listMaybeReplacedLine = (
+  name: string,
+  removed: number,
+  kept: number,
+): string => {
+  const goes = t({
+    id: "toolChange.list.goes",
+    message: plural(removed, { one: "# goes", other: "# go" }),
+  });
+  const stays =
+    kept > 0
+      ? t({
+          id: "toolChange.list.stays",
+          message: plural(kept, { one: "# stays", other: "# stay" }),
+        })
+      : undefined;
+  const parts = stays === undefined ? goes : `${goes}, ${stays}`;
+  return t({
+    id: "toolChange.list.ifReplaced",
+    message: `If this replaces the list ${name}: ${parts}`,
+  });
+};
+
 export const listRemovedLabel = (name: string): string =>
   t({ id: "toolChange.list.removed", message: `${name} removed` });
+
+export const listWouldGoLabel = (name: string): string =>
+  t({ id: "toolChange.list.wouldGo", message: `${name} that would go` });
+
+export const listWouldStayLabel = (name: string): string =>
+  t({ id: "toolChange.list.wouldStay", message: `${name} that would stay` });
 
 export const listKeptLabel = (name: string): string =>
   t({ id: "toolChange.list.kept", message: `${name} kept` });
@@ -474,12 +561,21 @@ export const opaqueCutLine = (): string =>
     message: "Only the start is shown here. Technical details has the rest.",
   });
 
+/** Size is only worth a heading on text too long to take in at a glance. */
+const LONG_TEXT_LINES = 3;
+const LONG_TEXT_CHARS = 240;
+
 export const textHeading = (
   name: string,
   lines: number,
   chars: number,
   replaced: boolean,
 ): string => {
+  if (lines <= LONG_TEXT_LINES && chars < LONG_TEXT_CHARS) {
+    return replaced
+      ? t({ id: "toolChange.text.replacedShort", message: `${name} replaced` })
+      : name;
+  }
   const size = chars.toLocaleString();
   return replaced
     ? t({
@@ -520,7 +616,10 @@ export const batchDifferentLine = (): string =>
   t({ id: "toolChange.batch.different", message: "Each row is different." });
 
 /** Whether any row loses something, or a statement that none does. */
-export const batchLossLines = (batch: ChangeBatch): string[] => {
+export const batchLossLines = (
+  batch: ChangeBatch,
+  listsMaybeReplaced = false,
+): string[] => {
   const lines: string[] = [];
   if (batch.rowsEmptying > 0) {
     const emptying = batch.rowsEmptying;
@@ -537,13 +636,21 @@ export const batchLossLines = (batch: ChangeBatch): string[] => {
   if (batch.rowsReplacingLists > 0) {
     const replacing = batch.rowsReplacingLists;
     lines.push(
-      t({
-        id: "toolChange.batch.losses.lists",
-        message: plural(replacing, {
-          one: "# row replaces a list",
-          other: "# rows replace a list",
-        }),
-      }),
+      listsMaybeReplaced
+        ? t({
+            id: "toolChange.batch.losses.listsMaybe",
+            message: plural(replacing, {
+              one: "# row may replace a list",
+              other: "# rows may replace a list",
+            }),
+          })
+        : t({
+            id: "toolChange.batch.losses.lists",
+            message: plural(replacing, {
+              one: "# row replaces a list",
+              other: "# rows replace a list",
+            }),
+          }),
     );
   }
   if (lines.length === 0 && batch.deletions === 0 && batch.readAll) {
@@ -561,6 +668,7 @@ export const batchLossLines = (batch: ChangeBatch): string[] => {
 export const batchFieldLine = (
   field: ChangeBatchField,
   total: number,
+  listsMaybeReplaced = false,
 ): string => {
   const { emptied } = field;
   const replaced = field.listsReplaced;
@@ -627,13 +735,21 @@ export const batchFieldLine = (
   }
   if (replaced > 0) {
     parts.push(
-      t({
-        id: "toolChange.batch.field.lists",
-        message: plural(replaced, {
-          one: "list replaced on # row",
-          other: "list replaced on # rows",
-        }),
-      }),
+      listsMaybeReplaced
+        ? t({
+            id: "toolChange.batch.field.listsMaybe",
+            message: plural(replaced, {
+              one: "list may be replaced on # row",
+              other: "list may be replaced on # rows",
+            }),
+          })
+        : t({
+            id: "toolChange.batch.field.lists",
+            message: plural(replaced, {
+              one: "list replaced on # row",
+              other: "list replaced on # rows",
+            }),
+          }),
     );
   }
   return parts.join(" · ");

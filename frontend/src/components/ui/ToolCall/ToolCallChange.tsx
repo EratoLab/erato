@@ -7,6 +7,7 @@ import {
   changeLayout,
   collapsedNames,
   hidesMachineId,
+  listReplaceIsUnknown,
   MAX_FIRST_VIEW_BATCH_FIELDS,
   MAX_FIRST_VIEW_ROWS,
   TEXT_LINES,
@@ -27,8 +28,8 @@ import {
   changeNoteLabel,
   changeSeeMoreLine,
   changeSummaryLine,
-  cutValuePhrase,
   codedValueText,
+  cutValuePhrase,
   dryRunLabel,
   emptiedLabel,
   emptiedWasLabel,
@@ -44,9 +45,12 @@ import {
   listAddedLabel,
   listAddsClaim,
   listKeptLabel,
+  listMaybeReplacedLine,
   listRemovedLabel,
   listReplacedLine,
   listSetLabel,
+  listWouldGoLabel,
+  listWouldStayLabel,
   machineIdPhrase,
   opaqueCutLine,
   outsideLine,
@@ -77,7 +81,7 @@ import type {
   ChangeValue,
   GistChange,
 } from "@/lib/toolCallGist/change";
-import type { Gist, GistPhase } from "@/lib/toolCallGist/gist";
+import type { Gist, GistAction, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ScrollBoxKind } from "@/lib/toolCallGist/scrollBox";
 import type { ReactNode, Ref } from "react";
 
@@ -350,22 +354,41 @@ const EmptiedRow = ({ effects }: { effects: ChangeEffect[] }) =>
     </div>
   );
 
-const ListRow = ({ effect }: { effect: ChangeEffect }) => (
+const ListRow = ({
+  effect,
+  replaceUnknown,
+}: {
+  effect: ChangeEffect;
+  /** Whether it is unknown if the call replaces the list or adds to it. */
+  replaceUnknown: boolean;
+}) => (
   <div className="space-y-0.5" data-testid="tool-call-change-list">
     {effect.removed.length > 0 ? (
       <>
         <p className="text-xs text-theme-fg-primary">
-          {listReplacedLine(
+          {(replaceUnknown ? listMaybeReplacedLine : listReplacedLine)(
             effect.name,
             effect.removed.length,
             effect.kept.length,
           )}
         </p>
-        <Row name={listRemovedLabel(effect.name)}>
+        <Row
+          name={
+            replaceUnknown
+              ? listWouldGoLabel(effect.name)
+              : listRemovedLabel(effect.name)
+          }
+        >
           <ValueList values={effect.removed} limit={MAX_FIRST_VIEW_ROWS * 4} />
         </Row>
         {effect.kept.length > 0 && (
-          <Row name={listKeptLabel(effect.name)}>
+          <Row
+            name={
+              replaceUnknown
+                ? listWouldStayLabel(effect.name)
+                : listKeptLabel(effect.name)
+            }
+          >
             <ValueList values={effect.kept} />
           </Row>
         )}
@@ -376,7 +399,7 @@ const ListRow = ({ effect }: { effect: ChangeEffect }) => (
         )}
       </>
     ) : (
-      <Row name={listSetLabel(effect.name)}>
+      <Row name={replaceUnknown ? effect.name : listSetLabel(effect.name)}>
         <ValueList values={effect.values} omitted={effect.omitted} />
       </Row>
     )}
@@ -623,7 +646,13 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
   </li>
 );
 
-const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
+const BatchFields = ({
+  batch,
+  listsMaybeReplaced,
+}: {
+  batch: ChangeBatch;
+  listsMaybeReplaced: boolean;
+}) => {
   const shown = batch.fields.slice(0, MAX_FIRST_VIEW_BATCH_FIELDS);
   const more = batch.fields.length - shown.length + batch.fieldsOmitted;
   return shown.length === 0 ? null : (
@@ -631,7 +660,7 @@ const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
       {shown.map((field, index) => (
         <Row key={index} name={field.name}>
           <span dir="auto" className={ISOLATED}>
-            {batchFieldLine(field, batch.total)}
+            {batchFieldLine(field, batch.total, listsMaybeReplaced)}
           </span>
         </Row>
       ))}
@@ -640,7 +669,13 @@ const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
   );
 };
 
-const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
+const BatchPart = ({
+  batch,
+  listsMaybeReplaced,
+}: {
+  batch: ChangeBatch;
+  listsMaybeReplaced: boolean;
+}) => {
   const deleted = batch.rows
     .filter((row) => row.action === "delete")
     .slice(0, 3)
@@ -648,7 +683,7 @@ const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
   const first = batch.rows.slice(0, MAX_FIRST_VIEW_ROWS);
   const rest = batch.rows.slice(MAX_FIRST_VIEW_ROWS);
   const unstored = batch.total - batch.rows.length;
-  const losses = batchLossLines(batch);
+  const losses = batchLossLines(batch, listsMaybeReplaced);
   const seeMoreCount = batch.sameChange
     ? batch.total
     : batch.total - first.length;
@@ -690,7 +725,7 @@ const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
         </>
       ) : (
         <>
-          <BatchFields batch={batch} />
+          <BatchFields batch={batch} listsMaybeReplaced={listsMaybeReplaced} />
           <p className={MUTED}>{batchDifferentLine()}</p>
           <ul className="space-y-1">
             {first.map((row) => (
@@ -722,7 +757,11 @@ const LossesPart = ({ change }: { change: GistChange }) => {
     <>
       <EmptiedRow effects={layout.emptied} />
       {layout.lists.map((effect, index) => (
-        <ListRow key={index} effect={effect} />
+        <ListRow
+          key={index}
+          effect={effect}
+          replaceUnknown={listReplaceIsUnknown(change)}
+        />
       ))}
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
@@ -731,7 +770,13 @@ const LossesPart = ({ change }: { change: GistChange }) => {
   );
 };
 
-const ValuesPart = ({ change }: { change: GistChange }) => {
+const ValuesPart = ({
+  change,
+  action,
+}: {
+  change: GistChange;
+  action: GistAction | undefined;
+}) => {
   const layout = changeLayout(change);
   const collapsedTotal = layout.collapsed.length + layout.beyondCap;
   const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
@@ -746,7 +791,7 @@ const ValuesPart = ({ change }: { change: GistChange }) => {
       ))}
       {collapsedTotal > 0 && (
         <SeeMore
-          label={changeSeeMoreLine(change, layout)}
+          label={changeSeeMoreLine(change, layout, action)}
           defaultOpen={layout.opensByDefault}
           hint={
             shown.length > 0 ? (
@@ -831,9 +876,9 @@ export const ToolCallChangeRowDetails = ({
       {change.batch &&
         (change.batch.rowsEmptying > 0 ||
           change.batch.rowsReplacingLists > 0) &&
-        batchLossLines(change.batch).map((line, index) => (
-          <p key={index}>{line}</p>
-        ))}
+        batchLossLines(change.batch, listReplaceIsUnknown(change)).map(
+          (line, index) => <p key={index}>{line}</p>,
+        )}
       {layout.emptied.length > 0 && (
         <p dir="auto" className={ISOLATED}>
           {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
@@ -841,8 +886,10 @@ export const ToolCallChangeRowDetails = ({
       )}
       {removals.map((effect, index) => (
         <p key={index} dir="auto" className={ISOLATED}>
-          {listRemovedLabel(effect.name)}:{" "}
-          {effect.removed.map(plainChangeValue).join(", ")}
+          {listReplaceIsUnknown(change)
+            ? listWouldGoLabel(effect.name)
+            : listRemovedLabel(effect.name)}
+          : {effect.removed.map(plainChangeValue).join(", ")}
         </p>
       ))}
       {found.map((line, index) => (
@@ -906,11 +953,16 @@ export const ToolCallChangeBody = ({
     {change.opaque.map((opaque, index) => (
       <OpaquePart key={index} opaque={opaque} />
     ))}
-    {change.batch && <BatchPart batch={change.batch} />}
+    {change.batch && (
+      <BatchPart
+        batch={change.batch}
+        listsMaybeReplaced={listReplaceIsUnknown(change)}
+      />
+    )}
     {change.texts.map((entry, index) => (
       <TextPart key={index} entry={entry} replaced={replacesText} />
     ))}
-    {values && <ValuesPart change={change} />}
+    {values && <ValuesPart change={change} action={action} />}
     <ChangeNotes change={change} />
   </div>
 );
@@ -933,7 +985,7 @@ export const ToolCallChangeCard = ({
   phase: GistPhase;
   notes?: ReactNode;
 }) => {
-  const summary = changeSummaryLine(change);
+  const summary = changeSummaryLine(change, gist.action);
   return (
     <div className="space-y-2" data-testid="tool-call-gist">
       {gist.warnings.map((warning) => (
@@ -957,10 +1009,12 @@ export const ToolCallChangeCard = ({
               gist={gist}
               item={item}
               phase={phase}
+  action,
               variant="card"
             />
           </p>
         ))}
+  action?: GistAction;
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody
           change={change}
@@ -970,3 +1024,4 @@ export const ToolCallChangeCard = ({
     </div>
   );
 };
+          action={gist.action}

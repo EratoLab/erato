@@ -2431,6 +2431,33 @@ fn a_glossary_never_names_a_machine_id_field_or_a_recipient() {
 fn forgetting_earlier_results_drops_a_meaning_that_came_from_one() {
     let context = read_issue(json!({"name": "Low", "value": 4}));
     let (mut change, _) = change_with(
+#[test]
+fn a_list_the_tool_or_the_member_says_is_only_added_to_is_never_counted_as_replaced() {
+    let (rows, _) = change_with(
+        &tool(
+            "update_items",
+            "Only adds, existing labels are never removed.",
+            None,
+        ),
+        json!({"items": [
+            {"id": "r1", "name": "A", "labels": ["x"]},
+            {"id": "r2", "name": "B", "labels": ["y", "z"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    let batch = rows.batch.as_ref().unwrap();
+    assert_eq!(batch.rows_replacing_lists, 0);
+    let (added, _) = change_with(
+        &tool("update_items", "", None),
+        json!({"items": [
+            {"id": "r1", "name": "A", "addLabels": ["x"]},
+            {"id": "r2", "name": "B", "addLabels": ["y", "z"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(added.batch.as_ref().unwrap().rows_replacing_lists, 0);
+}
+
         &tool("update_issue", "", None),
         json!({"id": RECORD, "priority": 4}),
         &context,

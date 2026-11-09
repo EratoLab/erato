@@ -1432,7 +1432,9 @@ impl<'a> Walk<'a> {
                         empties = true;
                         tallies[at].emptied += 1;
                     }
-                    Unwrapped::List(_) if update_like => {
+                    Unwrapped::List(_)
+                        if update_like && !only_adds(member) && !self.says.adds_to_list =>
+                    {
                         replaces = true;
                         tallies[at].lists += 1;
                     }
