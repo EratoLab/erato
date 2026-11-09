@@ -130,12 +130,7 @@ export const sharedModulesImportMapPlugin = (
         type: "asset",
         fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
         source: JSON.stringify(
-          {
-            imports,
-            ...(options.sharedSurfaceMinor === undefined
-              ? {}
-              : { sharedSurfaceMinor: options.sharedSurfaceMinor }),
-          },
+          { imports, sharedSurfaceMinor: options.sharedSurfaceMinor },
           null,
           2,
         ),

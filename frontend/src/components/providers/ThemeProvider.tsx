@@ -511,7 +511,7 @@ const syncThemeVariablesStyle = (theme: Theme) => {
 };
 
 // Try to get the saved theme from localStorage
-export const getSavedTheme = (): ThemeMode => {
+const getSavedTheme = (): ThemeMode => {
   if (typeof window === "undefined") return "light";
 
   const savedTheme = localStorage.getItem(THEME_MODE_LOCAL_STORAGE_KEY);
@@ -529,7 +529,7 @@ export const getSavedTheme = (): ThemeMode => {
 const isTextSize = (value: unknown): value is TextSize =>
   TEXT_SIZE_OPTIONS.includes(value as TextSize);
 
-export const getSavedTextSize = (): TextSize => {
+const getSavedTextSize = (): TextSize => {
   if (typeof window === "undefined") return "default";
 
   const saved = localStorage.getItem(TEXT_SIZE_LOCAL_STORAGE_KEY);

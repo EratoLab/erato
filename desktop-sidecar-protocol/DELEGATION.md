@@ -164,7 +164,9 @@ add-ins share it. When several callers share a job, the window names the one
 that opened it: a repeated request only focuses the window. From package 0.1.49
 `client` also carries `theme_mode` and `text_size`, and the window follows the
 person's colour mode and text size the same way, falling back to the operating
-system's colour mode and the default size.
+system's colour mode and the default size. Erato's clients send the colour they
+are showing, so a person on the system setting in an add-in gets the colour the
+add-in takes from its Office host.
 
 Approval exports each call filtered to its approved items: the array at `items`
 keeps only the approved items, the values at `resultMetadata` are kept, an

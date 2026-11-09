@@ -6,10 +6,6 @@ import {
 import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  TEXT_SIZE_LOCAL_STORAGE_KEY,
-  THEME_MODE_LOCAL_STORAGE_KEY,
-} from "@/components/providers/ThemeProvider";
 import { setClientPlatform } from "@/lib/clientPlatform";
 
 import {
@@ -380,8 +376,8 @@ describe("runSidecarJob", () => {
       vi.useFakeTimers();
       const locale = vi.spyOn(i18n, "locale", "get").mockReturnValue("de");
       setClientPlatform("outlook");
-      localStorage.setItem(THEME_MODE_LOCAL_STORAGE_KEY, "dark");
-      localStorage.setItem(TEXT_SIZE_LOCAL_STORAGE_KEY, "large");
+      document.documentElement.setAttribute("data-theme", "dark");
+      document.documentElement.setAttribute("data-text-size", "large");
       try {
         const { client, requests } = fakeSidecarClient((method) => {
           if (method === "jobs.status.v1") return at(approved, maxWaitMs);
@@ -406,8 +402,8 @@ describe("runSidecarJob", () => {
           },
         });
       } finally {
-        localStorage.removeItem(THEME_MODE_LOCAL_STORAGE_KEY);
-        localStorage.removeItem(TEXT_SIZE_LOCAL_STORAGE_KEY);
+        document.documentElement.removeAttribute("data-theme");
+        document.documentElement.removeAttribute("data-text-size");
         setClientPlatform("web");
         locale.mockRestore();
       }

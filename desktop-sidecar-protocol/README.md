@@ -39,7 +39,7 @@ It preserves source Outlook data and configuration. See [full reset semantics](S
 
 Package 0.1.49 adds `theme_mode` and `text_size` to the `client` of
 `jobs.review.v1`, so the review window follows the colour mode and text size
-the person chose in the web app or add-in. See
+the web app or add-in is showing. See
 [Strict review](DELEGATION.md#strict-review).
 
 Package 0.1.48 lets a review name who asks: `jobs.review.v1` gains the optional
