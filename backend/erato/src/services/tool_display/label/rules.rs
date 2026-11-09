@@ -374,7 +374,7 @@ pub fn rules_label(
     let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
     let action = verb.action;
-    let (object_kind, table) = kind(&name, arguments);
+    let (mut object_kind, table) = kind(&name, arguments);
     let mut item = ToolCallLabelItemMapping::default();
     let creates = matches!(
         action,
@@ -437,6 +437,15 @@ pub fn rules_label(
     } else {
         None
     };
+
+    if action == ToolCallAction::Comment
+        && matches!(
+            object_kind,
+            ToolCallObjectKind::Comment | ToolCallObjectKind::Email
+        )
+    {
+        object_kind = commented_on(item.id.as_deref());
+    }
 
     let empty = item == ToolCallLabelItemMapping::default();
     let mapping = if action == ToolCallAction::Other && empty {
@@ -823,6 +832,20 @@ fn kind(name: &[String], arguments: &Value) -> (ToolCallObjectKind, Option<Strin
         }
     }
     (kind_of(name).unwrap_or(ToolCallObjectKind::Other), None)
+}
+
+/// What a comment is on, by the member that names it (`issueId`, `task_id`,
+/// `page_id`, `thread`): the comment itself is what the call makes, not what
+/// it is on. An ID that names no kind leaves the neutral `Other`.
+fn commented_on(id_pointer: Option<&str>) -> ToolCallObjectKind {
+    let words = id_pointer
+        .and_then(|pointer| pointer::member_names(pointer).into_iter().last())
+        .map(|member| name_words(text_prefix(&member, MAX_NAME_BYTES)))
+        .unwrap_or_default();
+    if words.iter().any(|word| word == "thread") {
+        return ToolCallObjectKind::Comment;
+    }
+    kind_of(&words).unwrap_or(ToolCallObjectKind::Other)
 }
 
 fn kind_of(words: &[String]) -> Option<ToolCallObjectKind> {

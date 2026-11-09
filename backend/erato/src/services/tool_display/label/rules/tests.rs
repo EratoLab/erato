@@ -180,12 +180,64 @@ fn a_batch_of_different_operations_updates_what_holds_them() {
 }
 
 #[test]
+fn a_comment_says_what_it_is_on() {
+    for (tool, arguments, kind) in [
+        (
+            "add_comment",
+            json!({"issueId": "ERMAIN-1159", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "save_comment",
+            json!({"issue_id": "ERMAIN-1159", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "create_comment",
+            json!({"task_id": "42", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "notion-create-comment",
+            json!({"page_id": "p1", "markdown": "Done"}),
+            ToolCallObjectKind::Page,
+        ),
+        (
+            "add_comment",
+            json!({"item_id": "42", "body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+        (
+            "add_comment",
+            json!({"id": "42", "body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+        (
+            "add_comment",
+            json!({"body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+    ] {
+        let rules = label(tool, arguments);
+        assert_eq!(rules.mapping.action, ToolCallAction::Comment, "{tool}");
+        assert_eq!(rules.mapping.object_kind, kind, "{tool}");
+        // The rules know it is a comment, so no model is asked for its kind.
+        assert_eq!(rules.unsure, None, "{tool}");
+    }
+    let reply = label(
+        "reply_to_comment",
+        json!({"comment_id": "c1", "body": "Hi"}),
+    );
+    assert_eq!(reply.mapping.object_kind, ToolCallObjectKind::Comment);
+}
+
+#[test]
 fn some_names_read_as_one_verb() {
     for (tool, action, kind) in [
         (
             "notion-create-comment",
             ToolCallAction::Comment,
-            ToolCallObjectKind::Comment,
+            ToolCallObjectKind::Other,
         ),
         (
             "post_message",
@@ -1587,9 +1639,6 @@ const TESTSET_MISSES: [(&str, &[&str]); 8] = [
             "n03-batch-rows",
             "n04-meeting-note",
             "n07-inject-content",
-            "n21-comment-page",
-            "n23-comment-selection",
-            "n24-comment-inject",
             "n26-suggest",
             "n28-update-ds",
             "n31-read-query",
