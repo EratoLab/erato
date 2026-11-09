@@ -152,6 +152,33 @@ describe("FacetSelector", () => {
     },
   );
 
+  it.each([
+    { global: false, own: true, labelled: true },
+    { global: true, own: false, labelled: false },
+    { global: true, own: undefined, labelled: true },
+    { global: false, own: undefined, labelled: false },
+  ])(
+    "labels a selected facet's chip by its own setting before the global one: %o",
+    ({ global, own, labelled }) => {
+      const facet: FacetInfo = {
+        ...WEB_SEARCH,
+        show_indicator_with_display_name: own,
+      };
+      render(
+        <FacetSelector
+          facets={[facet]}
+          selectedFacetIds={[facet.id]}
+          onSelectionChange={vi.fn()}
+          onlySingleFacet={false}
+          showFacetIndicatorWithDisplayName={global}
+        />,
+      );
+
+      const chip = screen.getByTestId(`selected-facet-${facet.id}`);
+      expect(chip.textContent?.includes("Web search")).toBe(labelled);
+    },
+  );
+
   it("renders nothing without facets or assistants", () => {
     const { container } = render(
       <FacetSelector

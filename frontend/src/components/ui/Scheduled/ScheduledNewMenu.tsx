@@ -13,7 +13,7 @@ import {
 
 export interface ScheduledNewMenuProps {
   onNewReminder: () => void;
-  /** Omitted until a chat can open with the schedule facet (ERMAIN-1143). */
+  /** Omitted while the user has no schedule facet: the item stays disabled. */
   onCreateWithChat?: () => void;
   /**
    * Set at the limit of upcoming items: Reminder is disabled and says why

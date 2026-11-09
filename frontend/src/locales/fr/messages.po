@@ -4071,6 +4071,11 @@ msgid "error.404.title"
 msgstr "404 - Page non trouvée"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/facetDisplayName.ts
+msgid "facets.builtin.schedule.displayName"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Feedback/FeedbackCommentDialog.tsx
 msgid "feedback.comment.aria"
 msgstr "Commentaire de feedback"

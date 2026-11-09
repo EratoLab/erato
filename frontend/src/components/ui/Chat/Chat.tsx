@@ -16,6 +16,7 @@ import {
 } from "@/hooks/chat";
 import { useCompactionStore } from "@/hooks/chat/store/compactionStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
+import { useApplyComposerPreset } from "@/hooks/chat/useComposerPreset";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -274,6 +275,7 @@ export const Chat = ({
     }),
     [],
   );
+  useApplyComposerPreset(chatInputControlsRef);
 
   // Resolve message controls from registry if not explicitly provided
   const resolvedMessageControls = useMemo(
