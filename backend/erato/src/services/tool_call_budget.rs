@@ -79,6 +79,5 @@ pub(crate) fn request(
         approvals: Vec::new(),
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }

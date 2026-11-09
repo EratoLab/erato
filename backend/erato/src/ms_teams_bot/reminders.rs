@@ -238,7 +238,6 @@ mod tests {
             approvals: Vec::new(),
             pending_tool_calls: Vec::new(),
             approval_scope: None,
-            labels_updated_at: None,
         })
     }
 

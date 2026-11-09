@@ -1,19 +1,20 @@
-//! A configured model labels the MCP calls the rules are unsure of. The card
-//! never waits for it: the rules' label shows first, and the model's replaces
-//! it on the running turn's row or on the parked approval card. It sees only
-//! the calls of turns on its own provider unless another is allowed, and
-//! only for users whose model permissions include it.
+//! A configured model is asked about the MCP calls the rules are unsure of.
+//! The card never waits for it, and its answer only supplies a verb or kind
+//! the rules have none for: while the turn runs on the call's row, and never
+//! on a parked approval card, which is already on screen. It sees only the
+//! calls of turns on its own provider unless another is allowed, and only
+//! for users whose model permissions include it.
 use super::*;
 use crate::test_utils::build_openai_delayed_text_streaming_response;
 use erato::config::McpToolApprovalPreset;
-use erato::models::message::{ToolCallLabel, ToolCallLabelSource, upgrade_open_approval_label};
+use erato::models::message::ToolCallLabelSource;
 use erato::services::tool_display::label::cache::ToolLabelCacheKey;
 use std::time::Duration;
 
-const SENTINEL: &str = "You label one tool call";
+const SENTINEL: &str = "You pick the one verb";
 const ASK: &str = "Reject the record";
 const CALL_ID: &str = "call_update";
-const REPLY: &str = r#"{"action":"update","object_kind":"row","items":[{"title":null,"id":null,"target":null,"before":null,"after":"/status","fields":[]}]}"#;
+const REPLY: &str = r#"{"action":"update","object_kind":"row"}"#;
 
 /// No `id`, so the rules have nothing to name and are unsure.
 fn arguments() -> Value {
@@ -221,9 +222,7 @@ async fn eventually<T, F: std::future::Future<Output = Option<T>>>(
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
-    pool: Pool<Postgres>,
-) {
+async fn a_models_answer_adds_nothing_where_the_rules_have_a_verb_and_kind(pool: Pool<Postgres>) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
@@ -256,10 +255,10 @@ async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
     let label = &row["display"]["label"];
     assert_eq!(
         (&label["source"], &label["action"], &label["object_kind"]),
-        (&json!("model"), &json!("update"), &json!("row"))
+        (&json!("rules"), &json!("update"), &json!("row"))
     );
-    assert_eq!(label["items"][0]["after"]["pointer"], "/status");
-    assert_eq!(label["items"][0]["after"]["values"][0]["text"], "Rejected");
+    // Nothing of the model's mapping reaches the label.
+    assert!(label["items"][0]["after"].is_null(), "{label}");
     assert!(row["display"].get("description").is_none(), "{row}");
 
     let updates: Vec<_> = terminal_tool_call_update_events(&events)
@@ -272,17 +271,19 @@ async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
     assert_eq!(last["status"], row["status"]);
     assert_eq!(last["output"], row["output"]);
 
-    let bodies = recorder.bodies();
+    let bodies = eventually("the labeller's request", || async {
+        let bodies = recorder.bodies();
+        (!bodies.is_empty()).then_some(bodies)
+    })
+    .await;
     assert_eq!(bodies.len(), 1, "{bodies:?}");
     let request: Value = serde_json::from_str(&bodies[0]).unwrap();
     let format = &request["response_format"];
     assert_eq!(format["type"], "json_schema");
     assert_eq!(format["json_schema"]["strict"], true);
-    assert_eq!(
-        format["json_schema"]["schema"]["properties"]["items"]["items"]["properties"]["after"]["anyOf"]
-            [0]["enum"],
-        json!(["/status"])
-    );
+    let reply_schema = &format["json_schema"]["schema"]["properties"];
+    assert_eq!(reply_schema.as_object().unwrap().len(), 2, "{format}");
+    assert!(reply_schema.get("action").is_some() && reply_schema.get("object_kind").is_some());
     assert!(bodies[0].contains("TOOL: update_record"), "{}", bodies[0]);
     assert!(!bodies[0].contains("Updates the record"), "{}", bodies[0]);
     // The skeleton carries the value's length, never its text.
@@ -298,11 +299,10 @@ async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
     assert_eq!(kept.source, ToolCallLabelSource::Model);
 }
 
-/// The turn parks right after the gate, so the label lands on the stored
-/// card: its own call and its item, and nothing but their labels changes.
-/// The parked chat then says a label changed, which is what makes a client
-/// showing the card load it again. The labeller is the turn's own provider,
-/// which needs no opt-in.
+/// The turn parks right after the gate, so the labeller's answer arrives
+/// after the card is on screen: the card stays as it was, the parked chat
+/// says nothing changed, and the mapping is kept for the next call of this
+/// shape. The labeller is the turn's own provider, which needs no opt-in.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -311,11 +311,11 @@ async fn a_call_that_ran_without_asking_gets_the_models_label_during_the_turn(
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: Pool<Postgres>) {
+async fn a_late_answer_leaves_the_parked_card_as_it_is(pool: Pool<Postgres>) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     // Late enough that the turn has parked before it answers.
-    labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(3));
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(2));
     calls_update_record(&mut mocks);
     let app_state = labelled_records(
         pool,
@@ -328,50 +328,18 @@ async fn a_parked_card_gets_the_models_label_and_the_parked_chat_says_so(pool: P
 
     let parked = card(&app_state, message_id).await;
     assert_eq!(parked["display"]["label"]["source"], "rules");
-    assert!(parked.get("labels_updated_at").is_none(), "{parked}");
 
-    let upgraded = eventually("the card's upgrade", || async {
-        let card = card(&app_state, message_id).await;
-        (card["display"]["label"]["source"] == "model").then_some(card)
+    eventually("the model's mapping", || async {
+        let key = label_key(&app_state).await;
+        app_state
+            .tool_label_cache
+            .lookup(&key, &arguments(), None)
+            .await
     })
     .await;
-    assert_eq!(upgraded["approvals"][0]["display"], upgraded["display"]);
-    assert_eq!(
-        upgraded["display"]["label"]["items"][0]["after"]["pointer"],
-        "/status"
-    );
-    let mut relabelled = parked.clone();
-    relabelled["display"]["label"] = upgraded["display"]["label"].clone();
-    relabelled["approvals"][0]["display"]["label"] = upgraded["display"]["label"].clone();
-    relabelled["labels_updated_at"] = upgraded["labels_updated_at"].clone();
-    assert_eq!(upgraded, relabelled);
-    let stored_at = upgraded["labels_updated_at"].as_str().unwrap();
-
-    let entry = eventually("the parked chat's marker", || async {
-        let entry = generating_entry(&app_state, chat_id).await;
-        entry.get("labels_updated_at").is_some().then_some(entry)
-    })
-    .await;
-    assert_eq!(entry["state"], "action_required");
-    assert_eq!(
-        chrono::DateTime::parse_from_rfc3339(entry["labels_updated_at"].as_str().unwrap()).unwrap(),
-        chrono::DateTime::parse_from_rfc3339(stored_at).unwrap()
-    );
-
-    let response = app_server(app_state.clone())
-        .get(&format!("/api/v1beta/chats/{chat_id}/messages"))
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .await;
-    response.assert_status_ok();
-    let messages = response.json::<Value>();
-    let served = messages["messages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|message| message["id"] == message_id.to_string())
-        .unwrap();
-    let served = served["content"].as_array().unwrap().last().unwrap();
-    assert_eq!(served["display"], upgraded["display"]);
+    assert_eq!(card(&app_state, message_id).await, parked);
+    let entry = generating_entry(&app_state, chat_id).await;
+    assert!(entry.get("labels_updated_at").is_none(), "{entry}");
     assert_eq!(recorder.bodies().len(), 1);
 }
 
@@ -457,17 +425,16 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
     .await;
     let (_chat_id, message_id, _events) = submit(&app_state).await;
 
-    let upgraded = eventually("the card's upgrade", || async {
-        let card = card(&app_state, message_id).await;
-        (card["display"]["label"]["source"] == "model").then_some(card)
+    let bodies = eventually("the labeller's request", || async {
+        let bodies = recorder.bodies();
+        (!bodies.is_empty()).then_some(bodies)
     })
     .await;
-    assert_eq!(
-        upgraded["display"]["label"]["items"][0]["after"]["pointer"],
-        "/status"
-    );
-    let bodies = recorder.bodies();
     assert_eq!(bodies.len(), 1, "{bodies:?}");
+    assert_eq!(
+        card(&app_state, message_id).await["display"]["label"]["source"],
+        "rules"
+    );
     let request: Value = serde_json::from_str(&bodies[0]).unwrap();
     let user = request["messages"]
         .as_array()
@@ -477,7 +444,7 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
         .unwrap_or_else(|| panic!("{request}"));
     assert_eq!(
         user["content"],
-        "TOOL: update_record\nARGUMENTS: {\"status\":\"<str len=8>\"}\nPATHS: [\"/status\"]"
+        "TOOL: update_record\nARGUMENTS: {\"status\":\"<str len=8>\"}"
     );
     assert!(!bodies[0].contains(CONSENT), "{}", bodies[0]);
 
@@ -489,9 +456,8 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
     assert_eq!(kept.source, ToolCallLabelSource::Model);
 }
 
-/// A label that arrives after the card was approved leaves the message as
-/// the continuation stored it: the card's write refuses the call once its
-/// card is answered, as it refuses another call's label on an open card.
+/// An answer that arrives after the card was approved leaves the message as
+/// the continuation stored it.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -523,14 +489,6 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
     .await;
     let (_chat_id, message_id, _events) = submit(&app_state).await;
 
-    let parked = card(&app_state, message_id).await;
-    let label: ToolCallLabel = serde_json::from_value(parked["display"]["label"].clone()).unwrap();
-    assert!(
-        !upgrade_open_approval_label(&app_state.db, message_id, "call_other", &label)
-            .await
-            .unwrap()
-    );
-
     let continued = app_server(app_state.clone())
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
@@ -557,17 +515,6 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
         "tool_approval_request"
     );
 
-    let late = ToolCallLabel {
-        source: ToolCallLabelSource::Model,
-        ..label
-    };
-    assert!(
-        !upgrade_open_approval_label(&app_state.db, message_id, CALL_ID, &late)
-            .await
-            .unwrap()
-    );
-    assert_eq!(message_content(&app_state, message_id).await, stored);
-
     let mapping = app_state
         .tool_label_cache
         .get_or_compute(
@@ -582,12 +529,6 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
     assert_eq!(mapping.source, ToolCallLabelSource::Model);
     // Secondary: the labeller's own attempt may not have run yet.
     assert_eq!(message_content(&app_state, message_id).await, stored);
-    assert!(
-        stored
-            .iter()
-            .all(|part| part.get("labels_updated_at").is_none()),
-        "{stored:?}"
-    );
 }
 
 /// A labeller that fails, times out or points outside the call's paths
@@ -643,13 +584,12 @@ async fn the_card_keeps_the_rules_label(
     let card = card(&app_state, message_id).await;
     assert_eq!(card["display"]["label"]["source"], "rules");
     assert_eq!(card["approvals"][0]["display"], card["display"]);
-    assert!(card.get("labels_updated_at").is_none(), "{card}");
     let entry = eventually("the parked state", || async {
         let entry = generating_entry(&app_state, chat_id).await;
         (entry["state"] == "action_required").then_some(entry)
     })
     .await;
-    assert!(entry.get("labels_updated_at").is_none(), "{entry}");
+    assert_eq!(entry["state"], "action_required");
     assert_eq!(recorder.bodies().len(), 1);
 }
 
@@ -688,10 +628,10 @@ async fn a_slow_labeller_leaves_the_rules_label(pool: Pool<Postgres>) {
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_reply_pointing_outside_the_calls_paths_leaves_the_rules_label(pool: Pool<Postgres>) {
+async fn a_reply_off_the_closed_lists_leaves_the_rules_label(pool: Pool<Postgres>) {
     the_card_keeps_the_rules_label(
         pool,
-        Some(&REPLY.replace("/status", "/recordId")),
+        Some(r#"{"action":"teleport","object_kind":"row"}"#),
         Duration::ZERO,
         Duration::from_secs(10),
     )
@@ -723,9 +663,9 @@ async fn a_hostile_reply_leaves_the_rules_label(pool: Pool<Postgres>) {
     .await;
 }
 
-/// A model's mapping that fails the cross-check puts the generic label on
-/// the card, like any label that fails it, but is not kept: the next call of
-/// the same shape asks the model again.
+/// A model's verb that fails the cross-check changes nothing on the card,
+/// which keeps the rules' verb, and is not kept: the next call of the same
+/// shape asks the model again.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -734,7 +674,7 @@ async fn a_hostile_reply_leaves_the_rules_label(pool: Pool<Postgres>) {
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_models_mapping_the_cross_check_rejects_shows_generic_and_is_not_kept(
+async fn a_models_verb_the_cross_check_rejects_changes_nothing_and_is_not_kept(
     pool: Pool<Postgres>,
 ) {
     let recorder = RequestBodyRecorder::new();
@@ -752,14 +692,15 @@ async fn a_models_mapping_the_cross_check_rejects_shows_generic_and_is_not_kept(
     let key = label_key(&app_state).await;
     for asked in 1..=2 {
         let (_chat_id, message_id, _events) = submit(&app_state).await;
-        let label = eventually("the generic card", || async {
-            let card = card(&app_state, message_id).await;
-            (card["display"]["label"]["source"] == "generic")
-                .then(|| card["display"]["label"].clone())
+        eventually("the labeller's request", || async {
+            (recorder.bodies().len() == asked).then_some(())
         })
         .await;
-        assert_eq!(label["action"], "other");
-        assert_eq!(recorder.bodies().len(), asked);
+        let label = card(&app_state, message_id).await["display"]["label"].clone();
+        assert_eq!(
+            (label["source"].as_str(), label["action"].as_str()),
+            (Some("rules"), Some("update"))
+        );
         assert_eq!(
             app_state
                 .tool_label_cache
@@ -803,13 +744,12 @@ async fn nothing_goes_to_the_labeller(
     assert!(recorder.bodies().is_empty(), "{:?}", recorder.bodies());
     let card = card(&app_state, message_id).await;
     assert_eq!(card["display"]["label"]["source"], "rules");
-    assert!(card.get("labels_updated_at").is_none(), "{card}");
     let entry = eventually("the parked state", || async {
         let entry = generating_entry(&app_state, chat_id).await;
         (entry["state"] == "action_required").then_some(entry)
     })
     .await;
-    assert!(entry.get("labels_updated_at").is_none(), "{entry}");
+    assert_eq!(entry["state"], "action_required");
     assert_eq!(
         app_state
             .tool_label_cache

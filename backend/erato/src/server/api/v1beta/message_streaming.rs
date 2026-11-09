@@ -623,7 +623,6 @@ fn ask_for_tool_call(
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
         approval_scope: None,
-        labels_updated_at: None,
     }))
 }
 
@@ -6030,7 +6029,6 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6098,7 +6096,6 @@ fn task_plan_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6790,10 +6787,8 @@ async fn stream_generate_chat_completion<'a>(
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
         &user_id,
         chat_id,
-        assistant_message_id,
         assistant_id,
         &langfuse_trace_enrichment.platform,
-        streaming_task,
         crate::services::tool_labeller::TurnLabeller::for_turn(
             app_state,
             policy,

@@ -8,9 +8,11 @@
 //! its resolved annotations.
 
 use super::arguments::{MAX_INLINE_CHARS, MAX_LIST_ENTRIES, names_an_id};
+use super::change::is_sql_statement;
 use super::context::{
     is_id_member, is_link, is_lookup, is_name_member, link_id_member, name_words, text_prefix,
 };
+use super::machine_id::is_machine_id;
 use super::pointer::{self, MAX_POINTER_BYTES, escape};
 use super::recipients::{
     ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, RECIPIENT_NUMBER_WORDS,
@@ -30,7 +32,15 @@ use std::collections::{HashMap, VecDeque};
 /// Members whose value names the operation (`command: "update_content"`,
 /// `op: "add"`), read up to four levels deep. A verb they give wins over the
 /// tool's name when the tool's input schema declares them.
-pub const VERB_FIELDS: [&str; 6] = ["command", "op", "kind", "action", "mode", "operation"];
+pub const VERB_FIELDS: [&str; 7] = [
+    "command",
+    "op",
+    "kind",
+    "action",
+    "mode",
+    "operation",
+    "method",
+];
 /// Objects below the arguments' top whose verb fields still count.
 const VERB_FIELD_DEPTH: usize = 3;
 /// A verb field's value counts only when it reads as an identifier, such as
@@ -47,7 +57,7 @@ const MAX_VERB_FIELDS: usize = 32;
 const MAX_SEARCH_DEPTH: usize = 6;
 const MAX_FIELD_DEPTH: usize = 4;
 
-const VERBS: [(ToolCallAction, &[&str]); 6] = [
+const VERBS: [(ToolCallAction, &[&str]); 11] = [
     (
         ToolCallAction::Create,
         &[
@@ -57,25 +67,74 @@ const VERBS: [(ToolCallAction, &[&str]); 6] = [
             "post",
             "insert",
             "append",
-            "upload",
             "duplicate",
+            "fork",
         ],
     ),
     (
         ToolCallAction::Update,
         &[
-            "update", "edit", "patch", "set", "rename", "modify", "change", "replace", "apply",
-            "resolve", "reopen", "accept", "submit", "pull", "push",
+            "update",
+            "edit",
+            "patch",
+            "set",
+            "rename",
+            "modify",
+            "change",
+            "replace",
+            "apply",
+            "resolve",
+            "reopen",
+            "accept",
+            "submit",
+            "pull",
+            "push",
+            "write",
+            "overwrite",
+            "merge",
+            "transition",
+            "assign",
+            "close",
+            "lock",
+            "unlock",
+            "reset",
+            "revert",
+            "scale",
+            "deploy",
+            "enable",
+            "disable",
         ],
     ),
     (
         ToolCallAction::Delete,
-        &["delete", "remove", "trash", "archive", "cancel", "clear"],
+        &[
+            "delete",
+            "remove",
+            "cancel",
+            "clear",
+            "purge",
+            "drop",
+            "destroy",
+            "revoke",
+            "terminate",
+            "wipe",
+            "erase",
+        ],
     ),
+    (ToolCallAction::Archive, &["archive", "trash"]),
     (ToolCallAction::Move, &["move"]),
     (
         ToolCallAction::Send,
-        &["send", "reply", "forward", "share", "publish"],
+        &["send", "reply", "forward", "publish", "invite"],
+    ),
+    (ToolCallAction::Share, &["share", "grant"]),
+    (ToolCallAction::Upload, &["upload"]),
+    (ToolCallAction::Upsert, &["upsert"]),
+    (
+        ToolCallAction::Run,
+        &[
+            "run", "exec", "execute", "eval", "evaluate", "invoke", "trigger", "act",
+        ],
     ),
     (ToolCallAction::Comment, &["comment", "annotate"]),
 ];
@@ -103,7 +162,7 @@ const TITLE_MEMBERS: [&str; 11] = [
     "displayname",
     "display_name",
 ];
-const TARGET_MEMBERS: [&str; 11] = [
+pub(super) const TARGET_MEMBERS: [&str; 12] = [
     "parent",
     "new_parent",
     "folder_id",
@@ -111,12 +170,27 @@ const TARGET_MEMBERS: [&str; 11] = [
     "destination",
     "to",
     "channel",
+    "channel_id",
     "teamid",
     "calendar_id",
     "snapshot",
     "anchor",
 ];
-const ID_MEMBERS: [&str; 16] = [
+/// Where a record lives, most specific first, when no target names it; the
+/// same words the change description reads as the card's place.
+pub(super) const PLACE_MEMBERS: [&str; 10] = [
+    "repo",
+    "repository",
+    "repo_path",
+    "project_id",
+    "project_key",
+    "namespace",
+    "objectname",
+    "object_name",
+    "branch",
+    "organization",
+];
+pub(super) const ID_MEMBERS: [&str; 26] = [
     "id",
     "page_id",
     "note_id",
@@ -133,7 +207,19 @@ const ID_MEMBERS: [&str; 16] = [
     "page_or_database_ids",
     "recordid",
     "recordids",
+    "issue_number",
+    "issuenumber",
+    "pull_number",
+    "pullnumber",
+    "pr_number",
+    "ticket_number",
+    "number",
+    "issue_key",
+    "issuekey",
+    "ticket_key",
 ];
+/// A path names a file a write acts on; on a read it says nothing about a change.
+const PATH_MEMBERS: [&str; 3] = ["path", "file_path", "filepath"];
 const BEFORE_MEMBERS: [&str; 4] = ["old_str", "old_text", "old", "before"];
 const AFTER_MEMBERS: [&str; 9] = [
     "new_str", "new_text", "new", "after", "text", "content", "body", "markdown", "message",
@@ -146,7 +232,7 @@ const MAX_RECIPIENT_OBJECT_MEMBERS: usize = 64;
 /// Where a created item's text sits when none of the above holds it.
 const CREATED_TEXT_MEMBER: &str = "description";
 /// Members naming the table or type a record lives in: its kind.
-const TABLE_MEMBERS: [&str; 8] = [
+pub(super) const TABLE_MEMBERS: [&str; 8] = [
     "tablename",
     "table",
     "table_name",
@@ -230,8 +316,6 @@ pub enum RulesUnsure {
 pub enum CrossCheckFlag {
     /// The resolved `readOnlyHint` is true, but the label writes.
     ReadOnlyAnnotation,
-    /// The resolved `destructiveHint` is true, but the label only adds.
-    DestructiveAnnotation,
     /// The tool's name reads, but the label does more than read.
     ReadName,
     /// The tool's name has verbs, and none of them is the label's.
@@ -244,7 +328,6 @@ impl CrossCheckFlag {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ReadOnlyAnnotation => "read_only_annotation",
-            Self::DestructiveAnnotation => "destructive_annotation",
             Self::ReadName => "read_name",
             Self::NameVerb => "name_verb",
             Self::FieldVerb => "field_verb",
@@ -294,11 +377,26 @@ pub fn rules_label(
     let action = verb.action;
     let (object_kind, table) = kind(&name, arguments);
     let mut item = ToolCallLabelItemMapping::default();
-    if action != ToolCallAction::Create {
+    let creates = matches!(
+        action,
+        ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
+    );
+    if !creates && action != ToolCallAction::Run {
         item.id = id_pointer(arguments);
     }
+    if item.id.is_none() && action != ToolCallAction::Other && !creates {
+        item.id = find(
+            arguments,
+            Skip::Targets,
+            id_member(|member| is_one_of(member, &PATH_MEMBERS)),
+        );
+    }
     item.target = target_pointer(arguments, action, item.id.as_deref());
-    if matches!(action, ToolCallAction::Create | ToolCallAction::Send) {
+    if creates || action == ToolCallAction::Send {
+        item.title = title_pointer(arguments);
+    }
+    // A delete names what goes; on an update a `name` is a changed value.
+    if item.id.is_none() && matches!(action, ToolCallAction::Delete | ToolCallAction::Archive) {
         item.title = title_pointer(arguments);
     }
     item.before = find(arguments, Skip::Lookups, text_member(&BEFORE_MEMBERS));
@@ -308,9 +406,12 @@ pub fn rules_label(
             | ToolCallAction::Update
             | ToolCallAction::Comment
             | ToolCallAction::Send
+            | ToolCallAction::Share
+            | ToolCallAction::Upsert
+            | ToolCallAction::Upload
     ) {
         item.after = find(arguments, Skip::Lookups, text_member(&AFTER_MEMBERS)).or_else(|| {
-            matches!(action, ToolCallAction::Create | ToolCallAction::Send)
+            (creates || action == ToolCallAction::Send)
                 .then(|| {
                     find(
                         arguments,
@@ -359,7 +460,8 @@ pub fn rules_label(
 }
 
 /// Holds a label's verb against the tool's name and its resolved
-/// annotations, operator overrides included; an absent hint says nothing.
+/// annotations, operator overrides included; an absent hint says nothing. A
+/// destructive hint is no disagreement: a card says it apart from the verb.
 /// Any flag means the card shows the generic label. When verb fields the
 /// tool's input schema declares set the verb, the name's verb steps back: it
 /// describes the tool, the fields this call. The label must then agree with
@@ -371,21 +473,15 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     let name = name_words(text_prefix(&tool.name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
     let mut flags = Vec::new();
-    if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other {
+    // A read-only claim never overrules a name that says something is lost.
+    let name_loses = matches!(action, ToolCallAction::Delete | ToolCallAction::Archive)
+        && name_sounds_like_a_loss(&name);
+    if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other && !name_loses {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
     }
-    if hint(|hints| hints.destructive_hint)
-        && !matches!(
-            action,
-            ToolCallAction::Delete
-                | ToolCallAction::Update
-                | ToolCallAction::Move
-                | ToolCallAction::Other
-        )
-    {
-        flags.push(CrossCheckFlag::DestructiveAnnotation);
-    }
-    if verb.source == VerbSource::Field && verb.action != action {
+    let upsert_agrees = verb.action == ToolCallAction::Upsert
+        && matches!(action, ToolCallAction::Create | ToolCallAction::Update);
+    if verb.source == VerbSource::Field && verb.action != action && !upsert_agrees {
         flags.push(CrossCheckFlag::FieldVerb);
     }
     // A member the schema does not declare may be one the model made up.
@@ -393,7 +489,12 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
         && verb_fields(arguments)
             .into_iter()
             .all(|(member, _)| declares(&tool.input_schema, member));
-    if action != ToolCallAction::Other && has(&name, &READ_VERBS) {
+    // "query" also names what a run runs.
+    let names_a_run = action == ToolCallAction::Run
+        && !name
+            .iter()
+            .any(|word| word != "query" && READ_VERBS.contains(&word.as_str()));
+    if action != ToolCallAction::Other && !names_a_run && has(&name, &READ_VERBS) {
         flags.push(CrossCheckFlag::ReadName);
     }
     if declared {
@@ -536,11 +637,11 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     if let Some((action, source)) = compound(name, &fields) {
         return found(action, source);
     }
-    if has(name, &["upsert"]) {
+    if is_upsert_name(name) {
         let action = if arguments.is_some_and(holds_an_id) {
             ToolCallAction::Update
         } else {
-            ToolCallAction::Create
+            ToolCallAction::Upsert
         };
         return found(action, VerbSource::Arguments);
     }
@@ -549,6 +650,15 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     }
     if let Some(action) = actions_of(name).first() {
         return found(*action, VerbSource::Name);
+    }
+    // What a member is named says it holds a statement; the statement's own
+    // words never pick a verb.
+    if arguments.is_some_and(holds_a_statement)
+        && !name
+            .iter()
+            .any(|word| word != "query" && READ_VERBS.contains(&word.as_str()))
+    {
+        return found(ToolCallAction::Run, VerbSource::Arguments);
     }
     if let (Some(first), Some(arguments)) = (name.first(), arguments)
         && arguments.is_object()
@@ -581,6 +691,56 @@ fn compound(name: &[String], fields: &[String]) -> Option<(ToolCallAction, VerbS
         .then_some((ToolCallAction::Send, VerbSource::Name))
 }
 
+fn name_sounds_like_a_loss(name: &[String]) -> bool {
+    actions_of(name)
+        .iter()
+        .any(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Archive))
+}
+
+/// Whether a tool's name or a flag it sets says something is lost, whatever
+/// its annotations claim: such a call is never presented as a read.
+pub fn sounds_like_a_loss(tool_name: &str, arguments: &Value) -> bool {
+    if name_sounds_like_a_loss(&name_words(text_prefix(tool_name, MAX_NAME_BYTES))) {
+        return true;
+    }
+    arguments.as_object().is_some_and(|members| {
+        members
+            .iter()
+            .take(MAX_SEARCH_VALUES)
+            .any(|(member, value)| {
+                value == &Value::Bool(true)
+                    && name_sounds_like_a_loss(&name_words(text_prefix(member, MAX_NAME_BYTES)))
+            })
+    })
+}
+
+/// A top-level member that by its name holds something to run.
+fn holds_a_statement(arguments: &Value) -> bool {
+    arguments.as_object().is_some_and(|members| {
+        members
+            .iter()
+            .take(MAX_SEARCH_VALUES)
+            .any(|(member, value)| {
+                let bare = bare_member(member);
+                let text = value.as_str().unwrap_or_default();
+                match bare.as_str() {
+                    "sql" | "statement" | "bash" | "shell" | "script" => !text.trim().is_empty(),
+                    "command" => {
+                        value.is_array()
+                            || (!text.trim().is_empty() && text.contains(char::is_whitespace))
+                    }
+                    "query" => is_sql_statement(text),
+                    _ => false,
+                }
+            })
+    })
+}
+
+/// `upsert_contact` and `create_or_update_file`.
+fn is_upsert_name(name: &[String]) -> bool {
+    has(name, &["upsert"]) || (has(name, &["create"]) && has(name, &["update"]))
+}
+
 /// Every verb the tool's name allows.
 fn name_verbs(name: &[String]) -> Vec<ToolCallAction> {
     if let Some((action, _)) = compound(name, &[]) {
@@ -591,10 +751,22 @@ fn name_verbs(name: &[String]) -> Vec<ToolCallAction> {
         && name
             .first()
             .is_some_and(|first| SAVE_VERBS.contains(&first.as_str()));
-    if has(name, &["upsert"]) || saves {
-        return vec![ToolCallAction::Create, ToolCallAction::Update];
+    if is_upsert_name(name) || saves {
+        return vec![
+            ToolCallAction::Create,
+            ToolCallAction::Update,
+            ToolCallAction::Upsert,
+        ];
     }
     named
+}
+
+/// What a verb field's value says a row does, if it names one verb.
+pub(super) fn action_of(value: &str) -> Option<ToolCallAction> {
+    match actions_of(&name_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
+        [action] => Some(*action),
+        _ => None,
+    }
 }
 
 /// The actions the words name, in the order of `VERBS`.
@@ -755,7 +927,13 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
                 .flatten()
         })
     });
-    if found.is_some() || action != ToolCallAction::Create {
+    let found = found.or_else(|| place_pointer(arguments, id));
+    if found.is_some()
+        || !matches!(
+            action,
+            ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
+        )
+    {
         return found;
     }
     find(arguments, Skip::Nothing, |pointer, member, values| {
@@ -781,6 +959,19 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
                 .iter()
                 .any(|value| is_id_member(member, value))
                 .then(|| pointer.to_string())
+        })
+    })
+}
+
+/// The most specific member naming where a record lives, for a call with no
+/// parent, folder or channel to go by.
+fn place_pointer(arguments: &Value, id: Option<&str>) -> Option<String> {
+    PLACE_MEMBERS.iter().find_map(|place| {
+        find(arguments, Skip::Lookups, |pointer, member, values| {
+            (member.eq_ignore_ascii_case(place)
+                && id != Some(pointer)
+                && values.iter().copied().any(is_text_or_number))
+            .then(|| pointer.to_string())
         })
     })
 }
@@ -818,7 +1009,7 @@ fn fitting(pointer: String, whole: &str) -> String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Recipients {
+pub(super) enum Recipients {
     /// Who a message, invite or share is addressed to.
     To,
     /// Who gets a copy.
@@ -832,12 +1023,22 @@ enum Recipients {
 }
 
 /// What a member holding `values` says about recipients. Without values only
-/// its name counts.
-fn recipients_in(member: &str, values: &[&Value]) -> Option<Recipients> {
+/// its name counts. `to` also names destinations (`copy_object`, branches), so
+/// it counts only for a value that holds an address; the other recipient
+/// names only need a value that could hold one, not a count or a flag.
+pub(super) fn recipients_in(member: &str, values: &[&Value]) -> Option<Recipients> {
     let bare = bare_member(member);
-    if RECIPIENT_MEMBERS.contains(&bare.as_str()) {
+    let addressed =
+        |test: fn(&Value) -> bool| values.is_empty() || values.iter().copied().any(test);
+    if RECIPIENT_MEMBERS.contains(&bare.as_str())
+        && addressed(if bare == "to" {
+            holds_an_address_or_nobody
+        } else {
+            may_hold_an_address
+        })
+    {
         Some(Recipients::To)
-    } else if COPY_RECIPIENT_MEMBERS.contains(&bare.as_str()) {
+    } else if COPY_RECIPIENT_MEMBERS.contains(&bare.as_str()) && addressed(may_hold_an_address) {
         Some(Recipients::Copy)
     } else if is_contact_number_member(member)
         || (names_where_it_goes(member) && values.iter().copied().any(holds_a_phone_number))
@@ -845,6 +1046,40 @@ fn recipients_in(member: &str, values: &[&Value]) -> Option<Recipients> {
         Some(Recipients::Number)
     } else {
         None
+    }
+}
+
+/// A value that names no one stays a recipient member that names no one.
+fn holds_an_address_or_nobody(value: &Value) -> bool {
+    !names_someone(value) || holds_an_address(value)
+}
+
+/// An email address, a phone number, a machine ID standing for a person, a
+/// recipient object, or a list holding one.
+fn holds_an_address(value: &Value) -> bool {
+    let one = |value: &Value| match value {
+        Value::String(text) => text.contains('@') || is_phone_shaped(text) || is_machine_id(text),
+        Value::Object(members) => !members.is_empty(),
+        _ => false,
+    };
+    match value {
+        Value::Array(entries) => entries.iter().take(MAX_LIST_ENTRIES).any(one),
+        value => one(value),
+    }
+}
+
+/// Anything but a count or a flag.
+fn may_hold_an_address(value: &Value) -> bool {
+    match value {
+        Value::Array(entries) => {
+            entries.is_empty()
+                || entries
+                    .iter()
+                    .take(MAX_SEARCH_VALUES)
+                    .any(may_hold_an_address)
+        }
+        Value::Number(_) | Value::Bool(_) => false,
+        _ => true,
     }
 }
 
@@ -1104,7 +1339,11 @@ fn fields(
     used.extend(recipients.iter().map(|recipient| recipient.member.as_str()));
     let mut budget = MAX_SEARCH_VALUES;
     match action {
-        ToolCallAction::Create | ToolCallAction::Send => {
+        ToolCallAction::Create
+        | ToolCallAction::Send
+        | ToolCallAction::Share
+        | ToolCallAction::Upsert
+        | ToolCallAction::Upload => {
             let Some((parent, _)) = item
                 .title
                 .as_deref()

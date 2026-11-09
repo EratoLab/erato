@@ -199,7 +199,7 @@ fn some_names_read_as_one_verb() {
         ),
         (
             "trash_file",
-            ToolCallAction::Delete,
+            ToolCallAction::Archive,
             ToolCallObjectKind::File,
         ),
     ] {
@@ -240,7 +240,7 @@ fn some_names_read_as_one_verb() {
 fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
     let upsert = |record: Value| label("crm.records.upsert", json!({ "record": record }));
     let created = upsert(json!({"object_type": "company", "data": {"legal_name": "Acme"}}));
-    assert_eq!(created.mapping.action, ToolCallAction::Create);
+    assert_eq!(created.mapping.action, ToolCallAction::Upsert);
     assert_eq!(
         created.mapping.items[0].title.as_deref(),
         Some("/record/data/legal_name")
@@ -258,7 +258,7 @@ fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
         );
     }
     let under_a_parent = label("upsert_record", json!({"parent_id": "p_1", "name": "Acme"}));
-    assert_eq!(under_a_parent.mapping.action, ToolCallAction::Create);
+    assert_eq!(under_a_parent.mapping.action, ToolCallAction::Upsert);
     let new = &under_a_parent.mapping.items[0];
     assert_eq!(
         (new.title.as_deref(), new.target.as_deref()),
@@ -272,7 +272,7 @@ fn upserts_and_saves_update_only_when_their_arguments_hold_an_id() {
         let created = label("upsert_contact", arguments.clone());
         assert_eq!(
             created.mapping.action,
-            ToolCallAction::Create,
+            ToolCallAction::Upsert,
             "{arguments}"
         );
         assert_eq!(created.mapping.items[0].id, None, "{arguments}");
@@ -689,7 +689,7 @@ fn the_cross_check_trusts_only_hints_that_are_set() {
     );
     assert_eq!(
         check(ToolCallAction::Send, Some(hints(Some(false), Some(true)))),
-        [CrossCheckFlag::DestructiveAnnotation]
+        []
     );
     assert_eq!(check(ToolCallAction::Send, Some(hints(None, None))), []);
     assert_eq!(check(ToolCallAction::Send, None), []);
@@ -870,7 +870,7 @@ fn every_recipient_is_the_target_or_a_field() {
         "share_file",
         json!({"file_id": "f_1", "share_with": ["ann@example.com"], "role": "writer"}),
     );
-    assert_eq!(shared.mapping.action, ToolCallAction::Send);
+    assert_eq!(shared.mapping.action, ToolCallAction::Share);
     let shared = &shared.mapping.items[0];
     assert_eq!(
         (shared.id.as_deref(), shared.target.as_deref()),
@@ -1727,4 +1727,204 @@ fn the_rules_reproduce_the_probe_baseline_on_its_test_sets() {
         };
         assert_eq!(score.flagged, expected_flags, "{name}: flagged");
     }
+}
+
+#[test]
+fn a_destructive_hint_keeps_the_label_and_never_makes_the_card_generic() {
+    for action in [
+        ToolCallAction::Create,
+        ToolCallAction::Send,
+        ToolCallAction::Update,
+        ToolCallAction::Delete,
+    ] {
+        assert!(
+            !cross_check(
+                &tool("create_record", Some(hints(Some(false), Some(true))), &[]),
+                &json!({}),
+                action
+            )
+            .contains(&CrossCheckFlag::ReadOnlyAnnotation),
+            "{action:?}"
+        );
+    }
+    let create = cross_check(
+        &tool("create_record", Some(hints(Some(false), Some(true))), &[]),
+        &json!({"name": "New"}),
+        ToolCallAction::Create,
+    );
+    assert_eq!(create, []);
+}
+
+#[test]
+fn a_method_style_field_names_the_verb() {
+    for (name, arguments, action) in [
+        (
+            "issue_write",
+            json!({"method": "update", "issue_number": 4211, "state": "closed"}),
+            ToolCallAction::Update,
+        ),
+        (
+            "issue_write",
+            json!({"method": "create", "title": "New"}),
+            ToolCallAction::Create,
+        ),
+        (
+            "label_write",
+            json!({"method": "delete", "name": "bug"}),
+            ToolCallAction::Delete,
+        ),
+        (
+            "salesforce_dml_records",
+            json!({"operation": "upsert", "records": [{"Name": "A"}]}),
+            ToolCallAction::Upsert,
+        ),
+    ] {
+        assert_eq!(label(name, arguments).mapping.action, action, "{name}");
+    }
+    // Free text is never a verb, whatever words it holds.
+    let free = label("act", json!({"action": "please delete the record"}));
+    assert_eq!(free.mapping.action, ToolCallAction::Run);
+    assert_eq!(
+        verb_field_values(&json!({"action": "please delete the record", "method": "update"})),
+        ["update"]
+    );
+}
+
+#[test]
+fn issue_numbers_and_keys_identify_the_record() {
+    for (member, value) in [
+        ("issue_number", json!(4211)),
+        ("issueNumber", json!(4211)),
+        ("pull_number", json!(17)),
+        ("number", json!(17)),
+        ("issue_key", json!("ABC-123")),
+        ("issueKey", json!("ABC-123")),
+    ] {
+        let mut arguments = serde_json::Map::new();
+        arguments.insert(member.to_string(), value);
+        arguments.insert("state".to_string(), json!("closed"));
+        assert_eq!(
+            item("update_issue", Value::Object(arguments)).id.as_deref(),
+            Some(format!("/{member}").as_str())
+        );
+    }
+}
+
+#[test]
+fn more_verbs_come_from_a_tools_name_in_a_closed_list() {
+    for (name, arguments, action) in [
+        (
+            "share_file",
+            json!({"fileId": "f_1", "role": "writer"}),
+            ToolCallAction::Share,
+        ),
+        (
+            "execute_sql",
+            json!({"project_id": "p", "query": "select 1"}),
+            ToolCallAction::Run,
+        ),
+        ("run_shell", json!({"command": "ls"}), ToolCallAction::Run),
+        (
+            "pods_exec",
+            json!({"namespace": "x", "name": "y", "command": ["ls"]}),
+            ToolCallAction::Run,
+        ),
+        (
+            "trash_file",
+            json!({"fileId": "f_1"}),
+            ToolCallAction::Archive,
+        ),
+        (
+            "archive_page",
+            json!({"page_id": "p_1"}),
+            ToolCallAction::Archive,
+        ),
+        (
+            "upload_file",
+            json!({"filename": "x.txt"}),
+            ToolCallAction::Upload,
+        ),
+        (
+            "write_file",
+            json!({"path": "/tmp/x", "content": "x"}),
+            ToolCallAction::Update,
+        ),
+        (
+            "create_or_update_file",
+            json!({"path": "x", "content": "y"}),
+            ToolCallAction::Upsert,
+        ),
+        (
+            "upsert_contact",
+            json!({"email": "a@example.test"}),
+            ToolCallAction::Upsert,
+        ),
+        (
+            "merge_pull_request",
+            json!({"pullNumber": 3}),
+            ToolCallAction::Update,
+        ),
+    ] {
+        assert_eq!(label(name, arguments).mapping.action, action, "{name}");
+    }
+}
+
+#[test]
+fn risky_words_inside_opaque_content_are_never_the_verb() {
+    for (name, arguments) in [
+        ("query", json!({"sql": "DELETE FROM users"})),
+        (
+            "exec_op",
+            json!({"data": {"k": "delete everything", "v": 1}}),
+        ),
+    ] {
+        let rules = label(name, arguments);
+        assert_ne!(rules.mapping.action, ToolCallAction::Delete, "{name}");
+    }
+}
+
+#[test]
+fn a_to_member_is_a_recipient_only_when_it_holds_an_address() {
+    let to = |value: Value| {
+        let arguments = json!({ "to": value, "from": "a", "subject": "x" });
+        recipient_members(&arguments).len()
+    };
+    assert_eq!(to(json!("ana@contoso.example")), 1);
+    assert_eq!(to(json!(["a@contoso.example", "b@contoso.example"])), 1);
+    assert_eq!(to(json!("+49 170 1234567")), 1);
+    assert_eq!(to(json!("U012AB3CD")), 1);
+    assert_eq!(to(json!({"email": "ana@contoso.example"})), 1);
+    assert_eq!(to(json!("main")), 0);
+    assert_eq!(to(json!("/backups/archive.tgz")), 0);
+    assert_eq!(to(json!("")), 0);
+
+    assert_eq!(recipient_members(&json!({"guests": 3})).len(), 0);
+    assert_eq!(recipient_members(&json!({"cc": "ops"})).len(), 1);
+    assert_eq!(recipient_members(&json!({"recipients": ["ops"]})).len(), 1);
+    // A value under such a member still never gets a name from a result.
+    assert!(super::super::recipients::is_recipient_member("to"));
+}
+
+#[test]
+fn a_copy_destination_is_the_target_not_a_recipient() {
+    let rules = label(
+        "copy_object",
+        json!({"from": "/a/x", "to": "/b/x", "overwrite": true}),
+    );
+    assert_eq!(rules.mapping.items[0].target.as_deref(), Some("/to"));
+}
+
+#[test]
+fn where_a_record_lives_is_a_target_when_nothing_else_is() {
+    let rules = label(
+        "update_issue",
+        json!({"owner": "contoso", "repo": "uploader", "issue_number": 7, "state": "closed"}),
+    );
+    assert_eq!(rules.mapping.items[0].target.as_deref(), Some("/repo"));
+    // A plain project field on an update stays a value.
+    let field = label(
+        "update_task",
+        json!({"id": "t1", "project": "Apollo", "state": "done"}),
+    );
+    assert_eq!(field.mapping.items[0].target, None);
 }

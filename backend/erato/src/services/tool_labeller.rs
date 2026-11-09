@@ -1,16 +1,14 @@
 //! The model fallback for tool-call labels: one request to the configured
 //! provider for an MCP call the rules are unsure of, started at the gate and
-//! never awaited by it. Its label reaches the call's row while the turn runs,
-//! or the call's parked approval card once the turn has stopped there. A
-//! failing, slow or hostile labeller only costs the call the model's label.
+//! never awaited by it. Its answer supplies only a verb and kind the rules
+//! have none for, and only while the turn runs: a parked approval card is on
+//! screen, and a late answer never changes what it says. A failing, slow or
+//! hostile labeller only costs the call the model's verb.
 
 use crate::config::{AppConfig, McpRuntimeConfig};
-use crate::models::message::{
-    ContentPart, ContentPartText, ToolCallLabel, ToolDisplayMetadata, upgrade_open_approval_label,
-};
+use crate::models::message::{ContentPart, ContentPartText, ToolCallLabel, ToolDisplayMetadata};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
-use crate::services::background_tasks::StreamingTask;
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::genai::{GenAIClient, build_chat_options_for_summary};
 use crate::services::genai_langfuse::{TracedGenerationBuilder, generate_langfuse_ids};
@@ -18,7 +16,8 @@ use crate::services::langfuse::TracingLangfuseClient;
 use crate::services::template_rendering::contexts::chat_provider_headers::ChatProviderHeadersContext;
 use crate::services::tool_display::label::cache::ToolLabelCacheKey;
 use crate::services::tool_display::label::{
-    ToolCallLabelMapping, ToolResultContext, logged_tool_name, model,
+    ToolCallLabelMapping, ToolResultContext, guarded_rules, logged_tool_name, model,
+    with_model_verb,
 };
 use crate::services::tool_display::{label_consent_argument, mcp_tool_call_display_from};
 use crate::state::{AppState, ChatProviderConfigWithId};
@@ -26,7 +25,7 @@ use futures::FutureExt;
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
 use std::panic::AssertUnwindSafe;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore, mpsc};
 use tracing::Instrument;
@@ -40,9 +39,6 @@ pub const MAX_CONCURRENT_LABELS: usize = 4;
 /// label, so a turn's cost and memory stay bounded however many it makes.
 const MAX_LABELS_PER_TURN: usize = 32;
 const MAX_REPLY_TOKENS: u32 = 512;
-/// How long a label the running turn no longer takes waits for that turn's
-/// content to be stored before it tries the parked card.
-const STORED_WAIT: Duration = Duration::from_secs(30);
 /// How long a finished request's trace may take to send.
 const TRACE_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -82,11 +78,8 @@ struct Upgrade {
 struct Turn {
     user_id: String,
     chat_id: Uuid,
-    message_id: Uuid,
     assistant_id: Option<Uuid>,
     platform: String,
-    /// Weak, since the turn's stream lasts as long as its task does.
-    task: Option<Weak<StreamingTask>>,
 }
 
 /// The provider that labels one turn's calls. Whether the turn's user may use
@@ -203,10 +196,8 @@ impl LabelUpgrades {
     pub fn new(
         user_id: &str,
         chat_id: Uuid,
-        message_id: Uuid,
         assistant_id: Option<Uuid>,
         platform: &str,
-        task: Option<&Arc<StreamingTask>>,
         labeller: Option<Arc<TurnLabeller>>,
     ) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
@@ -217,10 +208,8 @@ impl LabelUpgrades {
             turn: Turn {
                 user_id: user_id.to_string(),
                 chat_id,
-                message_id,
                 assistant_id,
                 platform: platform.to_string(),
-                task: task.map(Arc::downgrade),
             },
             labeller,
             started: 0,
@@ -394,22 +383,9 @@ impl Labelling {
             tool_call_id: self.job.tool_call_id,
             label,
         };
-        let Err(mpsc::error::SendError(upgrade)) = sender.send(upgrade) else {
-            return;
-        };
-        if let Some(task) = self.turn.task.as_ref().and_then(Weak::upgrade) {
-            let _ = tokio::time::timeout(STORED_WAIT, task.wait_for_completion()).await;
-        }
-        if let Err(error) = upgrade_open_approval_label(
-            &self.app_state.db,
-            self.turn.message_id,
-            &upgrade.tool_call_id,
-            &upgrade.label,
-        )
-        .await
-        {
-            tracing::warn!(%error, "Cannot put a model's label on a parked approval card");
-        }
+        // Once the turn has parked, the card is on screen: the mapping is kept
+        // for the next call of this shape, but what the card says stays.
+        let _ = sender.send(upgrade);
     }
 
     /// The label the model's mapping gives the call; a mapping kept for the
@@ -495,7 +471,7 @@ impl Labelling {
             }
             Ok(Ok(reply)) => {
                 let text = reply.first_text().unwrap_or("");
-                let parsed = model::parse_reply(text, &job.arguments, &request.paths);
+                let parsed = model::parse_reply(text);
                 let output = model::traced_reply(text).to_string();
                 match parsed {
                     Ok(mapping) => ("labelled", Some(mapping), output, Some(reply.usage)),
@@ -533,13 +509,14 @@ fn shown_label(
     job: &LabelJob,
     mapping: &ToolCallLabelMapping,
 ) -> Option<ToolCallLabel> {
+    let rules = guarded_rules(&job.tool, &job.arguments, job.approval_argument.as_deref());
     mcp_tool_call_display_from(
         config,
         &job.server_id,
         &job.tool,
         &job.arguments,
         job.approval_argument.as_deref(),
-        mapping,
+        &with_model_verb(rules.mapping, mapping),
         &job.context,
     )
     .label
@@ -712,12 +689,11 @@ mod tests {
             approvals: vec![item(call_id, None)],
             pending_tool_calls: Vec::new(),
             approval_scope: None,
-            labels_updated_at: None,
         })
     }
 
     fn upgrades() -> LabelUpgrades {
-        LabelUpgrades::new("user", Uuid::nil(), Uuid::nil(), None, "web", None, None)
+        LabelUpgrades::new("user", Uuid::nil(), None, "web", None)
     }
 
     fn model_label() -> ToolCallLabel {
@@ -988,12 +964,18 @@ mod tests {
             .iter()
             .map(|field| field.pointer.as_str())
             .collect();
-        assert_eq!(shown, ["/status"]);
+        // The model names a verb; it never adds a field the rules did not read.
+        assert!(shown.is_empty(), "{shown:?}");
 
+        // A model's pointers never reach the label, whatever they point at.
         let consent = ToolCallLabelItemMapping {
             title: Some("/hasUserApproved".into()),
             ..Default::default()
         };
+        let label = shown_label(&config, &call, &mapping(ToolCallAction::Update, consent)).unwrap();
+        assert_eq!(label.source, ToolCallLabelSource::Model);
+        assert_eq!(label.items[0].title, None);
+
         let mut read_only = tool.clone();
         read_only.annotations = Some(rmcp::model::ToolAnnotations::from_raw(
             None,
@@ -1002,48 +984,14 @@ mod tests {
             None,
             None,
         ));
-        let to_only = ToolCallLabelItemMapping {
-            title: Some("/subject".into()),
-            target: Some("/to".into()),
-            ..Default::default()
-        };
-        let hidden_copy = job(
-            tool.clone(),
-            json!({"to": ["a@example.com"], "bcc": ["b@example.com"], "subject": "Q3"}),
-        );
         let label = shown_label(
             &config,
-            &hidden_copy,
-            &mapping(ToolCallAction::Send, to_only.clone()),
+            &job(read_only, call.arguments.clone()),
+            &mapping(ToolCallAction::Delete, fields),
         )
         .unwrap();
-        assert_eq!(label.source, ToolCallLabelSource::Model);
-        assert!(
-            label.items[0]
-                .fields
-                .iter()
-                .any(|field| field.pointer == "/bcc"),
-            "{label:?}"
-        );
-        let mail: serde_json::Map<String, Value> =
-            ["to", "cc", "bcc", "attendees", "invitees", "participants"]
-                .into_iter()
-                .map(|member| (member.to_string(), json!(["x@example.com"])))
-                .chain([("subject".to_string(), json!("Q3"))])
-                .collect();
-        let mail = job(tool.clone(), Value::Object(mail));
-        for (call, mapping) in [
-            (&call, mapping(ToolCallAction::Update, consent)),
-            (
-                &job(read_only, call.arguments.clone()),
-                mapping(ToolCallAction::Delete, fields),
-            ),
-            (&mail, mapping(ToolCallAction::Send, to_only)),
-        ] {
-            let label = shown_label(&config, call, &mapping).unwrap();
-            assert_eq!(label.source, ToolCallLabelSource::Generic, "{mapping:?}");
-            assert!(label.items.is_empty());
-        }
+        assert_eq!(label.source, ToolCallLabelSource::Generic);
+        assert!(label.items.is_empty());
     }
 
     #[test]

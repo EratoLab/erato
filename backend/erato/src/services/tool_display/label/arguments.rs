@@ -2,10 +2,11 @@
 //! each one, as paths into the stored input. Values stay in the input, so the
 //! view holds nothing a reader could not already see there.
 
+use super::machine_id::is_machine_id;
 use super::pointer::escape;
 use crate::models::message::{ToolArgumentKind, ToolArgumentNode};
 use crate::services::display_text::MAX_DISPLAY_NAME_CHARS;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 /// Nodes in one view; the rest are counted as omitted.
 pub const MAX_VIEW_NODES: usize = 250;
@@ -18,6 +19,74 @@ pub const MAX_LIST_ENTRIES: usize = 25;
 /// Longer strings, or any with a line break, show as a block of text.
 pub const MAX_INLINE_CHARS: usize = 80;
 pub(super) const MAX_ID_CHARS: usize = 128;
+/// A string this long is content, not the arguments of a call packed into one.
+const MAX_JSON_STRING_BYTES: usize = 256 * 1024;
+/// Levels whose members may hold JSON in a string.
+const MAX_JSON_STRING_DEPTH: usize = 2;
+/// Members that hold content a call writes, whatever it looks like: a file
+/// that happens to be JSON stays its text.
+const TEXT_MEMBERS: [&str; 12] = [
+    "body",
+    "content",
+    "text",
+    "html",
+    "markdown",
+    "description",
+    "message",
+    "note",
+    "query",
+    "sql",
+    "command",
+    "code",
+];
+
+/// `arguments` with the objects and lists a string member holds as JSON read
+/// as members, so a server that packs its fields into one string labels like
+/// any other; `None` when no member holds any. Paths into such a member reach
+/// nothing in the stored input: the card keeps the text it read.
+pub fn json_strings_read(arguments: &Value) -> Option<Value> {
+    read_json_members(arguments, 0)
+}
+
+fn read_json_members(value: &Value, depth: usize) -> Option<Value> {
+    let Value::Object(members) = value else {
+        return None;
+    };
+    let mut copied: Option<Map<String, Value>> = None;
+    for (name, member) in members {
+        let read = match member {
+            Value::String(text) if !is_text_member(name) => parsed_json(text),
+            Value::Object(_) if depth + 1 < MAX_JSON_STRING_DEPTH => {
+                read_json_members(member, depth + 1)
+            }
+            _ => None,
+        };
+        if let Some(read) = read {
+            copied
+                .get_or_insert_with(|| members.clone())
+                .insert(name.clone(), read);
+        }
+    }
+    copied.map(Value::Object)
+}
+
+fn is_text_member(name: &str) -> bool {
+    TEXT_MEMBERS
+        .iter()
+        .any(|member| name.eq_ignore_ascii_case(member))
+}
+
+/// The object or list `text` holds as JSON, if that is all it holds.
+fn parsed_json(text: &str) -> Option<Value> {
+    let trimmed = text.trim_start();
+    if text.len() > MAX_JSON_STRING_BYTES || !(trimmed.starts_with('{') || trimmed.starts_with('['))
+    {
+        return None;
+    }
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .filter(|parsed| parsed.is_object() || parsed.is_array())
+}
 
 /// The view of `arguments`, and whether the caps left any of them out.
 pub fn readable_arguments(arguments: &Value) -> (ToolArgumentNode, bool) {
@@ -119,6 +188,8 @@ fn kind_of(value: &Value, key: Option<&str>) -> ToolArgumentKind {
     match value {
         Value::Object(_) => ToolArgumentKind::Group,
         Value::Array(_) => ToolArgumentKind::List,
+        Value::String(text) if is_machine_id(text) => ToolArgumentKind::MachineId,
+        Value::Number(number) if is_machine_id(&number.to_string()) => ToolArgumentKind::MachineId,
         Value::String(text) if is_id_text(text, key) => ToolArgumentKind::Id,
         Value::String(text)
             if text.contains('\n') || text.chars().nth(MAX_INLINE_CHARS).is_some() =>
@@ -187,6 +258,30 @@ mod tests {
     }
 
     #[test]
+    fn json_inside_a_string_is_read_as_members_but_content_stays_text() {
+        let raw = json!({
+            "issue_key": "ABC-123",
+            "fields": "{\"summary\": \"New\", \"labels\": []}",
+            "nested": {"more": "[1, 2]", "deeper": {"fields": "{\"a\": 1}"}},
+            "content": "{\"kept\": \"as text\"}",
+            "not_json": "{half",
+            "scalar": "12",
+        });
+        let read = json_strings_read(&raw).unwrap();
+        assert_eq!(read["fields"]["summary"], "New");
+        assert_eq!(read["nested"]["more"], json!([1, 2]));
+        assert_eq!(read["nested"]["deeper"]["fields"], "{\"a\": 1}");
+        assert_eq!(read["content"], "{\"kept\": \"as text\"}");
+        assert_eq!(read["not_json"], "{half");
+        assert_eq!(read["scalar"], "12");
+
+        let plain = json!({"title": "No JSON here", "count": 3});
+        assert_eq!(json_strings_read(&plain), None);
+        let huge = format!("[{}]", "1,".repeat(MAX_JSON_STRING_BYTES));
+        assert_eq!(json_strings_read(&json!({ "data": huge })), None);
+    }
+
+    #[test]
     fn text_lists_and_ids_are_told_apart_by_shape_and_name() {
         let arguments = json!({
             "parent": {"data_source_id": "src_42"},
@@ -222,10 +317,10 @@ mod tests {
                 ("/page_ids", List),
                 ("/page_ids/0", Id),
                 ("/page_ids/1", Id),
-                ("/recordId", Id),
+                ("/recordId", MachineId),
                 ("/valid", Value),
                 ("/note", Text),
-                ("/ref", Id),
+                ("/ref", MachineId),
                 ("/thread_id", Value),
                 ("/ticket_id", Id),
                 ("/nothing", Value),

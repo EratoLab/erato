@@ -6,13 +6,14 @@
 mod arguments;
 pub mod cache;
 pub mod context;
+pub mod machine_id;
 pub mod model;
 pub mod own;
 pub mod pointer;
 mod recipients;
 pub mod rules;
 
-pub use arguments::readable_arguments;
+pub use arguments::{json_strings_read, readable_arguments};
 pub use context::ToolResultContext;
 
 use crate::models::message::{
@@ -177,7 +178,7 @@ pub async fn mcp_call_mapping(
     });
     match found {
         Some(Ok(mapping)) => McpCallMapping {
-            mapping,
+            mapping: with_model_verb(rules.mapping, &mapping),
             unlabelled: None,
         },
         Some(Err(key)) => McpCallMapping {
@@ -188,6 +189,32 @@ pub async fn mcp_call_mapping(
             mapping: rules.mapping,
             unlabelled: None,
         },
+    }
+}
+
+/// The rules' mapping with the verb and kind a model chose, only where the
+/// rules have none. Everything else the rules filled stays theirs: a model
+/// never replaces what the card shows, it can only say what the rules could not.
+pub fn with_model_verb(
+    rules: ToolCallLabelMapping,
+    model: &ToolCallLabelMapping,
+) -> ToolCallLabelMapping {
+    let action = match rules.action {
+        ToolCallAction::Other => model.action,
+        action => action,
+    };
+    let object_kind = match rules.object_kind {
+        ToolCallObjectKind::Other => model.object_kind,
+        kind => kind,
+    };
+    if (action, object_kind) == (rules.action, rules.object_kind) {
+        return rules;
+    }
+    ToolCallLabelMapping {
+        action,
+        object_kind,
+        source: ToolCallLabelSource::Model,
+        ..rules
     }
 }
 
@@ -531,11 +558,13 @@ fn label_value(path: String, value: &Value, hidden: &mut bool) -> Option<ToolCal
     };
     let text = sanitize_display_text(&raw, MAX_LABEL_VALUE_CHARS);
     *hidden |= text.hidden_characters;
+    let machine_id = machine_id::is_machine_id(&text.text);
     (!text.text.is_empty()).then_some(ToolCallLabelValue {
         path,
         text: text.text,
         truncated: text.truncated || cut,
         resolved: None,
+        machine_id,
     })
 }
 
@@ -871,7 +900,10 @@ mod tests {
         );
         assert!(label.items.is_empty() && label.warnings.is_empty());
         let view = label.arguments.as_ref().unwrap();
-        assert_eq!(view.children[0].children[0].kind, ToolArgumentKind::Id);
+        assert_eq!(
+            view.children[0].children[0].kind,
+            ToolArgumentKind::MachineId
+        );
 
         let rows: Vec<_> = (0..100).map(|i| json!({ "n": i })).collect();
         assert_eq!(
@@ -1168,7 +1200,7 @@ mod tests {
         );
 
         let mut newer = json;
-        newer["label"]["action"] = json!("archive");
+        newer["label"]["action"] = json!("teleport");
         newer["label"]["object_kind"] = json!("spreadsheet");
         newer["label"]["source"] = json!("cache");
         newer["label"]["warnings"] = json!(["shared_with_everyone"]);
@@ -1393,7 +1425,10 @@ mod tests {
             mapping,
             unlabelled,
         } = mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None).await;
-        assert_eq!((&mapping, unlabelled), (&model, None));
+        assert_eq!(
+            (&mapping, unlabelled),
+            (&with_model_verb(rules.mapping.clone(), &model), None)
+        );
         let label = checked_label("crm", &tool, &second, &mapping, None);
         assert_eq!(label.source, ToolCallLabelSource::Model);
         assert_eq!(texts(label.items[0].id.as_ref().unwrap()), ["rec-2"]);
@@ -1425,10 +1460,13 @@ mod tests {
             mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None)
                 .await
                 .mapping,
-            model
+            with_model_verb(
+                rules::rules_label(&tool.name, &second, None, None).mapping,
+                &model
+            )
         );
 
-        // An operator's later override drops a mapping it rules out.
+        // An operator's later override changes what is shown, not what is kept.
         let create = ToolCallLabelMapping {
             action: ToolCallAction::Create,
             ..model.clone()
@@ -1439,20 +1477,78 @@ mod tests {
                 Some(create.clone())
             })
             .await;
+        // A destructive hint rules nothing out: the card says it next to the verb.
         tool.annotations = hints(None, Some(true));
         let rules_mapping =
             rules::rules_label(&tool.name, &second, tool.annotations.as_ref(), None).mapping;
         assert_eq!(
             mcp_call_mapping(Some(&cache), "user-c", "crm", &tool, &second, None).await,
             McpCallMapping {
-                mapping: rules_mapping.clone(),
-                unlabelled: Some(key.clone()),
+                mapping: with_model_verb(rules_mapping.clone(), &create),
+                unlabelled: None,
             }
         );
-        assert!(cache.entries().get(&key).await.is_none());
+        assert!(cache.entries().get(&key).await.is_some());
         assert_eq!(
             checked_label("crm", &tool, &second, &rules_mapping, None).source,
             ToolCallLabelSource::Rules
+        );
+    }
+
+    #[test]
+    fn a_model_only_supplies_a_verb_or_kind_the_rules_have_none_for() {
+        let rules_with_verb = ToolCallLabelMapping {
+            action: ToolCallAction::Update,
+            object_kind: ToolCallObjectKind::Row,
+            items: vec![ToolCallLabelItemMapping {
+                id: Some("/id".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Rules,
+        };
+        let model = ToolCallLabelMapping {
+            action: ToolCallAction::Delete,
+            object_kind: ToolCallObjectKind::Page,
+            items: vec![ToolCallLabelItemMapping {
+                title: Some("/secret".into()),
+                ..Default::default()
+            }],
+            source: ToolCallLabelSource::Model,
+        };
+        assert_eq!(
+            with_model_verb(rules_with_verb.clone(), &model),
+            rules_with_verb
+        );
+
+        let no_verb = ToolCallLabelMapping {
+            action: ToolCallAction::Other,
+            object_kind: ToolCallObjectKind::Other,
+            items: rules_with_verb.items.clone(),
+            source: ToolCallLabelSource::Rules,
+        };
+        let merged = with_model_verb(no_verb.clone(), &model);
+        assert_eq!(
+            (merged.action, merged.object_kind, merged.source),
+            (
+                ToolCallAction::Delete,
+                ToolCallObjectKind::Page,
+                ToolCallLabelSource::Model
+            )
+        );
+        assert_eq!(merged.items, no_verb.items);
+
+        // A verb without a kind takes only the kind.
+        let kind_only = with_model_verb(
+            ToolCallLabelMapping {
+                action: ToolCallAction::Update,
+                object_kind: ToolCallObjectKind::Other,
+                ..rules_with_verb.clone()
+            },
+            &model,
+        );
+        assert_eq!(
+            (kind_only.action, kind_only.object_kind),
+            (ToolCallAction::Update, ToolCallObjectKind::Page)
         );
     }
 
@@ -1483,7 +1579,7 @@ mod tests {
         assert_eq!(
             mcp_call_mapping(None, "user-a", "crm", &tool, &second, None).await,
             McpCallMapping {
-                mapping: rules.mapping,
+                mapping: rules.mapping.clone(),
                 unlabelled: None,
             }
         );
@@ -1491,7 +1587,7 @@ mod tests {
             mcp_call_mapping(Some(&cache), "user-a", "crm", &tool, &second, None)
                 .await
                 .mapping,
-            model
+            with_model_verb(rules.mapping, &model)
         );
     }
 
@@ -1545,12 +1641,8 @@ mod tests {
             .mapping;
         let label = checked_label("crm", &tool, &call, &mapping, None);
         assert_eq!(label.source, ToolCallLabelSource::Model);
-        let fields: Vec<_> = label.items[0]
-            .fields
-            .iter()
-            .map(|field| field.pointer.as_str())
-            .collect();
-        assert_eq!(fields, ["/stage"]);
+        // A model never adds a field, and a consent flag is none either way.
+        assert!(label.items[0].fields.is_empty());
 
         let earlier: serde_json::Map<String, Value> =
             ["to", "cc", "bcc", "attendees", "invitees", "participants"]
