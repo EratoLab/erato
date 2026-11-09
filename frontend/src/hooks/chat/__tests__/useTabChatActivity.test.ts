@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useTabChatActivity } from "@/hooks/chat/useTabChatActivity";
@@ -146,6 +147,10 @@ describe("useTabChatActivity", () => {
     beforeEach(() => {
       localStorage.clear();
       useSidecarReviewLinks.setState({ links: {} });
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: {},
+        waitingOnlyIds: {},
+      });
       useGenerationStatusStore.setState({
         statusByChatId: {
           "chat-a": {
@@ -178,6 +183,51 @@ describe("useTabChatActivity", () => {
       });
 
       expect(result.current).toBe("attention");
+    });
+
+    it("carries no marker for a card that only waits", () => {
+      useConfirmationRegistryStore
+        .getState()
+        .registerConfirmation("chat-a", "card-1", { waitingOnly: true });
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+
+      expect(result.current).toBe("idle");
+    });
+
+    it("keeps asking through the poll while a prompt is open", () => {
+      const statusStore = useGenerationStatusStore.getState();
+      const confirmations = useConfirmationRegistryStore.getState();
+      statusStore.seedActionRequired("chat-a", new Date().toISOString());
+      confirmations.registerConfirmation("chat-a", "prompt-1");
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+      expect(result.current).toBe("attention");
+
+      // The server cannot see the prompt, so it reports the park as a wait.
+      act(() => {
+        statusStore.applyPollSnapshot([
+          {
+            chat_id: "chat-a",
+            state: "action_required",
+            started_at: startedAt,
+            waiting_only: true,
+          },
+        ]);
+      });
+      expect(
+        useGenerationStatusStore.getState().statusByChatId["chat-a"],
+      ).toMatchObject({ kind: "action_required", waitingOnly: true });
+      expect(result.current).toBe("attention");
+
+      act(() => {
+        confirmations.unregisterConfirmation("chat-a", "prompt-1");
+      });
+      expect(result.current).toBe("idle");
     });
   });
 

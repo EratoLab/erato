@@ -174,7 +174,7 @@ export interface ChatHistoryRowMenuState {
   canEdit: boolean;
   isRun: boolean;
   status: ChatAttentionStatus | null;
-  waitingOnly?: boolean;
+  waitingOnly: boolean;
 }
 
 /**
