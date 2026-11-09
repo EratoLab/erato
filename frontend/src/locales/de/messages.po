@@ -8593,6 +8593,465 @@ msgid "toolCallLimit.title"
 msgstr "Limit für Tool-Aufrufe erreicht"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.deletions"
+msgstr "{deletions, plural, one {# Löschung} other {# Löschungen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.deletionsNamed"
+msgstr "{deletions, plural, one {# Löschung: {listed}} other {# Löschungen: {listed}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.different"
+msgstr "Jede Zeile ist anders."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+#~ msgid "toolChange.batch.differentNoneEmptied"
+#~ msgstr "Jede Zeile ist anders. Keine Zeile leert ein Feld."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.allEmptied"
+msgstr "Geleert {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.distinct"
+msgstr "{distinct} verschiedene Werte {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.emptied"
+msgstr "{emptied, plural, one {geleert in # Zeile} other {geleert in # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.lists"
+msgstr "{replaced, plural, one {Liste ersetzt in # Zeile} other {Liste ersetzt in # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.many"
+msgstr "Viele verschiedene Werte {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+#~ msgid "toolChange.batch.fields"
+#~ msgstr "Felder in jeder Zeile: {listed}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.fieldsMore"
+msgstr "{more, plural, one {+# weiteres Feld} other {+# weitere Felder}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.emptying"
+msgstr "{emptying, plural, one {# Zeile leert ein Feld} other {# Zeilen leeren ein Feld}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.lists"
+msgstr "{replacing, plural, one {# Zeile ersetzt eine Liste} other {# Zeilen ersetzen eine Liste}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.none"
+msgstr "Keine Zeile löscht oder leert etwas."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.create"
+msgstr "{count, plural, one {# Erstellen} other {# Erstellen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.delete"
+msgstr "{count, plural, one {# Löschen} other {# Löschen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.other"
+msgstr "{count, plural, one {# Sonstiges} other {# Sonstige}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.update"
+msgstr "{count, plural, one {# Aktualisieren} other {# Aktualisieren}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: batch.total
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.operations"
+msgstr "{0, plural, one {# Operation in einem Aufruf: {parts}} other {# Operationen in einem Aufruf: {parts}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.rest"
+msgstr "{rest, plural, one {Die übrige # Zeile steht in den Technischen Details.} other {Die übrigen # Zeilen stehen in den Technischen Details.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.row"
+msgstr "Zeile {number}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.same"
+msgstr "Jede Zeile ändert sich gleich"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.scope.all"
+msgstr "{rows, plural, one {in # Zeile} other {in allen # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.scope.some"
+msgstr "in {rows} von {total} Zeilen"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.seeMore"
+msgstr "{more, plural, one {# weitere Zeile anzeigen} other {# weitere Zeilen anzeigen}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.changed
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.changed"
+msgstr "{0, plural, one {# geändert} other {# geändert}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.emptied
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.emptied"
+msgstr "{0, plural, one {# geleert} other {# geleert}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listReplaced
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listReplaced"
+msgstr "{0, plural, one {# Liste ersetzt} other {# Listen ersetzt}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.set
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.set"
+msgstr "{0, plural, one {# gesetzt} other {# gesetzt}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: change.counts.unchanged
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.unchanged"
+msgstr "{0, plural, one {# unverändert} other {# unverändert}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.unreadable
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.unreadable"
+msgstr "{0, plural, one {# nicht lesbar} other {# nicht lesbar}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.filter.everyRecord"
+msgstr "Das gilt für jeden Datensatz: Der Filter ist leer."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.filter.where"
+msgstr "Filter"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.flag.dryRun"
+msgstr "Probelauf ({name})"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.flags"
+msgstr "Optionen"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.goes"
+msgstr "{removed, plural, one {# entfällt} other {# entfallen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.kept"
+msgstr "{name} bleiben"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.removed"
+msgstr "{name} entfernt"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.replaced"
+msgstr "Die Liste {name} wird ersetzt: {parts}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.setTo"
+msgstr "{name} gesetzt auf"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.stays"
+msgstr "{kept, plural, one {# bleibt} other {# bleiben}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.namesOnly"
+msgstr "Nur Namen: {names}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.namesOnly.more"
+msgstr "Nur Namen: {names}, +{more} weitere"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.deleteOutcomeUnknown"
+msgstr "Was sonst noch mit gelöscht wird und ob es wiederhergestellt werden kann, ist nicht bekannt."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.instructionOutcomeUnknown"
+msgstr "Ein anderer Assistent entscheidet, was geschieht. Erato kann nicht sagen, was sich ändert."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.listReplaceUnknown"
+msgstr "Ob dies die aktuelle Liste ersetzt oder ergänzt, ist nicht bekannt."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.markedDestructive"
+msgstr "Das Tool kennzeichnet dies als destruktiv."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.nothingChanges"
+msgstr "Jeder Wert entspricht dem, was zuvor in diesem Chat gelesen wurde, es scheint sich also nichts zu ändern."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.oldValuesFromEarlier"
+msgstr "Alte Werte stammen von früher in diesem Chat und können sich geändert haben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.rowCountUnknown"
+msgstr "Erato kann nicht sagen, wie viele Zeilen dies betrifft."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.toolSaysAddsToList"
+msgstr "Das Tool gibt an, dass es nur zur Liste hinzufügt."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.toolSaysIgnoredIfMissing"
+msgstr "Das Tool gibt an, dies stillschweigend zu ignorieren, wenn der Datensatz nicht existiert."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.toolSaysPermanent"
+msgstr "Das Tool gibt an, dass dies nicht rückgängig gemacht werden kann."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.toolSaysReplacesList"
+msgstr "Das Tool gibt an, die aktuelle Liste zu ersetzen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.toolSaysRestorable"
+msgstr "Das Tool gibt an, dass dies wiederhergestellt werden kann."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.code"
+msgstr "Code"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.cut"
+msgstr "Hier ist nur der Anfang zu sehen. Der Rest steht in den Technischen Details."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.found"
+msgstr "Gefunden ({what}): {words}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.instruction"
+msgstr "Anweisung"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.shell"
+msgstr "Befehl"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.sql"
+msgstr "SQL"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.opaque.writeInsideRead"
+msgstr "Es steckt in einer Anweisung, die wie ein Lesevorgang beginnt."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.outside"
+msgstr "{count, plural, one {# Adresse liegt außerhalb Ihrer Organisation: {names}{more}} other {# Adressen liegen außerhalb Ihrer Organisation: {names}{more}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.seeAll"
+msgstr "{total, plural, one {Die # Adresse anzeigen} other {Alle # Adressen anzeigen}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: recipients.total
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.total"
+msgstr "{0, plural, one {An # Adresse{groups}} other {An # Adressen{groups}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.unchecked"
+msgstr "{unchecked, plural, one {# Empfänger hat keine prüfbare Adresse} other {# Empfänger haben keine prüfbare Adresse}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.emptied"
+msgstr "Geleert"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.emptiedWas"
+msgstr "{name} (war {was})"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.allSet"
+msgstr "{total, plural, one {# weiteres Feld anzeigen, gesetzt, alter Wert unbekannt (keines wird geleert)} other {# weitere Felder anzeigen, alle gesetzt, alter Wert unbekannt (keines wird geleert)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.incomplete"
+msgstr "{total, plural, one {# weiteres Feld anzeigen, einige Werte konnten nicht gelesen werden} other {# weitere Felder anzeigen, einige Werte konnten nicht gelesen werden}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.mixed"
+msgstr "{total, plural, one {# weiteres Feld anzeigen: {detail} (keines wird geleert)} other {# weitere Felder anzeigen: {detail} (keines wird geleert)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.changed"
+msgstr "{changed, plural, one {# geändert} other {# geändert}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.set"
+msgstr "{set, plural, one {# gesetzt} other {# gesetzt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.unchanged"
+msgstr "{unchanged, plural, one {# unverändert} other {# unverändert}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.unchanged"
+msgstr "{total, plural, one {# unverändertes Feld anzeigen} other {# unveränderte Felder anzeigen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.summary.fields"
+msgstr "{changing, plural, one {# Feld ändert sich} other {# Felder ändern sich}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.unchanged
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.summary.staySame"
+msgstr "{0, plural, one {# bleibt gleich} other {# bleiben gleich}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+#~ msgid "toolChange.summary.withUnchanged"
+#~ msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.text.old"
+msgstr "Ersetzter Text"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.text.replaced"
+msgstr "{lines, plural, one {{name} ersetzt: # Zeile, {size} Zeichen} other {{name} ersetzt: # Zeilen, {size} Zeichen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.text.seeAll"
+msgstr "{hiddenLines, plural, one {Ganzen Text anzeigen (+# Zeile)} other {Ganzen Text anzeigen (+# Zeilen)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.text.size"
+msgstr "{lines, plural, one {{name}: # Zeile, {size} Zeichen} other {{name}: # Zeilen, {size} Zeichen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.aLink"
+msgstr "eine Verknüpfung (siehe Technische Details)"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.anId"
+msgstr "eine ID (siehe Technische Details)"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.cut"
+msgstr "hier gekürzt (siehe Technische Details)"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.empty"
+msgstr "(leer)"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.linkTo"
+msgstr "Verknüpfung mit {name}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.archive.ask"
+msgstr "{shape, select, full {{kind} {title} in {where} archivieren} titled {{kind} {title} archivieren} placed {{kind} in {where} archivieren} other {{kind} archivieren}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.archive.done"
+msgstr "{shape, select, full {{kind} {title} in {where} archiviert} titled {{kind} {title} archiviert} placed {{kind} in {where} archiviert} other {{kind} archiviert}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.archive.failed"
+msgstr "{shape, select, full {Archivieren fehlgeschlagen: {kind} {title} in {where}} titled {Archivieren fehlgeschlagen: {kind} {title}} placed {Archivieren fehlgeschlagen: {kind} in {where}} other {Archivieren fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"
 msgstr "wird zu"
@@ -8899,6 +9358,81 @@ msgid "toolGist.proposal.failed"
 msgstr "Nicht vorgeschlagen: {what}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.run.ask"
+msgstr "{shape, select, full {{kind} {title} in {where} ausführen} titled {{kind} {title} ausführen} placed {{kind} in {where} ausführen} other {{kind} ausführen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.run.done"
+msgstr "{shape, select, full {{kind} {title} in {where} ausgeführt} titled {{kind} {title} ausgeführt} placed {{kind} in {where} ausgeführt} other {{kind} ausgeführt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.run.failed"
+msgstr "{shape, select, full {Ausführen fehlgeschlagen: {kind} {title} in {where}} titled {Ausführen fehlgeschlagen: {kind} {title}} placed {Ausführen fehlgeschlagen: {kind} in {where}} other {Ausführen fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runCode.ask"
+msgstr "{placed, select, placed {Diesen Code in {place} ausführen} other {Diesen Code ausführen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runCode.done"
+msgstr "{placed, select, placed {Diesen Code in {place} ausgeführt} other {Diesen Code ausgeführt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runCode.failed"
+msgstr "{placed, select, placed {Ausführen fehlgeschlagen: diesen Code in {place}} other {Ausführen fehlgeschlagen: diesen Code}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runInstruction.ask"
+msgstr "{placed, select, placed {Diese Anweisung in {place} an einen anderen Assistenten übergeben} other {Diese Anweisung an einen anderen Assistenten übergeben}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runInstruction.done"
+msgstr "{placed, select, placed {Diese Anweisung in {place} an einen anderen Assistenten übergeben} other {Diese Anweisung an einen anderen Assistenten übergeben}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runInstruction.failed"
+msgstr "{placed, select, placed {Übergabe fehlgeschlagen: diese Anweisung an einen anderen Assistenten in {place}} other {Übergabe fehlgeschlagen: diese Anweisung an einen anderen Assistenten}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runShell.ask"
+msgstr "{placed, select, placed {Diesen Befehl in {place} ausführen} other {Diesen Befehl ausführen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runShell.done"
+msgstr "{placed, select, placed {Diesen Befehl in {place} ausgeführt} other {Diesen Befehl ausgeführt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runShell.failed"
+msgstr "{placed, select, placed {Ausführen fehlgeschlagen: diesen Befehl in {place}} other {Ausführen fehlgeschlagen: diesen Befehl}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runSql.ask"
+msgstr "{placed, select, placed {Dieses SQL in {place} ausführen} other {Dieses SQL ausführen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runSql.done"
+msgstr "{placed, select, placed {Dieses SQL in {place} ausgeführt} other {Dieses SQL ausgeführt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.runSql.failed"
+msgstr "{placed, select, placed {Ausführen fehlgeschlagen: dieses SQL in {place}} other {Ausführen fehlgeschlagen: dieses SQL}}"
+
+#. js-lingui-explicit-id
 #: src/lib/toolCallGist/scrollBox.ts
 msgid "toolGist.scrollBox.arguments"
 msgstr "Scrollbare Argumente dieses Aufrufs"
@@ -8939,6 +9473,21 @@ msgid "toolGist.send.failed"
 msgstr "{shape, select, full {Senden fehlgeschlagen: {kind} {title} an {where}} titled {Senden fehlgeschlagen: {kind} {title}} placed {Senden fehlgeschlagen: {kind} an {where}} other {Senden fehlgeschlagen: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.share.ask"
+msgstr "{shape, select, full {{kind} {title} in {where} teilen} titled {{kind} {title} teilen} placed {{kind} in {where} teilen} other {{kind} teilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.share.done"
+msgstr "{shape, select, full {{kind} {title} in {where} geteilt} titled {{kind} {title} geteilt} placed {{kind} in {where} geteilt} other {{kind} geteilt}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.share.failed"
+msgstr "{shape, select, full {Teilen fehlgeschlagen: {kind} {title} in {where}} titled {Teilen fehlgeschlagen: {kind} {title}} placed {Teilen fehlgeschlagen: {kind} in {where}} other {Teilen fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.textChange"
 msgstr "Textänderung"
@@ -8962,6 +9511,36 @@ msgstr "{shape, select, full {{kind} {title} in {where} aktualisiert} titled {{k
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.update.failed"
 msgstr "{shape, select, full {Aktualisieren fehlgeschlagen: {kind} {title} in {where}} titled {Aktualisieren fehlgeschlagen: {kind} {title}} placed {Aktualisieren fehlgeschlagen: {kind} in {where}} other {Aktualisieren fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upload.ask"
+msgstr "{shape, select, full {{kind} {title} nach {where} hochladen} titled {{kind} {title} hochladen} placed {{kind} nach {where} hochladen} other {{kind} hochladen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upload.done"
+msgstr "{shape, select, full {{kind} {title} nach {where} hochgeladen} titled {{kind} {title} hochgeladen} placed {{kind} nach {where} hochgeladen} other {{kind} hochgeladen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upload.failed"
+msgstr "{shape, select, full {Hochladen fehlgeschlagen: {kind} {title} nach {where}} titled {Hochladen fehlgeschlagen: {kind} {title}} placed {Hochladen fehlgeschlagen: {kind} nach {where}} other {Hochladen fehlgeschlagen: {kind}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upsert.ask"
+msgstr "{shape, select, full {{kind} {title} in {where} erstellen oder aktualisieren} titled {{kind} {title} erstellen oder aktualisieren} placed {{kind} in {where} erstellen oder aktualisieren} other {{kind} erstellen oder aktualisieren}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upsert.done"
+msgstr "{shape, select, full {{kind} {title} in {where} erstellt oder aktualisiert} titled {{kind} {title} erstellt oder aktualisiert} placed {{kind} in {where} erstellt oder aktualisiert} other {{kind} erstellt oder aktualisiert}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.upsert.failed"
+msgstr "{shape, select, full {Erstellen oder Aktualisieren fehlgeschlagen: {kind} {title} in {where}} titled {Erstellen oder Aktualisieren fehlgeschlagen: {kind} {title}} placed {Erstellen oder Aktualisieren fehlgeschlagen: {kind} in {where}} other {Erstellen oder Aktualisieren fehlgeschlagen: {kind}}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx

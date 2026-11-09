@@ -5,6 +5,7 @@ import {
   viewLeavesOutMembers,
   wholeValue,
 } from "./argumentValues";
+import { changeSaysSomething, readChange } from "./change";
 import { isConsentClaim, isConsentMember } from "./consent";
 import {
   cleanServerText,
@@ -16,6 +17,7 @@ import {
 } from "./serverText";
 
 import type { ArgumentTexts, ValueBudget } from "./argumentValues";
+import type { GistChange } from "./change";
 import type {
   ToolArgumentNode,
   ToolCallAction,
@@ -33,6 +35,11 @@ export const GIST_ACTIONS = [
   "move",
   "send",
   "comment",
+  "share",
+  "run",
+  "upsert",
+  "archive",
+  "upload",
 ] as const satisfies readonly ToolCallAction[];
 export type GistAction = (typeof GIST_ACTIONS)[number];
 
@@ -63,6 +70,7 @@ const GIST_SOURCES = [
 
 const ARGUMENTS_TRUNCATED = "arguments_truncated";
 const HIDDEN_CHARACTERS = "hidden_characters";
+const HIDDEN_ID = "hidden_id";
 /* eslint-enable lingui/no-unlocalized-strings */
 
 /** The label warnings a gist card can show; any other sends a call to the generic card. */
@@ -78,9 +86,16 @@ export const GIST_PHASES = ["ask", "done", "failed"] as const;
 /**
  * Where a value comes from, which decides how it looks: text the call wrote,
  * a name an earlier result in the chat gave the value, the value a field had
- * in an earlier result, or an ID shown short.
+ * in an earlier result, an ID shown short, a machine ID no name is known for,
+ * which the card only mentions, or the place a record lives.
  */
-export type GistValueOrigin = "written" | "resolved" | "earlier" | "id";
+export type GistValueOrigin =
+  | "written"
+  | "resolved"
+  | "earlier"
+  | "id"
+  | "hidden_id"
+  | "place";
 
 export interface GistValue {
   text: string;
@@ -112,6 +127,8 @@ export interface GistItem {
   names: GistValue[];
   /** How many things the item acts on, counting values the label left out. */
   count: number;
+  /** Machine IDs the line says nothing about, which count as shown. */
+  hiddenIdPaths: string[];
   where: GistValue[];
   whereOmitted: number;
   before: GistValue[];
@@ -128,6 +145,8 @@ export interface Gist {
   hiddenCharacters: boolean;
   /** Whether a key value was left out because it is a consent flag. */
   leavesOutConsent: boolean;
+  /** What the call changes, on labels that carry it. */
+  change?: GistChange;
 }
 
 const isOneOf = <T extends string>(
@@ -152,6 +171,7 @@ interface LabelValue {
   resolved?: string;
   truncated: boolean;
   hidden: boolean;
+  machineId: boolean;
 }
 
 interface LabelSlot {
@@ -184,6 +204,7 @@ const readValue = (raw: unknown): LabelValue | undefined => {
     resolved: resolved.text.length > 0 ? resolved.text : undefined,
     truncated: raw.truncated === true || text.truncated,
     hidden: text.hiddenCharacters || resolved.hiddenCharacters,
+    machineId: raw.machine_id === true,
   };
 };
 
@@ -290,6 +311,19 @@ const gistValue = (
 ): GistValue => {
   const row = rowOf(slot.pointer, value.path, rowPrefix);
   const { path, truncated } = value;
+  // A machine ID shows as its name or not at all: the written value would
+  // only be noise beside it.
+  if (value.machineId) {
+    return value.resolved
+      ? {
+          text: value.resolved,
+          origin: "resolved",
+          path,
+          truncated: false,
+          row,
+        }
+      : { text: "", origin: HIDDEN_ID, path, truncated: false, row };
+  }
   const isId =
     identifies === "always" ||
     (identifies === "maybe" && looksLikeAnId(value.text, slot.pointer));
@@ -448,11 +482,19 @@ const gistItem = (
   const hasTitle = (item.title?.values.length ?? 0) > 0;
   const nameSlot = hasTitle ? item.title : item.id;
   const rowPrefix = rowPrefixOf(nameSlot?.pointer);
-  const names = valuesOf(nameSlot, hasTitle ? "never" : "always", rowPrefix);
+  const allNames = valuesOf(nameSlot, hasTitle ? "never" : "always", rowPrefix);
+  const allWhere = valuesOf(item.target, "maybe", rowPrefix);
+  const shownOf = (values: GistValue[]) =>
+    values.filter((value) => value.origin !== "hidden_id");
+  const hiddenIdPaths = [...allNames, ...allWhere].flatMap((value) =>
+    value.origin === "hidden_id" ? [value.path] : [],
+  );
+  const names = shownOf(allNames);
   const gist: GistItem = {
     names,
-    count: Math.max(names.length + (nameSlot?.omitted ?? 0), 1),
-    where: valuesOf(item.target, "maybe", rowPrefix),
+    count: Math.max(allNames.length + (nameSlot?.omitted ?? 0), 1),
+    hiddenIdPaths,
+    where: shownOf(allWhere),
     whereOmitted: item.target?.omitted ?? 0,
     before: valuesOf(item.before, "maybe", rowPrefix),
     after: valuesOf(item.after, "never", rowPrefix),
@@ -464,11 +506,23 @@ const gistItem = (
   const saysAnything =
     gist.names.length > 0 ||
     gist.where.length > 0 ||
+    gist.hiddenIdPaths.length > 0 ||
     gist.before.length > 0 ||
     gist.after.length > 0 ||
     gist.fields.length > 0;
   return saysAnything ? gist : undefined;
 };
+
+const emptyItem = (): GistItem => ({
+  names: [],
+  count: 1,
+  hiddenIdPaths: [],
+  where: [],
+  whereOmitted: 0,
+  before: [],
+  after: [],
+  fields: [],
+});
 
 /**
  * The gist a label gives, or `undefined` for the generic card: a generic
@@ -519,11 +573,30 @@ export const gistOf = (
     const gist = gistItem(item, action);
     return gist ? [gist] : [];
   });
-  // Only something new can be told apart by its values alone.
+  const change = readChange(raw.change);
+  if (change && changeSaysSomething(change) && items.length === 0) {
+    items.push(emptyItem());
+  }
+  if (
+    items.length > 0 &&
+    change?.place !== undefined &&
+    change.place.length > 0
+  ) {
+    items[0].where = [
+      { text: change.place, origin: "place", path: "", truncated: false },
+    ];
+    items[0].whereOmitted = 0;
+  }
+  // Only something new can be told apart by its values alone; a change
+  // description says on its own what the call does.
   const needsName =
-    kind === "other" || (action !== "create" && action !== "send");
+    change === undefined &&
+    (kind === "other" || (action !== "create" && action !== "send"));
   const namesSomething = items.some(
-    (item) => item.names.length > 0 || item.where.length > 0,
+    (item) =>
+      item.names.length > 0 ||
+      item.where.length > 0 ||
+      item.hiddenIdPaths.length > 0,
   );
   if (items.length === 0 || (needsName && !namesSomething)) return undefined;
   return {
@@ -531,8 +604,9 @@ export const gistOf = (
     kind,
     items,
     warnings: gistWarningsOf(items, input),
-    hiddenCharacters,
-    leavesOutConsent,
+    hiddenCharacters: hiddenCharacters || change?.hiddenCharacters === true,
+    leavesOutConsent: leavesOutConsent || change?.consentLeftOut === true,
+    change,
   };
 };
 
@@ -611,6 +685,7 @@ export const gistShownPaths = (
   };
   for (const item of gist.items) {
     const line = lineSlots(gist, item);
+    for (const path of item.hiddenIdPaths) shown.set(path, true);
     if (line.title && namesInLine(item)) add(listedValues(item.names));
     if (line.where) add(listedValues(item.where));
     add(item.before);
@@ -697,7 +772,7 @@ export const unshownArguments = (
   const shown = gistShownPaths(gist, lineSlots);
   let leavesOutConsent = false;
   const prune = (node: ToolArgumentNode): ToolArgumentNode | undefined => {
-    if (isCovered(shown, node)) return undefined;
+    if (isCovered(shown, node) || node.kind === "machine_id") return undefined;
     if (isConsentClaim(node.path)) {
       leavesOutConsent = true;
       return undefined;
@@ -741,6 +816,38 @@ const withWholeText = (
         before: item.before.map(whole),
         after: item.after.map(whole),
       })),
+    },
+    hiddenCharacters,
+  };
+};
+
+/**
+ * A change description with its statements and long text read whole from the
+ * call's input where the stored start of them ends, so nothing the call runs
+ * or writes is cut on the card. A path that does not reach the input, as
+ * inside a string holding JSON, keeps the stored start and says it is cut.
+ */
+const withWholeChangeText = (
+  change: GistChange,
+  input: unknown,
+  budget: ValueBudget,
+): { change: GistChange; hiddenCharacters: boolean } => {
+  let hiddenCharacters = false;
+  const whole = <T extends { path: string; text: string; truncated: boolean }>(
+    entry: T,
+  ): T => {
+    const raw = readPointer(input, entry.path);
+    if (typeof raw !== "string") return entry;
+    const cleaned = wholeValue(raw, budget);
+    if (cleaned.text.length === 0) return entry;
+    hiddenCharacters ||= cleaned.hiddenCharacters;
+    return { ...entry, text: cleaned.text, truncated: cleaned.truncated };
+  };
+  return {
+    change: {
+      ...change,
+      opaque: change.opaque.map(whole),
+      texts: change.texts.map(whole),
     },
     hiddenCharacters,
   };
@@ -825,6 +932,25 @@ export const toolCallCardOf = (
     const { gist } = whole;
     const gistHidden =
       labelHidden || gist.hiddenCharacters || whole.hiddenCharacters;
+    // The change description decides what the card lists; the raw arguments
+    // are behind Technical details.
+    if (gist.change) {
+      const change = withWholeChangeText(gist.change, input, budget);
+      return {
+        kind: "gist",
+        gist: { ...gist, change: change.change },
+        rest: {
+          kind: "view",
+          view: undefined,
+          values: new Map(),
+          truncated: labelTruncated,
+        },
+        notes: {
+          hiddenCharacters: gistHidden || change.hiddenCharacters,
+          leavesOutConsent: gist.leavesOutConsent || membersLeftOut,
+        },
+      };
+    }
     if (!view) {
       return {
         kind: "gist",

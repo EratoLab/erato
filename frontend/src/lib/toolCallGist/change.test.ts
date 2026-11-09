@@ -1,0 +1,443 @@
+import { i18n } from "@lingui/core";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { messages as enMessages } from "@/locales/en/messages.json";
+
+import {
+  MAX_COLLAPSED_NAMES,
+  MAX_FIRST_VIEW_VALUES,
+  changeLayout,
+  changeSaysSomething,
+  collapsedNames,
+  hidesMachineId,
+  readChange,
+} from "./change";
+import {
+  batchFieldLine,
+  batchLossLines,
+  changeRowCounts,
+  changeSeeMoreLine,
+  changeSummaryLine,
+} from "./changeLabels";
+import { gistOf, gistShownPaths, unshownArguments } from "./gist";
+import { gistLineSentence, gistPlainLine } from "./gistLabels";
+
+import type { ChangeBatch, GistChange } from "./change";
+import type {
+  ToolArgumentNode,
+  ToolCallEffect,
+  ToolCallLabel,
+} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { Messages } from "@lingui/core";
+
+beforeAll(() => {
+  i18n.load("en", enMessages as unknown as Messages);
+  i18n.activate("en");
+});
+
+const effect = (
+  name: string,
+  kind: ToolCallEffect["effect"],
+  extra: Partial<ToolCallEffect> = {},
+): ToolCallEffect => ({
+  path: `/${name}`,
+  name,
+  raw_name: `raw_${name}`,
+  effect: kind,
+  ...extra,
+});
+
+const change = (effects: ToolCallEffect[], extra: object = {}): GistChange => {
+  const counts = {
+    emptied: 0,
+    list_replaced: 0,
+    changed: 0,
+    set: 0,
+    unchanged: 0,
+    unreadable: 0,
+  };
+  for (const { effect: kind } of effects) counts[kind] += 1;
+  const read = readChange({ effects, counts, complete: true, ...extra });
+  if (!read) throw new Error("no change");
+  return read;
+};
+
+const labelled = (overrides: Partial<ToolCallLabel>): ToolCallLabel => ({
+  action: "update",
+  object_kind: "row",
+  source: "rules",
+  ...overrides,
+});
+
+describe("reading a change description", () => {
+  it("is absent for anything that is not one", () => {
+    for (const raw of [undefined, null, "x", 3, []]) {
+      expect(readChange(raw)).toBeUndefined();
+    }
+  });
+
+  it("reads wrong types as absent and an unknown kind as unreadable", () => {
+    const read = readChange({
+      effects: [
+        { path: "/a", name: "A", raw_name: "a", effect: "teleport" },
+        { name: "no path" },
+        "junk",
+      ],
+      notes: ["nothing_changes", "from_the_future"],
+      flags: "nope",
+      counts: { set: "many", changed: 2 },
+    });
+    expect(read?.effects).toHaveLength(1);
+    expect(read?.effects[0].effect).toBe("unreadable");
+    expect(read?.notes).toEqual(["nothing_changes"]);
+    expect(read?.flags).toEqual([]);
+    expect(read?.counts.changed).toBe(2);
+    expect(read?.counts.set).toBe(0);
+    expect(read?.complete).toBe(false);
+  });
+
+  it("cleans text again and remembers hidden characters", () => {
+    const read = readChange({
+      effects: [effect("a​b", "set", { values: [{ text: "x‮y" }] })],
+    });
+    expect(read?.effects[0].name).toBe("ab");
+    expect(read?.effects[0].values[0].text).toBe("xy");
+    expect(read?.hiddenCharacters).toBe(true);
+  });
+});
+
+describe("what goes in the first view", () => {
+  it("ranks by what happens to the value, never by name, up to five", () => {
+    const layout = changeLayout(
+      change([
+        effect("s1", "set"),
+        effect("s2", "set"),
+        effect("c1", "changed"),
+        effect("e1", "emptied"),
+        effect("u1", "unchanged"),
+        effect("c2", "changed"),
+        effect("l1", "list_replaced"),
+        effect("s3", "set"),
+        effect("s4", "set"),
+        effect("s5", "set"),
+        effect("r1", "unreadable"),
+      ]),
+    );
+    expect(layout.emptied.map((row) => row.name)).toEqual(["e1"]);
+    expect(layout.lists.map((row) => row.name)).toEqual(["l1"]);
+    expect(layout.unreadable.map((row) => row.name)).toEqual(["r1"]);
+    expect(layout.firstRows.map((row) => row.name)).toEqual([
+      "c1",
+      "c2",
+      "s1",
+      "s2",
+      "s3",
+    ]);
+    expect(layout.firstRows).toHaveLength(MAX_FIRST_VIEW_VALUES);
+    expect(layout.collapsed.map((row) => row.name)).toEqual(["s4", "s5", "u1"]);
+    expect(layout.opensByDefault).toBe(false);
+  });
+
+  it("keeps every loss in the first view, however many", () => {
+    const losses = Array.from({ length: 30 }, (_, index) =>
+      effect(`e${index}`, "emptied"),
+    );
+    const layout = changeLayout(change(losses));
+    expect(layout.emptied).toHaveLength(30);
+    expect(layout.collapsed).toHaveLength(0);
+  });
+
+  it("counts values past the cap and opens when not everything was read", () => {
+    const rows = Array.from({ length: 8 }, (_, index) =>
+      effect(`s${index}`, "set"),
+    );
+    const read = change(rows, { complete: false });
+    read.counts.set = 40;
+    const layout = changeLayout(read);
+    expect(layout.beyondCap).toBe(32);
+    expect(layout.opensByDefault).toBe(true);
+    expect(
+      changeSeeMoreLine(layout.collapsed, layout.beyondCap, read.complete),
+    ).toBe("See 35 more fields, some values could not be read");
+  });
+
+  it("says how many more names there are when not all are listed", () => {
+    const names = Array.from({ length: 12 }, (_, index) => `f${index}`);
+    expect(collapsedNames(names)).toEqual({
+      shown: names.slice(0, MAX_COLLAPSED_NAMES),
+      more: 12 - MAX_COLLAPSED_NAMES,
+    });
+    expect(collapsedNames(["a"]).more).toBe(0);
+  });
+});
+
+describe("the words of a change", () => {
+  it("states a guarantee only over what code put in the collapsed part", () => {
+    const set = [effect("a", "set"), effect("b", "set")];
+    expect(changeSeeMoreLine(change(set).effects, 0, true)).toBe(
+      "See 2 more fields, all set with the old value unknown (none is emptied)",
+    );
+    const unchanged = [effect("a", "unchanged"), effect("b", "unchanged")];
+    expect(changeSeeMoreLine(change(unchanged).effects, 0, true)).toBe(
+      "See 2 unchanged fields",
+    );
+    const mixed = [
+      effect("a", "changed"),
+      effect("b", "set"),
+      effect("c", "unchanged"),
+    ];
+    expect(changeSeeMoreLine(change(mixed).effects, 0, true)).toBe(
+      "See 3 more fields: 1 changed, 1 set, 1 unchanged (none is emptied)",
+    );
+    expect(changeSeeMoreLine(change(set).effects, 0, false)).toBe(
+      "See 2 more fields, some values could not be read",
+    );
+  });
+
+  it("summarises the counts and leaves one value to its row", () => {
+    expect(changeSummaryLine(change([effect("a", "set")]))).toBeUndefined();
+    expect(
+      changeSummaryLine(
+        change([
+          effect("a", "emptied"),
+          effect("b", "changed"),
+          effect("c", "set"),
+        ]),
+      ),
+    ).toBe("3 fields change: 1 emptied, 1 changed, 1 set");
+    expect(
+      changeSummaryLine(
+        change([
+          effect("a", "changed"),
+          effect("b", "unchanged"),
+          effect("c", "unchanged"),
+        ]),
+      ),
+    ).toBe("1 field changes, 2 stay the same");
+    expect(changeRowCounts(change([effect("a", "changed")]))).toBe("1 changed");
+  });
+
+  it("says what each field does across a batch and whether any row loses something", () => {
+    const batch: ChangeBatch = {
+      name: "Records",
+      total: 200,
+      sameChange: false,
+      shared: [],
+      rows: [],
+      deletions: 0,
+      rowsEmptying: 0,
+      rowsReplacingLists: 0,
+      operations: [],
+      fields: [],
+      fieldsOmitted: 0,
+      readAll: true,
+    };
+    const field = {
+      name: "Stage",
+      rawName: "stage",
+      rows: 200,
+      emptied: 0,
+      listsReplaced: 0,
+      distinct: 1,
+      distinctCapped: false,
+      samples: [{ text: "Closed", truncated: false, machineId: false }],
+    };
+    expect(batchFieldLine(field, 200)).toBe("Closed on all 200 rows");
+    expect(batchFieldLine({ ...field, rows: 3 }, 200)).toBe(
+      "Closed on 3 of 200 rows",
+    );
+    expect(batchFieldLine({ ...field, distinct: 2 }, 200)).toBe(
+      "2 different values on all 200 rows: Closed",
+    );
+    expect(batchFieldLine({ ...field, emptied: 200, samples: [] }, 200)).toBe(
+      "Emptied on all 200 rows",
+    );
+    expect(batchFieldLine({ ...field, emptied: 2 }, 200)).toBe(
+      "Closed on all 200 rows · emptied on 2 rows",
+    );
+
+    expect(batchLossLines(batch)).toEqual([
+      "No row deletes or empties anything.",
+    ]);
+    expect(batchLossLines({ ...batch, readAll: false })).toEqual([]);
+    expect(batchLossLines({ ...batch, deletions: 2 })).toEqual([]);
+    expect(
+      batchLossLines({ ...batch, rowsEmptying: 3, rowsReplacingLists: 1 }),
+    ).toEqual(["3 rows empty a field", "1 row replaces a list"]);
+  });
+});
+
+describe("machine identifiers on the line", () => {
+  const id = "aaaaaaaa-0000-4000-8000-0000000000a1";
+  const slot = (
+    pointer: string,
+    value: { text: string; resolved?: string; machine_id?: boolean },
+  ) => ({
+    pointer,
+    values: [{ path: pointer, ...value }],
+  });
+
+  it("never shows a machine id and says the thing without it", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: slot("/recordId", { text: id, machine_id: true }),
+            target: slot("/table", { text: "opportunity" }),
+          },
+        ],
+      }),
+      {},
+    );
+    const item = gist?.items[0];
+    expect(item?.names).toEqual([]);
+    expect(item?.count).toBe(1);
+    expect(gistPlainLine(gist!, item!, "ask")).toBe(
+      "Update row in “opportunity”",
+    );
+    expect(gistLineSentence(gist!, item!, "ask")).not.toContain(id);
+  });
+
+  it("shows a known name alone and counts a batch of machine ids", () => {
+    const named = gistOf(
+      labelled({
+        items: [
+          {
+            id: slot("/recordId", {
+              text: id,
+              resolved: "Contoso",
+              machine_id: true,
+            }),
+          },
+        ],
+      }),
+      {},
+    );
+    expect(named?.items[0].names[0]).toMatchObject({
+      text: "Contoso",
+      origin: "resolved",
+    });
+    expect(named?.items[0].names[0].written).toBeUndefined();
+
+    const batch = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/ids/*",
+              values: [
+                { path: "/ids/0", text: id, machine_id: true },
+                { path: "/ids/1", text: id, machine_id: true },
+              ],
+              omitted: 1,
+            },
+          },
+        ],
+      }),
+      {},
+    );
+    expect(batch?.items[0].count).toBe(3);
+    expect(gistPlainLine(batch!, batch!.items[0], "ask")).toBe("Update 3 rows");
+  });
+
+  it("keeps a written value beside a human-readable name", () => {
+    const gist = gistOf(
+      labelled({
+        items: [{ id: slot("/ticket", { text: "ABC-123", resolved: "Bug" }) }],
+      }),
+      {},
+    );
+    expect(gist?.items[0].names[0].written).toBe("ABC-123");
+  });
+
+  it("counts a hidden machine id as shown, never as an other argument", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: slot("/recordId", { text: id, machine_id: true }),
+            target: slot("/table", { text: "x" }),
+          },
+        ],
+      }),
+      {},
+    );
+    expect(gistShownPaths(gist!).get("/recordId")).toBe(true);
+    const view: ToolArgumentNode = {
+      path: "",
+      kind: "group",
+      children: [
+        { path: "/recordId", kind: "machine_id" },
+        { path: "/ownerid", kind: "machine_id" },
+        { path: "/note", kind: "value" },
+      ],
+    };
+    const rest = unshownArguments(view, gist!);
+    expect(rest.view?.children?.map((node) => node.path)).toEqual(["/note"]);
+  });
+});
+
+describe("the place on the line", () => {
+  it("uses the place the change names when the call has no target", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+          },
+        ],
+        change: {
+          place: "contoso / uploader",
+          counts: {},
+          complete: true,
+        },
+      }),
+      {},
+    );
+    expect(gistPlainLine(gist!, gist!.items[0], "ask")).toBe(
+      "Update row r1 in contoso / uploader",
+    );
+  });
+
+  it("reads a sentence for what a run runs", () => {
+    const gist = gistOf(
+      labelled({
+        action: "run",
+        object_kind: "other",
+        change: {
+          opaque: [
+            {
+              kind: "sql",
+              name: "Query",
+              raw_name: "query",
+              path: "/query",
+              text: "select 1",
+              lines: 1,
+            },
+          ],
+          counts: {},
+          complete: true,
+        } as unknown as ToolCallLabel["change"],
+      }),
+      {},
+    );
+    expect(gistLineSentence(gist!, gist!.items[0], "ask")).toBe("Run this SQL");
+    expect(gistLineSentence(gist!, gist!.items[0], "done")).toBe(
+      "Ran this SQL",
+    );
+  });
+
+  it("tells a change that says something from one that says nothing", () => {
+    expect(changeSaysSomething(change([]))).toBe(false);
+    expect(changeSaysSomething(change([effect("a", "set")]))).toBe(true);
+    expect(
+      hidesMachineId({ text: "", truncated: false, machineId: true }),
+    ).toBe(true);
+    expect(
+      hidesMachineId({ text: "Contoso", truncated: false, machineId: true }),
+    ).toBe(false);
+  });
+});

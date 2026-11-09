@@ -1,6 +1,7 @@
 import { plural, t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import { machineIdPhrase } from "@/lib/toolCallGist/changeLabels";
 import { isConsentClaim } from "@/lib/toolCallGist/consent";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 import {
@@ -42,6 +43,9 @@ const isLongText = (kind: string, text: string) =>
 
 // IDs show whole, so two that start alike never look the same.
 const Scalar = ({ node, values, compact }: NodeProps) => {
+  if (node.kind === "machine_id") {
+    return <span className="text-theme-fg-muted">{machineIdPhrase()}</span>;
+  }
   const { text, truncated } = values.get(node.path) ?? NO_TEXT;
   const shown = truncated ? `${text}…` : text;
   const isId = node.kind === "id";
