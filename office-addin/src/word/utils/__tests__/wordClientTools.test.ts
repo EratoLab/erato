@@ -75,7 +75,7 @@ describe("Word client tool registration", () => {
     ]);
   });
 
-  it("hands a task's call to the session while document inclusion is off, where a cleared capture refuses it", async () => {
+  it("refuses a task's call as capture-unavailable while document inclusion is off, without reading", async () => {
     const execute = vi.spyOn(wordDocumentReadSession, "execute");
     registerWordClientTools({
       readEnabled: () => false,
@@ -86,11 +86,11 @@ describe("Word client tool registration", () => {
       ok: false,
       error: "Document inclusion is off.",
     });
-    expect(execute).not.toHaveBeenCalled();
     expect(await read({}, { ...task, hostGrant: grant })).toMatchObject({
       ok: false,
       validationErrors: [{ code: "capture-unavailable" }],
       submissionFeedback: { terminal: true },
     });
+    expect(execute).not.toHaveBeenCalled();
   });
 });

@@ -10,6 +10,7 @@ import {
   WORD_SUBMIT_COMMENT_CHANGES_TOOL,
 } from "./wordCommentSubmission";
 import {
+  captureUnavailable,
   wordDocumentReadSession,
   WORD_READ_TOOL,
 } from "./wordDocumentReadTool";
@@ -28,8 +29,8 @@ const inclusionOff = (): Promise<ClientToolExecutionResult> =>
 
 /**
  * The Word pane's client tools. Only the document read takes delegated tasks' calls (contract §7);
- * the writes and the comment read stay with the coordinator. A task's call skips the inclusion
- * check: switching inclusion off clears the capture, so such a call ends as capture-unavailable.
+ * the writes and the comment read stay with the coordinator. With inclusion off a task's call is
+ * capture-unavailable at once: the pane clears the capture only after the render commits.
  */
 export function registerWordClientTools({
   readEnabled,
@@ -40,10 +41,12 @@ export function registerWordClientTools({
   bindingIdentity: () => string | undefined;
 }): () => void {
   const submit = createWordDocumentSubmissionExecutor(wordDocumentReadSession);
-  const read: ClientToolExecutor = (input, context) =>
-    readEnabled() || context?.hostGrant
-      ? wordDocumentReadSession.execute(input, context)
+  const read: ClientToolExecutor = (input, context) => {
+    if (readEnabled()) return wordDocumentReadSession.execute(input, context);
+    return context?.hostGrant
+      ? Promise.resolve(captureUnavailable())
       : inclusionOff();
+  };
   const unregister = [
     registerClientToolExecutor(
       WORD_READ_COMMENTS_TOOL,

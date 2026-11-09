@@ -60,7 +60,7 @@ export type WordDocumentReadRequest = Pick<
 >;
 
 /** A lost capture is final: a new request must capture the document again (contract §6). */
-const captureUnavailable = (): ClientToolExecutionResult => ({
+export const captureUnavailable = (): ClientToolExecutionResult => ({
   ok: false,
   error: "The document capture is no longer available.",
   validationErrors: [
