@@ -1,9 +1,13 @@
 import { SIDECAR_PROVIDER } from "@erato/desktop-sidecar-protocol";
+import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
+import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
 import { ClientOperationCoordinator } from "@/lib/clientOperations/coordinator";
 import { createClientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
+import { fetchProfile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import {
   completedJob,
@@ -43,6 +47,7 @@ import type {
   ExecutorBinding,
   OperationPayload,
   OperationRequest,
+  UserProfile,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   CallToolResult,
@@ -50,6 +55,11 @@ import type {
   JobToolCall,
   SidecarSnapshot,
 } from "@erato/desktop-sidecar-protocol";
+
+vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", async (original) => ({
+  ...(await original<object>()),
+  fetchProfile: vi.fn(),
+}));
 
 // The reference mock's data (desktop-sidecar-protocol/test-server), with a
 // coverage report, an HTML body and a preview-only warning, so every shaping
@@ -921,7 +931,15 @@ describe("desktop sidecar tools in strict mode", () => {
       );
       expect(legacy).toMatchObject({ ok: true });
       expect(JSON.stringify(viaJob)).toBe(JSON.stringify(legacy));
-      expect(await uploadsOf(job)).toEqual(await uploadsOf(direct));
+      const directUploads = await uploadsOf(direct);
+      expect(await uploadsOf(job)).toEqual({
+        uploaded: directUploads.uploaded,
+        // The same files, marked as already approved in the native review.
+        approved: directUploads.approved.map((call) => [
+          ...call.slice(0, -1),
+          true,
+        ]),
+      });
       await vi.waitFor(() =>
         expect(job.methods()).toEqual(
           selects(tool)
@@ -936,6 +954,117 @@ describe("desktop sidecar tools in strict mode", () => {
       );
     },
   );
+
+  describe("the web file approval after Share", () => {
+    const BLOCKED =
+      'The user approved this file in the Erato desktop app, but their file upload setting is "Never allow", so it was not uploaded. Tell the user why, and do not retry unless they change that setting.';
+    const FILE_TOOLS = [
+      READ_SIDECAR_CONVERSATION_TOOL,
+      GET_SIDECAR_DOCUMENT_TOOL,
+    ];
+    const withPolicy = (
+      policy: "ask" | "always_allow" | "never_allow",
+      discovery: Partial<SidecarSnapshot> = strict,
+    ) => {
+      vi.mocked(fetchProfile).mockResolvedValue({
+        client_tool_file_approval: policy,
+      } as UserProfile);
+      const path = sidecar(RPC, discovery);
+      const { result } = renderHook(() => useClientToolFileApproval());
+      path.options.approveFiles.mockImplementation(result.current.approveFiles);
+      return path;
+    };
+    const fileStore = () => useClientToolFileApprovalStore.getState();
+    afterEach(() => {
+      useClientToolFileApprovalStore.setState({
+        requests: [],
+        blockedAfterReview: [],
+      });
+    });
+
+    describe.each(FILE_TOOLS)("%s", (tool) => {
+      it.each(["ask", "always_allow"] as const)(
+        "with %s, reaches the turn with no card",
+        async (policy) => {
+          const job = withPolicy(policy);
+          const outcome = await settled(
+            job.tool(tool).execute(INPUTS[tool], context),
+          );
+          expect(outcome.ok).toBe(true);
+          expect(fileStore().requests).toEqual([]);
+          expect(fileStore().blockedAfterReview).toEqual([]);
+          expect(job.options.uploadAttachment).toHaveBeenCalledTimes(1);
+        },
+      );
+
+      it("still asks about a normal-mode job's files", async () => {
+        const job = withPolicy("ask", fixtureDiscovery(NORMAL_MODE));
+        const outcome = job.tool(tool).execute(INPUTS[tool], context);
+        await vi.waitFor(() => expect(fileStore().requests).toHaveLength(1));
+        const [request] = fileStore().requests;
+        request.finish(new Set(request.files));
+        expect((await outcome).ok).toBe(true);
+        expect(job.options.uploadAttachment).toHaveBeenCalledTimes(1);
+      });
+
+      it("adds no notice when never allow blocks a normal-mode job's files", async () => {
+        const job = withPolicy("never_allow", fixtureDiscovery(NORMAL_MODE));
+        await job.tool(tool).execute(INPUTS[tool], context);
+        expect(fileStore().blockedAfterReview).toEqual([]);
+        expect(job.options.uploadAttachment).not.toHaveBeenCalled();
+      });
+    });
+
+    it("with never allow, keeps a document blocked and says why", async () => {
+      for (const callContext of [context, grantContext]) {
+        const job = withPolicy("never_allow");
+        const outcome = await settled(
+          job
+            .tool(GET_SIDECAR_DOCUMENT_TOOL)
+            .execute(INPUTS[GET_SIDECAR_DOCUMENT_TOOL], callContext),
+        );
+        expect(outcome).toEqual(
+          callContext === grantContext
+            ? {
+                ok: false,
+                error: BLOCKED,
+                validationErrors: [
+                  { path: "", code: "declined", message: BLOCKED },
+                ],
+              }
+            : { ok: false, error: BLOCKED },
+        );
+        expect(job.options.uploadAttachment).not.toHaveBeenCalled();
+        expect(fileStore().requests).toEqual([]);
+      }
+      expect(fileStore().blockedAfterReview).toEqual([
+        {
+          toolCallId: "call",
+          messageId: "owner-message",
+          fileNames: ["mock.eml"],
+        },
+      ]);
+    });
+
+    it("with never allow, keeps a conversation's text, blocks its attachments and says why", async () => {
+      const job = withPolicy("never_allow");
+      const outcome = await settled(
+        job
+          .tool(READ_SIDECAR_CONVERSATION_TOOL)
+          .execute(INPUTS[READ_SIDECAR_CONVERSATION_TOOL], context),
+      );
+      expect(outcome).toMatchObject({
+        ok: true,
+        result: {
+          state: "partial",
+          messages: [{ attachments: [{ status: "rejected", error: BLOCKED }] }],
+        },
+      });
+      expect(job.options.uploadAttachment).not.toHaveBeenCalled();
+      expect(fileStore().blockedAfterReview).toHaveLength(1);
+      expect(fileStore().blockedAfterReview[0].messageId).toBe("message");
+    });
+  });
 
   it.each([
     [

@@ -2028,6 +2028,11 @@ msgstr "Ausgewählte Dateien hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr "In der Erato-Desktop-App geteilt, aber nicht hochgeladen: {names}. Uploads von Dateien von diesem Gerät stehen auf „Nie erlauben“."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Ausgewählte Dateien werden zu Erato hochgeladen und ihre Inhalte mit dem KI-Anbieter geteilt. Sehen Sie sich die Dateien an, bevor Sie entscheiden."
 

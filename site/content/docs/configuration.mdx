@@ -757,6 +757,10 @@ are omitted from the tool's file references. The selection appears inline in the
 originating message, using the same consent card as MCP tool approvals. Tool timeouts still apply; configure `client_tools.tools.<key>.timeout_ms` to allow
 enough time to review files (for example, `600000` for ten minutes).
 
+With `desktop_sidecar.strict_mode`, a person who shares files in the Erato
+desktop app's review is not asked about them again in the chat. `never_allow`
+still blocks those files, and the chat says that the setting blocked them.
+
 #### `desktop_sidecar.show_settings_tab`
 
 {/* erato_toml_config_key: desktop_sidecar.show_settings_tab */}

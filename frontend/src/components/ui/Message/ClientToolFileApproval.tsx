@@ -6,6 +6,7 @@ import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFil
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { TaskChatLink } from "./TaskChatLink";
 import { Card } from "../Container/Card";
+import { Alert } from "../Feedback/Alert";
 import { FilePreviewContent } from "../FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "../FilePreview/OutlookSourceAction";
 import { AttachmentTile } from "../FileUpload/AttachmentTile";
@@ -24,25 +25,58 @@ export function ClientToolFileApprovals({
   taskBriefsByChatId?: ReadonlyMap<string, string | undefined>;
 }) {
   const requests = useClientToolFileApprovalStore((state) => state.requests);
-  return requests
-    .filter(
-      (request) =>
-        (request.context.hostGrant?.ownerMessageId ??
-          request.context.messageId) === messageId,
-    )
-    .map((request) => (
-      <ClientToolFileApprovalCard
-        key={request.id}
-        request={request}
-        taskBrief={
-          request.context.hostGrant
-            ? taskBriefsByChatId?.get(
-                request.context.hostGrant.requestingChatId,
-              )
-            : undefined
-        }
-      />
-    ));
+  const blocked = useClientToolFileApprovalStore(
+    (state) => state.blockedAfterReview,
+  );
+  return (
+    <>
+      {blocked
+        .filter((notice) => notice.messageId === messageId)
+        .map((notice) => (
+          <BlockedAfterReviewNotice
+            key={notice.toolCallId}
+            fileNames={notice.fileNames}
+          />
+        ))}
+      {requests
+        .filter(
+          (request) =>
+            (request.context.hostGrant?.ownerMessageId ??
+              request.context.messageId) === messageId,
+        )
+        .map((request) => (
+          <ClientToolFileApprovalCard
+            key={request.id}
+            request={request}
+            taskBrief={
+              request.context.hostGrant
+                ? taskBriefsByChatId?.get(
+                    request.context.hostGrant.requestingChatId,
+                  )
+                : undefined
+            }
+          />
+        ))}
+    </>
+  );
+}
+
+/** A deployment default of never allow reads the same as a saved one. */
+function BlockedAfterReviewNotice({ fileNames }: { fileNames: string[] }) {
+  const names = fileNames.join(", ");
+  return (
+    <Alert
+      type="warning"
+      role="status"
+      geometryVariant="message"
+      data-testid="client-tool-file-blocked-after-review"
+    >
+      {t({
+        id: "chat.fileApproval.blockedAfterReview",
+        message: `Shared in the Erato desktop app but not uploaded: ${names}. File uploads from this device are set to “Never allow”.`,
+      })}
+    </Alert>
+  );
 }
 
 function ClientToolFileApprovalCard({

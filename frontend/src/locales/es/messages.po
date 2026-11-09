@@ -2028,6 +2028,11 @@ msgstr "Subir archivos seleccionados"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Los archivos seleccionados se subirán a Erato y su contenido se compartirá con el proveedor de IA. Previsualice los archivos antes de decidir."
 
