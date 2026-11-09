@@ -587,31 +587,36 @@ fn the_rules_say_when_a_model_should_label_the_call() {
     };
     assert_eq!(
         unsure("sign_out", json!({}), None),
-        Some(RulesUnsure::NoClearVerb)
+        Some(RulesUnsure::NoVerb)
     );
     assert_eq!(
         unsure("notion-restore-pages", json!({"page_ids": [RECORD]}), None),
-        Some(RulesUnsure::NoClearVerb)
+        Some(RulesUnsure::NoVerb)
     );
-    assert_eq!(
-        unsure(
-            "get_or_create_folder",
-            json!({"name": "Invoices", "parent_id": "root"}),
-            None
-        ),
-        Some(RulesUnsure::NoClearVerb)
-    );
+    // A verb and a kind are all a model could add, whatever is named or not.
     assert_eq!(
         unsure(
             "post_message",
             json!({"channel": "C1", "text": "Done."}),
             None
         ),
-        Some(RulesUnsure::NothingNamed)
+        None
     );
     assert_eq!(
         unsure("create_folder", json!({"visibility": "workspace"}), None),
-        Some(RulesUnsure::NothingNamed)
+        None
+    );
+    assert_eq!(
+        unsure(
+            "update_gizmo",
+            json!({"gizmo_id": "g1", "stage": "won"}),
+            None
+        ),
+        Some(RulesUnsure::NoKind)
+    );
+    assert_eq!(
+        unsure("get_or_create_gizmo", json!({"name": "Invoices"}), None),
+        Some(RulesUnsure::NoKind)
     );
     assert_eq!(unsure("read_file", json!({"path": "a.txt"}), None), None);
     assert_eq!(

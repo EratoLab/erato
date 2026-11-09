@@ -301,14 +301,13 @@ pub struct RulesLabel {
     pub unsure: Option<RulesUnsure>,
 }
 
-/// Why the rules would rather a model labelled a call.
+/// What a model may still supply for a call that is not a read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RulesUnsure {
-    /// No verb for a call that is not a read, or a tool name whose words name
-    /// more than one.
-    NoClearVerb,
-    /// A write whose item has neither a title nor an ID.
-    NothingNamed,
+    /// The rules found no verb.
+    NoVerb,
+    /// The rules have a verb but no kind for what it acts on.
+    NoKind,
 }
 
 /// Why a label's verb was not trusted.
@@ -430,14 +429,13 @@ pub fn rules_label(
         approval_argument,
     );
 
-    let read = has(&name, &READ_VERBS);
+    let claims_read = annotations.and_then(|hints| hints.read_only_hint) == Some(true);
     let unsure = if action == ToolCallAction::Other {
-        (!read && annotations.and_then(|hints| hints.read_only_hint) != Some(true))
-            .then_some(RulesUnsure::NoClearVerb)
-    } else if verb.source == VerbSource::Name && (name_verbs(&name).len() > 1 || read) {
-        Some(RulesUnsure::NoClearVerb)
+        (!has(&name, &READ_VERBS) && !claims_read).then_some(RulesUnsure::NoVerb)
+    } else if object_kind == ToolCallObjectKind::Other {
+        Some(RulesUnsure::NoKind)
     } else {
-        (item.title.is_none() && item.id.is_none()).then_some(RulesUnsure::NothingNamed)
+        None
     };
 
     let empty = item == ToolCallLabelItemMapping::default();

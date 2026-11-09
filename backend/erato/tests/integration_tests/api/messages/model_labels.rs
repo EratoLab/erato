@@ -16,7 +16,7 @@ const ASK: &str = "Reject the record";
 const CALL_ID: &str = "call_update";
 const REPLY: &str = r#"{"action":"update","object_kind":"row"}"#;
 
-/// No `id`, so the rules have nothing to name and are unsure.
+/// The rules read the verb but have no kind for a gizmo, so they are unsure.
 fn arguments() -> Value {
     json!({"status": "Rejected"})
 }
@@ -59,12 +59,12 @@ fn labeller(
     });
 }
 
-fn calls_update_record(mocks: &mut MockSet) {
+fn calls_update_gizmo(mocks: &mut MockSet) {
     answers_with(
         mocks,
         &[ASK],
         &[CALL_ID, SENTINEL],
-        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_record", arguments())]),
+        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_gizmo", arguments())]),
     );
 }
 
@@ -147,13 +147,13 @@ async fn label_key(app_state: &erato::state::AppState) -> ToolLabelCacheKey {
     ToolLabelCacheKey::new(
         &user.id.to_string(),
         "records",
-        &update_record(app_state).await,
+        &update_gizmo(app_state).await,
         &arguments(),
     )
 }
 
 /// The tool the gate labels the call with.
-async fn update_record(app_state: &erato::state::AppState) -> rmcp::model::Tool {
+async fn update_gizmo(app_state: &erato::state::AppState) -> rmcp::model::Tool {
     use erato::services::mcp_manager::{McpRequestAuthContext, McpServers};
     let tools = McpServers::new(&app_state.config)
         .list_tools_for_server_ids(
@@ -170,7 +170,7 @@ async fn update_record(app_state: &erato::state::AppState) -> rmcp::model::Tool 
         .unwrap();
     tools
         .into_iter()
-        .find(|tool| tool.tool.name == "update_record")
+        .find(|tool| tool.tool.name == "update_gizmo")
         .unwrap()
         .tool
 }
@@ -211,9 +211,9 @@ async fn eventually<T, F: std::future::Future<Output = Option<T>>>(
 }
 
 /// A call that ran without asking is shown with the rules' label, then its
-/// row gets the model's label within the same turn, live and stored. The
-/// model is asked once, with the reply schema and without the tool's
-/// description, and its mapping is kept for the call's shape.
+/// row gets the kind the rules had none for within the same turn, live and
+/// stored. The model is asked once, with the reply schema and without the
+/// tool's description, and its mapping is kept for the call's shape.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -222,11 +222,11 @@ async fn eventually<T, F: std::future::Future<Output = Option<T>>>(
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_models_answer_adds_nothing_where_the_rules_have_a_verb_and_kind(pool: Pool<Postgres>) {
+async fn a_models_answer_supplies_the_kind_the_rules_have_none_for(pool: Pool<Postgres>) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     // Slow enough that the label lands while the turn still runs.
     answers_with(
         &mut mocks,
@@ -249,15 +249,15 @@ async fn a_models_answer_adds_nothing_where_the_rules_have_a_verb_and_kind(pool:
     let content = message_content(&app_state, message_id).await;
     let row = content
         .iter()
-        .find(|part| part["tool_name"] == "update_record")
+        .find(|part| part["tool_name"] == "update_gizmo")
         .unwrap_or_else(|| panic!("{content:?}"));
     assert_eq!(row["content_type"], "tool_use");
     let label = &row["display"]["label"];
     assert_eq!(
         (&label["source"], &label["action"], &label["object_kind"]),
-        (&json!("rules"), &json!("update"), &json!("row"))
+        (&json!("model"), &json!("update"), &json!("row"))
     );
-    // Nothing of the model's mapping reaches the label.
+    // Only the kind comes from the model: it names no value on the card.
     assert!(label["items"][0]["after"].is_null(), "{label}");
     assert!(row["display"].get("description").is_none(), "{row}");
 
@@ -284,7 +284,7 @@ async fn a_models_answer_adds_nothing_where_the_rules_have_a_verb_and_kind(pool:
     let reply_schema = &format["json_schema"]["schema"]["properties"];
     assert_eq!(reply_schema.as_object().unwrap().len(), 2, "{format}");
     assert!(reply_schema.get("action").is_some() && reply_schema.get("object_kind").is_some());
-    assert!(bodies[0].contains("TOOL: update_record"), "{}", bodies[0]);
+    assert!(bodies[0].contains("TOOL: update_gizmo"), "{}", bodies[0]);
     assert!(!bodies[0].contains("Updates the record"), "{}", bodies[0]);
     // The skeleton carries the value's length, never its text.
     assert!(bodies[0].contains("<str len=8>"), "{}", bodies[0]);
@@ -297,6 +297,46 @@ async fn a_models_answer_adds_nothing_where_the_rules_have_a_verb_and_kind(pool:
         .await
         .expect("the model's mapping is kept");
     assert_eq!(kept.source, ToolCallLabelSource::Model);
+}
+
+/// A verb and a kind are all a model could add, so a call the rules have
+/// both for never reaches it.
+///
+/// # Test Categories
+/// - `uses-db`
+/// - `auth-required`
+/// - `sse-streaming`
+/// - `uses-mocked-llm`
+/// - `uses-mock-mcp`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_call_the_rules_have_a_verb_and_kind_for_never_reaches_the_labeller(
+    pool: Pool<Postgres>,
+) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &[CALL_ID, SENTINEL],
+        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_record", arguments())]),
+    );
+    let app_state = labelled_records(
+        pool,
+        mocks,
+        McpToolApprovalPreset::Restrictive,
+        Some(Labeller::Own),
+    )
+    .await;
+    let (_chat_id, message_id, _events) = submit(&app_state).await;
+
+    let parked = card(&app_state, message_id).await;
+    let label = &parked["display"]["label"];
+    assert_eq!(
+        (&label["source"], &label["action"], &label["object_kind"]),
+        (&json!("rules"), &json!("update"), &json!("row"))
+    );
+    assert!(recorder.bodies().is_empty(), "{:?}", recorder.bodies());
 }
 
 /// The turn parks right after the gate, so the labeller's answer arrives
@@ -316,7 +356,7 @@ async fn a_late_answer_leaves_the_parked_card_as_it_is(pool: Pool<Postgres>) {
     let mut mocks = MockSet::new();
     // Late enough that the turn has parked before it answers.
     labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(2));
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     let app_state = labelled_records(
         pool,
         mocks,
@@ -345,7 +385,7 @@ async fn a_late_answer_leaves_the_parked_card_as_it_is(pool: Pool<Postgres>) {
 
 const CONSENT: &str = "hasUserApproved";
 
-/// A records server whose `update_record` declares the consent argument.
+/// A records server whose `update_gizmo` declares the consent argument.
 async fn consent_records_server() -> String {
     async fn mcp(axum::Json(request): axum::Json<Value>) -> axum::response::Response {
         use axum::response::IntoResponse;
@@ -362,7 +402,7 @@ async fn consent_records_server() -> String {
                 "serverInfo": {"name": "consent-records", "version": "1"}
             }),
             "tools/list" => json!({"tools": [{
-                "name": "update_record",
+                "name": "update_gizmo",
                 "description": "Updates the record.",
                 "inputSchema": {
                     "type": "object",
@@ -408,7 +448,7 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
         &mut mocks,
         &[ASK],
         &[CALL_ID, SENTINEL],
-        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_record", claimed)]),
+        build_openai_tool_calls_streaming_response(&[(CALL_ID, "update_gizmo", claimed)]),
     );
     let app_state = labelled_records_with(
         pool,
@@ -444,7 +484,7 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
         .unwrap_or_else(|| panic!("{request}"));
     assert_eq!(
         user["content"],
-        "TOOL: update_record\nARGUMENTS: {\"status\":\"<str len=8>\"}"
+        "TOOL: update_gizmo\nARGUMENTS: {\"status\":\"<str len=8>\"}"
     );
     assert!(!bodies[0].contains(CONSENT), "{}", bodies[0]);
 
@@ -473,7 +513,7 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
     let mut mocks = MockSet::new();
     // Late enough that the continuation has ended before it answers.
     labeller(&mut mocks, &recorder, Some(REPLY), Duration::from_secs(3));
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     answers_with(
         &mut mocks,
         &[CALL_ID],
@@ -507,7 +547,7 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
     let stored = message_content(&app_state, message_id).await;
     let row = stored
         .iter()
-        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "update_record")
+        .find(|part| part["content_type"] == "tool_use" && part["tool_name"] == "update_gizmo")
         .unwrap_or_else(|| panic!("{stored:?}"));
     assert_eq!(row["display"]["label"]["source"], "rules");
     assert_ne!(
@@ -519,7 +559,7 @@ async fn a_label_that_arrives_after_the_card_was_approved_leaves_the_message_alo
         .tool_label_cache
         .get_or_compute(
             key,
-            &update_record(&app_state).await,
+            &update_gizmo(&app_state).await,
             &arguments(),
             None,
             async { None },
@@ -542,7 +582,7 @@ async fn the_card_keeps_the_rules_label(
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     labeller(&mut mocks, &recorder, reply, delay);
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     let mut app_state = labelled_records(
         pool,
         mocks,
@@ -565,7 +605,7 @@ async fn the_card_keeps_the_rules_label(
             .tool_label_cache
             .get_or_compute(
                 key.clone(),
-                &update_record(&app_state).await,
+                &update_gizmo(&app_state).await,
                 &arguments(),
                 None,
                 async { None }
@@ -681,7 +721,7 @@ async fn a_models_verb_the_cross_check_rejects_changes_nothing_and_is_not_kept(
     let mut mocks = MockSet::new();
     let deleting = REPLY.replace(r#""action":"update""#, r#""action":"delete""#);
     labeller(&mut mocks, &recorder, Some(&deleting), Duration::ZERO);
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     let app_state = labelled_records(
         pool,
         mocks,
@@ -721,7 +761,7 @@ async fn nothing_goes_to_the_labeller(
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     labeller(&mut mocks, &recorder, Some(REPLY), Duration::ZERO);
-    calls_update_record(&mut mocks);
+    calls_update_gizmo(&mut mocks);
     let mut app_state = labelled_records(
         pool,
         mocks,
