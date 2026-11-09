@@ -26,6 +26,7 @@ import {
   sharedModulesImportMapPlugin,
   walkFiles,
 } from "./component-kit-host.plugins";
+import { ERATO_SHARED_SURFACE_MINOR } from "./src/shared/surfaceVersion";
 import {
   iconCatalogManualChunk,
   iconCatalogPlugin,
@@ -249,6 +250,7 @@ export default defineConfig(({ mode }) => {
       // transforms those like app modules, so kit imports resolve to the
       // same module instances as the app's own.
       sharedModulesImportMapPlugin({
+        sharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR,
         devUrl: (entry) => `/src/shared/${entry.file}`,
       }),
       devComponentKitsPlugin({ rootDir: __dirname }),

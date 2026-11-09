@@ -23,7 +23,6 @@ import {
   SHARED_MODULES,
   type SharedModuleEntry,
 } from "./shared-modules.config";
-import { ERATO_SHARED_SURFACE_MINOR } from "./src/shared/surfaceVersion";
 
 type HostLogger = {
   warn(message: string): void;
@@ -72,7 +71,15 @@ type EmitFileContext = {
  * build-time manifest is always emitted.
  */
 export const sharedModulesImportMapPlugin = (
-  options: { devUrl?: (entry: SharedModuleEntry) => string } = {},
+  options: {
+    devUrl?: (entry: SharedModuleEntry) => string;
+    /**
+     * Recorded in the manifest, so a backend can compare this build with a
+     * desktop UI package built against another library version. A parameter
+     * because the surface module does not resolve in every host's build.
+     */
+    sharedSurfaceMinor?: number;
+  } = {},
 ) => {
   return {
     name: "shared-modules-import-map",
@@ -122,10 +129,13 @@ export const sharedModulesImportMapPlugin = (
       this.emitFile({
         type: "asset",
         fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
-        // The surface goes along so a backend can compare this build with
-        // a desktop UI package built against another library version.
         source: JSON.stringify(
-          { imports, sharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR },
+          {
+            imports,
+            ...(options.sharedSurfaceMinor === undefined
+              ? {}
+              : { sharedSurfaceMinor: options.sharedSurfaceMinor }),
+          },
           null,
           2,
         ),
