@@ -15,6 +15,7 @@ import {
 import {
   batchFieldLine,
   batchLossLines,
+  batchOperationsLine,
   changeRowCounts,
   changeSeeMoreLine,
   changeSummaryLine,
@@ -156,9 +157,18 @@ describe("what goes in the first view", () => {
     const layout = changeLayout(read);
     expect(layout.beyondCap).toBe(32);
     expect(layout.opensByDefault).toBe(true);
-    expect(
-      changeSeeMoreLine(layout.collapsed, layout.beyondCap, read.complete),
-    ).toBe("See 35 more fields, some values could not be read");
+    expect(changeSeeMoreLine(read, layout)).toBe("See 35 more fields: 35 set");
+  });
+
+  it("calls values past the stored cap what they are, never unreadable", () => {
+    const rows = Array.from({ length: 8 }, (_, index) =>
+      effect(`s${index}`, "set"),
+    );
+    const read = change(rows);
+    read.counts.set = 40;
+    expect(changeSeeMoreLine(read, changeLayout(read))).toBe(
+      "See 35 more fields, all set with the old value unknown (none is emptied)",
+    );
   });
 
   it("says how many more names there are when not all are listed", () => {
@@ -173,25 +183,41 @@ describe("what goes in the first view", () => {
 
 describe("the words of a change", () => {
   it("states a guarantee only over what code put in the collapsed part", () => {
+    const seeMoreOf = (read: GistChange) =>
+      changeSeeMoreLine(read, {
+        ...changeLayout(read),
+        firstRows: [],
+        collapsed: read.effects,
+        beyondCap: 0,
+      });
     const set = [effect("a", "set"), effect("b", "set")];
-    expect(changeSeeMoreLine(change(set).effects, 0, true)).toBe(
+    expect(seeMoreOf(change(set))).toBe(
       "See 2 more fields, all set with the old value unknown (none is emptied)",
     );
     const unchanged = [effect("a", "unchanged"), effect("b", "unchanged")];
-    expect(changeSeeMoreLine(change(unchanged).effects, 0, true)).toBe(
-      "See 2 unchanged fields",
-    );
+    expect(seeMoreOf(change(unchanged))).toBe("See 2 unchanged fields");
     const mixed = [
       effect("a", "changed"),
       effect("b", "set"),
       effect("c", "unchanged"),
     ];
-    expect(changeSeeMoreLine(change(mixed).effects, 0, true)).toBe(
+    expect(seeMoreOf(change(mixed))).toBe(
       "See 3 more fields: 1 changed, 1 set, 1 unchanged (none is emptied)",
     );
-    expect(changeSeeMoreLine(change(set).effects, 0, false)).toBe(
-      "See 2 more fields, some values could not be read",
+    // Not everything was read, so "none is emptied" cannot be said.
+    expect(seeMoreOf(change(set, { complete: false }))).toBe(
+      "See 2 more fields: 2 set",
     );
+    const lossPastTheStoredCap = change(set);
+    lossPastTheStoredCap.counts.emptied = 3;
+    expect(
+      changeSeeMoreLine(lossPastTheStoredCap, {
+        ...changeLayout(lossPastTheStoredCap),
+        firstRows: [],
+        collapsed: lossPastTheStoredCap.effects,
+        beyondCap: 3,
+      }),
+    ).toBe("See 5 more fields: 3 emptied or replaced, 2 set");
   });
 
   it("summarises the counts and leaves one value to its row", () => {
@@ -242,9 +268,9 @@ describe("the words of a change", () => {
       distinctCapped: false,
       samples: [{ text: "Closed", truncated: false, machineId: false }],
     };
-    expect(batchFieldLine(field, 200)).toBe("Closed on all 200 rows");
+    expect(batchFieldLine(field, 200)).toBe("Set to Closed on all 200 rows");
     expect(batchFieldLine({ ...field, rows: 3 }, 200)).toBe(
-      "Closed on 3 of 200 rows",
+      "Set to Closed on 3 of 200 rows",
     );
     expect(batchFieldLine({ ...field, distinct: 2 }, 200)).toBe(
       "2 different values on all 200 rows: Closed",
@@ -252,8 +278,33 @@ describe("the words of a change", () => {
     expect(batchFieldLine({ ...field, emptied: 200, samples: [] }, 200)).toBe(
       "Emptied on all 200 rows",
     );
-    expect(batchFieldLine({ ...field, emptied: 2 }, 200)).toBe(
-      "Closed on all 200 rows · emptied on 2 rows",
+    // Only the rows that write a value count as written.
+    expect(batchFieldLine({ ...field, emptied: 7 }, 200)).toBe(
+      "Set to Closed on 193 of 200 rows · emptied on 7 rows",
+    );
+    expect(batchFieldLine({ ...field, samples: [] }, 200)).toBe(
+      "Set on all 200 rows",
+    );
+    expect(
+      batchFieldLine({ ...field, rows: 5, listsReplaced: 5, samples: [] }, 5),
+    ).toBe("list replaced on 5 rows");
+    expect(
+      batchOperationsLine({
+        ...batch,
+        total: 9,
+        operations: [
+          { action: "move", count: 2 },
+          { action: "send", count: 1 },
+          { action: "comment", count: 1 },
+          { action: "share", count: 1 },
+          { action: "run", count: 1 },
+          { action: "upsert", count: 1 },
+          { action: "archive", count: 1 },
+          { action: "upload", count: 1 },
+        ],
+      }),
+    ).toBe(
+      "9 operations in one call: 2 move, 1 send, 1 comment, 1 share, 1 run, 1 create or update, 1 archive, 1 upload",
     );
 
     expect(batchLossLines(batch)).toEqual([
@@ -400,6 +451,53 @@ describe("the place on the line", () => {
     expect(gistPlainLine(gist!, gist!.items[0], "ask")).toBe(
       "Update row r1 in contoso / uploader",
     );
+  });
+
+  it("keeps a resolved target and shows the place beside it", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/parent",
+              values: [{ path: "/parent", text: "p1", resolved: "Q4 pipeline" }],
+            },
+          },
+        ],
+        change: { place: "contoso / uploader", counts: {}, complete: true },
+      }),
+      {},
+    );
+    const where = gist!.items[0].where.map((value) => value.text);
+    expect(where).toEqual(["Q4 pipeline", "contoso / uploader"]);
+  });
+
+  it("lets the place stand for a written target it already repeats", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/repo",
+              values: [{ path: "/repo", text: "uploader" }],
+            },
+          },
+        ],
+        change: { place: "contoso / uploader", counts: {}, complete: true },
+      }),
+      {},
+    );
+    expect(gist!.items[0].where.map((value) => value.text)).toEqual([
+      "contoso / uploader",
+    ]);
   });
 
   it("reads a sentence for what a run runs", () => {

@@ -582,10 +582,20 @@ export const gistOf = (
     change?.place !== undefined &&
     change.place.length > 0
   ) {
-    items[0].where = [
-      { text: change.place, origin: "place", path: "", truncated: false },
-    ];
-    items[0].whereOmitted = 0;
+    const lead = items[0];
+    const place: GistValue = {
+      text: change.place,
+      origin: "place",
+      path: "",
+      truncated: false,
+    };
+    // A resolved target says more than the place's text, so both stay; only
+    // text the place already repeats gives way to it.
+    const repeatsPlace = lead.where.every(
+      (value) =>
+        value.origin === "written" && change.place?.includes(value.text),
+    );
+    lead.where = repeatsPlace ? [place] : [...lead.where, place];
   }
   // Only something new can be told apart by its values alone; a change
   // description says on its own what the call does.
@@ -885,6 +895,8 @@ export type ToolCallCard =
       values: ArgumentTexts;
       truncated: boolean;
       notes: ToolCallCardNotes;
+      /** What the call does past its values, when the rules could read it. */
+      change?: GistChange;
     }
   | { kind: "legacy" };
 
@@ -912,6 +924,11 @@ export const toolCallCardOf = (
     const labelled = gistOf(label, input);
     if (!labelled) {
       const values = readArgumentValues(view, input, budget);
+      const read = readChange(label.change);
+      const change =
+        read && changeSaysSomething(read)
+          ? withWholeChangeText(read, input, budget)
+          : undefined;
       return {
         kind: "generic",
         label,
@@ -922,10 +939,17 @@ export const toolCallCardOf = (
           (view !== undefined && hasOmittedArguments(view)) ||
           values.cut,
         notes: {
-          hiddenCharacters: labelHidden || values.hiddenCharacters,
+          hiddenCharacters:
+            labelHidden ||
+            values.hiddenCharacters ||
+            change?.change.hiddenCharacters === true ||
+            change?.hiddenCharacters === true,
           leavesOutConsent:
-            view !== undefined && (holdsConsentFlag(view) || membersLeftOut),
+            (view !== undefined &&
+              (holdsConsentFlag(view) || membersLeftOut)) ||
+            change?.change.consentLeftOut === true,
         },
+        change: change?.change,
       };
     }
     const whole = withWholeText(labelled, input, budget);

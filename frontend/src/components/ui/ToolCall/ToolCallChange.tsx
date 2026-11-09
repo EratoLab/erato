@@ -21,6 +21,7 @@ import {
   batchRowLabel,
   batchSameLine,
   batchSeeMore,
+  beingEmptiedLabel,
   changeNamesOnly,
   changeNoteLabel,
   changeSeeMoreLine,
@@ -31,10 +32,15 @@ import {
   emptiedWasLabel,
   emptyValuePhrase,
   everyRecordLine,
+  fieldsInDetails,
+  filterEmptyPart,
   filterLabel,
   flagsLabel,
   foundLine,
+  incompleteLines,
   linkPhrase,
+  listAddedLabel,
+  listAddsClaim,
   listKeptLabel,
   listRemovedLabel,
   listReplacedLine,
@@ -43,6 +49,7 @@ import {
   opaqueCutLine,
   outsideLine,
   plainChangeValue,
+  recipientKindWord,
   recipientsLine,
   recipientsSeeAll,
   textHeading,
@@ -276,15 +283,23 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
 const ValueRow = ({
   effect,
   showRawName = false,
+  claim,
 }: {
   effect: ChangeEffect;
   showRawName?: boolean;
+  /** What the tool claims about this value, so the card says whose word it is. */
+  claim?: string;
 }) => (
   <Row name={effect.name}>
     <ScrollBox kind="value" className="max-h-24">
       <EffectValue effect={effect} />
     </ScrollBox>
-    {showRawName && effect.rawName !== effect.name && (
+    {claim !== undefined && (
+      <p className={MUTED} data-testid="tool-call-change-claim">
+        {claim}
+      </p>
+    )}
+    {showRawName && effect.rawName.length > 0 && effect.rawName !== effect.name && (
       <p
         dir="auto"
         className={clsx(
@@ -333,6 +348,11 @@ const ListRow = ({ effect }: { effect: ChangeEffect }) => (
             <ValueList values={effect.kept} />
           </Row>
         )}
+        {effect.added.length > 0 && (
+          <Row name={listAddedLabel(effect.name)}>
+            <ValueList values={effect.added} />
+          </Row>
+        )}
       </>
     ) : (
       <Row name={listSetLabel(effect.name)}>
@@ -360,7 +380,7 @@ const RecipientsPart = ({ recipients }: { recipients: ChangeRecipients }) => (
     {recipients.groups.some((group) => group.values.length > 0) && (
       <SeeMore label={recipientsSeeAll(recipients.total)}>
         {recipients.groups.map((group, index) => (
-          <Row key={index} name={group.rawName}>
+          <Row key={index} name={recipientKindWord(group.kind)}>
             <ScrollBox kind="value" className="max-h-24">
               <span dir="auto" className={ISOLATED}>
                 {group.values.join(", ")}
@@ -392,6 +412,9 @@ const FilterPart = ({
       </Alert>
     );
   }
+  if (!filter.text && filter.parts.length === 0 && filter.omitted === 0) {
+    return null;
+  }
   return (
     <div data-testid="tool-call-change-filter">
       <Row name={filterLabel()}>
@@ -401,12 +424,23 @@ const FilterPart = ({
           filter.parts.map((part, index) => (
             <Fragment key={index}>
               {index > 0 && ", "}
-              <span dir="auto" className={ISOLATED}>
-                {part.name}
-              </span>{" "}
-              <ValueText value={part.value} />
+              {part.isEmpty ? (
+                <span dir="auto" className={ISOLATED}>
+                  {filterEmptyPart(part.name)}
+                </span>
+              ) : (
+                <>
+                  <span dir="auto" className={ISOLATED}>
+                    {part.name}
+                  </span>{" "}
+                  <ValueText value={part.value} />
+                </>
+              )}
             </Fragment>
           ))
+        )}
+        {filter.omitted > 0 && (
+          <span className="text-theme-fg-muted"> +{filter.omitted}</span>
         )}
       </Row>
     </div>
@@ -540,7 +574,7 @@ const rowChangeText = (effect: ChangeEffect): string => {
 
 const batchEffectText = (effect: ChangeEffect): string =>
   effect.effect === "emptied"
-    ? emptiedWasLabel(effect.name, emptiedLabel())
+    ? beingEmptiedLabel(effect.name)
     : rowChangeText(effect);
 
 const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
@@ -560,6 +594,9 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
         )}
       >
         {row.effects.map(batchEffectText).join(" · ")}
+        {row.effectsOmitted > 0 && (
+          <span className="text-theme-fg-muted"> +{row.effectsOmitted}</span>
+        )}
       </p>
     )}
   </li>
@@ -657,10 +694,9 @@ const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
   );
 };
 
-const FieldsPart = ({ change }: { change: GistChange }) => {
+/** What the call loses or the card cannot read: above any long text or SQL. */
+const LossesPart = ({ change }: { change: GistChange }) => {
   const layout = changeLayout(change);
-  const collapsedTotal = layout.collapsed.length + layout.beyondCap;
-  const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
   return (
     <>
       <EmptiedRow effects={layout.emptied} />
@@ -670,16 +706,26 @@ const FieldsPart = ({ change }: { change: GistChange }) => {
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
       ))}
+    </>
+  );
+};
+
+const ValuesPart = ({ change }: { change: GistChange }) => {
+  const layout = changeLayout(change);
+  const collapsedTotal = layout.collapsed.length + layout.beyondCap;
+  const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  const addsOnly = change.notes.includes("tool_says_adds_to_list");
+  const claimOf = (effect: ChangeEffect) =>
+    addsOnly && effect.list ? listAddsClaim() : undefined;
+  return (
+    <>
       {layout.firstRows.map((effect, index) => (
-        <ValueRow key={index} effect={effect} />
+        <ValueRow key={index} effect={effect} claim={claimOf(effect)} />
       ))}
       {collapsedTotal > 0 && (
         <SeeMore
-          label={changeSeeMoreLine(
-            layout.collapsed,
-            layout.beyondCap,
-            change.complete,
-          )}
+          label={changeSeeMoreLine(change, layout)}
           defaultOpen={layout.opensByDefault}
           hint={
             shown.length > 0 ? (
@@ -692,8 +738,16 @@ const FieldsPart = ({ change }: { change: GistChange }) => {
           }
         >
           {layout.collapsed.map((effect, index) => (
-            <ValueRow key={index} effect={effect} showRawName />
+            <ValueRow
+              key={index}
+              effect={effect}
+              showRawName
+              claim={claimOf(effect)}
+            />
           ))}
+          {layout.beyondCap > 0 && (
+            <p className={MUTED}>{fieldsInDetails(layout.beyondCap)}</p>
+          )}
         </SeeMore>
       )}
     </>
@@ -798,6 +852,52 @@ export const changeRowHasDetails = (change: GistChange): boolean => {
   );
 };
 
+const IncompleteAlert = ({ change }: { change: GistChange }) =>
+  change.complete ? null : (
+    <Alert
+      type="warning"
+      role="none"
+      data-testid="tool-call-change-incomplete"
+    >
+      {incompleteLines(change).map((line, index) => (
+        <p key={index}>{line}</p>
+      ))}
+    </Alert>
+  );
+
+/**
+ * What a change description says beyond a card's line: who it reaches, what
+ * is lost and what cannot be read first, then statements and long text, then
+ * the values. A call with no verb lists its values in its own argument view,
+ * so `values` leaves them out there.
+ */
+export const ToolCallChangeBody = ({
+  change,
+  replacesText = false,
+  values = true,
+}: {
+  change: GistChange;
+  replacesText?: boolean;
+  values?: boolean;
+}) => (
+  <div className="space-y-2" data-testid="tool-call-change-body">
+    <IncompleteAlert change={change} />
+    {change.recipients && <RecipientsPart recipients={change.recipients} />}
+    {change.filter && <FilterPart filter={change.filter} />}
+    {change.flags.length > 0 && <FlagsPart flags={change.flags} />}
+    {values && <LossesPart change={change} />}
+    {change.opaque.map((opaque, index) => (
+      <OpaquePart key={index} opaque={opaque} />
+    ))}
+    {change.batch && <BatchPart batch={change.batch} />}
+    {change.texts.map((entry, index) => (
+      <TextPart key={index} entry={entry} replaced={replacesText} />
+    ))}
+    {values && <ValuesPart change={change} />}
+    <ChangeNotes change={change} />
+  </div>
+);
+
 /**
  * What an approval card shows for a call with a change description: the
  * sentence, then who it reaches, what is lost and what the card cannot read,
@@ -845,22 +945,10 @@ export const ToolCallChangeCard = ({
           </p>
         ))}
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
-        {change.recipients && <RecipientsPart recipients={change.recipients} />}
-        {change.filter && <FilterPart filter={change.filter} />}
-        {change.flags.length > 0 && <FlagsPart flags={change.flags} />}
-        {change.opaque.map((opaque, index) => (
-          <OpaquePart key={index} opaque={opaque} />
-        ))}
-        {change.batch && <BatchPart batch={change.batch} />}
-        {change.texts.map((entry, index) => (
-          <TextPart
-            key={index}
-            entry={entry}
-            replaced={gist.action === "update" || gist.action === "upsert"}
-          />
-        ))}
-        <FieldsPart change={change} />
-        <ChangeNotes change={change} />
+        <ToolCallChangeBody
+          change={change}
+          replacesText={gist.action === "update" || gist.action === "upsert"}
+        />
       </ScrollBox>
     </div>
   );

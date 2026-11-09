@@ -5,7 +5,7 @@ import type {
   ChangeBatchField,
   ChangeBatchRow,
   ChangeCounts,
-  ChangeEffect,
+  ChangeLayout,
   ChangeRecipients,
   ChangeValue,
   GistChange,
@@ -14,6 +14,7 @@ import type {
   ToolCallAction,
   ToolCallChangeNote,
   ToolCallOpaqueKind,
+  ToolCallRecipientKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -123,27 +124,31 @@ export const changeRowCounts = (change: GistChange): string | undefined => {
   return parts.length > 0 ? joinParts(parts) : undefined;
 };
 
-/** The truthful line that opens a collapsed part of a card. */
+/**
+ * The truthful line that opens a collapsed part of a card, from the counts of
+ * what is behind it. "None is emptied" needs the whole call read and every
+ * loss already on the card.
+ */
 export const changeSeeMoreLine = (
-  collapsed: readonly ChangeEffect[],
-  beyondCap: number,
-  complete: boolean,
+  change: GistChange,
+  layout: ChangeLayout,
 ): string => {
-  const total = collapsed.length + beyondCap;
-  const has = (kind: ChangeEffect["effect"]) =>
-    collapsed.filter((effect) => effect.effect === kind).length;
-  const changed = has("changed");
-  const set = has("set");
-  const unchanged = has("unchanged");
-  if (!complete) {
-    return t({
-      id: "toolChange.seeMore.incomplete",
-      message: plural(total, {
-        one: "See # more field, some values could not be read",
-        other: "See # more fields, some values could not be read",
-      }),
-    });
-  }
+  const { counts } = change;
+  const total = layout.collapsed.length + layout.beyondCap;
+  const behind = (kind: "changed" | "set" | "unchanged") =>
+    counts[kind] -
+    layout.firstRows.filter((effect) => effect.effect === kind).length;
+  const changed = behind("changed");
+  const set = behind("set");
+  const unchanged = behind("unchanged");
+  const losses =
+    counts.emptied -
+    layout.emptied.length +
+    counts.listReplaced -
+    layout.lists.length +
+    counts.unreadable -
+    layout.unreadable.length;
+  const noLoss = change.complete && losses <= 0;
   if (unchanged === total) {
     return t({
       id: "toolChange.seeMore.unchanged",
@@ -153,7 +158,7 @@ export const changeSeeMoreLine = (
       }),
     });
   }
-  if (set === total) {
+  if (set === total && noLoss) {
     return t({
       id: "toolChange.seeMore.allSet",
       message: plural(total, {
@@ -164,6 +169,15 @@ export const changeSeeMoreLine = (
     });
   }
   const parts = [
+    losses > 0
+      ? t({
+          id: "toolChange.seeMore.part.losses",
+          message: plural(losses, {
+            one: "# emptied or replaced",
+            other: "# emptied or replaced",
+          }),
+        })
+      : undefined,
     changed > 0
       ? t({
           id: "toolChange.seeMore.part.changed",
@@ -187,13 +201,80 @@ export const changeSeeMoreLine = (
       : undefined,
   ].flatMap((part) => (part === undefined ? [] : [part]));
   const detail = joinParts(parts);
-  return t({
-    id: "toolChange.seeMore.mixed",
-    message: plural(total, {
-      one: `See # more field: ${detail} (none is emptied)`,
-      other: `See # more fields: ${detail} (none is emptied)`,
+  return noLoss
+    ? t({
+        id: "toolChange.seeMore.mixed",
+        message: plural(total, {
+          one: `See # more field: ${detail} (none is emptied)`,
+          other: `See # more fields: ${detail} (none is emptied)`,
+        }),
+      })
+    : t({
+        id: "toolChange.seeMore.counts",
+        message: plural(total, {
+          one: `See # more field: ${detail}`,
+          other: `See # more fields: ${detail}`,
+        }),
+      });
+};
+
+/** Under a See more line, for values counted but not stored. */
+export const fieldsInDetails = (count: number): string =>
+  t({
+    id: "toolChange.seeMore.inDetails",
+    message: plural(count, {
+      one: "The other # field is in Technical details.",
+      other: "The other # fields are in Technical details.",
     }),
   });
+
+/** The first-view warning on a description that could not read everything. */
+export const incompleteLines = (change: GistChange): string[] => {
+  const conditions = change.filter?.omitted ?? 0;
+  const statements = change.opaqueOmitted;
+  const texts = change.textsOmitted;
+  const counted = [
+    conditions > 0
+      ? t({
+          id: "toolChange.incomplete.conditions",
+          message: plural(conditions, {
+            one: "# condition",
+            other: "# conditions",
+          }),
+        })
+      : undefined,
+    statements > 0
+      ? t({
+          id: "toolChange.incomplete.statements",
+          message: plural(statements, {
+            one: "# statement",
+            other: "# statements",
+          }),
+        })
+      : undefined,
+    texts > 0
+      ? t({
+          id: "toolChange.incomplete.texts",
+          message: plural(texts, { one: "# text", other: "# texts" }),
+        })
+      : undefined,
+  ].flatMap((part) => (part === undefined ? [] : [part]));
+  const notShown = joinParts(counted);
+  return [
+    t({
+      id: "toolChange.incomplete",
+      message:
+        "This call is too large to read in full, so it may do more than the card says. Technical details has the whole call.",
+    }),
+    ...(counted.length > 0
+      ? [
+          t({
+            id: "toolChange.incomplete.notShown",
+            message: `Not shown here: ${notShown}.`,
+          }),
+        ]
+      : []),
+  ];
 };
 
 export const changeNamesOnly = (names: string, more: number): string =>
@@ -230,6 +311,9 @@ export const emptiedLabel = (): string =>
 export const emptiedWasLabel = (name: string, was: string): string =>
   t({ id: "toolChange.row.emptiedWas", message: `${name} (was ${was})` });
 
+export const beingEmptiedLabel = (name: string): string =>
+  t({ id: "toolChange.row.beingEmptied", message: `${name} is emptied` });
+
 export const listReplacedLine = (
   name: string,
   removed: number,
@@ -259,14 +343,36 @@ export const listRemovedLabel = (name: string): string =>
 export const listKeptLabel = (name: string): string =>
   t({ id: "toolChange.list.kept", message: `${name} kept` });
 
+export const listAddedLabel = (name: string): string =>
+  t({ id: "toolChange.list.added", message: `${name} added` });
+
 export const listSetLabel = (name: string): string =>
   t({ id: "toolChange.list.setTo", message: `${name} set to` });
+
+export const listAddsClaim = (): string =>
+  t({
+    id: "toolChange.list.addsClaim",
+    message: "Only added, the tool says",
+  });
+
+export const recipientKindWord = (kind: ToolCallRecipientKind): string => {
+  switch (kind) {
+    case "cc":
+      return t({ id: "toolChange.recipients.kind.cc", message: "Cc" });
+    case "bcc":
+      return t({ id: "toolChange.recipients.kind.bcc", message: "Bcc" });
+    default:
+      return t({ id: "toolChange.recipients.kind.to", message: "To" });
+  }
+};
 
 export const recipientsLine = (recipients: ChangeRecipients): string => {
   const groups =
     recipients.groups.length > 1
       ? ` (${joinParts(
-          recipients.groups.map((group) => `${group.count} ${group.rawName}`),
+          recipients.groups.map(
+            (group) => `${group.count} ${recipientKindWord(group.kind)}`,
+          ),
         )})`
       : "";
   return t({
@@ -318,6 +424,9 @@ export const everyRecordLine = (): string =>
 
 export const filterLabel = (): string =>
   t({ id: "toolChange.filter.where", message: "Where" });
+
+export const filterEmptyPart = (name: string): string =>
+  t({ id: "toolChange.filter.isEmpty", message: `${name} is empty` });
 
 export const flagsLabel = (): string =>
   t({ id: "toolChange.flags", message: "Options" });
@@ -453,8 +562,9 @@ export const batchFieldLine = (
   field: ChangeBatchField,
   total: number,
 ): string => {
-  const { rows } = field;
-  const scope =
+  const { emptied } = field;
+  const replaced = field.listsReplaced;
+  const scopeOf = (rows: number) =>
     rows === total
       ? t({
           id: "toolChange.batch.scope.all",
@@ -464,28 +574,47 @@ export const batchFieldLine = (
           id: "toolChange.batch.scope.some",
           message: `on ${rows} of ${total} rows`,
         });
-  if (field.emptied === rows) {
+  if (emptied === field.rows) {
+    const scope = scopeOf(field.rows);
     return t({
       id: "toolChange.batch.field.allEmptied",
       message: `Emptied ${scope}`,
     });
   }
+  const written = field.rows - emptied - replaced;
   const samples = field.samples.map(plainChangeValue).join(", ");
   const distinct = field.distinct;
-  const written = field.distinctCapped
-    ? t({
-        id: "toolChange.batch.field.many",
-        message: `Many different values ${scope}: ${samples}`,
-      })
-    : distinct > 1
-      ? t({
+  const parts: string[] = [];
+  if (written > 0) {
+    const scope = scopeOf(written);
+    if (field.distinctCapped) {
+      parts.push(
+        t({
+          id: "toolChange.batch.field.many",
+          message: `Many different values ${scope}: ${samples}`,
+        }),
+      );
+    } else if (distinct > 1) {
+      parts.push(
+        t({
           id: "toolChange.batch.field.distinct",
           message: `${distinct} different values ${scope}: ${samples}`,
-        })
-      : `${samples} ${scope}`;
-  const parts = [written];
-  if (field.emptied > 0) {
-    const emptied = field.emptied;
+        }),
+      );
+    } else if (samples.length > 0) {
+      parts.push(
+        t({
+          id: "toolChange.batch.field.setTo",
+          message: `Set to ${samples} ${scope}`,
+        }),
+      );
+    } else {
+      parts.push(
+        t({ id: "toolChange.batch.field.set", message: `Set ${scope}` }),
+      );
+    }
+  }
+  if (emptied > 0) {
     parts.push(
       t({
         id: "toolChange.batch.field.emptied",
@@ -496,8 +625,7 @@ export const batchFieldLine = (
       }),
     );
   }
-  if (field.listsReplaced > 0) {
-    const replaced = field.listsReplaced;
+  if (replaced > 0) {
     parts.push(
       t({
         id: "toolChange.batch.field.lists",
@@ -533,6 +661,49 @@ const operationWord = (action: ToolCallAction, count: number): string => {
       return t({
         id: "toolChange.batch.op.delete",
         message: plural(count, { one: "# delete", other: "# delete" }),
+      });
+    case "move":
+      return t({
+        id: "toolChange.batch.op.move",
+        message: plural(count, { one: "# move", other: "# move" }),
+      });
+    case "send":
+      return t({
+        id: "toolChange.batch.op.send",
+        message: plural(count, { one: "# send", other: "# send" }),
+      });
+    case "comment":
+      return t({
+        id: "toolChange.batch.op.comment",
+        message: plural(count, { one: "# comment", other: "# comment" }),
+      });
+    case "share":
+      return t({
+        id: "toolChange.batch.op.share",
+        message: plural(count, { one: "# share", other: "# share" }),
+      });
+    case "run":
+      return t({
+        id: "toolChange.batch.op.run",
+        message: plural(count, { one: "# run", other: "# run" }),
+      });
+    case "upsert":
+      return t({
+        id: "toolChange.batch.op.upsert",
+        message: plural(count, {
+          one: "# create or update",
+          other: "# create or update",
+        }),
+      });
+    case "archive":
+      return t({
+        id: "toolChange.batch.op.archive",
+        message: plural(count, { one: "# archive", other: "# archive" }),
+      });
+    case "upload":
+      return t({
+        id: "toolChange.batch.op.upload",
+        message: plural(count, { one: "# upload", other: "# upload" }),
       });
     default:
       return t({

@@ -99,7 +99,7 @@ const GistRowDetails = ({
 }) => (
   <div className="space-y-1">
     {gist.change ? (
-      <ToolCallChangeRowDetails change={gist.change} />
+      phase === "done" && <ToolCallChangeRowDetails change={gist.change} />
     ) : (
       gist.items.map((item, index) => (
         <div key={index} className="space-y-1">
@@ -210,9 +210,11 @@ const PlainToolUseStep = ({
     gist !== undefined &&
     (failure !== undefined ||
       (gist.change
-        ? changeRowHasDetails(gist.change)
+        ? phase === "done" && changeRowHasDetails(gist.change)
         : gist.items.length > 1 || gist.items.some(hasRowValues)));
-  const counts = gist?.change ? changeRowCounts(gist.change) : undefined;
+  // Effects are facts only once the call has run.
+  const counts =
+    gist?.change && phase === "done" ? changeRowCounts(gist.change) : undefined;
   const link = useMemo(
     () =>
       part.status === "success" ? resultLinkOf(part.result_details) : undefined,

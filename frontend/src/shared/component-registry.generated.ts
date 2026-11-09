@@ -444,6 +444,7 @@ export type { JsonDisplayProps } from "@/components/ui/ToolCall/JsonDisplay";
 export { McpToolDescription } from "@/components/ui/ToolCall/McpToolDescription";
 export type { McpToolDescriptionProps } from "@/components/ui/ToolCall/McpToolDescription";
 export { ToolArgumentView } from "@/components/ui/ToolCall/ToolArgumentView";
+export { ToolCallChangeBody } from "@/components/ui/ToolCall/ToolCallChange";
 export { ToolCallChangeCard } from "@/components/ui/ToolCall/ToolCallChange";
 export { ToolCallChangeRowDetails } from "@/components/ui/ToolCall/ToolCallChange";
 export { changeRowHasDetails } from "@/components/ui/ToolCall/ToolCallChange";

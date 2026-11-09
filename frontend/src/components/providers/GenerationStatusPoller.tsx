@@ -155,7 +155,6 @@ export function GenerationStatusPoller({
   const lastListingRefreshRef = useRef(0);
   /** `chatId:startedAt` of the task-result turn already reacted to. */
   const reactedRef = useRef<string | null>(null);
-  /** `chatId:labelsUpdatedAt` of the parked card already reloaded. */
 
   const { data, dataUpdatedAt } = useGeneratingChats(
     {},

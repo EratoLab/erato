@@ -82,7 +82,9 @@ interface NodeProps {
 
 const Members = ({ node, values, compact }: NodeProps) => {
   const members = childrenOf(node).flatMap((child) => {
-    const name = cleanServerText(lastPointerSegment(child.path)).text;
+    const name = child.machine_name
+      ? machineIdPhrase()
+      : cleanServerText(lastPointerSegment(child.path)).text;
     return isConsentClaim(child.path) ? [] : [{ child, name }];
   });
   return (

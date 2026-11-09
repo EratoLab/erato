@@ -1,3 +1,4 @@
+import { machineIdPhrase } from "./changeLabels";
 import { cleanServerText, countOf, isRecord } from "./serverText";
 
 import type {
@@ -5,6 +6,7 @@ import type {
   ToolCallChangeNote,
   ToolCallEffectKind,
   ToolCallOpaqueKind,
+  ToolCallRecipientKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -30,6 +32,9 @@ export interface ChangeEffect {
   old?: ChangeValue;
   removed: ChangeValue[];
   kept: ChangeValue[];
+  added: ChangeValue[];
+  /** The value is a list, whatever the card can say about what happens to it. */
+  list: boolean;
   link: boolean;
 }
 
@@ -47,6 +52,7 @@ export interface ChangeText {
 export interface ChangeRecipientGroup {
   name: string;
   rawName: string;
+  kind: ToolCallRecipientKind;
   count: number;
   values: string[];
   omitted: number;
@@ -63,8 +69,10 @@ export interface ChangeRecipients {
 
 export interface ChangeFilter {
   everyRecord: boolean;
-  parts: { name: string; value: ChangeValue }[];
+  parts: { name: string; value: ChangeValue; isEmpty: boolean }[];
   text?: ChangeValue;
+  /** Conditions past what the card stores: counted, never listed. */
+  omitted: number;
 }
 
 export interface ChangeFlag {
@@ -90,6 +98,7 @@ export interface ChangeBatchRow {
   name?: string;
   action?: ToolCallAction;
   effects: ChangeEffect[];
+  effectsOmitted: number;
 }
 
 export interface ChangeBatchField {
@@ -135,6 +144,8 @@ export interface GistChange {
   filter?: ChangeFilter;
   flags: ChangeFlag[];
   opaque: ChangeOpaque[];
+  opaqueOmitted: number;
+  textsOmitted: number;
   batch?: ChangeBatch;
   place?: string;
   notes: ToolCallChangeNote[];
@@ -173,6 +184,7 @@ const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "old_values_from_earlier",
   "nothing_changes",
 ];
+const RECIPIENT_KINDS: readonly ToolCallRecipientKind[] = ["to", "cc", "bcc"];
 const ROW_ACTIONS: readonly ToolCallAction[] = [
   "create",
   "update",
@@ -204,6 +216,14 @@ const isOneOf = <T extends string>(
   value: unknown,
 ): value is T => typeof value === "string" && values.some((v) => v === value);
 
+/** The backend's mark for a machine ID inside a value or a name. */
+const HIDDEN_ID_MARK = "\uE002";
+
+const withIdPhrase = (text: string): string =>
+  text.includes(HIDDEN_ID_MARK)
+    ? text.replaceAll(HIDDEN_ID_MARK, machineIdPhrase())
+    : text;
+
 /** Reads text and remembers whether cleaning it changed it invisibly. */
 class Reader {
   hiddenCharacters = false;
@@ -211,7 +231,7 @@ class Reader {
   text(raw: unknown, maxChars?: number): string {
     const cleaned = cleanServerText(raw, maxChars);
     this.hiddenCharacters ||= cleaned.hiddenCharacters;
-    return cleaned.text;
+    return withIdPhrase(cleaned.text);
   }
 
   value(raw: unknown): ChangeValue | undefined {
@@ -219,7 +239,7 @@ class Reader {
     const cleaned = cleanServerText(raw.text);
     this.hiddenCharacters ||= cleaned.hiddenCharacters;
     return {
-      text: cleaned.text,
+      text: withIdPhrase(cleaned.text),
       truncated: raw.truncated === true || cleaned.truncated,
       machineId: raw.machine_id === true,
     };
@@ -244,6 +264,8 @@ class Reader {
       old: this.value(raw.old),
       removed: this.values(raw.removed, MAX_LIST_VALUES),
       kept: this.values(raw.kept, MAX_LIST_VALUES),
+      added: this.values(raw.added, MAX_LIST_VALUES),
+      list: raw.list === true,
       link: raw.link === true,
     };
   }
@@ -285,6 +307,7 @@ class Reader {
               {
                 name: this.text(group.name),
                 rawName: this.text(group.raw_name),
+                kind: isOneOf(RECIPIENT_KINDS, group.kind) ? group.kind : "to",
                 count: countOf(group.count),
                 values: listOf(group.values, MAX_LIST_VALUES).map((value) =>
                   this.text(value),
@@ -310,9 +333,12 @@ class Reader {
       parts: listOf(raw.parts, MAX_GROUPS).flatMap((part) => {
         if (!isRecord(part)) return [];
         const value = this.value(part.value);
-        return value ? [{ name: this.text(part.name), value }] : [];
+        return value
+          ? [{ name: this.text(part.name), value, isEmpty: part.is_empty === true }]
+          : [];
       }),
       text: this.value(raw.text),
+      omitted: countOf(raw.omitted),
     };
   }
 
@@ -353,6 +379,7 @@ class Reader {
             name: name.length > 0 ? name : undefined,
             action: isOneOf(ROW_ACTIONS, row.action) ? row.action : undefined,
             effects: this.effects(row.effects, MAX_EFFECTS),
+            effectsOmitted: countOf(row.effects_omitted),
           },
         ];
       }),
@@ -420,6 +447,8 @@ export const readChange = (raw: unknown): GistChange | undefined => {
         : [],
     ),
     opaque: reader.opaque(raw.opaque),
+    opaqueOmitted: countOf(raw.opaque_omitted),
+    textsOmitted: countOf(raw.texts_omitted),
     batch: reader.batch(raw.batch),
     place: typeof raw.place === "string" ? reader.text(raw.place) : undefined,
     notes: listOf(raw.notes, MAX_NOTES).filter(

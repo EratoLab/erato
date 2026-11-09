@@ -187,8 +187,8 @@ describe("the change card", () => {
 
   it("says who it reaches and never claims none are outside when it cannot know", () => {
     const groups = [
-      { name: "To", raw_name: "to", count: 32, values: ["a@x.example"] },
-      { name: "Cc", raw_name: "cc", count: 8, values: ["b@x.example"] },
+      { name: "To", raw_name: "to", kind: "to", count: 32, values: ["a@x.example"] },
+      { name: "Cc", raw_name: "copy_to", kind: "cc", count: 8, values: ["b@x.example"] },
     ];
     const { unmount } = renderCard({
       recipients: {
@@ -199,7 +199,8 @@ describe("the change card", () => {
       },
     });
     const part = screen.getByTestId("tool-call-change-recipients");
-    expect(part).toHaveTextContent("To 40 addresses (32 to, 8 cc)");
+    expect(part).toHaveTextContent("To 40 addresses (32 To, 8 Cc)");
+    expect(part).not.toHaveTextContent("copy_to");
     expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
       "1 address is outside your organisation: ana@fabrikam.example",
     );
@@ -210,6 +211,178 @@ describe("the change card", () => {
     });
     expect(screen.queryByTestId("tool-call-change-outside")).toBeNull();
     expect(document.body.textContent).not.toContain("outside");
+  });
+
+  it("says first when a call could not be read in full, without opening anything", () => {
+    renderCard({
+      complete: false,
+      filter: {
+        parts: [{ name: "Stage", value: { text: "open" } }],
+        omitted: 3,
+      },
+      opaque_omitted: 2,
+      texts_omitted: 1,
+    });
+    const alert = screen.getByTestId("tool-call-change-incomplete");
+    expect(alert).toHaveTextContent("too large to read in full");
+    expect(alert).toHaveTextContent(
+      "Not shown here: 3 conditions, 2 statements, 1 text.",
+    );
+    expect(screen.getByTestId("tool-call-change-filter")).toHaveTextContent(
+      "+3",
+    );
+  });
+
+  it("shows no incomplete warning for a call read in full", () => {
+    renderCard({ effects: [set(0)], counts: { set: 1 } });
+    expect(screen.queryByTestId("tool-call-change-incomplete")).toBeNull();
+  });
+
+  it("keeps what is lost above long text and statements", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/owner",
+          name: "Owner",
+          raw_name: "owner",
+          effect: "emptied",
+        },
+      ],
+      counts: { emptied: 1 },
+      opaque: [
+        {
+          kind: "sql",
+          name: "Query",
+          raw_name: "sql",
+          path: "/sql",
+          text: "update t set a = 1",
+          lines: 1,
+        },
+      ],
+      texts: [
+        {
+          path: "/body",
+          name: "Body",
+          raw_name: "body",
+          text: "line",
+          lines: 1,
+          chars: 4,
+        },
+      ],
+    });
+    const emptied = screen.getByTestId("tool-call-change-emptied");
+    const position = (other: HTMLElement) =>
+      emptied.compareDocumentPosition(other);
+    expect(
+      position(screen.getByTestId("tool-call-change-statement")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      position(screen.getByTestId("tool-call-change-text")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("shows what a replaced list adds next to what it removes and keeps", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/owners",
+          name: "Owners",
+          raw_name: "owners",
+          effect: "list_replaced",
+          values: [{ text: "Ann" }, { text: "Carl" }],
+          removed: [{ text: "Bob" }],
+          kept: [{ text: "Ann" }],
+          added: [{ text: "Carl" }],
+          list: true,
+        },
+      ],
+      counts: { list_replaced: 1 },
+    });
+    const list = screen.getByTestId("tool-call-change-list");
+    expect(within(list).getByText("Owners added")).toBeInTheDocument();
+    expect(within(list).getByText("Carl")).toBeInTheDocument();
+  });
+
+  it("marks a list the tool says it only adds to as the tool's word", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/labels",
+          name: "Labels",
+          raw_name: "labels",
+          effect: "set",
+          values: [{ text: "bug" }],
+          list: true,
+        },
+      ],
+      counts: { set: 1 },
+      notes: ["tool_says_adds_to_list"],
+    });
+    expect(screen.getByTestId("tool-call-change-claim")).toHaveTextContent(
+      "Only added, the tool says",
+    );
+  });
+
+  it("never claims a batch row was emptied in a phrase that reads as its old value", () => {
+    renderCard({
+      batch: {
+        name: "Rows",
+        total: 2,
+        rows: [
+          {
+            number: 1,
+            effects: [
+              {
+                path: "/rows/0/owner",
+                name: "Owner",
+                raw_name: "owner",
+                effect: "emptied",
+              },
+            ],
+            effects_omitted: 4,
+          },
+        ],
+        read_all: true,
+      },
+    });
+    const row = screen.getByTestId("tool-call-change-batch-row");
+    expect(row).toHaveTextContent("Owner is emptied");
+    expect(row).not.toHaveTextContent("was");
+    expect(row).toHaveTextContent("+4");
+  });
+
+  it("reads an empty filter condition and never leaves a bare Where", () => {
+    const { unmount } = renderCard({
+      filter: { parts: [{ name: "Email", value: { text: "" }, is_empty: true }] },
+    });
+    expect(screen.getByTestId("tool-call-change-filter")).toHaveTextContent(
+      "Email is empty",
+    );
+    unmount();
+    renderCard({ filter: { parts: [] } });
+    expect(screen.queryByTestId("tool-call-change-filter")).toBeNull();
+    expect(document.body.textContent).not.toContain("Where");
+  });
+
+  it("turns the mark for a hidden id into words, in values and names", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/m",
+          name: "\uE002",
+          raw_name: "",
+          effect: "unreadable",
+          values: [{ text: "Owner: \uE002, State: open" }],
+        },
+      ],
+      counts: { unreadable: 1 },
+    });
+    expect(document.body.textContent).not.toContain("\uE002");
+    expect(document.body.textContent).toContain(
+      "Owner: an ID (see Technical details), State: open",
+    );
   });
 
   it("states an empty filter as every record", () => {

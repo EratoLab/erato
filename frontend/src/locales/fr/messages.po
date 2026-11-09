@@ -8639,6 +8639,16 @@ msgstr "De nombreuses valeurs différentes {scope} : {samples}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.set"
+msgstr "Défini {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.setTo"
+msgstr "Défini sur {samples} {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 #~ msgid "toolChange.batch.fields"
 #~ msgstr "Champs définis sur chaque ligne : {listed}"
 
@@ -8664,6 +8674,16 @@ msgstr "Aucune ligne ne supprime ni ne vide quoi que ce soit."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.archive"
+msgstr "{count, plural, one {# archivage} other {# archivages}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.comment"
+msgstr "{count, plural, one {# commentaire} other {# commentaires}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.op.create"
 msgstr "{count, plural, one {# création} other {# créations}}"
 
@@ -8674,13 +8694,43 @@ msgstr "{count, plural, one {# suppression} other {# suppressions}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.move"
+msgstr "{count, plural, one {# déplacement} other {# déplacements}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.op.other"
 msgstr "{count, plural, one {# autre} other {# autres}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.run"
+msgstr "{count, plural, one {# exécution} other {# exécutions}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.send"
+msgstr "{count, plural, one {# envoi} other {# envois}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.share"
+msgstr "{count, plural, one {# partage} other {# partages}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.op.update"
 msgstr "{count, plural, one {# mise à jour} other {# mises à jour}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.upload"
+msgstr "{count, plural, one {# téléversement} other {# téléversements}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.op.upsert"
+msgstr "{count, plural, one {# création ou mise à jour} other {# créations ou mises à jour}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: batch.total
@@ -8761,6 +8811,11 @@ msgstr "Cela s’applique à chaque enregistrement : le filtre est vide."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.filter.isEmpty"
+msgstr "{name} est vide"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.filter.where"
 msgstr "Filtre"
 
@@ -8773,6 +8828,41 @@ msgstr "Essai à blanc ({name})"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
 msgstr "Options"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.incomplete"
+msgstr "Cet appel est trop volumineux pour être lu en entier : il peut faire plus que ce qui est indiqué ici. Les Détails techniques contiennent l’appel complet."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.incomplete.conditions"
+msgstr "{conditions, plural, one {# condition} other {# conditions}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.incomplete.notShown"
+msgstr "Non affiché ici : {notShown}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.incomplete.statements"
+msgstr "{statements, plural, one {# instruction} other {# instructions}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.incomplete.texts"
+msgstr "{texts, plural, one {# texte} other {# textes}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.added"
+msgstr "{name} ajoutés"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.addsClaim"
+msgstr "Ajout uniquement, selon l’outil"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8911,6 +9001,21 @@ msgstr "Cela se trouve dans une instruction qui commence comme une lecture."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.kind.bcc"
+msgstr "Cci"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.kind.cc"
+msgstr "Cc"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.kind.to"
+msgstr "À"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.recipients.outside"
 msgstr "{count, plural, one {# adresse est en dehors de votre organisation : {names}{more}} other {# adresses sont en dehors de votre organisation : {names}{more}}}"
 
@@ -8932,6 +9037,11 @@ msgstr "{unchecked, plural, one {# destinataire n’a pas d’adresse vérifiabl
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.beingEmptied"
+msgstr "{name} est vidé"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.row.emptied"
 msgstr "Vidé"
 
@@ -8947,8 +9057,18 @@ msgstr "{total, plural, one {Voir # champ de plus, défini, ancienne valeur inco
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.seeMore.incomplete"
-msgstr "{total, plural, one {Voir # champ de plus, certaines valeurs n’ont pas pu être lues} other {Voir # champs de plus, certaines valeurs n’ont pas pu être lues}}"
+msgid "toolChange.seeMore.counts"
+msgstr "{total, plural, one {Voir # champ de plus : {detail}} other {Voir # champs de plus : {detail}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+#~ msgid "toolChange.seeMore.incomplete"
+#~ msgstr "{total, plural, one {Voir # champ de plus, certaines valeurs n’ont pas pu être lues} other {Voir # champs de plus, certaines valeurs n’ont pas pu être lues}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.inDetails"
+msgstr "{count, plural, one {L’autre champ (#) se trouve dans les Détails techniques.} other {Les # autres champs se trouvent dans les Détails techniques.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8959,6 +9079,11 @@ msgstr "{total, plural, one {Voir # champ de plus : {detail} (aucun n’est vid�
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.part.changed"
 msgstr "{changed, plural, one {# modifié} other {# modifiés}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.losses"
+msgstr "{losses, plural, one {# vidé ou remplacé} other {# vidés ou remplacés}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

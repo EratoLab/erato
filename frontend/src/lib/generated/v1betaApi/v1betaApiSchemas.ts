@@ -4449,6 +4449,10 @@ export type ToolArgumentNode = {
   children?: ToolArgumentNode[];
   kind: ToolArgumentKind;
   /**
+   * The member's own name is a machine identifier, which a card does not show.
+   */
+  machine_name?: boolean;
+  /**
    * Members or entries left out of `children`.
    *
    * @format int32
@@ -4588,9 +4592,20 @@ export type ToolCallBatchRow = {
   action?: ToolCallAction;
   effects?: ToolCallEffect[];
   /**
+   * Fields of the row past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  effects_omitted?: number;
+  /**
    * What it is called; absent when only a machine ID identifies it.
    */
   name?: string;
+  /**
+   * `name` came from an earlier result naming a machine ID, not the call.
+   */
+  name_from_earlier?: boolean;
   /**
    * The row's position in the call, from 1.
    *
@@ -4634,6 +4649,13 @@ export type ToolCallChange = {
    */
   opaque?: ToolCallOpaque[];
   /**
+   * Statements past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  opaque_omitted?: number;
+  /**
    * Where the record lives when no target says so: the table, the project,
    * joined when the call names several.
    */
@@ -4643,6 +4665,13 @@ export type ToolCallChange = {
    * Long text the call writes, shown as a block.
    */
   texts?: ToolCallTextChange[];
+  /**
+   * Long texts past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  texts_omitted?: number;
 };
 
 /**
@@ -4668,6 +4697,10 @@ export type ToolCallChangeNote =
  * One value a call writes and what happens to what is there.
  */
 export type ToolCallEffect = {
+  /**
+   * What a replaced list gains, where an earlier result showed the list.
+   */
+  added?: ToolCallEffectValue[];
   effect: ToolCallEffectKind;
   /**
    * What a replaced list keeps, where an earlier result showed the list.
@@ -4677,6 +4710,10 @@ export type ToolCallEffect = {
    * The value only links to another record.
    */
   link?: boolean;
+  /**
+   * The value is a list, whichever effect it has.
+   */
+  list?: boolean;
   /**
    * A readable name, display-cleaned.
    */
@@ -4778,12 +4815,23 @@ export type ToolCallFilter = {
    * The filter is empty: every record.
    */
   every_record?: boolean;
+  /**
+   * Conditions past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
   parts?: ToolCallFilterPart[];
   path: string;
   text?: ToolCallEffectValue;
 };
 
 export type ToolCallFilterPart = {
+  /**
+   * The condition asks for an empty value.
+   */
+  is_empty?: boolean;
   name: string;
   value: ToolCallEffectValue;
 };
@@ -4953,6 +5001,7 @@ export type ToolCallRecipientGroup = {
    * @minimum 0
    */
   count: number;
+  kind?: ToolCallRecipientKind;
   name: string;
   /**
    * @format int32
@@ -4965,6 +5014,11 @@ export type ToolCallRecipientGroup = {
    */
   values?: string[];
 };
+
+/**
+ * How a group of recipients is addressed.
+ */
+export type ToolCallRecipientKind = "to" | "cc" | "bcc";
 
 /**
  * Who a call reaches. Group addresses count as one and are never expanded.

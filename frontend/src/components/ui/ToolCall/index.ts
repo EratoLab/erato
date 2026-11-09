@@ -13,6 +13,7 @@ export {
 } from "./ToolCallGist";
 export {
   changeRowHasDetails,
+  ToolCallChangeBody,
   ToolCallChangeCard,
   ToolCallChangeRowDetails,
 } from "./ToolCallChange";

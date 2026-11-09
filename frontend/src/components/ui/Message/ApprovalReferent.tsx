@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   McpToolDescription,
   ToolArgumentView,
+  ToolCallChangeBody,
   ToolCallChangeCard,
   ToolCallGist,
   ToolCallIdentity,
@@ -302,6 +303,9 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
         <div className="mt-2 space-y-2">
           <CardNotes notes={card.notes} />
           {card.truncated && <TruncatedArgumentsNote />}
+          {card.change && (
+            <ToolCallChangeBody change={card.change} values={false} />
+          )}
           <ArgumentsScrollBox>
             <ToolArgumentView view={card.view} values={card.values} />
           </ArgumentsScrollBox>
@@ -312,7 +316,16 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
   return (
     <RawReferent
       {...props}
-      notes={card.kind === "generic" && <CardNotes notes={card.notes} />}
+      notes={
+        card.kind === "generic" && (
+          <>
+            <CardNotes notes={card.notes} />
+            {card.change && (
+              <ToolCallChangeBody change={card.change} values={false} />
+            )}
+          </>
+        )
+      }
     />
   );
 };

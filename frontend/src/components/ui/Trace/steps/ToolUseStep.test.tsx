@@ -258,6 +258,66 @@ describe("ToolUseStep with a change description", () => {
     expect(details).toHaveTextContent("Stage lead → customer");
   });
 
+  it.each([
+    ["failed", "error", "Could not update row Tailspin Toys"],
+    ["still running", "in_progress", "Update row Tailspin Toys"],
+  ])(
+    "states no counts or losses for a call that %s",
+    (_name, status, sentence) => {
+      render(
+        <ToolUseStep
+          part={
+            {
+              content_type: "tool_use",
+              tool_call_id: "call",
+              tool_name: "update_company",
+              status,
+              input: { name: "Tailspin Toys" },
+              output: { error: "server said no" },
+              display: { title: "Update", label },
+            } as unknown as ToolUse & { content_type: "tool_use" }
+          }
+          status={status === "error" ? "error" : "running"}
+          isStreaming={false}
+          isCollapsed={false}
+          isLastStep
+        />,
+      );
+      expect(screen.getByTestId("tool-call-gist-line").textContent).toBe(
+        sentence,
+      );
+      expect(screen.queryByTestId("tool-call-change-row-details")).toBeNull();
+      expect(document.body.textContent).not.toContain("Emptied");
+    },
+  );
+
+  it("states no counts or losses for a call the user denied", () => {
+    render(
+      <ToolUseStep
+        part={
+          {
+            content_type: "tool_use",
+            tool_call_id: "call",
+            tool_name: "update_company",
+            status: "error",
+            input: { name: "Tailspin Toys" },
+            output: {},
+            display: { title: "Update", label },
+          } as unknown as ToolUse & { content_type: "tool_use" }
+        }
+        decision={{ kind: "denied" } as unknown as ToolDecision}
+        status="error"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).not.toHaveTextContent(
+      "emptied",
+    );
+    expect(screen.queryByTestId("tool-call-change-row-details")).toBeNull();
+  });
+
   it("keeps the raw call behind the row's toggle", () => {
     render(
       <ToolUseStep
