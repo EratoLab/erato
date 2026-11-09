@@ -132,10 +132,12 @@ async fn process_message(
         .as_ref()
         .and_then(reminders::CardSubmit::from_value)
     {
-        if submit.keeps() {
-            return on_reminder_keep(bot, host, activity, target, sender, submit).await;
-        }
-        return on_reminder_cancel(bot, host, activity, target, sender, submit).await;
+        return match (submit.on_list(), submit.keeps()) {
+            (false, true) => on_reminder_keep(bot, host, activity, target, sender, submit).await,
+            (false, false) => on_reminder_cancel(bot, host, activity, target, sender, submit).await,
+            (true, true) => on_list_keep(bot, host, activity, target, sender, submit).await,
+            (true, false) => on_list_cancel(bot, host, activity, target, sender, submit).await,
+        };
     }
 
     let text = activity.text_without_bot_mention();
@@ -152,14 +154,20 @@ async fn process_message(
 
     // An unsubscribe must not depend on Graph consent: the activity is
     // verified at the route, and the sender is known by Entra object id.
-    if let Some(tips_on) = nudge::reminders_command(&text) {
-        if let Some(user) = known_user(bot, activity, target, sender).await? {
-            host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
-            target
-                .send_text(&reminders_text(bot, tips_on, lang))
-                .await?;
-        }
-        return Ok(());
+    if let Some(command) = nudge::reminders_command(&text) {
+        let Some(user) = known_user(bot, activity, target, sender).await? else {
+            return Ok(());
+        };
+        return match command {
+            nudge::RemindersCommand::Tips(tips_on) => {
+                host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
+                target.send_text(&reminders_text(bot, tips_on, lang)).await
+            }
+            nudge::RemindersCommand::List => {
+                let card = reminders_list_card(bot, host, user.id, None, lang).await?;
+                target.send(&card).await.map(|_| ())
+            }
+        };
     }
 
     let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
@@ -768,7 +776,7 @@ async fn on_reminder_keep(
 /// The line a confirmation card ends with once its reminder is no longer
 /// upcoming, as the web card's status reads.
 fn settled_note(status: Option<DisplayStatus>, scheduled_url: Option<&str>, lang: Lang) -> String {
-    let page = scheduled_page_link(scheduled_url, lang);
+    let page = reminders::scheduled_page_link(scheduled_url, lang);
     match status {
         Some(DisplayStatus::Cancelled) => Msg::ReminderCancelled.text(lang).to_string(),
         Some(DisplayStatus::Failed) => Msg::ReminderNotDelivered.fill(lang, &[("page", &page)]),
@@ -800,7 +808,8 @@ async fn current_confirmation_card(
     )))
 }
 
-/// One confirmation card per reminder the turn scheduled, after its answer.
+/// One confirmation card per reminder the turn scheduled, after its answer,
+/// then the list card when it listed the user's reminders and they have any.
 /// A reminder the turn also cancelled is confirmed as cancelled. A card that
 /// cannot be built or sent is logged: the reminder is stored and the answer
 /// already went out.
@@ -809,10 +818,10 @@ pub(super) async fn send_reminder_confirmations(
     host: &Host,
     target: &ReplyTarget<'_>,
     user_id: Uuid,
-    reminders: &[Uuid],
+    reminders: &reminders::TurnReminders,
 ) {
     let scheduled_url = scheduled_page_url(bot);
-    for item_id in reminders {
+    for item_id in &reminders.created {
         let card = match current_confirmation_card(
             host,
             user_id,
@@ -833,13 +842,131 @@ pub(super) async fn send_reminder_confirmations(
             tracing::warn!(%error, %item_id, "Could not send a reminder's confirmation card");
         }
     }
+    if !reminders.listed {
+        return;
+    }
+    let card = match host.upcoming_reminders(user_id, target.lang).await {
+        Ok(upcoming) if upcoming.is_empty() => return,
+        Ok(upcoming) => reminders::list_card(&upcoming, base_url(bot), None, target.lang),
+        Err(error) => {
+            tracing::warn!(%error, "Could not build the reminders list card");
+            return;
+        }
+    };
+    if let Err(error) = target.send(&card).await {
+        tracing::warn!(%error, "Could not send the reminders list card");
+    }
 }
 
-fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+fn base_url(bot: &TeamsBot) -> Option<&str> {
     bot.settings
         .public_base_url
         .as_deref()
-        .map(|base| format!("{}/scheduled", base.trim_end_matches('/')))
+        .map(|base| base.trim_end_matches('/'))
+}
+
+/// The user's upcoming reminders as the list card, with a note on the last
+/// press.
+async fn reminders_list_card(
+    bot: &TeamsBot,
+    host: &Host,
+    user_id: Uuid,
+    note: Option<&str>,
+    lang: Lang,
+) -> Result<Value, Report> {
+    let upcoming = host.upcoming_reminders(user_id, lang).await?;
+    Ok(reminders::list_card(&upcoming, base_url(bot), note, lang))
+}
+
+/// "Cancel it" on a row of the list card: the shared cancel for the user's
+/// own reminder, as on the confirmation card. The list then replaces the card
+/// in place, without that reminder and with a line on what happened; someone
+/// else's press only gets a reply.
+async fn on_list_cancel(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CardSubmit,
+) -> Result<(), Report> {
+    let lang = target.lang;
+    let Some(user) = known_user(bot, activity, target, sender).await? else {
+        return Ok(());
+    };
+    let note = match host.cancel_reminder(user.id, submit.item_id).await? {
+        Ok(item) => Msg::NamedReminderCancelled.fill(lang, &[("name", &item.name)]),
+        Err(refused) => match refused.code {
+            // Only the owner's press may redraw the card: it is drawn from the
+            // presser's reminders, and the card may be someone else's.
+            ScheduledItemErrorCode::NotFound => {
+                let reply = if host.reminder_exists(submit.item_id).await? {
+                    Msg::ReminderNotYours
+                } else {
+                    Msg::ReminderGone
+                };
+                return target.send_text(reply.text(lang)).await;
+            }
+            ScheduledItemErrorCode::Finished => settled_note(
+                host.reminder_status(user.id, submit.item_id).await?,
+                scheduled_page_url(bot).as_deref(),
+                lang,
+            ),
+            _ => Msg::ReminderUnchangeable.text(lang).to_string(),
+        },
+    };
+    replace_list_card(bot, host, activity, target, user.id, &note).await
+}
+
+/// "Keep it" on a row of the list card: the list goes back as it stands now,
+/// which folds the question away. Someone else's press changes nothing.
+async fn on_list_keep(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CardSubmit,
+) -> Result<(), Report> {
+    let (Ok(Some(user)), Some(card_id)) = (sender, activity.reply_to_id.as_deref()) else {
+        return Ok(());
+    };
+    if host
+        .reminder_status(user.id, submit.item_id)
+        .await?
+        .is_none()
+    {
+        return Ok(());
+    }
+    let card = reminders_list_card(bot, host, user.id, None, target.lang).await?;
+    if let Err(error) = target.update(card_id, card).await {
+        tracing::warn!(%error, "Could not put back the reminders list card");
+    }
+    Ok(())
+}
+
+/// Replace the pressed list card with the current list and `note`; when that
+/// fails, the note goes out as a message.
+async fn replace_list_card(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    note: &str,
+) -> Result<(), Report> {
+    if let Some(card_id) = activity.reply_to_id.as_deref() {
+        let card = reminders_list_card(bot, host, user_id, Some(note), target.lang).await?;
+        match target.update(card_id, card).await {
+            Ok(()) => return Ok(()),
+            Err(error) => tracing::warn!(%error, "Could not replace the reminders list card"),
+        }
+    }
+    target.send_text(note).await
+}
+
+fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+    base_url(bot).map(|base| format!("{base}{}", scheduled_items::chat_tools::SCHEDULED_PATH))
 }
 
 /// Why a reminder's button did nothing, shown on the card in its place.
@@ -855,15 +982,10 @@ fn reminder_refusal_note(refusal: Refusal) -> Msg {
 }
 
 fn reminder_button_gone_text(scheduled_url: Option<&str>, lang: Lang) -> String {
-    Msg::ReminderButtonGone.fill(lang, &[("page", &scheduled_page_link(scheduled_url, lang))])
-}
-
-fn scheduled_page_link(scheduled_url: Option<&str>, lang: Lang) -> String {
-    let name = Msg::ScheduledPage.text(lang);
-    match scheduled_url {
-        Some(url) => format!("[{name}]({url})"),
-        None => name.to_string(),
-    }
+    Msg::ReminderButtonGone.fill(
+        lang,
+        &[("page", &reminders::scheduled_page_link(scheduled_url, lang))],
+    )
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
@@ -1895,7 +2017,7 @@ mod tests {
             earlier_text: String::new(),
             approvals: None,
             needs_client: false,
-            reminders: Vec::new(),
+            reminders: Default::default(),
             client_tasks: Vec::new(),
         }
     }

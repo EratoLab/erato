@@ -308,7 +308,7 @@ pub async fn run(
 ) -> Result<CallResult, Report> {
     match name {
         CREATE_REMINDER => create(app_state, call, arguments).await,
-        LIST_REMINDERS => list(app_state, call.user_id).await,
+        LIST_REMINDERS => list(app_state, call).await,
         CANCEL_REMINDER => cancel(app_state, call.user_id, arguments).await,
         other => Err(eyre!("`{other}` is not a reminder tool")),
     }
@@ -483,16 +483,24 @@ async fn created_output(
     }))
 }
 
-async fn list(app_state: &AppState, user_id: Uuid) -> Result<CallResult, Report> {
-    let (zone, _) = entry_zone(app_state, user_id).await?;
+async fn list(app_state: &AppState, call: CallContext<'_>) -> Result<CallResult, Report> {
+    let (zone, _) = entry_zone(app_state, call.user_id).await?;
+    let reminders = upcoming(app_state, call.user_id).await?;
+    let any = reminders.as_array().is_some_and(|list| !list.is_empty());
+    let mut output = json!({
+        "status": "ok",
+        "time_zone": zone.name(),
+        "max_upcoming": MAX_ACTIVE_ITEMS,
+        "reminders": reminders,
+    });
+    if any && call.platform == Some(crate::ms_teams_bot::TEAMS_PLATFORM) {
+        output["shown_to_user"] = json!(
+            "When you only show these reminders, the user sees them after your answer as a card with a Cancel button for each, so answer briefly without repeating every reminder."
+        );
+    }
     Ok(CallResult {
         succeeded: true,
-        output: json!({
-            "status": "ok",
-            "time_zone": zone.name(),
-            "max_upcoming": MAX_ACTIVE_ITEMS,
-            "reminders": upcoming(app_state, user_id).await?,
-        }),
+        output,
     })
 }
 
@@ -537,19 +545,38 @@ async fn stored_language(app_state: &AppState, user_id: Uuid) -> Result<Lang, Re
     .await
 }
 
-/// The user's upcoming reminders, the next one first.
 async fn upcoming(app_state: &AppState, user_id: Uuid) -> Result<Value, Report> {
-    let mut views = super::list(&app_state.db, user_id, false, 0).await?;
-    let now = Utc::now();
-    views.sort_by_key(|view| super::next_occurrence(view, now));
     let lang = stored_language(app_state, user_id).await?;
+    Ok(json!(upcoming_reminders(app_state, user_id, lang).await?))
+}
+
+/// The user's upcoming reminders, the next one first, with their times in
+/// `lang`: what `list_reminders` returns and the Teams list card shows.
+pub async fn upcoming_reminders(
+    app_state: &AppState,
+    user_id: Uuid,
+    lang: Lang,
+) -> Result<Vec<ReminderSummary>, Report> {
+    let now = Utc::now();
+    // A one-off that just went out stays active until the producer ends it,
+    // but nothing of it is upcoming any more.
+    let mut views: Vec<_> = super::list(&app_state.db, user_id, false, 0)
+        .await?
+        .into_iter()
+        .filter(|view| {
+            matches!(
+                super::display_status(view, now),
+                DisplayStatus::Scheduled | DisplayStatus::Snoozed
+            )
+        })
+        .collect();
+    views.sort_by_key(|view| super::next_occurrence(view, now));
     let user_zone = user_time_zone(&app_state.db, &user_id).await?;
     let titles = chat_titles(app_state, user_id, &views.iter().collect::<Vec<_>>()).await?;
-    let summaries = views
+    views
         .iter()
         .map(|view| summary(view, &titles, user_zone, now, lang))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(json!(summaries))
+        .collect()
 }
 
 async fn chat_titles(
@@ -576,26 +603,27 @@ async fn chat_titles(
         .collect())
 }
 
-#[derive(Debug, Serialize)]
-struct LinkedChatSummary {
-    id: Uuid,
-    title: String,
+#[derive(Debug, Clone, Serialize)]
+pub struct LinkedChatSummary {
+    pub id: Uuid,
+    /// Empty for a chat without a title.
+    pub title: String,
 }
 
 /// A reminder as the model reads it.
-#[derive(Debug, Serialize)]
-struct ReminderSummary {
-    id: Uuid,
-    name: String,
-    message: String,
-    status: DisplayStatus,
+#[derive(Debug, Clone, Serialize)]
+pub struct ReminderSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub message: String,
+    pub status: DisplayStatus,
     /// When it arrives next, in the user's language.
-    when: Option<String>,
+    pub when: Option<String>,
     /// The wall-clock time in `time_zone`.
-    next_local: Option<NaiveDateTime>,
-    repeats: Option<String>,
-    time_zone: String,
-    linked_chat: Option<LinkedChatSummary>,
+    pub next_local: Option<NaiveDateTime>,
+    pub repeats: Option<String>,
+    pub time_zone: String,
+    pub linked_chat: Option<LinkedChatSummary>,
 }
 
 fn summary(
