@@ -537,7 +537,7 @@ async fn on_delivery_action(
         return Ok(());
     };
     if command == nudge::DeliveryCommand::ContinueChat {
-        return continue_reminder_chat(host, activity, target, user.id, submit.delivery_id).await;
+        return continue_reminder_chat(host, activity, target, user.id, &submit).await;
     }
     let conversation_id = activity.conversation_id().unwrap_or_default();
     if !host
@@ -573,14 +573,17 @@ async fn continue_reminder_chat(
     activity: &Activity,
     target: &ReplyTarget<'_>,
     user_id: Uuid,
-    delivery_id: Uuid,
+    submit: &nudge::DeliverySubmit,
 ) -> Result<(), Report> {
     let lang = target.lang;
     let kind = activity.conversation_kind();
     if !kind.is_personal() {
         return target.send_text(Msg::ButtonNotSupported.text(lang)).await;
     }
-    let Some(chat) = host.reminder_chat_to_continue(user_id, delivery_id).await? else {
+    let Some(chat) = host
+        .reminder_chat_to_continue(user_id, submit.delivery_id, submit.target)
+        .await?
+    else {
         return target
             .send_text(Msg::ReminderChatUnavailable.text(lang))
             .await;
