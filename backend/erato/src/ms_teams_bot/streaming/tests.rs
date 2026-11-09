@@ -87,6 +87,7 @@ impl Harness {
             conversation_id: "conversation",
             reply_to_id: None,
             mention: None,
+            lang: Lang::En,
         }
     }
 

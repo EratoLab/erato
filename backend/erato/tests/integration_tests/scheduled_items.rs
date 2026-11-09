@@ -46,9 +46,10 @@ fn settings() -> ExecutorSettings {
 
 fn registry(channel: &Arc<RecordingChannel>) -> DeliveryRegistry {
     let mut registry = DeliveryRegistry::new();
-    registry.register_producer(Arc::new(ReminderProducer::new(Some(format!(
-        "{BASE_URL}/"
-    )))));
+    registry.register_producer(Arc::new(ReminderProducer::new(
+        Some(format!("{BASE_URL}/")),
+        "en",
+    )));
     registry.register_channel(channel.clone());
     registry
 }
@@ -454,7 +455,7 @@ async fn editing_and_cancelling_act_on_the_coming_occurrences(pool: Pool<Postgre
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn an_occurrence_in_flight_follows_the_item(pool: Pool<Postgres>) {
     let (db, user) = database(pool).await;
-    let producer = ReminderProducer::new(None);
+    let producer = ReminderProducer::new(None, "en");
     let tomorrow = Trigger::Once {
         date: today() + Duration::days(1),
         time: nine(),

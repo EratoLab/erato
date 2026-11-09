@@ -7,8 +7,7 @@ pub use crate::db::entity::ms_teams_requests::{ActionKind, RequestState};
 use crate::models::message::MessageRole;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::server::api::v1beta::message_streaming::{
-    EditMessageRequest, RegenerateMessageRequest, STALE_REVISION_MESSAGE, start_edit,
-    start_regeneration,
+    EditMessageRequest, RegenerateMessageRequest, start_edit, start_regeneration,
 };
 use sea_orm::{DbBackend, FromQueryResult, Statement};
 
@@ -563,7 +562,7 @@ impl Host {
             .current_tip(session, request)
             .await
             .map_err(|error| StartError::internal("check the latest question", error))?
-            .ok_or_else(|| StartError::Rejected(STALE_REVISION_MESSAGE.into()))?;
+            .ok_or(StartError::Refused(Msg::NotLatestQuestion))?;
         // Do not inspect a partially persisted aborted turn and then race its
         // cleanup into a new lease: its final tool effects may still be saved.
         if self.generation_active(request.chat_id).await {
@@ -574,27 +573,23 @@ impl Host {
                 let message_id = request
                     .assistant_message_id
                     .filter(|message_id| *message_id == tip)
-                    .ok_or_else(|| {
-                        StartError::Rejected("There is no saved answer to retry.".into())
-                    })?;
+                    .ok_or(StartError::Refused(Msg::NoAnswerToRetry))?;
                 let assistant = Messages::find_by_id(message_id)
                     .one(&self.app_state.db)
                     .await
                     .map_err(|error| StartError::internal("load the answer to retry", error))?
                     .filter(|message| message.chat_id == request.chat_id)
-                    .ok_or_else(|| {
-                        StartError::Rejected("This answer is no longer available.".into())
-                    })?;
+                    .ok_or(StartError::Refused(Msg::AnswerUnavailable))?;
                 let parsed = MessageSchema::validate(&assistant.raw_message).map_err(|error| {
                     tracing::warn!(%error, "Teams retry found an unreadable answer");
-                    StartError::Rejected("This answer can no longer be retried.".into())
+                    StartError::Refused(Msg::AnswerCannotRetry)
                 })?;
                 if request.tools_started
                     || parsed.content.iter().any(|part| {
                         !matches!(part, ContentPart::Text(_) | ContentPart::Reasoning(_))
                     })
                 {
-                    return Err(StartError::Rejected("Tools may already have run. Send a new instruction to continue without repeating their effects.".into()));
+                    return Err(StartError::Refused(Msg::ToolsMayHaveRun));
                 }
                 start_regeneration(
                     &self.app_state,
@@ -608,8 +603,7 @@ impl Host {
                 .await?
             }
             ActionKind::Edit => {
-                let unavailable =
-                    || StartError::Rejected("The original question is unavailable.".into());
+                let unavailable = || StartError::Refused(Msg::QuestionUnavailable);
                 let user_message_id = request.user_message_id.ok_or_else(unavailable)?;
                 let user_message = Messages::find_by_id(user_message_id)
                     .one(&self.app_state.db)
@@ -624,13 +618,12 @@ impl Host {
                     })?
                     .role;
                 if role != MessageRole::User {
-                    return Err(StartError::Rejected(
-                        "Only your question can be edited.".into(),
-                    ));
+                    return Err(StartError::Refused(Msg::OnlyYourQuestion));
                 }
-                let edited = request.pending_edit.clone().ok_or_else(|| {
-                    StartError::Rejected("This edit is no longer available.".into())
-                })?;
+                let edited = request
+                    .pending_edit
+                    .clone()
+                    .ok_or(StartError::Refused(Msg::EditUnavailable))?;
                 start_edit(
                     &self.app_state,
                     &session.policy,
@@ -651,6 +644,8 @@ impl Host {
             started.chat_id,
             started.events,
             Some(started.client_stream_guard),
+            session.lang,
+            self.app_name(),
         ))
     }
 }

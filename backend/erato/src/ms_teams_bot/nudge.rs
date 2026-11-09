@@ -13,6 +13,7 @@ use super::cards;
 use super::connector::ActivityError;
 use super::host::Host;
 use super::render;
+use super::texts::Msg;
 use crate::db::entity::prelude::MsTeamsConversations;
 use crate::db::entity::scheduled_deliveries::{CreatedBy, Model};
 use crate::db::entity::scheduled_items::Model as ScheduledItem;
@@ -28,6 +29,7 @@ use crate::services::scheduled_deliveries::{
 use crate::services::scheduled_items::{
     self, Change, DONE_COMMAND, SNOOZE_COMMAND, SnoozeChoice, TOMORROW_COMMAND,
 };
+use crate::services::text_language;
 use chrono::{
     DateTime, Datelike, Duration as ChronoDuration, FixedOffset, TimeZone, Timelike, Utc,
 };
@@ -77,6 +79,7 @@ pub fn register(
         reloadable,
         &bot.settings.app_name,
         bot.settings.public_base_url.as_deref(),
+        &bot.settings.default_language,
     )));
 }
 
@@ -198,6 +201,9 @@ pub struct InactivityNudgeProducer {
     settings: SettingsSource,
     app_name: String,
     public_base_url: Option<String>,
+    /// For users without a stored language. The tip itself is as the admin
+    /// entered it; only the card around it follows the user's language.
+    default_language: String,
     last_run: Mutex<Option<Instant>>,
 }
 
@@ -223,6 +229,7 @@ impl InactivityNudgeProducer {
         config: &TeamsInactivityNudgeConfig,
         app_name: &str,
         public_base_url: Option<&str>,
+        default_language: &str,
     ) -> Result<Self, Report> {
         if config.tips.is_empty() {
             return Err(eyre!("the inactivity nudge needs at least one tip"));
@@ -231,6 +238,7 @@ impl InactivityNudgeProducer {
             SettingsSource::Fixed(Arc::new(NudgeSettings::from_config(config)?)),
             app_name,
             public_base_url,
+            default_language,
         ))
     }
 
@@ -240,19 +248,27 @@ impl InactivityNudgeProducer {
         reloadable: Arc<RwLock<ReloadableAppState>>,
         app_name: &str,
         public_base_url: Option<&str>,
+        default_language: &str,
     ) -> Self {
         Self::new(
             SettingsSource::Reloadable(reloadable),
             app_name,
             public_base_url,
+            default_language,
         )
     }
 
-    fn new(settings: SettingsSource, app_name: &str, public_base_url: Option<&str>) -> Self {
+    fn new(
+        settings: SettingsSource,
+        app_name: &str,
+        public_base_url: Option<&str>,
+        default_language: &str,
+    ) -> Self {
         Self {
             settings,
             app_name: app_name.to_string(),
             public_base_url: public_base_url.map(|url| url.trim_end_matches('/').to_string()),
+            default_language: default_language.to_string(),
             last_run: Mutex::new(None),
         }
     }
@@ -489,11 +505,13 @@ impl DeliveryProducer for InactivityNudgeProducer {
             .to_string();
         let token = Uuid::new_v4();
         store_action_token(db, row, token).await?;
+        let lang = text_language::of_user(db, row.user_id, None, &self.default_language).await?;
+        let app = [("app", self.app_name.as_str())];
         let links = self
             .public_base_url
             .iter()
             .map(|url| DeliveryLink {
-                title: format!("Open {}", self.app_name),
+                title: Msg::OpenApp.fill(lang, &app),
                 url: url.clone(),
             })
             .collect();
@@ -502,10 +520,10 @@ impl DeliveryProducer for InactivityNudgeProducer {
             content: DeliveryContent {
                 title: None,
                 text: tip,
-                summary: Some(format!("A tip from {}", self.app_name)),
+                summary: Some(Msg::TipFrom.fill(lang, &app)),
                 links,
                 actions: vec![DeliveryAction {
-                    title: "Don't remind me".to_string(),
+                    title: Msg::DontRemindMe.text(lang).to_string(),
                     command: OPT_OUT_COMMAND.to_string(),
                     token: Some(token),
                 }],
@@ -895,6 +913,7 @@ mod tests {
             &config,
             "Hugo",
             Some("https://hugo.example.com/"),
+            "en",
         )
         .unwrap();
         assert_eq!(

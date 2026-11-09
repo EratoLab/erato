@@ -25,13 +25,14 @@ pub mod wording;
 use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
-use crate::models::chat::resolve_chat_display_name;
+use crate::models::chat::chat_title;
 use crate::models::user_preference::user_time_zone;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
     self as deliveries, DeliveryAction, DeliveryContent, DeliveryLink, DeliveryProducer,
     NewDelivery, ResolvedContent, StillDue, cancel_open, schedule, snooze, store_action_token,
 };
+use crate::services::text_language;
 use chrono::{DateTime, NaiveTime, SecondsFormat, SubsecRound, Utc};
 use chrono_tz::Tz;
 use eyre::{Report, eyre};
@@ -953,15 +954,18 @@ async fn advance(db: &DatabaseConnection, item_id: Uuid) -> Result<bool, Report>
 }
 
 /// Delivers user reminders: the item's name as title, its message as body,
-/// and a link to the linked chat.
+/// and a link to the linked chat. Buttons and times are in the user's stored
+/// language, else in `default_language`.
 pub struct ReminderProducer {
     public_base_url: Option<String>,
+    default_language: String,
 }
 
 impl ReminderProducer {
-    pub fn new(public_base_url: Option<String>) -> Self {
+    pub fn new(public_base_url: Option<String>, default_language: &str) -> Self {
         Self {
             public_base_url: public_base_url.map(|url| url.trim_end_matches('/').to_string()),
+            default_language: default_language.to_string(),
         }
     }
 
@@ -1055,13 +1059,16 @@ impl DeliveryProducer for ReminderProducer {
                 .filter(|chat| chat.owner_user_id == item.user_id.to_string()),
             _ => None,
         };
+        let lang = text_language::of_user(db, item.user_id, None, &self.default_language).await?;
         let links = chat
             .zip(self.public_base_url.as_deref())
             .map(|(chat, base)| DeliveryLink {
-                title: resolve_chat_display_name(
+                title: chat_title(
                     chat.title_by_user_provided.as_deref(),
                     chat.title_by_summary.as_deref(),
-                ),
+                )
+                .unwrap_or(wording::untitled_chat(lang))
+                .to_string(),
                 url: format!("{base}/chat/{}", chat.id),
             })
             .into_iter()
@@ -1072,7 +1079,7 @@ impl DeliveryProducer for ReminderProducer {
         let zone = zone_of(&item)?;
         let user_zone = user_time_zone(db, &item.user_id).await?;
         let mut actions = vec![DeliveryAction {
-            title: wording::DONE_BUTTON.to_string(),
+            title: wording::done_button(lang).to_string(),
             command: DONE_COMMAND.to_string(),
             token: Some(token),
         }];
@@ -1081,7 +1088,7 @@ impl DeliveryProducer for ReminderProducer {
                 .await?
                 .into_iter()
                 .map(|choice| DeliveryAction {
-                    title: wording::snooze_button(choice, zone, user_zone),
+                    title: wording::snooze_button(choice, zone, user_zone, lang),
                     command: choice.command().to_string(),
                     token: Some(token),
                 }),

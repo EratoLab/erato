@@ -4,7 +4,9 @@
 use super::*;
 use chrono::{Timelike, Utc};
 use erato::db::entity::scheduled_deliveries::DeliveryState;
-use erato::models::user_preference::{set_teams_nudges_opt_out, teams_nudges_opted_out};
+use erato::models::user_preference::{
+    record_client_locale, set_teams_nudges_opt_out, teams_nudges_opted_out,
+};
 use erato::ms_teams_bot::nudge::{CHANNEL, DeliverySubmit, InactivityNudgeProducer, KIND};
 use erato::services::scheduled_deliveries::{
     DeliveryOutcome, DeliveryProducer, DeliveryRegistry, ExecutorSettings, RecordingChannel,
@@ -38,7 +40,7 @@ fn config() -> TeamsInactivityNudgeConfig {
 }
 
 fn producer(config: &TeamsInactivityNudgeConfig) -> InactivityNudgeProducer {
-    InactivityNudgeProducer::from_config(config, APP_NAME, Some("https://hugo.example.com"))
+    InactivityNudgeProducer::from_config(config, APP_NAME, Some("https://hugo.example.com"), "en")
         .expect("producer")
 }
 
@@ -188,6 +190,60 @@ fn producer_with(adjust: impl FnOnce(&mut TeamsInactivityNudgeConfig)) -> Inacti
     let mut config = config();
     adjust(&mut config);
     producer(&config)
+}
+
+/// A tip goes out without a message to answer, so the card around it
+/// follows the user's stored language, else the deployment's default. The
+/// tip stays as the admin entered it.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn the_tip_card_follows_the_stored_language(pool: Pool<Postgres>) {
+    let db = sea_orm::SqlxPostgresConnector::from_sqlx_postgres_pool(pool);
+    let german = user(&db, "german", "german@example.com").await;
+    record_client_locale(&db, &german.id, None, Some("de-AT"))
+        .await
+        .unwrap();
+    let unset = user(&db, "unset", "unset@example.com").await;
+    for (user, conversation) in [(&german, "a:german"), (&unset, "a:unset")] {
+        personal_conversation(&db, user.id, conversation).await;
+        last_activity_hours_ago(&db, user.id, 3.0).await;
+    }
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(producer(&config())));
+    registry.register_channel(channel.clone());
+    let outcome = run_delivery_tick(&db, &settings(), &registry).await;
+    assert_eq!(outcome.delivered, 2, "{outcome:?}");
+    let card_of = |user_id: Uuid| {
+        channel
+            .deliveries()
+            .into_iter()
+            .find(|delivery| delivery.user_id == user_id)
+            .expect("a tip")
+            .content
+    };
+    let card = card_of(german.id);
+    assert_eq!(card.text, "Tip one");
+    assert_eq!(card.summary.as_deref(), Some("Ein Tipp von Hugo"));
+    assert_eq!(card.links[0].title, "Hugo öffnen");
+    assert_eq!(card.actions[0].title, "Nicht mehr erinnern");
+    assert_eq!(card_of(unset.id).actions[0].title, "Don't remind me");
+
+    let defaults_to_german =
+        InactivityNudgeProducer::from_config(&config(), APP_NAME, None, "de").expect("producer");
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(defaults_to_german));
+    let channel = Arc::new(RecordingChannel::new(CHANNEL));
+    registry.register_channel(channel.clone());
+    let newcomer = user(&db, "newcomer", "newcomer@example.com").await;
+    personal_conversation(&db, newcomer.id, "a:newcomer").await;
+    last_activity_hours_ago(&db, newcomer.id, 3.0).await;
+    run_delivery_tick(&db, &settings(), &registry).await;
+    let delivered = channel.deliveries();
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(delivered[0].content.actions[0].title, "Nicht mehr erinnern");
 }
 
 /// One tip per inactivity period, the next only after the user was active
@@ -360,7 +416,7 @@ async fn the_producer_follows_reloaded_settings(pool: Pool<Postgres>) {
     let db = app_state.db.clone();
     app_state.reloadable.write().await.teams_nudge = config();
     let producer =
-        InactivityNudgeProducer::reloadable(app_state.reloadable.clone(), APP_NAME, None);
+        InactivityNudgeProducer::reloadable(app_state.reloadable.clone(), APP_NAME, None, "en");
 
     let inactive = user(&db, "reloaded", "reloaded@example.com").await;
     personal_conversation(&db, inactive.id, "a:reloaded").await;

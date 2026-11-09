@@ -4,6 +4,7 @@
 use super::cards;
 use super::host::{ActionKind, RequestState, TeamsRequest};
 use super::render;
+use super::texts::{Lang, Msg};
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -45,56 +46,61 @@ pub fn should_show(request: &TeamsRequest) -> bool {
     }
 }
 
-pub fn activity(request: &TeamsRequest) -> Value {
+pub fn activity(request: &TeamsRequest, lang: Lang) -> Value {
     let mut actions = Vec::new();
     let mut body = Vec::new();
     let text = if request.running() {
         if request.state == RequestState::Stopping {
-            "Stopping…"
+            Msg::Stopping
         } else {
-            super::streaming::WORKING_STATUS
+            Msg::Working
         }
     } else if request.pending_edit.is_some() {
-        "Your question was edited. Regenerate the answer using the updated question?"
+        Msg::QuestionEdited
     } else if request.state == RequestState::Stopped {
-        "Stopped."
+        Msg::Stopped
     } else if request.state == RequestState::Failed {
-        "The response could not be completed."
+        Msg::ResponseIncomplete
     } else {
-        "Finished."
-    };
+        Msg::Finished
+    }
+    .text(lang);
+    let note =
+        |msg: Msg| json!({"type":"TextBlock", "text":msg.text(lang), "wrap":true, "isSubtle":true});
     body.push(json!({"type":"TextBlock", "text":text, "wrap":true}));
     if request.state == RequestState::Running
         && !request.native_stop_available
         && let Some(message_id) = request.assistant_message_id
     {
-        actions.push(json!({"type":"Action.Submit", "title":"Stop", "data":{
+        actions.push(json!({"type":"Action.Submit", "title":Msg::Stop.text(lang), "data":{
             "action":ACTION, "command":ControlCommand::Stop, "request_id":request.id, "message_id":message_id
         }}));
     }
     if let Some(edited) = request.pending_edit.as_deref() {
         let preview: String = edited.chars().take(1200).collect();
         body.push(json!({"type":"TextBlock", "text":preview, "wrap":true}));
-        body.push(json!({"type":"TextBlock", "text":"Regenerating starts a new answer and may run tools again. Original attachments are kept.", "wrap":true, "isSubtle":true}));
+        body.push(note(Msg::RegenerateHint));
         if request.running() {
-            body.push(json!({"type":"TextBlock", "text":"Stop the current response or wait for it to finish before regenerating.", "wrap":true}));
+            body.push(json!({"type":"TextBlock", "text":Msg::StopBeforeRegenerating.text(lang), "wrap":true}));
         }
     }
     if !request.running() {
         if let (Some(token), Some(kind)) = (request.action_token, request.action_kind) {
             let (title, command) = match kind {
-                ActionKind::Edit => ("Regenerate edited question", ControlCommand::Edit),
-                ActionKind::Retry => ("Retry", ControlCommand::Retry),
+                ActionKind::Edit => (Msg::RegenerateEdited, ControlCommand::Edit),
+                ActionKind::Retry => (Msg::Retry, ControlCommand::Retry),
             };
-            actions.push(json!({"type":"Action.Submit", "title":title, "data":{
-                "action":ACTION, "command":command, "request_id":request.id, "token":token
-            }}));
+            actions.push(
+                json!({"type":"Action.Submit", "title":title.text(lang), "data":{
+                    "action":ACTION, "command":command, "request_id":request.id, "token":token
+                }}),
+            );
         } else if matches!(request.state, RequestState::Stopped | RequestState::Failed)
             && request.tools_started
         {
-            body.push(json!({"type":"TextBlock", "text":"This request involved tools. Send a new instruction to continue without automatically repeating their work.", "wrap":true, "isSubtle":true}));
+            body.push(note(Msg::ToolsInvolved));
         } else if request.state == RequestState::Failed {
-            body.push(json!({"type":"TextBlock", "text":"Send a new message to continue.", "wrap":true, "isSubtle":true}));
+            body.push(note(Msg::SendNewMessage));
         }
     }
     render::card_message(cards::adaptive_card(body, actions), text)
@@ -143,7 +149,7 @@ mod tests {
         request.pending_edit = Some("Edited question".into());
         assert!(should_show(&request), "retain the pending-edit explanation");
         assert!(
-            activity(&request)["attachments"][0]["content"]["actions"]
+            activity(&request, Lang::En)["attachments"][0]["content"]["actions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -152,12 +158,12 @@ mod tests {
         request.native_stop_available = false;
         assert!(should_show(&request));
         assert_eq!(
-            activity(&request)["attachments"][0]["content"]["actions"][0]["title"],
+            activity(&request, Lang::En)["attachments"][0]["content"]["actions"][0]["title"],
             "Stop"
         );
         request.state = RequestState::Stopping;
         assert!(
-            activity(&request)["attachments"][0]["content"]["actions"]
+            activity(&request, Lang::En)["attachments"][0]["content"]["actions"]
                 .as_array()
                 .unwrap()
                 .is_empty()
@@ -168,12 +174,33 @@ mod tests {
         request.action_token = Some(Uuid::new_v4());
         assert!(should_show(&request), "native Stop still gets Erato Retry");
         assert_eq!(
-            activity(&request)["attachments"][0]["content"]["actions"][0]["title"],
+            activity(&request, Lang::En)["attachments"][0]["content"]["actions"][0]["title"],
             "Retry"
         );
         request.state = RequestState::Completed;
         request.action_token = None;
         assert!(!should_show(&request));
+    }
+
+    #[test]
+    fn a_german_users_controls_are_german() {
+        let mut request = request();
+        request.native_stop_available = false;
+        let card = &activity(&request, Lang::De)["attachments"][0]["content"];
+        assert_eq!(card["body"][0]["text"], "Ihre Anfrage wird bearbeitet…");
+        assert_eq!(card["actions"][0]["title"], "Stoppen");
+        request.state = RequestState::Failed;
+        request.action_kind = Some(ActionKind::Retry);
+        request.action_token = Some(Uuid::new_v4());
+        let failed = activity(&request, Lang::De);
+        assert_eq!(
+            failed["summary"],
+            "Die Antwort konnte nicht abgeschlossen werden."
+        );
+        assert_eq!(
+            failed["attachments"][0]["content"]["actions"][0]["title"],
+            "Erneut versuchen"
+        );
     }
 
     #[test]
@@ -183,7 +210,7 @@ mod tests {
         request.action_kind = Some(ActionKind::Edit);
         request.action_token = Some(Uuid::new_v4());
         request.pending_edit = Some("Edited question".into());
-        let card = activity(&request);
+        let card = activity(&request, Lang::En);
         let submit =
             Submit::from_value(&card["attachments"][0]["content"]["actions"][0]["data"]).unwrap();
         assert_eq!(submit.command, ControlCommand::Edit);

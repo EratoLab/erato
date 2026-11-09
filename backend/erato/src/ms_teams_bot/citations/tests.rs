@@ -2,6 +2,14 @@ use super::*;
 
 const FILE: &str = "d8d87f60-f27a-4fd9-8a9a-31d6deea74bf";
 
+fn render(text: &str, sources: &[FileSource], base: Option<&str>) -> (String, Vec<Citation>) {
+    super::render(text, sources, base, Lang::En)
+}
+
+fn details(text: &str, sources: &[FileSource], base: Option<&str>) -> String {
+    super::details(text, sources, base, Lang::En)
+}
+
 fn sources() -> Vec<FileSource> {
     vec![FileSource {
         id: FILE.into(),
@@ -159,4 +167,14 @@ fn bare_file_urls_keep_sentence_punctuation_and_large_numeric_text_still_splits(
     assert_eq!(citations.len(), 1);
     let long_number = format!("[{}]", "1".repeat(30_000));
     assert_eq!(split(&long_number, &[], None).concat(), long_number);
+}
+
+#[test]
+fn german_answers_name_pages_and_missing_files_in_german() {
+    let input = format!(
+        "See [the report](erato-file://{FILE}#page=3) and [](erato-file://00000000-0000-4000-8000-000000000000)."
+    );
+    let (text, citations) = super::render(&input, &sources(), None, Lang::De);
+    assert_eq!(text, "See the report [1] and Nicht verfügbare Datei.");
+    assert_eq!(citations[0].appearance["abstract"], "Seite 3");
 }

@@ -4,6 +4,7 @@
 use super::citations::{self, Citation, FileSource};
 use super::connector::{ActivityError, Connector};
 use super::render::{self, MAX_MESSAGE_CHARS};
+use super::texts::{Lang, Msg};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::time::Instant;
@@ -12,7 +13,6 @@ const MIN_UPDATE_INTERVAL: Duration = Duration::from_millis(1_500);
 const MAX_STREAM_DURATION: Duration = Duration::from_secs(100);
 const MAX_STATUS_BYTES: usize = 900;
 pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
-pub const WORKING_STATUS: &str = "Working on your request…";
 
 pub struct ReplyTarget<'a> {
     pub connector: &'a Connector,
@@ -21,6 +21,8 @@ pub struct ReplyTarget<'a> {
     /// Set in group chats and channels: replies stay in the thread.
     pub reply_to_id: Option<&'a str>,
     pub mention: Option<render::Mention>,
+    /// The language of everything the bot itself writes here.
+    pub lang: Lang,
 }
 
 impl ReplyTarget<'_> {
@@ -329,7 +331,9 @@ impl<'a> StreamingReply<'a> {
             return;
         }
         let text = if self.streamed_text.is_empty() {
-            self.rendered.as_deref().unwrap_or(WORKING_STATUS)
+            self.rendered
+                .as_deref()
+                .unwrap_or(Msg::Working.text(self.target.lang))
         } else {
             &self.streamed_text
         };
@@ -416,10 +420,11 @@ impl<'a> StreamingReply<'a> {
         if self.cancelled {
             return Ok(());
         }
+        let stopped = format!("**{}**", Msg::Stopped.text(self.target.lang));
         let text = if self.text.trim().is_empty() {
-            "**Stopped.**".to_string()
+            stopped
         } else {
-            format!("**Stopped.**\n\n{}", self.text)
+            format!("{stopped}\n\n{}", self.text)
         };
         self.finish(&text).await
     }
@@ -440,16 +445,18 @@ impl<'a> StreamingReply<'a> {
         sources: &[FileSource],
         public_base_url: Option<&str>,
     ) -> eyre::Result<()> {
-        let (text, citations) = citations::render(text, sources, public_base_url);
+        let lang = self.target.lang;
+        let (text, citations) = citations::render(text, sources, public_base_url, lang);
         self.citations = citations;
         // Details remain a separate card. Its links need ordinary HTTPS URLs,
         // not citation markers whose metadata belongs to the answer activity.
-        let earlier_text = citations::details(earlier_text, sources, public_base_url);
+        let earlier_text = citations::details(earlier_text, sources, public_base_url, lang);
         self.finish_details(&text, &earlier_text).await
     }
 
     async fn finish_details(&mut self, text: &str, earlier_text: &str) -> eyre::Result<()> {
-        let (text, attachment) = render::answer_with_details(text, earlier_text);
+        let lang = self.target.lang;
+        let (text, attachment) = render::answer_with_details(text, earlier_text, lang);
         // Teams expands text + card into multiple activities and rejects a
         // PUT containing both. Settle the existing text reply first, then
         // post the optional disclosure as its own card-only activity.
@@ -457,7 +464,11 @@ impl<'a> StreamingReply<'a> {
         if !self.cancelled
             && let Some(attachment) = attachment
         {
-            let summary = format!("{}: {}", render::EARLIER_STEPS, short_status(earlier_text));
+            let summary = format!(
+                "{}: {}",
+                Msg::EarlierSteps.text(lang),
+                short_status(earlier_text)
+            );
             let activity = render::card_message(attachment, &summary);
             match self.deliver(Op::Send(&activity)).await {
                 Outcome::Sent | Outcome::Cancelled => return Ok(()),
@@ -467,7 +478,7 @@ impl<'a> StreamingReply<'a> {
             // showing. Preserve the earlier text as a separate text message.
             self.wait_ready().await;
             self.target
-                .send_text(&render::earlier_steps_markdown(earlier_text))
+                .send_text(&render::earlier_steps_markdown(earlier_text, lang))
                 .await?;
         }
         Ok(())

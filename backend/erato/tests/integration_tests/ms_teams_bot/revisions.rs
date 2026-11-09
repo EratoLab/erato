@@ -3,6 +3,7 @@
 use super::*;
 use crate::test_utils::{build_openai_text_streaming_response, setup_mock_llm_server_with_mocks};
 use erato::ms_teams_bot::host::{ActionKind, RequestState, Session, StartError, TeamsRequest};
+use erato::ms_teams_bot::texts::Msg;
 use erato::state::AppState;
 use mocktail::MockSet;
 use mocktail::server::MockServer;
@@ -158,6 +159,7 @@ async fn test_file_citations_use_chat_input_inventory(pool: Pool<Postgres>) {
         &answer.text,
         &sources,
         Some("https://erato.example"),
+        erato::ms_teams_bot::texts::Lang::En,
     );
     assert_eq!(text, "Attached [1], Never sent, Invented.");
     // Even a real file attached in the original chat cannot be resolved for a
@@ -427,7 +429,7 @@ async fn revisions_reject_foreign_users_and_superseded_questions(pool: Pool<Post
                 .host
                 .revise_request(&other_session, &edited, kind)
                 .await,
-            Err(StartError::Rejected(_))
+            Err(StartError::Refused(Msg::NotLatestQuestion))
         ));
     }
     let rows = Messages::find()
@@ -454,7 +456,7 @@ async fn revisions_reject_foreign_users_and_superseded_questions(pool: Pool<Post
                 .host
                 .revise_request(&fixture.session, &edited, kind)
                 .await,
-            Err(StartError::Rejected(_))
+            Err(StartError::Refused(Msg::NotLatestQuestion))
         ));
     }
     let rows = Messages::find()
@@ -716,7 +718,7 @@ async fn retry_refuses_persisted_tool_effects_and_expired_actions(pool: Pool<Pos
         .revise_request(&fixture.session, &request, ActionKind::Retry)
         .await;
     assert!(
-        matches!(&retry, Err(StartError::Rejected(message)) if message.contains("Tools may already have run")),
+        matches!(&retry, Err(StartError::Refused(Msg::ToolsMayHaveRun))),
         "persisted tool effects must refuse retry: {retry:?}"
     );
     let stopped = fixture
@@ -857,9 +859,10 @@ async fn newer_turn_during_revision_validation_rejects_without_leaking_lease(poo
             .revise_request(&fixture.session, &request, ActionKind::Retry),
         advance_thread,
     );
-    assert!(
-        matches!(revision, Err(StartError::Rejected(ref reason)) if reason.contains("latest question"))
-    );
+    assert!(matches!(
+        revision,
+        Err(StartError::Refused(Msg::NotLatestQuestion))
+    ));
     assert!(
         fixture
             .state
@@ -951,7 +954,7 @@ async fn edit_regenerates_a_question_whose_preparation_failed(pool: Pool<Postgre
             .host
             .revise_request(&fixture.session, &failed, ActionKind::Retry)
             .await,
-        Err(StartError::Rejected(reason)) if reason.contains("no saved answer")
+        Err(StartError::Refused(Msg::NoAnswerToRetry))
     ));
 
     let proposed = fixture

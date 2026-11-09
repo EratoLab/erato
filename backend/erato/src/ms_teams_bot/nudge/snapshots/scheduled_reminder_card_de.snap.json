@@ -1,0 +1,65 @@
+{
+  "type": "message",
+  "summary": "Alex zurückrufen",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Alex zurückrufen",
+            "wrap": true,
+            "weight": "Bolder",
+            "size": "Medium"
+          },
+          {
+            "type": "TextBlock",
+            "text": "Fragen, ob die neuen Konditionen vor Freitag gebraucht werden.",
+            "wrap": true
+          }
+        ],
+        "actions": [
+          {
+            "type": "Action.OpenUrl",
+            "title": "Vergleich der Q4-Konditionen",
+            "url": "https://erato.example.com/chat/CHAT_ID"
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Erledigt",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "done",
+              "token": "TOKEN"
+            }
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Später (30 Min.)",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "snooze",
+              "token": "TOKEN"
+            }
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Morgen 9:00",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "tomorrow",
+              "token": "TOKEN"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

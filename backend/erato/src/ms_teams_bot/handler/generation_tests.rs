@@ -192,6 +192,7 @@ async fn native_stop_before_started_aborts_the_saved_backend_generation(pool: sq
         conversation_id: "conversation",
         reply_to_id: None,
         mention: None,
+        lang: Lang::En,
     };
     tokio::time::timeout(
         Duration::from_secs(15),

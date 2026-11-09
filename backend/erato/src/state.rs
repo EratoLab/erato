@@ -241,8 +241,10 @@ impl AppState {
         // Failures are logged but not fatal
         mcp_servers.check_connectivity().await;
 
-        let ms_teams_bot =
-            crate::ms_teams_bot::TeamsBot::from_config(&config.integrations.ms_office.teams)?;
+        let ms_teams_bot = crate::ms_teams_bot::TeamsBot::from_config(
+            &config.integrations.ms_office.teams,
+            &config.i18n.language.default_language,
+        )?;
         let mut scheduled_deliveries =
             crate::services::scheduled_deliveries::DeliveryRegistry::new();
         if let Some(bot) = &ms_teams_bot {
@@ -257,6 +259,7 @@ impl AppState {
                 ms_teams_bot
                     .as_ref()
                     .and_then(|bot| bot.settings.public_base_url.clone()),
+                &config.i18n.language.default_language,
             ),
         ));
         let scheduled_deliveries = Arc::new(scheduled_deliveries);

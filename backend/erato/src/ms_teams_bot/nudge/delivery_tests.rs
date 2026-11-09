@@ -5,10 +5,16 @@
 //! the card in place.
 use super::*;
 use crate::config::AppConfig;
+use crate::models::message::{
+    ContentPart, ContentPartText, ContentPartToolApprovalRequest, ToolApprovalAnnotations,
+    ToolApprovalKind,
+};
 use crate::models::user::{get_or_create_user, record_entra_object_id};
-use crate::models::user_preference::teams_nudges_opted_out;
+use crate::models::user_preference::{record_client_locale, teams_nudges_opted_out};
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
-use crate::ms_teams_bot::handler::{on_bot_added, on_message, settle_delivered_card};
+use crate::ms_teams_bot::handler::{
+    deliver_proactive, on_bot_added, on_message, settle_delivered_card,
+};
 use crate::ms_teams_bot::streaming::ReplyTarget;
 use crate::services::scheduled_deliveries::{
     ExecutorSettings, NewDelivery, run_delivery_tick, schedule,
@@ -17,6 +23,7 @@ use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
 use crate::services::scheduled_items::{
     self, ItemInput, REMINDER, ReminderProducer, current_occurrence,
 };
+use crate::services::text_language::Lang;
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -275,6 +282,10 @@ async fn installing_the_app_records_the_personal_conversation_of_known_users(poo
     )
     .await;
 
+    let mut german = added("00000000-0000-4000-8000-0000000000de", "a:german");
+    german.locale = Some("de-DE".into());
+    on_bot_added(bot.clone(), host.clone(), german).await;
+
     let rows = MsTeamsConversations::find().all(&state.db).await.unwrap();
     assert_eq!(
         rows.len(),
@@ -285,8 +296,12 @@ async fn installing_the_app_records_the_personal_conversation_of_known_users(poo
     assert_eq!(rows[0].user_id, user.id);
     assert_eq!(rows[0].conversation_type, "personal");
     assert_eq!(rows[0].service_url, base);
-    // Both got their welcome card.
-    assert_eq!(shared.lock().unwrap().outgoing.len(), 2);
+    // All got their welcome card; a client reporting German gets it in
+    // German before Erato knows the user.
+    let outgoing = shared.lock().unwrap().outgoing.clone();
+    assert_eq!(outgoing.len(), 3);
+    assert_eq!(outgoing[0].1["summary"], "Hi, I'm Erato.");
+    assert_eq!(outgoing[2].1["summary"], "Hallo, ich bin Erato.");
 }
 
 async fn replies(shared: &Shared, expected: usize) -> Vec<Value> {
@@ -470,7 +485,15 @@ async fn the_teams_client_zone_and_language_are_stored(pool: sqlx::PgPool) {
     .unwrap();
 
     on_message(bot.clone(), host.clone(), activity).await;
-    replies(&shared, 1).await;
+    let sent = replies(&shared, 1).await;
+    // The reply already follows the language the client just reported.
+    assert_eq!(
+        sent[0]["text"],
+        format!(
+            "In Ordnung, {} sendet Ihnen keine Tipps mehr. Senden Sie /erinnerungen an, um sie wieder zu erhalten.",
+            bot.settings.app_name
+        )
+    );
 
     let prefs = crate::models::user_preference::get_user_preferences(&state.db, &user.id)
         .await
@@ -490,9 +513,50 @@ async fn the_teams_client_zone_and_language_are_stored(pool: sqlx::PgPool) {
 /// - `uses-db`
 #[sqlx::test(migrator = "MIGRATOR")]
 async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
+    let sample = sample_card(
+        pool,
+        None,
+        "Q4 rate comparison",
+        "Call Alex back",
+        "Ask whether they need the revised rates before Friday.",
+    )
+    .await;
+    assert_sample("scheduled_reminder_card.json", sample);
+}
+
+/// The same for a user whose stored language is German, with no message to
+/// answer: `snapshots/scheduled_reminder_card_de.snap.json`.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_reminder_arrives_as_the_sample_card_in_german(pool: sqlx::PgPool) {
+    let sample = sample_card(
+        pool,
+        Some("de-DE"),
+        "Vergleich der Q4-Konditionen",
+        "Alex zurückrufen",
+        "Fragen, ob die neuen Konditionen vor Freitag gebraucht werden.",
+    )
+    .await;
+    assert_sample("scheduled_reminder_card_de.json", sample);
+}
+
+/// Deliver a reminder for tomorrow 9:00 Berlin time, linked to a chat, to a
+/// user in Berlin, and return the posted activity with its ids replaced.
+async fn sample_card(
+    pool: sqlx::PgPool,
+    language: Option<&str>,
+    chat_title: &str,
+    name: &str,
+    message: &str,
+) -> String {
     let (state, bot, shared, base) = harness(pool).await;
     let host = Host::new(state.clone());
     let user = get_or_create_user(&state.db, "https://issuer.example", "reminded", None)
+        .await
+        .unwrap();
+    record_client_locale(&state.db, &user.id, Some("Europe/Berlin"), language)
         .await
         .unwrap();
     host.upsert_conversation(
@@ -510,8 +574,12 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
         .execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "INSERT INTO chats (id, owner_user_id, title_by_user_provided)
-             VALUES ($1, $2, 'Q4 rate comparison')",
-            [chat_id.into(), user.id.to_string().into()],
+             VALUES ($1, $2, $3)",
+            [
+                chat_id.into(),
+                user.id.to_string().into(),
+                chat_title.into(),
+            ],
         ))
         .await
         .unwrap();
@@ -520,8 +588,8 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
         user.id,
         ItemInput {
             kind: REMINDER.into(),
-            name: "Call Alex back".into(),
-            message: "Ask whether they need the revised rates before Friday.".into(),
+            name: name.into(),
+            message: message.into(),
             linked_chat_id: Some(chat_id),
             channel: CHANNEL.into(),
             trigger: Trigger::Once {
@@ -536,15 +604,7 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
     .unwrap()
     .unwrap();
     let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
-    state
-        .db
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "UPDATE scheduled_deliveries SET due_at = now() - interval '1 second' WHERE id = $1",
-            [occurrence.id.into()],
-        ))
-        .await
-        .unwrap();
+    make_due(&state, occurrence.id).await;
     let registry = reminder_registry(bot);
     let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
     assert_eq!(tick.delivered, 1, "{tick:?}");
@@ -565,18 +625,21 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
         sample = sample.replace(&id, placeholder);
     }
     sample.push('\n');
+    sample
+}
+
+fn assert_sample(name: &str, sample: String) {
     let mut snapshot = insta::Settings::clone_current();
     snapshot.set_prepend_module_to_snapshot(false);
-    snapshot.bind(|| {
-        insta::assert_binary_snapshot!("scheduled_reminder_card.json", sample.into_bytes())
-    });
+    snapshot.bind(|| insta::assert_binary_snapshot!(name, sample.into_bytes()));
 }
 
 fn reminder_registry(bot: Arc<TeamsBot>) -> DeliveryRegistry {
     let mut registry = DeliveryRegistry::new();
-    registry.register_producer(Arc::new(ReminderProducer::new(Some(
-        "https://erato.example.com".into(),
-    ))));
+    registry.register_producer(Arc::new(ReminderProducer::new(
+        Some("https://erato.example.com".into()),
+        "en",
+    )));
     registry.register_channel(Arc::new(TeamsPersonalChannel::new(bot)));
     registry
 }
@@ -782,6 +845,134 @@ async fn reminder_buttons_replace_the_card_in_place(pool: sqlx::PgPool) {
     assert_eq!(shared.lock().unwrap().outgoing.len(), 3);
 }
 
+/// A German user gets the reminder, its buttons, the card after Snooze and
+/// Done, and the reply to a used button in German, from the stored language
+/// alone: the button presses carry no locale.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_german_user_gets_the_reminder_and_its_buttons_in_german(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com".into());
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "deutsch", None)
+        .await
+        .unwrap();
+    const OID: &str = "4a1b3c5d-0000-4000-8000-00000000d0e0";
+    record_entra_object_id(&state.db, &user, OID).await.unwrap();
+    record_client_locale(&state.db, &user.id, Some("Europe/Berlin"), Some("de-AT"))
+        .await
+        .unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        &base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let chat_id = Uuid::new_v4();
+    state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+            [chat_id.into(), user.id.to_string().into()],
+        ))
+        .await
+        .unwrap();
+    let item = scheduled_items::create(
+        &state.db,
+        user.id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Alex zurückrufen".into(),
+            message: "Nach den neuen Konditionen fragen.".into(),
+            linked_chat_id: Some(chat_id),
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(3),
+                time: LocalTime::new(9, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(&state, occurrence.id).await;
+    let registry = reminder_registry(bot.clone());
+    run_delivery_tick(&state.db, &executor(), &registry).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    assert_eq!(
+        buttons(&card),
+        [
+            "Unbenannter Chat",
+            "Erledigt",
+            "Später (30 Min.)",
+            "Morgen 9:00"
+        ]
+    );
+    let press = |data: Value| -> Activity {
+        serde_json::from_value(json!({
+            "type": "message", "id": "m1", "serviceUrl": base, "value": data,
+            "from": {"id": "29:user", "aadObjectId": OID}, "recipient": {"id": "28:bot"},
+            "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
+        }))
+        .unwrap()
+    };
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    let note = settled["attachments"][0]["content"]["body"][2]["text"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(note.starts_with("Zurückgestellt bis "), "{note}");
+    assert!(
+        !note.contains("tomorrow") && !note.contains("time)"),
+        "{note}"
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&card, DONE_COMMAND)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "Diese Schaltfläche wurde bereits verwendet oder ist abgelaufen. Ihre Erinnerungen finden Sie auf der Seite [„Geplant“](https://erato.example.com/scheduled)."
+    );
+
+    let redelivery = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(&state, redelivery.id).await;
+    run_delivery_tick(&state.db, &executor(), &registry).await;
+    let again = shared.lock().unwrap().outgoing[2].1.clone();
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&again, DONE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[1].2.clone();
+    assert_eq!(
+        settled["attachments"][0]["content"]["body"][2]["text"],
+        "Als erledigt markiert."
+    );
+}
+
 /// A press whose service call fails changes nothing and gives the token
 /// back: the card keeps its buttons, and the next press works.
 ///
@@ -911,6 +1102,7 @@ async fn a_note_goes_out_as_a_message_when_the_card_cannot_be_read(pool: sqlx::P
         conversation_id: "a:personal",
         reply_to_id: None,
         mention: None,
+        lang: Lang::En,
     };
 
     settle_delivered_card(&host, &target, occurrence.id, "Snoozed until 9:30.")
@@ -919,4 +1111,114 @@ async fn a_note_goes_out_as_a_message_when_the_card_cannot_be_read(pool: sqlx::P
     let sent = replies(&shared, 2).await;
     assert_eq!(sent[1]["text"], "Snoozed until 9:30.");
     assert!(shared.lock().unwrap().updated.is_empty());
+}
+
+/// A background task's result has no inbound activity to take a language
+/// from: its heading, answer and approval card follow the stored language.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_task_result_arrives_in_the_stored_language(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let user = get_or_create_user(&state.db, "https://issuer.example", "hintergrund", None)
+        .await
+        .unwrap();
+    record_client_locale(&state.db, &user.id, None, Some("de-DE"))
+        .await
+        .unwrap();
+    let conversation = host
+        .upsert_conversation(
+            "a:personal",
+            ConversationKind::Personal,
+            user.id,
+            &base,
+            "29:user",
+        )
+        .await
+        .unwrap();
+    let chat_id = Uuid::new_v4();
+    let message_id = Uuid::new_v4();
+    let approval = ContentPart::ToolApprovalRequest(ContentPartToolApprovalRequest {
+        tool_call_id: "call-1".into(),
+        tool_name: "send_mail".into(),
+        display: None,
+        mcp_server_id: "mail".into(),
+        input: json!({}),
+        annotations: ToolApprovalAnnotations {
+            read_only_hint: false,
+            destructive_hint: false,
+            idempotent_hint: false,
+            open_world_hint: true,
+        },
+        preset: String::new(),
+        allow_always: false,
+        requested_at: String::new(),
+        kind: ToolApprovalKind::McpTool,
+        approvals: Vec::new(),
+        pending_tool_calls: Vec::new(),
+        approval_scope: None,
+        labels_updated_at: None,
+    });
+    let raw_message = json!({
+        "role": "assistant",
+        "content": [
+            ContentPart::Text(ContentPartText { text: "Der Bericht ist fertig.".into() }),
+            approval,
+        ],
+    });
+    for (sql, values) in [
+        (
+            "INSERT INTO chats (id, owner_user_id) VALUES ($1, $2)",
+            vec![chat_id.into(), user.id.to_string().into()],
+        ),
+        (
+            "INSERT INTO messages (id, chat_id, raw_message) VALUES ($1, $2, $3)",
+            vec![message_id.into(), chat_id.into(), raw_message.into()],
+        ),
+    ] {
+        state
+            .db
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                values,
+            ))
+            .await
+            .unwrap();
+    }
+    host.set_current_chat(&conversation, Some(chat_id))
+        .await
+        .unwrap();
+
+    deliver_proactive(&bot, &host, chat_id, message_id)
+        .await
+        .unwrap();
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[0]["text"],
+        "**Eine Hintergrundaufgabe ist abgeschlossen.**\n\nDer Bericht ist fertig.\n\n**Zum Fortfahren ist eine Genehmigung nötig.**"
+    );
+    assert_eq!(
+        sent[1]["summary"],
+        "Genehmigung erforderlich, um send_mail auszuführen."
+    );
+    assert_eq!(
+        sent[1]["attachments"][0]["content"]["body"][0]["text"],
+        "Genehmigung erforderlich"
+    );
+
+    record_client_locale(&state.db, &user.id, None, Some("en-US"))
+        .await
+        .unwrap();
+    deliver_proactive(&bot, &host, chat_id, message_id)
+        .await
+        .unwrap();
+    let sent = replies(&shared, 4).await;
+    assert_eq!(
+        sent[2]["text"],
+        "**A background task finished.**\n\nDer Bericht ist fertig.\n\n**Approval needed to continue.**"
+    );
+    assert_eq!(sent[3]["summary"], "Approval needed to run send_mail.");
 }
