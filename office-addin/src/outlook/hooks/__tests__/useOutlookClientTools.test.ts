@@ -120,6 +120,12 @@ describe("useOutlookClientTools", () => {
     const { unmount } = renderHook(() => useOutlookClientTools());
     const tools = registered();
     expect(tools.name).toBe("fetch_availability");
+    expect(mocks.registerClientToolExecutor.mock.calls[0]).toEqual([
+      "fetch_availability",
+      tools.execute,
+      undefined,
+      { acceptsGrantCalls: true },
+    ]);
     expect(tools.operationName).toBe("fetch_availability");
     expect(tools.options).toEqual({ yields: true });
     expect(tools.handler).toBeInstanceOf(mocks.RecordingHandler);

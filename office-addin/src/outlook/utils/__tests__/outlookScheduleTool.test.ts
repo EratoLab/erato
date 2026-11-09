@@ -21,7 +21,11 @@ import type {
   NormalizedCalendar,
   OutlookCalendarFetcher,
 } from "../fetchOutlookCalendar";
-import type { ContentPart } from "@erato/frontend/library";
+import type {
+  ClientToolCallContext,
+  ClientToolHostGrant,
+  ContentPart,
+} from "@erato/frontend/library";
 
 const emptyCalendar: NormalizedCalendar = {
   workingHours: null,
@@ -766,6 +770,133 @@ describe("createFetchAvailabilityExecutor", () => {
     };
     const executor = createFetchAvailabilityExecutor(() => fetcher);
     expect(await executor(null)).toEqual({ ok: false, error: "EWS 9020" });
+  });
+
+  const taskCall = (
+    grant: Partial<ClientToolHostGrant> = {},
+  ): ClientToolCallContext => ({
+    toolCallId: "call-1",
+    messageId: "task-message",
+    chatId: "task-chat",
+    hostGrant: {
+      ownerChatId: "owner-chat",
+      ownerMessageId: "owner-message",
+      requestingChatId: "task-chat",
+      requestingMessageId: "task-message",
+      ...grant,
+    },
+  });
+
+  it("gives a task the read-only legend and freshness, and leaves the own call as it was", async () => {
+    const fetchCalendar = vi.fn().mockResolvedValue(emptyCalendar);
+    const executor = createFetchAvailabilityExecutor(() => ({
+      fetchCalendar,
+    }));
+
+    const own = await executor(
+      { lookahead_days: 7 },
+      {
+        toolCallId: "call-0",
+        messageId: "owner-message",
+        chatId: "owner-chat",
+      },
+    );
+    const task = await executor({ lookahead_days: 7 }, taskCall());
+
+    expect(fetchCalendar).toHaveBeenCalledTimes(2);
+    expect(fetchCalendar.mock.calls[1][0]).toEqual(
+      fetchCalendar.mock.calls[0][0],
+    );
+    if (!own.ok || !task.ok) throw new Error("both reads succeed");
+    const ownResult = own.result as Record<string, unknown>;
+    const taskResult = task.result as Record<string, unknown>;
+    expect(ownResult).not.toHaveProperty("freshness");
+    expect(ownResult.legend).toContain("erato-appointment");
+    const { legend: _ownLegend, ...ownData } = ownResult;
+    const { legend, freshness, ...taskData } = taskResult;
+    expect(taskData).toEqual(ownData);
+    expect(legend).toContain("startIso/endIso");
+    for (const marker of [
+      "erato-appointment",
+      "propose_client_action",
+      "create_appointment",
+    ]) {
+      expect(JSON.stringify(taskResult)).not.toContain(marker);
+    }
+    expect(freshness).toEqual({
+      readAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      changes: "none",
+      counts: { own: 0, local: 0, remote: 0, unknown: 0 },
+    });
+  });
+
+  it.each([
+    ["a requesting chat other than the call's", { requestingChatId: "x" }],
+    [
+      "a requesting message other than the call's",
+      { requestingMessageId: "x" },
+    ],
+    ["a context version", { contextRef: "snapshot-1" }],
+    ["no owner chat", { ownerChatId: "" }],
+    ["no owner message", { ownerMessageId: "" }],
+  ])("refuses a task's call with %s before it reads", async (_name, grant) => {
+    const fetchCalendar = vi.fn().mockResolvedValue(emptyCalendar);
+    const executor = createFetchAvailabilityExecutor(() => ({
+      fetchCalendar,
+    }));
+    const outcome = await executor({}, taskCall(grant));
+    expect(fetchCalendar).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "context_unavailable" }],
+      submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+    });
+  });
+
+  it("keeps a task reading after the user switches the item, and reports no change", async () => {
+    const context = Office.context as unknown as Record<string, unknown>;
+    const itemChanged: (() => void)[] = [];
+    context.mailbox = {
+      item: { itemId: "item-1" },
+      addHandlerAsync: (_type: string, handler: () => void) => {
+        itemChanged.push(handler);
+      },
+    };
+    try {
+      const executor = createFetchAvailabilityExecutor(() => ({
+        fetchCalendar: vi.fn().mockResolvedValue(emptyCalendar),
+      }));
+      const before = await executor({}, taskCall());
+      (context.mailbox as { item: unknown }).item = { itemId: "item-2" };
+      itemChanged.forEach((handler) => handler());
+      const after = await executor({}, taskCall());
+      for (const outcome of [before, after]) {
+        expect(outcome).toMatchObject({
+          ok: true,
+          result: {
+            freshness: {
+              changes: "none",
+              counts: { own: 0, local: 0, remote: 0, unknown: 0 },
+            },
+          },
+        });
+      }
+    } finally {
+      delete context.mailbox;
+    }
+  });
+
+  it("ends a task's call as context_unavailable when the pane has no calendar access", async () => {
+    const outcome = await createFetchAvailabilityExecutor(() => null)(
+      {},
+      taskCall(),
+    );
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Calendar access is not available"),
+      validationErrors: [{ path: "", code: "context_unavailable" }],
+      submissionFeedback: { terminal: true, recovery: "cannot_continue" },
+    });
   });
 });
 
