@@ -646,6 +646,7 @@ impl Host {
             Some(started.client_stream_guard),
             session.lang,
             self.app_name(),
+            self.app_state.config.facets.clone(),
         ))
     }
 }

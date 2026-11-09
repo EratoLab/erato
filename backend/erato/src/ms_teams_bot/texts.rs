@@ -91,6 +91,12 @@ texts! {
         "[Öffnen Sie den Chat in {app}]({link}) und stellen Sie die Frage dort noch einmal.";
     OpenChatToAskAgainPlain => "Open the chat in {app} and ask there again.",
         "Öffnen Sie den Chat in {app} und stellen Sie die Frage dort noch einmal.";
+    AskAgainInChatAfterStep => "After this step, ask again in the chat in {app}.",
+        "Stellen Sie die Frage nach diesem Schritt im Chat in {app} noch einmal.";
+    AskAgainInWord => "Open the document in Word and ask again in the {app} add-in there.",
+        "Öffnen Sie das Dokument in Word und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
+    AskAgainInOutlook => "Open Outlook and ask again in the {app} add-in there.",
+        "Öffnen Sie Outlook und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
     NoText => "(The answer contained no text.)", "(Die Antwort enthielt keinen Text.)";
     UnavailableFile => "Unavailable file", "Nicht verfügbare Datei";
     File => "File", "Datei";

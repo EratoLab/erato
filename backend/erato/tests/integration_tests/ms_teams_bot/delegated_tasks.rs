@@ -13,7 +13,7 @@ use erato::db::entity::{chats, messages, users};
 use erato::models::user::get_or_create_user;
 use erato::models::user_preference::{ClientToolDecision, set_client_tool_decision};
 use erato::ms_teams_bot::activity::ConversationKind;
-use erato::ms_teams_bot::host::{Completion, Host, Session};
+use erato::ms_teams_bot::host::{ClientTask, Completion, Host, Session, TaskClient};
 use erato::services::client_operations::executor_stream::{self, PresenceClaim};
 use erato::services::client_operations::{ExecutionRealm, ExecutorBinding, HostContext};
 use mocktail::MockSet;
@@ -367,7 +367,13 @@ async fn test_teams_task_gets_no_client_tools_and_says_so(pool: Pool<Postgres>) 
     assert_eq!(done.text, PARENT_FINAL);
     assert!(!done.needs_client);
     assert!(done.approvals.is_none());
-    assert_eq!(done.client_tasks, [CLIENT_BRIEF]);
+    assert_eq!(
+        done.client_tasks,
+        [ClientTask {
+            brief: CLIENT_BRIEF.into(),
+            client: Some(TaskClient::Outlook),
+        }]
+    );
 
     let first_turn = parent
         .bodies()

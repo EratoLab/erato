@@ -83,8 +83,10 @@ gets no client tools"; a mention run gets none.
 A turn from the Teams bot has no binding, so its client tasks get the second
 reason, also while the user's app is connected on another device (CT-7: no
 pickup by another client). The bot names each task with that reason in its
-answer and links the chat in Erato; the reason itself stays host-neutral, since
-the Teams personal app sends the same platform and is a client.
+answer and says where to ask again, by the task's host: the chat in Erato for
+the desktop sidecar, Word or Outlook with the add-in for a document or mailbox
+task. The reason itself stays host-neutral, since the Teams personal app sends
+the same platform and is a client.
 
 ## Offer predicate
 

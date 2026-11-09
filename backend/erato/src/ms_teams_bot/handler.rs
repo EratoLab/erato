@@ -10,7 +10,8 @@ use super::cards::{self, ApprovalSubmit};
 use super::controls::{self, ControlCommand};
 use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{
-    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
+    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TaskClient,
+    TeamsRequest,
 };
 use super::nudge;
 use super::reminders;
@@ -1560,28 +1561,39 @@ pub(super) fn completion_text(
         };
     }
     let app = ("app", app_name);
-    if !completion.client_tasks.is_empty() {
-        let tasks: Vec<String> = completion
-            .client_tasks
-            .iter()
-            .map(|brief| {
-                let label = render::inline_label(brief, TASK_LABEL_BYTES);
-                Msg::QuotedTask.fill(lang, &[("task", &label)])
-            })
-            .collect();
+    // One line per client, in the order the tasks ran.
+    let mut groups: Vec<(Option<TaskClient>, Vec<String>)> = Vec::new();
+    for task in &completion.client_tasks {
+        let label = render::inline_label(&task.brief, TASK_LABEL_BYTES);
+        let label = Msg::QuotedTask.fill(lang, &[("task", &label)]);
+        match groups.iter_mut().find(|(client, _)| *client == task.client) {
+            Some((_, labels)) => labels.push(label),
+            None => groups.push((task.client, vec![label])),
+        }
+    }
+    for (client, tasks) in groups {
         let note = match tasks.as_slice() {
             [task] => Msg::TaskNeedsApp.fill(lang, &[app, ("task", task)]),
             _ => Msg::TasksNeedApp.fill(lang, &[app, ("tasks", &tasks.join(", "))]),
         };
-        let mut note = format!("_{note}_");
-        // The step's own line below links the chat already.
-        if !completion.needs_client {
-            let open = match chat_link {
+        let next = match client {
+            Some(TaskClient::Word) => Some(Msg::AskAgainInWord.fill(lang, &[app])),
+            Some(TaskClient::Outlook) => Some(Msg::AskAgainInOutlook.fill(lang, &[app])),
+            // The step's own line below links the chat; continuing there does
+            // not run a finished task again.
+            Some(TaskClient::Chat) if completion.needs_client => {
+                Some(Msg::AskAgainInChatAfterStep.fill(lang, &[app]))
+            }
+            Some(TaskClient::Chat) => Some(match chat_link {
                 Some(link) => Msg::OpenChatToAskAgain.fill(lang, &[app, ("link", link)]),
                 None => Msg::OpenChatToAskAgainPlain.fill(lang, &[app]),
-            };
-            note = format!("{note} {open}");
-        }
+            }),
+            None => None,
+        };
+        let note = match next {
+            Some(next) => format!("_{note}_ {next}"),
+            None => format!("_{note}_"),
+        };
         text = if text.is_empty() {
             note
         } else {
@@ -1932,36 +1944,72 @@ mod tests {
         assert!(!is_new_chat_command("/new idea for the roadmap"));
     }
 
+    fn task(brief: &str, client: TaskClient) -> crate::ms_teams_bot::host::ClientTask {
+        crate::ms_teams_bot::host::ClientTask {
+            brief: brief.into(),
+            client: Some(client),
+        }
+    }
+
     #[test]
     fn an_answer_names_the_tasks_that_need_the_app() {
         let link = Some("https://erato.example/chat/1");
         let mut one = completion("Here is what I found.");
-        one.client_tasks = vec!["Read my calendar\nfor next week".into()];
+        one.client_tasks = vec![task("Search my files\nfrom last week", TaskClient::Chat)];
         assert_eq!(
             completion_text(&one, link, "Erato", Lang::En),
-            "Here is what I found.\n\n_The task “Read my calendar” needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) and ask there again."
+            "Here is what I found.\n\n_The task “Search my files” needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) and ask there again."
         );
         assert_eq!(
             completion_text(&one, None, "Hugo", Lang::De),
-            "Here is what I found.\n\n_Die Aufgabe „Read my calendar“ erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo und stellen Sie die Frage dort noch einmal."
+            "Here is what I found.\n\n_Die Aufgabe „Search my files“ erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo und stellen Sie die Frage dort noch einmal."
         );
 
         let mut two = completion("");
-        two.client_tasks = vec!["Read my calendar".into(), "Search my files".into()];
+        two.client_tasks = vec![
+            task("Search my files", TaskClient::Chat),
+            task("Search my notes", TaskClient::Chat),
+        ];
         assert_eq!(
             completion_text(&two, None, "Erato", Lang::En),
-            "_These tasks need the Erato app: “Read my calendar”, “Search my files”._ Open the chat in Erato and ask there again."
+            "_These tasks need the Erato app: “Search my files”, “Search my notes”._ Open the chat in Erato and ask there again."
         );
         assert_eq!(
             completion_text(&two, link, "Hugo", Lang::De),
-            "_Diese Aufgaben erfordern die Hugo-App: „Read my calendar“, „Search my files“._ [Öffnen Sie den Chat in Hugo](https://erato.example/chat/1) und stellen Sie die Frage dort noch einmal."
+            "_Diese Aufgaben erfordern die Hugo-App: „Search my files“, „Search my notes“._ [Öffnen Sie den Chat in Hugo](https://erato.example/chat/1) und stellen Sie die Frage dort noch einmal."
+        );
+    }
+
+    #[test]
+    fn a_task_that_needs_word_or_outlook_points_there_not_to_the_chat() {
+        let link = Some("https://erato.example/chat/1");
+        let mut mixed = completion("Partial answer");
+        mixed.client_tasks = vec![
+            task("Read my calendar", TaskClient::Outlook),
+            task("Summarize the draft", TaskClient::Word),
+            task("Read my inbox", TaskClient::Outlook),
+            crate::ms_teams_bot::host::ClientTask {
+                brief: "Facet since removed".into(),
+                client: None,
+            },
+        ];
+        assert_eq!(
+            completion_text(&mixed, link, "Erato", Lang::En),
+            "Partial answer\n\n_These tasks need the Erato app: “Read my calendar”, “Read my inbox”._ Open Outlook and ask again in the Erato add-in there.\n\n_The task “Summarize the draft” needs the Erato app._ Open the document in Word and ask again in the Erato add-in there.\n\n_The task “Facet since removed” needs the Erato app._"
+        );
+        assert_eq!(
+            completion_text(&mixed, link, "Hugo", Lang::De),
+            "Partial answer\n\n_Diese Aufgaben erfordern die Hugo-App: „Read my calendar“, „Read my inbox“._ Öffnen Sie Outlook und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Die Aufgabe „Summarize the draft“ erfordert die Hugo-App._ Öffnen Sie das Dokument in Word und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Die Aufgabe „Facet since removed“ erfordert die Hugo-App._"
         );
     }
 
     #[test]
     fn a_step_that_needs_the_app_links_the_chat_once_after_the_tasks() {
         let mut both = completion("Partial answer");
-        both.client_tasks = vec!["Read my calendar".into()];
+        both.client_tasks = vec![
+            task("Search my files", TaskClient::Chat),
+            task("Read my calendar", TaskClient::Outlook),
+        ];
         both.needs_client = true;
         assert_eq!(
             completion_text(
@@ -1970,16 +2018,23 @@ mod tests {
                 "Erato",
                 Lang::En
             ),
-            "Partial answer\n\n_The task “Read my calendar” needs the Erato app._\n\n_This step needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) to continue."
+            "Partial answer\n\n_The task “Search my files” needs the Erato app._ After this step, ask again in the chat in Erato.\n\n_The task “Read my calendar” needs the Erato app._ Open Outlook and ask again in the Erato add-in there.\n\n_This step needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) to continue."
+        );
+        assert_eq!(
+            completion_text(&both, None, "Hugo", Lang::De),
+            "Partial answer\n\n_Die Aufgabe „Search my files“ erfordert die Hugo-App._ Stellen Sie die Frage nach diesem Schritt im Chat in Hugo noch einmal.\n\n_Die Aufgabe „Read my calendar“ erfordert die Hugo-App._ Öffnen Sie Outlook und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Dieser Schritt erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo, um fortzufahren."
         );
     }
 
     #[test]
     fn a_task_brief_cannot_add_links_or_formatting() {
         let mut forged = completion("");
-        forged.client_tasks = vec![format!(
-            "  [x](https://evil.example) **now** `code` _it_ <at>Bob</at> {}",
-            "long ".repeat(40)
+        forged.client_tasks = vec![task(
+            &format!(
+                "  [x](https://evil.example) **now** `code` _it_ <at>Bob</at> {}",
+                "long ".repeat(40)
+            ),
+            TaskClient::Chat,
         )];
         let text = completion_text(&forged, None, "Erato", Lang::En);
         let label = text
