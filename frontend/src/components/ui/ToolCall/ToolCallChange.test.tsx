@@ -718,43 +718,42 @@ describe("old and new values", () => {
     expect(screen.queryByText(/says/)).toBeNull();
   });
 
-});
-describe("what sits on the card", () => {
-  it("shows a glossary name with the raw name beside it, and not twice", () => {
+  it("show no arrow for a value that stays the same", () => {
     renderCard({
       effects: [
-        {
-          ...set(1),
-          name: "Expected close (estimatedclosedate)",
-          raw_name: "estimatedclosedate",
-        },
-        ...Array.from({ length: 7 }, (_, index) => set(index + 2)),
+        changed({
+          effect: "unchanged",
+          values: [{ text: "4", meaning: { label: "Low", source: "earlier" } }],
+          old: { text: "4", meaning: { label: "Low", source: "earlier" } },
+        }),
       ],
-      counts: { set: 8 },
+      counts: { unchanged: 1 },
     });
-    expect(
-      screen.getByText("Expected close (estimatedclosedate)"),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /See 3 more fields/ }));
-    expect(screen.queryByText("estimatedclosedate")).toBeNull();
-    expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
+    expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
+      "PriorityLow (4)",
+    );
   });
 
-});
-  it("says who marked a tool as destructive", () => {
-    renderCard({
-      effects: [],
-      counts: {},
-      notes: ["operator_marked_destructive"],
+  it("colour a trace row's values and a batch row's values too", () => {
+    const change = readAs({
+      effects: [changed({})],
+      counts: { changed: 1 },
     });
-    expect(
-      screen.getByText(
-        "Your organisation has marked this tool as destructive.",
-      ),
-    ).toBeInTheDocument();
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeRowDetails change={change} />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId("tool-call-change-old")).toHaveClass(
+      "line-through",
+    );
+    expect(screen.getByTestId("tool-call-change-new").className).toContain(
+      "--theme-diff-added-fg",
+    );
   });
-
 });
+
 describe("a card for something new", () => {
   const renderCreate = (raw: object) => {
     const change = readAs(raw);
@@ -827,11 +826,56 @@ describe("a card for something new", () => {
     expect(short).not.toHaveTextContent("39 characters");
     expect(long).toHaveTextContent("Body: 4 lines, 300 characters");
   });
-    expect(box).toHaveAccessibleName("Scrollable details of this call");
-    scrollHeight.mockRestore();
-    clientHeight.mockRestore();
+});
+
+describe("what sits on the card", () => {
+  it("gives statements and option chips a surface of their own", () => {
+    renderCard({
+      effects: [],
+      counts: {},
+      opaque: [{ kind: "sql", path: "/q", text: "select 1", lines: 1 }],
+      flags: [{ name: "Force", raw_name: "force" }],
+    });
+    expect(screen.getByTestId("tool-call-change-statement")).toHaveClass(
+      "bg-theme-bg-tertiary",
+    );
+    expect(
+      within(screen.getByTestId("tool-call-change-flags")).getByText("Force"),
+    ).toHaveClass("bg-theme-bg-tertiary");
   });
 
+  it("shows a glossary name with the raw name beside it, and not twice", () => {
+    renderCard({
+      effects: [
+        {
+          ...set(1),
+          name: "Expected close (estimatedclosedate)",
+          raw_name: "estimatedclosedate",
+        },
+        ...Array.from({ length: 7 }, (_, index) => set(index + 2)),
+      ],
+      counts: { set: 8 },
+    });
+    expect(
+      screen.getByText("Expected close (estimatedclosedate)"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /See 3 more fields/ }));
+    expect(screen.queryByText("estimatedclosedate")).toBeNull();
+    expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
+  });
+
+  it("says who marked a tool as destructive", () => {
+    renderCard({
+      effects: [],
+      counts: {},
+      notes: ["operator_marked_destructive"],
+    });
+    expect(
+      screen.getByText(
+        "Your organisation has marked this tool as destructive.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("a trace row's details", () => {
@@ -884,6 +928,7 @@ describe("a trace row's details", () => {
     expect(details.textContent).not.toContain(UUID);
   });
 });
+
 describe("the scroll box", () => {
   it("becomes a named tab stop only when its content overflows", () => {
     const scrollHeight = vi
@@ -895,3 +940,8 @@ describe("the scroll box", () => {
     renderCard({ effects: [set(1)], counts: { set: 1 } });
     const box = screen.getByTestId("tool-call-gist-scroll");
     expect(box).toHaveAttribute("tabindex", "0");
+    expect(box).toHaveAccessibleName("Scrollable details of this call");
+    scrollHeight.mockRestore();
+    clientHeight.mockRestore();
+  });
+});

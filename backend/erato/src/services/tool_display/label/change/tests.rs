@@ -125,6 +125,7 @@ fn a_call_with_no_verb_has_no_change_description() {
                 server: None,
                 rules_action: label.action,
                 glossary: None,
+                destructive_by_operator: false,
             },
         )
         .is_none()
@@ -801,8 +802,9 @@ fn nothing_panics_on_odd_arguments() {
                 context: &context,
                 server: Some(SERVER),
                 rules_action: label.action,
-            },
                 glossary: None,
+                destructive_by_operator: false,
+            },
         );
     }
 }
@@ -858,9 +860,10 @@ fn a_mapping_from_any_source_is_described_the_same_way() {
             context: &context,
             server: None,
             rules_action: label.action,
+            glossary: None,
+            destructive_by_operator: false,
         },
     )
-            glossary: None,
     .unwrap();
     assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
 }
@@ -1785,10 +1788,11 @@ fn the_models_verb_only_words_the_headline_and_never_decides_what_is_lost() {
             context: &context,
             server: None,
             rules_action,
+            glossary: None,
+            destructive_by_operator: false,
         },
     );
     assert!(described.is_none(), "{described:?}");
-            glossary: None,
 }
 
 #[test]
@@ -2071,11 +2075,11 @@ fn one_old_and_new_text_edit_in_a_list_reads_old_to_new() {
     assert_eq!(edit.effect, ToolCallEffectKind::Changed);
     assert_eq!(edit.old.as_ref().unwrap().text, "a");
 }
+
 fn with_change(
     tool: &Tool,
     arguments: Value,
     context: &ToolResultContext,
-
     destructive_by_operator: bool,
 ) -> ToolCallChange {
     let label = labelled(tool, &arguments, context);
@@ -2088,18 +2092,14 @@ fn with_change(
             context,
             server: Some(SERVER),
             rules_action: label.action,
+            glossary: None,
             destructive_by_operator,
         },
     )
     .expect("a labelled call has a change description")
-            glossary: None,
     .0
 }
 
-#[test]
-fn the_destructive_note_only_appears_where_it_says_something_new() {
-    let context = ToolResultContext::default();
-    let notes = |name: &str, arguments: Value, by_operator: bool| {
 fn with_glossary(
     tool: &Tool,
     arguments: Value,
@@ -2385,6 +2385,10 @@ fn a_glossary_never_names_a_machine_id_field_or_a_recipient() {
     );
 }
 
+#[test]
+fn the_destructive_note_only_appears_where_it_says_something_new() {
+    let context = ToolResultContext::default();
+    let notes = |name: &str, arguments: Value, by_operator: bool| {
         with_change(
             &tool(name, "", Some(true)),
             arguments,
@@ -2428,10 +2432,6 @@ fn a_glossary_never_names_a_machine_id_field_or_a_recipient() {
 }
 
 #[test]
-fn forgetting_earlier_results_drops_a_meaning_that_came_from_one() {
-    let context = read_issue(json!({"name": "Low", "value": 4}));
-    let (mut change, _) = change_with(
-#[test]
 fn a_list_the_tool_or_the_member_says_is_only_added_to_is_never_counted_as_replaced() {
     let (rows, _) = change_with(
         &tool(
@@ -2458,6 +2458,10 @@ fn a_list_the_tool_or_the_member_says_is_only_added_to_is_never_counted_as_repla
     assert_eq!(added.batch.as_ref().unwrap().rows_replacing_lists, 0);
 }
 
+#[test]
+fn forgetting_earlier_results_drops_a_meaning_that_came_from_one() {
+    let context = read_issue(json!({"name": "Low", "value": 4}));
+    let (mut change, _) = change_with(
         &tool("update_issue", "", None),
         json!({"id": RECORD, "priority": 4}),
         &context,

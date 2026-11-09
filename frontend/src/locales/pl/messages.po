@@ -9794,6 +9794,7 @@ msgid "toolGist.upsert.failed"
 msgstr "{shape, select, full {Nie udało się utworzyć lub zaktualizować: {kind} {title} w {where}} titled {Nie udało się utworzyć lub zaktualizować: {kind} {title}} placed {Nie udało się utworzyć lub zaktualizować: {kind} w {where}} other {Nie udało się utworzyć lub zaktualizować: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.value.earlier"
 msgstr "Wartość z wcześniejszego wyniku w tym czacie"

@@ -180,6 +180,7 @@ const OPAQUE_KINDS: readonly ToolCallOpaqueKind[] = [
 ];
 const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "marked_destructive",
+  "operator_marked_destructive",
   "delete_outcome_unknown",
   "tool_says_permanent",
   "tool_says_restorable",
@@ -188,7 +189,6 @@ const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "list_replace_unknown",
   "tool_says_ignored_if_missing",
   "row_count_unknown",
-  "operator_marked_destructive",
   "instruction_outcome_unknown",
   "old_values_from_earlier",
   "nothing_changes",

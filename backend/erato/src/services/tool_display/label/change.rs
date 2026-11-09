@@ -1756,8 +1756,22 @@ fn is_update_like(action: ToolCallAction) -> bool {
     matches!(action, ToolCallAction::Update | ToolCallAction::Upsert)
 }
 
-fn is_one_of(member: &str, names: &[&str]) -> bool {
-    names.iter().any(|name| member.eq_ignore_ascii_case(name))
+/// Tool names that say the call writes whatever it is given: on these the
+/// destructive mark is on every call, so it says nothing about this one.
+const UPSERT_STYLE_WORDS: [&str; 5] = ["save", "upsert", "put", "set", "sync"];
+
+/// Whether a destructive mark tells someone reading the card something new. A
+/// create or send does not read as if it destroys anything; an update already
+/// lists what it changes, and so says the rest on its own.
+fn destructive_mark_adds_something(action: ToolCallAction, tool_name: &str) -> bool {
+    let words = name_words(text_prefix(tool_name, super::rules::MAX_NAME_BYTES));
+    let upsert_style = words
+        .iter()
+        .any(|word| UPSERT_STYLE_WORDS.contains(&word.as_str()))
+        || (words.iter().any(|word| word == "create") && words.iter().any(|word| word == "update"));
+    !is_update_like(action) && !upsert_style
+}
+
 /// The pointer of the object holding the member at `path`.
 fn parent_of(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(parent, _)| parent)
@@ -1767,6 +1781,8 @@ fn scalar_is_number(scalar: &Value, text: &str) -> bool {
     scalar.is_number() || text.parse::<f64>().is_ok()
 }
 
+fn is_one_of(member: &str, names: &[&str]) -> bool {
+    names.iter().any(|name| member.eq_ignore_ascii_case(name))
 }
 
 fn is_scalar(value: &Value) -> bool {
@@ -1906,22 +1922,6 @@ fn is_behaviour_flag(member: &str) -> bool {
 /// becomes "Owners" for sitting beside other keys.
 fn shared_prefix(members: &Map<String, Value>) -> Option<String> {
     if members.len() < 3 {
-/// Tool names that say the call writes whatever it is given: on these the
-/// destructive mark is on every call, so it says nothing about this one.
-const UPSERT_STYLE_WORDS: [&str; 5] = ["save", "upsert", "put", "set", "sync"];
-
-/// Whether a destructive mark tells someone reading the card something new. A
-/// create or send does not read as if it destroys anything; an update already
-/// lists what it changes, and so says the rest on its own.
-fn destructive_mark_adds_something(action: ToolCallAction, tool_name: &str) -> bool {
-    let words = name_words(text_prefix(tool_name, super::rules::MAX_NAME_BYTES));
-    let upsert_style = words
-        .iter()
-        .any(|word| UPSERT_STYLE_WORDS.contains(&word.as_str()))
-        || (words.iter().any(|word| word == "create") && words.iter().any(|word| word == "update"));
-    !is_update_like(action) && !upsert_style
-}
-
         return None;
     }
     let mut counts: HashMap<&str, usize> = HashMap::new();
@@ -1999,12 +1999,12 @@ fn member_words(member: &str, shared: Option<&str>) -> String {
     if words.is_empty() {
         return member.to_string();
     }
-    words
-        .iter()
     let words: Vec<String> = words
         .iter()
         .flat_map(|word| super::words::split_glued(word))
         .collect();
+    words
+        .iter()
         .enumerate()
         .map(|(index, word)| {
             let lower = word.to_lowercase();
@@ -2509,8 +2509,6 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
         if value.machine_id {
             value.text.clear();
         }
-    }
-    fn forget_effect(effect: &mut ToolCallEffect) {
         if value
             .meaning
             .as_ref()
@@ -2518,6 +2516,8 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
         {
             value.meaning = None;
         }
+    }
+    fn forget_effect(effect: &mut ToolCallEffect) {
         effect.old = None;
         effect.removed.clear();
         effect.kept.clear();

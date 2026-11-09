@@ -1004,10 +1004,12 @@ const IncompleteAlert = ({ change }: { change: GistChange }) =>
  */
 export const ToolCallChangeBody = ({
   change,
+  action,
   replacesText = false,
   values = true,
 }: {
   change: GistChange;
+  action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
 }) => (
@@ -1076,19 +1078,17 @@ export const ToolCallChangeCard = ({
               gist={gist}
               item={item}
               phase={phase}
-  action,
               variant="card"
             />
           </p>
         ))}
-  action?: GistAction;
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody
           change={change}
+          action={gist.action}
           replacesText={gist.action === "update" || gist.action === "upsert"}
         />
       </ScrollBox>
     </div>
   );
 };
-          action={gist.action}

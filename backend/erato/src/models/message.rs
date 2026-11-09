@@ -1009,6 +1009,8 @@ pub struct ToolCallBatchOperation {
 pub enum ToolCallChangeNote {
     /// The tool's annotations mark it as destructive.
     MarkedDestructive,
+    /// The operator's configuration marks the tool as destructive.
+    OperatorMarkedDestructive,
     /// What else goes, and whether it can be restored, is not known.
     DeleteOutcomeUnknown,
     ToolSaysPermanent,
@@ -1039,8 +1041,6 @@ pub enum ToolCallChangeNote {
     Default,
     Serialize,
     Deserialize,
-    /// The operator's configuration marks the tool as destructive.
-    OperatorMarkedDestructive,
     PartialEq,
     Eq,
     Hash,
