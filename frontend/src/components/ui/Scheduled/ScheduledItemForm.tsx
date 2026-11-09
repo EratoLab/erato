@@ -47,6 +47,8 @@ export interface ScheduledItemFormProps {
   initialValues: ScheduledFormValues;
   /** Whether the chosen channel reaches the user, from the API. */
   channelStatus: DeliveryChannelStatus;
+  /** What the deployment's Teams app is called, for the channel's hints. */
+  teamsAppName?: string | null;
   /** The user's recent chats, to link one. */
   chats: ScheduledLinkableChat[];
   /** The zone dates and times are entered in; the browser's when omitted. */
@@ -139,6 +141,7 @@ export function ScheduledItemForm({
   mode,
   initialValues,
   channelStatus,
+  teamsAppName = null,
   chats,
   timeZone,
   now,
@@ -667,7 +670,7 @@ export function ScheduledItemForm({
         title={t({ id: "scheduled.form.reminder", message: "Reminder" })}
         description={t({
           id: "scheduled.form.reminder.description",
-          message: "What Erato sends you.",
+          message: "What you receive.",
         })}
       />
 
@@ -731,6 +734,7 @@ export function ScheduledItemForm({
       <ScheduledDeliverySettings
         channel={values.channel}
         channelStatus={channelStatus}
+        teamsAppName={teamsAppName}
         onChannelChange={(channel) => update("channel", channel)}
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}

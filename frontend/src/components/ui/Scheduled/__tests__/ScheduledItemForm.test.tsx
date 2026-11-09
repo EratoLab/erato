@@ -111,7 +111,7 @@ describe("ScheduledItemForm", () => {
     expect(props.onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText("Enter a name.")).toBeInTheDocument();
     expect(
-      screen.getByText("Enter the message Erato sends you."),
+      screen.getByText("Enter the message you want to receive."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("This time is in the past. Pick a time in the future."),
@@ -178,14 +178,32 @@ describe("ScheduledItemForm", () => {
     fireEvent.click(toggle);
     expect(screen.getByRole("radio", { name: /Teams chat/ })).toBeChecked();
     expect(
-      screen.getByText(/Erato can't reach you in Teams yet/),
-    ).toBeInTheDocument();
+      screen.queryByText(/can't reach you in Teams yet/),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("radio", { name: /Desktop notification/ }),
     ).toBeDisabled();
     expect(
       screen.getByRole("radio", { name: /Browser notification/ }),
     ).toBeDisabled();
+  });
+
+  it("names the deployment's Teams app in the Teams chat hint", () => {
+    renderForm({
+      channelStatus: "not_set_up",
+      teamsAppName: "Hugo",
+      initialAdvancedOpen: true,
+    });
+
+    expect(
+      screen.getByText(
+        "Hugo can't reach you in Teams yet. Open Hugo in Microsoft Teams once: under Apps, search for Hugo and open it. After that, this channel works.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Your chat with Hugo in Microsoft Teams"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Erato/)).not.toBeInTheDocument();
   });
 
   it("opens the delivery settings on a refused channel", () => {

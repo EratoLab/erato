@@ -27,6 +27,7 @@ import {
   useScheduledTemplates,
 } from "@/hooks/scheduled/useScheduledItems";
 import { usePageAlignment } from "@/hooks/ui";
+import { useScheduledFeature } from "@/providers/FeatureConfigProvider";
 
 import { EmptyAssistantHubState } from "./assistantHubUtils";
 
@@ -63,6 +64,8 @@ export interface ScheduledPageViewProps extends ScheduledItemActions {
   now?: Date;
   /** IANA zone for days and times; the browser's zone when omitted. */
   timeZone?: string;
+  /** What the deployment's Teams app is called; null when unknown. */
+  teamsAppName?: string | null;
 }
 
 /**
@@ -84,6 +87,7 @@ export function ScheduledPageView({
   onTemplateSelect,
   now,
   timeZone,
+  teamsAppName = null,
   ...rowActions
 }: ScheduledPageViewProps) {
   const { i18n } = useLingui();
@@ -189,7 +193,7 @@ export function ScheduledPageView({
           description={t({
             id: "scheduled.empty.description",
             message:
-              "Get a reminder at a time you choose, or describe it in a chat and Erato sets it up.",
+              "Get a reminder at a time you choose, or describe it in a chat and the assistant sets it up.",
           })}
         />
         <ScheduledTemplates
@@ -216,6 +220,7 @@ export function ScheduledPageView({
             groups={groups}
             dateContext={dateContext}
             now={now}
+            teamsAppName={teamsAppName}
             {...rowActions}
           />
         ) : tab === "upcoming" ? (
@@ -253,7 +258,8 @@ export function ScheduledPageView({
         title={pageTitle}
         subtitle={t({
           id: "scheduled.page.subtitle",
-          message: "Everything Erato does for you at a time you choose.",
+          message:
+            "Everything the assistant does for you at a time you choose.",
         })}
       >
         <div className={clsx("flex", justifyAlignment)}>
@@ -318,6 +324,7 @@ export default function ScheduledPage() {
     remove,
   } = useScheduledItems();
   const { templates } = useScheduledTemplates();
+  const { teamsAppName } = useScheduledFeature();
 
   return (
     <ScheduledPageView
@@ -326,6 +333,7 @@ export default function ScheduledPage() {
       notice={notice}
       maxUpcoming={maxUpcoming}
       timeZone={timeZone}
+      teamsAppName={teamsAppName}
       templates={templates}
       isLoading={isLoading}
       error={error}

@@ -47,20 +47,30 @@ interface ScheduledItemRowProps extends ScheduledItemActions {
   dateContext: ScheduledDateFormat;
   /** Reference time; the current time when omitted. */
   now?: Date;
+  /** What the deployment's Teams app is called; null when unknown. */
+  teamsAppName?: string | null;
 }
 
 /**
  * What a failed delivery means for the user, with the channel's own setup
  * hint. Row copy: the page-level alert names no channel.
  */
-function failedDeliveryText(channel: ScheduledItemChannel | null | undefined) {
+function failedDeliveryText(
+  channel: ScheduledItemChannel | null | undefined,
+  teamsAppName: string | null,
+) {
   switch (channel) {
     case "teams_chat": {
       const channelName = scheduledChannelLabel(channel);
-      return t({
-        id: "scheduled.item.failed.teamsChat",
-        message: `Could not be delivered via ${channelName}. Check that Erato is set up in Teams, then schedule it again.`,
-      });
+      return teamsAppName
+        ? t({
+            id: "scheduled.item.failed.teamsChat",
+            message: `Could not be delivered via ${channelName}. Check that ${teamsAppName} is set up in Teams, then schedule it again.`,
+          })
+        : t({
+            id: "scheduled.item.failed.teamsChat.unnamed",
+            message: `Could not be delivered via ${channelName}. Check that the assistant's app is set up in Teams, then schedule it again.`,
+          });
     }
     default:
       return t({
@@ -157,6 +167,7 @@ export function ScheduledItemRow({
   onOpenLinkedChat,
   onScheduleAgain,
   onDelete,
+  teamsAppName = null,
 }: ScheduledItemRowProps) {
   const { i18n } = useLingui();
   const locale = i18n.locale || undefined;
@@ -284,7 +295,7 @@ export function ScheduledItemRow({
         )}
         {item.status === "failed" && (
           <p className="mt-2 text-sm text-theme-error-fg">
-            {failedDeliveryText(item.channel)}
+            {failedDeliveryText(item.channel, teamsAppName)}
           </p>
         )}
         {/* Every part leads with its dot and the line is pulled back by one

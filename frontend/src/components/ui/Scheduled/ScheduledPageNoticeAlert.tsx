@@ -29,7 +29,7 @@ export function ScheduledPageNoticeAlert({
           {t({
             id: "scheduled.notice.notSetUp.body",
             message:
-              "Erato can't reach you on any delivery channel yet, so nothing new can be scheduled. The form's advanced settings show how to set one up.",
+              "No delivery channel can reach you yet, so nothing new can be scheduled. The form's advanced settings show how to set one up.",
           })}
         </Alert>
       );

@@ -44,6 +44,31 @@ function channelStatusLabel(status: DeliveryChannelStatus) {
   }
 }
 
+/** The Teams chat card's texts, naming the deployment's Teams app if known. */
+function teamsChatTexts(teamsAppName: string | null) {
+  if (teamsAppName) {
+    return {
+      helper: t({
+        id: "scheduled.channel.teamsChat.helper",
+        message: `Your chat with ${teamsAppName} in Microsoft Teams`,
+      }),
+      notSetUp: t({
+        id: "scheduled.channel.teamsChat.notSetUp",
+        message: `${teamsAppName} can't reach you in Teams yet. Open ${teamsAppName} in Microsoft Teams once: under Apps, search for ${teamsAppName} and open it. After that, this channel works.`,
+      }),
+    };
+  }
+  return {
+    helper: t({
+      id: "scheduled.channel.teamsChat.helper.unnamed",
+      message: "Your chat with the assistant in Microsoft Teams",
+    }),
+    // A Teams channel that can be not set up always comes with the app's
+    // name, so only local setups get here; vague steps would help nobody.
+    notSetUp: null,
+  };
+}
+
 const comingLater = () => (
   <StatusPill tone="muted">
     {t({ id: "scheduled.channel.comingLater", message: "Coming later" })}
@@ -60,6 +85,8 @@ interface ScheduledDeliverySettingsProps {
   /** A refusal of the channel by the API. */
   error?: string;
   disabled?: boolean;
+  /** What the deployment's Teams app is called; null when unknown. */
+  teamsAppName?: string | null;
 }
 
 /**
@@ -74,10 +101,12 @@ export function ScheduledDeliverySettings({
   onOpenChange,
   error,
   disabled = false,
+  teamsAppName = null,
 }: ScheduledDeliverySettingsProps) {
   const bodyId = useId();
   const errorId = useId();
   const channelName = scheduledChannelLabel(channel);
+  const teamsChat = teamsChatTexts(teamsAppName);
 
   return (
     <Card
@@ -134,23 +163,16 @@ export function ScheduledDeliverySettings({
             onChange={() => onChannelChange(channel)}
             icon={<ChatBubbleIcon className="size-5" />}
             label={channelName}
-            helper={t({
-              id: "scheduled.channel.teamsChat.helper",
-              message: "Your chat with Erato in Microsoft Teams",
-            })}
+            helper={teamsChat.helper}
             trailing={
               <StatusPill tone={STATUS_TONE[channelStatus]}>
                 {channelStatusLabel(channelStatus)}
               </StatusPill>
             }
           >
-            {channelStatus === "not_set_up" ? (
+            {channelStatus === "not_set_up" && teamsChat.notSetUp ? (
               <p className="p-3 text-xs text-theme-fg-secondary">
-                {t({
-                  id: "scheduled.channel.teamsChat.notSetUp",
-                  message:
-                    "Erato can't reach you in Teams yet. Open Erato in Microsoft Teams once: under Apps, search for Erato and open it. After that, this channel works.",
-                })}
+                {teamsChat.notSetUp}
               </p>
             ) : channelStatus === "unavailable" ? (
               <p className="p-3 text-xs text-theme-fg-secondary">
@@ -176,7 +198,7 @@ export function ScheduledDeliverySettings({
             helper={t({
               id: "scheduled.channel.desktop.helper",
               message:
-                "A notification on your computer, through the Erato desktop app",
+                "A notification on your computer, through the desktop app",
             })}
             trailing={comingLater()}
           />
@@ -193,7 +215,8 @@ export function ScheduledDeliverySettings({
             })}
             helper={t({
               id: "scheduled.channel.browser.helper",
-              message: "A notification from your browser while Erato is open",
+              message:
+                "A notification from your browser while this app is open",
             })}
             trailing={comingLater()}
           />

@@ -249,6 +249,11 @@ export interface TraceFeatureConfig {
 /** The Scheduled page: its sidebar entry and its route. */
 export interface ScheduledFeatureConfig {
   enabled: boolean;
+  /**
+   * What the deployment's Teams app is called, for the Teams chat channel's
+   * setup hints; null without a Teams bot.
+   */
+  teamsAppName: string | null;
 }
 
 /**
@@ -395,6 +400,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   },
   scheduled: {
     enabled: false,
+    teamsAppName: null,
   },
 };
 
@@ -540,6 +546,7 @@ function createFeatureConfig(
     },
     scheduled: {
       enabled: environment.scheduledEnabled,
+      teamsAppName: environment.teamsAppName,
     },
   };
 }
