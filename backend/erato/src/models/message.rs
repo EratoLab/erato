@@ -683,6 +683,36 @@ pub struct ToolCallEffectValue {
     /// A machine identifier: the card shows `text`, or a phrase when it is empty.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub machine_id: bool,
+    /// What a coded value (`text`, as written) stands for, where the
+    /// operator's glossary, the tool's own schema or an earlier result says so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub meaning: Option<ToolCallValueMeaning>,
+}
+
+/// What a coded value stands for, and whose word that is.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallValueMeaning {
+    /// Display-cleaned and capped.
+    pub label: String,
+    pub source: ToolCallValueMeaningSource,
+}
+
+/// Whose word a value's meaning is; a card marks a tool's own as a claim.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallValueMeaningSource {
+    /// The operator's glossary for the server.
+    Glossary,
+    /// An earlier result in the chat paired the value with this label.
+    Earlier,
+    /// The tool's own input schema or description.
+    Tool,
+    /// A source from a newer version; clients show the value alone.
+    #[serde(other)]
+    Other,
 }
 
 /// What happens to a value, ranked from most to least to lose.

@@ -3,6 +3,7 @@ use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallLabelSource, ToolCallObjectKind,
     ToolCallStatus, ToolDisplayMetadata, ToolUse,
 };
+use crate::models::message::{ToolCallValueMeaning, ToolCallValueMeaningSource};
 use crate::services::prompt_composition::transforms::replay_assistant_content;
 use crate::services::tool_display::label::arguments::MAX_LIST_ENTRIES;
 use crate::services::tool_display::label::rules::rules_label;
@@ -72,8 +73,9 @@ fn change_with(
             context,
             server: Some(SERVER),
             rules_action: label.action,
-        },
+            glossary: None,
             destructive_by_operator: false,
+        },
     )
     .expect("a labelled call has a change description")
 }
@@ -122,9 +124,9 @@ fn a_call_with_no_verb_has_no_change_description() {
                 context: &context,
                 server: None,
                 rules_action: label.action,
+                glossary: None,
             },
         )
-                destructive_by_operator: false,
         .is_none()
     );
 }
@@ -297,7 +299,7 @@ fn machine_ids_never_carry_their_text_and_show_a_known_name() {
     assert!(bind.link);
     assert!(bind.values[0].machine_id);
     assert_eq!(bind.values[0].text, "Contoso");
-    assert_eq!(bind.name, "Parentaccountid");
+    assert_eq!(bind.name, "Parent account ID");
     assert_eq!(texts(&effect(&change, "ref").values), ["#4211"]);
     assert!(!effect(&change, "ref").values[0].machine_id);
 }
@@ -800,9 +802,9 @@ fn nothing_panics_on_odd_arguments() {
                 server: Some(SERVER),
                 rules_action: label.action,
             },
+                glossary: None,
         );
     }
-                destructive_by_operator: false,
 }
 
 #[test]
@@ -858,9 +860,9 @@ fn a_mapping_from_any_source_is_described_the_same_way() {
             rules_action: label.action,
         },
     )
+            glossary: None,
     .unwrap();
     assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
-            destructive_by_operator: false,
 }
 
 fn read_of(tool_name: &str, input: Value, output: Value) -> ToolResultContext {
@@ -1786,9 +1788,9 @@ fn the_models_verb_only_words_the_headline_and_never_decides_what_is_lost() {
         },
     );
     assert!(described.is_none(), "{described:?}");
+            glossary: None,
 }
 
-            destructive_by_operator: false,
 #[test]
 fn a_call_with_no_verb_still_says_what_reaches_past_its_values_and_claims_no_loss() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
@@ -2073,6 +2075,7 @@ fn with_change(
     tool: &Tool,
     arguments: Value,
     context: &ToolResultContext,
+
     destructive_by_operator: bool,
 ) -> ToolCallChange {
     let label = labelled(tool, &arguments, context);
@@ -2089,6 +2092,7 @@ fn with_change(
         },
     )
     .expect("a labelled call has a change description")
+            glossary: None,
     .0
 }
 
@@ -2096,6 +2100,291 @@ fn with_change(
 fn the_destructive_note_only_appears_where_it_says_something_new() {
     let context = ToolResultContext::default();
     let notes = |name: &str, arguments: Value, by_operator: bool| {
+fn with_glossary(
+    tool: &Tool,
+    arguments: Value,
+    glossary: &erato_config::config::McpGlossaryConfig,
+) -> ToolCallChange {
+    let context = ToolResultContext::default();
+    let label = labelled(tool, &arguments, &context);
+    describe(
+        &label,
+        ChangeFacts {
+            tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context: &context,
+            server: Some(SERVER),
+            rules_action: label.action,
+            glossary: Some(glossary),
+            destructive_by_operator: false,
+        },
+    )
+    .expect("a labelled call has a change description")
+    .0
+}
+
+fn tool_with_schema(name: &str, description: &str, schema: Value) -> Tool {
+    Tool::new(
+        name.to_string(),
+        description.to_string(),
+        schema.as_object().unwrap().clone(),
+    )
+}
+
+fn read_issue(priority: Value) -> ToolResultContext {
+    read_of(
+        "get_issue",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "title": "Upload fails", "priority": priority}),
+    )
+}
+
+#[test]
+fn a_coded_old_value_compares_in_the_same_form_as_the_new_one() {
+    let context = read_issue(json!({"name": "Low", "value": 4}));
+    let update = tool("update_issue", "", None);
+
+    let (changed, _) = change_with(&update, json!({"id": RECORD, "priority": 2}), &context);
+    let row = effect(&changed, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Changed);
+    let old = row.old.as_ref().unwrap();
+    assert_eq!(old.text, "4");
+    assert_eq!(
+        old.meaning.as_ref().unwrap(),
+        &ToolCallValueMeaning {
+            label: "Low".into(),
+            source: ToolCallValueMeaningSource::Earlier,
+        }
+    );
+    assert_eq!(row.values[0].text, "2");
+    assert_eq!(row.values[0].meaning, None);
+
+    // The same code and the same label are both "the same value".
+    for same in [json!(4), json!("Low"), json!("4")] {
+        let (kept, _) = change_with(&update, json!({"id": RECORD, "priority": same}), &context);
+        assert_eq!(
+            effect(&kept, "priority").effect,
+            ToolCallEffectKind::Unchanged,
+            "{same}"
+        );
+    }
+
+    // Against a label, the old value stays a label.
+    let (relabelled, _) = change_with(&update, json!({"id": RECORD, "priority": "High"}), &context);
+    let old = effect(&relabelled, "priority").old.as_ref().unwrap();
+    assert_eq!((old.text.as_str(), &old.meaning), ("Low", &None));
+}
+
+#[test]
+fn a_label_with_a_string_code_works_the_same_and_a_link_is_no_pair() {
+    let context = read_issue(json!({"label": "Blocked", "code": "blocked"}));
+    let (same, _) = change_with(
+        &tool("update_issue", "", None),
+        json!({"id": RECORD, "priority": "blocked"}),
+        &context,
+    );
+    let row = effect(&same, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Unchanged);
+    assert_eq!(row.old.as_ref().unwrap().text, "blocked");
+
+    // {id, name} is a link to a record, whose earlier value is its ID.
+    let context = read_issue(json!({"id": "9", "name": "Tess"}));
+    let (linked, _) = change_with(
+        &tool("update_issue", "", None),
+        json!({"id": RECORD, "priority": "9"}),
+        &context,
+    );
+    let row = effect(&linked, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Unchanged);
+    assert_eq!(row.old.as_ref().unwrap().meaning, None);
+}
+
+#[test]
+fn state_and_status_are_the_same_field_when_only_one_was_read() {
+    let context = read_of(
+        "get_issue",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "title": "Upload fails", "status": "In Progress"}),
+    );
+    let update = tool("update_issue", "", None);
+    let (change, _) = change_with(&update, json!({"id": RECORD, "state": "Done"}), &context);
+    let row = effect(&change, "state");
+    assert_eq!(row.effect, ToolCallEffectKind::Changed);
+    assert_eq!(row.old.as_ref().unwrap().text, "In Progress");
+
+    // A call that writes both means two fields.
+    let (both, _) = change_with(
+        &update,
+        json!({"id": RECORD, "state": "Done", "status": "Won"}),
+        &context,
+    );
+    assert_eq!(effect(&both, "state").effect, ToolCallEffectKind::Set);
+    assert_eq!(effect(&both, "status").effect, ToolCallEffectKind::Changed);
+
+    // Only the agreed pair counts.
+    let (other, _) = change_with(&update, json!({"id": RECORD, "stage": "Done"}), &context);
+    assert_eq!(effect(&other, "stage").effect, ToolCallEffectKind::Set);
+}
+
+#[test]
+fn a_code_means_something_only_when_someone_says_so() {
+    let schema = json!({"type": "object", "properties": {
+        "id": {"type": "string"},
+        "priority": {"type": "number", "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low"},
+        "phone": {"type": "string", "description": "1=Home, 2=Work"},
+    }});
+    let update = tool_with_schema("update_issue", "", schema);
+
+    let (nothing, _) = change_with(
+        &tool("update_issue", "", None),
+        json!({"id": RECORD, "priority": 4}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(effect(&nothing, "priority").values[0].meaning, None);
+
+    let context = read_issue(json!({"name": "Low", "value": 4}));
+    let (change, _) = change_with(&update, json!({"id": RECORD, "priority": 2}), &context);
+    let row = effect(&change, "priority");
+    assert_eq!(
+        row.values[0].meaning.as_ref().unwrap(),
+        &ToolCallValueMeaning {
+            label: "High".into(),
+            source: ToolCallValueMeaningSource::Tool,
+        }
+    );
+    assert_eq!(
+        row.old.as_ref().unwrap().meaning.as_ref().unwrap().label,
+        "Low"
+    );
+
+    // A plain earlier number gets the schema's meaning, on both sides.
+    let plain = read_issue(json!(3));
+    let (known, _) = change_with(&update, json!({"id": RECORD, "priority": 1}), &plain);
+    let row = effect(&known, "priority");
+    let old = row.old.as_ref().unwrap();
+    assert_eq!(
+        (
+            old.text.as_str(),
+            old.meaning.as_ref().unwrap().label.as_str()
+        ),
+        ("3", "Medium")
+    );
+
+    // The earlier read and the schema agree: the read's word wins.
+    let (agreed, _) = change_with(&update, json!({"id": RECORD, "priority": 4}), &context);
+    assert_eq!(
+        effect(&agreed, "priority").values[0]
+            .meaning
+            .as_ref()
+            .unwrap()
+            .source,
+        ToolCallValueMeaningSource::Earlier
+    );
+
+    // A schema that disagrees with what was read says nothing about the code.
+    let disagreeing = read_issue(json!({"name": "Custom", "value": 2}));
+    let (conflict, _) = change_with(&update, json!({"id": RECORD, "priority": 2}), &disagreeing);
+    assert_eq!(effect(&conflict, "priority").values[0].meaning, None);
+
+    // A recipient or a phone-shaped value never gets a meaning.
+    let (reach, _) = change_with(
+        &update,
+        json!({"id": RECORD, "phone": "+49 30 1234567", "priority": 1}),
+        &context,
+    );
+    assert_eq!(effect(&reach, "phone").values[0].meaning, None);
+}
+
+#[test]
+fn a_label_from_a_read_only_counts_for_records_of_that_read() {
+    let list = json!([
+        {"id": RECORD, "name": "A", "priority": {"name": "Low", "value": 4}},
+        {"id": ACCOUNT, "name": "B", "priority": {"name": "Urgent", "value": 1}},
+    ]);
+    let context = earlier(vec![
+        ("list_issues", json!({}), list),
+        (
+            "list_tasks",
+            json!({}),
+            json!([{"id": "t1", "name": "C", "priority": {"name": "Blocker", "value": 1}}]),
+        ),
+    ]);
+    let update = tool("update_issue", "", None);
+    let (change, _) = change_with(&update, json!({"id": RECORD, "priority": 1}), &context);
+    let row = effect(&change, "priority");
+    // "1" means Urgent in the read that returned this record, whatever
+    // another table called it.
+    assert_eq!(row.old.as_ref().unwrap().text, "4");
+    assert_eq!(row.values[0].meaning.as_ref().unwrap().label, "Urgent");
+    assert_eq!(
+        row.values[0].meaning.as_ref().unwrap().source,
+        ToolCallValueMeaningSource::Earlier
+    );
+
+    // Two labels for one code in that read: nothing is claimed.
+    let context = read_of(
+        "list_issues",
+        json!({}),
+        json!([
+            {"id": RECORD, "name": "A", "priority": {"name": "Low", "value": 4}},
+            {"id": ACCOUNT, "name": "B", "priority": {"name": "Urgent", "value": 1}},
+            {"id": "t2", "name": "C", "priority": {"name": "Blocker", "value": 1}},
+        ]),
+    );
+    let (ambiguous, _) = change_with(&update, json!({"id": RECORD, "priority": 1}), &context);
+    assert_eq!(effect(&ambiguous, "priority").values[0].meaning, None);
+}
+
+#[test]
+fn the_glossary_names_fields_and_values_with_the_raw_name_beside_it() {
+    let glossary: erato_config::config::McpGlossaryConfig = serde_json::from_value(json!({
+        "field_names": {"customertypecode": "Customer type"},
+        "choice_labels": {"customertypecode": {"8": "Prospect"}},
+    }))
+    .unwrap();
+    let change = with_glossary(
+        &tool("update_record", "", None),
+        json!({"id": RECORD, "fields": {"customertypecode": 8, "estimatedclosedate": "2026-01-01"}}),
+        &glossary,
+    );
+    let row = effect(&change, "customertypecode");
+    assert_eq!(row.name, "Customer type (customertypecode)");
+    assert_eq!(
+        row.values[0].meaning.as_ref().unwrap(),
+        &ToolCallValueMeaning {
+            label: "Prospect".into(),
+            source: ToolCallValueMeaningSource::Glossary,
+        }
+    );
+    assert_eq!(
+        effect(&change, "estimatedclosedate").name,
+        "Estimated close date"
+    );
+}
+
+#[test]
+fn a_glossary_never_names_a_machine_id_field_or_a_recipient() {
+    let glossary: erato_config::config::McpGlossaryConfig = serde_json::from_value(json!({
+        "field_names": {RECORD: "Secret name", "to": "Audience"},
+        "choice_labels": {"to": {"a@example.com": "Everyone"}},
+    }))
+    .unwrap();
+    let change = with_glossary(
+        &tool("send_email", "", None),
+        json!({"subject": "Hi", "to": "a@example.com", "metadata": {RECORD: "x"}}),
+        &glossary,
+    );
+    let recipients = change.recipients.as_ref().unwrap();
+    assert_eq!(recipients.groups[0].values, ["a@example.com"]);
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| !effect.name.contains("Secret name"))
+    );
+}
+
         with_change(
             &tool(name, "", Some(true)),
             arguments,
@@ -2138,3 +2427,37 @@ fn the_destructive_note_only_appears_where_it_says_something_new() {
     assert_eq!(operator, [ToolCallChangeNote::OperatorMarkedDestructive]);
 }
 
+#[test]
+fn forgetting_earlier_results_drops_a_meaning_that_came_from_one() {
+    let context = read_issue(json!({"name": "Low", "value": 4}));
+    let (mut change, _) = change_with(
+        &tool("update_issue", "", None),
+        json!({"id": RECORD, "priority": 4}),
+        &context,
+    );
+    assert!(effect(&change, "priority").values[0].meaning.is_some());
+    forget_earlier(&mut change);
+    assert_eq!(effect(&change, "priority").values[0].meaning, None);
+    assert_eq!(effect(&change, "priority").values[0].text, "4");
+}
+
+#[test]
+fn glued_lower_case_names_read_as_words() {
+    for (member, expected) in [
+        ("estimatedclosedate", "Estimated close date"),
+        ("customertypecode", "Customer type code"),
+        ("parentaccountid", "Parent account ID"),
+        ("websiteurl", "Website URL"),
+        ("telephone1", "Telephone 1"),
+        ("address1_city", "Address 1 city"),
+        ("Stage", "Stage"),
+        ("renewalDueOn", "Renewal due on"),
+        ("sha256", "Sha256"),
+    ] {
+        let change = change_of(
+            "update_record",
+            json!({"id": "r1", "fields": {member: "v"}}),
+        );
+        assert_eq!(effect(&change, member).name, expected, "{member}");
+    }
+}

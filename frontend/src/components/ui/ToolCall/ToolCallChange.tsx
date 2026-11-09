@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { Fragment, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -27,6 +28,7 @@ import {
   changeSeeMoreLine,
   changeSummaryLine,
   cutValuePhrase,
+  codedValueText,
   dryRunLabel,
   emptiedLabel,
   emptiedWasLabel,
@@ -208,12 +210,28 @@ const ValueText = ({
       </span>
     );
   }
-  const shown = value.truncated ? `${value.text}…` : value.text;
+  const text = codedValueText(value);
+  const shown = value.truncated ? `${text}…` : text;
+  // A meaning read from an earlier result looks like any other earlier value.
+  const earlier = value.meaning?.source === "earlier";
   return (
     <span
       dir="auto"
-      data-origin={value.machineId ? "resolved" : "written"}
-      className={ISOLATED}
+      data-origin={
+        earlier ? "earlier" : value.machineId ? "resolved" : "written"
+      }
+      title={
+        earlier
+          ? t({
+              id: "toolGist.value.earlier",
+              message: "Value from an earlier result in this chat",
+            })
+          : undefined
+      }
+      className={clsx(
+        ISOLATED,
+        earlier && "underline decoration-dotted underline-offset-2",
+      )}
     >
       {link ? linkPhrase(shown) : shown}
     </span>
@@ -301,7 +319,8 @@ const ValueRow = ({
     )}
     {showRawName &&
       effect.rawName.length > 0 &&
-      effect.rawName !== effect.name && (
+      // A glossary name already carries the raw name beside it.
+      !effect.name.endsWith(`(${effect.rawName})`) && (
         <p
           dir="auto"
           className={clsx(

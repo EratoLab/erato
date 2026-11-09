@@ -854,3 +854,19 @@ export const plainChangeValue = (value: ChangeValue): string =>
         id: "toolChange.note.operatorMarkedDestructive",
         message: "Your organisation has marked this tool as destructive.",
       });
+/**
+ * A coded value with its meaning: the label first and the value as written
+ * beside it, or for a meaning only the tool states, the value and its claim.
+ */
+export const codedValueText = (value: ChangeValue): string => {
+  const { text, meaning } = value;
+  if (meaning === undefined) return text;
+  const label = meaning.label;
+  return meaning.source === "tool"
+    ? t({
+        id: "toolChange.value.toolSaysMeaning",
+        message: `${text} (the tool says: ${label})`,
+      })
+    : t({ id: "toolChange.value.meaning", message: `${label} (${text})` });
+};
+

@@ -4806,6 +4806,7 @@ export type ToolCallEffectValue = {
    * A machine identifier: the card shows `text`, or a phrase when it is empty.
    */
   machine_id?: boolean;
+  meaning?: ToolCallValueMeaning;
   /**
    * Display-cleaned and capped. For a machine identifier: the name of the
    * record it stands for, or empty when no result names it.
@@ -5088,6 +5089,26 @@ export type ToolCallTextChange = {
   text: string;
   truncated?: boolean;
 };
+
+/**
+ * What a coded value stands for, and whose word that is.
+ */
+export type ToolCallValueMeaning = {
+  /**
+   * Display-cleaned and capped.
+   */
+  label: string;
+  source: ToolCallValueMeaningSource;
+};
+
+/**
+ * Whose word a value's meaning is; a card marks a tool's own as a claim.
+ */
+export type ToolCallValueMeaningSource =
+  | "glossary"
+  | "earlier"
+  | "tool"
+  | "other";
 
 /**
  * Inert display text for a tool call, captured with the call: the tool

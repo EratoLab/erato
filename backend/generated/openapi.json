@@ -13834,6 +13834,10 @@
             "type": "boolean",
             "description": "A machine identifier: the card shows `text`, or a phrase when it is empty."
           },
+          "meaning": {
+            "$ref": "#/components/schemas/ToolCallValueMeaning",
+            "description": "What a coded value (`text`, as written) stands for, where the\noperator's glossary, the tool's own schema or an earlier result says so."
+          },
           "text": {
             "type": "string",
             "description": "Display-cleaned and capped. For a machine identifier: the name of the\nrecord it stands for, or empty when no result names it."
@@ -14284,6 +14288,33 @@
             "type": "boolean"
           }
         }
+      },
+      "ToolCallValueMeaning": {
+        "type": "object",
+        "description": "What a coded value stands for, and whose word that is.",
+        "required": [
+          "label",
+          "source"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "Display-cleaned and capped."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ToolCallValueMeaningSource"
+          }
+        }
+      },
+      "ToolCallValueMeaningSource": {
+        "type": "string",
+        "description": "Whose word a value's meaning is; a card marks a tool's own as a claim.",
+        "enum": [
+          "glossary",
+          "earlier",
+          "tool",
+          "other"
+        ]
       },
       "ToolDisplayMetadata": {
         "type": "object",

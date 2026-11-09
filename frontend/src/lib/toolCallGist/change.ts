@@ -7,6 +7,7 @@ import type {
   ToolCallEffectKind,
   ToolCallOpaqueKind,
   ToolCallRecipientKind,
+  ToolCallValueMeaningSource,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -15,11 +16,18 @@ import type {
  * one renders as it did before.
  */
 
+export interface ChangeMeaning {
+  label: string;
+  source: ToolCallValueMeaningSource;
+}
+
 export interface ChangeValue {
   text: string;
   truncated: boolean;
   /** A machine identifier: `text` is its name, or empty when none is known. */
   machineId: boolean;
+  /** What a coded value stands for, where a glossary, the tool or a read says so. */
+  meaning?: ChangeMeaning;
 }
 
 export interface ChangeEffect {
@@ -186,6 +194,11 @@ const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "nothing_changes",
 ];
 const RECIPIENT_KINDS: readonly ToolCallRecipientKind[] = ["to", "cc", "bcc"];
+const MEANING_SOURCES: readonly ToolCallValueMeaningSource[] = [
+  "glossary",
+  "earlier",
+  "tool",
+];
 const ROW_ACTIONS: readonly ToolCallAction[] = [
   "create",
   "update",
@@ -243,7 +256,16 @@ class Reader {
       text: withIdPhrase(cleaned.text),
       truncated: raw.truncated === true || cleaned.truncated,
       machineId: raw.machine_id === true,
+      meaning: this.meaning(raw.meaning),
     };
+  }
+
+  meaning(raw: unknown): ChangeMeaning | undefined {
+    if (!isRecord(raw) || !isOneOf(MEANING_SOURCES, raw.source)) {
+      return undefined;
+    }
+    const label = this.text(raw.label);
+    return label.length > 0 ? { label, source: raw.source } : undefined;
   }
 
   values(raw: unknown, max: number): ChangeValue[] {

@@ -641,6 +641,70 @@ describe("the scroll box", () => {
     renderCard({ effects: [set(1)], counts: { set: 1 } });
     const box = screen.getByTestId("tool-call-gist-scroll");
     expect(box).toHaveAttribute("tabindex", "0");
+describe("old and new values", () => {
+  const changed = (extra: object) => ({
+    path: "/priority",
+    name: "Priority",
+    raw_name: "priority",
+    effect: "changed",
+    values: [{ text: "2" }],
+    old: { text: "4" },
+    ...extra,
+  });
+
+  it("mark a meaning from an earlier read as such", () => {
+    renderCard({
+      effects: [
+        changed({
+          old: { text: "4", meaning: { label: "Low", source: "earlier" } },
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    const old = screen
+      .getByTestId("tool-call-change-old")
+      .querySelector("[data-origin]");
+    expect(old).toHaveAttribute("data-origin", "earlier");
+    expect(old).toHaveClass("decoration-dotted");
+  });
+
+  it("leave a code alone when nobody says what it means", () => {
+    renderCard({
+      effects: [
+        {
+          ...set(1),
+          values: [{ text: "8" }],
+        },
+      ],
+      counts: { set: 1 },
+    });
+    expect(screen.getByText("8")).toBeInTheDocument();
+    expect(screen.queryByText(/says/)).toBeNull();
+  });
+
+});
+describe("what sits on the card", () => {
+  it("shows a glossary name with the raw name beside it, and not twice", () => {
+    renderCard({
+      effects: [
+        {
+          ...set(1),
+          name: "Expected close (estimatedclosedate)",
+          raw_name: "estimatedclosedate",
+        },
+        ...Array.from({ length: 7 }, (_, index) => set(index + 2)),
+      ],
+      counts: { set: 8 },
+    });
+    expect(
+      screen.getByText("Expected close (estimatedclosedate)"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /See 3 more fields/ }));
+    expect(screen.queryByText("estimatedclosedate")).toBeNull();
+    expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
+  });
+
+});
   it("says who marked a tool as destructive", () => {
     renderCard({
       effects: [],

@@ -191,6 +191,10 @@ fn labelled_display(
             context,
             server: scope.as_deref(),
             rules_action,
+            glossary: config
+                .mcp_servers
+                .get(server_id)
+                .map(|server| &server.glossary),
             destructive_by_operator:
                 crate::services::mcp_tool_annotations::destructive_hint_set_by_operator(
                     config, server_id, &tool.name,
@@ -422,6 +426,60 @@ mod tests {
             Some("Removed since")
         );
         assert_eq!(tool_display_metadata(&tool).server_name, None);
+    }
+
+    #[test]
+    fn a_server_glossary_and_who_marked_the_tool_destructive_reach_the_card() {
+        let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
+            "mcp_servers": {
+                "crm": {
+                    "transport_type": "streamable_http",
+                    "url": "http://localhost/mcp",
+                    "glossary": {
+                        "field_names": {"prioritycode": "Priority"},
+                        "choice_labels": {"prioritycode": {"2": "High"}},
+                    },
+                    "tools": {
+                        "create_record": {
+                            "override_tool_annotations": {"destructive_hint": true},
+                        },
+                    },
+                },
+            }
+        }))
+        .unwrap();
+        let mut tool = Tool::new("create_record", "Creates a record.", JsonObject::new());
+        tool.annotations = Some(ToolAnnotations::from_raw(
+            None,
+            None,
+            Some(true),
+            None,
+            None,
+        ));
+        let arguments =
+            serde_json::json!({"tablename": "t", "item": {"name": "n", "prioritycode": 2}});
+        let change =
+            mcp_tool_call_display(&config, "crm", &tool, &arguments, None, &Default::default())
+                .label
+                .and_then(|label| label.change)
+                .expect("a create has a change description");
+        let priority = change
+            .effects
+            .iter()
+            .find(|effect| effect.raw_name == "prioritycode")
+            .expect("the field is on the card");
+        assert_eq!(priority.name, "Priority (prioritycode)");
+        assert_eq!(
+            priority.values[0]
+                .meaning
+                .as_ref()
+                .map(|meaning| meaning.label.as_str()),
+            Some("High")
+        );
+        assert_eq!(
+            change.notes,
+            [crate::models::message::ToolCallChangeNote::OperatorMarkedDestructive]
+        );
     }
 
     #[test]

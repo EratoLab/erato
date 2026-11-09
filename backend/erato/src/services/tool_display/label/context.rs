@@ -70,6 +70,9 @@ pub struct ToolResultContext {
     bytes: usize,
     /// Who counts as inside the organisation for this chat's user.
     organization: Option<OrganizationDomains>,
+    /// Which read a record's values came from, so a code's label is only taken
+    /// from the same read: another table may number its choices differently.
+    reads: u32,
 }
 
 /// Mail providers anyone can sign up with: an address there says nothing about
@@ -147,17 +150,72 @@ pub(super) struct Record {
     fields: HashMap<String, String>,
     /// Fields that held a list.
     lists: HashMap<String, RecordList>,
+    /// Fields written as a label with its code, such as `{"name": "Low", "value": 4}`.
+    coded: HashMap<String, CodedValue>,
     /// A non-UUID ID that named two different things: it resolves to nothing.
     ambiguous: bool,
+    /// The read that last reported this record.
+    read: u32,
 }
 
-impl Record {
-    pub(super) fn field(&self, member: &str) -> Option<String> {
-        self.fields.get(member).cloned()
-    }
+/// A field's value as an earlier result wrote it with its label.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct CodedValue {
+    pub code: String,
+    pub label: String,
+}
 
+/// Field names that mean the same thing, compared without case.
+const SAME_FIELD_NAMES: [(&str, &str); 1] = [("state", "status")];
+
+impl Record {
     pub(super) fn list(&self, member: &str) -> Option<&RecordList> {
         self.lists.get(member)
+    }
+
+    pub(super) fn coded(&self, member: &str) -> Option<&CodedValue> {
+        self.coded.get(member)
+    }
+
+    /// The field an earlier result kept under `member`, or, when it has none
+    /// and the name is one of [`SAME_FIELD_NAMES`], under its one synonym.
+    /// `sibling_members` are the other members the call writes next to it: a
+    /// call that writes both names means two fields. Returns the name found.
+    pub(super) fn field_or_synonym(
+        &self,
+        member: &str,
+        sibling_members: impl Fn(&str) -> bool,
+    ) -> Option<(String, String)> {
+        if let Some(value) = self.fields.get(member) {
+            return Some((member.to_string(), value.clone()));
+        }
+        let synonym = SAME_FIELD_NAMES.iter().find_map(|(a, b)| {
+            if member.eq_ignore_ascii_case(a) {
+                Some(*b)
+            } else if member.eq_ignore_ascii_case(b) {
+                Some(*a)
+            } else {
+                None
+            }
+        })?;
+        if sibling_members(synonym) {
+            return None;
+        }
+        let mut same: Vec<&String> = self
+            .fields
+            .keys()
+            .filter(|key| key.eq_ignore_ascii_case(synonym))
+            .collect();
+        let found = same.pop()?;
+        if !same.is_empty()
+            || self
+                .fields
+                .keys()
+                .any(|key| key.eq_ignore_ascii_case(member))
+        {
+            return None;
+        }
+        Some((found.clone(), self.fields.get(found)?.clone()))
     }
 }
 
@@ -419,6 +477,32 @@ impl ToolResultContext {
         self.record(server, text_key(id)?)?.name.as_deref()
     }
 
+    /// The label `code` has for `member` in the read that reported `record`,
+    /// if no record of that read gives it another. Scoped to one read:
+    /// another table may number the same member differently.
+    pub(super) fn earlier_choice_label(
+        &self,
+        server: &str,
+        record: &Record,
+        member: &str,
+        code: &str,
+    ) -> Option<String> {
+        let mut found: Option<&str> = None;
+        for (key, other) in &self.records {
+            if key.server != server || other.read != record.read {
+                continue;
+            }
+            let Some(coded) = other.coded.get(member).filter(|coded| coded.code == code) else {
+                continue;
+            };
+            match found {
+                Some(label) if label != coded.label => return None,
+                _ => found = Some(coded.label.as_str()),
+            }
+        }
+        found.map(str::to_string)
+    }
+
     fn note_decisions(&mut self, content: &[ContentPart]) {
         for part in content {
             match part {
@@ -523,6 +607,7 @@ impl ToolResultContext {
         if self.is_refused_by_erato(tool) {
             return;
         }
+        self.reads = self.reads.wrapping_add(1);
         // A task's child may have changed any record, and what its tools
         // returned stays in the child's chat.
         if crate::services::delegation::is_delegation_tool_name(&tool.tool_name) {
@@ -589,9 +674,9 @@ impl ToolResultContext {
             return;
         }
         let name = name_of(object);
-        let (fields, lists) = values_of(object, "", walk);
-        if name.is_some() || !fields.is_empty() || !lists.is_empty() {
-            self.merge(RecordKey::new(server, key), name, fields, lists);
+        let values = values_of(object, "", walk);
+        if name.is_some() || !values.is_empty() {
+            self.merge(RecordKey::new(server, key), name, values);
         }
     }
 
@@ -614,10 +699,10 @@ impl ToolResultContext {
                 }
                 if let Some((member, key)) = own_id(object, words) {
                     let name = name_of(object);
-                    let (fields, lists) = values_of(object, member, walk);
-                    if name.is_some() || !fields.is_empty() || !lists.is_empty() {
+                    let values = values_of(object, member, walk);
+                    if name.is_some() || !values.is_empty() {
                         walk.records -= 1;
-                        self.merge(RecordKey::new(server, key), name, fields, lists);
+                        self.merge(RecordKey::new(server, key), name, values);
                     }
                 }
                 for child in object.values().filter(|child| is_container(child)) {
@@ -652,6 +737,7 @@ impl ToolResultContext {
                 let before = record_bytes(key, record);
                 record.fields.clear();
                 record.lists.clear();
+                record.coded.clear();
                 let after = record_bytes(key, record);
                 self.bytes = self.bytes.saturating_sub(before - after);
             }
@@ -662,6 +748,7 @@ impl ToolResultContext {
         for record in self.records.values_mut() {
             record.fields.clear();
             record.lists.clear();
+            record.coded.clear();
         }
         self.bytes = self
             .records
@@ -690,22 +777,21 @@ impl ToolResultContext {
             self.merge(
                 RecordKey::new(server, key),
                 Some(name),
-                HashMap::new(),
-                HashMap::new(),
+                ReadValues::default(),
             );
         }
     }
 
-    fn merge(
-        &mut self,
-        key: RecordKey,
-        name: Option<String>,
-        fields: HashMap<String, String>,
-        lists: HashMap<String, RecordList>,
-    ) {
+    fn merge(&mut self, key: RecordKey, name: Option<String>, values: ReadValues) {
         if !indexable(&key.id) {
             return;
         }
+        let ReadValues {
+            fields,
+            lists,
+            coded,
+        } = values;
+        let read = self.reads;
         let record = match self.records.remove(&key) {
             Some(mut record) => {
                 self.bytes = self.bytes.saturating_sub(record_bytes(&key, &record));
@@ -741,6 +827,14 @@ impl ToolResultContext {
                             record.lists.insert(member, entries);
                         }
                     }
+                    for (member, value) in coded {
+                        if record.coded.len() < MAX_FIELDS_PER_RECORD
+                            || record.coded.contains_key(&member)
+                        {
+                            record.coded.insert(member, value);
+                        }
+                    }
+                    record.read = read;
                 }
                 record
             }
@@ -753,7 +847,9 @@ impl ToolResultContext {
                     name,
                     fields,
                     lists,
+                    coded,
                     ambiguous: false,
+                    read,
                 }
             }
         };
@@ -795,12 +891,18 @@ fn record_bytes(key: &RecordKey, record: &Record) -> usize {
                     .sum::<usize>()
         })
         .sum();
+    let coded: usize = record
+        .coded
+        .iter()
+        .map(|(member, value)| OVERHEAD + member.len() + value.code.len() + value.label.len())
+        .sum();
     OVERHEAD
         + key.server.len()
         + key.id.len()
         + record.name.as_ref().map_or(0, String::len)
         + fields
         + lists
+        + coded
 }
 
 /// Separates the parts of a member-qualified record key; no ID holds it.
@@ -1102,17 +1204,12 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
 /// A record's values, by member: scalars and lists, read through the wrappers
 /// servers put around them, and one level of nested objects such as
 /// `properties` or `fields`.
-fn values_of(
-    object: &Map<String, Value>,
-    id_member: &str,
-    walk: &mut Walk,
-) -> (HashMap<String, String>, HashMap<String, RecordList>) {
-    let mut fields = HashMap::new();
-    let mut lists = HashMap::new();
+fn values_of(object: &Map<String, Value>, id_member: &str, walk: &mut Walk) -> ReadValues {
+    let mut read = ReadValues::default();
     let mut nested = Vec::new();
     for (member, value) in object {
-        if fields.len() == MAX_FIELDS_PER_RECORD {
-            return (fields, lists);
+        if read.fields.len() == MAX_FIELDS_PER_RECORD {
+            return read;
         }
         if member == id_member || member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some() {
             continue;
@@ -1121,38 +1218,99 @@ fn values_of(
             if !walk.take(inner.len()) {
                 break;
             }
+            if read.keep_coded(member, inner) {
+                continue;
+            }
             // Only a pure link stands for its ID: `properties` holding one
             // `*_id` among its values is the record's values, not a link.
             match link_id_member(inner) {
                 Some(link) => {
                     if let Some(text) = inner.get(link).and_then(scalar_text) {
-                        fields.insert(member.clone(), text);
+                        read.fields.insert(member.clone(), text);
                     }
                 }
                 None => match record_value(member, value) {
                     Some(RecordValue::Unread) | None => nested.push(inner),
-                    Some(read) => read.keep(member, &mut fields, &mut lists),
+                    Some(value) => value.keep(member, &mut read.fields, &mut read.lists),
                 },
             }
             continue;
         }
-        if let Some(read) = record_value(member, value) {
-            read.keep(member, &mut fields, &mut lists);
+        if let Some(value) = record_value(member, value) {
+            value.keep(member, &mut read.fields, &mut read.lists);
         }
     }
     for (member, value) in nested.into_iter().flatten() {
-        if fields.len() == MAX_FIELDS_PER_RECORD {
+        if read.fields.len() == MAX_FIELDS_PER_RECORD {
             break;
         }
-        if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_none()
-            && !fields.contains_key(member)
-            && !lists.contains_key(member)
-            && let Some(read) = record_value(member, value)
+        if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some()
+            || read.fields.contains_key(member)
+            || read.lists.contains_key(member)
         {
-            read.keep(member, &mut fields, &mut lists);
+            continue;
+        }
+        if value
+            .as_object()
+            .is_some_and(|inner| read.keep_coded(member, inner))
+        {
+            continue;
+        }
+        if let Some(value) = record_value(member, value) {
+            value.keep(member, &mut read.fields, &mut read.lists);
         }
     }
-    (fields, lists)
+    read
+}
+
+/// What one result said about one record.
+#[derive(Default)]
+struct ReadValues {
+    fields: HashMap<String, String>,
+    lists: HashMap<String, RecordList>,
+    coded: HashMap<String, CodedValue>,
+}
+
+impl ReadValues {
+    fn is_empty(&self) -> bool {
+        self.fields.is_empty() && self.lists.is_empty()
+    }
+
+    /// Keeps a label with its code, as a field that reads as the label.
+    fn keep_coded(&mut self, member: &str, value: &Map<String, Value>) -> bool {
+        let Some(pair) = coded_pair(value) else {
+            return false;
+        };
+        self.fields.insert(member.to_string(), pair.label.clone());
+        self.coded.insert(member.to_string(), pair);
+        true
+    }
+}
+
+const LABEL_KEYS: [&str; 4] = ["name", "label", "title", "displayname"];
+const CODE_KEYS: [&str; 3] = ["value", "code", "key"];
+
+/// A label with the short code it stands for: `{"name": "Low", "value": 4}`
+/// or `{"label": "Low", "code": "4"}`. Exactly those two members, so a link's
+/// `{id, name}` or anything richer stays what it was.
+fn coded_pair(object: &Map<String, Value>) -> Option<CodedValue> {
+    if object.len() != 2 {
+        return None;
+    }
+    let member_in = |names: &[&str]| {
+        object
+            .iter()
+            .find(|(member, _)| is_any_of(member, names))
+            .map(|(_, value)| value)
+    };
+    let label = clean(member_in(&LABEL_KEYS)?.as_str()?);
+    let code = match member_in(&CODE_KEYS)? {
+        Value::Number(number) => number.to_string(),
+        Value::String(text) if super::choices::is_choice_code(text) => text.clone(),
+        _ => return None,
+    };
+    (!label.is_empty() && label.chars().count() <= super::choices::MAX_CHOICE_LABEL_CHARS)
+        .then_some(CodedValue { code, label })
 }
 
 /// One value of a record, past its wrappers.

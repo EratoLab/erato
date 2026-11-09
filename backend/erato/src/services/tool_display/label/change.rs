@@ -7,9 +7,10 @@
 
 use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::names_an_id;
+use super::choices::{MAX_CHOICE_LABEL_CHARS, is_choice_code, schema_choice_label};
 use super::context::{
-    ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match, list_entry,
-    name_words, text_prefix,
+    CodedValue, ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match,
+    list_entry, name_words, text_prefix,
 };
 use super::machine_id::is_machine_id;
 use super::pointer::escape;
@@ -20,7 +21,7 @@ use crate::models::message::{
     ToolCallChange, ToolCallChangeNote, ToolCallEffect, ToolCallEffectKind, ToolCallEffectValue,
     ToolCallFilter, ToolCallFilterPart, ToolCallFlag, ToolCallLabel, ToolCallLabelItem,
     ToolCallLabelSource, ToolCallOpaque, ToolCallOpaqueKind, ToolCallRecipientGroup,
-    ToolCallRecipientKind, ToolCallTextChange,
+    ToolCallRecipientKind, ToolCallTextChange, ToolCallValueMeaning, ToolCallValueMeaningSource,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
@@ -200,10 +201,12 @@ pub struct ChangeFacts<'a> {
     pub rules_action: ToolCallAction,
     /// The server whose earlier results may name this call's IDs.
     pub server: Option<&'a str>,
-}
+    /// The operator's words for this server's field names and choice values.
+    pub glossary: Option<&'a erato_config::config::McpGlossaryConfig>,
     /// The operator's configuration, not the server, sets the tool's
     /// destructive hint.
     pub destructive_by_operator: bool,
+}
 
 /// The call's change description, and whether cleaning a value or name it
 /// holds removed invisible characters. A call with no verb claims no losses,
@@ -282,6 +285,12 @@ struct EarlierRecord<'a> {
     server: &'a str,
 }
 
+/// One field of the record, as an earlier read wrote it.
+struct EarlierField {
+    text: String,
+    coded: Option<CodedValue>,
+}
+
 impl<'a> Walk<'a> {
     fn new(
         action: ToolCallAction,
@@ -357,7 +366,7 @@ impl<'a> Walk<'a> {
             }
             self.nodes -= 1;
             let path = format!("{base}/{}", escape(member));
-            let name = readable_name(member, shared.as_deref(), prefix);
+            let name = self.member_name(member, shared.as_deref(), prefix);
             self.member(member, value, &path, name, depth, flat);
         }
     }
@@ -474,6 +483,26 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// What a member reads as on the card: the operator's name with the raw
+    /// one beside it, else the member in words.
+    fn member_name(&self, member: &str, shared: Option<&str>, prefix: &str) -> String {
+        match self.glossary_name(member) {
+            Some(name) => format!("{prefix}{name} ({member})"),
+            None => readable_name(member, shared, prefix),
+        }
+    }
+
+    fn glossary_name(&self, member: &str) -> Option<&'a str> {
+        if is_machine_id(member) {
+            return None;
+        }
+        self.facts
+            .glossary?
+            .field_names
+            .get(member)
+            .map(String::as_str)
+    }
+
     fn is_named(&self, path: &str, value: &Value) -> bool {
         if self.named.contains(path) {
             return true;
@@ -588,6 +617,7 @@ impl<'a> Walk<'a> {
                 text: self.name_of_id(&cleaned.text, path).unwrap_or_default(),
                 truncated: false,
                 machine_id: true,
+                meaning: None,
             });
         }
         if cleaned.text.is_empty() {
@@ -599,12 +629,14 @@ impl<'a> Walk<'a> {
                 text: String::new(),
                 truncated: true,
                 machine_id: false,
+                meaning: None,
             });
         }
         Some(ToolCallEffectValue {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -706,7 +738,9 @@ impl<'a> Walk<'a> {
             }
             Unwrapped::Scalar(scalar) => {
                 effect.link = is_link_shaped(member, value);
-                let shown = self.link_or_value(scalar, path);
+                let shown = self
+                    .link_or_value(scalar, path)
+                    .map(|value| self.with_meaning(value, member, path, scalar));
                 effect.values.extend(shown);
                 self.classify_scalar(member, path, scalar, &mut effect);
             }
@@ -729,6 +763,56 @@ impl<'a> Walk<'a> {
         effect
     }
 
+    /// `value` with what its code means, where someone has said so. The
+    /// glossary is the operator's word; the tool's schema and an earlier read
+    /// count only when they agree, and a card marks the tool's as a claim.
+    fn with_meaning(
+        &self,
+        mut value: ToolCallEffectValue,
+        member: &str,
+        path: &str,
+        scalar: &Value,
+    ) -> ToolCallEffectValue {
+        if value.machine_id || value.truncated || value.text.is_empty() {
+            return value;
+        }
+        let code = match scalar {
+            Value::String(_) | Value::Number(_) => value.text.as_str(),
+            _ => return value,
+        };
+        if !is_choice_code(code) || below_a_recipient(path) {
+            return value;
+        }
+        value.meaning = self.meaning_of(member, path, code);
+        value
+    }
+
+    fn meaning_of(&self, member: &str, path: &str, code: &str) -> Option<ToolCallValueMeaning> {
+        let meaning = |label: String, source| {
+            let label = sanitize_display_text(&label, MAX_CHOICE_LABEL_CHARS).text;
+            (!label.is_empty()).then_some(ToolCallValueMeaning { label, source })
+        };
+        if let Some(label) = self
+            .facts
+            .glossary
+            .and_then(|glossary| glossary.choice_labels.get(member)?.get(code))
+        {
+            return meaning(label.clone(), ToolCallValueMeaningSource::Glossary);
+        }
+        let schema = schema_choice_label(&self.facts.tool.input_schema, path, code);
+        let earlier = self.earlier.as_ref().and_then(|earlier| {
+            self.facts
+                .context
+                .earlier_choice_label(earlier.server, earlier.record, member, code)
+        });
+        match (schema, earlier) {
+            (Some(schema), Some(earlier)) if !schema.eq_ignore_ascii_case(&earlier) => None,
+            (_, Some(earlier)) => meaning(earlier, ToolCallValueMeaningSource::Earlier),
+            (Some(schema), None) => meaning(schema, ToolCallValueMeaningSource::Tool),
+            (None, None) => None,
+        }
+    }
+
     fn link_or_value(&mut self, scalar: &Value, path: &str) -> Option<ToolCallEffectValue> {
         if let Value::String(text) = scalar
             && let Some(inside) = id_inside_a_link_path(text)
@@ -737,6 +821,7 @@ impl<'a> Walk<'a> {
                 text: self.name_of_id(inside, path).unwrap_or_default(),
                 truncated: false,
                 machine_id: true,
+                meaning: None,
             });
         }
         self.shown(scalar, path)
@@ -752,29 +837,75 @@ impl<'a> Walk<'a> {
         if !is_update_like(self.action) {
             return;
         }
-        let Some(earlier) = self.earlier_text(member) else {
+        let Some(earlier) = self.earlier_field(member, path) else {
             return;
         };
         let new = scalar_text(scalar).unwrap_or_default();
-        effect.effect = if earlier == new {
+        let coded = earlier.coded.as_ref();
+        let same_code = coded.is_some_and(|coded| coded.code == new);
+        effect.effect = if earlier.text == new || same_code {
             ToolCallEffectKind::Unchanged
         } else {
             ToolCallEffectKind::Changed
         };
-        effect.old = self.old_shown(member, &earlier, path);
+        let compared_as_code = same_code || (coded.is_some() && scalar_is_number(scalar, &new));
+        effect.old = match coded.filter(|_| compared_as_code) {
+            Some(coded) => Some(self.old_code_shown(coded)),
+            None => self.old_shown(member, &earlier.text, path).map(|mut old| {
+                if old.meaning.is_none()
+                    && !old.machine_id
+                    && !old.truncated
+                    && is_choice_code(&old.text)
+                    && !below_a_recipient(path)
+                {
+                    old.meaning = self.meaning_of(member, path, &old.text);
+                }
+                old
+            }),
+        };
         self.used_earlier = true;
     }
 
     fn fill_old(&mut self, member: &str, path: &str, effect: &mut ToolCallEffect) {
-        if let Some(earlier) = self.earlier_text(member) {
-            effect.old = self.old_shown(member, &earlier, path);
+        if let Some(earlier) = self.earlier_field(member, path) {
+            effect.old = self.old_shown(member, &earlier.text, path);
             self.used_earlier = true;
         }
     }
 
-    fn earlier_text(&self, member: &str) -> Option<String> {
+    /// What an earlier read said about `member`, under its name or its one
+    /// synonym, when the call does not write the synonym as well.
+    fn earlier_field(&self, member: &str, path: &str) -> Option<EarlierField> {
         let earlier = self.earlier.as_ref()?;
-        earlier.record.field(member)
+        let siblings = self
+            .facts
+            .arguments
+            .pointer(parent_of(path))
+            .and_then(Value::as_object);
+        let writes_too = |synonym: &str| {
+            siblings
+                .is_some_and(|members| members.keys().any(|key| key.eq_ignore_ascii_case(synonym)))
+        };
+        let (found, text) = earlier.record.field_or_synonym(member, writes_too)?;
+        Some(EarlierField {
+            coded: earlier.record.coded(&found).cloned(),
+            text,
+        })
+    }
+
+    /// An earlier value in the form it was compared in: its code, with what
+    /// the result said it means.
+    fn old_code_shown(&self, coded: &CodedValue) -> ToolCallEffectValue {
+        let cleaned = sanitize_display_text(&coded.code, MAX_DISPLAY_NAME_CHARS);
+        ToolCallEffectValue {
+            text: cleaned.text,
+            truncated: cleaned.truncated,
+            machine_id: false,
+            meaning: Some(ToolCallValueMeaning {
+                label: coded.label.clone(),
+                source: ToolCallValueMeaningSource::Earlier,
+            }),
+        }
     }
 
     /// An earlier ID shows as its record's name, never as the raw ID.
@@ -797,16 +928,19 @@ impl<'a> Walk<'a> {
                     text: name.to_string(),
                     truncated: false,
                     machine_id: true,
+                    meaning: None,
                 },
                 None if is_machine_id(earlier) => ToolCallEffectValue {
                     text: String::new(),
                     truncated: false,
                     machine_id: true,
+                    meaning: None,
                 },
                 None => ToolCallEffectValue {
                     text: self.clean(earlier),
                     truncated: false,
                     machine_id: false,
+                    meaning: None,
                 },
             });
         }
@@ -818,6 +952,7 @@ impl<'a> Walk<'a> {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -909,6 +1044,7 @@ impl<'a> Walk<'a> {
                     .join(", "),
                 truncated: old_shown.iter().any(|value| value.truncated),
                 machine_id: false,
+                meaning: None,
             });
     }
 
@@ -1000,7 +1136,7 @@ impl<'a> Walk<'a> {
                 let shared = shared_prefix(members);
                 for (member, inner) in members.iter().take(MAX_FILTER_PARTS) {
                     let inner_path = format!("{path}/{}", escape(member));
-                    let name = readable_name(member, shared.as_deref(), "");
+                    let name = self.member_name(member, shared.as_deref(), "");
                     let name = self.display_name(&name);
                     let is_empty = matches!(unwrap(inner, false), Unwrapped::Empty);
                     let value = if is_empty {
@@ -1008,6 +1144,7 @@ impl<'a> Walk<'a> {
                             text: String::new(),
                             truncated: false,
                             machine_id: false,
+                            meaning: None,
                         })
                     } else {
                         self.shown(inner, &inner_path)
@@ -1220,6 +1357,7 @@ impl<'a> Walk<'a> {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -1283,7 +1421,8 @@ impl<'a> Walk<'a> {
                 let hash = value_hash(value);
                 shape.push((member.as_str(), hash));
                 let at = *order.entry(member.as_str()).or_insert_with(|| {
-                    tallies.push(FieldTally::new(member, shared.as_deref()));
+                    let name = self.member_name(member, shared.as_deref(), "");
+                    tallies.push(FieldTally::new(member, name));
                     tallies.len() - 1
                 });
                 let update_like =
@@ -1419,7 +1558,7 @@ impl<'a> Walk<'a> {
                 effects_omitted = effects_omitted.saturating_add(1);
                 continue;
             }
-            let readable = readable_name(member, shared.as_deref(), "");
+            let readable = self.member_name(member, shared.as_deref(), "");
             let effect = match edit {
                 Some((before, after)) if after == member.as_str() => {
                     self.text_edit_effect(member, before, members, value, &value_path, readable)
@@ -1617,6 +1756,15 @@ fn is_update_like(action: ToolCallAction) -> bool {
 
 fn is_one_of(member: &str, names: &[&str]) -> bool {
     names.iter().any(|name| member.eq_ignore_ascii_case(name))
+/// The pointer of the object holding the member at `path`.
+fn parent_of(path: &str) -> &str {
+    path.rsplit_once('/').map_or("", |(parent, _)| parent)
+}
+
+fn scalar_is_number(scalar: &Value, text: &str) -> bool {
+    scalar.is_number() || text.parse::<f64>().is_ok()
+}
+
 }
 
 fn is_scalar(value: &Value) -> bool {
@@ -1660,9 +1808,9 @@ struct FieldTally<'a> {
 }
 
 impl<'a> FieldTally<'a> {
-    fn new(member: &'a str, shared: Option<&str>) -> Self {
+    fn new(member: &'a str, name: String) -> Self {
         Self {
-            name: readable_name(member, shared, ""),
+            name,
             raw_name: member,
             rows: 0,
             emptied: 0,
@@ -1851,10 +1999,14 @@ fn member_words(member: &str, shared: Option<&str>) -> String {
     }
     words
         .iter()
+    let words: Vec<String> = words
+        .iter()
+        .flat_map(|word| super::words::split_glued(word))
+        .collect();
         .enumerate()
         .map(|(index, word)| {
             let lower = word.to_lowercase();
-            if matches!(lower.as_str(), "id" | "ids") {
+            if matches!(lower.as_str(), "id" | "ids" | "url" | "urls") {
                 return lower.to_uppercase();
             }
             if index == 0 {
@@ -2357,6 +2509,13 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
         }
     }
     fn forget_effect(effect: &mut ToolCallEffect) {
+        if value
+            .meaning
+            .as_ref()
+            .is_some_and(|meaning| meaning.source == ToolCallValueMeaningSource::Earlier)
+        {
+            value.meaning = None;
+        }
         effect.old = None;
         effect.removed.clear();
         effect.kept.clear();
