@@ -567,6 +567,38 @@ fn gate_mcp_tool_call(
     }
 }
 
+/// The gate for one of Erato's own reminder tools, for a call that asks by
+/// `chat_tools::asks_for_approval` (the caller checks first, before describing
+/// the call). `display` is what the card names, `None` when the call would
+/// change nothing and so runs unasked. These tools are never offered in a
+/// delegated run, and a call from one is refused rather than parked.
+fn gate_builtin_tool_call(
+    config: &McpToolApprovalConfig,
+    tool_call: &genai::chat::ToolCall,
+    display: Option<crate::models::message::ToolDisplayMetadata>,
+    is_delegated_run: bool,
+) -> ToolCallGate {
+    use crate::services::scheduled_items::chat_tools;
+    let Some(display) = display else {
+        return ToolCallGate::Run(None);
+    };
+    if is_delegated_run {
+        return ToolCallGate::Refuse(approval_unavailable_in_delegated_run(&tool_call.fn_name));
+    }
+    ask_for_tool_call(
+        tool_call,
+        ToolApprovalKind::BuiltinTool,
+        "",
+        Some(display),
+        chat_tools::approval_annotations(&tool_call.fn_name),
+        match config.preset {
+            McpToolApprovalPreset::Permissive => "permissive",
+            McpToolApprovalPreset::Restrictive => "restrictive",
+        },
+        false,
+    )
+}
+
 fn approval_unavailable_in_delegated_run(tool_name: &str) -> String {
     format!(
         "The tool '{tool_name}' requires user approval, which is unavailable in a delegated run; the call was not executed."
@@ -8003,14 +8035,87 @@ async fn stream_generate_chat_completion<'a>(
             ) && !offered_client_tools.contains_key(unfinished_tool_call.fn_name.as_str())
                 && !available_mcp_tools_by_name.contains_key(unfinished_tool_call.fn_name.as_str())
             {
+                use crate::services::scheduled_items::chat_tools;
+                const NOTHING_CHANGED: &str = "Something went wrong; nothing was changed.";
                 let started_at = tool_call_started_at
                     .remove(&unfinished_tool_call.call_id)
                     .unwrap_or_else(now_timestamp);
-                let result = match Uuid::parse_str(&user_id) {
-                    Ok(user_id) => {
-                        crate::services::scheduled_items::chat_tools::run(
+                let approval_config = &mcp.config.mcp_servers_global.approval;
+                // A call the user just approved on its card is not asked about again.
+                let gate = if approved_task_call_ids.contains(&unfinished_tool_call.call_id)
+                    || !chat_tools::asks_for_approval(
+                        &unfinished_tool_call.fn_name,
+                        approval_config,
+                    ) {
+                    ToolCallGate::Run(None)
+                } else {
+                    let ask = match Uuid::parse_str(&user_id) {
+                        Ok(user_id) => {
+                            chat_tools::approval_display(
+                                app_state,
+                                user_id,
+                                &unfinished_tool_call.fn_name,
+                                &unfinished_tool_call.fn_arguments,
+                            )
+                            .await
+                        }
+                        Err(error) => Err(error.into()),
+                    };
+                    match ask {
+                        Ok(ask) => {
+                            let mut parked_call = unfinished_tool_call.clone();
+                            let display = ask.map(|ask| {
+                                parked_call.fn_arguments = ask.arguments;
+                                ask.display
+                            });
+                            gate_builtin_tool_call(
+                                approval_config,
+                                &parked_call,
+                                display,
+                                is_delegated_run,
+                            )
+                        }
+                        Err(error) => {
+                            tracing::warn!(%error, tool = %unfinished_tool_call.fn_name, "A reminder tool call could not be described for approval");
+                            ToolCallGate::Refuse(NOTHING_CHANGED.to_string())
+                        }
+                    }
+                };
+                if let ToolCallGate::Ask(approval_request) = gate {
+                    let mut approval_request = *approval_request;
+                    approval_request.pending_tool_calls = unfinished_tool_calls
+                        .drain(..)
+                        .map(|call| crate::models::message::PendingToolCall {
+                            call_id: call.call_id,
+                            fn_name: call.fn_name,
+                            fn_arguments: call.fn_arguments,
+                        })
+                        .collect();
+                    pending_approval_part = Some(approval_request);
+                    exit_metadata = build_generation_metadata(
+                        total_prompt_tokens,
+                        total_completion_tokens,
+                        total_total_tokens,
+                        total_reasoning_tokens,
+                        langfuse_trace_id.clone(),
+                        false,
+                        None,
+                        non_empty_string(&captured_reasoning_summary),
+                        non_empty_vec(&captured_reasoning_items),
+                        non_empty_vec(&captured_reasoning_item_encrypted_content),
+                    );
+                    exit_after_join = true;
+                    break 'pop_calls;
+                }
+                let result = match (gate, Uuid::parse_str(&user_id)) {
+                    (ToolCallGate::Refuse(error), _) => Ok(chat_tools::CallResult {
+                        succeeded: false,
+                        output: json!({"status": "rejected", "error": error}),
+                    }),
+                    (_, Ok(user_id)) => {
+                        chat_tools::run(
                             app_state,
-                            crate::services::scheduled_items::chat_tools::CallContext {
+                            chat_tools::CallContext {
                                 user_id,
                                 chat_id,
                                 message_id: assistant_message_id,
@@ -8021,7 +8126,7 @@ async fn stream_generate_chat_completion<'a>(
                         )
                         .await
                     }
-                    Err(error) => Err(error.into()),
+                    (_, Err(error)) => Err(error.into()),
                 };
                 let (status, saved_status, output) = match result {
                     Ok(result) if result.succeeded => (
@@ -8039,7 +8144,7 @@ async fn stream_generate_chat_completion<'a>(
                         (
                             ToolCallStatus::Error,
                             MessageToolCallStatus::Error,
-                            json!({"status": "error", "error": "Something went wrong; nothing was changed."}),
+                            json!({"status": "error", "error": NOTHING_CHANGED}),
                         )
                     }
                 };
@@ -10292,7 +10397,9 @@ async fn stream_generate_chat_completion<'a>(
             let own_gated_call = pending_approval_part.as_ref().is_some_and(|part| {
                 matches!(
                     part.kind,
-                    ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+                    ToolApprovalKind::McpTool
+                        | ToolApprovalKind::ClientTool
+                        | ToolApprovalKind::BuiltinTool
                 )
             });
             if own_gated_call && exit_error.is_none() && !aborted {
@@ -14098,6 +14205,123 @@ mod tests {
         let (mcp, child, plan) =
             super::split_decisions_by_lane(ToolApprovalKind::ToolCallLimit, &open, submitted);
         assert!(mcp.is_empty() && child.is_empty() && plan.is_empty());
+    }
+
+    /// A cancel asks under both presets and a create only under the
+    /// restrictive one, never with the gate off; the card offers no standing
+    /// decision, and a call that would change nothing runs unasked.
+    #[test]
+    fn reminder_writes_ask_by_the_decided_rules() {
+        use crate::services::scheduled_items::chat_tools::{
+            CANCEL_REMINDER, CREATE_REMINDER, LIST_REMINDERS,
+        };
+        let config = |enabled, preset| McpToolApprovalConfig {
+            enabled,
+            preset,
+            allow_always: true,
+        };
+        let call = |name: &str| ToolCall {
+            call_id: format!("call_{name}"),
+            fn_name: name.to_string(),
+            fn_arguments: json!({"reminder_id": "r-1"}),
+            thought_signatures: None,
+        };
+        let display = || {
+            Some(crate::models::message::ToolDisplayMetadata {
+                title: "Follow up on the offer".into(),
+                description: Some("Friday, 13 Nov, 10:00".into()),
+                description_truncated: false,
+                server_name: None,
+                label: None,
+                read_only: false,
+            })
+        };
+        let asks = |config: &McpToolApprovalConfig, name: &str| {
+            crate::services::scheduled_items::chat_tools::asks_for_approval(name, config)
+        };
+        for preset in [
+            McpToolApprovalPreset::Permissive,
+            McpToolApprovalPreset::Restrictive,
+        ] {
+            let on = config(true, preset);
+            assert!(asks(&on, CANCEL_REMINDER), "{preset:?}");
+            assert_eq!(
+                asks(&on, CREATE_REMINDER),
+                preset == McpToolApprovalPreset::Restrictive
+            );
+            assert!(!asks(&on, LIST_REMINDERS));
+            let off = config(false, preset);
+            for name in [CANCEL_REMINDER, CREATE_REMINDER, LIST_REMINDERS] {
+                assert!(!asks(&off, name), "{name} with the gate off");
+            }
+        }
+
+        let on = config(true, McpToolApprovalPreset::Permissive);
+        let ToolCallGate::Ask(request) =
+            super::gate_builtin_tool_call(&on, &call(CANCEL_REMINDER), display(), false)
+        else {
+            panic!("a cancel asks");
+        };
+        assert_eq!(request.kind, ToolApprovalKind::BuiltinTool);
+        assert!(
+            !request.allow_always,
+            "no standing decision on a built-in tool"
+        );
+        assert_eq!(request.mcp_server_id, "");
+        assert!(request.annotations.destructive_hint && !request.annotations.open_world_hint);
+        assert_eq!(request.approvals.len(), 1);
+        assert_eq!(request.approvals[0].approval_id, "call_cancel_reminder");
+        assert_eq!(request.approvals[0].display, display());
+        assert_eq!(
+            super::gate_builtin_tool_call(&on, &call(CANCEL_REMINDER), None, false),
+            ToolCallGate::Run(None),
+            "nothing to cancel, nothing to ask"
+        );
+        assert!(matches!(
+            super::gate_builtin_tool_call(&on, &call(CANCEL_REMINDER), display(), true),
+            ToolCallGate::Refuse(_)
+        ));
+    }
+
+    #[test]
+    fn builtin_decisions_settle_in_the_plan_lane_and_save_nothing() {
+        let open = [open_approval("own"), child_item("task-a")];
+        let submitted = vec![
+            ("own".to_string(), ToolApprovalDecision::Approve),
+            ("task-a".to_string(), ToolApprovalDecision::Reject),
+        ];
+        let (mcp, child, plan) =
+            super::split_decisions_by_lane(ToolApprovalKind::BuiltinTool, &open, submitted.clone());
+        assert!(mcp.is_empty());
+        assert_eq!(child, vec![submitted[1].clone()]);
+        assert_eq!(plan, vec![submitted[0].clone()]);
+
+        let mut builtin = gated_request("own", "2026-11-09T10:00:00Z");
+        builtin.kind = ToolApprovalKind::BuiltinTool;
+        for standing in [
+            ToolApprovalDecision::ApproveAlways,
+            ToolApprovalDecision::RejectAlways,
+        ] {
+            assert!(super::builtin_standing_refused(
+                &builtin,
+                &open,
+                &[("own".to_string(), standing)]
+            ));
+        }
+        assert!(!super::builtin_standing_refused(
+            &builtin,
+            &open,
+            &[
+                ("own".to_string(), ToolApprovalDecision::Reject),
+                ("task-a".to_string(), ToolApprovalDecision::RejectAlways),
+            ]
+        ));
+        let mcp = gated_request("own", "2026-11-09T10:00:00Z");
+        assert!(!super::builtin_standing_refused(
+            &mcp,
+            &open,
+            &[("own".to_string(), ToolApprovalDecision::ApproveAlways)]
+        ));
     }
 
     #[test]
@@ -20616,7 +20840,7 @@ fn resolve_submitted_decisions(
 fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
     matches!(
         state.request.kind,
-        ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool
+        ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool | ToolApprovalKind::BuiltinTool
     ) && state.decidable().iter().any(|item| item.child.is_some())
 }
 
@@ -20645,6 +20869,24 @@ fn approve_always_refused(
             && asked_about != ToolApprovalKind::ClientTool
             && !mcp_allows_always
     })
+}
+
+/// Whether a set of decisions saves a standing answer on one of Erato's own
+/// tools: their card asks every time, so there is nothing to save it under.
+fn builtin_standing_refused(
+    request: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> bool {
+    request.kind == ToolApprovalKind::BuiltinTool
+        && decisions.iter().any(|(approval_id, decision)| {
+            matches!(
+                decision,
+                ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
+            ) && open
+                .iter()
+                .any(|item| &item.approval_id == approval_id && item.child.is_none())
+        })
 }
 
 /// Why an `approve_context` decision cannot apply to its item, judged from the
@@ -20999,6 +21241,14 @@ pub(crate) async fn start_continuation(
                 return Err((
                     axum::http::StatusCode::BAD_REQUEST,
                     "Tool budget decisions cannot be saved as standing permissions".to_string(),
+                )
+                    .into());
+            }
+            if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
+                return Err((
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Decisions on built-in tools cannot be saved as standing permissions"
+                        .to_string(),
                 )
                     .into());
             }
@@ -21931,9 +22181,10 @@ fn reparked_with_waiting_children(
 /// Two kinds of call are approved but not run. A child that parks again after
 /// a mixed decision carries the turn's approved own call into the new part as
 /// pending; seeded as an ordinary pending call it would be asked about a second
-/// time. And a `client_tool` part's own call is approved before its children
-/// resume and dispatched only after they have, so a continuation that died in
-/// between leaves it approved on the row and in no part's pending calls.
+/// time. And a `client_tool` or `builtin_tool` part's own call is approved
+/// before its children resume and dispatched only after they have, so a
+/// continuation that died in between leaves it approved on the row and in no
+/// part's pending calls.
 fn previously_approved_pending(
     content: &[ContentPart],
     request: &ContentPartToolApprovalRequest,
@@ -21962,7 +22213,10 @@ fn previously_approved_pending(
         });
         approved && !ran
     };
-    let own_calls = if request.kind == ToolApprovalKind::ClientTool {
+    let own_calls = if matches!(
+        request.kind,
+        ToolApprovalKind::ClientTool | ToolApprovalKind::BuiltinTool
+    ) {
         request
             .approval_items()
             .into_iter()
@@ -22016,9 +22270,9 @@ fn context_approved_calls(content: &[ContentPart]) -> HashMap<String, Uuid> {
 /// within each.
 ///
 /// The lanes share no settlement: an MCP item names a tool this process calls,
-/// a child item a child whose own continuation makes the call, and a plan or
-/// client-tool item a call that never reached its executor, re-seeded on
-/// approval and refused on denial. An item with `child` set is a child's
+/// a child item a child whose own continuation makes the call, and a plan,
+/// client-tool or built-in item a call that never reached its executor,
+/// re-seeded on approval and refused on denial. An item with `child` set is a child's
 /// whatever the part's kind, because a turn's own gated call carries its parked
 /// children on its own part.
 fn split_decisions_by_lane(
@@ -22036,7 +22290,9 @@ fn split_decisions_by_lane(
             ToolApprovalKind::McpTool => &mut mcp,
             // An item that lost its child still settles there, as a failure.
             ToolApprovalKind::DelegatedTask => &mut child,
-            ToolApprovalKind::TaskPlan | ToolApprovalKind::ClientTool => &mut plan,
+            ToolApprovalKind::TaskPlan
+            | ToolApprovalKind::ClientTool
+            | ToolApprovalKind::BuiltinTool => &mut plan,
         };
         lane.push((approval_id, decision));
     }
@@ -22825,7 +23081,13 @@ pub(crate) async fn run_continuation(
             tool_call_id: item.tool_call_id.clone(),
             status: MessageToolCallStatus::Error,
             tool_name: item.tool_name.clone(),
-            display: item.display.as_ref().map(tool_row_display),
+            // A built-in item's display names the reminder, not the tool, so
+            // its row reads as the call's own row would.
+            display: item
+                .display
+                .as_ref()
+                .filter(|_| approval_request.kind != ToolApprovalKind::BuiltinTool)
+                .map(tool_row_display),
             input: Some(item.input.clone()),
             progress_message: None,
             progress: None,
@@ -22838,10 +23100,10 @@ pub(crate) async fn run_continuation(
             } else {
                 json!({
                     "status": "rejected",
-                    "error": if approval_request.kind == ToolApprovalKind::ClientTool {
-                        "The user denied this tool call."
-                    } else {
+                    "error": if approval_request.kind == ToolApprovalKind::TaskPlan {
                         "The user declined this task."
+                    } else {
+                        "The user denied this tool call."
                     },
                 })
             }),

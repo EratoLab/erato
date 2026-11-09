@@ -59,7 +59,7 @@ msgstr "Allow this action?"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.description"
-msgstr "{itemCount, plural, one {The response continues once you decide.} other {They are shown one at a time, oldest first. The response continues once all of them are decided.}}"
+msgstr "{itemCount, plural, one {The response continues once you decide.} other {They are shown one at a time. The response continues once all of them are decided.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
@@ -1676,6 +1676,41 @@ msgstr "Branding overview"
 #: src/pages/BrandingOverviewPage.tsx
 msgid "brandingOverview.web"
 msgstr "Web app"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.allow"
+msgstr "Allow"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.cancelReminder.title"
+msgstr "Cancel the reminder “{name}”?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.confirm"
+msgstr "Schedule"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.deny"
+msgstr "Don't schedule"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.createReminder.title"
+msgstr "Schedule the reminder “{name}”?"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.deny"
+msgstr "Deny"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
+msgid "builtinToolApproval.title"
+msgstr "Allow “{name}”?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatUsageAdvisory.tsx
@@ -3580,6 +3615,7 @@ msgstr "Cancel"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatShareDialog.tsx
+#: src/components/ui/Container/DetailPane.tsx
 msgid "common.close"
 msgstr "Close"
 
@@ -6583,7 +6619,7 @@ msgstr "Browser notification"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.browser.helper"
-msgstr "A notification from your browser while Erato is open"
+msgstr "A notification from your browser while this app is open"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6598,7 +6634,7 @@ msgstr "Desktop notification"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.desktop.helper"
-msgstr "A notification on your computer, through the Erato desktop app"
+msgstr "A notification on your computer, through the desktop app"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6623,12 +6659,22 @@ msgstr "Teams chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.teamsChat.helper"
-msgstr "Your chat with Erato in Microsoft Teams"
+msgstr "Your chat with {teamsAppName} in Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.helper.unnamed"
+msgstr "Your chat with the assistant in Microsoft Teams"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.teamsChat.notSetUp"
-msgstr "Erato can't reach you in Teams yet. Open Erato in Microsoft Teams once: under Apps, search for Erato and open it. After that, this channel works."
+msgstr "{teamsAppName} can't reach you in Teams yet. Open {teamsAppName} in Microsoft Teams once: under Apps, search for {teamsAppName} and open it. After that, this channel works."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+#~ msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
+#~ msgstr "The assistant can't reach you in Teams yet. Open its app in Microsoft Teams once, under Apps. After that, this channel works."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6648,7 +6694,7 @@ msgstr "“{name}” could not be deleted"
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.empty.description"
-msgstr "Get a reminder at a time you choose, or describe it in a chat and Erato sets it up."
+msgstr "Get a reminder at a time you choose, or describe it in a chat and the assistant sets it up."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -6853,7 +6899,7 @@ msgstr "Reminder"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemForm.tsx
 msgid "scheduled.form.reminder.description"
-msgstr "What Erato sends you."
+msgstr "What you receive."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemForm.tsx
@@ -6888,7 +6934,7 @@ msgstr "Changes apply to what has not happened yet."
 #. js-lingui-explicit-id
 #: src/pages/ScheduledItemFormPage.tsx
 msgid "scheduled.form.subtitle.new"
-msgstr "Choose when it happens and what Erato sends you."
+msgstr "Choose when it happens and what you receive."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledItemFormPage.tsx
@@ -7028,7 +7074,7 @@ msgstr "Pick the last day."
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledForm.ts
 msgid "scheduled.form.validation.message.required"
-msgstr "Enter the message Erato sends you."
+msgstr "Enter the message you want to receive."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledForm.ts
@@ -7131,12 +7177,14 @@ msgid "scheduled.item.actions.aria"
 msgstr "Actions for {name}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirm"
 msgstr "Cancel it"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmMessage"
@@ -7149,6 +7197,7 @@ msgid "scheduled.item.cancel.confirmTitle"
 msgstr "Cancel “{name}”?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/BuiltinToolApprovalItem.tsx
 #: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
@@ -7177,7 +7226,12 @@ msgstr "Could not be delivered. You can schedule it again."
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.failed.teamsChat"
-msgstr "Could not be delivered via {channelName}. Check that Erato is set up in Teams, then schedule it again."
+msgstr "Could not be delivered via {channelName}. Check that {teamsAppName} is set up in Teams, then schedule it again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat.unnamed"
+msgstr "Could not be delivered via {channelName}. Check that the assistant's app is set up in Teams, then schedule it again."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
@@ -7242,7 +7296,7 @@ msgstr "Create with chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
 msgid "scheduled.new.createWithChat.description"
-msgstr "Describe it and Erato sets it up"
+msgstr "Describe it and the assistant sets it up"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
@@ -7262,7 +7316,7 @@ msgstr "Scheduled task"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
 msgid "scheduled.new.scheduledTask.description"
-msgstr "Erato runs a prompt or check for you. Coming later"
+msgstr "The assistant runs a prompt or check for you. Coming later"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
@@ -7282,7 +7336,7 @@ msgstr "You have the maximum of {max} upcoming items. Cancel one to schedule ano
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
 msgid "scheduled.notice.notSetUp.body"
-msgstr "Erato can't reach you on any delivery channel yet, so nothing new can be scheduled. The form's advanced settings show how to set one up."
+msgstr "No delivery channel can reach you yet, so nothing new can be scheduled. The form's advanced settings show how to set one up."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
@@ -7297,7 +7351,7 @@ msgstr "Delivery is not available here yet, so nothing new can be scheduled."
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.subtitle"
-msgstr "Everything Erato does for you at a time you choose."
+msgstr "Everything the assistant does for you at a time you choose."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -7307,7 +7361,7 @@ msgstr "Scheduled"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.refusal.channelNotSetUp"
-msgstr "Erato can't reach you on this delivery channel yet. Set it up first."
+msgstr "This delivery channel can't reach you yet. Set it up first."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts

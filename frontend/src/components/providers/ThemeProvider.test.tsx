@@ -88,6 +88,7 @@ const createMockEnv = (overrides: Partial<Env> = {}): Env => ({
   maskReasoningTraceText: false,
   desktopSidecarSettingsTabEnabled: false,
   scheduledEnabled: false,
+  teamsAppName: null,
   ...overrides,
 });
 

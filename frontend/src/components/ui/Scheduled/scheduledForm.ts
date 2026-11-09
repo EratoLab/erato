@@ -265,7 +265,7 @@ export function validateScheduledForm(
   if (!values.message.trim()) {
     errors.message = t({
       id: "scheduled.form.validation.message.required",
-      message: "Enter the message Erato sends you.",
+      message: "Enter the message you want to receive.",
     });
   } else if (values.message.trim().length > SCHEDULED_MESSAGE_MAX) {
     errors.message = t({

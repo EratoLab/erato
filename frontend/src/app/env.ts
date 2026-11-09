@@ -102,6 +102,8 @@ export type Env = {
   maskReasoningTraceText: boolean;
   desktopSidecarSettingsTabEnabled: boolean;
   scheduledEnabled: boolean;
+  /** The deployment's Teams app name, set only when its Teams bot runs. */
+  teamsAppName: string | null;
 };
 
 declare global {
@@ -188,6 +190,7 @@ declare global {
     MASK_REASONING_TRACE_TEXT?: boolean;
     DESKTOP_SIDECAR_SHOW_SETTINGS_TAB?: boolean;
     SCHEDULED_ENABLED?: boolean;
+    TEAMS_APP_NAME?: string;
     __E2E_COMPONENT_VARIANT__?: string;
     __E2E_FACET_ID__?: string;
   }
@@ -556,6 +559,11 @@ export const env = (): Env => {
     import.meta.env.VITE_SCHEDULED_ENABLED === "true"
       ? true
       : (window.SCHEDULED_ENABLED ?? false);
+  let teamsAppName: string | null =
+    import.meta.env.VITE_TEAMS_APP_NAME ?? window.TEAMS_APP_NAME ?? null;
+  if (!teamsAppName?.trim()) {
+    teamsAppName = null;
+  }
 
   return {
     apiRootUrl,
@@ -640,5 +648,6 @@ export const env = (): Env => {
     maskReasoningTraceText,
     desktopSidecarSettingsTabEnabled,
     scheduledEnabled,
+    teamsAppName,
   };
 };

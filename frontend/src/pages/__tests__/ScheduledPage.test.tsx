@@ -119,12 +119,24 @@ describe("ScheduledPageView", () => {
     });
     expect(within(failed).getByText("Failed")).toBeInTheDocument();
     expect(failed).toHaveTextContent(
-      "Could not be delivered via Teams chat. Check that Erato is set up in Teams, then schedule it again.",
+      "Could not be delivered via Teams chat. Check that the assistant's app is set up in Teams, then schedule it again.",
     );
     // The rows already say it on Past, so the alert drops its action there.
     expect(
       screen.queryByRole("button", { name: "Show in Past" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("names the deployment's Teams app on a failed Teams delivery", () => {
+    renderView({ initialTab: "past", teamsAppName: "Hugo" });
+
+    expect(
+      screen.getByRole("article", {
+        name: "Check the customs clearance status",
+      }),
+    ).toHaveTextContent(
+      "Could not be delivered via Teams chat. Check that Hugo is set up in Teams, then schedule it again.",
+    );
   });
 
   it("cancels an item only after the confirmation", async () => {

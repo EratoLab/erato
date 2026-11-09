@@ -1912,6 +1912,7 @@ mod tests {
                 display: None,
                 source: None,
                 input: json!({}),
+                own_tool: false,
             }],
         });
         assert_eq!(

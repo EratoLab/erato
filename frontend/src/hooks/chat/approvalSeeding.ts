@@ -80,7 +80,7 @@ const toolUsePart = (item: SeedableApprovalItem, approved: boolean) =>
  * refusal. The parked children come next, decision only, because each child's
  * slot already sits on the row and is overwritten where it stands. An approved
  * client-tool call is dispatched last, once the turn resumes; an approved plan
- * item gets its slot from the dispatch itself.
+ * or built-in item gets its slot from the dispatch itself.
  */
 export const seedDecisionParts = (
   settled: readonly SettledApproval[],
@@ -93,7 +93,10 @@ export const seedDecisionParts = (
     const approved = isApprovalDecision(answer.decision);
     if (
       kind === "tool_call_limit" ||
-      ((kind === "task_plan" || kind === "client_tool") && approved)
+      ((kind === "task_plan" ||
+        kind === "client_tool" ||
+        kind === "builtin_tool") &&
+        approved)
     ) {
       return [decisionPart(answer, now)];
     }

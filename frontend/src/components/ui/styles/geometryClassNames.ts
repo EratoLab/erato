@@ -68,6 +68,7 @@ export const ERATO_GEOMETRY_CLASS = Object.freeze({
   group: "group",
   listRowGeometry: "list-row-geometry",
   messageFrameGeometry: "message-frame-geometry",
+  masterDetailGeometry: "master-detail-geometry",
   modalCloseGeometry: "modal-close-geometry",
   modalOverlaySkin: "modal-overlay-skin",
   modalSectionGeometry: "modal-section-geometry",

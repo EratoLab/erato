@@ -3,7 +3,8 @@ import { useMessagingStore } from "@erato/frontend/library";
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 
 /** Bind before sending: SSE can deliver ownership and a tool request before React renders.
- * Approval continuations keep their owner; task children and later requests need a new capture. */
+ * Approval continuations keep their owner. Task children read the capture only under the server's
+ * grant (executeChildRead); later requests need a new capture. */
 export function bindWordDocumentReadRequest(
   session: Pick<WordDocumentReadSession, "bindRequest">,
   snapshot: string,
