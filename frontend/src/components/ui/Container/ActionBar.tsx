@@ -29,7 +29,7 @@ export function ActionBar({
       {...rest}
       data-ui={dataUi ?? "action-bar"}
       className={clsx(
-        "flex min-h-14 flex-none flex-wrap items-center justify-between gap-3 border-t border-theme-border bg-[var(--theme-shell-modal,var(--theme-bg-primary))] px-6 py-3 text-sm",
+        "flex min-h-14 flex-none flex-wrap items-center justify-between gap-3 border-t border-theme-border bg-[var(--theme-shell-modal,var(--theme-bg-primary))] px-[var(--theme-spacing-window-gutter)] py-3 text-sm",
         className,
       )}
     >

@@ -284,6 +284,7 @@ export {
   type ListToolbarProps,
 } from "@/components/ui/Container/ListToolbar";
 export {
+  MASTER_DETAIL_OVERLAY_QUERY,
   MasterDetailLayout,
   type MasterDetailLayoutProps,
 } from "@/components/ui/Container/MasterDetailLayout";

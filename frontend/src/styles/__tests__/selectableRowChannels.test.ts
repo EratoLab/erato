@@ -136,7 +136,7 @@ describe("selectable row channels", () => {
       "--theme-radius-selectable-row:0;",
       "--theme-spacing-selectable-row-height:2.25rem;",
       "--theme-spacing-selectable-row-padding-y:0.4375rem;",
-      "--theme-spacing-selectable-row-padding-x:1.5rem;",
+      "--theme-spacing-selectable-row-padding-x:var(--theme-spacing-window-gutter);",
       "--theme-selectable-row-selected-bg:var(--theme-bg-secondary);",
     ]) {
       expect(root).toContain(token);

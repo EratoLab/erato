@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { ScheduledItemRow } from "./ScheduledItemRow";
+import { ListGroupHeading } from "../Container/ListGroupHeading";
 
 import type { ScheduledItemActions } from "./ScheduledItemRow";
 import type { ScheduledDateFormat, ScheduledDayGroup } from "./scheduledItems";
@@ -31,12 +32,9 @@ export function ScheduledItemGroups({
             aria-labelledby={headingId}
             data-ui="scheduled-day-group"
           >
-            <h2
-              id={headingId}
-              className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-theme-fg-muted"
-            >
+            <ListGroupHeading id={headingId} variant="overline">
               {group.label}
-            </h2>
+            </ListGroupHeading>
             <div className="grid gap-3">
               {group.items.map((item) => (
                 <ScheduledItemRow

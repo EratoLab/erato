@@ -16,6 +16,7 @@ describe("library exports for list and review windows", () => {
     "ListGroupHeading",
     "ActionBar",
     "MasterDetailLayout",
+    "MASTER_DETAIL_OVERLAY_QUERY",
     "DetailPane",
     "DetailPaneSection",
     "ComponentSlot",

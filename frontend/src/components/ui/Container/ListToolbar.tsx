@@ -19,7 +19,7 @@ export function ListToolbar({
       {...rest}
       data-ui={dataUi ?? "list-toolbar"}
       className={clsx(
-        "flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-y border-theme-border bg-theme-bg-secondary px-6 py-2 text-sm text-theme-fg-secondary",
+        "flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-y border-theme-border bg-theme-bg-secondary px-[var(--theme-spacing-window-gutter)] py-2 text-sm text-theme-fg-secondary",
         className,
       )}
     >

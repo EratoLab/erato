@@ -12,8 +12,9 @@ export interface PageHeaderProps {
   /** Optional children to render below title/subtitle (e.g., search input) */
   children?: React.ReactNode;
   /**
-   * Header density. `window` is for a small app window: a smaller heading, no
-   * rule below it and the theme's page alignment left out.
+   * Header density. `window` is for a small app window: a smaller heading in
+   * the theme's heading font, a `<header>` element, no rule below it, no fill
+   * of its own and the theme's page alignment left out.
    */
   density?: "default" | "compact" | "window";
   /** Additional CSS classes */
@@ -62,13 +63,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   const isWindow = density === "window";
   const isCompact = density === "compact";
   const textAlignment = isWindow ? undefined : alignment.textAlignment;
+  const Root = isWindow ? "header" : "div";
 
   return (
-    <div
+    <Root
       className={clsx(
-        "flex flex-none flex-col bg-theme-bg-primary",
-        !isWindow && "border-b border-theme-border",
-        isWindow && "px-6 pb-3 pt-5",
+        "flex flex-none flex-col",
+        !isWindow && "border-b border-theme-border bg-theme-bg-primary",
+        isWindow && "px-[var(--theme-spacing-window-gutter)] pb-3 pt-5",
         !isWindow && (isCompact ? "py-4" : "py-8"),
         !isWindow && alignment.horizontalPadding,
         className,
@@ -83,7 +85,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           className={clsx(
             "font-semibold text-theme-fg-primary",
             titleRef && "outline-none",
-            isWindow ? "mb-1 text-lg" : "text-2xl",
+            isWindow ? "mb-1 font-heading text-lg" : "text-2xl",
             !isWindow && (isCompact ? "mb-3" : "mb-6"),
             textAlignment,
           )}
@@ -104,7 +106,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
         {children}
       </div>
-    </div>
+    </Root>
   );
 };
 

@@ -193,6 +193,7 @@ export const DEFAULT_STUBS = {
   ComponentSlot: StubNothing,
   ListGroupHeading: StubPassthrough,
   ListToolbar: StubPassthrough,
+  MASTER_DETAIL_OVERLAY_QUERY: "(max-width: 40rem)",
   MasterDetailLayout: StubNothing,
   Select: StubSelect,
   TextComparison: StubNothing,

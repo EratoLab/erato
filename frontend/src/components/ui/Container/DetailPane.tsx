@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
 import { Button } from "../Controls/Button";
@@ -12,12 +13,16 @@ export interface DetailPaneProps
   titleId: string;
   /** Shows a close button. */
   onClose?: () => void;
+  /** The close button's name. Defaults to the shared "Close". */
   closeLabel?: string;
   /** Theme hook. Defaults to `detail-pane`. */
   "data-ui"?: string;
 }
 
-/** A pane showing one item: its heading, a close button and its sections. */
+/**
+ * A pane showing one item. Its heading and close button stay in place while
+ * its sections scroll.
+ */
 export function DetailPane({
   title,
   titleId,
@@ -34,13 +39,13 @@ export function DetailPane({
       aria-labelledby={titleId}
       data-ui={dataUi ?? "detail-pane"}
       className={clsx(
-        "flex min-h-0 flex-1 flex-col gap-3 overflow-auto border-s border-theme-border bg-[var(--theme-shell-modal,var(--theme-bg-primary))] px-[1.125rem] py-3.5 text-sm",
+        "flex min-h-0 flex-1 flex-col border-s border-theme-border bg-[var(--theme-shell-modal,var(--theme-bg-primary))] text-sm",
         className,
       )}
     >
       <div
         data-ui="detail-pane-head"
-        className="flex items-start justify-between gap-2"
+        className="flex flex-none items-start justify-between gap-2 px-[1.125rem] pb-3 pt-3.5"
       >
         <h2
           id={titleId}
@@ -50,17 +55,26 @@ export function DetailPane({
         </h2>
         {onClose ? (
           <Button
-            variant="ghost"
+            variant="icon-only"
             size="sm"
-            geometry="icon"
-            tabIndex={0}
-            aria-label={closeLabel}
+            aria-label={
+              closeLabel ??
+              t({
+                id: "common.close",
+                message: "Close",
+              })
+            }
             icon={<CloseIcon className="size-4" />}
             onClick={onClose}
           />
         ) : null}
       </div>
-      {children}
+      <div
+        data-ui="detail-pane-body"
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-[1.125rem] pb-3.5"
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -70,6 +84,8 @@ export interface DetailPaneSectionProps
   title: ReactNode;
   /** A lighter note after the title. */
   hint?: ReactNode;
+  /** Theme hook. Defaults to `detail-pane-section`. */
+  "data-ui"?: string;
 }
 
 /** A titled part of a detail pane. */
@@ -77,10 +93,11 @@ export function DetailPaneSection({
   title,
   hint,
   children,
+  "data-ui": dataUi,
   ...rest
 }: DetailPaneSectionProps) {
   return (
-    <div {...rest} data-ui="detail-pane-section">
+    <div {...rest} data-ui={dataUi ?? "detail-pane-section"}>
       <h3 className="m-0 mb-1.5 text-sm font-semibold">
         {title}
         {hint ? (

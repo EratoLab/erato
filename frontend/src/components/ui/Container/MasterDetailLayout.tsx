@@ -1,6 +1,14 @@
 import clsx from "clsx";
+import { Children } from "react";
 
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from "react";
+
+/**
+ * Where the detail covers the list, for script that has to agree with the
+ * layout. globals.css holds the same breakpoint; a test keeps the two equal.
+ */
+// eslint-disable-next-line lingui/no-unlocalized-strings -- a media query
+export const MASTER_DETAIL_OVERLAY_QUERY = "(max-width: 40rem)";
 
 export interface MasterDetailLayoutProps
   extends Omit<ComponentPropsWithoutRef<"div">, "children"> {
@@ -26,7 +34,9 @@ export function MasterDetailLayout({
   "data-ui": dataUi,
   ...rest
 }: MasterDetailLayoutProps) {
-  const open = detail != null;
+  // Empty values, `cond && <Detail />` among them, render nothing and must not
+  // open the pane. toArray drops all of them except the empty string.
+  const open = Children.toArray(detail).some((child) => child !== "");
   return (
     <div
       {...rest}

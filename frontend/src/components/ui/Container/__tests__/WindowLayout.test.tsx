@@ -66,6 +66,30 @@ describe("window layout pieces", () => {
     ).toBe("one item");
   });
 
+  it.each([[false], [true], [""], [[]], [null]])(
+    "MasterDetailLayout keeps the pane closed for %j",
+    (detail) => {
+      const { container } = render(
+        <MasterDetailLayout list="items" detail={detail} />,
+      );
+      expect(
+        (container.firstElementChild as HTMLElement).dataset.detailOpen,
+      ).toBeUndefined();
+      expect(
+        container.querySelector('[data-ui="master-detail-detail"]'),
+      ).toBeNull();
+    },
+  );
+
+  it("MasterDetailLayout treats zero as content", () => {
+    const { container } = render(
+      <MasterDetailLayout list="items" detail={0} />,
+    );
+    expect(
+      container.querySelector('[data-ui="master-detail-detail"]')?.textContent,
+    ).toBe("0");
+  });
+
   it("DetailPane is labelled by its title and closes only when it can", () => {
     const onClose = vi.fn();
     const { rerender } = render(
@@ -92,10 +116,50 @@ describe("window layout pieces", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("DetailPane names its close button by default", () => {
+    render(<DetailPane title="An item" titleId="t" onClose={() => {}} />);
+    expect(screen.getByRole("button", { name: "Close" })).toBeDefined();
+  });
+
+  it("DetailPane scrolls its sections and keeps its heading in place", () => {
+    const { container } = render(
+      <DetailPane title="An item" titleId="t">
+        <p>text</p>
+      </DetailPane>,
+    );
+    const body = container.querySelector('[data-ui="detail-pane-body"]');
+    expect(body?.className).toContain("overflow-auto");
+    expect(body?.textContent).toBe("text");
+    expect(body?.querySelector('[data-ui="detail-pane-head"]')).toBeNull();
+  });
+
+  it("DetailPaneSection keeps a caller's theme hook", () => {
+    const { container } = render(
+      <DetailPaneSection title="Body" data-ui="custom">
+        text
+      </DetailPaneSection>,
+    );
+    expect((container.firstElementChild as HTMLElement).dataset.ui).toBe(
+      "custom",
+    );
+  });
+
   it("ListGroupHeading is a heading with a theme hook", () => {
     render(<ListGroupHeading>Search</ListGroupHeading>);
     expect(screen.getByRole("heading", { level: 2 }).dataset.ui).toBe(
       "list-group-heading",
+    );
+  });
+
+  it("ListGroupHeading keeps a caller's theme hook", () => {
+    render(<ListGroupHeading data-ui="custom">Search</ListGroupHeading>);
+    expect(screen.getByRole("heading", { level: 2 }).dataset.ui).toBe("custom");
+  });
+
+  it("ListGroupHeading has a small-capitals label for page lists", () => {
+    render(<ListGroupHeading variant="overline">Today</ListGroupHeading>);
+    expect(screen.getByRole("heading", { level: 2 }).className).toContain(
+      "uppercase",
     );
   });
 });
@@ -130,5 +194,20 @@ describe("PageHeader", () => {
     expect(header.className).not.toContain("border-b");
     expect(header.className).not.toContain("page-padding");
     expect(screen.getByRole("heading").className).not.toContain("page-align");
+  });
+
+  it("is a header without a fill of its own, in the theme's heading font", () => {
+    const { container } = render(<PageHeader title="Title" density="window" />);
+    const header = container.firstElementChild as HTMLElement;
+    expect(header.tagName).toBe("HEADER");
+    expect(header.className).not.toContain("bg-theme-bg-primary");
+    expect(screen.getByRole("heading").className).toContain("font-heading");
+  });
+
+  it("keeps the page fill outside a window", () => {
+    const { container } = render(<PageHeader title="Title" />);
+    const header = container.firstElementChild as HTMLElement;
+    expect(header.tagName).toBe("DIV");
+    expect(header.className).toContain("bg-theme-bg-primary");
   });
 });
