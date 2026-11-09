@@ -6636,6 +6636,11 @@ msgid "scheduled.channel.teamsChat.unavailable"
 msgstr "Delivery via Teams chat is not available here. Ask your administrator."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
+msgid "scheduled.confirmation.gone"
+msgstr "This reminder no longer exists."
+
+#. js-lingui-explicit-id
 #: src/hooks/scheduled/useScheduledItems.ts
 msgid "scheduled.delete.failed"
 msgstr "“{name}” could not be deleted"
@@ -7126,21 +7131,25 @@ msgid "scheduled.item.actions.aria"
 msgstr "Actions for {name}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirm"
 msgstr "Cancel it"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmMessage"
 msgstr "It will not be carried out. You can still find it under Past."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmTitle"
 msgstr "Cancel “{name}”?"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
 msgstr "Keep it"
@@ -7214,6 +7223,11 @@ msgstr "Was planned for {when}"
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.loading"
 msgstr "Loading scheduled items..."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.failed"
+msgstr "something could not be carried out"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatHistorySidebar.tsx

@@ -25,6 +25,7 @@ import {
   useGroupedChatSessions,
   useGroupedLoadMorePaused,
 } from "@/hooks/chat/useGroupedChatSessions";
+import { useScheduledFailureAlertShown } from "@/hooks/scheduled/useScheduledItems";
 import { useResponsiveCollapsedMode, useThemedIcon } from "@/hooks/ui";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import {
@@ -374,10 +375,19 @@ const ScheduledNavigationItem = memo<{
   isSlimMode?: boolean;
 }>(({ onScheduled, isOnScheduledPage, isSlimMode = false }) => {
   const scheduledIconId = useThemedIcon("navigation", "scheduled");
+  const failureAlertShown = useScheduledFailureAlertShown();
 
   return (
     <SidebarNavigationItem
       label={t({ id: "scheduled.navigation.label", message: "Scheduled" })}
+      warning={
+        failureAlertShown
+          ? t({
+              id: "scheduled.navigation.failed",
+              message: "something could not be carried out",
+            })
+          : undefined
+      }
       icon={
         <ResolvedIcon
           iconId={scheduledIconId}

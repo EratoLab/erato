@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation } from "react-router-dom";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 import { setIdToken } from "@/auth/tokenStore";
+import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import {
@@ -1572,6 +1573,40 @@ describe("useChatMessaging", () => {
       queryKey: ["chatDetail"],
       predicate: expect.any(Function),
     });
+  });
+
+  it("refreshes the scheduled items once the chat created or cancelled a reminder", async () => {
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("remind me on Friday");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-reminder-1",
+    });
+    const toolUpdate = (toolName: string, status: string) =>
+      sendSSEEvent({
+        message_type: "tool_call_update",
+        message_id: "assistant-reminder-1",
+        content_index: 0,
+        tool_call_id: `call-${toolName}`,
+        tool_name: toolName,
+        status,
+        output: {},
+      });
+    const scheduledRefresh = { queryKey: SCHEDULED_ITEMS_QUERY_KEY };
+    mockInvalidateQueries.mockClear();
+
+    await toolUpdate("create_reminder", "in_progress");
+    await toolUpdate("list_reminders", "success");
+    await toolUpdate("cancel_reminder", "error");
+    expect(mockInvalidateQueries).not.toHaveBeenCalledWith(scheduledRefresh);
+
+    await toolUpdate("create_reminder", "success");
+    expect(mockInvalidateQueries).toHaveBeenCalledWith(scheduledRefresh);
+
+    mockInvalidateQueries.mockClear();
+    await toolUpdate("cancel_reminder", "success");
+    expect(mockInvalidateQueries).toHaveBeenCalledWith(scheduledRefresh);
   });
 
   it("should prefer streaming content over api snapshot when ids collide during streaming", async () => {

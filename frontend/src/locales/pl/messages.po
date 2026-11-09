@@ -6636,6 +6636,11 @@ msgid "scheduled.channel.teamsChat.unavailable"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
+msgid "scheduled.confirmation.gone"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/hooks/scheduled/useScheduledItems.ts
 msgid "scheduled.delete.failed"
 msgstr ""
@@ -7126,21 +7131,25 @@ msgid "scheduled.item.actions.aria"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirm"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmMessage"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.confirmTitle"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ReminderConfirmationCard.tsx
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.cancel.keep"
 msgstr ""
@@ -7213,6 +7222,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.loading"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatHistorySidebar.tsx
+msgid "scheduled.navigation.failed"
 msgstr ""
 
 #. js-lingui-explicit-id

@@ -10,6 +10,8 @@ import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
+import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 import {
   Trace,
   durationFromTraceParts,
@@ -141,6 +143,11 @@ interface MessageContentProps {
   mentionedAssistants?: AssistantMention[];
   /** The delegated task result this reply answers, drawn above the reply. */
   taskResult?: ContentPartTaskResult;
+  /**
+   * A shared, read-only view: cards show what was stored, without the live
+   * state and actions that belong to the chat's owner.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -1315,6 +1322,7 @@ export const MessageContent = memo(function MessageContent({
   outlookArtifact,
   mentionedAssistants,
   taskResult,
+  readOnly = false,
 }: MessageContentProps) {
   // The deprecated prop is honored as a fallback for one release; every
   // artifact-driven path below reads this single resolved value.
@@ -1754,23 +1762,33 @@ export const MessageContent = memo(function MessageContent({
             content.slice(lastTracePartIndex + 1).some(isRenderableContentPart);
 
           return (
-            <WaitingHostsContext.Provider
-              key={`trace-${cluster.startIndex}`}
-              value={waitingHosts}
-            >
-              <Trace
-                parts={cluster.parts}
-                isStreaming={!!isStreaming}
-                hasLaterContent={hasLaterContent}
-                renderMarkdown={renderMarkdown}
-                durationMs={
-                  durationFromTraceParts(cluster.parts) ??
-                  (traceClusterCount === 1 ? traceDurationMs : null)
-                }
-                hasError={hasError}
-                toolDecisions={toolDecisions}
-              />
-            </WaitingHostsContext.Provider>
+            <React.Fragment key={`trace-${cluster.startIndex}`}>
+              <WaitingHostsContext.Provider value={waitingHosts}>
+                <Trace
+                  parts={cluster.parts}
+                  isStreaming={!!isStreaming}
+                  hasLaterContent={hasLaterContent}
+                  renderMarkdown={renderMarkdown}
+                  durationMs={
+                    durationFromTraceParts(cluster.parts) ??
+                    (traceClusterCount === 1 ? traceDurationMs : null)
+                  }
+                  hasError={hasError}
+                  toolDecisions={toolDecisions}
+                />
+              </WaitingHostsContext.Provider>
+              {/* Outside the trace, which folds away once the turn ends. */}
+              {cluster.parts.map((tracePart) => {
+                const confirmation = reminderConfirmationOf(tracePart);
+                return confirmation ? (
+                  <ReminderConfirmationCard
+                    key={`reminder-${confirmation.itemId}`}
+                    confirmation={confirmation}
+                    readOnly={readOnly}
+                  />
+                ) : null;
+              })}
+            </React.Fragment>
           );
         }
 

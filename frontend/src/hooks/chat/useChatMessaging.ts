@@ -28,6 +28,11 @@ import {
 } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import {
+  CANCEL_REMINDER_TOOL_NAME,
+  CREATE_REMINDER_TOOL_NAME,
+} from "@/components/ui/Scheduled/reminderConfirmation";
+import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
 import { useChatHistory } from "@/hooks";
 import {
   beginSpeechResponse,
@@ -1285,6 +1290,17 @@ export function useChatMessaging(
               responseData,
             );
             handleToolCallUpdate(responseData, activeStreamKey);
+            // The sidebar keeps the Scheduled lists cached, so without this
+            // the Scheduled page and earlier cards would not show the change.
+            if (
+              responseData.status === "success" &&
+              (responseData.tool_name === CREATE_REMINDER_TOOL_NAME ||
+                responseData.tool_name === CANCEL_REMINDER_TOOL_NAME)
+            ) {
+              void queryClient.invalidateQueries({
+                queryKey: SCHEDULED_ITEMS_QUERY_KEY,
+              });
+            }
             // A background dispatch surfaces in this chat's delegated-runs
             // listing right away, without waiting for the turn to end; the
             // terminal invalidation later replaces the seed with server truth.

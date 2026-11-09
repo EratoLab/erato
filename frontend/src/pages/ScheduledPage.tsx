@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/Scheduled/scheduledApi";
 import {
   groupScheduledItemsByDay,
+  scheduledFailureAlertItems,
   scheduledItemTab,
 } from "@/components/ui/Scheduled/scheduledItems";
 import {
@@ -36,8 +37,6 @@ import type {
   ScheduledTab,
   ScheduledTemplate,
 } from "@/components/ui/Scheduled/scheduledItems";
-
-const FAILURE_ALERT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ScheduledPageViewProps extends ScheduledItemActions {
   items: ScheduledItem[];
@@ -115,14 +114,10 @@ export function ScheduledPageView({
     [byTab, tab, dateContext, now],
   );
 
-  // Past keeps failures for good, so only the recent ones still call for the
-  // alert; older ones stay in the list.
-  const failedItems = useMemo(() => {
-    const since = (now ?? new Date()).getTime() - FAILURE_ALERT_WINDOW_MS;
-    return items.filter(
-      (item) => item.status === "failed" && Date.parse(item.dueAt) >= since,
-    );
-  }, [items, now]);
+  const failedItems = useMemo(
+    () => scheduledFailureAlertItems(items, now ?? new Date()),
+    [items, now],
+  );
 
   const tabLabel = (value: ScheduledTab) => {
     const count = counts?.[value] ?? byTab[value].length;

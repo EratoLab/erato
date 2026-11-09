@@ -3,7 +3,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useScheduledItems } from "../useScheduledItems";
+import { useListScheduledItems } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+
+import {
+  useScheduledFailureAlertShown,
+  useScheduledItems,
+} from "../useScheduledItems";
 
 import type {
   ScheduledItem,
@@ -145,6 +150,45 @@ describe("useScheduledItems", () => {
         description: "This item is already over.",
       }),
     );
+  });
+
+  it("agrees with the page on when its failure alert shows", async () => {
+    const failedAt = (at: string): ScheduledItem => ({
+      ...pastItem,
+      status: "failed",
+      last_delivery: { due: { at, local: at }, outcome: "failed" },
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-08T12:00:00Z"));
+    const answer = (past: ScheduledItem) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((url: string) =>
+          Promise.resolve(
+            json(listResponse(url.endsWith("tab=past") ? [past] : [])),
+          ),
+        ),
+      );
+    };
+
+    answer(failedAt("2026-11-06T08:00:00Z"));
+    const recent = renderHook(() => useScheduledFailureAlertShown(), {
+      wrapper,
+    });
+    await waitFor(() => expect(recent.result.current).toBe(true));
+    recent.unmount();
+
+    answer(failedAt("2026-10-31T08:00:00Z"));
+    const old = renderHook(
+      () => ({
+        shown: useScheduledFailureAlertShown(),
+        past: useListScheduledItems({ queryParams: { tab: "past" } }),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(old.result.current.past.isSuccess).toBe(true));
+    expect(old.result.current.shown).toBe(false);
+    vi.useRealTimers();
   });
 
   it("deletes a past item through the API", async () => {

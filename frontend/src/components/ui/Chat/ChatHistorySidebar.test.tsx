@@ -18,6 +18,8 @@ let mockedAssistantsEnabled = false;
 let mockedAssistantHubEnabled = false;
 let mockedScheduledEnabled = false;
 const mockUseChatDetail = vi.fn();
+let mockedScheduledLists: Record<string, { data?: unknown; error?: unknown }> =
+  {};
 
 vi.mock("@/components/providers/ThemeProvider", () => ({
   useTheme: () => ({
@@ -44,6 +46,11 @@ vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   useAssistantHubConfig: () => ({
     data: { enabled: mockedAssistantHubEnabled },
   }),
+  useListScheduledItems: ({
+    queryParams,
+  }: {
+    queryParams: { tab: "upcoming" | "past" };
+  }) => mockedScheduledLists[queryParams.tab] ?? { data: undefined },
 }));
 
 vi.mock("@/providers/FeatureConfigProvider", () => ({
@@ -176,6 +183,7 @@ describe("ChatHistorySidebar", () => {
     mockedAssistantsEnabled = false;
     mockedAssistantHubEnabled = false;
     mockedScheduledEnabled = false;
+    mockedScheduledLists = {};
     mockUseChatDetail.mockReset();
     mockUseChatDetail.mockReturnValue({ data: undefined });
     localStorage.clear();
@@ -711,7 +719,7 @@ describe("ChatHistorySidebar", () => {
     expect(assistantsItem?.closest("a")).toBeNull();
   });
 
-  const renderSidebarAt = async (path: string) => {
+  const renderSidebarAt = async (path: string, collapsed = false) => {
     const { i18n } = await import("@lingui/core");
     return render(
       <MemoryRouter initialEntries={[path]}>
@@ -723,6 +731,7 @@ describe("ChatHistorySidebar", () => {
             onSessionArchive={vi.fn()}
             onSessionUnarchive={vi.fn()}
             isLoading={false}
+            collapsed={collapsed}
           />
         </I18nProvider>
       </MemoryRouter>,
@@ -757,6 +766,99 @@ describe("ChatHistorySidebar", () => {
       assistantsItem!.compareDocumentPosition(scheduledItem!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  describe("the Scheduled entry's warning dot", () => {
+    const listOf = (dueAt: string, status = "failed") => ({
+      data: {
+        items: [
+          {
+            id: `item-${status}`,
+            type: "reminder",
+            name: "Follow up on the offer",
+            message: "",
+            trigger: { kind: "once", date: "2026-11-06", time: "09:00" },
+            time_zone: "Europe/Berlin",
+            status,
+            occurrence_count: 1,
+            channel: "teams_personal",
+            channel_status: "connected",
+            last_delivery: {
+              due: { at: dueAt, local: dueAt },
+              outcome: status,
+            },
+            created_at: dueAt,
+            updated_at: dueAt,
+          },
+        ],
+        upcoming_count: 0,
+        past_count: 1,
+        time_zone: "Europe/Berlin",
+        time_zone_source: "user",
+        channels: [],
+        max_upcoming: 10,
+      },
+    });
+    const daysAgo = (days: number) =>
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const dot = (container: HTMLElement) =>
+      container.querySelector('[data-testid="sidebar-navigation-warning"]');
+
+    beforeEach(() => {
+      mockedScheduledEnabled = true;
+    });
+
+    it("shows while the page's failure alert would, and names why", async () => {
+      mockedScheduledLists = { past: listOf(daysAgo(2)) };
+      const { container } = await renderSidebarAt("/chat/new");
+
+      expect(dot(container)).not.toBeNull();
+      expect(
+        screen.getByRole("link", {
+          name: "Scheduled, something could not be carried out",
+        }),
+      ).toHaveAttribute("href", "/scheduled");
+    });
+
+    it("stays off for a failure older than the alert's window", async () => {
+      mockedScheduledLists = { past: listOf(daysAgo(8)) };
+      const { container } = await renderSidebarAt("/chat/new");
+
+      expect(dot(container)).toBeNull();
+      expect(
+        screen.getByRole("link", { name: "Scheduled" }),
+      ).toBeInTheDocument();
+    });
+
+    it("stays off when nothing failed or the page could not load", async () => {
+      mockedScheduledLists = { past: listOf(daysAgo(1), "done") };
+      const { container, unmount } = await renderSidebarAt("/chat/new");
+      expect(dot(container)).toBeNull();
+      unmount();
+
+      mockedScheduledLists = {
+        upcoming: { error: new Error("offline") },
+        past: listOf(daysAgo(1)),
+      };
+      const reloaded = await renderSidebarAt("/chat/new");
+      expect(dot(reloaded.container)).toBeNull();
+    });
+
+    it("stays on the icon in slim mode, with the reason in the tooltip", async () => {
+      mockedCollapsedMode = "slim";
+      mockedScheduledLists = { upcoming: listOf(daysAgo(0)) };
+      const { container } = await renderSidebarAt("/chat/new", true);
+
+      expect(dot(container)).not.toBeNull();
+      expect(
+        container
+          .querySelector('[data-ui="sidebar-scheduled-item"]')
+          ?.closest("a"),
+      ).toHaveAttribute(
+        "title",
+        "Scheduled, something could not be carried out",
+      );
+    });
   });
 
   it("marks the Scheduled entry active on its page", async () => {
