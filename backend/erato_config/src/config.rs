@@ -1771,10 +1771,13 @@ impl AppConfig {
 
         // After the operator-trap warnings: the built-in allowlists only
         // reserved tools on purpose, which would trip the MCP warning above.
-        let scheduled_deliveries_enabled = config.scheduled_deliveries.enabled;
+        // Reminders reach users through the Teams bot only so far; without it
+        // the facet's tools are never offered.
+        let reminders_deliverable =
+            config.scheduled_deliveries.enabled && config.integrations.ms_office.teams.bot.enabled;
         config
             .facets
-            .inject_builtin_schedule_facet(scheduled_deliveries_enabled);
+            .inject_builtin_schedule_facet(reminders_deliverable);
 
         // Every `child_facet_ids` entry, global or per facet, must name a
         // configured facet.
@@ -6141,10 +6144,10 @@ not available yet: say so and offer a reminder instead. Use `list_reminders` and
 `cancel_reminder` to show or cancel the user's reminders.";
 
 impl FacetsConfig {
-    /// Adds the built-in `schedule` facet while scheduled deliveries are on.
+    /// Adds the built-in `schedule` facet while reminders can be delivered.
     /// A configured `[facets.facets.schedule]` replaces it as a whole.
-    pub fn inject_builtin_schedule_facet(&mut self, scheduled_deliveries_enabled: bool) {
-        if !scheduled_deliveries_enabled {
+    pub fn inject_builtin_schedule_facet(&mut self, reminders_deliverable: bool) {
+        if !reminders_deliverable {
             return;
         }
         self.facets
@@ -6190,7 +6193,7 @@ mod builtin_schedule_facet_tests {
     }
 
     #[test]
-    fn injected_only_while_scheduled_deliveries_are_enabled() {
+    fn injected_only_while_reminders_can_be_delivered() {
         let mut facets = FacetsConfig::default();
         facets.inject_builtin_schedule_facet(false);
         assert!(facets.facets.is_empty());
