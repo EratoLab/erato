@@ -80,9 +80,11 @@ client task, with or without a grant. Retries and the @-mention route never get 
 grant. A retried client task still gets the note, with the reason "a retried task
 gets no client tools"; a mention run gets none.
 
-A turn from the Teams bot has no binding, so its client tasks get the second
-reason, also while the user's app is connected on another device (CT-7: no
-pickup by another client). The bot names each task with that reason in its
+A turn from the Teams bot has no binding, so with client tools on for tasks its
+client tasks get the second reason, also while the user's app is connected on
+another device (CT-7: no pickup by another client). While they are off, the
+tasks carry the first reason and the bot names nothing, since asking again
+anywhere would not help. The bot names each task with the second reason in its
 answer and says where to ask again, by the task's host: the chat in Erato for
 the desktop sidecar, Word or Outlook with the add-in for a document or mailbox
 task. The reason itself stays host-neutral, since the Teams personal app sends
