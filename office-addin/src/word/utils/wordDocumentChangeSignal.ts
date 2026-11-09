@@ -1,3 +1,5 @@
+import { requestClientOperationSweep } from "@erato/frontend/library";
+
 import {
   noteWordChangeEventsActive,
   recordWordParagraphEvent,
@@ -94,6 +96,8 @@ async function installParagraphEvents(): Promise<void> {
       await context.sync();
     });
     noteWordChangeEventsActive();
+    // The read now checks document approvals, so the executor stream reopens to list it as scoped.
+    requestClientOperationSweep();
   } catch {
     // Callers then treat every return to the pane as a change.
   }

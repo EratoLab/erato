@@ -39,6 +39,8 @@ pub(super) struct HostRow {
     pub namespace: &'static str,
     pub read_tool: &'static str,
     pub read_parameters: Value,
+    /// Input fields the pane fills from its own context (`child_host_inputs`).
+    pub host_inputs: &'static [&'static str],
     pub requires_client_registration: bool,
     /// What the child's model sends, with a forged context version.
     pub model_input: Value,
@@ -118,6 +120,7 @@ impl HostRow {
             host_context: Some(self.host),
             child_context_arg: self.context.as_ref().map(|context| context.arg.into()),
             child_context_input: self.context.as_ref().map(|context| context.input.into()),
+            child_host_inputs: self.host_inputs.iter().map(|&field| field.into()).collect(),
             durable: durable.then_some(ClientToolDurableConfig {
                 host_context: self.host,
                 result_schema: None,
@@ -139,9 +142,14 @@ impl HostRow {
     }
 
     /// `model_input` as the pane receives it: the grant's context version in
-    /// place of the forged one.
+    /// place of the forged one, and none of the fields the pane fills.
     pub fn dispatched_input(&self) -> Value {
         let mut input = self.model_input.clone();
+        if let Some(object) = input.as_object_mut() {
+            for field in self.host_inputs {
+                object.remove(*field);
+            }
+        }
         if let Some(context) = &self.context {
             input[context.input] = json!(context.value);
         }
@@ -193,6 +201,7 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
         read_tool: "read_part",
         read_parameters: json!({"type": "object", "properties": {
             "context": {"type": "string"}, "part": {"type": "string"}}}),
+        host_inputs: &[],
         requires_client_registration: false,
         model_input: json!({"context": "forged", "part": "intro"}),
         turn_args: json!({}),
@@ -232,8 +241,16 @@ pub(super) fn fake_live_host(host: ClientToolHostContext) -> HostRow {
 
 const SNAPSHOT: &str = "SNAPSHOT-TOKEN-7";
 
-/// The overlay's Word read tool as it stands; ERMAIN-1003 adjusts the row to
-/// what ships.
+/// The overlay's `word_read_document_blocks` parameters, verbatim from
+/// `erato-action-facets.toml` (erato-subscription-content `main @ e10e960`):
+/// complete pagination, `table_cell`, `target` and `section`.
+const WORD_READ_PARAMETERS: &str = r##"{"type":"object","anyOf":[{"type":"object","properties":{"snapshot":{"type":"string","description":"The exact immutable document snapshot token supplied for this request."},"cursor":{"type":["string","null"],"description":"The preceding response's nextCursor; omit or use null for the first page."}},"required":["snapshot"],"additionalProperties":false},{"type":"object","properties":{"snapshot":{"type":"string"},"documentIdentity":{"type":"string"},"table_cell":{"type":"object","properties":{"nearbyText":{"type":"string","maxLength":256,"minLength":1},"header":{"type":"string","maxLength":256,"minLength":1},"rowLabel":{"type":"string","maxLength":256,"minLength":1},"text":{"type":"string","maxLength":256},"sourceRef":{"type":"string","maxLength":256,"minLength":1},"rowIndex":{"type":"integer","minimum":0},"cellIndex":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0}},"minProperties":1,"additionalProperties":false}},"required":["snapshot","documentIdentity","table_cell"],"additionalProperties":false},{"type":"object","properties":{"snapshot":{"type":"string"},"documentIdentity":{"type":"string"},"target":{"anyOf":[{"$ref":"#/$defs/targetQuery"},{"type":"object","properties":{"queries":{"type":"array","minItems":1,"maxItems":16,"items":{"$ref":"#/$defs/targetQuery"}}},"required":["queries"],"additionalProperties":false}]},"include":{"type":"array","maxItems":7,"uniqueItems":true,"items":{"type":"string","enum":["text","formatting","table","media","structures","stories","sections"]}}},"required":["snapshot","documentIdentity","target"],"additionalProperties":false},{"type":"object","properties":{"snapshot":{"type":"string"},"documentIdentity":{"type":"string"},"section":{"type":"object","properties":{"ref":{"type":"string","minLength":1,"maxLength":256},"throughRef":{"type":"string","minLength":1,"maxLength":256},"cursor":{"type":["string","null"]}},"required":["ref"],"additionalProperties":false}},"required":["snapshot","documentIdentity","section"],"additionalProperties":false}],"$defs":{"targetQuery":{"type":"object","properties":{"kind":{"type":"string","minLength":1,"maxLength":256},"text":{"type":"string","minLength":1,"maxLength":256},"nearbyText":{"type":"string","minLength":1,"maxLength":256},"ref":{"type":"string","minLength":1,"maxLength":256},"throughRef":{"type":"string","minLength":1,"maxLength":256},"refs":{"type":"array","maxItems":16,"items":{"type":"string"},"minItems":1,"uniqueItems":true},"offset":{"type":"integer","minimum":0}},"required":[],"additionalProperties":false,"minProperties":1}}}"##;
+
+/// The overlay's Word read tool as ERMAIN-1004 turns it on for tasks: the
+/// server fills `snapshot` from the parent's `document_snapshot`, and the pane
+/// fills `documentIdentity` from its own capture. Word's `sections` stays
+/// empty until it sees a change, and the task result keeps only a non-empty
+/// list, so the row reports a change elsewhere.
 pub(super) fn word_document() -> HostRow {
     HostRow {
         host: ClientToolHostContext::WordDocument,
@@ -243,16 +260,13 @@ pub(super) fn word_document() -> HostRow {
         platform: "word",
         namespace: "word",
         read_tool: "read_document_blocks",
-        read_parameters: json!({"type": "object", "properties": {
-            "snapshot": {"type": "string"},
-            "documentIdentity": {"type": "string"},
-            "target": {"type": "object"}},
-            "required": ["snapshot"]}),
+        read_parameters: serde_json::from_str(WORD_READ_PARAMETERS).unwrap(),
+        host_inputs: &["documentIdentity"],
         requires_client_registration: true,
         model_input: json!({
             "snapshot": "forged",
-            "documentIdentity": "document-1",
-            "target": {"kind": "heading", "text": "Introduction"},
+            "documentIdentity": "guessed-document",
+            "section": {"ref": "b3"},
         }),
         turn_args: json!({}),
         context: Some(ContextVersion {
@@ -260,19 +274,21 @@ pub(super) fn word_document() -> HostRow {
             input: "snapshot",
             value: SNAPSHOT,
         }),
-        part: ("$.target.text", "Introduction"),
+        part: ("$.section.ref", "b3"),
         freshness: json!({
             "context_ref": SNAPSHOT,
             "capturedAt": "2026-10-20T10:00:00Z",
-            "changes": "none",
-            "counts": counts(),
+            "changes": "elsewhere",
+            "counts": {"own": 0, "local": 1, "remote": 0, "unknown": 0},
+            "sections": ["b7"],
         }),
         wait_note: wait_note(ClientToolHostContext::WordDocument),
     }
 }
 
-/// The overlay's Outlook availability read as it stands; ERMAIN-1006 adjusts
-/// the row to what ships.
+/// The overlay's Outlook availability read as it ships with ERMAIN-1006: no
+/// context version, and a live read that reports all-zero counts. The overlay
+/// keeps no receipt for it, so `part` serves only the cases that add one.
 pub(super) fn outlook_mailbox() -> HostRow {
     HostRow {
         host: ClientToolHostContext::OutlookMailbox,
@@ -287,6 +303,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
             "attendees": {"type": "array", "items": {"type": "string"}, "maxItems": 15},
             "duration_minutes": {"type": "integer", "minimum": 5, "maximum": 1440}},
             "additionalProperties": false}),
+        host_inputs: &[],
         requires_client_registration: false,
         model_input: json!({"lookahead_days": 7, "duration_minutes": 30}),
         turn_args: json!({"now_iso": "2026-10-20T09:00:00+02:00", "timezone": "Europe/Berlin"}),
@@ -295,7 +312,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
         freshness: json!({
             "readAt": "2026-10-20T10:00:00Z",
             "changes": "none",
-            "counts": counts(),
+            "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
         }),
         wait_note: wait_note(ClientToolHostContext::OutlookMailbox),
     }
@@ -337,6 +354,7 @@ pub(super) fn desktop_sidecar() -> HostRow {
                 "dateTo": {"type": "integer"}},
                 "additionalProperties": false}},
             "additionalProperties": false}),
+        host_inputs: &[],
         requires_client_registration: true,
         model_input: json!({"text": "contract", "filters": {"dateFrom": 1719792000, "dateTo": 1727740800}}),
         turn_args: json!({}),

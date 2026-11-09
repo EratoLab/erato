@@ -8,6 +8,13 @@ import {
   type OutlookActionFacetInput,
   type OutlookSendPreviewInput,
 } from "../outlookActionFacet";
+import {
+  OUTLOOK_DELEGATED_SCHEDULING_FACET_ID,
+  isSchedulingThreadFresh,
+  newestSchedulingSignalAt,
+} from "../outlookScheduleTool";
+
+import type { ContentPart } from "@erato/frontend/library";
 
 const base: OutlookActionFacetInput = {
   itemKind: null,
@@ -474,6 +481,50 @@ describe("resolveOutlookActionFacet", () => {
 
     expect(result.facet?.id).toBe("outlook_review_appointment");
     expect(result.draft).toBe("sent");
+  });
+
+  it("sticky: a pick in read mode after a delegated multi-meeting turn stays outlook_schedule", () => {
+    // Neutral pane: the ambient rung attached outlook_schedule and the turn
+    // handed each meeting to a task; the parent holds only delegate_task.
+    const history = [
+      {
+        role: "user",
+        content: [] as ContentPart[],
+        createdAt: "2026-07-03T13:00:00+02:00",
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            content_type: "tool_use",
+            tool_name: "delegate_task",
+            input: {
+              brief: "Meeting A",
+              facet_ids: [OUTLOOK_DELEGATED_SCHEDULING_FACET_ID],
+              run_mode: "wait",
+            },
+          },
+          { content_type: "text", text: "Meeting A: Tue 10:00 or Wed 14:00" },
+        ] as unknown as ContentPart[],
+        createdAt: "2026-07-03T13:05:00+02:00",
+      },
+    ];
+    const schedulingThreadActive = isSchedulingThreadFresh(
+      newestSchedulingSignalAt(history),
+      Date.parse(base.nowIso),
+    );
+
+    // The user then opens a mail and picks a slot.
+    const result = resolveOutlookActionFacet({
+      ...base,
+      ...scheduleReady,
+      itemKind: "message",
+      isReadMode: true,
+      replyFromReadAvailable: true,
+      schedulingThreadActive,
+    });
+
+    expect(result.facet?.id).toBe("outlook_schedule");
   });
 
   it("sticky does not fire without an available facet or calendar backend", () => {

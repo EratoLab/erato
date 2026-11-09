@@ -131,7 +131,10 @@ import { CopyErrorButton } from "../Feedback/CopyErrorButton";
 import { toast } from "../Toast/toast";
 
 import type { AssistantMentionPopoverHandle } from "./AssistantMentionPopover";
-import type { ChatInputControlsHandle } from "./ChatInputControlsContext";
+import type {
+  ChatInputControlsHandle,
+  DraftMessageOptions,
+} from "./ChatInputControlsContext";
 import type { ChatInputAudioTranscriptionControls } from "../FileUpload/FileAttachmentsPreview";
 import type { AudioTranscriptionState } from "../FileUpload/audioTranscriptionStatus";
 import type {
@@ -1131,8 +1134,10 @@ export const ChatInput = ({
   }, []);
 
   const setDraftMessage = useCallback(
-    (nextMessage: string, options?: { focus?: boolean }) => {
-      setMessage(nextMessage);
+    (nextMessage: string, options?: DraftMessageOptions) => {
+      setMessage((current) =>
+        options?.onlyIfEmpty && current.trim() !== "" ? current : nextMessage,
+      );
       if (options?.focus ?? true) {
         textareaRef.current?.focus();
       }
@@ -1195,7 +1200,12 @@ export const ChatInput = ({
     () => ({
       setDraftMessage,
       focusInput,
-      setSelectedFacetIds: applySelectedFacetIds,
+      // Like a pick in the menu, so the selection outlives the new chat
+      // getting its id.
+      setSelectedFacetIds: (facetIds: string[]) => {
+        userSelectedFacetsSessionRef.current = composeSessionId;
+        applySelectedFacetIds(facetIds);
+      },
       setSelectedChatProviderId: applySelectedChatProviderId,
       toggleFacetId,
       addUploadedFiles: handleFilesUploaded,

@@ -2165,6 +2165,11 @@ export type FacetInfo = {
   display_name: string;
   icon?: string;
   id: string;
+  /**
+   * Whether this facet's indicator shows its display name. Absent: follow
+   * `show_facet_indicator_with_display_name` of the global settings.
+   */
+  show_indicator_with_display_name?: boolean;
 };
 
 export type FacetsResponse = {

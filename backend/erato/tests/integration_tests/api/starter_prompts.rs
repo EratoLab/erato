@@ -97,6 +97,7 @@ async fn test_starter_prompts_endpoint(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
 

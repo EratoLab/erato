@@ -253,16 +253,9 @@ pub struct TurnReminders {
 /// so a continuation does not repeat them.
 pub fn turn_reminders(content: &[crate::models::message::ContentPart]) -> TurnReminders {
     use crate::models::message::{ContentPart, ToolCallStatus};
-    let last = content.len().saturating_sub(1);
-    let start = content
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(index, part)| *index != last && matches!(part, ContentPart::ToolApprovalRequest(_)))
-        .map_or(0, |(index, _)| index + 1);
     let mut turn = TurnReminders::default();
     let mut writes = false;
-    for part in &content[start..] {
+    for part in super::host::since_earlier_stop(content) {
         match part {
             ContentPart::ToolUse(tool) if tool.status == ToolCallStatus::Success => {
                 match tool.tool_name.as_str() {

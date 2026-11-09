@@ -6631,6 +6631,29 @@ child_host_context = "word_document"
 additional_system_prompt = "Read only the part of the document your task names."
 ```
 
+##### Facet indicator label
+
+{/* erato_toml_config_key: facets.facets.<facet-id>.show_indicator_with_display_name */}
+
+Whether this facet's chat box indicator includes its display name, overriding [`facets.show_facet_indicator_with_display_name`](#facetsshow_facet_indicator_with_display_name) for this facet. Omit it to follow the global setting.
+
+**Type:** `boolean` (optional)
+
+##### Built-in Schedule facet
+
+While [`scheduled_deliveries`](#scheduled_deliveries) and the Teams bot (`integrations.ms_office.teams.bot.enabled`) are enabled, so reminders can be delivered, Erato adds a facet with the id `schedule` ("Schedule", shown as "Planen" in German). "Create with chat" on the Scheduled page opens a new chat with it selected. Its prompt asks the model to create reminders with the built-in reminder tools, to ask back when the date or time is unclear, and to say something is scheduled only after the tool succeeded. It restricts no tools. Only when a global `tool_call_allowlist` is set does it allowlist `erato/create_reminder`, `erato/list_reminders` and `erato/cancel_reminder`, so the reminder tools are offered while it is selected even when the global allowlist leaves them out. On its own it does not count as configured facets, so a deployment without facets of its own keeps every tool unfiltered. Its indicator always shows its name. It is listed after the facets in `priority_order`. With [`facet_permissions`](#facet_permissions) rules, a facet must be named in a rule to be shown: add `schedule` to a rule, or "Create with chat" stays unavailable.
+
+To change it, define `[facets.facets.schedule]` yourself: that facet replaces the built-in as a whole (name, icon, prompt and allowlist), so include the reminder tools in its `tool_call_allowlist` if a global allowlist would otherwise leave them out.
+
+```toml
+[facets.facets.schedule]
+display_name = "Erinnerungen"
+icon = "iconoir-calendar"
+show_indicator_with_display_name = true
+tool_call_allowlist = ["erato/create_reminder", "erato/list_reminders", "erato/cancel_reminder"]
+additional_system_prompt = "Create reminders with create_reminder. Ask when the date or time is unclear."
+```
+
 #### `facets.priority_order`
 
 {/* erato_toml_config_key: facets.priority_order */}
