@@ -6,6 +6,10 @@ import {
 } from "@erato/desktop-sidecar-protocol";
 import { i18n } from "@lingui/core";
 
+import {
+  getSavedTextSize,
+  getSavedTheme,
+} from "@/components/providers/ThemeProvider";
 import { getClientPlatform } from "@/lib/clientPlatform";
 
 import { markAwaitingReview } from "./sidecarReviewStore";
@@ -25,13 +29,21 @@ import type {
 export const JOB_POLL_INTERVAL_MS = 1_500;
 
 /**
- * Who asks for a review, as the review window names it: this surface and its
- * active language. Display data; a sidecar built before it ignores the field.
+ * Who asks for a review and how the person has this client set up: the
+ * review window names the surface and follows its language, colour mode and
+ * text size. Display data; a sidecar built before it ignores the fields.
  */
-function reviewClient(): { platform: string; locale?: string } {
+function reviewClient(): {
+  platform: string;
+  locale?: string;
+  theme_mode: string;
+  text_size: string;
+} {
   return {
     platform: getClientPlatform(),
     ...(i18n.locale ? { locale: i18n.locale } : {}),
+    theme_mode: getSavedTheme(),
+    text_size: getSavedTextSize(),
   };
 }
 

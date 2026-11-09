@@ -363,7 +363,12 @@ describe("job envelope", () => {
     await expect(
       client.invoke("jobs.review.v1", {
         handle: started.handle,
-        client: { platform: "web", locale: "de" },
+        client: {
+          platform: "web",
+          locale: "de",
+          theme_mode: "dark",
+          text_size: "large",
+        },
       }),
     ).resolves.toEqual({ handle: started.handle, state: "ready_for_review" });
     await expect(

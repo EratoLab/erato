@@ -23,6 +23,7 @@ import {
   SHARED_MODULES,
   type SharedModuleEntry,
 } from "./shared-modules.config";
+import { ERATO_SHARED_SURFACE_MINOR } from "./src/shared/surfaceVersion";
 
 type HostLogger = {
   warn(message: string): void;
@@ -121,7 +122,13 @@ export const sharedModulesImportMapPlugin = (
       this.emitFile({
         type: "asset",
         fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
-        source: JSON.stringify({ imports }, null, 2),
+        // The surface goes along so a backend can compare this build with
+        // a desktop UI package built against another library version.
+        source: JSON.stringify(
+          { imports, sharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR },
+          null,
+          2,
+        ),
       });
     },
   };

@@ -1,6 +1,6 @@
 # Strict mode and the job envelope
 
-Status: package 0.1.48. Transport protocol remains 1.0. This document is the
+Status: package 0.1.49. Transport protocol remains 1.0. This document is the
 shared design record. It does not certify a security implementation.
 
 ## Trust model
@@ -161,7 +161,10 @@ window names the client and uses its language, and falls back to a generic name
 and the operating system's language; a value the sidecar cannot use is dropped,
 not refused. The window never names the Origin, because the web app and the
 add-ins share it. When several callers share a job, the window names the one
-that opened it: a repeated request only focuses the window.
+that opened it: a repeated request only focuses the window. From package 0.1.49
+`client` also carries `theme_mode` and `text_size`, and the window follows the
+person's colour mode and text size the same way, falling back to the operating
+system's colour mode and the default size.
 
 Approval exports each call filtered to its approved items: the array at `items`
 keeps only the approved items, the values at `resultMetadata` are kept, an
