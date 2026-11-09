@@ -680,6 +680,20 @@ const GRANT_MISMATCH =
 const TASK_CALENDAR_UNAVAILABLE =
   "Calendar access is not available in the user's Outlook pane, so availability cannot be checked for this task.";
 
+/**
+ * A task gets the user's free/busy, not what the events are about: a subject
+ * can be text an outside invite sender wrote.
+ */
+function withoutEventSubjects(result: AvailabilityToolResult) {
+  return {
+    ...result,
+    busy: result.busy.map(({ subject: _subject, ...block }) => block),
+    recentMeetings: result.recentMeetings.map(
+      ({ subject: _subject, ...meeting }) => meeting,
+    ),
+  };
+}
+
 /** A task's call the pane cannot serve; retrying it as it stands cannot help. */
 function contextLoss(message: string): ClientToolExecutionResult {
   return {
@@ -716,8 +730,9 @@ function grantHolds(
  * re-run an executor).
  *
  * A delegated task's call (`hostGrant`) is checked before anything is read,
- * gets the read-only legend and reports freshness. An item switch is not a
- * change for it: availability does not depend on the open item.
+ * gets no event subjects and the read-only legend, and reports freshness. An
+ * item switch is not a change for it: availability does not depend on the
+ * open item.
  */
 export function createFetchAvailabilityExecutor(
   getFetcher: () => OutlookCalendarFetcher | null,
@@ -763,7 +778,7 @@ export function createFetchAvailabilityExecutor(
         ok: true,
         result: grant
           ? {
-              ...result,
+              ...withoutEventSubjects(result),
               legend: TASK_CALENDAR_LEGEND,
               freshness: {
                 readAt,

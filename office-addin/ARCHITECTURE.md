@@ -494,7 +494,8 @@ Outlook (ERMAIN-1006):
 Host context:          outlook_mailbox; identity = SHA-256 of the normalized
                        mailbox address; realm office-addin
 Context version:       none (outlook_schedule sends only now_iso and timezone)
-Read tools:            outlook/fetch_availability
+Read tools:            outlook/fetch_availability; tasks get availability
+                       without event subjects
 Write tools:           none registered: outlook.reply, reply_all and
                        create_appointment are client actions the coordinator
                        proposes
