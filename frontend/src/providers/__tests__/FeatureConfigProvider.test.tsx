@@ -24,6 +24,7 @@ import {
   useSidebarFeature,
   useUserPreferencesFeature,
   useTraceFeature,
+  useScheduledFeature,
 } from "../FeatureConfigProvider";
 
 import type { ReactNode } from "react";
@@ -128,6 +129,7 @@ describe("FeatureConfigProvider", () => {
       maskReasoningTraceText: false,
       desktopSidecarSettingsTabEnabled: false,
       scheduledEnabled: false,
+      teamsAppName: null,
     });
   });
 
@@ -252,6 +254,7 @@ describe("FeatureConfigProvider", () => {
         },
         scheduled: {
           enabled: false,
+          teamsAppName: null,
         },
       });
     });
@@ -1427,6 +1430,22 @@ describe("FeatureConfigProvider", () => {
       });
 
       expect(result.current.maskReasoningText).toBe(true);
+    });
+  });
+
+  describe("useScheduledFeature", () => {
+    it("carries the deployment's Teams app name from the environment", () => {
+      mockEnv.mockReturnValue({
+        ...env(),
+        scheduledEnabled: true,
+        teamsAppName: "Hugo",
+      });
+
+      const { result } = renderHook(() => useScheduledFeature(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current).toEqual({ enabled: true, teamsAppName: "Hugo" });
     });
   });
 });

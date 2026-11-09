@@ -88,6 +88,7 @@ describe("themeConfig", () => {
     maskReasoningTraceText: false,
     desktopSidecarSettingsTabEnabled: false,
     scheduledEnabled: false,
+    teamsAppName: null,
     ...overrides,
   });
 
