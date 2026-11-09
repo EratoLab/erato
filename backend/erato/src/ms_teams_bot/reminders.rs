@@ -132,14 +132,7 @@ pub fn confirmation_card(
 /// stopped there, so a continuation does not confirm them twice.
 pub fn created_reminders(content: &[crate::models::message::ContentPart]) -> Vec<Uuid> {
     use crate::models::message::{ContentPart, ToolCallStatus};
-    let last = content.len().saturating_sub(1);
-    let start = content
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(index, part)| *index != last && matches!(part, ContentPart::ToolApprovalRequest(_)))
-        .map_or(0, |(index, _)| index + 1);
-    content[start..]
+    super::host::since_earlier_stop(content)
         .iter()
         .filter_map(|part| match part {
             ContentPart::ToolUse(tool)

@@ -80,6 +80,16 @@ client task, with or without a grant. Retries and the @-mention route never get 
 grant. A retried client task still gets the note, with the reason "a retried task
 gets no client tools"; a mention run gets none.
 
+A turn from the Teams bot has no binding, so with client tools on for tasks its
+client tasks get the second reason, also while the user's app is connected on
+another device (CT-7: no pickup by another client). While they are off, the
+tasks carry the first reason and the bot names nothing, since asking again
+anywhere would not help. The bot names each task with the second reason in its
+answer and says where to ask again, by the task's host: the chat in Erato for
+the desktop sidecar, Word or Outlook with the add-in for a document or mailbox
+task. The reason itself stays host-neutral, since the Teams personal app sends
+the same platform and is a client.
+
 ## Offer predicate
 
 `granted_tools` is the one predicate used on fresh turns and on continuations
@@ -437,6 +447,8 @@ host: Always allow under a strict MCP policy, Never allow stored as the
 client-tool preference, adoption by regenerate, and a turn without the context
 version whose read is dispatched without one. No integration case covers the
 @-mention route, which launches no client task and so never gets a grant.
+The Teams bot is not a host and has no row; its cases are in
+`erato/tests/integration_tests/ms_teams_bot/delegated_tasks.rs`.
 
 `delegated/approval_scope.rs` adds five approval-scope cases to every row whose
 host supports an approval scope, and two more to such a row marked `slow_path`:

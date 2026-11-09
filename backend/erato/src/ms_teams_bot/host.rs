@@ -17,6 +17,7 @@ use super::cards::{
 use super::citations::{self, FileSource};
 use super::graph::{GraphIdentity, SharedItem};
 use super::texts::{Lang, Msg};
+use crate::config::{ClientToolHostContext, FacetsConfig};
 use crate::db::entity::prelude::{
     Chats, Messages, MsTeamsConversations, MsTeamsPendingSignIns, MsTeamsRequests,
     MsTeamsTokenExchanges,
@@ -76,6 +77,28 @@ pub struct Completion {
     pub needs_client: bool,
     /// Reminders the turn scheduled that still need their confirmation card.
     pub reminders: Vec<Uuid>,
+    /// The turn's tasks that needed a client tool, which a turn sent from
+    /// Teams never has.
+    pub client_tasks: Vec<ClientTask>,
+}
+
+/// A task that got no client tools because its turn was sent from Teams.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClientTask {
+    pub brief: String,
+    /// `None` once the task's facet is no longer configured.
+    pub client: Option<TaskClient>,
+}
+
+/// Where a task that needs a client tool gets one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskClient {
+    /// The open document in Word, with the Erato add-in.
+    Word,
+    /// Outlook, with the Erato add-in.
+    Outlook,
+    /// The chat in Erato, with the Erato desktop app on the device.
+    Chat,
 }
 
 #[derive(Debug)]
@@ -588,6 +611,7 @@ impl Host {
             Some(started.client_stream_guard),
             session.lang,
             self.app_name(),
+            self.app_state.config.facets.clone(),
         ))
     }
 
@@ -624,6 +648,7 @@ impl Host {
             None,
             session.lang,
             self.app_name(),
+            self.app_state.config.facets.clone(),
         ))
     }
 
@@ -652,6 +677,7 @@ impl Host {
         };
         let parsed = MessageSchema::validate(&message.raw_message)?;
         Ok(Some(completion_from_content(
+            &self.app_state.config.facets,
             chat_id,
             message_id,
             &parsed.content,
@@ -677,7 +703,13 @@ impl Host {
             return Ok(None);
         }
         let parsed = MessageSchema::validate(&message.raw_message)?;
-        Ok(completion_from_content(message.chat_id, message_id, &parsed.content).approvals)
+        Ok(completion_from_content(
+            &self.app_state.config.facets,
+            message.chat_id,
+            message_id,
+            &parsed.content,
+        )
+        .approvals)
     }
 
     /// Claim an SSO token exchange; `false` when another replica or client
@@ -720,6 +752,7 @@ fn translate(
     guard: Option<ClientStreamGuard>,
     lang: Lang,
     app_name: String,
+    facets: FacetsConfig,
 ) -> mpsc::Receiver<GenerationUpdate> {
     let (tx, rx) = mpsc::channel(64);
     tokio::spawn(async move {
@@ -862,7 +895,7 @@ fn translate(
                     content,
                     ..
                 }) => GenerationUpdate::Completed(completion_from_content(
-                    chat_id, message_id, &content,
+                    &facets, chat_id, message_id, &content,
                 )),
                 Ok(StreamingEvent::Error { error }) => {
                     GenerationUpdate::Failed(error_message(error.as_ref(), lang))
@@ -922,7 +955,12 @@ fn approval_source(
         .or_else(|| Some(server_id.to_string()).filter(|id| !id.is_empty()))
 }
 
-fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPart]) -> Completion {
+fn completion_from_content(
+    facets: &FacetsConfig,
+    chat_id: Uuid,
+    message_id: Uuid,
+    content: &[ContentPart],
+) -> Completion {
     let (text, earlier_text) = answer_text(content);
     // A client tool runs on the user's device, never in Teams, so its approval
     // is left to the Erato app instead of a card whose approval could not run it.
@@ -989,7 +1027,82 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
         reminders: super::reminders::created_reminders(content),
+        client_tasks: tasks_without_client(facets, content),
     }
+}
+
+/// The parts a reply has not shown yet: those before an approval stop that
+/// is not the last part were shown when the turn stopped there.
+pub(super) fn since_earlier_stop(content: &[ContentPart]) -> &[ContentPart] {
+    let last = content.len().saturating_sub(1);
+    let start = content
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(index, part)| *index != last && matches!(part, ContentPart::ToolApprovalRequest(_)))
+        .map_or(0, |(index, _)| index + 1);
+    &content[start..]
+}
+
+/// The tasks that got no client tools because the turn did not come from the
+/// client they need. Only that reason: while client tools are off for tasks,
+/// the client could not run them either.
+fn tasks_without_client(facets: &FacetsConfig, content: &[ContentPart]) -> Vec<ClientTask> {
+    let start = content.len() - since_earlier_stop(content).len();
+    // A task the earlier stop waited on had not finished when that reply was
+    // shown; it finishes in its slot before the stop.
+    let waited_on: std::collections::HashSet<String> =
+        match start.checked_sub(1).map(|index| &content[index]) {
+            Some(ContentPart::ToolApprovalRequest(request)) => request
+                .approval_items()
+                .into_iter()
+                .map(|item| item.tool_call_id)
+                .collect(),
+            _ => Default::default(),
+        };
+    content
+        .iter()
+        .enumerate()
+        .filter_map(|(index, part)| {
+            let ContentPart::ToolUse(tool) = part else {
+                return None;
+            };
+            if index < start && !waited_on.contains(&tool.tool_call_id) {
+                return None;
+            }
+            let unavailable = tool
+                .output
+                .as_ref()?
+                .pointer("/client_tools/unavailable")?
+                .as_str()?;
+            if tool.tool_name != erato_config::config::DELEGATE_TASK_TOOL_NAME
+                || unavailable != crate::services::delegated_client_tools::NOT_FROM_HOST
+            {
+                return None;
+            }
+            let input = tool.input.as_ref()?;
+            let facet_ids: Vec<String> = input
+                .get("facet_ids")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect();
+            let client = crate::services::delegated_client_tools::client_task_host(
+                facets, &facet_ids,
+            )
+            .map(|host| match host {
+                ClientToolHostContext::WordDocument => TaskClient::Word,
+                ClientToolHostContext::OutlookMailbox => TaskClient::Outlook,
+                ClientToolHostContext::DesktopSidecar => TaskClient::Chat,
+            });
+            Some(ClientTask {
+                brief: input.get("task")?.as_str()?.to_string(),
+                client,
+            })
+        })
+        .collect()
 }
 
 /// Keep all assistant text, but present text after the last tool step as the
@@ -1136,7 +1249,14 @@ mod tests {
         let chat_id = Uuid::new_v4();
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(chat_id, receiver, None, Lang::En, "Erato".into());
+        let mut updates = translate(
+            chat_id,
+            receiver,
+            None,
+            Lang::En,
+            "Erato".into(),
+            FacetsConfig::default(),
+        );
         // A continuation need not repeat AssistantMessageStarted.
         sender
             .send(StreamingEvent::ReasoningDelta {
@@ -1231,9 +1351,202 @@ mod tests {
         })
     }
 
+    fn task_facets() -> FacetsConfig {
+        let mut facets = FacetsConfig::default();
+        for (id, host) in [
+            ("doc_reader", ClientToolHostContext::WordDocument),
+            ("mail_reader", ClientToolHostContext::OutlookMailbox),
+            ("file_reader", ClientToolHostContext::DesktopSidecar),
+        ] {
+            facets.facets.insert(
+                id.into(),
+                crate::config::FacetConfig {
+                    child_host_context: Some(host),
+                    ..Default::default()
+                },
+            );
+        }
+        facets
+    }
+
+    /// A finished task named `call_id`, which got no client tools for
+    /// `unavailable`.
+    fn task(
+        tool_name: &str,
+        call_id: &str,
+        brief: &str,
+        facet: &str,
+        unavailable: Option<&str>,
+    ) -> ContentPart {
+        let mut output = json!({"status": "completed", "result": "done"});
+        if let Some(reason) = unavailable {
+            output["client_tools"] = json!({"unavailable": reason});
+        }
+        ContentPart::ToolUse(crate::models::message::ToolUse {
+            tool_call_id: call_id.into(),
+            tool_name: tool_name.into(),
+            input: Some(json!({"task": brief, "facet_ids": [facet]})),
+            output: Some(output),
+            ..Default::default()
+        })
+    }
+
+    fn client_tasks(content: &[ContentPart]) -> Vec<(String, Option<TaskClient>)> {
+        completion_from_content(&task_facets(), Uuid::nil(), Uuid::nil(), content)
+            .client_tasks
+            .into_iter()
+            .map(|task| (task.brief, task.client))
+            .collect()
+    }
+
+    fn named(brief: &str, client: Option<TaskClient>) -> (String, Option<TaskClient>) {
+        (brief.to_string(), client)
+    }
+
+    #[test]
+    fn a_task_without_its_client_is_named_only_when_the_turn_had_none() {
+        use crate::services::delegated_client_tools::{NOT_ENABLED, NOT_FROM_HOST};
+        let delegate = erato_config::config::DELEGATE_TASK_TOOL_NAME;
+        let content = [
+            task(
+                delegate,
+                "a",
+                "Read my calendar\nfor next week",
+                "mail_reader",
+                Some(NOT_FROM_HOST),
+            ),
+            task(delegate, "b", "Look up the background", "research", None),
+            // While client tools are off for tasks, the client could not run
+            // them either.
+            task(
+                delegate,
+                "c",
+                "Read the document",
+                "doc_reader",
+                Some(NOT_ENABLED),
+            ),
+            task(
+                "other_tool",
+                "d",
+                "Not a task",
+                "doc_reader",
+                Some(NOT_FROM_HOST),
+            ),
+            task(
+                delegate,
+                "e",
+                "Search my files",
+                "file_reader",
+                Some(NOT_FROM_HOST),
+            ),
+            task(
+                delegate,
+                "f",
+                "Summarize the draft",
+                "doc_reader",
+                Some(NOT_FROM_HOST),
+            ),
+            task(
+                delegate,
+                "g",
+                "Facet since removed",
+                "gone",
+                Some(NOT_FROM_HOST),
+            ),
+        ];
+        assert_eq!(
+            client_tasks(&content),
+            [
+                named("Read my calendar\nfor next week", Some(TaskClient::Outlook)),
+                named("Search my files", Some(TaskClient::Chat)),
+                named("Summarize the draft", Some(TaskClient::Word)),
+                named("Facet since removed", None),
+            ]
+        );
+        let completion =
+            completion_from_content(&task_facets(), Uuid::nil(), Uuid::nil(), &content);
+        assert!(!completion.needs_client);
+        assert!(completion.approvals.is_none());
+    }
+
+    #[test]
+    fn a_task_shown_before_an_approval_stop_is_not_named_again() {
+        use crate::services::delegated_client_tools::NOT_FROM_HOST;
+        let delegate = erato_config::config::DELEGATE_TASK_TOOL_NAME;
+        let first = task(
+            delegate,
+            "a",
+            "Read my calendar",
+            "mail_reader",
+            Some(NOT_FROM_HOST),
+        );
+        assert_eq!(
+            client_tasks(&[first.clone(), approval(ToolApprovalKind::McpTool)]),
+            [named("Read my calendar", Some(TaskClient::Outlook))]
+        );
+        assert_eq!(
+            client_tasks(&[
+                first,
+                approval(ToolApprovalKind::McpTool),
+                task(
+                    delegate,
+                    "b",
+                    "Search my files",
+                    "file_reader",
+                    Some(NOT_FROM_HOST)
+                ),
+            ]),
+            [named("Search my files", Some(TaskClient::Chat))]
+        );
+    }
+
+    #[test]
+    fn a_task_that_waited_at_the_earlier_stop_is_named_once_it_finished() {
+        use crate::models::message::ContentPartText;
+        use crate::services::delegated_client_tools::NOT_FROM_HOST;
+        let delegate = erato_config::config::DELEGATE_TASK_TOOL_NAME;
+        // The stop carries the task's item "task-a"; the task's slot sits
+        // before it and holds the task's result once it was approved.
+        let parked = ContentPart::ToolUse(crate::models::message::ToolUse {
+            tool_call_id: "task-a".into(),
+            tool_name: delegate.into(),
+            input: Some(json!({"task": "Read my calendar", "facet_ids": ["mail_reader"]})),
+            output: Some(json!({"status": "input_required"})),
+            ..Default::default()
+        });
+        let finished = task(
+            delegate,
+            "task-a",
+            "Read my calendar",
+            "mail_reader",
+            Some(NOT_FROM_HOST),
+        );
+        let text = |text: &str| ContentPart::Text(ContentPartText { text: text.into() });
+        assert!(client_tasks(&[parked, mixed_approval(ToolApprovalKind::McpTool)]).is_empty());
+        assert_eq!(
+            client_tasks(&[
+                finished.clone(),
+                mixed_approval(ToolApprovalKind::McpTool),
+                text("Done"),
+            ]),
+            [named("Read my calendar", Some(TaskClient::Outlook))]
+        );
+        assert!(
+            client_tasks(&[
+                finished,
+                mixed_approval(ToolApprovalKind::McpTool),
+                text("Next"),
+                approval(ToolApprovalKind::McpTool),
+                text("Done"),
+            ])
+            .is_empty()
+        );
+    }
+
     #[test]
     fn a_client_tool_approval_is_left_to_the_erato_app() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[approval(ToolApprovalKind::ClientTool)],
@@ -1257,6 +1570,7 @@ mod tests {
             read_only: false,
         });
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(request.clone())],
@@ -1274,6 +1588,7 @@ mod tests {
             display.server_name = Some("Desktop Search".into());
         }
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(request)],
@@ -1286,6 +1601,7 @@ mod tests {
             unreachable!()
         };
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(mixed.clone())],
@@ -1304,6 +1620,7 @@ mod tests {
                 read_only: false,
             });
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(mixed)],
@@ -1316,6 +1633,7 @@ mod tests {
     #[test]
     fn an_mcp_tool_approval_still_gets_a_card() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[approval(ToolApprovalKind::McpTool)],
@@ -1331,6 +1649,7 @@ mod tests {
     #[test]
     fn a_builtin_tool_approval_gets_a_card_in_teams() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[mixed_approval(ToolApprovalKind::BuiltinTool)],
@@ -1398,6 +1717,7 @@ mod tests {
         });
         mixed.approvals.push(waiting.clone());
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(mixed.clone())],
@@ -1414,6 +1734,7 @@ mod tests {
         mixed.kind = ToolApprovalKind::DelegatedTask;
         mixed.approvals = vec![waiting];
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[ContentPart::ToolApprovalRequest(mixed)],
@@ -1425,6 +1746,7 @@ mod tests {
     #[test]
     fn a_mixed_approval_lists_the_turns_call_and_each_child() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[mixed_approval(ToolApprovalKind::McpTool)],
@@ -1457,6 +1779,7 @@ mod tests {
     #[test]
     fn a_mixed_client_tool_approval_is_left_to_the_erato_app() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[mixed_approval(ToolApprovalKind::ClientTool)],
@@ -1508,7 +1831,14 @@ mod tests {
     async fn tool_boundary_replaces_narration_and_late_progress_keeps_the_answer() {
         let message_id = Uuid::new_v4();
         let (sender, receiver) = broadcast::channel(16);
-        let mut updates = translate(Uuid::new_v4(), receiver, None, Lang::En, "Erato".into());
+        let mut updates = translate(
+            Uuid::new_v4(),
+            receiver,
+            None,
+            Lang::En,
+            "Erato".into(),
+            FacetsConfig::default(),
+        );
         let text = |index, text: &str| StreamingEvent::TextDelta {
             message_id,
             content_index: index,

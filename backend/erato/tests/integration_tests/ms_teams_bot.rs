@@ -1,5 +1,6 @@
 //! Teams bot integration tests: the Erato side of a Teams conversation.
 
+mod delegated_tasks;
 mod nudge;
 mod revisions;
 mod sign_in;
