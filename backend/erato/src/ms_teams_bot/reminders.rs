@@ -16,7 +16,7 @@ use super::texts::Msg;
 use crate::db::entity::scheduled_items::Model as ScheduledItem;
 use crate::models::user_preference::user_time_zone;
 use crate::services::scheduled_items::chat_tools::{
-    self, CREATE_REMINDER, Confirmation, LIST_REMINDERS, ReminderSummary,
+    self, CANCEL_REMINDER, CREATE_REMINDER, Confirmation, LIST_REMINDERS, ReminderSummary,
 };
 use crate::services::scheduled_items::wording;
 use crate::services::scheduled_items::{self, Checked, DisplayStatus};
@@ -192,13 +192,10 @@ pub fn list_card(
             } else {
                 &chat.title
             };
-            let chat = match base_url {
-                Some(base) => format!("[{title}]({base}/chat/{})", chat.id),
-                None => title.to_string(),
-            };
+            let url = base_url.map(|base| format!("{base}/chat/{}", chat.id));
             items.push(json!({
                 "type": "TextBlock", "wrap": true, "isSubtle": true, "spacing": "None",
-                "text": Msg::LinkedChat.fill(lang, &[("chat", &chat)]),
+                "text": wording::linked_chat_line(&wording::chat_link(title, url.as_deref()), lang),
             }));
         }
         items.push(json!({
@@ -245,7 +242,9 @@ pub fn scheduled_page_link(scheduled_url: Option<&str>, lang: Lang) -> String {
 pub struct TurnReminders {
     /// The reminders it created, in order, each confirmed on a card.
     pub created: Vec<Uuid>,
-    /// It listed the user's reminders, which then follow as the list card.
+    /// It listed the user's reminders to show them, which then follow as the
+    /// list card; not when it listed only on the way to creating or
+    /// cancelling one.
     pub listed: bool,
 }
 
@@ -262,25 +261,36 @@ pub fn turn_reminders(content: &[crate::models::message::ContentPart]) -> TurnRe
         .find(|(index, part)| *index != last && matches!(part, ContentPart::ToolApprovalRequest(_)))
         .map_or(0, |(index, _)| index + 1);
     let mut turn = TurnReminders::default();
+    let mut writes = false;
     for part in &content[start..] {
-        let ContentPart::ToolUse(tool) = part else {
-            continue;
-        };
-        if tool.status != ToolCallStatus::Success {
-            continue;
-        }
-        match tool.tool_name.as_str() {
-            CREATE_REMINDER => turn.created.extend(
-                tool.output
-                    .as_ref()
-                    .and_then(|output| output.pointer("/reminder/id"))
-                    .and_then(Value::as_str)
-                    .and_then(|id| Uuid::parse_str(id).ok()),
-            ),
-            LIST_REMINDERS => turn.listed = true,
+        match part {
+            ContentPart::ToolUse(tool) if tool.status == ToolCallStatus::Success => {
+                match tool.tool_name.as_str() {
+                    CREATE_REMINDER => {
+                        writes = true;
+                        turn.created.extend(
+                            tool.output
+                                .as_ref()
+                                .and_then(|output| output.pointer("/reminder/id"))
+                                .and_then(Value::as_str)
+                                .and_then(|id| Uuid::parse_str(id).ok()),
+                        );
+                    }
+                    CANCEL_REMINDER => writes = true,
+                    LIST_REMINDERS => turn.listed = true,
+                    _ => {}
+                }
+            }
+            // A write still waiting for its approval counts as one.
+            ContentPart::ToolApprovalRequest(request) => {
+                writes |= std::iter::once(request.tool_name.as_str())
+                    .chain(request.approvals.iter().map(|item| item.tool_name.as_str()))
+                    .any(|name| matches!(name, CREATE_REMINDER | CANCEL_REMINDER));
+            }
             _ => {}
         }
     }
+    turn.listed &= !writes;
     turn
 }
 
@@ -399,6 +409,19 @@ mod tests {
         assert!(turn_reminders(&[listed(), approval()]).listed);
         assert!(!turn_reminders(&[listed(), approval(), created(Uuid::new_v4())]).listed);
         assert!(!turn_reminders(&[created(Uuid::new_v4())]).listed);
+    }
+
+    #[test]
+    fn listing_on_the_way_to_a_write_shows_no_list() {
+        assert!(!turn_reminders(&[listed(), created(Uuid::new_v4())]).listed);
+        let ContentPart::ToolApprovalRequest(mut cancel) = approval() else {
+            unreachable!()
+        };
+        cancel.tool_name = CANCEL_REMINDER.into();
+        assert!(
+            !turn_reminders(&[listed(), ContentPart::ToolApprovalRequest(cancel)]).listed,
+            "the cancel waits for its approval"
+        );
     }
 
     #[test]

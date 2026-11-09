@@ -485,15 +485,17 @@ async fn created_output(
 
 async fn list(app_state: &AppState, call: CallContext<'_>) -> Result<CallResult, Report> {
     let (zone, _) = entry_zone(app_state, call.user_id).await?;
+    let reminders = upcoming(app_state, call.user_id).await?;
+    let any = reminders.as_array().is_some_and(|list| !list.is_empty());
     let mut output = json!({
         "status": "ok",
         "time_zone": zone.name(),
         "max_upcoming": MAX_ACTIVE_ITEMS,
-        "reminders": upcoming(app_state, call.user_id).await?,
+        "reminders": reminders,
     });
-    if call.platform == Some(crate::ms_teams_bot::TEAMS_PLATFORM) {
+    if any && call.platform == Some(crate::ms_teams_bot::TEAMS_PLATFORM) {
         output["shown_to_user"] = json!(
-            "After your answer the user sees their upcoming reminders as a card with a Cancel button for each, so answer briefly without repeating every reminder."
+            "When you only show these reminders, the user sees them after your answer as a card with a Cancel button for each, so answer briefly without repeating every reminder."
         );
     }
     Ok(CallResult {
@@ -555,8 +557,19 @@ pub async fn upcoming_reminders(
     user_id: Uuid,
     lang: Lang,
 ) -> Result<Vec<ReminderSummary>, Report> {
-    let mut views = super::list(&app_state.db, user_id, false, 0).await?;
     let now = Utc::now();
+    // A one-off that just went out stays active until the producer ends it,
+    // but nothing of it is upcoming any more.
+    let mut views: Vec<_> = super::list(&app_state.db, user_id, false, 0)
+        .await?
+        .into_iter()
+        .filter(|view| {
+            matches!(
+                super::display_status(view, now),
+                DisplayStatus::Scheduled | DisplayStatus::Snoozed
+            )
+        })
+        .collect();
     views.sort_by_key(|view| super::next_occurrence(view, now));
     let user_zone = user_time_zone(&app_state.db, &user_id).await?;
     let titles = chat_titles(app_state, user_id, &views.iter().collect::<Vec<_>>()).await?;

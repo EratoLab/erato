@@ -134,7 +134,7 @@ async fn process_message(
         return match (submit.on_list(), submit.keeps()) {
             (false, true) => on_reminder_keep(bot, host, activity, target, sender, submit).await,
             (false, false) => on_reminder_cancel(bot, host, activity, target, sender, submit).await,
-            (true, true) => on_list_keep(bot, host, activity, target, sender).await,
+            (true, true) => on_list_keep(bot, host, activity, target, sender, submit).await,
             (true, false) => on_list_cancel(bot, host, activity, target, sender, submit).await,
         };
     }
@@ -896,10 +896,16 @@ async fn on_list_cancel(
     let note = match host.cancel_reminder(user.id, submit.item_id).await? {
         Ok(item) => Msg::NamedReminderCancelled.fill(lang, &[("name", &item.name)]),
         Err(refused) => match refused.code {
-            ScheduledItemErrorCode::NotFound if host.reminder_exists(submit.item_id).await? => {
-                return target.send_text(Msg::ReminderNotYours.text(lang)).await;
+            // Only the owner's press may redraw the card: it is drawn from the
+            // presser's reminders, and the card may be someone else's.
+            ScheduledItemErrorCode::NotFound => {
+                let reply = if host.reminder_exists(submit.item_id).await? {
+                    Msg::ReminderNotYours
+                } else {
+                    Msg::ReminderGone
+                };
+                return target.send_text(reply.text(lang)).await;
             }
-            ScheduledItemErrorCode::NotFound => Msg::ReminderGone.text(lang).to_string(),
             ScheduledItemErrorCode::Finished => settled_note(
                 host.reminder_status(user.id, submit.item_id).await?,
                 scheduled_page_url(bot).as_deref(),
@@ -919,10 +925,18 @@ async fn on_list_keep(
     activity: &Activity,
     target: &ReplyTarget<'_>,
     sender: Sender,
+    submit: reminders::CardSubmit,
 ) -> Result<(), Report> {
     let (Ok(Some(user)), Some(card_id)) = (sender, activity.reply_to_id.as_deref()) else {
         return Ok(());
     };
+    if host
+        .reminder_status(user.id, submit.item_id)
+        .await?
+        .is_none()
+    {
+        return Ok(());
+    }
     let card = reminders_list_card(bot, host, user.id, None, target.lang).await?;
     if let Err(error) = target.update(card_id, card).await {
         tracing::warn!(%error, "Could not put back the reminders list card");

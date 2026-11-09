@@ -2352,6 +2352,22 @@ async fn reminders_lists_upcoming_reminders_with_a_cancel_each(pool: sqlx::PgPoo
         host.clone(),
         press_on_card(
             &base,
+            OTHER_OID,
+            "activity-1",
+            list_press(&card, 1, LIST_KEEP_ACTION),
+        ),
+    )
+    .await;
+    assert!(
+        shared.lock().unwrap().updated.is_empty(),
+        "someone else's Keep does not redraw the card with their reminders"
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(
+            &base,
             OID,
             "activity-1",
             list_press(&card, 1, LIST_KEEP_ACTION),
@@ -2417,6 +2433,28 @@ async fn reminders_lists_upcoming_reminders_with_a_cancel_each(pool: sqlx::PgPoo
         2,
         "presses change the card; only the other user got a message"
     );
+
+    execute(
+        &state,
+        "DELETE FROM scheduled_items WHERE id = $1",
+        vec![later.id.into()],
+    )
+    .await;
+    let updates = shared.lock().unwrap().updated.len();
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on_card(
+            &base,
+            OTHER_OID,
+            "activity-1",
+            list_press(&card, 1, LIST_CANCEL_ACTION),
+        ),
+    )
+    .await;
+    let sent = replies(&shared, 3).await;
+    assert_eq!(sent[2]["text"], "This reminder no longer exists.");
+    assert_eq!(shared.lock().unwrap().updated.len(), updates);
 }
 
 /// `/erinnerungen` without upcoming reminders answers in German that there
