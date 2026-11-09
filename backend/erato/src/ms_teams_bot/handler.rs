@@ -1542,6 +1542,9 @@ async fn citation_sources(
     }
 }
 
+/// How much of a task's brief names it in an answer.
+const TASK_LABEL_BYTES: usize = 100;
+
 pub(super) fn completion_text(
     completion: &Completion,
     chat_link: Option<&str>,
@@ -1556,8 +1559,36 @@ pub(super) fn completion_text(
             format!("{text}\n\n**{}**", Msg::ApprovalNeededToContinue.text(lang))
         };
     }
+    let app = ("app", app_name);
+    if !completion.client_tasks.is_empty() {
+        let tasks: Vec<String> = completion
+            .client_tasks
+            .iter()
+            .map(|brief| {
+                let label = render::inline_label(brief, TASK_LABEL_BYTES);
+                Msg::QuotedTask.fill(lang, &[("task", &label)])
+            })
+            .collect();
+        let note = match tasks.as_slice() {
+            [task] => Msg::TaskNeedsApp.fill(lang, &[app, ("task", task)]),
+            _ => Msg::TasksNeedApp.fill(lang, &[app, ("tasks", &tasks.join(", "))]),
+        };
+        let mut note = format!("_{note}_");
+        // The step's own line below links the chat already.
+        if !completion.needs_client {
+            let open = match chat_link {
+                Some(link) => Msg::OpenChatToAskAgain.fill(lang, &[app, ("link", link)]),
+                None => Msg::OpenChatToAskAgainPlain.fill(lang, &[app]),
+            };
+            note = format!("{note} {open}");
+        }
+        text = if text.is_empty() {
+            note
+        } else {
+            format!("{text}\n\n{note}")
+        };
+    }
     if completion.needs_client {
-        let app = ("app", app_name);
         let open = match chat_link {
             Some(link) => Msg::OpenChatToContinue.fill(lang, &[app, ("link", link)]),
             None => Msg::OpenChatToContinuePlain.fill(lang, &[app]),
@@ -1809,6 +1840,7 @@ mod tests {
             approvals: None,
             needs_client: false,
             reminders: Vec::new(),
+            client_tasks: Vec::new(),
         }
     }
 
@@ -1898,6 +1930,75 @@ mod tests {
         assert!(is_new_chat_command(" /new "));
         assert!(is_new_chat_command("New Chat"));
         assert!(!is_new_chat_command("/new idea for the roadmap"));
+    }
+
+    #[test]
+    fn an_answer_names_the_tasks_that_need_the_app() {
+        let link = Some("https://erato.example/chat/1");
+        let mut one = completion("Here is what I found.");
+        one.client_tasks = vec!["Read my calendar\nfor next week".into()];
+        assert_eq!(
+            completion_text(&one, link, "Erato", Lang::En),
+            "Here is what I found.\n\n_The task “Read my calendar” needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) and ask there again."
+        );
+        assert_eq!(
+            completion_text(&one, None, "Hugo", Lang::De),
+            "Here is what I found.\n\n_Die Aufgabe „Read my calendar“ erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo und stellen Sie die Frage dort noch einmal."
+        );
+
+        let mut two = completion("");
+        two.client_tasks = vec!["Read my calendar".into(), "Search my files".into()];
+        assert_eq!(
+            completion_text(&two, None, "Erato", Lang::En),
+            "_These tasks need the Erato app: “Read my calendar”, “Search my files”._ Open the chat in Erato and ask there again."
+        );
+        assert_eq!(
+            completion_text(&two, link, "Hugo", Lang::De),
+            "_Diese Aufgaben erfordern die Hugo-App: „Read my calendar“, „Search my files“._ [Öffnen Sie den Chat in Hugo](https://erato.example/chat/1) und stellen Sie die Frage dort noch einmal."
+        );
+    }
+
+    #[test]
+    fn a_step_that_needs_the_app_links_the_chat_once_after_the_tasks() {
+        let mut both = completion("Partial answer");
+        both.client_tasks = vec!["Read my calendar".into()];
+        both.needs_client = true;
+        assert_eq!(
+            completion_text(
+                &both,
+                Some("https://erato.example/chat/1"),
+                "Erato",
+                Lang::En
+            ),
+            "Partial answer\n\n_The task “Read my calendar” needs the Erato app._\n\n_This step needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) to continue."
+        );
+    }
+
+    #[test]
+    fn a_task_brief_cannot_add_links_or_formatting() {
+        let mut forged = completion("");
+        forged.client_tasks = vec![format!(
+            "  [x](https://evil.example) **now** `code` _it_ <at>Bob</at> {}",
+            "long ".repeat(40)
+        )];
+        let text = completion_text(&forged, None, "Erato", Lang::En);
+        let label = text
+            .split_once('“')
+            .and_then(|(_, rest)| rest.split_once('”'))
+            .map(|(label, _)| label)
+            .expect("a quoted label");
+        assert!(
+            !label.contains(['[', ']', '(', ')', '*', '_', '`', '<', '>']),
+            "{label}"
+        );
+        assert!(
+            label.starts_with("xhttps://evil.example now code it atBob/at long long"),
+            "{label}"
+        );
+        assert!(
+            label.ends_with('…') && label.len() <= TASK_LABEL_BYTES,
+            "{label}"
+        );
     }
 
     #[test]

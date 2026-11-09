@@ -76,6 +76,9 @@ pub struct Completion {
     pub needs_client: bool,
     /// Reminders the turn scheduled that still need their confirmation card.
     pub reminders: Vec<Uuid>,
+    /// The briefs of the turn's tasks that needed a client tool, which a turn
+    /// sent from Teams never has.
+    pub client_tasks: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -986,7 +989,46 @@ fn completion_from_content(chat_id: Uuid, message_id: Uuid, content: &[ContentPa
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
         reminders: super::reminders::created_reminders(content),
+        client_tasks: tasks_without_client(content),
     }
+}
+
+/// The parts a reply has not shown yet: those before an approval stop that
+/// is not the last part were shown when the turn stopped there.
+pub(super) fn since_earlier_stop(content: &[ContentPart]) -> &[ContentPart] {
+    let last = content.len().saturating_sub(1);
+    let start = content
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(index, part)| *index != last && matches!(part, ContentPart::ToolApprovalRequest(_)))
+        .map_or(0, |(index, _)| index + 1);
+    &content[start..]
+}
+
+/// The briefs of the tasks that got no client tools because the turn did not
+/// come from the client they need. Only that reason: while client tools are
+/// off for tasks, the chat in Erato could not run them either.
+fn tasks_without_client(content: &[ContentPart]) -> Vec<String> {
+    since_earlier_stop(content)
+        .iter()
+        .filter_map(|part| {
+            let ContentPart::ToolUse(tool) = part else {
+                return None;
+            };
+            let unavailable = tool
+                .output
+                .as_ref()?
+                .pointer("/client_tools/unavailable")?
+                .as_str()?;
+            if tool.tool_name != erato_config::config::DELEGATE_TASK_TOOL_NAME
+                || unavailable != crate::services::delegated_client_tools::NOT_FROM_HOST
+            {
+                return None;
+            }
+            Some(tool.input.as_ref()?.get("task")?.as_str()?.to_string())
+        })
+        .collect()
 }
 
 /// Keep all assistant text, but present text after the last tool step as the
@@ -1226,6 +1268,71 @@ mod tests {
             approval_scope: None,
             labels_updated_at: None,
         })
+    }
+
+    fn task(tool_name: &str, brief: &str, unavailable: Option<&str>) -> ContentPart {
+        let mut output = json!({"status": "completed", "result": "done"});
+        if let Some(reason) = unavailable {
+            output["client_tools"] = json!({"unavailable": reason});
+        }
+        ContentPart::ToolUse(crate::models::message::ToolUse {
+            tool_name: tool_name.into(),
+            input: Some(json!({"task": brief})),
+            output: Some(output),
+            ..Default::default()
+        })
+    }
+
+    #[test]
+    fn a_task_without_its_client_is_named_only_when_the_turn_had_none() {
+        use crate::services::delegated_client_tools::{NOT_ENABLED, NOT_FROM_HOST};
+        let delegate = erato_config::config::DELEGATE_TASK_TOOL_NAME;
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[
+                task(
+                    delegate,
+                    "Read my calendar\nfor next week",
+                    Some(NOT_FROM_HOST),
+                ),
+                task(delegate, "Look up the background", None),
+                // While client tools are off for tasks, the chat in Erato
+                // could not run them either.
+                task(delegate, "Read the document", Some(NOT_ENABLED)),
+                task("other_tool", "Not a task", Some(NOT_FROM_HOST)),
+                task(delegate, "Search my files", Some(NOT_FROM_HOST)),
+            ],
+        );
+        assert_eq!(
+            completion.client_tasks,
+            ["Read my calendar\nfor next week", "Search my files"]
+        );
+        assert!(!completion.needs_client);
+        assert!(completion.approvals.is_none());
+    }
+
+    #[test]
+    fn a_task_shown_before_an_approval_stop_is_not_named_again() {
+        use crate::services::delegated_client_tools::NOT_FROM_HOST;
+        let delegate = erato_config::config::DELEGATE_TASK_TOOL_NAME;
+        let first = task(delegate, "Read my calendar", Some(NOT_FROM_HOST));
+        let stopped = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[first.clone(), approval(ToolApprovalKind::McpTool)],
+        );
+        assert_eq!(stopped.client_tasks, ["Read my calendar"]);
+        let resumed = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[
+                first,
+                approval(ToolApprovalKind::McpTool),
+                task(delegate, "Search my files", Some(NOT_FROM_HOST)),
+            ],
+        );
+        assert_eq!(resumed.client_tasks, ["Search my files"]);
     }
 
     #[test]
