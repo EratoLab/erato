@@ -4,7 +4,7 @@
 
 use super::*;
 use chrono::{Datelike, Duration, NaiveDate, TimeZone, Weekday};
-use erato::config::PromptSourceSpecification;
+use erato::config::{McpToolApprovalConfig, McpToolApprovalPreset, PromptSourceSpecification};
 use erato::db::entity::prelude::ScheduledItems;
 use erato::models::user_preference::record_client_locale;
 use erato::services::scheduled_deliveries::{DeliveryRegistry, RecordingChannel};
@@ -27,8 +27,26 @@ async fn setup(
     reachable: bool,
     language: &str,
 ) -> (AppState, TestServer, Uuid, Uuid, MockServer) {
+    setup_with_approval(pool, mocks, reachable, language, None).await
+}
+
+/// `setup` with the tool approval gate on under `preset`.
+async fn setup_with_approval(
+    pool: Pool<Postgres>,
+    mocks: MockSet,
+    reachable: bool,
+    language: &str,
+    preset: Option<McpToolApprovalPreset>,
+) -> (AppState, TestServer, Uuid, Uuid, MockServer) {
     let (mut config, llm) = setup_mock_llm_server_with_mocks(mocks).await;
     config.scheduled_deliveries.enabled = true;
+    if let Some(preset) = preset {
+        config.mcp_servers_global.approval = McpToolApprovalConfig {
+            enabled: true,
+            preset,
+            allow_always: true,
+        };
+    }
     config
         .chat_providers
         .as_mut()
@@ -317,7 +335,8 @@ fn extract_answer(events: &[Value]) -> String {
 
 /// "Welche Erinnerungen habe ich?" then "Lösch die für Freitag": the list
 /// names each upcoming reminder with its id and time, and the cancel ends
-/// that one through the shared cancel; the other stays.
+/// that one through the shared cancel; the other stays. The approval gate is
+/// off here, so the cancel runs without asking.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn reminders_are_listed_and_cancelled_in_chat(pool: Pool<Postgres>) {
     let (state, server, user_id, chat_id, llm) = setup(pool, MockSet::new(), true, "en-US").await;
@@ -453,4 +472,391 @@ async fn no_reminder_tools_without_a_delivery_channel(pool: Pool<Postgres>) {
     for body in bodies {
         assert!(!body.contains("create_reminder"), "{body}");
     }
+}
+
+/// The assistant row the chat's turn parked on, and its approval request.
+async fn parked(state: &AppState, chat_id: Uuid) -> (Uuid, Value) {
+    let rows = Messages::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
+        .order_by_asc(erato::db::entity::messages::Column::CreatedAt)
+        .all(&state.db)
+        .await
+        .unwrap();
+    rows.iter()
+        .rev()
+        .find_map(|row| {
+            let last = row.raw_message["content"].as_array()?.last()?.clone();
+            (last["content_type"] == "tool_approval_request").then_some((row.id, last))
+        })
+        .expect("the turn parked on an approval")
+}
+
+async fn decide(
+    server: &TestServer,
+    message_id: Uuid,
+    approval_id: &Value,
+    decision: &str,
+) -> Vec<Value> {
+    let response = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": approval_id, "decision": decision}],
+        }))
+        .await;
+    response.assert_status_ok();
+    parse_sse_events(&response)
+        .into_iter()
+        .filter_map(|event| serde_json::from_str(&event.data).ok())
+        .collect()
+}
+
+/// A model turn that cancels the user's first reminder, then answers.
+fn cancel_turns(mocks: &mut MockSet, reminder_id: Uuid) {
+    tool_turn(
+        mocks,
+        &[],
+        (
+            "call_cancel",
+            "cancel_reminder",
+            json!({"reminder_id": reminder_id}),
+        ),
+    );
+    answer_turn(mocks, "call_cancel", "Done.");
+}
+
+/// With approvals on, a cancel asked for by chat waits for the user: the card
+/// names the reminder and when it arrives in the user's language, offers no
+/// standing decision, and the cancel runs once approved.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_cancel_in_chat_asks_first_and_runs_once_approved(pool: Pool<Postgres>) {
+    let (state, server, user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+    )
+    .await;
+    let friday = next_friday();
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Angebot nachfassen", friday, 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    cancel_turns(&mut llm.mocks(), item.id);
+
+    send(&server, chat_id, "Lösch die für Freitag").await;
+
+    let (message_id, request) = parked(&state, chat_id).await;
+    assert_eq!(request["kind"], "builtin_tool", "{request}");
+    assert_eq!(request["tool_name"], "cancel_reminder");
+    assert_eq!(request["allow_always"], false);
+    let at = BERLIN
+        .from_local_datetime(&friday.and_hms_opt(10, 0, 0).unwrap())
+        .unwrap()
+        .with_timezone(&Utc);
+    assert_eq!(
+        request["approvals"][0]["display"],
+        json!({
+            "title": "Angebot nachfassen",
+            "description": wording::exact_when(at, BERLIN, Some(BERLIN), Utc::now(), Lang::De),
+            "description_truncated": false,
+        })
+    );
+    assert_eq!(upcoming(&server).await.len(), 1, "nothing is cancelled yet");
+
+    let approval_id = request["approvals"][0]["approval_id"].clone();
+    let refused = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": approval_id, "decision": "approve_always"}],
+        }))
+        .await;
+    refused.assert_status(axum::http::StatusCode::BAD_REQUEST);
+
+    let events = decide(&server, message_id, &approval_id, "approve").await;
+    let cancelled = tool_output(&events, "call_cancel");
+    assert_eq!(cancelled["status"], "cancelled", "{cancelled}");
+    assert_eq!(extract_answer(&events), "Done.");
+    assert!(upcoming(&server).await.is_empty());
+}
+
+/// A denied cancel changes nothing, and the model reads that the user said no.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_denied_cancel_leaves_the_reminder(pool: Pool<Postgres>) {
+    let (state, server, user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "en-US",
+        Some(McpToolApprovalPreset::Restrictive),
+    )
+    .await;
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Follow up on the offer", next_friday(), 9),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    cancel_turns(&mut llm.mocks(), item.id);
+
+    send(&server, chat_id, "Delete the one for Friday").await;
+    let (message_id, request) = parked(&state, chat_id).await;
+
+    let events = decide(
+        &server,
+        message_id,
+        &request["approvals"][0]["approval_id"],
+        "reject",
+    )
+    .await;
+    let denied = tool_output(&events, "call_cancel");
+    assert_eq!(denied["status"], "rejected", "{denied}");
+    assert_eq!(denied["error"], "The user denied this tool call.");
+    let items = upcoming(&server).await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], json!(item.id));
+}
+
+/// A cancel of an id that names no reminder of the user's changes nothing, so
+/// it is not asked about: it is refused at once.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_cancel_with_nothing_to_cancel_is_not_asked_about(pool: Pool<Postgres>) {
+    let (state, server, _user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "en-US",
+        Some(McpToolApprovalPreset::Permissive),
+    )
+    .await;
+    cancel_turns(&mut llm.mocks(), Uuid::new_v4());
+
+    let events = send(&server, chat_id, "Delete the one for Friday").await;
+
+    assert_eq!(tool_output(&events, "call_cancel")["code"], "not_found");
+    assert_eq!(extract_answer(&events), "Done.");
+    let rows = Messages::find()
+        .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
+        .all(&state.db)
+        .await
+        .unwrap();
+    assert!(rows.iter().all(|row| {
+        !row.raw_message
+            .to_string()
+            .contains("tool_approval_request")
+    }));
+}
+
+fn create_turns(mocks: &mut MockSet, friday: NaiveDate) {
+    tool_turn(
+        mocks,
+        &[],
+        (
+            "call_create",
+            "create_reminder",
+            json!({
+                "name": "Call back",
+                "message": "Call back about the offer.",
+                "trigger": {"kind": "once", "date": friday, "time": "10:00"},
+            }),
+        ),
+    );
+    answer_turn(mocks, "call_create", "Scheduled.");
+}
+
+/// Under the restrictive preset a create asks first and is stored once
+/// approved, with its confirmation card.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_create_asks_under_the_restrictive_preset(pool: Pool<Postgres>) {
+    let (state, server, _user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "en-US",
+        Some(McpToolApprovalPreset::Restrictive),
+    )
+    .await;
+    let friday = next_friday();
+    create_turns(&mut llm.mocks(), friday);
+
+    send(&server, chat_id, "Remind me on Friday at 10").await;
+    let (message_id, request) = parked(&state, chat_id).await;
+    assert_eq!(request["kind"], "builtin_tool");
+    assert_eq!(request["tool_name"], "create_reminder");
+    assert_eq!(request["approvals"][0]["display"]["title"], "Call back");
+    assert!(
+        request["approvals"][0]["display"]["description"]
+            .as_str()
+            .unwrap()
+            .ends_with(", 10:00"),
+        "{request}"
+    );
+    assert!(upcoming(&server).await.is_empty(), "nothing is stored yet");
+
+    let events = decide(
+        &server,
+        message_id,
+        &request["approvals"][0]["approval_id"],
+        "approve",
+    )
+    .await;
+    let created = tool_output(&events, "call_create");
+    assert_eq!(created["status"], "created", "{created}");
+    assert_eq!(created["confirmation"]["name"], "Call back");
+    assert_eq!(upcoming(&server).await.len(), 1);
+}
+
+/// Under the permissive preset a create runs at once: its confirmation card
+/// with Cancel is the check.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_create_runs_at_once_under_the_permissive_preset(pool: Pool<Postgres>) {
+    let (_state, server, _user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "en-US",
+        Some(McpToolApprovalPreset::Permissive),
+    )
+    .await;
+    create_turns(&mut llm.mocks(), next_friday());
+
+    let events = send(&server, chat_id, "Remind me on Friday at 10").await;
+
+    assert_eq!(tool_output(&events, "call_create")["status"], "created");
+    assert_eq!(extract_answer(&events), "Scheduled.");
+    assert_eq!(upcoming(&server).await.len(), 1);
+}
+
+/// The same cancel by chat in Teams: the bot gets an approval card for it
+/// rather than handing it to the app, and approving it there cancels.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_cancel_in_teams_is_approved_in_teams(pool: Pool<Postgres>) {
+    use erato::ms_teams_bot::activity::ConversationKind;
+    use erato::ms_teams_bot::cards::{ApprovalChoice, ApprovalKind};
+    use erato::ms_teams_bot::graph::GraphIdentity;
+    use erato::ms_teams_bot::host::{Completion, GenerationUpdate, Host};
+
+    async fn completion(mut updates: tokio::sync::mpsc::Receiver<GenerationUpdate>) -> Completion {
+        let mut completion = None;
+        while let Some(update) = updates.recv().await {
+            match update {
+                GenerationUpdate::Completed(done) => completion = Some(done),
+                GenerationUpdate::Failed(error) => panic!("generation failed: {error}"),
+                _ => {}
+            }
+        }
+        completion.expect("generation completed")
+    }
+
+    let (state, _server, _web_user, _chat, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        false,
+        "en-US",
+        Some(McpToolApprovalPreset::Permissive),
+    )
+    .await;
+    let user = get_or_create_user(&state.db, "https://issuer.example", "teams-user", None)
+        .await
+        .unwrap();
+    record_client_locale(&state.db, &user.id, Some("Europe/Berlin"), Some("en-US"))
+        .await
+        .unwrap();
+    let host = Host::new(state.clone());
+    let identity: GraphIdentity = serde_json::from_value(json!({
+        "id": "4a1b3c5d-0000-4000-8000-00000000beef", "displayName": "Teams User",
+    }))
+    .unwrap();
+    let session = host
+        .session(
+            &user,
+            &identity,
+            Vec::new(),
+            "graph-token".into(),
+            None,
+            "tenant-1",
+        )
+        .await
+        .unwrap();
+    let row = host
+        .upsert_conversation(
+            "a:personal-reminders",
+            ConversationKind::Personal,
+            user.id,
+            "https://smba.example/",
+            "29:user",
+        )
+        .await
+        .unwrap();
+    let (chat_id, _) = host.ensure_chat(&session, &row, None).await.unwrap();
+    let item = scheduled_items::create_checked(
+        &state,
+        user.id,
+        reminder("Follow up on the offer", next_friday(), 9),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    cancel_turns(&mut llm.mocks(), item.id);
+
+    let parked = completion(
+        host.submit(
+            &session,
+            chat_id,
+            "Delete the one for Friday".into(),
+            Vec::new(),
+        )
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert!(!parked.needs_client);
+    let set = parked
+        .approvals
+        .expect("the cancel waits for an approval in Teams");
+    assert_eq!(set.kind, ApprovalKind::BuiltinTool);
+    assert_eq!(set.items.len(), 1);
+    assert!(set.items[0].own_tool);
+    assert_eq!(
+        set.items[0].display.as_ref().unwrap().title,
+        "Follow up on the offer"
+    );
+    let still = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        still.item.status,
+        erato::db::entity::scheduled_items::ItemStatus::Active
+    );
+
+    let decisions = vec![(set.items[0].approval_id.clone(), ApprovalChoice::Approve)];
+    let resumed = completion(
+        host.continue_approval(&session, parked.message_id, decisions)
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(resumed.text, "Done.");
+    let cancelled = scheduled_items::get(&state.db, user.id, item.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        cancelled.item.status,
+        erato::db::entity::scheduled_items::ItemStatus::Cancelled
+    );
 }

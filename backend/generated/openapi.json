@@ -13363,7 +13363,8 @@
           "delegated_task",
           "task_plan",
           "tool_call_limit",
-          "client_tool"
+          "client_tool",
+          "builtin_tool"
         ]
       },
       "ToolArgumentKind": {

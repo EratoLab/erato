@@ -809,6 +809,11 @@ pub enum ToolApprovalKind {
     /// A client tool the user set to ask. `mcp_server_id` carries the tool's
     /// namespace, so `namespace/tool_name` is the key its decision is saved under.
     ClientTool,
+    /// One of Erato's own server tools, such as `cancel_reminder`. Its card asks
+    /// about what the call does, offers no standing decision, and an approved
+    /// call runs when the turn resumes. `display.title` names what the call acts
+    /// on and `display.description` when, both in the user's language.
+    BuiltinTool,
 }
 
 /// What let an MCP call run without asking the user.

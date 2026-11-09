@@ -12,6 +12,7 @@
 
 use super::render::{bounded_text, card_fits};
 use super::texts::{Lang, Msg};
+use crate::services::scheduled_items::chat_tools::{CANCEL_REMINDER, CREATE_REMINDER};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -28,6 +29,8 @@ const MAX_ITEM_PREVIEW_BYTES: usize = 1_500;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApprovalKind {
     McpTool,
+    /// One of Erato's own tools, such as cancelling a reminder.
+    BuiltinTool,
     DelegatedTask,
     TaskPlan,
     ToolCallLimit,
@@ -42,6 +45,9 @@ pub struct PendingApprovalItem {
     pub display: Option<ToolDisplay>,
     pub source: Option<String>,
     pub input: Value,
+    /// One of Erato's own tools: the card asks about what the call does, and
+    /// `display.title` names what it acts on.
+    pub own_tool: bool,
 }
 
 /// Display-only projection of the backend's descriptor snapshot.
@@ -54,6 +60,26 @@ pub struct ToolDisplay {
 impl PendingApprovalItem {
     fn display_name(&self) -> &str {
         self.display.as_ref().map_or(&self.tool_name, |d| &d.title)
+    }
+
+    /// The item's question, and what the decided card says was approved or
+    /// denied.
+    fn ask(&self, lang: Lang) -> (String, String) {
+        let name = [("name", self.display_name())];
+        match self.tool_name.as_str() {
+            CANCEL_REMINDER if self.own_tool => (
+                Msg::CancelReminderApproval.fill(lang, &name),
+                Msg::CancelReminderAction.fill(lang, &name),
+            ),
+            CREATE_REMINDER if self.own_tool => (
+                Msg::CreateReminderApproval.fill(lang, &name),
+                Msg::CreateReminderAction.fill(lang, &name),
+            ),
+            _ => (
+                Msg::RunTool.fill(lang, &[("tool", self.display_name())]),
+                self.display_name().to_string(),
+            ),
+        }
     }
 }
 
@@ -130,8 +156,10 @@ impl ApprovalSubmit {
 fn heading(set: &PendingApprovalSet, app_name: &str, lang: Lang) -> String {
     let count = set.items.len().to_string();
     let msg = match set.kind {
-        ApprovalKind::McpTool if set.items.len() == 1 => Msg::ApprovalNeeded,
-        ApprovalKind::McpTool => Msg::ToolCallsNeedApproval,
+        ApprovalKind::McpTool | ApprovalKind::BuiltinTool if set.items.len() == 1 => {
+            Msg::ApprovalNeeded
+        }
+        ApprovalKind::McpTool | ApprovalKind::BuiltinTool => Msg::ToolCallsNeedApproval,
         ApprovalKind::TaskPlan => Msg::TasksToStart,
         ApprovalKind::DelegatedTask => Msg::SubTasksWaiting,
         ApprovalKind::ToolCallLimit => Msg::ToolCallLimitReached,
@@ -167,11 +195,11 @@ fn build_approval_card(
     let count = set.items.len();
     let heading = heading(set, app_name, lang);
     let item_budget = (MAX_INPUT_PREVIEW_BYTES / count.max(1)).min(MAX_ITEM_PREVIEW_BYTES);
+    let asks: Vec<(String, String)> = set.items.iter().map(|item| item.ask(lang)).collect();
     // Display names also travel in each button's data for the decided card.
-    let names: Vec<String> = set
-        .items
+    let names: Vec<String> = asks
         .iter()
-        .map(|item| bounded_text(item.display_name(), MAX_NAME_BYTES / count.max(1)))
+        .map(|(_, name)| bounded_text(name, MAX_NAME_BYTES / count.max(1)))
         .collect();
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
@@ -186,13 +214,25 @@ fn build_approval_card(
         .enumerate()
         .filter(|_| set.kind != ApprovalKind::ToolCallLimit)
     {
-        let mut title = plain_text(
-            &Msg::RunTool.fill(lang, &[("tool", &names[index])]),
-            json!({"weight": "Bolder"}),
-        );
+        let question = if item.own_tool {
+            bounded_text(&asks[index].0, MAX_NAME_BYTES / count.max(1))
+        } else {
+            Msg::RunTool.fill(lang, &[("tool", &names[index])])
+        };
+        let mut title = plain_text(&question, json!({"weight": "Bolder"}));
         title["separator"] = json!(index > 0);
         body.push(title);
-        if detail < Detail::Minimal {
+        if item.own_tool {
+            // Says what the call does in place of the tool and its input.
+            let when = item.display.as_ref().and_then(|d| d.description.as_deref());
+            body.extend(when.map(|when| plain_text(when, json!({}))));
+            if item.tool_name == CANCEL_REMINDER {
+                body.push(plain_text(
+                    Msg::CancelReminderApprovalNote.text(lang),
+                    json!({"isSubtle": true}),
+                ));
+            }
+        } else if detail < Detail::Minimal {
             if let Some(source) = &item.source {
                 body.push(plain_text(
                     &format!("{source} / {}", item.tool_name),
@@ -203,6 +243,7 @@ fn build_approval_card(
             }
         }
         if detail < Detail::NoDescriptions
+            && !item.own_tool
             && let Some(description) = item.display.as_ref().and_then(|d| d.description.as_deref())
         {
             body.push(plain_text(
@@ -211,6 +252,7 @@ fn build_approval_card(
             ));
         }
         if detail < Detail::NoArguments
+            && !item.own_tool
             && !item.input.as_object().is_some_and(|input| input.is_empty())
         {
             body.push(plain_text(
@@ -327,6 +369,9 @@ pub fn approval_summary(set: &PendingApprovalSet, app_name: &str, lang: Lang) ->
     match (set.kind, set.items.as_slice()) {
         (ApprovalKind::ToolCallLimit, _) => {
             Msg::ToolCallLimitSummary.fill(lang, &[("heading", &heading(set, app_name, lang))])
+        }
+        (_, [item]) if item.own_tool => {
+            format!("{}: {}", heading(set, app_name, lang), item.ask(lang).0)
         }
         (ApprovalKind::McpTool | ApprovalKind::DelegatedTask, [item]) => {
             Msg::ApprovalSummary.fill(lang, &[("tool", item.display_name())])
@@ -458,6 +503,7 @@ mod tests {
                     display: None,
                     source: None,
                     input: json!({"n": index}),
+                    own_tool: false,
                 })
                 .collect(),
         }
@@ -481,6 +527,89 @@ mod tests {
         assert_eq!(
             approval_summary(&set(3), "Erato", Lang::En),
             "Erato wants to start 3 task(s)."
+        );
+    }
+
+    fn reminder_cancel() -> PendingApprovalSet {
+        PendingApprovalSet {
+            message_id: "m-1".into(),
+            kind: ApprovalKind::BuiltinTool,
+            items: vec![PendingApprovalItem {
+                approval_id: "call_cancel".into(),
+                tool_name: CANCEL_REMINDER.into(),
+                display: Some(ToolDisplay {
+                    title: "Follow up on the offer".into(),
+                    description: Some("Friday, 13 Nov, 10:00".into()),
+                }),
+                source: None,
+                input: json!({"reminder_id": "0b9f3c1e-0000-4000-8000-000000000001"}),
+                own_tool: true,
+            }],
+        }
+    }
+
+    fn texts(card: &Value) -> Vec<String> {
+        card["content"]["body"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|block| {
+                block["text"]
+                    .as_str()
+                    .or_else(|| block["inlines"][0]["text"].as_str())
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
+    /// A cancel by chat asks about the reminder, never about a tool and its
+    /// input, and the decided card says what was approved.
+    #[test]
+    fn a_reminder_cancel_is_asked_about_in_the_users_words() {
+        let set = reminder_cancel();
+        let card = approval_card(&set, "Hugo", Lang::En);
+        assert_eq!(
+            texts(&card),
+            [
+                "Approval needed",
+                "Cancel the reminder “Follow up on the offer”?",
+                "Friday, 13 Nov, 10:00",
+                "It will no longer be delivered, and a repeating reminder stops for good.",
+            ]
+        );
+        assert!(!card.to_string().contains("reminder_id"), "{card}");
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 0, json!({}))).unwrap();
+        assert_eq!(
+            submit.decisions(),
+            Some(vec![("call_cancel".to_string(), ApprovalChoice::Approve)])
+        );
+        let decided: Vec<_> = submit
+            .display_names
+            .into_iter()
+            .zip([ApprovalChoice::Approve])
+            .collect();
+        assert_eq!(
+            decided_summary(&decided, "you", Lang::En),
+            "Cancelling the reminder “Follow up on the offer” was approved by you."
+        );
+        assert_eq!(
+            approval_summary(&set, "Hugo", Lang::En),
+            "Approval needed: Cancel the reminder “Follow up on the offer”?"
+        );
+
+        let german = approval_card(&set, "Hugo", Lang::De);
+        assert_eq!(
+            texts(&german)[1],
+            "Die Erinnerung „Follow up on the offer“ abbrechen?"
+        );
+        let mut create = set;
+        create.items[0].tool_name = CREATE_REMINDER.into();
+        assert_eq!(
+            texts(&approval_card(&create, "Hugo", Lang::En))[1..],
+            [
+                "Schedule the reminder “Follow up on the offer”?",
+                "Friday, 13 Nov, 10:00"
+            ]
         );
     }
 

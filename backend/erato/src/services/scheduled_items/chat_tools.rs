@@ -13,9 +13,13 @@ use super::{
     DisplayStatus, ItemRequest, ItemView, MAX_ACTIVE_ITEMS, Model, Refused, ScheduledItemErrorCode,
     ScheduledItemType, cancel_checked, create_checked, entry_zone, owned_chats, owns_chat,
 };
+use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+use crate::db::entity::scheduled_items::ItemStatus;
 use crate::models::chat::chat_title;
+use crate::models::message::{ToolApprovalAnnotations, ToolDisplayMetadata};
 use crate::models::user_preference::user_time_zone;
 use crate::ms_teams_bot::nudge::CHANNEL as TEAMS_CHANNEL;
+use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::text_language::{self, Lang};
 use crate::state::AppState;
 use chrono::{DateTime, Duration, NaiveDateTime, SubsecRound, Timelike, Utc};
@@ -44,6 +48,94 @@ pub fn is_reminder_tool(name: &str) -> bool {
 /// cancelling change what the user gets.
 pub fn is_read_only(name: &str) -> bool {
     name == LIST_REMINDERS
+}
+
+/// Whether a call asks the user first while the approval gate is on. A cancel
+/// can't be undone, so it asks under both presets; a created reminder stays
+/// visible with its confirmation card and Cancel, so it asks only under the
+/// restrictive one.
+pub fn asks_for_approval(name: &str, approval: &McpToolApprovalConfig) -> bool {
+    if !approval.enabled || is_read_only(name) {
+        return false;
+    }
+    name == CANCEL_REMINDER || approval.preset == McpToolApprovalPreset::Restrictive
+}
+
+/// The hints an approval request records for a reminder tool: nothing leaves
+/// the deployment, and only a cancel ends something.
+pub fn approval_annotations(name: &str) -> ToolApprovalAnnotations {
+    ToolApprovalAnnotations {
+        read_only_hint: is_read_only(name),
+        destructive_hint: name == CANCEL_REMINDER,
+        idempotent_hint: name != CREATE_REMINDER,
+        open_world_hint: false,
+    }
+}
+
+/// What the approval card for a call names: the reminder, and when it
+/// arrives or how it repeats, in the user's language. `None` when the call
+/// would change nothing, such as cancelling an id that names none of the
+/// user's upcoming reminders: it then runs without asking and is refused.
+pub async fn approval_display(
+    app_state: &AppState,
+    user_id: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> Result<Option<ToolDisplayMetadata>, Report> {
+    let now = Utc::now();
+    let (reminder_name, trigger, zone, next) = match name {
+        CREATE_REMINDER => {
+            let Ok(arguments) = serde_json::from_value::<CreateArguments>(arguments.clone()) else {
+                return Ok(None);
+            };
+            let (zone, _) = entry_zone(app_state, user_id).await?;
+            let Ok(trigger) = arguments
+                .trigger
+                .resolve(zone, now)
+                .and_then(Trigger::normalized)
+            else {
+                return Ok(None);
+            };
+            let Some(first) = trigger.next_after(zone, now, 0) else {
+                return Ok(None);
+            };
+            (arguments.name, trigger, zone, first)
+        }
+        CANCEL_REMINDER => {
+            let Some(item_id) = cancel_target(arguments) else {
+                return Ok(None);
+            };
+            let Some(view) = super::get(&app_state.db, user_id, item_id).await? else {
+                return Ok(None);
+            };
+            let Some(next) = super::next_occurrence(&view, now)
+                .filter(|_| view.item.status == ItemStatus::Active)
+            else {
+                return Ok(None);
+            };
+            (
+                view.item.name.clone(),
+                super::trigger_of(&view.item)?,
+                super::zone_of(&view.item)?,
+                next,
+            )
+        }
+        _ => return Ok(None),
+    };
+    let lang = stored_language(app_state, user_id).await?;
+    let user_zone = user_time_zone(&app_state.db, &user_id).await?;
+    let description = match trigger {
+        Trigger::Repeat(rule) => wording::capitalized(&wording::repeat_pattern(&rule, lang)),
+        Trigger::Once { .. } => wording::exact_when(next, zone, user_zone, now, lang),
+    };
+    Ok(Some(ToolDisplayMetadata {
+        title: sanitize_display_text(&reminder_name, MAX_DISPLAY_NAME_CHARS).text,
+        description: Some(description),
+        description_truncated: false,
+        server_name: None,
+        label: None,
+        read_only: false,
+    }))
 }
 
 /// The offered tools among `names`. Their descriptions name the zone local
@@ -383,15 +475,18 @@ struct CancelArguments {
     reminder_id: String,
 }
 
+fn cancel_target(arguments: &Value) -> Option<Uuid> {
+    serde_json::from_value::<CancelArguments>(arguments.clone())
+        .ok()
+        .and_then(|arguments| Uuid::parse_str(arguments.reminder_id.trim()).ok())
+}
+
 async fn cancel(
     app_state: &AppState,
     user_id: Uuid,
     arguments: &Value,
 ) -> Result<CallResult, Report> {
-    let Some(item_id) = serde_json::from_value::<CancelArguments>(arguments.clone())
-        .ok()
-        .and_then(|arguments| Uuid::parse_str(arguments.reminder_id.trim()).ok())
-    else {
+    let Some(item_id) = cancel_target(arguments) else {
         return Ok(CallResult::refused(Refused::new(
             ScheduledItemErrorCode::NotFound,
             "No reminder has this id; list_reminders gives the ids.",
