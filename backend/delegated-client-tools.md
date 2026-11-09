@@ -384,11 +384,13 @@ the freshness, read from the same place: `detail` is the call's receipt input fi
 `changes`, and `counts` are the freshness counts. Only short tokens and integers
 are copied from the host. For Word the part stays empty until the overlay keeps a
 part field in its receipt (ERMAIN-1003/1004). Outlook's `fetch_availability`
-keeps no receipt by decision (ERMAIN-1006): a `[replay]` table would also turn the
-coordinator's own earlier calls into receipts, and the add-in's slot-picker card
-reads the coordinator's full result. Its trace step shows the tool and the
-freshness without a part, a deviation from contract §12. A resumed child's events
-are folded into the trace its park left behind.
+keeps no receipt by decision (ERMAIN-1006). A `[replay]` receipt shortens only
+what the model sees of calls from earlier user turns (the stored result stays
+full), but it would also shorten the coordinator's own earlier calls, and on the
+turn the user picks a slot the model must copy the earlier result's
+`suggestedSlots` `startIso`/`endIso` verbatim. Its trace step shows the tool and
+the freshness without a part, a deviation from contract §12. A resumed child's
+events are folded into the trace its park left behind.
 
 ## Frontend
 
