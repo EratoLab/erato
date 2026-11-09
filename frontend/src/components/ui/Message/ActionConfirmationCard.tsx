@@ -221,7 +221,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      className={`mt-2 min-w-0 ${className}`}
+      className={`focus-ring-tight mt-2 min-w-0 ${className}`}
       bodyClassName={isPending ? "space-y-3" : "text-xs text-theme-fg-muted"}
       data-testid={dataTestId}
     >

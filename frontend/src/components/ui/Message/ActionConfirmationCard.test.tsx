@@ -16,6 +16,17 @@ vi.mock("../Controls/Button", () => ({
 }));
 
 describe("ActionConfirmationCard", () => {
+  it("shows the theme's focus style when it receives focus, not the browser's", () => {
+    render(
+      <ActionConfirmationCard
+        description="Open a reply"
+        onAllowOnce={vi.fn()}
+        onDeny={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("group")).toHaveClass("focus-ring-tight");
+  });
+
   it("renders the generic frame with the once decisions, and standing ones on request", () => {
     const onAllowOnce = vi.fn();
     const onAlwaysAllow = vi.fn();

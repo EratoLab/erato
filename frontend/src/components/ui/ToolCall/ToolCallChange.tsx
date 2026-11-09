@@ -66,6 +66,12 @@ import {
 } from "@/lib/toolCallGist/changeLabels";
 import { gistWarningLabel } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+import {
+  NEW_TEXT_CLASS,
+  NEW_VALUE_CLASS,
+  OLD_TEXT_CLASS,
+  OLD_VALUE_CLASS,
+} from "@/lib/toolCallGist/valueStyle";
 
 import { ToolCallGistLine } from "./ToolCallGist";
 import { Collapse } from "../Controls/Collapse";
@@ -90,6 +96,8 @@ const MUTED = "text-xs text-theme-fg-muted";
 const LIST_VALUES = 6;
 /** Values named under a trace row; the rest are counted. */
 const ROW_VALUES = 2;
+/** Option chips and statements sit on the card, so they need a colour of their own. */
+const ON_CARD = "border border-theme-border bg-theme-bg-tertiary";
 
 /**
  * A box that scrolls when its content does not fit. Only then is it a tab
@@ -242,6 +250,47 @@ const ValueText = ({
   );
 };
 
+/** An old value struck through in red and the new one in green, on any theme. */
+const OldToNew = ({
+  old,
+  arrow,
+  children,
+}: {
+  old: ChangeValue;
+  /** A row line reads as text: its arrow stays a plain character there. */
+  arrow: "text" | "spoken";
+  children: ReactNode;
+}) => (
+  <>
+    <span
+      dir="auto"
+      data-testid="tool-call-change-old"
+      className={clsx(OLD_VALUE_CLASS, ISOLATED)}
+    >
+      <ValueText value={old} />
+    </span>
+    {arrow === "spoken" ? (
+      <>
+        <span aria-hidden="true" className="px-1 text-theme-fg-muted">
+          →
+        </span>
+        <span className="sr-only">
+          {t({ id: "toolGist.changesTo", message: "changes to" })}
+        </span>
+      </>
+    ) : (
+      " → "
+    )}
+    <span
+      dir="auto"
+      data-testid="tool-call-change-new"
+      className={clsx(NEW_VALUE_CLASS, ISOLATED)}
+    >
+      {children}
+    </span>
+  </>
+);
+
 const ValueList = ({
   values,
   omitted = 0,
@@ -274,31 +323,19 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
       </span>
     );
   }
-  return (
-    <>
-      {effect.old && (
-        <>
-          <span
-            dir="auto"
-            data-testid="tool-call-change-old"
-            className={clsx(
-              "underline decoration-dotted underline-offset-2",
-              ISOLATED,
-            )}
-          >
-            <ValueText value={effect.old} />
-          </span>
-          <span aria-hidden="true" className="px-1 text-theme-fg-muted">
-            →
-          </span>
-        </>
-      )}
-      {effect.values.length === 1 ? (
-        <ValueText value={effect.values[0]} link={effect.link} />
-      ) : (
-        <ValueList values={effect.values} omitted={effect.omitted} />
-      )}
-    </>
+  const value =
+    effect.values.length === 1 ? (
+      <ValueText value={effect.values[0]} link={effect.link} />
+    ) : (
+      <ValueList values={effect.values} omitted={effect.omitted} />
+    );
+  // An unchanged value has no old → new to show: it stays what it is.
+  return effect.old && effect.effect !== "unchanged" ? (
+    <OldToNew old={effect.old} arrow="spoken">
+      {value}
+    </OldToNew>
+  ) : (
+    value
   );
 };
 
@@ -499,7 +536,7 @@ const FlagsPart = ({ flags }: { flags: GistChange["flags"] }) => (
           <span
             key={index}
             dir="auto"
-            className={clsx("rounded bg-theme-bg-secondary px-1.5", ISOLATED)}
+            className={clsx("rounded px-1.5", ON_CARD, ISOLATED)}
           >
             {flag.dryRun ? dryRunLabel(flag.name) : flag.name}
           </span>
@@ -519,7 +556,10 @@ const OpaquePart = ({ opaque }: { opaque: ChangeOpaque }) => (
     )}
     <ScrollBox
       kind="value"
-      className="max-h-40 rounded bg-theme-bg-secondary p-2 font-mono text-xs text-theme-fg-primary"
+      className={clsx(
+        "max-h-40 rounded p-2 font-mono text-xs text-theme-fg-primary",
+        ON_CARD,
+      )}
       data-testid="tool-call-change-statement"
     >
       <span
@@ -547,6 +587,7 @@ const TextPart = ({
   const id = useId();
   const hiddenLines = Math.max(entry.lines - TEXT_LINES, 0);
   const collapsible = hiddenLines > 0;
+  const newTextClass = entry.before ? NEW_TEXT_CLASS : "text-theme-fg-primary";
   return (
     <div className="space-y-1" data-testid="tool-call-change-text">
       <p className="text-xs text-theme-fg-primary">
@@ -560,7 +601,8 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "max-h-24 overflow-hidden whitespace-pre-wrap text-xs text-theme-fg-muted line-through [overflow-wrap:anywhere]",
+              "max-h-24 overflow-hidden whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              OLD_TEXT_CLASS,
               ISOLATED,
             )}
           >
@@ -573,7 +615,8 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "line-clamp-6 whitespace-pre-wrap text-xs text-theme-fg-primary [overflow-wrap:anywhere]",
+              "line-clamp-6 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              newTextClass,
               ISOLATED,
             )}
             data-testid="tool-call-change-text-start"
@@ -583,7 +626,10 @@ const TextPart = ({
         ) : (
           <ScrollBox
             kind="value"
-            className="max-h-64 whitespace-pre-wrap text-xs text-theme-fg-primary [overflow-wrap:anywhere]"
+            className={clsx(
+              "max-h-64 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              newTextClass,
+            )}
             as="p"
           >
             <span dir="auto" className={ISOLATED}>
@@ -608,18 +654,29 @@ const TextPart = ({
   );
 };
 
-/** A value's old → new as plain text, for a row that shows a few in one line. */
-const rowChangeText = (effect: ChangeEffect): string => {
+/** A value's old → new, for a row that shows a few in one line. */
+const RowChange = ({ effect }: { effect: ChangeEffect }) => {
   const value = effect.values.map(plainChangeValue).join(", ");
-  return effect.old
-    ? `${effect.name} ${plainChangeValue(effect.old)} → ${value}`
-    : `${effect.name} ${value}`;
+  return (
+    <>
+      {effect.name}{" "}
+      {effect.old && effect.effect !== "unchanged" ? (
+        <OldToNew old={effect.old} arrow="text">
+          {value}
+        </OldToNew>
+      ) : (
+        value
+      )}
+    </>
+  );
 };
 
-const batchEffectText = (effect: ChangeEffect): string =>
-  effect.effect === "emptied"
-    ? beingEmptiedLabel(effect.name)
-    : rowChangeText(effect);
+const BatchEffect = ({ effect }: { effect: ChangeEffect }) =>
+  effect.effect === "emptied" ? (
+    <>{beingEmptiedLabel(effect.name)}</>
+  ) : (
+    <RowChange effect={effect} />
+  );
 
 const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
   <li className="space-y-0.5" data-testid="tool-call-change-batch-row">
@@ -637,7 +694,12 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
           ISOLATED,
         )}
       >
-        {row.effects.map(batchEffectText).join(" · ")}
+        {row.effects.map((effect, index) => (
+          <Fragment key={index}>
+            {index > 0 && " · "}
+            <BatchEffect effect={effect} />
+          </Fragment>
+        ))}
         {row.effectsOmitted > 0 && (
           <span className="text-theme-fg-muted"> +{row.effectsOmitted}</span>
         )}
@@ -897,7 +959,12 @@ export const ToolCallChangeRowDetails = ({
       ))}
       {shown.length > 0 && (
         <p dir="auto" className={ISOLATED}>
-          {shown.map(rowChangeText).join(", ")}
+          {shown.map((effect, index) => (
+            <Fragment key={index}>
+              {index > 0 && ", "}
+              <RowChange effect={effect} />
+            </Fragment>
+          ))}
           {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
         </p>
       )}

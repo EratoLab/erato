@@ -13,6 +13,12 @@ import {
   gistWarningLabel,
 } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+import {
+  NEW_TEXT_CLASS,
+  NEW_VALUE_CLASS,
+  OLD_TEXT_CLASS,
+  OLD_VALUE_CLASS,
+} from "@/lib/toolCallGist/valueStyle";
 
 import type {
   Gist,
@@ -244,7 +250,10 @@ const FieldValues = ({
           {index > 0 && ", "}
           {earlier && (
             <>
-              <span data-testid="tool-call-gist-earlier">
+              <span
+                data-testid="tool-call-gist-earlier"
+                className={OLD_VALUE_CLASS}
+              >
                 <GistValueText value={earlier} />
               </span>
               <span aria-hidden="true" className="px-1 text-theme-fg-muted">
@@ -255,7 +264,9 @@ const FieldValues = ({
               </span>
             </>
           )}
-          <GistValueText value={value} wholeId={wholeId} />
+          <span className={earlier ? NEW_VALUE_CLASS : undefined}>
+            <GistValueText value={value} wholeId={wholeId} />
+          </span>
         </Fragment>
       ))}
       {more > 0 && (
@@ -379,12 +390,14 @@ const TextChange = ({ item }: { item: GistItem }) => {
           : t({ id: "toolGist.content", message: "Content" })}
       </p>
       {item.before.length > 0 && (
-        <TextBlock
-          values={item.before}
-          className="text-theme-fg-muted line-through"
-        />
+        <TextBlock values={item.before} className={OLD_TEXT_CLASS} />
       )}
-      <TextBlock values={item.after} className="text-theme-fg-primary" />
+      <TextBlock
+        values={item.after}
+        className={
+          item.before.length > 0 ? NEW_TEXT_CLASS : "text-theme-fg-primary"
+        }
+      />
     </div>
   );
 };

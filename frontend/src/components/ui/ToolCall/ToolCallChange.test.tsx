@@ -652,6 +652,42 @@ describe("old and new values", () => {
     ...extra,
   });
 
+  it("render differently: old struck through in red, new in green", () => {
+    renderCard({
+      effects: [changed({})],
+      counts: { changed: 1 },
+      notes: ["old_values_from_earlier"],
+    });
+    const old = screen.getByTestId("tool-call-change-old");
+    const fresh = screen.getByTestId("tool-call-change-new");
+    expect(old).toHaveClass("line-through");
+    expect(old.className).toContain("--theme-diff-removed-fg");
+    expect(fresh).not.toHaveClass("line-through");
+    expect(fresh.className).toContain("--theme-diff-added-fg");
+    expect(old.className).not.toEqual(fresh.className);
+  });
+
+  it("show a code's meaning, and say so when only the tool says it", () => {
+    renderCard({
+      effects: [
+        changed({
+          old: {
+            text: "4",
+            meaning: { label: "Low", source: "earlier" },
+          },
+          values: [{ text: "2", meaning: { label: "High", source: "tool" } }],
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    expect(screen.getByTestId("tool-call-change-old")).toHaveTextContent(
+      "Low (4)",
+    );
+    expect(screen.getByTestId("tool-call-change-new")).toHaveTextContent(
+      "2 (the tool says: High)",
+    );
+  });
+
   it("mark a meaning from an earlier read as such", () => {
     renderCard({
       effects: [
