@@ -5044,19 +5044,18 @@ Soft target for the resulting context as a percentage of the selected conversati
 
 {/* erato_toml_config_key: tool_labels */}
 
-Approval cards and the trace show what an MCP call does to what, and where. Generic rules label most calls from the tool's name and the shape of its arguments. When the rules are unsure, a configured model can pick the label instead. The card never waits for it: it shows the rules' label first and the model's label when it arrives, usually within a few seconds. A parked approval card picks up the new label on the next poll of parked chats; only the label changes, never the card's buttons, its approval or anything else stored with it.
+Approval cards and the trace show what an MCP call does to what, and where: how far it reaches, what is lost, which values change, and what the card cannot read. Generic rules work this out from the tool's name and the shape of its arguments. Recipients outside the organisation are named by comparing their email domains with the signed-in user's own and with [`tool_labels.organization_email_domains`](#tool_labelsorganization_email_domains); when the user's domain is unknown, the card says nothing about who is outside. A group address counts as one and is never expanded.
 
-The model only chooses: pointers into the call's real argument paths, and an action and a kind from closed lists. Erato reads every value it shows through those pointers, so the model cannot put text of its own on the card. A reply that names a path the call does not have, fails to parse, is longer than 16 KiB or takes longer than 10 seconds is dropped, and the card keeps the rules' label. The same checks as for the rules hold the model's label: its verb must agree with the tool's name and annotations, consent flags and the names inside lookup objects are never shown as facts, and a label must show every recipient; otherwise the card shows the generic label. A model's label is kept per user, tool and argument shape, so later calls of the same shape reuse it without another request.
+When the rules have no verb or no kind for a call, a configured model can supply them. The model answers with one verb and one kind from closed lists and nothing else; Erato reads every value it shows from the call, so the model cannot put text of its own on the card. The card never waits for it. Its answer is used while the turn runs and kept for later calls of the same shape; an answer that arrives after a parked approval card is on screen does not change what that card says or move its buttons. A reply that fails to parse, is off the lists, is longer than 16 KiB or takes longer than 10 seconds is dropped. The same checks as for the rules hold the model's verb: it must agree with the tool's name and annotations. A model's verb is kept per user, tool and argument shape, so later calls of the same shape reuse it without another request.
 
 **What leaves Erato.** For each call the rules are unsure of, the model receives:
 
 - the tool's name;
-- an argument skeleton: member names and the first three entries of each array, with every text value replaced by its length (`<str len=12>`) and every number by `<number>`. Only two kinds of values go as they are: the values of `command`, `op`, `kind`, `action`, `mode` and `operation` members that read as identifiers, and values the tool's input schema lists for that member in an `enum` or `const` (up to 64 characters, without control or invisible characters). Booleans and nulls go as they are;
-- the list of the call's argument paths.
+- an argument skeleton: member names and the first three entries of each array, with every text value replaced by its length (`<str len=12>`) and every number by `<number>`. Only two kinds of values go as they are: the values of `command`, `op`, `kind`, `action`, `mode`, `operation` and `method` members that read as identifiers, and values the tool's input schema lists for that member in an `enum` or `const` (up to 64 characters, without control or invisible characters). Booleans and nulls go as they are.
 
 The server's tool description, the tool's schema and every other argument value stay in Erato. By default the model only labels the calls of turns that already run on the labeller's provider, so nothing reaches a provider the chat did not already use; `allow_other_provider` lifts that. The labeller is never used for a user whose [`model_permissions`](#model_permissions) do not include its provider.
 
-Each backend replica runs at most four labeller requests at a time and a turn starts at most 32. A call past either limit is not queued: it keeps the rules' label, and a later call of the same shape asks again. Labeller requests share the provider's rate limits with chat turns. Provider errors are logged by kind (for example `rate_limited` or `server_error`) without the provider's response.
+Each backend replica runs at most four labeller requests at a time and a turn starts at most 32. A call past either limit is not queued: it keeps what the rules said, and a later call of the same shape asks again. Labeller requests share the provider's rate limits with chat turns. Provider errors are logged by kind (for example `rate_limited` or `server_error`) without the provider's response.
 
 Labeller requests are traced in Langfuse like chat history compaction, as `tool_labels.label`. Their tokens are not counted against user budgets.
 
@@ -5091,6 +5090,18 @@ Also label the calls of turns that run on another provider. The skeleton of thos
 enabled = true
 chat_provider_id = "gpt-4o-mini"
 allow_other_provider = true
+```
+
+#### `tool_labels.organization_email_domains`
+
+{/* erato_toml_config_key: tool_labels.organization_email_domains */}
+{/* erato_toml_config_key: tool_labels.organization_email_domains.[] */}
+
+Email domains that count as inside the organisation on approval cards, next to the signed-in user's own domain. A subdomain of a listed domain counts too. Applies whether or not `enabled` is set. **Default:** empty, so only the user's own domain counts.
+
+```toml
+[tool_labels]
+organization_email_domains = ["example.com", "subsidiary.example"]
 ```
 
 ### `prompt_optimizer`

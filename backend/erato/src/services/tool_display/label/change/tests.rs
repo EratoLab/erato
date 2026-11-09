@@ -1,0 +1,1067 @@
+use super::*;
+use crate::models::message::{
+    ContentPart, GenerationInputMessages, MessageRole, ToolCallLabelSource, ToolCallObjectKind,
+    ToolCallStatus, ToolDisplayMetadata, ToolUse,
+};
+use crate::services::prompt_composition::transforms::replay_assistant_content;
+use crate::services::tool_display::label::rules::rules_label;
+use crate::services::tool_display::label::{ToolCallLabelMapping, checked_label};
+use rmcp::model::{JsonObject, Tool, ToolAnnotations};
+use serde_json::json;
+
+const RECORD: &str = "5f0c2a10-0000-4000-8000-00000000a001";
+const ACCOUNT: &str = "5f0c2a10-0000-4000-8000-00000000c001";
+const SERVER: &str = "CRM";
+
+fn tool(name: &str, description: &str, destructive: Option<bool>) -> Tool {
+    let mut tool = Tool::new(name.to_string(), description.to_string(), JsonObject::new());
+    tool.annotations =
+        destructive.map(|hint| ToolAnnotations::from_raw(None, None, Some(hint), None, None));
+    tool
+}
+
+fn earlier(results: Vec<(&str, Value, Value)>) -> ToolResultContext {
+    let messages = results
+        .into_iter()
+        .enumerate()
+        .flat_map(|(index, (name, input, output))| {
+            replay_assistant_content(
+                &MessageRole::Assistant,
+                vec![ContentPart::ToolUse(ToolUse {
+                    tool_call_id: format!("read-{index}"),
+                    status: ToolCallStatus::Success,
+                    tool_name: name.into(),
+                    display: Some(ToolDisplayMetadata {
+                        title: "Read".into(),
+                        description: None,
+                        description_truncated: false,
+                        server_name: Some(SERVER.into()),
+                        label: None,
+                        read_only: false,
+                    }),
+                    input: Some(input),
+                    output: Some(output),
+                    ..Default::default()
+                })],
+            )
+        })
+        .collect();
+    ToolResultContext::from_messages(&GenerationInputMessages { messages })
+}
+
+fn labelled(tool: &Tool, arguments: &Value, context: &ToolResultContext) -> ToolCallLabel {
+    let rules = rules_label(&tool.name, arguments, tool.annotations.as_ref(), None);
+    let mut label = checked_label(SERVER, tool, arguments, &rules.mapping, None);
+    context.resolve(&mut label, arguments, SERVER);
+    label
+}
+
+fn change_with(
+    tool: &Tool,
+    arguments: Value,
+    context: &ToolResultContext,
+) -> (ToolCallChange, bool) {
+    let label = labelled(tool, &arguments, context);
+    describe(
+        &label,
+        ChangeFacts {
+            tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context,
+            server: Some(SERVER),
+        },
+    )
+    .expect("a labelled call has a change description")
+}
+
+fn change_of(name: &str, arguments: Value) -> ToolCallChange {
+    change_with(
+        &tool(name, "", None),
+        arguments,
+        &ToolResultContext::default(),
+    )
+    .0
+}
+
+fn effect<'a>(change: &'a ToolCallChange, name: &str) -> &'a ToolCallEffect {
+    change
+        .effects
+        .iter()
+        .find(|effect| effect.raw_name == name)
+        .unwrap_or_else(|| panic!("no effect for {name}: {change:#?}"))
+}
+
+fn texts(values: &[ToolCallEffectValue]) -> Vec<&str> {
+    values.iter().map(|value| value.text.as_str()).collect()
+}
+
+#[test]
+fn a_call_with_no_verb_has_no_change_description() {
+    let label = ToolCallLabel {
+        action: ToolCallAction::Other,
+        object_kind: ToolCallObjectKind::Other,
+        items: Vec::new(),
+        arguments: None,
+        warnings: Vec::new(),
+        source: ToolCallLabelSource::Rules,
+        change: None,
+    };
+    let arguments = json!({});
+    let context = ToolResultContext::default();
+    assert!(
+        describe(
+            &label,
+            ChangeFacts {
+                tool: &tool("x", "", None),
+                arguments: &arguments,
+                approval_argument: None,
+                context: &context,
+                server: None,
+            },
+        )
+        .is_none()
+    );
+}
+
+#[test]
+fn names_are_readable_and_a_prefix_only_goes_when_most_keys_share_it() {
+    let change = change_of(
+        "update_record",
+        json!({
+            "id": "r1",
+            "fields": {
+                "ppt_cx_reach_out_timing": 3,
+                "ppt_renewal_due_on": "2026-12-31",
+                "ppt_lic_seat_cnt": 250,
+                "other": "x",
+            },
+        }),
+    );
+    assert_eq!(
+        effect(&change, "ppt_cx_reach_out_timing").name,
+        "Cx reach out timing"
+    );
+    assert_eq!(effect(&change, "ppt_renewal_due_on").name, "Renewal due on");
+    assert_eq!(effect(&change, "other").name, "Other");
+
+    let notify = change_of(
+        "bulk_update_contacts",
+        json!({"where": {"stage": "lead"}, "set": {"owner_id": "u1"}, "notify_owners": false, "note": "x"}),
+    );
+    assert_eq!(effect(&notify, "notify_owners").name, "Notify owners");
+
+    let spaces = change_of(
+        "update_record",
+        json!({"id": "r1", "properties": {"Förderbetrag (€)": 12000, "Due date": "2026-01-01"}}),
+    );
+    assert_eq!(effect(&spaces, "Förderbetrag (€)").name, "Förderbetrag (€)");
+    assert_eq!(effect(&spaces, "Due date").name, "Due date");
+    let camel = change_of(
+        "update_record",
+        json!({"id": "r1", "renewalDueOn": "x", "ownerId": "abc"}),
+    );
+    assert_eq!(effect(&camel, "renewalDueOn").name, "Renewal due on");
+    assert_eq!(effect(&camel, "ownerId").name, "Owner ID");
+}
+
+#[test]
+fn every_value_says_what_happens_to_it() {
+    let change = change_of(
+        "update_record",
+        json!({
+            "id": "r1",
+            "fields": {
+                "a": null, "b": "", "c": [], "d": {},
+                "stage": "won", "labels": ["x"], "single": [{"text": {"content": "y"}}],
+            },
+        }),
+    );
+    for name in ["a", "b", "c", "d"] {
+        assert_eq!(
+            effect(&change, name).effect,
+            ToolCallEffectKind::Emptied,
+            "{name}"
+        );
+    }
+    assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
+    assert_eq!(
+        effect(&change, "labels").effect,
+        ToolCallEffectKind::ListReplaced
+    );
+    assert_eq!(effect(&change, "single").effect, ToolCallEffectKind::Set);
+    assert_eq!(texts(&effect(&change, "single").values), ["y"]);
+    assert_eq!(
+        (
+            change.counts.emptied,
+            change.counts.list_replaced,
+            change.counts.set
+        ),
+        (4, 1, 2)
+    );
+    assert!(change.complete);
+    assert!(
+        change
+            .notes
+            .contains(&ToolCallChangeNote::ListReplaceUnknown)
+    );
+}
+
+#[test]
+fn a_create_never_empties_anything() {
+    let change = change_of("create_task", json!({"title": "New", "due": null}));
+    assert_eq!(effect(&change, "due").effect, ToolCallEffectKind::Set);
+    assert_eq!(change.counts.emptied, 0);
+}
+
+#[test]
+fn wrapped_values_read_as_what_they_hold() {
+    let change = change_of(
+        "API-patch-page",
+        json!({
+            "page_id": RECORD,
+            "properties": {
+                "Stage": {"select": {"name": "Abgelehnt"}},
+                "Förderbetrag (€)": {"number": 12000},
+                "Owner": {"people": []},
+                "Due date": {"date": null},
+                "Title": {"title": [{"text": {"content": "Antrag"}}]},
+            },
+        }),
+    );
+    assert_eq!(texts(&effect(&change, "Stage").values), ["Abgelehnt"]);
+    assert_eq!(
+        texts(&effect(&change, "Förderbetrag (€)").values),
+        ["12000"]
+    );
+    assert_eq!(effect(&change, "Owner").effect, ToolCallEffectKind::Emptied);
+    assert_eq!(
+        effect(&change, "Due date").effect,
+        ToolCallEffectKind::Emptied
+    );
+    assert_eq!(texts(&effect(&change, "Title").values), ["Antrag"]);
+}
+
+#[test]
+fn a_nested_object_is_named_after_where_it_sits_and_past_the_depth_is_unreadable() {
+    let change = change_of(
+        "update_record",
+        json!({"id": "r1", "address": {"street": "Main", "city": "Berlin"}}),
+    );
+    assert_eq!(effect(&change, "street").name, "Address · Street");
+    let mut deep = json!({"leaf1": 1, "leaf2": 2});
+    for _ in 0..10 {
+        deep = json!({"level1": deep, "level2": 2});
+    }
+    let change = change_of("update_record", json!({"id": "r1", "deep": deep}));
+    assert!(change.counts.unreadable > 0);
+    assert!(
+        change.complete,
+        "the unreadable value is counted, nothing is unread"
+    );
+}
+
+#[test]
+fn machine_ids_never_carry_their_text_and_show_a_known_name() {
+    let context = earlier(vec![(
+        "read_account",
+        json!({}),
+        json!({"id": ACCOUNT, "name": "Contoso"}),
+    )]);
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({
+            "id": "r1",
+            "fields": {
+                "ownerid": RECORD,
+                "accountid": ACCOUNT,
+                "parentaccountid@odata.bind": format!("/accounts({ACCOUNT})"),
+                "ref": "#4211",
+                "email": "ana@contoso.example",
+            },
+        }),
+        &context,
+    );
+    let owner = effect(&change, "ownerid");
+    assert!(owner.values[0].machine_id);
+    assert_eq!(owner.values[0].text, "");
+    let account = effect(&change, "accountid");
+    assert!(account.values[0].machine_id);
+    assert_eq!(account.values[0].text, "Contoso");
+    let bind = effect(&change, "parentaccountid@odata.bind");
+    assert!(bind.link);
+    assert!(bind.values[0].machine_id);
+    assert_eq!(bind.values[0].text, "Contoso");
+    assert_eq!(bind.name, "Parentaccountid");
+    assert_eq!(texts(&effect(&change, "ref").values), ["#4211"]);
+    assert!(!effect(&change, "ref").values[0].machine_id);
+}
+
+#[test]
+fn recipients_count_everyone_and_name_only_who_is_outside() {
+    let context = ToolResultContext::default()
+        .with_organization(Some("me@contoso.example"), &["partner.example".to_string()]);
+    let (change, _) = change_with(
+        &tool("send_email", "", None),
+        json!({
+            "to": ["a@contoso.example", "b@mail.contoso.example", "ana@fabrikam.example"],
+            "cc": ["c@partner.example", {"emailAddress": {"address": "d@contoso.example.evil.test"}}],
+            "subject": "Hello",
+            "body": "Hi",
+        }),
+        &context,
+    );
+    let recipients = change.recipients.expect("recipients");
+    assert_eq!(recipients.total, 5);
+    assert_eq!(recipients.groups.len(), 2);
+    assert_eq!(recipients.groups[0].count, 3);
+    assert_eq!(recipients.groups[1].count, 2);
+    assert!(recipients.outside_known);
+    assert_eq!(
+        recipients.outside,
+        ["ana@fabrikam.example", "d@contoso.example.evil.test"]
+    );
+
+    // No user domain: nothing is claimed, whatever is configured.
+    let unknown =
+        ToolResultContext::default().with_organization(None, &["contoso.example".to_string()]);
+    let (change, _) = change_with(
+        &tool("send_email", "", None),
+        json!({"to": "ana@fabrikam.example", "subject": "x", "body": "y"}),
+        &unknown,
+    );
+    let recipients = change.recipients.expect("recipients");
+    assert!(!recipients.outside_known);
+    assert!(recipients.outside.is_empty());
+    assert_eq!(recipients.total, 1);
+}
+
+#[test]
+fn recipients_that_are_ids_or_numbers_are_counted_but_not_listed_or_checked() {
+    let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
+    let (change, _) = change_with(
+        &tool("send_message", "", None),
+        json!({"recipients": ["U012AB3CD", "+49 170 1234567"], "text": "hello there"}),
+        &context,
+    );
+    let recipients = change.recipients.expect("recipients");
+    assert_eq!(recipients.total, 2);
+    assert_eq!(recipients.groups[0].values, ["+49 170 1234567"]);
+    assert_eq!(recipients.unchecked, 2);
+    assert!(recipients.outside.is_empty());
+}
+
+#[test]
+fn an_emptied_recipient_list_on_an_update_is_a_loss() {
+    let change = change_of(
+        "update_issue_assignees",
+        json!({"issue_number": 4, "assignees": [], "state": "open"}),
+    );
+    assert_eq!(change.recipients, None);
+    let _ = effect(&change, "state");
+}
+
+#[test]
+fn a_filter_reads_in_words_and_an_empty_one_means_every_record() {
+    let change = change_of(
+        "bulk_update_contacts",
+        json!({"where": {"lifecycle_stage": "lead", "last_activity_before": "2025-01-01"}, "set": {"owner": "ana"}}),
+    );
+    let filter = change.filter.expect("filter");
+    assert!(!filter.every_record);
+    assert_eq!(filter.parts.len(), 2);
+    assert_eq!(filter.parts[0].name, "Lifecycle stage");
+    assert_eq!(filter.parts[0].value.text, "lead");
+    assert_eq!(filter.parts[1].name, "Last activity before");
+    assert!(change.notes.contains(&ToolCallChangeNote::RowCountUnknown));
+
+    let every = change_of(
+        "bulk_update_contacts",
+        json!({"where": {}, "set": {"owner": "ana"}}),
+    );
+    assert!(every.filter.expect("filter").every_record);
+
+    let text = change_of(
+        "delete_rows",
+        json!({"filter": "status = 'open'", "table": "x"}),
+    );
+    assert_eq!(
+        text.filter.expect("filter").text.expect("text").text,
+        "status = 'open'"
+    );
+}
+
+#[test]
+fn behaviour_flags_are_listed_only_when_set() {
+    let change = change_of(
+        "delete_folder",
+        json!({"path": "/srv/x", "recursive": true, "force": true, "verbose": true, "overwrite": false}),
+    );
+    let names: Vec<_> = change
+        .flags
+        .iter()
+        .map(|flag| flag.raw_name.as_str())
+        .collect();
+    assert_eq!(names, ["recursive", "force"]);
+    let dry = change_of(
+        "edit_file",
+        json!({"path": "/x", "dryRun": true, "content": "y"}),
+    );
+    assert_eq!(dry.flags[0].raw_name, "dryRun");
+    assert!(dry.flags[0].dry_run);
+    let validate = change_of("create_issue", json!({"title": "x", "validate_only": true}));
+    assert!(validate.flags[0].dry_run);
+}
+
+#[test]
+fn opaque_content_is_found_and_never_becomes_the_verb() {
+    let change = change_of(
+        "execute_sql",
+        json!({"project_id": "prj1", "query": "WITH gone AS (DELETE FROM audit_log RETURNING id)\nSELECT count(*) FROM gone;"}),
+    );
+    let opaque = &change.opaque[0];
+    assert_eq!(opaque.kind, ToolCallOpaqueKind::Sql);
+    assert_eq!(opaque.found, ["DELETE"]);
+    assert!(opaque.write_inside_read);
+    assert_eq!(opaque.lines, 2);
+    assert_eq!(change.place.as_deref(), Some("prj1"));
+    assert!(change.notes.contains(&ToolCallChangeNote::RowCountUnknown));
+
+    let shell = change_of("run_shell", json!({"command": "rm -rf /tmp/x"}));
+    assert_eq!(shell.opaque[0].kind, ToolCallOpaqueKind::Shell);
+    assert_eq!(shell.opaque[0].found, ["rm"]);
+
+    let args_list = change_of(
+        "pods_exec",
+        json!({"namespace": "n", "name": "p", "command": ["rm", "-rf", "/x"]}),
+    );
+    assert_eq!(args_list.opaque[0].text, "rm -rf /x");
+
+    let code = change_of(
+        "deploy_function",
+        json!({"code": "await fetch('https://x')"}),
+    );
+    assert_eq!(code.opaque[0].kind, ToolCallOpaqueKind::Code);
+    assert_eq!(code.opaque[0].found, ["fetch"]);
+
+    let instruction = change_of(
+        "run_agent_task",
+        json!({"instruction": "Clean up the CRM."}),
+    );
+    assert_eq!(instruction.opaque[0].kind, ToolCallOpaqueKind::Instruction);
+    assert!(
+        instruction
+            .notes
+            .contains(&ToolCallChangeNote::InstructionOutcomeUnknown)
+    );
+
+    let act = change_of("act", json!({"action": "click the delete button"}));
+    assert_eq!(act.opaque[0].kind, ToolCallOpaqueKind::Instruction);
+
+    // A plain search term is a value, not a statement.
+    let plain = change_of(
+        "update_filter",
+        json!({"id": "v1", "query": "open invoices"}),
+    );
+    assert!(plain.opaque.is_empty());
+    assert_eq!(texts(&effect(&plain, "query").values), ["open invoices"]);
+    // An identifier in a verb field is never read as an instruction.
+    let verb = change_of("update_thing", json!({"id": "v1", "action": "noop"}));
+    assert!(verb.opaque.is_empty());
+}
+
+#[test]
+fn long_text_is_measured_and_stored_only_up_to_its_start() {
+    let body = format!("{}\nsecond line", "x".repeat(10_000));
+    let change = change_of(
+        "update_issue_body",
+        json!({"issue_number": 3, "body": body}),
+    );
+    let text = &change.texts[0];
+    assert_eq!(text.lines, 2);
+    assert_eq!(text.chars, 10_012);
+    assert!(text.truncated);
+    assert_eq!(text.text.chars().count(), 4_000);
+}
+
+#[test]
+fn a_batch_of_identical_rows_collapses_to_one_statement() {
+    let rows: Vec<_> = (0..200)
+        .map(|index| json!({"Id": format!("{RECORD}"), "Name": format!("row {index}"), "StageName": "Closed", "Loss_Reason__c": "No budget"}))
+        .collect();
+    let change = change_of(
+        "salesforce_dml_records",
+        json!({"operation": "update", "objectName": "Opportunity", "records": rows}),
+    );
+    let batch = change.batch.expect("batch");
+    assert_eq!(batch.total, 200);
+    assert!(batch.same_change);
+    assert_eq!(batch.shared.len(), 2);
+    assert_eq!(batch.rows.len(), 50);
+    assert!(batch.read_all);
+    assert_eq!(batch.rows_emptying, 0);
+    assert_eq!(change.place.as_deref(), Some("Opportunity"));
+}
+
+#[test]
+fn a_batch_of_different_rows_keeps_deletions_first_and_counts_operations() {
+    let change = change_of(
+        "mutate",
+        json!({"ops": [
+            {"op": "update", "path": "/customers/c1", "value": {"tier": "gold"}},
+            {"op": "delete", "path": "/customers/c2"},
+            {"op": "create", "path": "/customers", "value": {"name": "Contoso"}},
+            {"op": "delete", "path": "/customers/c3"},
+            {"op": "update", "path": "/customers/c4", "value": {"owner": null}},
+        ]}),
+    );
+    let batch = change.batch.expect("batch");
+    assert!(!batch.same_change);
+    assert_eq!(batch.deletions, 2);
+    assert_eq!(batch.rows[0].action, Some(ToolCallAction::Delete));
+    assert_eq!(batch.rows[0].name.as_deref(), Some("/customers/c2"));
+    assert_eq!(batch.rows[1].name.as_deref(), Some("/customers/c3"));
+    assert_eq!(batch.rows[2].number, 1);
+    let totals: Vec<_> = batch
+        .operations
+        .iter()
+        .map(|op| (op.action, op.count))
+        .collect();
+    assert_eq!(
+        totals,
+        [
+            (ToolCallAction::Create, 1),
+            (ToolCallAction::Update, 2),
+            (ToolCallAction::Delete, 2)
+        ]
+    );
+    assert_eq!(batch.rows_emptying, 1);
+}
+
+#[test]
+fn rows_named_only_by_a_machine_id_stay_unnamed_so_they_are_numbered() {
+    let rows: Vec<_> = (0..3)
+        .map(|i| json!({"Id": RECORD, "Rating": format!("R{i}")}))
+        .collect();
+    let change = change_of(
+        "salesforce_dml_records",
+        json!({"operation": "update", "records": rows}),
+    );
+    let batch = change.batch.expect("batch");
+    assert!(batch.rows.iter().all(|row| row.name.is_none()));
+    assert_eq!(batch.rows[0].number, 1);
+}
+
+#[test]
+fn a_batch_of_old_and_new_text_edits_shows_old_to_new() {
+    let change = change_of(
+        "edit_file",
+        json!({"path": "/x", "edits": [
+            {"oldText": "a", "newText": "b"},
+            {"oldText": "c", "newText": "d"},
+        ]}),
+    );
+    let batch = change.batch.expect("batch");
+    let edit = &batch.rows[0].effects[0];
+    assert_eq!(edit.effect, ToolCallEffectKind::Changed);
+    assert_eq!(texts(&edit.values), ["b"]);
+    assert_eq!(edit.old.as_ref().unwrap().text, "a");
+}
+
+#[test]
+fn a_list_of_links_is_a_list_not_a_batch_and_one_record_in_a_list_is_that_record() {
+    let change = change_of(
+        "update_issue",
+        json!({"issue_number": 1, "assignees": [{"id": "u_1"}, {"id": "u_2"}]}),
+    );
+    assert_eq!(change.batch, None);
+    assert_eq!(texts(&effect(&change, "assignees").values), ["u_1", "u_2"]);
+
+    let single = change_of(
+        "salesforce_dml_records",
+        json!({"operation": "update", "records": [{"Id": RECORD, "Rating": "Hot"}]}),
+    );
+    assert_eq!(single.batch, None);
+    assert_eq!(texts(&effect(&single, "Rating").values), ["Hot"]);
+}
+
+#[test]
+fn consent_flags_are_left_out_and_said_so_lookup_names_stay_out() {
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "hasUserApproved": true, "status": "x", "parent": {"name": "Typed", "recordId": RECORD, "relatedTable": "account"}}),
+        &ToolResultContext::default(),
+    );
+    assert!(change.consent_left_out);
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.raw_name != "hasUserApproved")
+    );
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.raw_name != "name")
+    );
+}
+
+#[test]
+fn notes_say_what_the_tool_says_and_what_nobody_knows() {
+    let deleted = change_with(
+        &tool("delete_page", "", Some(true)),
+        json!({"page_id": "p1"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(
+        deleted
+            .notes
+            .contains(&ToolCallChangeNote::MarkedDestructive)
+    );
+    assert!(
+        deleted
+            .notes
+            .contains(&ToolCallChangeNote::DeleteOutcomeUnknown)
+    );
+
+    let permanent = change_with(
+        &tool("delete_page", "Permanently removes the page.", None),
+        json!({"page_id": "p1"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(
+        permanent
+            .notes
+            .contains(&ToolCallChangeNote::ToolSaysPermanent)
+    );
+    assert!(
+        !permanent
+            .notes
+            .contains(&ToolCallChangeNote::DeleteOutcomeUnknown)
+    );
+
+    let restorable = change_with(
+        &tool(
+            "trash_page",
+            "Moves the page to the trash. It can be restored.",
+            None,
+        ),
+        json!({"page_id": "p1"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(
+        restorable
+            .notes
+            .contains(&ToolCallChangeNote::ToolSaysRestorable)
+    );
+
+    let created = change_with(
+        &tool("create_record", "", Some(true)),
+        json!({"name": "x"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(created.notes, [ToolCallChangeNote::MarkedDestructive]);
+
+    let replaces = change_with(
+        &tool("set_labels", "This replaces the current labels.", None),
+        json!({"issue_number": 1, "labels": ["a"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(
+        replaces
+            .notes
+            .contains(&ToolCallChangeNote::ToolSaysReplacesList)
+    );
+    let adds = change_with(
+        &tool(
+            "update_labels",
+            "Only adds, existing labels are never removed.",
+            None,
+        ),
+        json!({"issue_number": 1, "labels": ["a"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(adds.notes.contains(&ToolCallChangeNote::ToolSaysAddsToList));
+    assert_eq!(effect(&adds, "labels").effect, ToolCallEffectKind::Set);
+    assert_eq!(adds.counts.list_replaced, 0);
+}
+
+#[test]
+fn hidden_characters_in_a_value_or_name_are_reported() {
+    let (_, hidden) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "stage": "wo\u{200B}n"}),
+        &ToolResultContext::default(),
+    );
+    assert!(hidden);
+    let (_, hidden) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "sta\u{202E}ge": "won"}),
+        &ToolResultContext::default(),
+    );
+    assert!(hidden);
+    let (_, clean) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "stage": "won"}),
+        &ToolResultContext::default(),
+    );
+    assert!(!clean);
+}
+
+#[test]
+fn a_hostile_call_stays_small_and_says_it_is_incomplete() {
+    let huge: serde_json::Map<String, Value> = (0..3000)
+        .map(|index| (format!("field_{index:04}"), json!("v".repeat(150))))
+        .collect();
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "fields": huge}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(change.effects.len(), MAX_EFFECTS);
+    assert_eq!(change.counts.set, 3000);
+    assert!(!change.complete);
+    assert!(serde_json::to_string(&change).unwrap().len() < 100_000);
+
+    let with_empties: serde_json::Map<String, Value> = (0..200)
+        .map(|index| (format!("zf_{index:04}"), Value::Null))
+        .collect();
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": "r1", "fields": with_empties}),
+        &ToolResultContext::default(),
+    );
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.effect == ToolCallEffectKind::Emptied)
+    );
+    assert_eq!(change.counts.emptied, 200);
+}
+
+#[test]
+fn nothing_panics_on_odd_arguments() {
+    for arguments in [
+        json!(null),
+        json!("text"),
+        json!([1, 2, 3]),
+        json!({"": {"": [[], [[]], {"": null}]}}),
+        json!({"id": "r1", "weird/name~with": "slashes", "*": [{}]}),
+    ] {
+        let tool = tool("update_record", "", None);
+        let context = ToolResultContext::default();
+        let label = labelled(&tool, &arguments, &context);
+        let _ = describe(
+            &label,
+            ChangeFacts {
+                tool: &tool,
+                arguments: &arguments,
+                approval_argument: None,
+                context: &context,
+                server: Some(SERVER),
+            },
+        );
+    }
+}
+
+#[test]
+fn forgetting_earlier_results_drops_old_values_and_names_but_keeps_what_the_call_writes() {
+    let context = earlier(vec![(
+        "read_record",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "stage": "open", "accountid": ACCOUNT, "name": "Rec"}),
+    )]);
+    let (mut change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"id": RECORD, "stage": "won", "accountid": RECORD, "note": "same"}),
+        &context,
+    );
+    assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Changed);
+    assert!(
+        change
+            .notes
+            .contains(&ToolCallChangeNote::OldValuesFromEarlier)
+    );
+    let before = change.counts;
+    forget_earlier(&mut change);
+    assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
+    assert!(effect(&change, "stage").old.is_none());
+    assert!(
+        !change
+            .notes
+            .contains(&ToolCallChangeNote::OldValuesFromEarlier)
+    );
+    assert_eq!(change.counts.set, before.changed + before.set);
+}
+
+#[test]
+fn a_mapping_from_any_source_is_described_the_same_way() {
+    let tool = tool("update_record", "", None);
+    let arguments = json!({"id": "r1", "stage": "won"});
+    let context = ToolResultContext::default();
+    let mapping = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: Vec::new(),
+        source: ToolCallLabelSource::Model,
+    };
+    let label = checked_label(SERVER, &tool, &arguments, &mapping, None);
+    let (change, _) = describe(
+        &label,
+        ChangeFacts {
+            tool: &tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context: &context,
+            server: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
+}
+
+#[test]
+fn a_batch_says_per_field_what_all_its_rows_do_and_whether_any_row_loses_something() {
+    let rows: Vec<_> = (0..200)
+        .map(|index| {
+            json!({
+                "Id": RECORD,
+                "Stage": if index < 3 { "Won" } else { "Lost" },
+                "Owner": if index < 7 { Value::Null } else { json!("ana") },
+                "Tags": if index == 0 { json!(["a"]) } else { json!(null) },
+            })
+        })
+        .collect();
+    let change = change_of(
+        "salesforce_dml_records",
+        json!({"operation": "update", "objectName": "Opportunity", "records": rows}),
+    );
+    let batch = change.batch.expect("batch");
+    assert!(!batch.same_change);
+    assert_eq!(batch.rows.len(), 50);
+    let stage = batch
+        .fields
+        .iter()
+        .find(|field| field.raw_name == "Stage")
+        .unwrap();
+    assert_eq!((stage.rows, stage.distinct, stage.emptied), (200, 2, 0));
+    assert_eq!(texts(&stage.samples), ["Won", "Lost"]);
+    let owner = batch
+        .fields
+        .iter()
+        .find(|field| field.raw_name == "Owner")
+        .unwrap();
+    assert_eq!((owner.rows, owner.emptied), (200, 7));
+    assert_eq!(batch.rows_emptying, 200);
+
+    // A row past every stored one still counts.
+    let mut late: Vec<_> = (0..120)
+        .map(|index| json!({"Name": format!("row {index}"), "Stage": "Open"}))
+        .collect();
+    late.push(json!({"Name": "last", "Stage": null}));
+    let change = change_of("update_rows", json!({"table": "x", "rows": late}));
+    let batch = change.batch.expect("batch");
+    assert_eq!(batch.rows_emptying, 1);
+    let stage = batch
+        .fields
+        .iter()
+        .find(|field| field.raw_name == "Stage")
+        .unwrap();
+    assert_eq!(stage.emptied, 1);
+    assert!(batch.read_all);
+}
+
+#[test]
+fn a_tools_read_only_claim_never_overrules_a_name_that_says_something_is_lost() {
+    use crate::services::tool_display::label::rules::{cross_check, sounds_like_a_loss};
+    let claims_reads = Some(ToolAnnotations::from_raw(
+        None,
+        Some(true),
+        None,
+        None,
+        None,
+    ));
+    let mut purge = tool("purge_user_data", "Only reads.", None);
+    purge.annotations = claims_reads.clone();
+    assert!(cross_check(&purge, &json!({"scope": "all"}), ToolCallAction::Delete).is_empty());
+    let (change, _) = change_with(
+        &purge,
+        json!({"scope": "all"}),
+        &ToolResultContext::default(),
+    );
+    assert!(
+        change
+            .notes
+            .iter()
+            .all(|note| !format!("{note:?}").contains("ReadOnly"))
+    );
+    assert!(sounds_like_a_loss("purge_user_data", &json!({})));
+    assert!(sounds_like_a_loss(
+        "refresh_cache",
+        &json!({"purge_user_data": true})
+    ));
+    assert!(!sounds_like_a_loss(
+        "refresh_cache",
+        &json!({"purge_user_data": false})
+    ));
+    assert!(!sounds_like_a_loss("list_records", &json!({"limit": 3})));
+
+    // Agreement between the verb and the claim is still a disagreement to flag.
+    let mut write = tool("update_record", "", None);
+    write.annotations = claims_reads;
+    assert!(!cross_check(&write, &json!({"id": "r1"}), ToolCallAction::Update).is_empty());
+}
+
+#[test]
+fn findings_are_only_for_real_statements() {
+    // A search box stays a value, even when its words sound like a statement.
+    for query in [
+        "delete pages about Q4",
+        "update pricing page",
+        "drop in sales",
+        "select the best one",
+    ] {
+        let plain = change_of("update_filter", json!({"id": "v1", "query": query}));
+        assert!(plain.opaque.is_empty(), "{query}");
+    }
+    let change = change_of(
+        "execute_sql",
+        json!({"query": "delete from pages where id = 1"}),
+    );
+    assert_eq!(change.opaque[0].found, ["DELETE"]);
+    let select = change_of(
+        "execute_sql",
+        json!({"query": "select count(*) from pages"}),
+    );
+    assert_eq!(select.opaque[0].kind, ToolCallOpaqueKind::Sql);
+    assert!(select.opaque[0].found.is_empty());
+
+    // A named statement member stays opaque, with findings only for a statement.
+    let named = change_of("execute_sql", json!({"sql": "delete pages about Q4"}));
+    assert_eq!(named.opaque[0].kind, ToolCallOpaqueKind::Sql);
+    assert!(named.opaque[0].found.is_empty());
+
+    // A code member that holds a plain value is a value.
+    let codes = change_of(
+        "update_record",
+        json!({"id": "r1", "country_code": "DE", "promo_code": "SAVE20"}),
+    );
+    assert!(codes.opaque.is_empty());
+    assert_eq!(texts(&effect(&codes, "promo_code").values), ["SAVE20"]);
+    let code = change_of("deploy_function", json!({"code": "delete_all();"}));
+    assert_eq!(code.opaque[0].kind, ToolCallOpaqueKind::Code);
+
+    // Prose under a command member is shown but not searched for risky words.
+    let prose = change_of("run_shell", json!({"command": "kill the old processes"}));
+    assert_eq!(prose.opaque[0].kind, ToolCallOpaqueKind::Shell);
+    assert!(prose.opaque[0].found.is_empty());
+    let shell = change_of("run_shell", json!({"command": "rm foo bar baz"}));
+    assert_eq!(shell.opaque[0].found, ["rm"]);
+}
+
+#[test]
+fn trash_is_restorable_and_a_negated_permanently_is_no_claim() {
+    let trash = change_with(
+        &tool(
+            "trash_file",
+            "Moves a file to the user's trash. It does not permanently delete the file.",
+            None,
+        ),
+        json!({"fileId": "f_1"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(
+        trash
+            .notes
+            .contains(&ToolCallChangeNote::ToolSaysRestorable)
+    );
+    assert!(!trash.notes.contains(&ToolCallChangeNote::ToolSaysPermanent));
+}
+
+#[test]
+fn an_address_counts_as_reach_only_on_a_send_or_share() {
+    let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
+    let shared = change_with(
+        &tool("share_file", "", None),
+        json!({"fileId": "f_1", "role": "writer", "emailAddress": "ana@fabrikam.example"}),
+        &context,
+    )
+    .0;
+    assert_eq!(shared.recipients.unwrap().outside, ["ana@fabrikam.example"]);
+
+    let record = change_with(
+        &tool("update_company", "", None),
+        json!({"id": "c1", "properties": {"phone": "+49 30 000000", "email": "a@x.example"}}),
+        &context,
+    )
+    .0;
+    assert_eq!(record.recipients, None);
+    assert_eq!(texts(&effect(&record, "phone").values), ["+49 30 000000"]);
+}
+
+#[test]
+fn a_member_named_add_says_it_only_adds_and_a_path_names_what_a_write_acts_on() {
+    let add = change_of("save_issue", json!({"id": "ENG-1", "addLabels": ["x"]}));
+    assert_eq!(effect(&add, "addLabels").effect, ToolCallEffectKind::Set);
+
+    let rules = rules_label(
+        "write_file",
+        &json!({"path": "/srv/a", "content": "x"}),
+        None,
+        None,
+    );
+    assert_eq!(rules.mapping.items[0].id.as_deref(), Some("/path"));
+    let read = rules_label("read_file", &json!({"path": "/srv/a"}), None, None);
+    assert!(read.mapping.items.is_empty());
+}
+
+#[test]
+fn a_statement_member_makes_a_query_tool_a_run_but_never_a_read_tool() {
+    let run = rules_label(
+        "query",
+        &json!({"sql": "select pg_terminate_backend(1)"}),
+        None,
+        None,
+    );
+    assert_eq!(run.mapping.action, ToolCallAction::Run);
+    let read = rules_label("read_query", &json!({"sql": "select 1"}), None, None);
+    assert_eq!(read.mapping.action, ToolCallAction::Other);
+    let search = rules_label(
+        "search",
+        &json!({"query": "delete pages about Q4"}),
+        None,
+        None,
+    );
+    assert_eq!(search.mapping.action, ToolCallAction::Other);
+}
+
+#[test]
+fn a_delete_without_an_id_names_what_goes() {
+    let rules = rules_label(
+        "resources_delete",
+        &json!({"apiVersion": "v1", "kind": "Namespace", "name": "shop"}),
+        None,
+        None,
+    );
+    assert_eq!(rules.mapping.items[0].title.as_deref(), Some("/name"));
+}
+
+#[test]
+fn one_old_and_new_text_edit_in_a_list_reads_old_to_new() {
+    let change = change_of(
+        "edit_file",
+        json!({"path": "/x", "edits": [{"oldText": "a", "newText": "b"}]}),
+    );
+    let edit = effect(&change, "newText");
+    assert_eq!(edit.effect, ToolCallEffectKind::Changed);
+    assert_eq!(edit.old.as_ref().unwrap().text, "a");
+}

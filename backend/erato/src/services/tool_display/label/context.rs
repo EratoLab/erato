@@ -12,7 +12,7 @@ use super::recipients::{is_phone_shaped, is_recipient_member};
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
-    ToolCallStatus, ToolUse,
+    ToolCallLabelItem, ToolCallStatus, ToolUse,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
@@ -66,6 +66,27 @@ pub struct ToolResultContext {
     approved: HashSet<String>,
     /// Estimated size of `records`, kept under [`MAX_INDEX_BYTES`].
     bytes: usize,
+    /// Who counts as inside the organisation for this chat's user.
+    organization: Option<OrganizationDomains>,
+}
+
+/// The signed-in user's email domain and the operator's extra ones.
+#[derive(Debug, Clone, Default)]
+struct OrganizationDomains {
+    domains: Vec<String>,
+}
+
+impl OrganizationDomains {
+    /// A subdomain counts: only the domain's owner can issue one.
+    fn holds(&self, domain: &str) -> bool {
+        let domain = domain.to_ascii_lowercase();
+        self.domains.iter().any(|known| {
+            domain == *known
+                || domain
+                    .strip_suffix(known.as_str())
+                    .is_some_and(|rest| rest.ends_with('.'))
+        })
+    }
 }
 
 /// A record as one MCP server reported it: `server` is the name its tool rows
@@ -86,14 +107,52 @@ impl RecordKey {
 }
 
 #[derive(Debug, Clone, Default)]
-struct Record {
+pub(super) struct Record {
     name: Option<String>,
     fields: HashMap<String, String>,
     /// A non-UUID ID that named two different things: it resolves to nothing.
     ambiguous: bool,
 }
 
+impl Record {
+    pub(super) fn field(&self, member: &str) -> Option<String> {
+        self.fields.get(member).cloned()
+    }
+}
+
 impl ToolResultContext {
+    /// Records who counts as inside the organisation for this chat's user:
+    /// `user_email`'s domain plus `extra_domains`. With no user domain nothing
+    /// is known, whatever is configured, so no card claims none are outside.
+    pub fn with_organization(mut self, user_email: Option<&str>, extra_domains: &[String]) -> Self {
+        let own = user_email
+            .and_then(|email| email.rsplit_once('@'))
+            .map(|(_, domain)| domain.trim().to_ascii_lowercase())
+            .filter(|domain| !domain.is_empty());
+        self.organization = own.map(|own| {
+            let mut domains = vec![own];
+            domains.extend(
+                extra_domains
+                    .iter()
+                    .map(|domain| domain.trim().trim_start_matches('@').to_ascii_lowercase())
+                    .filter(|domain| !domain.is_empty()),
+            );
+            OrganizationDomains { domains }
+        });
+        self
+    }
+
+    pub(super) fn organization_domains(&self) -> Option<()> {
+        self.organization.as_ref().map(|_| ())
+    }
+
+    /// Whether `domain` is the user's own or a configured one.
+    pub(super) fn is_inside_organization(&self, domain: &str) -> bool {
+        self.organization
+            .as_ref()
+            .is_some_and(|organization| organization.holds(domain))
+    }
+
     /// The tool results a turn's generation input replays, the most recent
     /// [`MAX_CALLS_READ`] calls only. After a chat-history compaction none are
     /// left, so names read before it are misses.
@@ -227,6 +286,27 @@ impl ToolResultContext {
                 }
             }
         }
+    }
+
+    /// The one record an item's `id` names, if a result reported it.
+    pub(super) fn record_of_item(
+        &self,
+        item: &ToolCallLabelItem,
+        arguments: &Value,
+        server: &str,
+    ) -> Option<&Record> {
+        item.id
+            .as_ref()
+            .filter(|slot| slot.omitted == 0)
+            .and_then(|slot| match slot.values.as_slice() {
+                [only] => self.record_at(arguments, &only.path, server),
+                _ => None,
+            })
+    }
+
+    /// What a result calls the record `id` stands for.
+    pub(super) fn name_of_id(&self, server: &str, id: &str) -> Option<&str> {
+        self.record(server, text_key(id)?)?.name.as_deref()
     }
 
     fn note_decisions(&mut self, content: &[ContentPart]) {
@@ -532,6 +612,9 @@ pub fn forget_resolved(label: &mut ToolCallLabel) {
                 value.resolved = None;
             }
         }
+    }
+    if let Some(change) = label.change.as_mut() {
+        super::change::forget_earlier(change);
     }
 }
 

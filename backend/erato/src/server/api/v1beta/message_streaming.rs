@@ -1016,6 +1016,7 @@ pub struct MeProfileChatRequestInput<'a> {
     pub oidc_token: &'a str,
     pub access_token: Option<&'a str>,
     pub preferred_language: &'a str,
+    pub email: Option<&'a str>,
     pub user_preference_nickname: Option<&'a str>,
     pub user_preference_job_title: Option<&'a str>,
     pub user_preference_assistant_custom_instructions: Option<&'a str>,
@@ -1036,6 +1037,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             oidc_token: &me_profile.oidc_token,
             access_token: me_profile.access_token.as_deref(),
             preferred_language: &me_profile.preferred_language,
+            email: me_profile.email.as_deref(),
             user_preference_nickname: me_profile.preference_nickname.as_deref(),
             user_preference_job_title: me_profile.preference_job_title.as_deref(),
             user_preference_assistant_custom_instructions: me_profile
@@ -4871,6 +4873,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     let tool_result_context =
         crate::services::tool_display::label::ToolResultContext::from_messages(
             &generation_input_messages,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state.config.tool_labels.organization_email_domains,
         );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
@@ -23382,6 +23388,10 @@ async fn resume_parked_generation(
         crate::services::tool_display::label::ToolResultContext::from_messages_and_row(
             &retrieval_source,
             &parsed.content,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state.config.tool_labels.organization_email_domains,
         );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(

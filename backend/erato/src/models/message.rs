@@ -568,6 +568,389 @@ pub struct ToolCallLabel {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<ToolCallLabelWarning>,
     pub source: ToolCallLabelSource,
+    /// What the call changes, in the same terms on every server. Absent on
+    /// older rows, labels with no verb and labels written by hand, which
+    /// render as before.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub change: Option<ToolCallChange>,
+}
+
+/// What a call changes, described the same way for every server and computed
+/// by code from the call's real arguments next to its label: what each value
+/// does, how far it reaches, what is lost, and what the card cannot know.
+/// Shown only: it never decides whether a call needs approval.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallChange {
+    /// Every value the call writes, in the call's order. Capped; `counts`
+    /// counts them all, and `complete` says whether everything was read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<ToolCallEffect>,
+    #[serde(default)]
+    pub counts: ToolCallEffectCounts,
+    /// Long text the call writes, shown as a block.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub texts: Vec<ToolCallTextChange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub recipients: Option<ToolCallRecipients>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub filter: Option<ToolCallFilter>,
+    /// Boolean arguments that change what the call does; only those set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<ToolCallFlag>,
+    /// Content the card cannot read: SQL, shell, code or an instruction.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub opaque: Vec<ToolCallOpaque>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub batch: Option<ToolCallBatch>,
+    /// Where the record lives when no target says so: the table, the project,
+    /// joined when the call names several.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub place: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<ToolCallChangeNote>,
+    /// Every value was read and classified. Only then may a card state what
+    /// the part it does not show cannot hold.
+    #[serde(default)]
+    pub complete: bool,
+    /// The call set an approval value of its own, which is left out.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub consent_left_out: bool,
+}
+
+/// One value a call writes and what happens to what is there.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallEffect {
+    /// Where the value sits in `input`.
+    pub path: String,
+    /// A readable name, display-cleaned.
+    pub name: String,
+    /// The member as written, display-cleaned; the card shows it under see more.
+    pub raw_name: String,
+    pub effect: ToolCallEffectKind,
+    /// The new value, or a list's new values; empty when the value is emptied.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<ToolCallEffectValue>,
+    /// List values past the cap.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omitted: u32,
+    /// The value an earlier result in the chat showed; absent when unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub old: Option<ToolCallEffectValue>,
+    /// What a replaced list loses, where an earlier result showed the list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed: Vec<ToolCallEffectValue>,
+    /// What a replaced list keeps, where an earlier result showed the list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<ToolCallEffectValue>,
+    /// The value only links to another record.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub link: bool,
+}
+
+/// One value as a card shows it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallEffectValue {
+    /// Display-cleaned and capped. For a machine identifier: the name of the
+    /// record it stands for, or empty when no result names it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    /// A machine identifier: the card shows `text`, or a phrase when it is empty.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub machine_id: bool,
+}
+
+/// What happens to a value, ranked from most to least to lose.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallEffectKind {
+    Emptied,
+    ListReplaced,
+    /// The old value is known and differs.
+    Changed,
+    /// The old value is unknown.
+    Set,
+    /// The value equals what an earlier result showed.
+    Unchanged,
+    /// A value this code cannot classify. Also what a kind from a newer
+    /// version reads as.
+    #[serde(other)]
+    Unreadable,
+}
+
+/// How many values a call writes, by effect, including those past the caps.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+pub struct ToolCallEffectCounts {
+    #[serde(default)]
+    pub emptied: u32,
+    #[serde(default)]
+    pub list_replaced: u32,
+    #[serde(default)]
+    pub changed: u32,
+    #[serde(default)]
+    pub set: u32,
+    #[serde(default)]
+    pub unchanged: u32,
+    #[serde(default)]
+    pub unreadable: u32,
+}
+
+/// Long text a call writes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallTextChange {
+    pub path: String,
+    pub name: String,
+    pub raw_name: String,
+    /// Its start, display-cleaned; the card reads the rest from `input`.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    pub lines: u32,
+    pub chars: u32,
+    /// The text it replaces, where the call says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub before: Option<ToolCallEffectValue>,
+}
+
+/// Who a call reaches. Group addresses count as one and are never expanded.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallRecipients {
+    pub total: u32,
+    /// One group per recipient member: to, cc, bcc and the like.
+    pub groups: Vec<ToolCallRecipientGroup>,
+    /// Addresses outside the organisation, as written.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outside: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub outside_omitted: u32,
+    /// Whether `outside` was computed: the signed-in user's domain is known.
+    #[serde(default)]
+    pub outside_known: bool,
+    /// Recipients with no address to check, such as a number or an ID.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub unchecked: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallRecipientGroup {
+    pub name: String,
+    pub raw_name: String,
+    pub count: u32,
+    /// Every address as written, capped; machine IDs are counted, not listed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omitted: u32,
+}
+
+/// What a filter selects, in words.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallFilter {
+    pub path: String,
+    /// The filter is empty: every record.
+    #[serde(default)]
+    pub every_record: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<ToolCallFilterPart>,
+    /// A filter written as text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub text: Option<ToolCallEffectValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallFilterPart {
+    pub name: String,
+    pub value: ToolCallEffectValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallFlag {
+    pub name: String,
+    pub raw_name: String,
+    pub path: String,
+    /// It asks for a dry run: the call says what it would do without doing it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dry_run: bool,
+}
+
+/// Content whose effect only reading it could tell.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallOpaque {
+    pub kind: ToolCallOpaqueKind,
+    pub name: String,
+    pub raw_name: String,
+    pub path: String,
+    /// Its start, display-cleaned; the card reads the rest from `input`.
+    pub text: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
+    pub lines: u32,
+    /// Risky words found in it, as written in the closed lists. Findings
+    /// only: never the verb.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub found: Vec<String>,
+    /// A write found in a statement that opens like a read.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub write_inside_read: bool,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallOpaqueKind {
+    Sql,
+    Shell,
+    Instruction,
+    /// Also what a kind from a newer version reads as.
+    #[serde(other)]
+    Code,
+}
+
+/// Several rows in one call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallBatch {
+    pub path: String,
+    pub name: String,
+    pub total: u32,
+    /// Every row writes the same values, ignoring what identifies a row.
+    #[serde(default)]
+    pub same_change: bool,
+    /// The one change every row makes, when `same_change`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared: Vec<ToolCallEffect>,
+    /// The first rows, deletions first, each with its number in the call.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rows: Vec<ToolCallBatchRow>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub deletions: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rows_emptying: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rows_replacing_lists: u32,
+    /// Rows per operation, when rows name their own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operations: Vec<ToolCallBatchOperation>,
+    /// What each field does across the rows, the first ones the batch writes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<ToolCallBatchField>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fields_omitted: u32,
+    /// Every row was read. Only then may a card say what no row does.
+    #[serde(default)]
+    pub read_all: bool,
+}
+
+/// What one field does across all of a batch's rows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallBatchField {
+    pub name: String,
+    pub raw_name: String,
+    /// Rows that write the field.
+    pub rows: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub emptied: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lists_replaced: u32,
+    /// How many different values the rows write.
+    pub distinct: u32,
+    /// `distinct` stopped counting at its cap.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub distinct_capped: bool,
+    /// The first different values, as examples.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub samples: Vec<ToolCallEffectValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallBatchRow {
+    /// The row's position in the call, from 1.
+    pub number: u32,
+    /// What it is called; absent when only a machine ID identifies it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub action: Option<ToolCallAction>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<ToolCallEffect>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallBatchOperation {
+    pub action: ToolCallAction,
+    pub count: u32,
+}
+
+/// What a card says in a closed sentence: what the tool claims, always as the
+/// tool's claim, and what nobody can know.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallChangeNote {
+    /// The tool's annotations mark it as destructive.
+    MarkedDestructive,
+    /// What else goes, and whether it can be restored, is not known.
+    DeleteOutcomeUnknown,
+    ToolSaysPermanent,
+    ToolSaysRestorable,
+    ToolSaysReplacesList,
+    ToolSaysAddsToList,
+    /// Whether a list replaces the current one or adds to it is not known.
+    ListReplaceUnknown,
+    ToolSaysIgnoredIfMissing,
+    /// How many rows the statement or filter touches is not known.
+    RowCountUnknown,
+    /// Another assistant decides what to do.
+    InstructionOutcomeUnknown,
+    /// Old values come from earlier results in the chat and may have changed.
+    OldValuesFromEarlier,
+    /// Every value equals what an earlier result showed.
+    NothingChanges,
+    /// A note from a newer version; clients skip it.
+    #[serde(other)]
+    Other,
 }
 
 /// What a call does. Reads, and anything none of the verbs fits, are `other`.

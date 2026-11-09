@@ -5,6 +5,7 @@
 
 mod arguments;
 pub mod cache;
+pub mod change;
 pub mod context;
 pub mod machine_id;
 pub mod model;
@@ -96,6 +97,7 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
             .into_iter()
             .collect(),
         source: ToolCallLabelSource::Generic,
+        change: None,
     }
 }
 

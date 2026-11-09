@@ -3548,6 +3548,10 @@ pub struct ToolLabelsConfig {
     #[facet(erato_config::security_relevance(level = "high"))]
     #[facet(erato_config::default_value_security(level = "more_secure"))]
     pub allow_other_provider: bool,
+    /// Email domains that count as inside the organisation on approval cards,
+    /// next to the signed-in user's own domain. Independent of `enabled`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub organization_email_domains: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]

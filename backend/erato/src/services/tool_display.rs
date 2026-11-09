@@ -4,7 +4,7 @@
 pub mod label;
 
 use crate::config::McpRuntimeConfig;
-use crate::models::message::ToolDisplayMetadata;
+use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
 };
@@ -180,6 +180,23 @@ fn labelled_display(
         // The view's paths reach the input as stored.
         if let Some(stored) = &labelled.stored {
             label.arguments = Some(label::readable_arguments(stored).0);
+        }
+        let facts = label::change::ChangeFacts {
+            tool,
+            arguments,
+            approval_argument: consent,
+            context,
+            server: scope.as_deref(),
+        };
+        if let Some((change, hidden)) = label::change::describe(&label, facts) {
+            label.change = Some(change);
+            if hidden
+                && !label
+                    .warnings
+                    .contains(&ToolCallLabelWarning::HiddenCharacters)
+            {
+                label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
+            }
         }
         label
     })
