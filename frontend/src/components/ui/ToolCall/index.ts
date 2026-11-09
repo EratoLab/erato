@@ -11,7 +11,11 @@ export {
   ToolCallGistLine,
   ToolCallGistValues,
 } from "./ToolCallGist";
-export { ToolCallChangeCard } from "./ToolCallChange";
+export {
+  changeRowHasDetails,
+  ToolCallChangeCard,
+  ToolCallChangeRowDetails,
+} from "./ToolCallChange";
 
 export type { ToolCallItemProps } from "./ToolCallItem";
 export type { ToolCallInputProps } from "./ToolCallInput";

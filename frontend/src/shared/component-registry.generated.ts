@@ -445,6 +445,8 @@ export { McpToolDescription } from "@/components/ui/ToolCall/McpToolDescription"
 export type { McpToolDescriptionProps } from "@/components/ui/ToolCall/McpToolDescription";
 export { ToolArgumentView } from "@/components/ui/ToolCall/ToolArgumentView";
 export { ToolCallChangeCard } from "@/components/ui/ToolCall/ToolCallChange";
+export { ToolCallChangeRowDetails } from "@/components/ui/ToolCall/ToolCallChange";
+export { changeRowHasDetails } from "@/components/ui/ToolCall/ToolCallChange";
 export { GistValueText } from "@/components/ui/ToolCall/ToolCallGist";
 export { ToolCallGist } from "@/components/ui/ToolCall/ToolCallGist";
 export { ToolCallGistLine } from "@/components/ui/ToolCall/ToolCallGist";

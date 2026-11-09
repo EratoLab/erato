@@ -75,6 +75,8 @@ import type { ReactNode, Ref } from "react";
 const ISOLATED = "[unicode-bidi:isolate]";
 const MUTED = "text-xs text-theme-fg-muted";
 const LIST_VALUES = 6;
+/** Values named under a trace row; the rest are counted. */
+const ROW_VALUES = 2;
 
 /**
  * A box that scrolls when its content does not fit. Only then is it a tab
@@ -710,6 +712,89 @@ const ChangeNotes = ({ change }: { change: GistChange }) => {
         </p>
       ))}
     </div>
+  );
+};
+
+/**
+ * Under a trace row, what the call did in a line or two: counts live in the
+ * row's title, so this names the losses, who it reached and the first values.
+ */
+export const ToolCallChangeRowDetails = ({
+  change,
+}: {
+  change: GistChange;
+}) => {
+  const layout = changeLayout(change);
+  const shown = layout.firstRows.slice(0, ROW_VALUES);
+  const more = layout.firstRows.length - shown.length + layout.collapsed.length;
+  const found = change.opaque.flatMap((opaque) =>
+    opaque.found.length > 0 ? [foundLine(opaque.kind, opaque.found)] : [],
+  );
+  const removals = layout.lists.filter((effect) => effect.removed.length > 0);
+  return (
+    <div
+      className="space-y-0.5 text-xs text-theme-fg-secondary"
+      data-testid="tool-call-change-row-details"
+    >
+      {change.recipients && (
+        <p>
+          {recipientsLine(change.recipients)}
+          {change.recipients.outsideKnown &&
+            change.recipients.outside.length > 0 && (
+              <span dir="auto" className={ISOLATED}>
+                {" · "}
+                {outsideLine(change.recipients)}
+              </span>
+            )}
+        </p>
+      )}
+      {change.batch && change.batch.deletions > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {batchDeletionsLine(change.batch.deletions, [])}
+        </p>
+      )}
+      {change.batch &&
+        (change.batch.rowsEmptying > 0 ||
+          change.batch.rowsReplacingLists > 0) &&
+        batchLossLines(change.batch).map((line, index) => (
+          <p key={index}>{line}</p>
+        ))}
+      {layout.emptied.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
+        </p>
+      )}
+      {removals.map((effect, index) => (
+        <p key={index} dir="auto" className={ISOLATED}>
+          {listRemovedLabel(effect.name)}:{" "}
+          {effect.removed.map(plainChangeValue).join(", ")}
+        </p>
+      ))}
+      {found.map((line, index) => (
+        <p key={index}>{line}</p>
+      ))}
+      {shown.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {shown.map(rowChangeText).join(", ")}
+          {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
+        </p>
+      )}
+    </div>
+  );
+};
+
+/** Whether a trace row has more to say than its line and counts. */
+export const changeRowHasDetails = (change: GistChange): boolean => {
+  const layout = changeLayout(change);
+  return (
+    change.recipients !== undefined ||
+    (change.batch?.deletions ?? 0) > 0 ||
+    (change.batch?.rowsEmptying ?? 0) > 0 ||
+    (change.batch?.rowsReplacingLists ?? 0) > 0 ||
+    layout.emptied.length > 0 ||
+    layout.firstRows.length > 0 ||
+    layout.lists.some((effect) => effect.removed.length > 0) ||
+    change.opaque.some((opaque) => opaque.found.length > 0)
   );
 };
 

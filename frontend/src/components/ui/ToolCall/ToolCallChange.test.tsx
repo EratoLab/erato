@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { readChange } from "@/lib/toolCallGist/change";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
-import { ToolCallChangeCard } from "./ToolCallChange";
+import { ToolCallChangeCard, ToolCallChangeRowDetails } from "./ToolCallChange";
 
 import type { GistChange } from "@/lib/toolCallGist/change";
 import type { Gist } from "@/lib/toolCallGist/gist";
@@ -389,6 +389,57 @@ describe("the change card", () => {
     expect(
       screen.getByText("<img src=x onerror=alert(1)>"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("a trace row's details", () => {
+  it("names the losses, who it reached and the first values", () => {
+    const change = readAs({
+      effects: [
+        {
+          path: "/owner",
+          name: "Owner",
+          raw_name: "owner",
+          effect: "emptied",
+        },
+        {
+          path: "/stage",
+          name: "Stage",
+          raw_name: "stage",
+          effect: "changed",
+          values: [{ text: "customer" }],
+          old: { text: "lead" },
+        },
+        {
+          path: "/id",
+          name: "Owner ID",
+          raw_name: "owner_id",
+          effect: "changed",
+          values: [{ text: "", machine_id: true }],
+          old: { text: "Tess", machine_id: true },
+        },
+        set(1),
+      ],
+      counts: { emptied: 1, changed: 2, set: 1 },
+      recipients: {
+        total: 2,
+        groups: [],
+        outside: ["a@x.example"],
+        outside_known: true,
+      },
+    });
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeRowDetails change={change} />
+      </I18nProvider>,
+    );
+    const details = screen.getByTestId("tool-call-change-row-details");
+    expect(details).toHaveTextContent("Emptied: Owner");
+    expect(details).toHaveTextContent("To 2 addresses");
+    expect(details).toHaveTextContent("1 address is outside your organisation");
+    expect(details).toHaveTextContent("Stage lead → customer");
+    expect(details).toHaveTextContent("+1");
+    expect(details.textContent).not.toContain(UUID);
   });
 });
 

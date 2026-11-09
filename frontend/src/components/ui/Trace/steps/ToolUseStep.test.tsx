@@ -199,6 +199,94 @@ describe("ToolUseStep sidecar trace", () => {
   });
 });
 
+describe("ToolUseStep with a change description", () => {
+  const change = {
+    effects: [
+      { path: "/owner", name: "Owner", raw_name: "owner", effect: "emptied" },
+      {
+        path: "/stage",
+        name: "Stage",
+        raw_name: "stage",
+        effect: "changed",
+        values: [{ text: "customer" }],
+        old: { text: "lead" },
+      },
+    ],
+    counts: { emptied: 1, changed: 1, unchanged: 10 },
+    complete: true,
+  };
+  const label = {
+    action: "update",
+    object_kind: "row",
+    source: "rules",
+    items: [
+      {
+        title: {
+          pointer: "/name",
+          values: [{ path: "/name", text: "Tailspin Toys" }],
+        },
+      },
+    ],
+    change,
+  };
+
+  it("says the sentence in the past tense with counts and losses", () => {
+    render(
+      <ToolUseStep
+        part={
+          {
+            content_type: "tool_use",
+            tool_call_id: "call",
+            tool_name: "update_company",
+            status: "success",
+            input: { name: "Tailspin Toys" },
+            output: {},
+            display: { title: "Update", label },
+          } as unknown as ToolUse & { content_type: "tool_use" }
+        }
+        status="done"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Updated row Tailspin Toys: 1 emptied, 1 changed, 10 unchanged",
+    );
+    const details = screen.getByTestId("tool-call-change-row-details");
+    expect(details).toHaveTextContent("Emptied: Owner");
+    expect(details).toHaveTextContent("Stage lead → customer");
+  });
+
+  it("keeps the raw call behind the row's toggle", () => {
+    render(
+      <ToolUseStep
+        part={
+          {
+            content_type: "tool_use",
+            tool_call_id: "call",
+            tool_name: "update_company",
+            status: "error",
+            input: { name: "Tailspin Toys" },
+            output: { error: "denied by server" },
+            display: { title: "Update", label },
+          } as unknown as ToolUse & { content_type: "tool_use" }
+        }
+        status="error"
+        isStreaming={false}
+        isCollapsed={false}
+        isLastStep
+      />,
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Could not update row Tailspin Toys",
+    );
+    expect(screen.getByTestId("tool-failure-message")).toHaveTextContent(
+      "denied by server",
+    );
+  });
+});
+
 describe("ToolUseStep decision row", () => {
   const DISPLAY = {
     title: "create_record",
