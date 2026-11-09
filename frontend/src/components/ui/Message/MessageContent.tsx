@@ -724,6 +724,18 @@ function ClientToolPendingNotice({ toolCallId }: { toolCallId: string }) {
   );
 }
 
+/**
+ * Whether a turn still waits on this client tool call's marker. A call that
+ * waits ends the row, or sits right before the stop that carries its tasks'
+ * questions. A marker further up belongs to a call that already ended.
+ */
+const isWaitingCallMarker = (
+  content: readonly ContentPart[],
+  index: number,
+): boolean =>
+  index === content.length - 1 ||
+  content[index + 1]?.content_type === "tool_approval_request";
+
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
   part.content_type === "reasoning" ||
@@ -1800,7 +1812,7 @@ export const MessageContent = memo(function MessageContent({
         }
 
         if (part.content_type === "client_tool_pending") {
-          if (index !== content.length - 1) return null;
+          if (!isWaitingCallMarker(content, index)) return null;
           return (
             <ClientToolPendingNotice
               key={`client-operation-${part.attempt_id}`}

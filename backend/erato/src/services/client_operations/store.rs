@@ -822,7 +822,19 @@ pub async fn supersede_other_attempts<C: ConnectionTrait>(
             continue;
         };
         let mut parsed = MessageSchema::validate(&message.raw_message)?;
-        parsed.content.retain(|part| !matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == row.attempt_id));
+        if let Some(position) = parsed.content.iter().position(|part| {
+            matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == row.attempt_id)
+        }) {
+            parsed.content.remove(position);
+            // The part that carried the tasks' questions goes with the call:
+            // they stay answerable from their own chats, as a task that parked
+            // before the user stopped does.
+            if position + 1 == parsed.content.len()
+                && matches!(parsed.content.get(position), Some(ContentPart::ToolApprovalRequest(_)))
+            {
+                parsed.content.remove(position);
+            }
+        }
         for part in &mut parsed.content {
             if let ContentPart::ToolUse(tool) = part
                 && tool.tool_call_id == row.tool_call_id

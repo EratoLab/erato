@@ -2498,6 +2498,36 @@ it("shows a durable app wait in persisted history and hides a consumed marker", 
   expect(screen.queryByRole("status")).toBeNull();
 });
 
+it("keeps a waiting call's notice beside the question its task asked", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const view = renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[pending, childApprovalRequest()]}
+    />,
+  );
+  expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+  expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+  view.unmount();
+  // An earlier call's marker, further up the row, is not a wait any more.
+  renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[
+        pending,
+        { content_type: "text", text: "Next step." },
+        childApprovalRequest(),
+      ]}
+    />,
+  );
+  expect(screen.queryByText(/waiting for a connected app/)).toBeNull();
+});
+
 it("points a turn parked on a sidecar review to the Erato desktop app while the review is open", () => {
   const pending: ContentPart = {
     content_type: "client_tool_pending",

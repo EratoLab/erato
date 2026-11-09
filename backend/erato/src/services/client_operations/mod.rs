@@ -426,6 +426,34 @@ pub fn pending(content: &[crate::models::message::ContentPart]) -> Option<&Clien
     }
 }
 
+/// The last pending part of a row, wherever it sits: the call the turn still
+/// waits for when it is open. A part further up belongs to a call that already
+/// ended, and only that call's own continuation removes it.
+pub fn waiting_call(content: &[crate::models::message::ContentPart]) -> Option<&ClientToolPending> {
+    content.iter().rev().find_map(|part| match part {
+        crate::models::message::ContentPart::ClientToolPending(pending) => Some(pending),
+        _ => None,
+    })
+}
+
+/// Moves a waiting call's part to the end of the row, where a turn that waits
+/// for it ends.
+pub fn move_waiting_call_last(
+    content: &mut Vec<crate::models::message::ContentPart>,
+    attempt_id: Uuid,
+) {
+    if let Some(position) = content.iter().position(|part| {
+        matches!(
+            part,
+            crate::models::message::ContentPart::ClientToolPending(pending)
+                if pending.attempt_id == attempt_id
+        )
+    }) {
+        let part = content.remove(position);
+        content.push(part);
+    }
+}
+
 pub fn from_fast_result(
     request: &OperationRequest,
     outcome: crate::services::client_tools::ClientToolOutcome,

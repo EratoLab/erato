@@ -100,7 +100,8 @@ Locks every context runs, as before. A POST that settles the unclaimed attempt
 through the fast path answers `stored: true`, and only then does the pane request
 a sweep, so a drop on the same pane resumes without waiting for the 10 s poll. A
 `client_tool_pending` part also requests a sweep, for a pane whose executor is not
-running. That sweep can race the generation's release after the park; the server
+running; a turn whose call waits while a task's question is open carries that part
+right before its `delegated_task` part, see `delegated-client-tools.md`, "Approvals". That sweep can race the generation's release after the park; the server
 refuses the claim (409) until the release lands, and the coordinator retries it
 once after 1.5 s before leaving the attempt to the poll (a claim refused again,
 for example one another pane holds, is not retried early). A pane without a
