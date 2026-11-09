@@ -293,8 +293,19 @@ const TURN_ANSWER: &str = "TURN-ANSWER-AFTER-BOTH";
 /// Long enough that the own call is popped and parks before the task asks: a
 /// task that asked first holds that call back, which is not the case here.
 const TASK_ASKS_AFTER: Duration = Duration::from_millis(1_500);
+/// How long an answered task keeps running, for what lands during its run.
+const TASK_ANSWERS_AFTER: Duration = Duration::from_millis(1_500);
 
 async fn setup_search_and_task(pool: Pool<Postgres>, timeout_ms: u64, asks_twice: bool) -> Setup {
+    setup_search_and_paced_task(pool, timeout_ms, asks_twice, Duration::ZERO).await
+}
+
+async fn setup_search_and_paced_task(
+    pool: Pool<Postgres>,
+    timeout_ms: u64,
+    asks_twice: bool,
+    answers_after: Duration,
+) -> Setup {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     let capture = recorder.clone();
@@ -339,14 +350,13 @@ async fn setup_search_and_task(pool: Pool<Postgres>, timeout_ms: u64, asks_twice
                 &[TASK_BRIEF, PROBE_RESULT],
                 &["child_run_id"],
             ));
-        mock_llm_sse_response(
-            then,
-            if asks_twice {
-                build_openai_tool_calls_streaming_response(&[("task-probe-2", PROBE, json!({}))])
-            } else {
-                build_openai_text_streaming_response(&[TASK_ANSWER])
-            },
-        );
+        let mut actions = vec![BodyAction::Delay(answers_after)];
+        actions.extend(if asks_twice {
+            build_openai_tool_calls_streaming_response(&[("task-probe-2", PROBE, json!({}))])
+        } else {
+            build_openai_text_streaming_response(&[TASK_ANSWER])
+        });
+        mock_llm_sse_response(then, actions);
     });
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
@@ -517,6 +527,26 @@ fn delegate_child(content: &[Value]) -> Uuid {
     .unwrap()
 }
 
+/// Waits until the answered task's own run is under way, with the parent's
+/// continuation waiting for it.
+async fn task_runs_again(setup: &Setup, child: Uuid) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let chat = chats::Entity::find_by_id(child)
+                .one(&setup.state.db)
+                .await
+                .unwrap()
+                .unwrap();
+            if chat.generation_state.as_deref() == Some("running") {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the answered task should run again");
+}
+
 async fn child_row(setup: &Setup, chat_id: Uuid) -> erato::db::entity::messages::Model {
     Messages::find()
         .filter(erato::db::entity::messages::Column::ChatId.eq(chat_id))
@@ -660,6 +690,105 @@ async fn the_calls_result_leaves_the_turn_on_the_tasks_open_question(pool: Pool<
     let content = parts(&setup).await;
     assert!(content.last().unwrap().to_string().contains(TURN_ANSWER));
     assert_eq!(slot(&content, TASK_CALL)["status"], "success");
+}
+
+/// The review ends while the answered task's run holds the chat on this
+/// replica. That run knows nothing of the call, so the result goes to the
+/// logged inbox; a delivery to the run would drop it and run the tool again.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_result_posted_while_the_answered_task_runs_settles_the_waiting_call(
+    pool: Pool<Postgres>,
+) {
+    let setup = setup_search_and_paced_task(pool, TIMEOUT_MS, false, TASK_ANSWERS_AFTER).await;
+    let (request, call) = park_search_and_task(&setup).await;
+    let content = parts(&setup).await;
+    let item = assert_rides_on_the_waiting_call(&content, &request);
+    let child = delegate_child(&content);
+
+    let (_, posted) = tokio::join!(decide(&setup.state, call.0, &item["approval_id"]), async {
+        task_runs_again(&setup, child).await;
+        post_live(
+            &setup.state,
+            setup.chat_id,
+            &call,
+            json!({"result": {"hits": [{"title": HIT}]}}),
+            Some(&sidecar()),
+        )
+        .await
+    });
+    posted.assert_status_ok();
+    assert_eq!(posted.json::<Value>()["stored"], true, "{}", posted.text());
+    assert_eq!(
+        attempt(&setup.state, request.attempt_id).await.state,
+        AttemptState::Ready
+    );
+    let content = parts(&setup).await;
+    assert_eq!(slot(&content, TASK_CALL)["status"], "success");
+    let pending = content.last().unwrap();
+    assert_eq!(
+        pending["content_type"], "client_tool_pending",
+        "the turn stays on the call until its continuation: {content:?}"
+    );
+    assert_eq!(pending["attempt_id"], json!(request.attempt_id));
+
+    continue_turn(&setup.state, request.attempt_id).await;
+    assert_eq!(turn_requests(&setup.recorder).len(), 2);
+    let content = parts(&setup).await;
+    assert!(content.last().unwrap().to_string().contains(TURN_ANSWER));
+    assert!(
+        !content
+            .iter()
+            .any(|part| part["content_type"] == "client_tool_pending"),
+        "{content:?}"
+    );
+}
+
+/// Stop while an answered task runs ends the waiting call. The run still holds
+/// its earlier copy of the row, and that copy must not bring the call back.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn stopping_the_turn_while_the_answered_task_runs_ends_the_waiting_call(
+    pool: Pool<Postgres>,
+) {
+    let setup = setup_search_and_paced_task(pool, TIMEOUT_MS, false, TASK_ANSWERS_AFTER).await;
+    let (request, call) = park_search_and_task(&setup).await;
+    let content = parts(&setup).await;
+    let item = assert_rides_on_the_waiting_call(&content, &request);
+    let child = delegate_child(&content);
+
+    tokio::join!(decide(&setup.state, call.0, &item["approval_id"]), async {
+        task_runs_again(&setup, child).await;
+        app_server(setup.state.clone())
+            .post("/api/v1beta/me/messages/abortstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({"chat_id": setup.chat_id}))
+            .await
+            .assert_status_ok();
+    });
+
+    assert_eq!(
+        attempt(&setup.state, request.attempt_id).await.state,
+        AttemptState::Completed
+    );
+    let content = parts(&setup).await;
+    assert!(
+        content
+            .iter()
+            .all(|part| part["content_type"] != "client_tool_pending"),
+        "a stopped turn waits for nothing: {content:?}"
+    );
+    let search = slot(&content, SEARCH_CALL);
+    assert_eq!(search["status"], "error", "{search}");
+    assert_eq!(search["output"]["status"], "cancelled", "{search}");
+    assert_eq!(
+        slot(&content, TASK_CALL)["status"],
+        "success",
+        "the answered task still ran: {content:?}"
+    );
+    assert_eq!(
+        turn_requests(&setup.recorder).len(),
+        1,
+        "the stopped turn asks the model nothing"
+    );
 }
 
 /// The fallback the slot cannot hold: the user stopped the turn. The question

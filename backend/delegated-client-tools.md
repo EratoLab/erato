@@ -285,7 +285,10 @@ part for a question the task asked next. A result that arrives first settles the
 call, moves its other pending calls onto the open part and leaves the turn on it
 until it is answered. The link to the task's chat remains only for what the slot
 cannot hold: the tool-call limit, and a turn the user stopped, which withdraws
-the part with the call so the task is answered in its own chat.
+the part with the call so the task is answered in its own chat. A Stop that lands
+while an answered task runs ends the call the same way: the continuation holds an
+earlier copy of the row, so it finds the attempt ended, takes the call's part off
+that copy and settles the tool row as cancelled before it writes.
 `ChildApprovalRef.kind` says the child asked about a client tool, so the queue
 names this device and shows no MCP open-world warning. Always allow and Never
 allow on such an item are saved as the user's client-tool preference. The MCP

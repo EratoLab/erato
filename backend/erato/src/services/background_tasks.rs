@@ -1748,6 +1748,14 @@ impl StreamingTask {
         }
     }
 
+    /// Whether this task's loop still waits for this call's result.
+    pub async fn awaits_client_tool_result(&self, tool_call_id: &str) -> bool {
+        self.pending_client_tools
+            .read()
+            .await
+            .contains_key(tool_call_id)
+    }
+
     /// Drop any pending entry for a client tool call (on timeout/abort) so a
     /// late client result cannot be delivered to a finished or replaced turn.
     pub async fn remove_pending_client_tool(&self, tool_call_id: &str) {

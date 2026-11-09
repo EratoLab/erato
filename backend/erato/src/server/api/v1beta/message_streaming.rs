@@ -19682,9 +19682,19 @@ pub async fn client_tool_result(
             Some(task) => task.client_operation(&request.tool_call_id).await,
             None => None,
         };
-        // Fast local delivery needs no new database access. Only late/remote
-        // results probe the logged inbox, before the legacy UNLOGGED transport.
-        if operation.is_some() || task.is_none() {
+        // Fast local delivery needs no new database access. Only a result no
+        // loop here waits for probes the logged inbox, before the legacy
+        // UNLOGGED transport: a late or remote one, or one for a call parked
+        // before this task started. A continuation that runs a task answered on
+        // the waiting call's stop never registered that call.
+        let unawaited_here = match &task {
+            Some(task) => {
+                task.message_id() == request.message_id
+                    && !task.awaits_client_tool_result(&request.tool_call_id).await
+            }
+            None => true,
+        };
+        if operation.is_some() || unawaited_here {
             if let (Some(operation), Some(task)) = (&operation, &task)
                 && task.message_id() == request.message_id
             {
@@ -23257,6 +23267,33 @@ pub(crate) async fn run_continuation(
         }
     }
 
+    // The response's own durable call may still wait on the stop these
+    // decisions came from. What the tasks did reaches the model once that
+    // call has its result: the turn stays parked on the call. A call that
+    // ended while this ran was ended by a Stop, which took it off the row;
+    // this run still holds its earlier copy, so every write from here on would
+    // bring back a call nothing will ever answer.
+    let waiting_attempt = crate::services::client_operations::waiting_call(&parsed.content)
+        .map(|pending| pending.attempt_id);
+    let waiting_call = match waiting_attempt {
+        Some(attempt_id) => {
+            let attempt =
+                crate::services::client_operations::store::get(&app_state.db, user_id, attempt_id)
+                    .await?;
+            if attempt.state == crate::services::client_operations::store::AttemptState::Completed {
+                crate::services::client_operations::store::remove_ended_call(
+                    &mut parsed.content,
+                    attempt_id,
+                    &attempt.tool_call_id,
+                );
+                None
+            } else {
+                Some(attempt_id)
+            }
+        }
+        None => None,
+    };
+
     if let Some(error) = mcp_content_filter_error {
         // All approval items have settled durably. A filtered result ends the
         // generation, as in the normal path, without another model request. A
@@ -23311,22 +23348,6 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
-    // The response's own durable call may still wait on the stop these
-    // decisions came from. What the tasks did reaches the model once that
-    // call has its result: the turn stays parked on the call.
-    let waiting_call = match crate::services::client_operations::waiting_call(&parsed.content) {
-        Some(pending) => {
-            let attempt = crate::services::client_operations::store::get(
-                &app_state.db,
-                user_id,
-                pending.attempt_id,
-            )
-            .await?;
-            (attempt.state != crate::services::client_operations::store::AttemptState::Completed)
-                .then_some(pending.attempt_id)
-        }
-        None => None,
-    };
     // A child that stopped a second time re-parks the turn waiting on it: one
     // new part of the same shape, and no model call — this turn has learnt
     // nothing yet that it could answer with.
