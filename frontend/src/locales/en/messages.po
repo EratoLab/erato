@@ -2359,6 +2359,11 @@ msgstr "This chat is still generating. Archiving will not stop the response."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "This chat is waiting for a connected app or for its tasks. Archiving abandons it, and unarchiving will not resume the response."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Archive this chat?"
 
@@ -10929,7 +10934,6 @@ msgstr "Read local mailbox"
 #~ msgstr "Ready for review in the desktop app"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr "Ready for review in the Erato desktop app"
 

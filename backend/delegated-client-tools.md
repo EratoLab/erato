@@ -222,6 +222,10 @@ first try and no 15 s grace.
   still leave one as it was (a row it cannot read, a read that fails), so the
   sweep visits them in chat order, 100 a tick, and carries a cursor to the next
   tick.
+- **Archived task no stop carries.** Archiving a parked task chat, on its own or
+  through "Archive all", settles its slot in the parent's row as failed when no
+  open item of the parent's last stop names it, so `ParkedTaskNotice` does not
+  stay for good. A turn still running on that row writes the slot itself.
 - **Resume.** Once nothing is left to decide and every waiting item settled, the
   tail starts the parent's continuation in process (`WaitingSettled`) under
   `Takeover::ResumeParked {expected_generation}`, which takes only the generation

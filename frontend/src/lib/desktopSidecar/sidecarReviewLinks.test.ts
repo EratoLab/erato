@@ -1,3 +1,4 @@
+import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +9,7 @@ import {
   reviewHasEnded,
   reviewLink,
   reviewLinkKey,
+  useChatsInOpenReview,
   useSidecarReviewLinks,
 } from "./sidecarReviewLinks";
 
@@ -22,6 +24,16 @@ afterEach(() => {
 });
 
 describe("sidecar review links", () => {
+  it("names the chats a review open in this browser waits on", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"]);
+    const { result, rerender } = renderHook(() => useChatsInOpenReview());
+    expect([...result.current].sort()).toEqual(["origin-chat", "task-chat"]);
+
+    markReviewEnded(key);
+    rerender();
+    expect(result.current.size).toBe(0);
+  });
+
   it("keeps a call's job beyond the page that opened it, with ids only", () => {
     rememberReview(key, "handle-1");
     expect(reviewLink(key)).toMatchObject({

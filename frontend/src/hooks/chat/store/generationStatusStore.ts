@@ -31,9 +31,16 @@ export type ChatGenerationStatus =
    * Generation stopped on a tool approval awaiting the user. Server-durable
    * (the chat's generation state parks as awaiting_approval), so unlike the
    * terminal kinds it may be seeded fresh after a refresh and never ages out
-   * on its own.
+   * on its own. `waitingOnly` marks a stop with nothing for the user to
+   * decide, so no surface asks them for anything; it stays parked for every
+   * other purpose.
    */
-  | { kind: "action_required"; startedAt: string; localSeenAt: number }
+  | {
+      kind: "action_required";
+      startedAt: string;
+      localSeenAt: number;
+      waitingOnly?: boolean;
+    }
   | { kind: "finished"; startedAt: string | null }
   | { kind: "error"; startedAt: string | null }
   | {
@@ -69,7 +76,11 @@ interface GenerationStatusStore {
   seedRunningLocal: (chatId: string, startedAt: string) => void;
   /** Seed from a durable pending-approval marker (list row, poll, or the
    * mounted approval card itself). */
-  seedActionRequired: (chatId: string, pendingAt: string) => void;
+  seedActionRequired: (
+    chatId: string,
+    pendingAt: string,
+    waitingOnly?: boolean,
+  ) => void;
   /** The user decided; tombstone the entry so stale rows and in-flight polls
    * carrying the same marker cannot resurrect it. */
   markApprovalDecided: (chatId: string) => void;
@@ -186,7 +197,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
           "generationStatus/seedRunningLocal",
         ),
 
-      seedActionRequired: (chatId, pendingAt) =>
+      seedActionRequired: (chatId, pendingAt, waitingOnly) =>
         set(
           (prev) => {
             const existing = prev.statusByChatId[chatId];
@@ -206,6 +217,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                     existing?.kind === "action_required"
                       ? existing.localSeenAt
                       : Date.now(),
+                  ...(waitingOnly ? { waitingOnly } : {}),
                 },
               },
             };
@@ -279,6 +291,7 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
               // — this is the running → parked flip for a chat the user is
               // not looking at.
               if (entry.state === "action_required") {
+                const waitingOnly = entry.waiting_only === true;
                 if (seedWins(existing, entry.started_at)) {
                   next[entry.chat_id] = {
                     kind: "action_required",
@@ -287,7 +300,16 @@ export const useGenerationStatusStore = create<GenerationStatusStore>()(
                       existing?.kind === "action_required"
                         ? existing.localSeenAt
                         : now,
+                    ...(waitingOnly ? { waitingOnly } : {}),
                   };
+                  changed = true;
+                } else if (
+                  existing?.kind === "action_required" &&
+                  (existing.waitingOnly === true) !== waitingOnly
+                ) {
+                  // The same park: a waiting task has started to ask, or its
+                  // question was answered and only the wait is left.
+                  next[entry.chat_id] = { ...existing, waitingOnly };
                   changed = true;
                 }
                 continue;
@@ -489,6 +511,7 @@ export function seedGenerationStatusFromListing(
     | "archived_at"
     | "active_generation_started_at"
     | "pending_tool_approval_at"
+    | "pending_approval_waiting_only"
     | "delegated_runs_in_flight"
   >[],
 ): void {
@@ -506,7 +529,11 @@ export function seedGenerationStatusFromListing(
       seedRunning(chat.id, chat.active_generation_started_at);
     }
     if (chat.pending_tool_approval_at) {
-      seedActionRequired(chat.id, chat.pending_tool_approval_at);
+      seedActionRequired(
+        chat.id,
+        chat.pending_tool_approval_at,
+        chat.pending_approval_waiting_only === true,
+      );
     }
     // `=== true`, never truthiness: a cached page from before the field
     // existed, an e2e route stub or an add-in mock carries `undefined`, which
@@ -559,6 +586,13 @@ export const useGenerationRunningCount = (): number =>
 
 export const useGenerationAttentionCount = (): number =>
   useGenerationStatusStore(selectAttentionCount);
+
+/** Whether a chat is parked with nothing for the user to decide. */
+export const useChatWaitsOnly = (chatId: string): boolean =>
+  useGenerationStatusStore((state) => {
+    const status = state.statusByChatId[chatId];
+    return status?.kind === "action_required" && status.waitingOnly === true;
+  });
 
 export const useGenerationStatusFor = (
   chatId: string,

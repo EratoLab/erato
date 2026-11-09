@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { memo, useEffect, useMemo, useRef } from "react";
 
 import { MessageTimestamp } from "@/components/ui";
+import { useChatWaitsOnly } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { useThemedIcon } from "@/hooks/ui";
@@ -173,6 +174,7 @@ export interface ChatHistoryRowMenuState {
   canEdit: boolean;
   isRun: boolean;
   status: ChatAttentionStatus | null;
+  waitingOnly?: boolean;
 }
 
 /**
@@ -183,7 +185,14 @@ export interface ChatHistoryRowMenuState {
  * the state by hand loses the run and pending-confirmation gates.
  */
 export const buildChatHistoryRowMenuItems = (
-  { archived, isPinned, canEdit, isRun, status }: ChatHistoryRowMenuState,
+  {
+    archived,
+    isPinned,
+    canEdit,
+    isRun,
+    status,
+    waitingOnly,
+  }: ChatHistoryRowMenuState,
   {
     pinnedChatsCount,
     pinnedChatsLimit,
@@ -261,6 +270,7 @@ export const buildChatHistoryRowMenuItems = (
       : buildArchiveMenuItems({
           archived,
           status,
+          waitingOnly,
           onArchive,
           onUnarchive,
         })),
@@ -298,6 +308,7 @@ const chatHistoryRowMenuOptions = (
 const rowMenuState = (
   session: ChatSession,
   status: ChatAttentionStatus | null,
+  waitingOnly: boolean,
 ): ChatHistoryRowMenuState => ({
   archived: session.archivedAt != null,
   isPinned: session.isPinned ?? false,
@@ -306,6 +317,7 @@ const rowMenuState = (
   // null for a run that records no origin at all, and that is still a run.
   isRun: session.provenanceKind === DELEGATION_PROVENANCE_KIND,
   status,
+  waitingOnly,
 });
 
 export const useChatHistoryRowMenuItems = ({
@@ -313,8 +325,12 @@ export const useChatHistoryRowMenuItems = ({
   ...handlers
 }: ChatHistoryRowMenuOptions): DropdownMenuItem[] => {
   const status = useChatRowStatus(session.id, session);
+  const waitingOnly = useChatWaitsOnly(session.id);
 
-  return buildChatHistoryRowMenuItems(rowMenuState(session, status), handlers);
+  return buildChatHistoryRowMenuItems(
+    rowMenuState(session, status, waitingOnly),
+    handlers,
+  );
 };
 
 export interface ChatHistoryRow extends ChatHistoryRowPresentation {
@@ -330,11 +346,12 @@ export const useChatHistoryRow = (
 ): ChatHistoryRow => {
   const title = useRowTitle(session);
   const status = useChatRowStatus(session.id, session);
+  const waitingOnly = useChatWaitsOnly(session.id);
 
   return {
     ...rowPresentation(session, title, status),
     menuItems: buildChatHistoryRowMenuItems(
-      rowMenuState(session, status),
+      rowMenuState(session, status, waitingOnly),
       chatHistoryRowMenuOptions(props, session),
     ),
   };

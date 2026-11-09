@@ -9,7 +9,6 @@ import {
   resultPreview,
 } from "@/lib/delegation/delegatedRunControls";
 import { delegationReasonLabel } from "@/lib/delegation/delegationLabels";
-import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { useDelegatedRunOpener } from "@/providers/DelegatedRunOpenProvider";
 import { hasLaterTaskResult } from "@/utils/chat/taskResultFolds";
 import { getChatUrl } from "@/utils/chat/urlUtils";
@@ -75,25 +74,22 @@ const statusPill = (status: string) => {
 /**
  * A task whose desktop sidecar call waits on the client waits for the Erato
  * desktop app, where the call's review happens, not for an answer in its
- * chat. This device says so while one of the task's calls waits for its
- * review here; otherwise the line claims no wait.
+ * chat. Only rows from before those calls waited inside the parent's turn
+ * read this way, so the line claims no wait.
  */
-const localReviewPill = (awaitingReview: boolean, replaced: boolean) => (
+const localReviewPill = (replaced: boolean) => (
   <SettledInfoPill
     label={
-      awaitingReview
-        ? t`Ready for review in the Erato desktop app`
-        : replaced
-          ? t({
-              id: "trace.taskResult.replacedByLaterReport",
-              message: "Replaced by a later report",
-            })
-          : t({
-              id: "trace.taskResult.localReview",
-              message: "Review in the Erato desktop app",
-            })
+      replaced
+        ? t({
+            id: "trace.taskResult.replacedByLaterReport",
+            message: "Replaced by a later report",
+          })
+        : t({
+            id: "trace.taskResult.localReview",
+            message: "Review in the Erato desktop app",
+          })
     }
-    toneClassName={awaitingReview ? WARNING_TONE : undefined}
   />
 );
 
@@ -134,9 +130,6 @@ export const TaskResultStep = ({
   // async result that waits on the client waits for a desktop sidecar call.
   const localReview =
     part.status === "input_required" && part.reason === "client_pending";
-  const awaitingReview = useSidecarReviewStore(
-    (state) => localReview && state.waitingByChatId.has(part.child_chat_id),
-  );
   const { child_chat_id: childChatId, sequence } = part;
   const selectReplaced = useCallback(
     (messages: Parameters<typeof hasLaterTaskResult>[0]) =>
@@ -144,12 +137,11 @@ export const TaskResultStep = ({
     [localReview, childChatId, sequence],
   );
   const replaced = useConversationSelector(selectReplaced, Object.is);
-  const settled = replaced && !awaitingReview;
   const pill = localReview
-    ? localReviewPill(awaitingReview, replaced)
+    ? localReviewPill(replaced)
     : statusPill(part.status);
-  const needsAttention = part.status !== "completed" && !settled;
-  const railStatus = settled ? "done" : railStatusFor(part.status);
+  const needsAttention = part.status !== "completed" && !replaced;
+  const railStatus = replaced ? "done" : railStatusFor(part.status);
 
   return (
     <div
@@ -220,7 +212,7 @@ export const TaskResultStep = ({
             </p>
           )}
           {/* The question waits in the run's own chat; nothing here can answer it. */}
-          {part.status === "input_required" && !settled && (
+          {part.status === "input_required" && !replaced && (
             <p data-testid="task-result-input-required">
               {localReview
                 ? t({

@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useTabChatActivity } from "@/hooks/chat/useTabChatActivity";
+import {
+  rememberReview,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 const startedAt = new Date("2024-01-01T00:00:00.000Z").toISOString();
 
@@ -135,6 +140,45 @@ describe("useTabChatActivity", () => {
     });
 
     expect(result.current).toBe("attention");
+  });
+
+  describe("an open chat that only waits", () => {
+    beforeEach(() => {
+      localStorage.clear();
+      useSidecarReviewLinks.setState({ links: {} });
+      useGenerationStatusStore.setState({
+        statusByChatId: {
+          "chat-a": {
+            kind: "action_required",
+            startedAt,
+            localSeenAt: 0,
+            waitingOnly: true,
+          },
+        },
+        currentChatId: "chat-a",
+      });
+    });
+
+    it("carries no marker", () => {
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+
+      expect(result.current).toBe("idle");
+    });
+
+    it("asks for attention while it waits for a review in this browser", () => {
+      rememberReview(reviewLinkKey("message-1", "call-1"), "handle-1", [
+        "chat-a",
+      ]);
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+
+      expect(result.current).toBe("attention");
+    });
   });
 
   it("stays idle inside an iframe, where the favicon is the host page's", () => {

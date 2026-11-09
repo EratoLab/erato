@@ -7,6 +7,7 @@ use super::approval_scope::{
     a_new_pane_session_asks_again, scope_changed_ends_the_approval_and_asks_again,
 };
 use super::slow_path::{
+    a_chat_that_only_waits_is_reported_as_nothing_to_decide,
     a_child_reaped_errored_after_its_answer_reads_as_completed,
     a_child_that_finishes_while_approvals_are_open_keeps_the_parent_parked,
     a_child_that_parks_on_a_second_grant_call_updates_its_waiting_item,
@@ -29,6 +30,7 @@ use super::slow_path::{
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
     a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
+    a_stop_keeps_the_slot_of_an_archived_task_it_carries,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
@@ -37,10 +39,12 @@ use super::slow_path::{
     a_waiting_task_that_starts_asking_offers_the_response_scope,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
+    an_archived_task_no_stop_carries_settles_its_slot,
     an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
     an_empty_continuestream_while_children_wait_is_children_waiting,
     an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child,
     approvals_decided_while_a_child_waits_repark_on_the_waiting_child,
+    archive_all_settles_a_task_no_stop_carries,
     continuestream_refuses_a_decision_naming_a_waiting_item,
     continuestream_refuses_a_single_decision_when_only_waiting_items_are_open,
     no_client_before_the_attempt_ends_gives_expired,
@@ -192,6 +196,10 @@ macro_rules! host_conformance {
             a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed
             the_old_slot_settles_while_a_newer_parent_turn_runs
             a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles
+            a_chat_that_only_waits_is_reported_as_nothing_to_decide
+            a_stop_keeps_the_slot_of_an_archived_task_it_carries
+            an_archived_task_no_stop_carries_settles_its_slot
+            archive_all_settles_a_task_no_stop_carries
             the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes
             a_failed_owner_lookup_withdraws_nothing
             an_errored_parent_that_cleared_its_marker_is_not_resumed_by_its_child

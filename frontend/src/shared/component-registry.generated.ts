@@ -380,6 +380,7 @@ export { approvalStopState } from "@/components/ui/Message/approvalItems";
 export { isChildItem } from "@/components/ui/Message/approvalItems";
 export { isWaitingItem } from "@/components/ui/Message/approvalItems";
 export { itemAllowsAlways } from "@/components/ui/Message/approvalItems";
+export { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 export { sameScope } from "@/components/ui/Message/approvalItems";
 export { scopeGroup } from "@/components/ui/Message/approvalItems";
 export { scopeOf } from "@/components/ui/Message/approvalItems";

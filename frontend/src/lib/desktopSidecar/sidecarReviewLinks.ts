@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 
 /**
@@ -8,7 +9,12 @@ import { create } from "zustand";
  * this says nothing about what the review shows.
  */
 export type SidecarReviewLink = { at: number } & (
-  | { state: "open"; handle: string }
+  | {
+      state: "open";
+      handle: string;
+      /** The chats that wait for this review: the call's and the one it runs for. */
+      chatIds?: string[];
+    }
   // The job ended without a decision, so the call waits for the user to ask
   // again.
   | { state: "ended" }
@@ -27,12 +33,14 @@ const KEEP_MS = 25 * 60 * 60 * 1000;
 
 const isLink = (value: unknown): value is SidecarReviewLink => {
   if (typeof value !== "object" || value === null) return false;
-  const { at, state, handle } = value as Record<string, unknown>;
+  const { at, state, handle, chatIds } = value as Record<string, unknown>;
   return (
     typeof at === "number" &&
     (state === "ended" ||
       state === "asking" ||
-      (state === "open" && typeof handle === "string"))
+      (state === "open" &&
+        typeof handle === "string" &&
+        (chatIds === undefined || Array.isArray(chatIds))))
   );
 };
 
@@ -94,8 +102,17 @@ export const reviewLink = (key: string): SidecarReviewLink | undefined =>
 const set = (key: string, link: SidecarReviewLink) =>
   write((links) => ({ ...links, [key]: link }));
 
-export const rememberReview = (key: string, handle: string): void =>
-  set(key, { state: "open", handle, at: Date.now() });
+export const rememberReview = (
+  key: string,
+  handle: string,
+  chatIds?: string[],
+): void =>
+  set(key, {
+    state: "open",
+    handle,
+    at: Date.now(),
+    ...(chatIds?.length ? { chatIds } : {}),
+  });
 
 export const markReviewEnded = (key: string): void =>
   set(key, { state: "ended", at: Date.now() });
@@ -105,6 +122,20 @@ export const askForReviewAgain = (key: string): void =>
 
 export const forgetReview = (key: string): void => {
   if (reviewLink(key)) write(({ [key]: _gone, ...links }) => links);
+};
+
+/** Every chat with a review open in the Erato desktop app, in this browser. */
+const chatsInOpenReview = (links: Links): ReadonlySet<string> =>
+  new Set(
+    Object.values(links).flatMap((link) =>
+      link.state === "open" ? (link.chatIds ?? []) : [],
+    ),
+  );
+
+/** The chats a review open in this browser waits on, across its tabs. */
+export const useChatsInOpenReview = (): ReadonlySet<string> => {
+  const links = useSidecarReviewLinks((state) => state.links);
+  return useMemo(() => chatsInOpenReview(links), [links]);
 };
 
 /** Whether this call's review ended and it waits for the user to ask again. */

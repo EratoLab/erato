@@ -2340,6 +2340,13 @@ export type GeneratingChat = {
    * generated summary title), when one exists
    */
   title?: string;
+  /**
+   * Set on an `action_required` chat that has nothing for the user to
+   * decide: it waits for a connected app or for its tasks. A wait for a
+   * review in the Erato desktop app also reads this way, because only the
+   * browser that opened the review knows about it.
+   */
+  waiting_only?: boolean;
 };
 
 /**
@@ -3503,6 +3510,11 @@ export type RecentChat = {
    * longer exists.
    */
   origin_chat_title?: string;
+  /**
+   * Set with `pending_tool_approval_at` when the stop has nothing for the
+   * user to decide: it waits for a connected app or for its tasks.
+   */
+  pending_approval_waiting_only?: boolean;
   /**
    * Present while the chat's generation is stopped on an MCP tool approval
    * awaiting the user's decision

@@ -54,6 +54,17 @@ const onlyWaitingIn = (
   );
 };
 
+/** Whether a card of `chatId` asks the user something rather than only waits. */
+export const hasDecisionIn = (
+  state: Pick<
+    ConfirmationRegistryStore,
+    "pendingIdsByChatId" | "waitingOnlyIds"
+  >,
+  chatId: string | null | undefined,
+): boolean =>
+  hasPendingIn(state.pendingIdsByChatId, chatId) &&
+  !onlyWaitingIn(state, chatId);
+
 const withWaitingOnly = (
   waitingOnlyIds: Partial<Record<string, true>>,
   registrationId: string,

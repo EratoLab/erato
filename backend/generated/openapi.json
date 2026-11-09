@@ -9519,6 +9519,10 @@
           "title": {
             "type": "string",
             "description": "Resolved chat title (user-provided title takes precedence over the\ngenerated summary title), when one exists"
+          },
+          "waiting_only": {
+            "type": "boolean",
+            "description": "Set on an `action_required` chat that has nothing for the user to\ndecide: it waits for a connected app or for its tasks. A wait for a\nreview in the Erato desktop app also reads this way, because only the\nbrowser that opened the review knows about it."
           }
         }
       },
@@ -11701,6 +11705,10 @@
           "origin_chat_title": {
             "type": "string",
             "description": "Resolved display title of the origin chat; absent when the origin no\nlonger exists."
+          },
+          "pending_approval_waiting_only": {
+            "type": "boolean",
+            "description": "Set with `pending_tool_approval_at` when the stop has nothing for the\nuser to decide: it waits for a connected app or for its tasks."
           },
           "pending_tool_approval_at": {
             "type": "string",

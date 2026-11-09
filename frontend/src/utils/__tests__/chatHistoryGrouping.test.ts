@@ -5,6 +5,7 @@ import enMessages from "@/locales/en/messages.json";
 import {
   groupChatSessions,
   resolveChatAttentionStatus,
+  resolveDelegatedRunStatus,
   resolveSessionRowStatus,
   sessionNeedsAttention,
   type GroupChatSessionsDeps,
@@ -104,6 +105,52 @@ describe("resolveSessionRowStatus / sessionNeedsAttention", () => {
       "finished",
     );
     expect(sessionNeedsAttention(noOutcome, dismissed, false)).toBe(false);
+  });
+});
+
+describe("a parked chat with nothing to decide", () => {
+  const waiting: ChatGenerationStatus = {
+    kind: "action_required",
+    startedAt: "2026-08-14T10:00:00Z",
+    localSeenAt: 0,
+    waitingOnly: true,
+  };
+  const parked: ChatGenerationStatus = {
+    kind: "action_required",
+    startedAt: "2026-08-14T10:00:00Z",
+    localSeenAt: 0,
+  };
+
+  it("shows nothing on an ordinary row and stays out of Unread", () => {
+    expect(resolveChatAttentionStatus(waiting, false)).toBeNull();
+    expect(resolveSessionRowStatus({}, waiting, false)).toBeNull();
+    expect(sessionNeedsAttention({}, waiting, false)).toBe(false);
+  });
+
+  it("is marked once something asks the user", () => {
+    expect(resolveChatAttentionStatus(waiting, true)).toBe("action_required");
+    expect(resolveChatAttentionStatus(parked, false)).toBe("action_required");
+  });
+
+  it("reads as still running on a task's row", () => {
+    const run = { provenanceKind: "delegation" };
+    expect(resolveSessionRowStatus(run, waiting, false)).toBe("running");
+    expect(resolveSessionRowStatus(run, waiting, true)).toBe("action_required");
+    expect(resolveDelegatedRunStatus({}, waiting)).toBe("running");
+    expect(resolveDelegatedRunStatus({}, parked)).toBe("action_required");
+  });
+
+  it("reads the listing's marker the same way", () => {
+    const at = "2026-08-14T10:00:00Z";
+    expect(
+      resolveDelegatedRunStatus(
+        { pending_tool_approval_at: at, pending_approval_waiting_only: true },
+        undefined,
+      ),
+    ).toBe("running");
+    expect(
+      resolveDelegatedRunStatus({ pending_tool_approval_at: at }, undefined),
+    ).toBe("action_required");
   });
 });
 

@@ -2742,6 +2742,118 @@ pub(super) async fn the_old_slot_settles_while_a_newer_parent_turn_runs(
     waiting.server.abort();
 }
 
+/// The slot a task chat left in its parent's row, once that chat was archived.
+async fn assert_slot_settled_as_archived(waiting: &Waiting) {
+    let slot = part_for(
+        &assistant_row(&waiting.state.db, waiting.chat_id).await,
+        CLIENT_TASK_CALL,
+    );
+    assert_eq!(slot["status"], "error", "{slot}");
+    assert_eq!(slot["output"]["status"], "failed", "{slot}");
+    assert_eq!(slot["output"]["error"], "The delegated run was archived.");
+    assert!(
+        slot["output"].get("reason").is_none(),
+        "the notice reads the reason: {slot}"
+    );
+    assert_eq!(
+        slot["output"]["child_run_id"],
+        json!(waiting.child.id),
+        "the slot still links to the run"
+    );
+}
+
+pub(super) async fn an_archived_task_no_stop_carries_settles_its_slot(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    drop_the_stop(&waiting).await;
+    app_server(waiting.state.clone())
+        .post(&format!("/api/v1beta/chats/{}/archive", waiting.child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+    assert_slot_settled_as_archived(&waiting).await;
+    waiting.server.abort();
+}
+
+pub(super) async fn archive_all_settles_a_task_no_stop_carries(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    drop_the_stop(&waiting).await;
+    app_server(waiting.state.clone())
+        .post("/api/v1beta/me/chats/archive_all")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+        .assert_status_ok();
+    assert_slot_settled_as_archived(&waiting).await;
+    waiting.server.abort();
+}
+
+pub(super) async fn a_stop_keeps_the_slot_of_an_archived_task_it_carries(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    app_server(waiting.state.clone())
+        .post(&format!("/api/v1beta/chats/{}/archive", waiting.child.id))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({}))
+        .await
+        .assert_status_ok();
+    let slot = part_for(
+        &assistant_row(&waiting.state.db, waiting.chat_id).await,
+        CLIENT_TASK_CALL,
+    );
+    assert_eq!(
+        slot["status"], "in_progress",
+        "the sweep settles it: {slot}"
+    );
+    waiting.server.abort();
+}
+
+pub(super) async fn a_chat_that_only_waits_is_reported_as_nothing_to_decide(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let server = app_server(waiting.state.clone());
+    let generating = server
+        .get("/api/v1beta/me/generating")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    generating.assert_status_ok();
+    let generating = generating.json::<serde_json::Value>();
+    let listing = server
+        .get("/api/v1beta/me/recent_chats?include_delegated=true")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await;
+    listing.assert_status_ok();
+    let listing = listing.json::<serde_json::Value>();
+    for chat_id in [waiting.chat_id, waiting.child.id] {
+        let entry = generating["chats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["chat_id"] == chat_id.to_string())
+            .unwrap_or_else(|| panic!("{chat_id} in {generating}"));
+        assert_eq!(entry["state"], "action_required", "{entry}");
+        assert_eq!(entry["waiting_only"], true, "{entry}");
+        let row = listing["chats"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|chat| chat["id"] == chat_id.to_string())
+            .unwrap_or_else(|| panic!("{chat_id} in {listing}"));
+        assert!(row["pending_tool_approval_at"].is_string(), "{row}");
+        assert_eq!(row["pending_approval_waiting_only"], true, "{row}");
+    }
+    waiting.server.abort();
+}
+
 /// What a turn leaves that ended on a stop no child item can share (the
 /// tool-call limit, its own durable operation): the child's slot waits, and
 /// no stop names the child.

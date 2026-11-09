@@ -1,6 +1,6 @@
 import { I18nProvider } from "@lingui/react";
 import { render, renderHook, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CHAT_HISTORY_ROW_CONTRACT_IDS,
@@ -9,6 +9,11 @@ import {
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
+import {
+  rememberReview,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { EXTENSION_POINT_REQUIRED_SURFACE_MINOR } from "@/shared/surfaceVersion";
 
@@ -1010,6 +1015,91 @@ describe("ChatHistoryList", () => {
       expect(
         screen.getByRole("link", { name: "Second chat, Error" }),
       ).toBeInTheDocument();
+    });
+
+    describe("a chat that only waits", () => {
+      const waitOnly = () =>
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            "chat-1": {
+              kind: "action_required",
+              startedAt: new Date().toISOString(),
+              localSeenAt: Date.now(),
+              waitingOnly: true,
+            },
+          },
+        });
+      afterEach(() => {
+        localStorage.clear();
+        useSidecarReviewLinks.setState({ links: {} });
+      });
+
+      it("shows no status", async () => {
+        waitOnly();
+        await renderList();
+
+        expect(screen.queryByTestId("chat-generation-status")).toBeNull();
+      });
+
+      it("is not marked by a card that only waits", async () => {
+        waitOnly();
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation("chat-1", "registration-1", {
+            waitingOnly: true,
+          });
+        await renderList();
+
+        expect(screen.queryByTestId("chat-generation-status")).toBeNull();
+      });
+
+      it("is marked while it waits for a review open in this browser", async () => {
+        waitOnly();
+        rememberReview(reviewLinkKey("message-1", "call-1"), "handle-1", [
+          "chat-1",
+        ]);
+        await renderList();
+
+        expect(screen.getByTestId("chat-generation-status")).toHaveAttribute(
+          "data-status",
+          "action_required",
+        );
+      });
+
+      it("is not marked by a remembered review once the chat has moved on", async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            "chat-1": {
+              kind: "running",
+              startedAt: new Date().toISOString(),
+              localSeenAt: Date.now(),
+            },
+          },
+        });
+        rememberReview(reviewLinkKey("message-1", "call-1"), "handle-1", [
+          "chat-1",
+        ]);
+        await renderList();
+
+        expect(screen.getByTestId("chat-generation-status")).toHaveAttribute(
+          "data-status",
+          "running",
+        );
+      });
+
+      it("warns before archiving that the wait is abandoned", async () => {
+        waitOnly();
+        await renderList();
+
+        expect(
+          screen.getAllByRole("button", { name: "Archive" })[0],
+        ).toHaveAttribute(
+          "data-confirm-message",
+          expect.stringContaining(
+            "waiting for a connected app or for its tasks",
+          ),
+        );
+      });
     });
 
     it("prioritizes a pending confirmation over the generation state", async () => {

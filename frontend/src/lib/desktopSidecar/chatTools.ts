@@ -981,6 +981,7 @@ export function createSidecarChatTools(
       const result = await runSidecarJob(client, name, check(input, context), {
         signal: context?.signal,
         chatId: context?.chatId ?? undefined,
+        ownerChatId: context?.hostGrant?.ownerChatId,
         toolCallId: context?.toolCallId,
         messageId: context?.messageId,
         // A review waits on the user, so the turn need not wait inline.

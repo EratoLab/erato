@@ -2359,6 +2359,11 @@ msgstr "Dieser Chat generiert noch. Das Archivieren stoppt die Antwort nicht."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "Dieser Chat wartet auf eine verbundene App oder seine Aufgaben. Durch das Archivieren wird das Warten abgebrochen, und das Aufheben der Archivierung setzt die Antwort nicht fort."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Diesen Chat archivieren?"
 
@@ -10929,7 +10934,6 @@ msgstr "Lokales Postfach lesen"
 #~ msgstr "Bereit zur Prüfung in der Desktop-App"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr "Bereit zur Prüfung in der Erato-Desktop-App"
 

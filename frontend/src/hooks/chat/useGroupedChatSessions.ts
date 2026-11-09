@@ -6,8 +6,8 @@ import {
   sessionNeedsAttention,
 } from "@/utils/chatHistoryGrouping";
 
-import { useConfirmationRegistryStore } from "./store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "./store/generationStatusStore";
+import { useChatsAskingForDecision } from "./useChatAsksForDecision";
 
 import type { ChatHistoryGroupBy } from "./store/chatHistoryFilterStore";
 import type { ChatSession } from "@/types/chat";
@@ -25,9 +25,7 @@ export function useGroupedChatSessions(
   const statusByChatId = useGenerationStatusStore(
     (state) => state.statusByChatId,
   );
-  const pendingIdsByChatId = useConfirmationRegistryStore(
-    (state) => state.pendingIdsByChatId,
-  );
+  const asking = useChatsAskingForDecision();
   const { i18n } = useLingui();
 
   return useMemo(
@@ -39,10 +37,10 @@ export function useGroupedChatSessions(
           sessionNeedsAttention(
             session,
             statusByChatId[session.id],
-            (pendingIdsByChatId[session.id]?.length ?? 0) > 0,
+            asking.has(session.id),
           ),
       }),
-    [sessions, groupBy, i18n.locale, statusByChatId, pendingIdsByChatId],
+    [sessions, groupBy, i18n.locale, statusByChatId, asking],
   );
 }
 
