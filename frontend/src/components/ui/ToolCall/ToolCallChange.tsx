@@ -299,17 +299,19 @@ const ValueRow = ({
         {claim}
       </p>
     )}
-    {showRawName && effect.rawName.length > 0 && effect.rawName !== effect.name && (
-      <p
-        dir="auto"
-        className={clsx(
-          "font-mono text-[0.7rem] text-theme-fg-muted",
-          ISOLATED,
-        )}
-      >
-        {effect.rawName}
-      </p>
-    )}
+    {showRawName &&
+      effect.rawName.length > 0 &&
+      effect.rawName !== effect.name && (
+        <p
+          dir="auto"
+          className={clsx(
+            "font-mono text-[0.7rem] text-theme-fg-muted",
+            ISOLATED,
+          )}
+        >
+          {effect.rawName}
+        </p>
+      )}
   </Row>
 );
 
@@ -854,11 +856,7 @@ export const changeRowHasDetails = (change: GistChange): boolean => {
 
 const IncompleteAlert = ({ change }: { change: GistChange }) =>
   change.complete ? null : (
-    <Alert
-      type="warning"
-      role="none"
-      data-testid="tool-call-change-incomplete"
-    >
+    <Alert type="warning" role="none" data-testid="tool-call-change-incomplete">
       {incompleteLines(change).map((line, index) => (
         <p key={index}>{line}</p>
       ))}

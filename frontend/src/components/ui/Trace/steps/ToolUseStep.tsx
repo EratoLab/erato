@@ -98,22 +98,20 @@ const GistRowDetails = ({
   failure: CleanText | undefined;
 }) => (
   <div className="space-y-1">
-    {gist.change ? (
-      phase === "done" && <ToolCallChangeRowDetails change={gist.change} />
-    ) : (
-      gist.items.map((item, index) => (
-        <div key={index} className="space-y-1">
-          {index > 0 && (
-            <p className="text-xs text-theme-fg-secondary">
-              <ToolCallGistLine gist={gist} item={item} phase={phase} />
-            </p>
-          )}
-          {hasRowValues(item) && (
-            <ToolCallGistValues item={item} variant="row" />
-          )}
-        </div>
-      ))
-    )}
+    {gist.change
+      ? phase === "done" && <ToolCallChangeRowDetails change={gist.change} />
+      : gist.items.map((item, index) => (
+          <div key={index} className="space-y-1">
+            {index > 0 && (
+              <p className="text-xs text-theme-fg-secondary">
+                <ToolCallGistLine gist={gist} item={item} phase={phase} />
+              </p>
+            )}
+            {hasRowValues(item) && (
+              <ToolCallGistValues item={item} variant="row" />
+            )}
+          </div>
+        ))}
     {failure && (
       <p
         dir="auto"

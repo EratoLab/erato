@@ -187,8 +187,20 @@ describe("the change card", () => {
 
   it("says who it reaches and never claims none are outside when it cannot know", () => {
     const groups = [
-      { name: "To", raw_name: "to", kind: "to", count: 32, values: ["a@x.example"] },
-      { name: "Cc", raw_name: "copy_to", kind: "cc", count: 8, values: ["b@x.example"] },
+      {
+        name: "To",
+        raw_name: "to",
+        kind: "to",
+        count: 32,
+        values: ["a@x.example"],
+      },
+      {
+        name: "Cc",
+        raw_name: "copy_to",
+        kind: "cc",
+        count: 8,
+        values: ["b@x.example"],
+      },
     ];
     const { unmount } = renderCard({
       recipients: {
@@ -355,7 +367,9 @@ describe("the change card", () => {
 
   it("reads an empty filter condition and never leaves a bare Where", () => {
     const { unmount } = renderCard({
-      filter: { parts: [{ name: "Email", value: { text: "" }, is_empty: true }] },
+      filter: {
+        parts: [{ name: "Email", value: { text: "" }, is_empty: true }],
+      },
     });
     expect(screen.getByTestId("tool-call-change-filter")).toHaveTextContent(
       "Email is empty",

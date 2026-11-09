@@ -334,7 +334,13 @@ class Reader {
         if (!isRecord(part)) return [];
         const value = this.value(part.value);
         return value
-          ? [{ name: this.text(part.name), value, isEmpty: part.is_empty === true }]
+          ? [
+              {
+                name: this.text(part.name),
+                value,
+                isEmpty: part.is_empty === true,
+              },
+            ]
           : [];
       }),
       text: this.value(raw.text),

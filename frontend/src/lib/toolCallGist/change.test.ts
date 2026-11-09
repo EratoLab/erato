@@ -464,7 +464,9 @@ describe("the place on the line", () => {
             },
             target: {
               pointer: "/parent",
-              values: [{ path: "/parent", text: "p1", resolved: "Q4 pipeline" }],
+              values: [
+                { path: "/parent", text: "p1", resolved: "Q4 pipeline" },
+              ],
             },
           },
         ],
