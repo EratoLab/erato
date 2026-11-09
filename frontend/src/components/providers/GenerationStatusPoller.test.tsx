@@ -615,6 +615,39 @@ describe("GenerationStatusPoller effects", () => {
     expect(invalidationsFor(otherKey)).toBe(0);
   });
 
+  it("refetches the open chat once when its parked turn parks again, on the same call or a next one", () => {
+    const messagesKey = chatMessagesQuery({
+      pathParams: { chatId: "origin" },
+    }).queryKey;
+    useGenerationStatusStore.getState().setCurrentChatId("origin");
+    const parkedAt = (at: string) => ({
+      chats: [
+        generatingEntry({
+          chat_id: "origin",
+          state: "action_required",
+          started_at: at,
+        }),
+      ],
+    });
+    emit(parkedAt("2026-08-19T12:00:01.000Z"));
+    const view = renderPoller();
+    const rerender = () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <GenerationStatusPoller />
+        </QueryClientProvider>,
+      );
+    expect(invalidationsFor(messagesKey)).toBe(0);
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(0);
+
+    emit(parkedAt("2026-08-19T12:00:09.000Z"));
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+    rerender();
+    expect(invalidationsFor(messagesKey)).toBe(1);
+  });
+
   it("leaves a parked chat the user is not looking at and a turn last seen running alone", () => {
     const originKey = chatMessagesQuery({
       pathParams: { chatId: "origin" },

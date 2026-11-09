@@ -18,6 +18,7 @@ import {
 import type {
   CallLineage,
   ClientToolParkRequest,
+  ClientToolParkResponse,
   ClientToolResultRequest,
   ClientToolResultResponse,
   ExecutorBinding,
@@ -139,13 +140,11 @@ async function runAndPost(
     if (expired()) abortClientToolCall(tool_call_id);
     // Only a call of the user's own turn from the chat stream, sent with its
     // binding, can have a durable operation to park.
-    let parkRequested = false;
+    let parked: Promise<boolean> | undefined;
     const park =
       !deps.executor && !deps.lineage && binding
         ? () => {
-            if (parkRequested) return;
-            parkRequested = true;
-            void requestPark(base, deps, binding);
+            parked ??= requestPark(base, deps, binding);
           }
         : undefined;
     try {
@@ -164,6 +163,8 @@ async function runAndPost(
           },
           deps.lineage,
         );
+        // The turn stays parked for the user; there is nothing to send.
+        if (!outcome.ok && outcome.stillWaiting && (await parked)) return;
         body = outcome.ok
           ? // Coalesce to explicit null so an empty success is delivered as a
             // result, not treated by the backend as "no result → tool error".
@@ -202,13 +203,13 @@ async function runAndPost(
  * Asks the server to park a call that now waits on the user on this device.
  * The call stays live where the server cannot park it (a tool without a
  * durable operation, or a server without the endpoint); its result is posted
- * as usual either way.
+ * as usual either way. Resolves to whether the server took the request.
  */
 async function requestPark(
   base: ClientToolParkRequest,
   deps: HandleClientToolCallDeps,
   binding: ExecutorBinding,
-): Promise<void> {
+): Promise<boolean> {
   try {
     const response = await fetch("/api/v1beta/me/messages/clienttoolpark", {
       method: "POST",
@@ -220,12 +221,19 @@ async function requestPark(
       },
       body: JSON.stringify(base),
     });
-    if (!response.ok)
+    if (!response.ok) {
       console.warn(
         `[client_tool_call] park request returned ${response.status}`,
       );
+      return false;
+    }
+    const answer = (await response
+      .json()
+      .catch(() => ({}))) as Partial<ClientToolParkResponse>;
+    return answer.requested === true;
   } catch (error) {
     console.warn("[client_tool_call] park request failed", error);
+    return false;
   }
 }
 

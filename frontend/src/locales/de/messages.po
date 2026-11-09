@@ -8299,6 +8299,46 @@ msgid "sidecar.uiPackage.reason.verification"
 msgstr "das Paket konnte nicht verifiziert werden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.asking.title"
+msgstr "Erneute Anfrage in der Erato-Desktop-App"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.action"
+msgstr "Erneut fragen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.description"
+msgstr "Es wurde nichts geteilt. Eine Prüfung endet eine Stunde nach dem Start."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.title"
+msgstr "Diese Prüfung ist beendet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.action"
+msgstr "Öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.description"
+msgstr "Eine Prüfung endet eine Stunde nach dem Start."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.failed"
+msgstr "Die Erato-Desktop-App konnte diese Prüfung nicht anzeigen. Prüfe, ob sie läuft, und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.title"
+msgstr "Wartet auf deine Prüfung in der Erato-Desktop-App"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""
@@ -11344,8 +11384,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits ({totalTokensFormatted} von {maxTokensFormatted})."
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "This task is waiting for a connected app. You can leave this chat and return later."
-msgstr "Diese Aufgabe wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
+msgid "This response is waiting for a connected app. You can leave this chat and return later."
+msgstr "Diese Antwort wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
+
+#: src/components/ui/Message/MessageContent.tsx
+#~ msgid "This task is waiting for a connected app. You can leave this chat and return later."
+#~ msgstr "Diese Aufgabe wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 #~ msgid "Thought"

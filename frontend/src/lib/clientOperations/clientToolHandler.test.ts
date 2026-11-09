@@ -224,12 +224,15 @@ describe("ClientToolOperationHandler", () => {
   function handler(
     run: ClientToolExecutor = async () => ({ ok: true, result: { busy: [] } }),
     ready = () => true,
+    waitsOnUser?: (request: OperationRequest) => boolean,
   ) {
     return new ClientToolOperationHandler(
       "fetch_availability",
       run,
       () => binding,
       ready,
+      undefined,
+      waitsOnUser,
     );
   }
 
@@ -263,6 +266,25 @@ describe("ClientToolOperationHandler", () => {
     expect(subject.defer(request)).toBe(false);
     trackClientToolCallAbort(request.tool_call_id, request.chat_id);
     expect(subject.defer(request)).toBe(true);
+  });
+
+  it("defers a call that waits for the user, whose run could not answer it", () => {
+    const subject = handler(undefined, undefined, () => true);
+    expect(subject.defer(request)).toBe(true);
+    expect(handler(undefined, undefined, () => false).defer(request)).toBe(
+      false,
+    );
+  });
+
+  it("leaves a parked call with no result while it still waits on the user", async () => {
+    const subject = handler(async () => ({
+      ok: false,
+      error: "Ended.",
+      stillWaiting: true,
+    }));
+    expect(
+      await subject.execute(request, claim, new AbortController().signal),
+    ).toBeUndefined();
   });
 
   it("runs the parked input and answers with the request's own binding", async () => {

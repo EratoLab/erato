@@ -36,6 +36,12 @@ export type ClientToolExecutionResult =
       validationErrors?: ClientToolValidationIssue[];
       /** Correction handle and terminal rejection, never a successful artifact. */
       submissionFeedback?: ClientToolSubmissionFeedback;
+      /**
+       * Nothing answers the call yet and it needs the user again, as when the
+       * review it waits on ended without a decision: a parked call stays open
+       * for them. A call that is not parked is answered with `error`.
+       */
+      stillWaiting?: boolean;
     };
 
 /**

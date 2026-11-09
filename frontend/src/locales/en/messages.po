@@ -8299,6 +8299,46 @@ msgid "sidecar.uiPackage.reason.verification"
 msgstr "the package did not verify"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.asking.title"
+msgstr "Asking again in the Erato desktop app"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.action"
+msgstr "Ask again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.description"
+msgstr "Nothing was shared. A review ends one hour after it starts."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.title"
+msgstr "This review has ended"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.action"
+msgstr "Open"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.description"
+msgstr "A review ends one hour after it starts."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.failed"
+msgstr "The Erato desktop app could not show this review. Check that it is running, then try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.title"
+msgstr "Waiting for your review in the Erato desktop app"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr "{itemCount, plural, one {The assistant planned this sub-task. Declining it is refused to the assistant and the response continues without it.} other {The assistant planned these sub-tasks. Decide each one; the ones you decline are refused and the response continues without them.}}"
@@ -11344,8 +11384,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "This task is waiting for a connected app. You can leave this chat and return later."
-msgstr "This task is waiting for a connected app. You can leave this chat and return later."
+msgid "This response is waiting for a connected app. You can leave this chat and return later."
+msgstr "This response is waiting for a connected app. You can leave this chat and return later."
+
+#: src/components/ui/Message/MessageContent.tsx
+#~ msgid "This task is waiting for a connected app. You can leave this chat and return later."
+#~ msgstr "This task is waiting for a connected app. You can leave this chat and return later."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 #~ msgid "Thought"

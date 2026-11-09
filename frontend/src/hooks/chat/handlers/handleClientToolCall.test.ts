@@ -503,6 +503,51 @@ describe("handleClientToolCall", () => {
       expect(sweep).not.toHaveBeenCalled();
     });
 
+    describe("a parked call whose review ended", () => {
+      const stillWaiting = async (
+        _input: unknown,
+        ctx?: { park?: () => void },
+      ) => {
+        ctx?.park?.();
+        // After the park answered, as a review's hour is.
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+        await Promise.resolve();
+        await Promise.resolve();
+        return { ok: false as const, error: "Ended.", stillWaiting: true };
+      };
+
+      it("sends nothing while the call is parked: it waits for the user to ask again", async () => {
+        registerClientToolExecutor("fetch_availability", stillWaiting);
+        fetchMock.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ requested: true }),
+        });
+        await handleClientToolCall(makeEvent(), deps);
+        expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+          "/api/v1beta/me/messages/clienttoolpark",
+        ]);
+        expect(isClientToolCallInFlight("call-1")).toBe(false);
+      });
+
+      it("answers with the error when the server did not park the call", async () => {
+        registerClientToolExecutor("fetch_availability", stillWaiting);
+        fetchMock
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ requested: false }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ delivered: true, stored: false }),
+          });
+        await handleClientToolCall(makeEvent(), deps);
+        expect(lastPostBody(fetchMock)).toMatchObject({ error: "Ended." });
+      });
+    });
+
     it("keeps a conflicting call answered without requesting a sweep", async () => {
       fetchMock.mockResolvedValueOnce({ ok: false, status: 409 });
       await handleClientToolCall(makeEvent(), deps);

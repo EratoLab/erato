@@ -32,6 +32,7 @@ import {
   runsAsSidecarJob,
   SidecarReviewEndedError,
 } from "./sidecarJobs";
+import { forgetReview, reviewLinkKey } from "./sidecarReviewLinks";
 import {
   cachedSourceDirectory,
   lacks,
@@ -981,6 +982,7 @@ export function createSidecarChatTools(
         signal: context?.signal,
         chatId: context?.chatId ?? undefined,
         toolCallId: context?.toolCallId,
+        messageId: context?.messageId,
         // A review waits on the user, so the turn need not wait inline.
         onReview: context?.park,
       });
@@ -1025,8 +1027,21 @@ export function createSidecarChatTools(
             result: { ...outcome.result, freshness: sidecarFreshness(readAt) },
           };
         } catch (error) {
-          if (error instanceof SidecarReviewEndedError)
+          if (error instanceof SidecarReviewEndedError) {
+            // The call stays open for the user to ask again; a task's call
+            // cannot wait for someone who may not be looking.
+            if (error.state === "expired" && context && !grant)
+              return {
+                ok: false,
+                error: REVIEW_ENDED.expired,
+                stillWaiting: true,
+              };
+            if (context)
+              forgetReview(
+                reviewLinkKey(context.messageId, context.toolCallId),
+              );
             return declined(REVIEW_ENDED[error.state], context);
+          }
           if (grant && isLostSidecar(error))
             return contextLoss(SIDECAR_UNAVAILABLE);
           return { ok: false, error: toolError(method, error) };
@@ -1038,7 +1053,11 @@ export function createSidecarChatTools(
         void result.then((outcome) => {
           // A run that could not finish here must run again when the call is
           // claimed again, not answer with what stopped it.
-          if (context?.signal?.aborted || isContextLoss(outcome)) {
+          if (
+            context?.signal?.aborted ||
+            isContextLoss(outcome) ||
+            (!outcome.ok && outcome.stillWaiting)
+          ) {
             if (executions.get(key) === result) executions.delete(key);
             return;
           }

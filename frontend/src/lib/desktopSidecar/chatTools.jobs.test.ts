@@ -25,6 +25,14 @@ import {
   sidecarToolAvailable,
 } from "./chatTools";
 import { JOB_POLL_INTERVAL_MS } from "./sidecarJobs";
+import {
+  askForReviewAgain,
+  rememberReview,
+  reviewHasEnded,
+  reviewLink,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "./sidecarReviewLinks";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
 
@@ -340,9 +348,11 @@ function sidecar(
   rpc: Record<string, SidecarReply>,
   discovery: Partial<SidecarSnapshot> = {},
   call: (tool: string) => JobCallResult = (tool) => composedCall(tool, rpc),
-  review: ReviewOutcome = "approved",
+  review: ReviewOutcome | (() => ReviewOutcome) = "approved",
 ) {
-  let calls: JobToolCall[] = [];
+  const reviewNow = () => (typeof review === "function" ? review() : review);
+  // A job remembered from an earlier run has no start here to name its calls.
+  let calls = [{ name: SEARCH_SIDECAR_INDEX_TOOL }] as JobToolCall[];
   const results = () => calls.map(({ name }) => call(name));
   const fake = fakeSidecarClient((method, params) => {
     if (method === "jobs.start.v1") {
@@ -357,8 +367,8 @@ function sidecar(
       return {
         result: {
           handle: JOB_HANDLE,
-          state: review,
-          ...(review === "approved" ? { results: results() } : {}),
+          state: reviewNow(),
+          ...(reviewNow() === "approved" ? { results: results() } : {}),
         },
       };
     if (method.startsWith("jobs."))
@@ -904,6 +914,8 @@ describe("desktop sidecar tools run as jobs", () => {
 describe("desktop sidecar tools in strict mode", () => {
   const strict = fixtureDiscovery(STRICT_MODE);
   beforeEach(() => {
+    localStorage.clear();
+    useSidecarReviewLinks.setState({ links: {} });
     // The poll after the review opens waits out the poll interval.
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
@@ -954,6 +966,9 @@ describe("desktop sidecar tools in strict mode", () => {
     "reports a review that ended as %s as an error a retry cannot fix",
     async (state, error) => {
       for (const callContext of [context, grantContext]) {
+        // Each row and context on a call of its own.
+        useSidecarReviewLinks.setState({ links: {} });
+        localStorage.clear();
         const job = sidecar(RPC, strict, undefined, state);
         const outcome = await settled(
           job
@@ -970,7 +985,10 @@ describe("desktop sidecar tools in strict mode", () => {
                   { path: "", code: "declined", message: error },
                 ],
               }
-            : { ok: false, error },
+            : state === "expired"
+              ? // Stays open for the user to ask again.
+                { ok: false, error, stillWaiting: true }
+              : { ok: false, error },
         );
         expect(job.options.approveFiles).not.toHaveBeenCalled();
         expect(job.options.uploadAttachment).not.toHaveBeenCalled();
@@ -1036,31 +1054,76 @@ describe("desktop sidecar tools in strict mode", () => {
     }
   });
 
+  /** A review's parked operation, on the server the coordinator talks to. */
+  function parkedReviewOperation() {
+    const binding: ExecutorBinding = {
+      device_id: "installation-one",
+      realm: "desktop-sidecar",
+      host_context: { kind: "desktop_sidecar", identity: "local" },
+    };
+    const request: OperationRequest = {
+      attempt_id: "00000000-0000-4000-8000-0000000000a1",
+      operation_id: "desktop/search_sidecar_index",
+      kind: "client_tool.v1",
+      account_id: "00000000-0000-4000-8000-000000000001",
+      chat_id: "00000000-0000-4000-8000-0000000000c1",
+      message_id: "00000000-0000-4000-8000-0000000000e1",
+      tool_call_id: "parked-call",
+      realm: "desktop-sidecar",
+      consent: "none",
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      input: INPUTS[SEARCH_SIDECAR_INDEX_TOOL] as OperationPayload,
+      binding,
+    };
+    let state: AttemptState = "pending";
+    const api = {
+      list: vi.fn<ClientOperationApi["list"]>(async () => ({
+        enabled: true,
+        executor_stream_enabled: false,
+        account_id: request.account_id,
+        operations: state === "completed" ? [] : [{ request, state }],
+      })),
+      claim: vi.fn<ClientOperationApi["claim"]>(async () => {
+        state = "claimed";
+        return {
+          claim_token: "claim",
+          expires_at: new Date(Date.now() + 120_000).toISOString(),
+        };
+      }),
+      complete: vi.fn<ClientOperationApi["complete"]>(async () => {
+        state = "ready";
+        return { state };
+      }),
+      continue: vi.fn<ClientOperationApi["continue"]>(async () => {
+        state = "completed";
+      }),
+    } satisfies ClientOperationApi;
+    return { binding, request, api };
+  }
+
+  const reviewApproved = (shaped: ClientToolExecutionResult) => ({
+    outcome: "succeeded",
+    result: {
+      type: "value",
+      value: (shaped as { result: unknown }).result,
+    },
+  });
+  const reviewDeclined = () => ({
+    outcome: "failed",
+    error: {
+      code: "execution_failed",
+      message:
+        "The user declined sharing this result in the Erato desktop app. Do not retry without their permission.",
+    },
+  });
   it.each([
-    [
-      "approved",
-      (shaped: ClientToolExecutionResult) => ({
-        outcome: "succeeded",
-        result: {
-          type: "value",
-          value: (shaped as { result: unknown }).result,
-        },
-      }),
-    ],
-    [
-      "declined",
-      () => ({
-        outcome: "failed",
-        error: {
-          code: "execution_failed",
-          message:
-            "The user declined sharing this result in the Erato desktop app. Do not retry without their permission.",
-        },
-      }),
-    ],
+    ["approved", false, reviewApproved],
+    ["declined", false, reviewDeclined],
+    ["approved", true, reviewApproved],
+    ["declined", true, reviewDeclined],
   ] as const)(
-    "resumes a parked review's call through the durable coordinator once the review is %s",
-    async (review, expected) => {
+    "resumes a parked review's call through the durable coordinator once the review is %s (decided with no page open: %s)",
+    async (review, decidedWhileAway, expected) => {
       const shaped = await settled(
         sidecar(RPC, strict)
           .tool(SEARCH_SIDECAR_INDEX_TOOL)
@@ -1070,48 +1133,12 @@ describe("desktop sidecar tools in strict mode", () => {
       vi.setSystemTime(new Date("2026-11-02T10:00:00Z"));
       const path = sidecar(RPC, strict, undefined, review);
       const tool = path.tool(SEARCH_SIDECAR_INDEX_TOOL);
-      const binding: ExecutorBinding = {
-        device_id: "installation-one",
-        realm: "desktop-sidecar",
-        host_context: { kind: "desktop_sidecar", identity: "local" },
-      };
-      const request: OperationRequest = {
-        attempt_id: "00000000-0000-4000-8000-0000000000a1",
-        operation_id: "desktop/search_sidecar_index",
-        kind: "client_tool.v1",
-        account_id: "00000000-0000-4000-8000-000000000001",
-        chat_id: "00000000-0000-4000-8000-0000000000c1",
-        message_id: "00000000-0000-4000-8000-0000000000e1",
-        tool_call_id: "parked-call",
-        realm: "desktop-sidecar",
-        consent: "none",
-        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-        input: INPUTS[SEARCH_SIDECAR_INDEX_TOOL] as OperationPayload,
-        binding,
-      };
-      let state: AttemptState = "pending";
-      const api = {
-        list: vi.fn<ClientOperationApi["list"]>(async () => ({
-          enabled: true,
-          executor_stream_enabled: false,
-          account_id: request.account_id,
-          operations: state === "completed" ? [] : [{ request, state }],
-        })),
-        claim: vi.fn<ClientOperationApi["claim"]>(async () => {
-          state = "claimed";
-          return {
-            claim_token: "claim",
-            expires_at: new Date(Date.now() + 120_000).toISOString(),
-          };
-        }),
-        complete: vi.fn<ClientOperationApi["complete"]>(async () => {
-          state = "ready";
-          return { state };
-        }),
-        continue: vi.fn<ClientOperationApi["continue"]>(async () => {
-          state = "completed";
-        }),
-      } satisfies ClientOperationApi;
+      const { binding, request, api } = parkedReviewOperation();
+      if (decidedWhileAway)
+        rememberReview(
+          reviewLinkKey(request.message_id, request.tool_call_id),
+          JOB_HANDLE,
+        );
       const registry = createClientOperationHandlerRegistry();
       // After a reload: no live call runs here, so the coordinator claims it.
       registry.register(
@@ -1144,13 +1171,72 @@ describe("desktop sidecar tools in strict mode", () => {
         executor: binding,
         ...expected(shaped),
       });
-      expect(path.methods().slice(0, 3)).toEqual([
-        "jobs.start.v1",
-        "jobs.review.v1",
-        "jobs.status.v1",
-      ]);
+      expect(path.methods().slice(0, decidedWhileAway ? 1 : 3)).toEqual(
+        decidedWhileAway
+          ? ["jobs.status.v1"]
+          : ["jobs.start.v1", "jobs.review.v1", "jobs.status.v1"],
+      );
+      if (decidedWhileAway) {
+        // No second review: the first decision is the one the turn receives.
+        expect(path.methods()).not.toContain("jobs.start.v1");
+        expect(path.methods()).not.toContain("jobs.review.v1");
+      }
     },
   );
+
+  it("keeps a parked call open when its review's hour ran out, and reviews it once more when the user asks again", async () => {
+    let outcome: ReviewOutcome = "expired";
+    const path = sidecar(RPC, strict, undefined, () => outcome);
+    const tool = path.tool(SEARCH_SIDECAR_INDEX_TOOL);
+    const { binding, request, api } = parkedReviewOperation();
+    const key = reviewLinkKey(request.message_id, request.tool_call_id);
+    rememberReview(key, JOB_HANDLE);
+    const registry = createClientOperationHandlerRegistry();
+    registry.register(
+      new ClientToolOperationHandler(
+        tool.name,
+        tool.execute,
+        () => binding,
+        tool.isAvailable,
+        () => false,
+        ({ message_id, tool_call_id }) =>
+          reviewHasEnded(message_id, tool_call_id),
+      ),
+    );
+    const coordinator = new ClientOperationCoordinator(
+      request.account_id,
+      api,
+      [],
+      vi.fn(),
+      registry,
+    );
+    try {
+      await coordinator.reconcile();
+      await vi.waitFor(() => expect(reviewLink(key)?.state).toBe("ended"));
+      expect(api.complete).not.toHaveBeenCalled();
+      expect(path.methods()).toEqual(["jobs.status.v1"]);
+
+      // While it waits for the user nothing claims it or asks the app.
+      const claims = api.claim.mock.calls.length;
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(api.claim).toHaveBeenCalledTimes(claims);
+      expect(path.methods()).toEqual(["jobs.status.v1"]);
+
+      outcome = "approved";
+      askForReviewAgain(key);
+      await coordinator.reconcile();
+      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+      await vi.waitFor(() => expect(api.continue).toHaveBeenCalledTimes(1));
+      expect(api.complete).toHaveBeenCalledTimes(1);
+      expect(
+        path.methods().filter((method) => method === "jobs.start.v1"),
+      ).toHaveLength(1);
+      expect(reviewLink(key)).toBeUndefined();
+    } finally {
+      coordinator.dispose();
+    }
+  });
 
   it("offers a reviewed tool only while the strict sidecar enables jobs.review.v1", async () => {
     const path = sidecar(RPC, strict);

@@ -6,6 +6,7 @@ import {
 import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { setClientPlatform } from "@/lib/clientPlatform";
 
 import {
@@ -20,10 +21,18 @@ import {
 } from "./__tests__/sidecarJobTestUtils";
 import {
   JOB_POLL_INTERVAL_MS,
+  reopenSidecarReview,
   runSidecarJob,
   runsAsSidecarJob,
   SidecarReviewEndedError,
 } from "./sidecarJobs";
+import {
+  askForReviewAgain,
+  rememberReview,
+  reviewLink,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "./sidecarReviewLinks";
 import { useSidecarReviewStore } from "./sidecarReviewStore";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
@@ -46,6 +55,8 @@ const at = (reply: SidecarReply, ms: number) =>
 
 afterEach(() => {
   vi.useRealTimers();
+  localStorage.clear();
+  useSidecarReviewLinks.setState({ links: {} });
 });
 
 describe("runsAsSidecarJob", () => {
@@ -165,7 +176,7 @@ describe("runSidecarJob", () => {
     await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
     await expect(result).resolves.toBeDefined();
     expect(onReview).not.toHaveBeenCalled();
-    expect(useSidecarReviewStore.getState().waitingByToolCallId.size).toBe(0);
+    expect(useSidecarReviewStore.getState().waitingByChatId.size).toBe(0);
   });
 
   it("long-polls jobs.status with wait_ms while the job runs", async () => {
@@ -478,9 +489,9 @@ describe("runSidecarJob", () => {
       );
       await vi.advanceTimersByTimeAsync(0);
       expect(onReview).toHaveBeenCalledTimes(1);
-      expect(
-        useSidecarReviewStore.getState().waitingByToolCallId.get("call-1"),
-      ).toBe(1);
+      expect(useSidecarReviewStore.getState().waitingByChatId.get("chat")).toBe(
+        1,
+      );
       // A quarter of an hour without a decision: still waiting, never cancelled.
       await vi.advanceTimersByTimeAsync(15 * 60_000);
       expect(onReview).toHaveBeenCalledTimes(1);
@@ -491,7 +502,7 @@ describe("runSidecarJob", () => {
         (mailboxesResult as Extract<JobCallResult, { result: unknown }>).result,
       );
       expect(methods().at(-1)).toBe("jobs.ack.v1");
-      expect(useSidecarReviewStore.getState().waitingByToolCallId.size).toBe(0);
+      expect(useSidecarReviewStore.getState().waitingByChatId.size).toBe(0);
     });
 
     it.each(["declined", "cancelled", "expired"] as const)(
@@ -551,6 +562,267 @@ describe("runSidecarJob", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(methods()).toContain("jobs.cancel.v1");
       expect(waiting().size).toBe(0);
+    });
+
+    describe("a call run again after its page went away", () => {
+      const key = reviewLinkKey("message-1", "call-1");
+      const callOptions = {
+        chatId: "chat",
+        toolCallId: "call-1",
+        messageId: "message-1",
+      };
+
+      it("records the job before the window opens and forgets it once decided", async () => {
+        vi.useFakeTimers();
+        const links: unknown[] = [];
+        const { client } = fakeSidecarClient((method) => {
+          if (method === "jobs.review.v1") links.push(reviewLink(key));
+          if (method === "jobs.status.v1") return approved;
+          if (method === "jobs.ack.v1")
+            return { result: { handle: JOB_HANDLE, state: "acked" } };
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const result = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        );
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await expect(result).resolves.toBeDefined();
+        expect(links).toEqual([
+          expect.objectContaining({ state: "open", handle: JOB_HANDLE }),
+        ]);
+        expect(reviewLink(key)).toBeUndefined();
+      });
+
+      it("delivers a Share made while no page was open, with no new job and no window", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const { client, requests, methods } = fakeSidecarClient(
+          (method) =>
+            method === "jobs.status.v1"
+              ? approved
+              : { result: { handle: JOB_HANDLE, state: "acked" } },
+          strictMode,
+        );
+        await expect(
+          runSidecarJob(
+            client,
+            "search_sidecar_index",
+            { query: "report" },
+            callOptions,
+          ),
+        ).resolves.toEqual(
+          (mailboxesResult as Extract<JobCallResult, { result: unknown }>)
+            .result,
+        );
+        expect(methods()).toEqual(["jobs.status.v1", "jobs.ack.v1"]);
+        expect(requests[0].params).toEqual({ handle: JOB_HANDLE });
+        expect(reviewLink(key)).toBeUndefined();
+      });
+
+      it("delivers a Decline made while no page was open, with no new job and no window", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const { client, methods } = fakeSidecarClient(
+          () => pendingJob("declined"),
+          strictMode,
+        );
+        const thrown = await runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        ).catch((caught: unknown) => caught);
+        expect(thrown).toBeInstanceOf(SidecarReviewEndedError);
+        expect(thrown).toMatchObject({ state: "declined" });
+        expect(methods()).toEqual(["jobs.status.v1"]);
+        expect(reviewLink(key)).toBeUndefined();
+      });
+
+      it("shows a review still open again, on the same job", async () => {
+        vi.useFakeTimers();
+        rememberReview(key, JOB_HANDLE);
+        let polled = 0;
+        const { client, methods, requests } = fakeSidecarClient((method) => {
+          if (method === "jobs.status.v1")
+            return ++polled === 1 ? pendingJob("ready_for_review") : approved;
+          if (method === "jobs.ack.v1")
+            return { result: { handle: JOB_HANDLE, state: "acked" } };
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const result = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(methods()).toEqual(["jobs.status.v1", "jobs.review.v1"]);
+        expect(requests[1].params).toMatchObject({ handle: JOB_HANDLE });
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await expect(result).resolves.toBeDefined();
+        expect(methods()).not.toContain("jobs.start.v1");
+      });
+
+      it("reports a review whose hour ran out, and starts nothing until the user asks again", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const { client, methods } = fakeSidecarClient(
+          () => pendingJob("expired"),
+          strictMode,
+        );
+        const thrown = await runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        ).catch((caught: unknown) => caught);
+        expect(thrown).toMatchObject({ state: "expired" });
+        expect(methods()).toEqual(["jobs.status.v1"]);
+        expect(reviewLink(key)?.state).toBe("ended");
+
+        // Run again before the user asks: nothing starts.
+        await runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        ).catch((caught: unknown) => caught);
+        expect(methods()).toEqual(["jobs.status.v1"]);
+      });
+
+      it("records that a review it was polling ended, for the user to ask again", async () => {
+        vi.useFakeTimers();
+        const { client } = fakeSidecarClient(
+          (method) =>
+            method === "jobs.status.v1"
+              ? pendingJob("expired")
+              : pendingJob("ready_for_review"),
+          strictMode,
+        );
+        const settled = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        ).catch((caught: unknown) => caught);
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await expect(settled).resolves.toMatchObject({ state: "expired" });
+        expect(reviewLink(key)?.state).toBe("ended");
+      });
+
+      it("starts one new review once the user asked again", async () => {
+        vi.useFakeTimers();
+        askForReviewAgain(key);
+        const { client, methods } = fakeSidecarClient((method) => {
+          if (method === "jobs.status.v1") return approved;
+          if (method === "jobs.ack.v1")
+            return { result: { handle: JOB_HANDLE, state: "acked" } };
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const result = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        );
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await expect(result).resolves.toBeDefined();
+        expect(methods().slice(0, 2)).toEqual([
+          "jobs.start.v1",
+          "jobs.review.v1",
+        ]);
+        expect(methods().filter((m) => m === "jobs.start.v1")).toHaveLength(1);
+      });
+
+      it.each(["cancelled", "failed", "acked"] as const)(
+        "starts over when the remembered job ended as %s, with no decision to deliver",
+        async (state) => {
+          vi.useFakeTimers();
+          rememberReview(key, JOB_HANDLE);
+          let starts = 0;
+          const { client, methods } = fakeSidecarClient((method) => {
+            if (method === "jobs.start.v1") {
+              starts += 1;
+              return pendingJob("ready_for_review");
+            }
+            if (method === "jobs.status.v1")
+              return starts === 0 ? pendingJob(state) : approved;
+            if (method === "jobs.ack.v1")
+              return { result: { handle: JOB_HANDLE, state: "acked" } };
+            return pendingJob("ready_for_review");
+          }, strictMode);
+          const result = runSidecarJob(
+            client,
+            "search_sidecar_index",
+            { query: "report" },
+            callOptions,
+          );
+          await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+          await expect(result).resolves.toBeDefined();
+          expect(methods().slice(0, 3)).toEqual([
+            "jobs.status.v1",
+            "jobs.start.v1",
+            "jobs.review.v1",
+          ]);
+        },
+      );
+    });
+
+    describe("reopenSidecarReview", () => {
+      const key = reviewLinkKey("message-1", "call-1");
+
+      it("shows the same job's review again and starts nothing", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const { client, requests, methods } = fakeSidecarClient(
+          () => pendingJob("ready_for_review"),
+          strictMode,
+        );
+        await reopenSidecarReview(client, key);
+        await reopenSidecarReview(client, key);
+        expect(methods()).toEqual(["jobs.review.v1", "jobs.review.v1"]);
+        expect(requests[0].params).toEqual({
+          handle: JOB_HANDLE,
+          client: expect.objectContaining({ platform: "web" }),
+        });
+      });
+
+      it("opens nothing for a review already decided and lets the call's next run deliver it", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const sweep = vi.fn();
+        const unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);
+        const { client, methods } = fakeSidecarClient(
+          () => pendingJob("declined"),
+          strictMode,
+        );
+        try {
+          await reopenSidecarReview(client, key);
+        } finally {
+          unsubscribe();
+        }
+        expect(methods()).toEqual(["jobs.review.v1"]);
+        expect(sweep).toHaveBeenCalledTimes(1);
+        expect(reviewLink(key)?.state).toBe("open");
+      });
+
+      it("says the review ended when the app no longer has it", async () => {
+        rememberReview(key, JOB_HANDLE);
+        const { client, methods } = fakeSidecarClient(
+          () => pendingJob("expired"),
+          strictMode,
+        );
+        await reopenSidecarReview(client, key);
+        expect(reviewLink(key)?.state).toBe("ended");
+        expect(methods()).toEqual(["jobs.review.v1"]);
+      });
+
+      it("does nothing for a call with no review to show", async () => {
+        const { client, methods } = fakeSidecarClient(
+          () => pendingJob("ready_for_review"),
+          strictMode,
+        );
+        await reopenSidecarReview(client, key);
+        expect(methods()).toEqual([]);
+      });
     });
   });
 });
