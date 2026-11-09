@@ -4280,6 +4280,12 @@ pub struct McpServersGlobalConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub enable_wait: bool,
 
+    /// Email domains that count as inside the organisation on approval cards
+    /// and trace rows, next to the signed-in user's own domain.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub organization_email_domains: Vec<String>,
+
     /// Maximum number of seconds the synthetic `wait` tool may defer a
     /// continuation. Defaults to one minute.
     #[serde(default = "default_mcp_wait_max_seconds")]
@@ -4305,6 +4311,7 @@ impl Default for McpServersGlobalConfig {
             enable_wait: false,
             max_wait_seconds: default_mcp_wait_max_seconds(),
             approval: McpToolApprovalConfig::default(),
+            organization_email_domains: Vec::new(),
         }
     }
 }

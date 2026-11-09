@@ -2015,12 +2015,6 @@ pub struct GeneratingChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     initiator: Option<crate::models::message::GenerationInitiator>,
-    /// Set on an `action_required` chat once a model's label replaced the one
-    /// its approval card was stored with; a client showing that card reloads
-    /// the chat's messages when this changes.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    labels_updated_at: Option<DateTime<FixedOffset>>,
 }
 
 /// Response for the generating_chats endpoint
@@ -3649,14 +3643,6 @@ pub async fn generating_chats(
             _ => None,
         };
 
-        let labels_updated_at = (state == GenerationChatState::ActionRequired)
-            .then(|| {
-                row.labels_updated_at
-                    .as_deref()
-                    .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
-            })
-            .flatten();
-
         chats.push(GeneratingChat {
             chat_id: row.id.to_string(),
             state,
@@ -3664,7 +3650,6 @@ pub async fn generating_chats(
             ended_at,
             title,
             initiator,
-            labels_updated_at,
         });
     }
 

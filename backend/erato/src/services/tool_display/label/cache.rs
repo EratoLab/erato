@@ -587,13 +587,13 @@ mod tests {
             ..model("/records/*/recordId")
         });
         let records = tool(schema());
-        let arguments = call("archive_quietly", &["Secret merger with Globex"]);
+        let arguments = call("drop_quietly", &["Secret merger with Globex"]);
         label(&cache, &labeller, "user-a", &records, &arguments).await;
         cache.entries.run_pending_tasks().await;
         assert_eq!(cache.entries.entry_count(), 1);
         for (key, mapping) in cache.entries.iter() {
             let stored = format!("{key:?} {}", serde_json::to_string(&*mapping).unwrap());
-            for value in ["Secret", "Globex", "rec-0", "archive_quietly"] {
+            for value in ["Secret", "Globex", "rec-0", "drop_quietly"] {
                 assert!(!stored.contains(value), "{value}: {stored}");
             }
         }

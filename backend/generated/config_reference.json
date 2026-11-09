@@ -4286,6 +4286,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers_global.organization_email_domains.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers_global.override_tool_annotations.destructive_hint": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",

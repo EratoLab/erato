@@ -131,6 +131,44 @@ describe("ApprovalReferent", () => {
     expect(onDecide).toHaveBeenCalledWith("reject");
   });
 
+  it("describes a call with no verb above its arguments, without claiming a loss", () => {
+    renderItem({
+      ...display,
+      label: {
+        ...display.label!,
+        action: "other",
+        object_kind: "other",
+        change: {
+          recipients: {
+            total: 1,
+            groups: [
+              {
+                name: "To",
+                raw_name: "to",
+                kind: "to",
+                count: 1,
+                values: ["ana@fabrikam.example"],
+              },
+            ],
+            outside: ["ana@fabrikam.example"],
+            outside_known: true,
+          },
+          counts: {},
+          complete: true,
+        } as unknown as ToolDisplayMetadata["label"] extends infer L
+          ? L extends { change?: infer C }
+            ? C
+            : never
+          : never,
+      },
+    });
+    expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
+      "1 address is outside your organisation",
+    );
+    expect(screen.getByTestId("tool-argument-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-change-emptied")).toBeNull();
+  });
+
   it("tries the label again once a new one arrives", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     broken.gist = true;

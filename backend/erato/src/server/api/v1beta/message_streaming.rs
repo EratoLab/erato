@@ -655,7 +655,6 @@ fn ask_for_tool_call(
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
         approval_scope: None,
-        labels_updated_at: None,
     }))
 }
 
@@ -1049,6 +1048,7 @@ pub struct MeProfileChatRequestInput<'a> {
     pub oidc_token: &'a str,
     pub access_token: Option<&'a str>,
     pub preferred_language: &'a str,
+    pub email: Option<&'a str>,
     pub user_preference_nickname: Option<&'a str>,
     pub user_preference_job_title: Option<&'a str>,
     pub user_preference_assistant_custom_instructions: Option<&'a str>,
@@ -1069,6 +1069,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             oidc_token: &me_profile.oidc_token,
             access_token: me_profile.access_token.as_deref(),
             preferred_language: &me_profile.preferred_language,
+            email: me_profile.email.as_deref(),
             user_preference_nickname: me_profile.preference_nickname.as_deref(),
             user_preference_job_title: me_profile.preference_job_title.as_deref(),
             user_preference_assistant_custom_instructions: me_profile
@@ -4904,6 +4905,13 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     let tool_result_context =
         crate::services::tool_display::label::ToolResultContext::from_messages(
             &generation_input_messages,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
@@ -6062,7 +6070,6 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6130,7 +6137,6 @@ fn task_plan_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6822,10 +6828,8 @@ async fn stream_generate_chat_completion<'a>(
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
         &user_id,
         chat_id,
-        assistant_message_id,
         assistant_id,
         &langfuse_trace_enrichment.platform,
-        streaming_task,
         crate::services::tool_labeller::TurnLabeller::for_turn(
             app_state,
             policy,
@@ -23724,6 +23728,13 @@ async fn resume_parked_generation(
         crate::services::tool_display::label::ToolResultContext::from_messages_and_row(
             &retrieval_source,
             &parsed.content,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(

@@ -155,8 +155,6 @@ export function GenerationStatusPoller({
   const lastListingRefreshRef = useRef(0);
   /** `chatId:startedAt` of the task-result turn already reacted to. */
   const reactedRef = useRef<string | null>(null);
-  /** `chatId:labelsUpdatedAt` of the parked card already reloaded. */
-  const relabelledRef = useRef<string | null>(null);
 
   const { data, dataUpdatedAt } = useGeneratingChats(
     {},
@@ -267,29 +265,6 @@ export function GenerationStatusPoller({
             pathParams: { chatId: currentChatId },
           }).queryKey;
           void queryClient.invalidateQueries({ queryKey: messagesKey });
-        }
-      }
-    }
-
-    // --- BRANCH D: a model's label improved the open chat's parked card.
-    // The label lands after the turn parked, so nothing streams it; refetch
-    // once per change of the marker.
-    if (currentChatId) {
-      const relabelled = data.chats.find(
-        (entry) =>
-          entry.chat_id === currentChatId &&
-          entry.state === "action_required" &&
-          entry.labels_updated_at !== undefined,
-      );
-      if (relabelled) {
-        const relabelKey = `${relabelled.chat_id}:${relabelled.labels_updated_at}`;
-        if (relabelledRef.current !== relabelKey) {
-          relabelledRef.current = relabelKey;
-          void queryClient.invalidateQueries({
-            queryKey: chatMessagesQuery({
-              pathParams: { chatId: currentChatId },
-            }).queryKey,
-          });
         }
       }
     }

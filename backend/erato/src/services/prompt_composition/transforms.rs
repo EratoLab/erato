@@ -898,6 +898,7 @@ fn strip_ui_only_tool_output(
                     arguments: None,
                     warnings: Vec::new(),
                     source: Default::default(),
+                    change: None,
                 }),
         });
     let is_delegation = crate::services::delegation::is_delegation_tool_name(&tool_use.tool_name);

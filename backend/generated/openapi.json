@@ -8117,10 +8117,6 @@
           "kind": {
             "$ref": "#/components/schemas/ToolApprovalKind"
           },
-          "labels_updated_at": {
-            "type": "string",
-            "description": "When a model's label last replaced the one this stop was stored with,\nso a client showing the parked card knows to load it again."
-          },
           "mcp_server_id": {
             "type": "string"
           },
@@ -9505,11 +9501,6 @@
           "initiator": {
             "$ref": "#/components/schemas/GenerationInitiator",
             "description": "Who started the generation this row describes. Absent means a person\ndid — including every generation written before the field existed."
-          },
-          "labels_updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Set on an `action_required` chat once a model's label replaced the one\nits approval card was stored with; a client showing that card reloads\nthe chat's messages when this changes."
           },
           "started_at": {
             "type": "string",
@@ -13378,6 +13369,7 @@
           "group",
           "list",
           "id",
+          "machine_id",
           "text",
           "value"
         ]
@@ -13399,6 +13391,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ToolArgumentKind"
+          },
+          "machine_name": {
+            "type": "boolean",
+            "description": "The member's own name is a machine identifier, which a card does not show."
           },
           "omitted": {
             "type": "integer",
@@ -13422,8 +13418,503 @@
           "move",
           "send",
           "comment",
+          "share",
+          "run",
+          "upsert",
+          "archive",
+          "upload",
           "other"
         ]
+      },
+      "ToolCallBatch": {
+        "type": "object",
+        "description": "Several rows in one call.",
+        "required": [
+          "path",
+          "name",
+          "total"
+        ],
+        "properties": {
+          "deletions": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallBatchField"
+            },
+            "description": "What each field does across the rows, the first ones the batch writes."
+          },
+          "fields_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallBatchOperation"
+            },
+            "description": "Rows per operation, when rows name their own."
+          },
+          "path": {
+            "type": "string"
+          },
+          "read_all": {
+            "type": "boolean",
+            "description": "Every row was read. Only then may a card say what no row does."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallBatchRow"
+            },
+            "description": "The first rows, deletions first, each with its number in the call."
+          },
+          "rows_emptying": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "rows_replacing_lists": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "same_change": {
+            "type": "boolean",
+            "description": "Every row writes the same values, ignoring what identifies a row."
+          },
+          "shared": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffect"
+            },
+            "description": "The one change every row makes, when `same_change`."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallBatchField": {
+        "type": "object",
+        "description": "What one field does across all of a batch's rows.",
+        "required": [
+          "name",
+          "raw_name",
+          "rows",
+          "distinct"
+        ],
+        "properties": {
+          "distinct": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many different values the rows write.",
+            "minimum": 0
+          },
+          "distinct_capped": {
+            "type": "boolean",
+            "description": "`distinct` stopped counting at its cap."
+          },
+          "emptied": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "lists_replaced": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "raw_name": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows that write the field.",
+            "minimum": 0
+          },
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "The first different values, as examples."
+          }
+        }
+      },
+      "ToolCallBatchOperation": {
+        "type": "object",
+        "required": [
+          "action",
+          "count"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ToolCallAction"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallBatchRow": {
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ToolCallAction"
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffect"
+            }
+          },
+          "effects_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Fields of the row past the cap, which the card counts.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "What it is called; absent when only a machine ID identifies it."
+          },
+          "name_from_earlier": {
+            "type": "boolean",
+            "description": "`name` came from an earlier result naming a machine ID, not the call."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The row's position in the call, from 1.",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallChange": {
+        "type": "object",
+        "description": "What a call changes, described the same way for every server and computed\nby code from the call's real arguments next to its label: what each value\ndoes, how far it reaches, what is lost, and what the card cannot know.\nShown only: it never decides whether a call needs approval.",
+        "properties": {
+          "batch": {
+            "$ref": "#/components/schemas/ToolCallBatch"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "Every value was read and classified. Only then may a card state what\nthe part it does not show cannot hold."
+          },
+          "consent_left_out": {
+            "type": "boolean",
+            "description": "The call set an approval value of its own, which is left out."
+          },
+          "counts": {
+            "$ref": "#/components/schemas/ToolCallEffectCounts"
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffect"
+            },
+            "description": "Every value the call writes, in the call's order. Capped; `counts`\ncounts them all, and `complete` says whether everything was read."
+          },
+          "filter": {
+            "$ref": "#/components/schemas/ToolCallFilter"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallFlag"
+            },
+            "description": "Boolean arguments that change what the call does; only those set."
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallChangeNote"
+            }
+          },
+          "opaque": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallOpaque"
+            },
+            "description": "Content the card cannot read: SQL, shell, code or an instruction."
+          },
+          "opaque_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Statements past the cap, which the card counts.",
+            "minimum": 0
+          },
+          "place": {
+            "type": "string",
+            "description": "Where the record lives when no target says so: the table, the project,\njoined when the call names several."
+          },
+          "recipients": {
+            "$ref": "#/components/schemas/ToolCallRecipients"
+          },
+          "texts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallTextChange"
+            },
+            "description": "Long text the call writes, shown as a block."
+          },
+          "texts_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Long texts past the cap, which the card counts.",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallChangeNote": {
+        "type": "string",
+        "description": "What a card says in a closed sentence: what the tool claims, always as the\ntool's claim, and what nobody can know.",
+        "enum": [
+          "marked_destructive",
+          "delete_outcome_unknown",
+          "tool_says_permanent",
+          "tool_says_restorable",
+          "tool_says_replaces_list",
+          "tool_says_adds_to_list",
+          "list_replace_unknown",
+          "tool_says_ignored_if_missing",
+          "row_count_unknown",
+          "instruction_outcome_unknown",
+          "old_values_from_earlier",
+          "nothing_changes",
+          "other"
+        ]
+      },
+      "ToolCallEffect": {
+        "type": "object",
+        "description": "One value a call writes and what happens to what is there.",
+        "required": [
+          "path",
+          "name",
+          "raw_name",
+          "effect"
+        ],
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "What a replaced list gains, where an earlier result showed the list."
+          },
+          "effect": {
+            "$ref": "#/components/schemas/ToolCallEffectKind"
+          },
+          "kept": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "What a replaced list keeps, where an earlier result showed the list."
+          },
+          "link": {
+            "type": "boolean",
+            "description": "The value only links to another record."
+          },
+          "list": {
+            "type": "boolean",
+            "description": "The value is a list, whichever effect it has."
+          },
+          "name": {
+            "type": "string",
+            "description": "A readable name, display-cleaned."
+          },
+          "old": {
+            "$ref": "#/components/schemas/ToolCallEffectValue",
+            "description": "The value an earlier result in the chat showed; absent when unknown."
+          },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "List values past the cap.",
+            "minimum": 0
+          },
+          "path": {
+            "type": "string",
+            "description": "Where the value sits in `input`."
+          },
+          "raw_name": {
+            "type": "string",
+            "description": "The member as written, display-cleaned; the card shows it under see more."
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "What a replaced list loses, where an earlier result showed the list."
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "The new value, or a list's new values; empty when the value is emptied."
+          }
+        }
+      },
+      "ToolCallEffectCounts": {
+        "type": "object",
+        "description": "How many values a call writes, by effect, including those past the caps.",
+        "properties": {
+          "changed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "emptied": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "list_replaced": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "set": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "unchanged": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "unreadable": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallEffectKind": {
+        "type": "string",
+        "description": "What happens to a value, ranked from most to least to lose.",
+        "enum": [
+          "emptied",
+          "list_replaced",
+          "changed",
+          "set",
+          "unchanged",
+          "unreadable"
+        ]
+      },
+      "ToolCallEffectValue": {
+        "type": "object",
+        "description": "One value as a card shows it.",
+        "properties": {
+          "machine_id": {
+            "type": "boolean",
+            "description": "A machine identifier: the card shows `text`, or a phrase when it is empty."
+          },
+          "text": {
+            "type": "string",
+            "description": "Display-cleaned and capped. For a machine identifier: the name of the\nrecord it stands for, or empty when no result names it."
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ToolCallFilter": {
+        "type": "object",
+        "description": "What a filter selects, in words.",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "every_record": {
+            "type": "boolean",
+            "description": "The filter is empty: every record."
+          },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Conditions past the cap, which the card counts.",
+            "minimum": 0
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallFilterPart"
+            }
+          },
+          "path": {
+            "type": "string"
+          },
+          "text": {
+            "$ref": "#/components/schemas/ToolCallEffectValue",
+            "description": "A filter written as text."
+          }
+        }
+      },
+      "ToolCallFilterPart": {
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "properties": {
+          "is_empty": {
+            "type": "boolean",
+            "description": "The condition asks for an empty value."
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/ToolCallEffectValue"
+          }
+        }
+      },
+      "ToolCallFlag": {
+        "type": "object",
+        "required": [
+          "name",
+          "raw_name",
+          "path"
+        ],
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "description": "It asks for a dry run: the call says what it would do without doing it."
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "raw_name": {
+            "type": "string"
+          }
+        }
       },
       "ToolCallLabel": {
         "type": "object",
@@ -13440,6 +13931,10 @@
           "arguments": {
             "$ref": "#/components/schemas/ToolArgumentNode",
             "description": "The arguments for the generic card: paths into the call's `input` and\nhow to show each, never the values themselves."
+          },
+          "change": {
+            "$ref": "#/components/schemas/ToolCallChange",
+            "description": "What the call changes, in the same terms on every server. Absent on\nolder rows, labels with no verb and labels written by hand, which\nrender as before."
           },
           "items": {
             "type": "array",
@@ -13538,6 +14033,10 @@
           "text"
         ],
         "properties": {
+          "machine_id": {
+            "type": "boolean",
+            "description": "A machine identifier (see `tool_display::label::machine_id`): a card\nnever shows `text`, only `resolved` if a name is known, and Technical\ndetails keeps it."
+          },
           "path": {
             "type": "string",
             "description": "Where the value sits in `input`, with indices in place of `*`."
@@ -13584,6 +14083,154 @@
           "other"
         ]
       },
+      "ToolCallOpaque": {
+        "type": "object",
+        "description": "Content whose effect only reading it could tell.",
+        "required": [
+          "kind",
+          "name",
+          "raw_name",
+          "path",
+          "text",
+          "lines"
+        ],
+        "properties": {
+          "found": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Risky words found in it, as written in the closed lists. Findings\nonly: never the verb."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ToolCallOpaqueKind"
+          },
+          "lines": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "raw_name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "Its start, display-cleaned; the card reads the rest from `input`."
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "write_inside_read": {
+            "type": "boolean",
+            "description": "A write found in a statement that opens like a read."
+          }
+        }
+      },
+      "ToolCallOpaqueKind": {
+        "type": "string",
+        "enum": [
+          "sql",
+          "shell",
+          "instruction",
+          "code"
+        ]
+      },
+      "ToolCallRecipientGroup": {
+        "type": "object",
+        "required": [
+          "name",
+          "raw_name",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ToolCallRecipientKind",
+            "description": "To, copy or blind copy, in words a card can say."
+          },
+          "name": {
+            "type": "string"
+          },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "raw_name": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Every address as written, capped; machine IDs are counted, not listed."
+          }
+        }
+      },
+      "ToolCallRecipientKind": {
+        "type": "string",
+        "description": "How a group of recipients is addressed.",
+        "enum": [
+          "to",
+          "cc",
+          "bcc"
+        ]
+      },
+      "ToolCallRecipients": {
+        "type": "object",
+        "description": "Who a call reaches. Group addresses count as one and are never expanded.",
+        "required": [
+          "total",
+          "groups"
+        ],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallRecipientGroup"
+            },
+            "description": "One group per recipient member: to, cc, bcc and the like."
+          },
+          "outside": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Addresses outside the organisation, as written."
+          },
+          "outside_known": {
+            "type": "boolean",
+            "description": "Whether `outside` was computed: the signed-in user's domain is known."
+          },
+          "outside_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "unchecked": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Recipients with no address to check, such as a number or an ID.",
+            "minimum": 0
+          }
+        }
+      },
       "ToolCallStatus": {
         "type": "string",
         "enum": [
@@ -13592,6 +14239,50 @@
           "success",
           "error"
         ]
+      },
+      "ToolCallTextChange": {
+        "type": "object",
+        "description": "Long text a call writes.",
+        "required": [
+          "path",
+          "name",
+          "raw_name",
+          "text",
+          "lines",
+          "chars"
+        ],
+        "properties": {
+          "before": {
+            "$ref": "#/components/schemas/ToolCallEffectValue",
+            "description": "The text it replaces, where the call says."
+          },
+          "chars": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "lines": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "raw_name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "Its start, display-cleaned; the card reads the rest from `input`."
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
       },
       "ToolDisplayMetadata": {
         "type": "object",

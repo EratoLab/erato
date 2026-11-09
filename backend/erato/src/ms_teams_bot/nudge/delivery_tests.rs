@@ -1810,7 +1810,6 @@ async fn a_task_result_arrives_in_the_stored_language(pool: sqlx::PgPool) {
         approvals: Vec::new(),
         pending_tool_calls: Vec::new(),
         approval_scope: None,
-        labels_updated_at: None,
     });
     let raw_message = json!({
         "role": "assistant",
