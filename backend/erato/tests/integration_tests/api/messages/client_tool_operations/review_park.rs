@@ -372,13 +372,8 @@ async fn setup_search_and_task(pool: Pool<Postgres>, timeout_ms: u64, asks_twice
             tool_call_allowlist: ["erato/delegate_task", "mock_mcp_approval/*", "desktop/*"]
                 .map(String::from)
                 .to_vec(),
-            model_settings: Default::default(),
             disable_facet_prompt_template: true,
-            hidden: false,
-            hidden_always_active_for_platform: None,
-            delegation: None,
-            child_chat_provider: None,
-            child_host_context: None,
+            ..Default::default()
         },
     );
     config.mcp_servers.insert(
