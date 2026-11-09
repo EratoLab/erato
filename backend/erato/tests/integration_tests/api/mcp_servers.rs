@@ -36,6 +36,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        glossary: Default::default(),
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),
@@ -492,6 +493,7 @@ async fn test_list_mcp_servers_bounds_parallel_probes_and_preserves_order(pool: 
     config.mcp_servers.insert(
         "failed".into(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: Some("Failing Probe".into()),
             ..mcp_server_config(&base_url, "/failed", McpServerAuthenticationConfig::None)
         },

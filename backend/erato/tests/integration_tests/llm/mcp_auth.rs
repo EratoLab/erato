@@ -25,6 +25,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        glossary: Default::default(),
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),

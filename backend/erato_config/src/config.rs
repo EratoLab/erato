@@ -96,6 +96,7 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
+        server.glossary.validate(id)?;
     }
 
     Ok(())
@@ -4076,6 +4077,12 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.1"))]
     pub approval_argument: Option<String>,
+    /// How this server's machine names read on approval cards: names for its
+    /// fields and the meaning of its choice values. Display only: it never
+    /// changes what a call does or whether it asks.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub glossary: McpGlossaryConfig,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -4091,6 +4098,79 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+/// Words for a server's machine names, written by the operator. Used when an
+/// approval card names a field or says what a choice value means, and shown
+/// with the raw name or value beside them.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpGlossaryConfig {
+    /// What people call a field, keyed by the field's exact name in the
+    /// tool's arguments.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub field_names: HashMap<String, String>,
+    /// What each value of a choice field means, keyed by the field's exact
+    /// name and then by the value as the tool writes it.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub choice_labels: HashMap<String, HashMap<String, String>>,
+}
+
+/// Entries one server's glossary holds, field names and choice labels alike.
+const MAX_GLOSSARY_ENTRIES: usize = 5_000;
+/// A field name, choice value or label longer than this reads as nothing on
+/// a card.
+const MAX_GLOSSARY_KEY_BYTES: usize = 128;
+
+impl McpGlossaryConfig {
+    /// Called from both config load paths, like `validate_mcp_server_ids`.
+    fn validate(&self, server_id: &str) -> Result<(), Report> {
+        let text_error = |what: &str, text: &str| {
+            eyre!(
+                "MCP server '{server_id}': glossary {what} '{}' must not be blank, must be at most {MAX_GLOSSARY_KEY_BYTES} bytes and must not contain control, bidi or invisible formatting characters",
+                text.chars()
+                    .take(MAX_GLOSSARY_KEY_BYTES)
+                    .collect::<String>()
+            )
+        };
+        let usable = |text: &str| {
+            !text.trim().is_empty()
+                && text.len() <= MAX_GLOSSARY_KEY_BYTES
+                && !text.chars().any(char::is_control)
+                && !has_hidden_chars(text)
+        };
+        let entries =
+            self.field_names.len() + self.choice_labels.values().map(HashMap::len).sum::<usize>();
+        if entries > MAX_GLOSSARY_ENTRIES {
+            return Err(eyre!(
+                "MCP server '{server_id}': glossary holds {entries} entries, more than the {MAX_GLOSSARY_ENTRIES} allowed"
+            ));
+        }
+        for (field, name) in &self.field_names {
+            if !usable(field) {
+                return Err(text_error("field name", field));
+            }
+            if !usable(name) {
+                return Err(text_error("name for field", name));
+            }
+        }
+        for (field, labels) in &self.choice_labels {
+            if !usable(field) {
+                return Err(text_error("field name", field));
+            }
+            for (value, label) in labels {
+                if !usable(value) {
+                    return Err(text_error("choice value", value));
+                }
+                if !usable(label) {
+                    return Err(text_error("choice label", label));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Optional operator assertions about MCP tool behavior. Missing hints inherit.

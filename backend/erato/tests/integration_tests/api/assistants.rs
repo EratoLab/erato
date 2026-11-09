@@ -262,6 +262,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
     app_config.mcp_servers.insert(
         "server1".to_string(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -744,6 +745,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     app_config.mcp_servers.insert(
         "server1".to_string(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -763,6 +765,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
     app_config.mcp_servers.insert(
         "server2".to_string(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -949,6 +952,7 @@ async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgr
     app_config.mcp_servers.insert(
         "restricted-server".to_string(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),

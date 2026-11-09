@@ -1189,6 +1189,7 @@ mod tests {
         McpServerConfig {
             display_name: None,
             approval_argument: None,
+            glossary: Default::default(),
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),

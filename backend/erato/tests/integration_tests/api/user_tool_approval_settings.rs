@@ -21,6 +21,7 @@ use crate::test_utils::{
 
 fn files_server_config() -> McpServerConfig {
     McpServerConfig {
+        glossary: Default::default(),
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),
