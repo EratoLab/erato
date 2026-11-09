@@ -977,6 +977,7 @@ fn completion_from_content(
                     ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool => {
                         ApprovalKind::McpTool
                     }
+                    ToolApprovalKind::BuiltinTool => ApprovalKind::BuiltinTool,
                     ToolApprovalKind::DelegatedTask => ApprovalKind::DelegatedTask,
                     ToolApprovalKind::TaskPlan => ApprovalKind::TaskPlan,
                     ToolApprovalKind::ToolCallLimit => ApprovalKind::ToolCallLimit,
@@ -1000,6 +1001,7 @@ fn completion_from_content(
                             source: approval_source(child.display.as_ref(), &child.mcp_server_id),
                             display: child.display.map(approval_display),
                             input: child.input,
+                            own_tool: false,
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
@@ -1007,6 +1009,7 @@ fn completion_from_content(
                             source: approval_source(item.display.as_ref(), &request.mcp_server_id),
                             display: item.display.map(approval_display),
                             input: item.input,
+                            own_tool: request.kind == ToolApprovalKind::BuiltinTool,
                         },
                     })
                     .collect(),
@@ -1639,6 +1642,22 @@ mod tests {
         assert_eq!(approvals.kind, ApprovalKind::McpTool);
         assert_eq!(approvals.items.len(), 1);
         assert!(!completion.needs_client);
+    }
+
+    /// A built-in tool's approval is answered in Teams, not left to the app,
+    /// and only the turn's own call asks about the call in the user's words.
+    #[test]
+    fn a_builtin_tool_approval_gets_a_card_in_teams() {
+        let completion = completion_from_content(
+            Uuid::nil(),
+            Uuid::nil(),
+            &[mixed_approval(ToolApprovalKind::BuiltinTool)],
+        );
+        assert!(!completion.needs_client);
+        let approvals = completion.approvals.expect("an approval card");
+        assert_eq!(approvals.kind, ApprovalKind::BuiltinTool);
+        let own: Vec<bool> = approvals.items.iter().map(|item| item.own_tool).collect();
+        assert_eq!(own, [true, false]);
     }
 
     /// The turn's own gated call with one parked child folded onto its part.

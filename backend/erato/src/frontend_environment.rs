@@ -57,6 +57,7 @@ const FRONTEND_ENV_KEY_DELEGATION_TASKS_ALLOW_ASYNC: &str = "DELEGATION_TASKS_AL
 const FRONTEND_ENV_KEY_DELEGATION_TASKS_APPROVAL_MODE: &str = "DELEGATION_TASKS_APPROVAL_MODE";
 const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED";
 const FRONTEND_ENV_KEY_SCHEDULED_ENABLED: &str = "SCHEDULED_ENABLED";
+const FRONTEND_ENV_KEY_TEAMS_APP_NAME: &str = "TEAMS_APP_NAME";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
@@ -489,6 +490,14 @@ fn build_frontend_environment(
         // Reminders only arrive while the executor runs, so the page follows it.
         Value::Bool(config.scheduled_deliveries.enabled),
     );
+    let teams = &config.integrations.ms_office.teams;
+    if teams.bot.enabled {
+        // The name users search for in Teams, as the bot names itself.
+        env.additional_environment.insert(
+            FRONTEND_ENV_KEY_TEAMS_APP_NAME.to_string(),
+            Value::String(teams.manifest.short_name.clone()),
+        );
+    }
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED.to_string(),
         Value::Bool(config.prompt_optimizer.enabled),
@@ -1364,6 +1373,30 @@ mod tests {
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_SCHEDULED_ENABLED),
                 Some(&Value::Bool(enabled))
+            );
+        }
+    }
+
+    #[test]
+    fn teams_app_name_is_exposed_only_with_the_bot() {
+        let mut config = AppConfig::default();
+        config.integrations.ms_office.teams.manifest.short_name = "Hugo".into();
+        let environment = build_frontend_environment(&config, FrontendKind::Web);
+        assert_eq!(
+            environment
+                .additional_environment
+                .get(FRONTEND_ENV_KEY_TEAMS_APP_NAME),
+            None
+        );
+
+        config.integrations.ms_office.teams.bot.enabled = true;
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_TEAMS_APP_NAME),
+                Some(&Value::String("Hugo".into()))
             );
         }
     }

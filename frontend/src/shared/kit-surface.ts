@@ -61,6 +61,24 @@ export type {
   ProgressBarSize,
   ProgressBarTone,
 } from "@/components/ui/Feedback/ProgressBar";
+export { ActionBar } from "@/components/ui/Container/ActionBar";
+export type { ActionBarProps } from "@/components/ui/Container/ActionBar";
+export { ListToolbar } from "@/components/ui/Container/ListToolbar";
+export type { ListToolbarProps } from "@/components/ui/Container/ListToolbar";
+export { MasterDetailLayout } from "@/components/ui/Container/MasterDetailLayout";
+export type { MasterDetailLayoutProps } from "@/components/ui/Container/MasterDetailLayout";
+export { ListGroupHeading } from "@/components/ui/Container/ListGroupHeading";
+export type { ListGroupHeadingProps } from "@/components/ui/Container/ListGroupHeading";
+export { ComponentSlot } from "@/components/ui/Feedback/ComponentSlot";
+export type { ComponentSlotProps } from "@/components/ui/Feedback/ComponentSlot";
+export {
+  DetailPane,
+  DetailPaneSection,
+} from "@/components/ui/Container/DetailPane";
+export type {
+  DetailPaneProps,
+  DetailPaneSectionProps,
+} from "@/components/ui/Container/DetailPane";
 export { DetailFields } from "@/components/ui/Container/DetailFields";
 export type {
   DetailField,
@@ -297,6 +315,8 @@ export { getChatUrl } from "@/utils/chat/urlUtils";
 export { useThemedIcon } from "@/hooks/ui/useThemedIcon";
 
 export const ERATO_KIT_SURFACE_EXPORTS = [
+  "ActionBar",
+  "ActionBarProps",
   "Alert",
   "ArchiveIcon",
   "ArchivedChatPill",
@@ -334,6 +354,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ChevronDownIcon",
   "ChevronRightIcon",
   "CloseIcon",
+  "ComponentSlot",
+  "ComponentSlotProps",
   "ComposerContextChipFaceProps",
   "ComposerContextItem",
   "ComposerContextLane",
@@ -350,6 +372,10 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "DetailFields",
   "DetailFieldsLayout",
   "DetailFieldsProps",
+  "DetailPane",
+  "DetailPaneProps",
+  "DetailPaneSection",
+  "DetailPaneSectionProps",
   "DisclosureChevron",
   "DisclosureChevronProps",
   "DisclosureChevronSize",
@@ -381,9 +407,15 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "InteractiveContainer",
   "JsonDisplay",
   "JsonDisplayProps",
+  "ListGroupHeading",
+  "ListGroupHeadingProps",
+  "ListToolbar",
+  "ListToolbarProps",
   "LoadingIndicator",
   "LogOutIcon",
   "MailIcon",
+  "MasterDetailLayout",
+  "MasterDetailLayoutProps",
   "MediaVideoIcon",
   "MessageAttachmentFiles",
   "MessageContent",

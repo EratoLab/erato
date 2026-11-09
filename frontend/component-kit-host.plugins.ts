@@ -71,7 +71,15 @@ type EmitFileContext = {
  * build-time manifest is always emitted.
  */
 export const sharedModulesImportMapPlugin = (
-  options: { devUrl?: (entry: SharedModuleEntry) => string } = {},
+  options: {
+    devUrl?: (entry: SharedModuleEntry) => string;
+    /**
+     * Recorded in the manifest, so a backend can compare this build with a
+     * desktop UI package built against another library version. A parameter
+     * because the surface module does not resolve in every host's build.
+     */
+    sharedSurfaceMinor?: number;
+  } = {},
 ) => {
   return {
     name: "shared-modules-import-map",
@@ -121,7 +129,11 @@ export const sharedModulesImportMapPlugin = (
       this.emitFile({
         type: "asset",
         fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
-        source: JSON.stringify({ imports }, null, 2),
+        source: JSON.stringify(
+          { imports, sharedSurfaceMinor: options.sharedSurfaceMinor },
+          null,
+          2,
+        ),
       });
     },
   };

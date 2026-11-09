@@ -188,8 +188,7 @@ export function scheduledRefusalMessage(code: string | null): string {
     case "channel_not_set_up":
       return t({
         id: "scheduled.refusal.channelNotSetUp",
-        message:
-          "Erato can't reach you on this delivery channel yet. Set it up first.",
+        message: "This delivery channel can't reach you yet. Set it up first.",
       });
     case "limit_reached":
       return t({

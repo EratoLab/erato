@@ -28,6 +28,7 @@ import { FrontendRequestError } from "@/utils/errorReport";
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { ApprovalQueueCard } from "./ApprovalQueueCard";
+import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
@@ -551,13 +552,14 @@ export const McpToolApprovalCard = ({
   };
 
   const isClientTool = kind === "client_tool";
+  const isBuiltinTool = kind === "builtin_tool";
   // The turn's own gated call carries its parked tasks on the same stop, and a
   // `delegated_task` stop is nothing but them: both are decided one item at a
   // time. A task plan reviews one plan rather than the turn's approvals, so it
   // keeps its list.
   const isQueue =
     kind === "delegated_task" ||
-    ((kind === "mcp_tool" || isClientTool) &&
+    ((kind === "mcp_tool" || isClientTool || isBuiltinTool) &&
       (waiting.length > 0 || approvalItems.some((item) => item.child != null)));
 
   // Resolved decisions are represented beside the matching tool call in the
@@ -652,6 +654,29 @@ export const McpToolApprovalCard = ({
         />
         {refusal}
       </>
+    );
+  }
+
+  if (isBuiltinTool) {
+    return (
+      <div
+        data-testid="builtin-tool-approval"
+        data-tool-name={request.tool_name}
+        data-approval-kind={kind}
+        className={APPROVAL_CARD_SHELL_CLASS}
+      >
+        <BuiltinToolApprovalItem
+          toolName={request.tool_name}
+          display={approvalItems[0]?.display ?? request.display}
+          input={request.input}
+          status={isArchived ? "dismissed" : "pending"}
+          resolvedLabel={isArchived ? archivedNoticeText() : undefined}
+          isBusy={cardIsBusy}
+          scrollIntoViewOnMount
+          onDecide={(decision) => void decide(decision)}
+        />
+        {refusal}
+      </div>
     );
   }
 

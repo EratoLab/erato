@@ -1,6 +1,7 @@
 import { useId } from "react";
 
 import { ScheduledItemRow } from "./ScheduledItemRow";
+import { ListGroupHeading } from "../Container/ListGroupHeading";
 
 import type { ScheduledItemActions } from "./ScheduledItemRow";
 import type { ScheduledDateFormat, ScheduledDayGroup } from "./scheduledItems";
@@ -10,6 +11,8 @@ interface ScheduledItemGroupsProps extends ScheduledItemActions {
   dateContext: ScheduledDateFormat;
   /** Reference time for the rows; the current time when omitted. */
   now?: Date;
+  /** What the deployment's Teams app is called; null when unknown. */
+  teamsAppName?: string | null;
 }
 
 /** One tab's items, a labelled section per day. */
@@ -17,6 +20,7 @@ export function ScheduledItemGroups({
   groups,
   dateContext,
   now,
+  teamsAppName = null,
   ...actions
 }: ScheduledItemGroupsProps) {
   const baseId = useId();
@@ -31,12 +35,9 @@ export function ScheduledItemGroups({
             aria-labelledby={headingId}
             data-ui="scheduled-day-group"
           >
-            <h2
-              id={headingId}
-              className="mb-2 px-4 text-xs font-semibold uppercase tracking-wide text-theme-fg-muted"
-            >
+            <ListGroupHeading id={headingId} variant="overline">
               {group.label}
-            </h2>
+            </ListGroupHeading>
             <div className="grid gap-3">
               {group.items.map((item) => (
                 <ScheduledItemRow
@@ -44,6 +45,7 @@ export function ScheduledItemGroups({
                   item={item}
                   dateContext={dateContext}
                   now={now}
+                  teamsAppName={teamsAppName}
                   {...actions}
                 />
               ))}

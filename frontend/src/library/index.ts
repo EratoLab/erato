@@ -276,6 +276,34 @@ export {
   type DetailFieldsProps,
 } from "@/components/ui/Container/DetailFields";
 export {
+  ActionBar,
+  type ActionBarProps,
+} from "@/components/ui/Container/ActionBar";
+export {
+  ListToolbar,
+  type ListToolbarProps,
+} from "@/components/ui/Container/ListToolbar";
+export {
+  MASTER_DETAIL_OVERLAY_QUERY,
+  MasterDetailLayout,
+  type MasterDetailLayoutProps,
+} from "@/components/ui/Container/MasterDetailLayout";
+export {
+  ListGroupHeading,
+  type ListGroupHeadingProps,
+} from "@/components/ui/Container/ListGroupHeading";
+export {
+  ComponentSlot,
+  type ComponentSlotProps,
+} from "@/components/ui/Feedback/ComponentSlot";
+export {
+  DetailPane,
+  DetailPaneSection,
+  type DetailPaneProps,
+  type DetailPaneSectionProps,
+} from "@/components/ui/Container/DetailPane";
+export { type AlertProps } from "@/components/ui/Feedback/Alert";
+export {
   TabRail,
   type TabRailOption,
   type TabRailProps,
@@ -311,6 +339,7 @@ export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog"
 export { I18nProvider } from "@/providers/I18nProvider";
 export { ProfileProvider } from "@/providers/ProfileProvider";
 export {
+  DesktopSidecarConfigurationSync,
   DesktopSidecarProvider,
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   resolveDesktopSidecarEndpoint,

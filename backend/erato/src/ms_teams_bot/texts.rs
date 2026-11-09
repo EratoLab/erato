@@ -272,6 +272,12 @@ texts! {
     CancelReminderExplained => "It will no longer be delivered. You can still find it under Past on the Scheduled page.",
         "Die Erinnerung wird nicht mehr zugestellt. Sie finden sie weiterhin unter „Vergangen“ auf der Seite „Geplant“.";
     CancelReminderConfirm => "Cancel it", "Ja, abbrechen";
+    CancelReminderApproval => "Cancel the reminder “{name}”?", "Die Erinnerung „{name}“ abbrechen?";
+    CancelReminderAction => "Cancelling the reminder “{name}”", "Das Abbrechen der Erinnerung „{name}“";
+    CreateReminderApproval => "Schedule the reminder “{name}”?", "Die Erinnerung „{name}“ planen?";
+    CreateReminderAction => "Scheduling the reminder “{name}”", "Das Planen der Erinnerung „{name}“";
+    CreateReminderConfirm => "Schedule", "Planen";
+    CreateReminderDeny => "Don't schedule", "Nicht planen";
     KeepReminder => "Keep it", "Behalten";
 }
 

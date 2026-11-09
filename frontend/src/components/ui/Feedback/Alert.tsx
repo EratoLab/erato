@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 
 export type AlertType = "error" | "warning" | "info" | "success";
 
-interface AlertProps {
+export interface AlertProps {
   /** The type of alert to display */
   type: AlertType;
   /** Alert content */

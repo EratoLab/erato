@@ -13,9 +13,13 @@ use super::{
     DisplayStatus, ItemRequest, ItemView, MAX_ACTIVE_ITEMS, Model, Refused, ScheduledItemErrorCode,
     ScheduledItemType, cancel_checked, create_checked, entry_zone, owned_chats, owns_chat,
 };
+use crate::config::{McpToolApprovalConfig, McpToolApprovalPreset};
+use crate::db::entity::scheduled_items::ItemStatus;
 use crate::models::chat::chat_title;
+use crate::models::message::{ToolApprovalAnnotations, ToolDisplayMetadata};
 use crate::models::user_preference::user_time_zone;
 use crate::ms_teams_bot::nudge::CHANNEL as TEAMS_CHANNEL;
+use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::text_language::{self, Lang};
 use crate::state::AppState;
 use chrono::{DateTime, Duration, NaiveDateTime, SubsecRound, Timelike, Utc};
@@ -44,6 +48,112 @@ pub fn is_reminder_tool(name: &str) -> bool {
 /// cancelling change what the user gets.
 pub fn is_read_only(name: &str) -> bool {
     name == LIST_REMINDERS
+}
+
+/// Whether a call asks the user first while the approval gate is on. A cancel
+/// can't be undone, so it asks under both presets; a created reminder stays
+/// visible with its confirmation card and Cancel, so it asks only under the
+/// restrictive one.
+pub fn asks_for_approval(name: &str, approval: &McpToolApprovalConfig) -> bool {
+    if !approval.enabled || is_read_only(name) {
+        return false;
+    }
+    name == CANCEL_REMINDER || approval.preset == McpToolApprovalPreset::Restrictive
+}
+
+/// The hints an approval request records for a reminder tool: nothing leaves
+/// the deployment, and only a cancel ends something.
+pub fn approval_annotations(name: &str) -> ToolApprovalAnnotations {
+    ToolApprovalAnnotations {
+        read_only_hint: is_read_only(name),
+        destructive_hint: name == CANCEL_REMINDER,
+        idempotent_hint: name != CREATE_REMINDER,
+        open_world_hint: false,
+    }
+}
+
+/// What a call is asked about: the card's text, and the arguments it runs
+/// with once approved.
+#[derive(Debug, Clone)]
+pub struct ApprovalAsk {
+    pub display: ToolDisplayMetadata,
+    /// A create's trigger is fixed to what the card shows, so a call approved
+    /// later stores that time rather than one moved by the wait: `in` becomes
+    /// the one-off it lands on, and a repeat gets its first day.
+    pub arguments: Value,
+}
+
+/// What the approval card for a call names: the reminder, and when it
+/// arrives or how it repeats, in the user's language. `None` when the call
+/// would change nothing, such as cancelling an id that names none of the
+/// user's upcoming reminders: it then runs without asking and is refused.
+pub async fn approval_display(
+    app_state: &AppState,
+    user_id: Uuid,
+    name: &str,
+    arguments: &Value,
+) -> Result<Option<ApprovalAsk>, Report> {
+    let now = Utc::now();
+    let mut run_with = arguments.clone();
+    let (reminder_name, trigger, zone, next) = match name {
+        CREATE_REMINDER => {
+            let Ok(parsed) = serde_json::from_value::<CreateArguments>(arguments.clone()) else {
+                return Ok(None);
+            };
+            let (zone, _) = entry_zone(app_state, user_id).await?;
+            let Ok(pinned) = parsed.trigger.pinned(zone, now) else {
+                return Ok(None);
+            };
+            let Ok(trigger) = serde_json::from_value::<Trigger>(pinned.clone())
+                .map_err(|error| error.to_string())
+                .and_then(Trigger::normalized)
+            else {
+                return Ok(None);
+            };
+            let Some(first) = trigger.next_after(zone, now, 0) else {
+                return Ok(None);
+            };
+            run_with["trigger"] = pinned;
+            (parsed.name, trigger, zone, first)
+        }
+        CANCEL_REMINDER => {
+            let Some(item_id) = cancel_target(arguments) else {
+                return Ok(None);
+            };
+            let Some(view) = super::get(&app_state.db, user_id, item_id).await? else {
+                return Ok(None);
+            };
+            let Some(next) = super::next_occurrence(&view, now)
+                .filter(|_| view.item.status == ItemStatus::Active)
+            else {
+                return Ok(None);
+            };
+            (
+                view.item.name.clone(),
+                super::trigger_of(&view.item)?,
+                super::zone_of(&view.item)?,
+                next,
+            )
+        }
+        _ => return Ok(None),
+    };
+    let lang = stored_language(app_state, user_id).await?;
+    let user_zone = user_time_zone(&app_state.db, &user_id).await?;
+    let description = match trigger {
+        Trigger::Repeat(rule) => wording::capitalized(&wording::repeat_pattern(&rule, lang)),
+        Trigger::Once { .. } => wording::exact_when(next, zone, user_zone, now, lang),
+    };
+    Ok(Some(ApprovalAsk {
+        display: ToolDisplayMetadata {
+            title: sanitize_display_text(&reminder_name, MAX_DISPLAY_NAME_CHARS).text,
+            description: Some(description),
+            description_truncated: false,
+            server_name: None,
+            label: None,
+            read_only: false,
+        },
+        arguments: run_with,
+    }))
 }
 
 /// The offered tools among `names`. Their descriptions name the zone local
@@ -232,7 +342,13 @@ impl TriggerArguments {
     /// The item's trigger, its times local to `zone`. `in` becomes a one-off
     /// at the next whole minute after the delay.
     fn resolve(self, zone: Tz, now: DateTime<Utc>) -> Result<Trigger, String> {
-        let trigger = match self.kind.as_str() {
+        serde_json::from_value(self.pinned(zone, now)?).map_err(|error| error.to_string())
+    }
+
+    /// The trigger as `now` reads it, in the shape of the tool's arguments, so
+    /// resolving it again later gives the same trigger.
+    fn pinned(self, zone: Tz, now: DateTime<Utc>) -> Result<Value, String> {
+        Ok(match self.kind.as_str() {
             "in" => {
                 let minutes = self
                     .minutes
@@ -272,8 +388,7 @@ impl TriggerArguments {
                 "ends": self.ends.unwrap_or_else(|| json!({"kind": "never"})),
             }),
             other => return Err(format!("unknown trigger kind `{other}`")),
-        };
-        serde_json::from_value(trigger).map_err(|error| error.to_string())
+        })
     }
 }
 
@@ -383,15 +498,18 @@ struct CancelArguments {
     reminder_id: String,
 }
 
+fn cancel_target(arguments: &Value) -> Option<Uuid> {
+    serde_json::from_value::<CancelArguments>(arguments.clone())
+        .ok()
+        .and_then(|arguments| Uuid::parse_str(arguments.reminder_id.trim()).ok())
+}
+
 async fn cancel(
     app_state: &AppState,
     user_id: Uuid,
     arguments: &Value,
 ) -> Result<CallResult, Report> {
-    let Some(item_id) = serde_json::from_value::<CancelArguments>(arguments.clone())
-        .ok()
-        .and_then(|arguments| Uuid::parse_str(arguments.reminder_id.trim()).ok())
-    else {
+    let Some(item_id) = cancel_target(arguments) else {
         return Ok(CallResult::refused(Refused::new(
             ScheduledItemErrorCode::NotFound,
             "No reminder has this id; list_reminders gives the ids.",
@@ -591,6 +709,41 @@ mod tests {
         );
         assert!(trigger(json!({"kind": "in", "minutes": 0})).is_err());
         assert!(trigger(json!({"kind": "in"})).is_err());
+    }
+
+    /// What an approval card showed is what the approved call stores, however
+    /// late it is approved.
+    #[test]
+    fn a_pinned_trigger_resolves_the_same_later() {
+        let asked = utc("2026-11-08T13:00:20Z");
+        let approved = utc("2026-11-09T08:30:00Z");
+        let pin = |value: Value| {
+            serde_json::from_value::<TriggerArguments>(value)
+                .unwrap()
+                .pinned(BERLIN, asked)
+                .unwrap()
+        };
+        let again = |pinned: &Value| {
+            serde_json::from_value::<TriggerArguments>(pinned.clone())
+                .unwrap()
+                .resolve(BERLIN, approved)
+                .unwrap()
+        };
+        let later = pin(json!({"kind": "in", "minutes": 120}));
+        assert_eq!(
+            later,
+            json!({"kind": "once", "date": "2026-11-08", "time": "16:01"})
+        );
+        assert_eq!(
+            again(&later),
+            trigger(json!({"kind": "in", "minutes": 120})).unwrap()
+        );
+        let monthly = pin(json!({"kind": "repeat", "frequency": "monthly", "time": "09:00"}));
+        assert_eq!(monthly["starts_on"], "2026-11-08");
+        assert_eq!(
+            again(&monthly),
+            trigger(json!({"kind": "repeat", "frequency": "monthly", "time": "09:00"})).unwrap()
+        );
     }
 
     #[test]

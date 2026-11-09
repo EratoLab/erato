@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   supports: vi.fn(() => true),
   invalidateQueries: vi.fn(),
   fetchUiPackageToken: vi.fn(),
+  organizationEnabled: [] as (boolean | undefined)[],
+  profile: undefined as
+    | { email: string; organization_user_id: string | null }
+    | undefined,
   snapshot: {
     state: "ready",
     instanceId: "instance",
@@ -50,12 +54,16 @@ vi.mock("@erato/desktop-sidecar-protocol", () => ({
   UI_PACKAGE_MAX_ARCHIVE_BYTES: 9_437_184,
 }));
 vi.mock("@/hooks/profile/useProfileApi", () => ({
-  useProfileApi: () => ({
-    profile: { email: "user@example.test", organization_user_id: "user-id" },
-  }),
+  useProfileApi: () => ({ profile: mocks.profile }),
 }));
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
-  useOrganizationConfiguration: () => ({ data: mocks.organization }),
+  useOrganizationConfiguration: (
+    _params: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    mocks.organizationEnabled.push(options.enabled);
+    return { data: options.enabled ? mocks.organization : undefined };
+  },
   fetchUiPackageToken: mocks.fetchUiPackageToken,
 }));
 vi.mock("@tanstack/react-query", () => ({
@@ -71,15 +79,17 @@ const saved = {
   organization_configuration: { policy_guides: { policies: { obsolete: {} } } },
 };
 
+const tree = () => (
+  <DesktopSidecarProvider
+    endpoint="http://localhost/rpc"
+    retryDiscovery={false}
+  >
+    <DesktopSidecarConfigurationSync />
+  </DesktopSidecarProvider>
+);
+
 function mount() {
-  return render(
-    <DesktopSidecarProvider
-      endpoint="http://localhost/rpc"
-      retryDiscovery={false}
-    >
-      <DesktopSidecarConfigurationSync />
-    </DesktopSidecarProvider>,
-  );
+  return render(tree());
 }
 
 const packageToken = {
@@ -91,6 +101,12 @@ const packageToken = {
 };
 
 beforeEach(() => {
+  mocks.snapshot.state = "ready";
+  mocks.organizationEnabled.length = 0;
+  mocks.profile = {
+    email: "user@example.test",
+    organization_user_id: "user-id",
+  };
   vi.clearAllMocks();
   mocks.snapshot.strict = undefined;
   mocks.snapshot.ui = undefined;
@@ -129,6 +145,53 @@ describe("DesktopSidecarConfigurationSync", () => {
       );
     },
   );
+
+  it("waits for the profile before configuring", async () => {
+    mocks.profile = undefined;
+    const { rerender } = mount();
+    await waitFor(() => expect(mocks.organizationEnabled).toContain(true));
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.profile = {
+      email: "user@example.test",
+      organization_user_id: "user-id",
+    };
+    rerender(tree());
+    await waitFor(() =>
+      expect(mocks.invoke).toHaveBeenCalledWith(
+        "sidecar.configure.v1",
+        expect.objectContaining({
+          signed_in_user: expect.objectContaining({ user_id: "user-id" }),
+        }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("configures a loaded profile without an Entra ID sign-in", async () => {
+    mocks.profile = {
+      email: "user@example.test",
+      organization_user_id: null,
+    };
+    mount();
+    await waitFor(() =>
+      expect(mocks.invoke).toHaveBeenCalledWith(
+        "sidecar.configure.v1",
+        expect.objectContaining({ signed_in_user: null }),
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("does not ask for the organization configuration without a ready sidecar", async () => {
+    mocks.snapshot.state = "unavailable";
+    mount();
+    await waitFor(() =>
+      expect(mocks.organizationEnabled.length).toBeGreaterThan(0),
+    );
+    expect(mocks.organizationEnabled).not.toContain(true);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
 
   it("still sends configuration when optional mailbox enumeration is denied", async () => {
     mocks.invoke.mockImplementation(async (method: string) => {

@@ -375,9 +375,10 @@
   /* Selectable rows. Not in theme.json's radius/spacing maps: a theme.css
      sets them. The rules repeat these values as fallbacks. */
   --theme-radius-selectable-row: 0;
+  --theme-spacing-window-gutter: 1.5rem;
   --theme-spacing-selectable-row-height: 2.25rem;
   --theme-spacing-selectable-row-padding-y: 0.4375rem;
-  --theme-spacing-selectable-row-padding-x: 1.5rem;
+  --theme-spacing-selectable-row-padding-x: var(--theme-spacing-window-gutter);
   --theme-selectable-row-selected-bg: var(--theme-bg-secondary);
 }
 
@@ -983,6 +984,35 @@ body {
     }
   }
 
+  /* A list with a detail pane, in a declared class so a theme has one stable
+     hook for it. MASTER_DETAIL_OVERLAY_QUERY repeats the breakpoint for script;
+     a test keeps the two equal. */
+  .master-detail-geometry {
+    position: relative;
+    display: grid;
+    flex: 1 1 0%;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .master-detail-geometry[data-detail-open] {
+    grid-template-columns: minmax(0, 1fr) var(--master-detail-width, 24rem);
+  }
+
+  @media (max-width: 40rem) {
+    .master-detail-geometry[data-detail-open] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .master-detail-geometry > [data-ui="master-detail-detail"] {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-end: 0;
+      width: min(100%, var(--master-detail-width, 24rem));
+      box-shadow: var(--theme-elevation-modal);
+    }
+  }
+
   /* A row that frames a checkbox (SelectableRow). Every cell is always
      rendered, so the grid areas hold whichever slots a row leaves empty. The
      divider colour comes from .selectable-row-skin. The end column fits a
@@ -1002,6 +1032,12 @@ body {
     border-radius: var(--theme-radius-selectable-row, 0);
     border-block-start-width: 1px;
     border-block-start-style: solid;
+  }
+
+  /* Beside a detail pane the row's title keeps the room. */
+  .master-detail-geometry[data-detail-open] .selectable-row-geometry {
+    --selectable-row-meta-width: 6.5rem;
+    --selectable-row-end-width: 6rem;
   }
 
   /* Stacked: the title spans the second line's two cells. Meta takes only its

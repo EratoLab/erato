@@ -89,6 +89,19 @@ describe("approvalQueueOf", () => {
     expect(ids(approvalQueueOf(request, open))).toEqual(["b", "own", "a"]);
   });
 
+  it("puts a built-in call before a child asked earlier", () => {
+    const request = {
+      requested_at: "2026-10-20T10:00:05Z",
+      kind: "builtin_tool" as const,
+    };
+    const open = [ownItem("own"), childItem("early", "2026-10-20T10:00:01Z")];
+
+    expect(ids(approvalQueueOf(request, open))).toEqual(["own", "early"]);
+    expect(
+      ids(approvalQueueOf({ ...request, kind: "mcp_tool" as const }, open)),
+    ).toEqual(["early", "own"]);
+  });
+
   it("puts an approval with an unreadable time after the rest", () => {
     const request = { requested_at: "2026-10-20T10:00:05Z" };
     const open = [childItem("unknown", "not a time"), ownItem("own")];

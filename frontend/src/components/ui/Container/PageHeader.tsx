@@ -7,14 +7,24 @@ import type React from "react";
 export interface PageHeaderProps {
   /** Main heading text */
   title: string;
-  /** Optional subtitle/description text */
-  subtitle?: string;
+  /** Optional subtitle/description; may hold markup such as a bold name */
+  subtitle?: React.ReactNode;
   /** Optional children to render below title/subtitle (e.g., search input) */
   children?: React.ReactNode;
-  /** Header vertical density */
-  density?: "default" | "compact";
+  /**
+   * Header density. `window` is for a small app window: a smaller heading in
+   * the theme's heading font, a `<header>` element, no rule below it, no fill
+   * of its own and the theme's page alignment left out.
+   */
+  density?: "default" | "compact" | "window";
   /** Additional CSS classes */
   className?: string;
+  /** The heading's id, for the regions it names */
+  titleId?: string;
+  /** The subtitle's id, for regions it describes */
+  subtitleId?: string;
+  /** Makes the heading a programmatic focus target; it draws no focus ring */
+  titleRef?: React.Ref<HTMLHeadingElement>;
 }
 
 /**
@@ -45,26 +55,38 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   children,
   density = "default",
   className,
+  titleId,
+  subtitleId,
+  titleRef,
 }) => {
-  const { containerClasses, textAlignment, horizontalPadding } =
-    usePageAlignment("headers");
+  const alignment = usePageAlignment("headers");
+  const isWindow = density === "window";
   const isCompact = density === "compact";
+  const textAlignment = isWindow ? undefined : alignment.textAlignment;
+  const Root = isWindow ? "header" : "div";
 
   return (
-    <div
+    <Root
       className={clsx(
-        "flex flex-col border-b border-theme-border bg-theme-bg-primary",
-        isCompact ? "py-4" : "py-8",
-        horizontalPadding,
+        "flex flex-none flex-col",
+        !isWindow && "border-b border-theme-border bg-theme-bg-primary",
+        isWindow && "px-[var(--theme-spacing-window-gutter)] pb-3 pt-5",
+        !isWindow && (isCompact ? "py-4" : "py-8"),
+        !isWindow && alignment.horizontalPadding,
         className,
       )}
       data-ui="page-header"
     >
-      <div className={clsx("w-full", containerClasses)}>
+      <div className={clsx("w-full", !isWindow && alignment.containerClasses)}>
         <h1
+          id={titleId}
+          ref={titleRef}
+          tabIndex={titleRef ? -1 : undefined}
           className={clsx(
-            "text-2xl font-semibold text-theme-fg-primary",
-            isCompact ? "mb-3" : "mb-6",
+            "font-semibold text-theme-fg-primary",
+            titleRef && "outline-none",
+            isWindow ? "mb-1 font-heading text-lg" : "text-2xl",
+            !isWindow && (isCompact ? "mb-3" : "mb-6"),
             textAlignment,
           )}
         >
@@ -72,9 +94,10 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         </h1>
         {subtitle && (
           <p
+            id={subtitleId}
             className={clsx(
               "text-theme-fg-secondary",
-              isCompact ? "mb-4" : "mb-6",
+              !isWindow && (isCompact ? "mb-4" : "mb-6"),
               textAlignment,
             )}
           >
@@ -83,7 +106,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
         {children}
       </div>
-    </div>
+    </Root>
   );
 };
 

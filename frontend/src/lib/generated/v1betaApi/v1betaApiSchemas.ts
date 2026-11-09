@@ -4437,7 +4437,8 @@ export type ToolApprovalKind =
   | "delegated_task"
   | "task_plan"
   | "tool_call_limit"
-  | "client_tool";
+  | "client_tool"
+  | "builtin_tool";
 
 /**
  * How the readable view shows one argument.

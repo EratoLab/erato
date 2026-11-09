@@ -376,6 +376,8 @@ describe("runSidecarJob", () => {
       vi.useFakeTimers();
       const locale = vi.spyOn(i18n, "locale", "get").mockReturnValue("de");
       setClientPlatform("outlook");
+      document.documentElement.setAttribute("data-theme", "dark");
+      document.documentElement.setAttribute("data-text-size", "large");
       try {
         const { client, requests } = fakeSidecarClient((method) => {
           if (method === "jobs.status.v1") return at(approved, maxWaitMs);
@@ -392,9 +394,16 @@ describe("runSidecarJob", () => {
           requests.find(({ method }) => method === "jobs.review.v1")?.params,
         ).toEqual({
           handle: JOB_HANDLE,
-          client: { platform: "outlook", locale: "de" },
+          client: {
+            platform: "outlook",
+            locale: "de",
+            theme_mode: "dark",
+            text_size: "large",
+          },
         });
       } finally {
+        document.documentElement.removeAttribute("data-theme");
+        document.documentElement.removeAttribute("data-text-size");
         setClientPlatform("web");
         locale.mockRestore();
       }
