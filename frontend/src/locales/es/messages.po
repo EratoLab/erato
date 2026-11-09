@@ -6627,7 +6627,17 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.helper.unnamed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.teamsChat.notSetUp"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -7177,6 +7187,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.failed.teamsChat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat.unnamed"
 msgstr ""
 
 #. js-lingui-explicit-id

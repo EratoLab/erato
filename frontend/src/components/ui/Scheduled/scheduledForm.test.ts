@@ -190,7 +190,7 @@ describe("scheduledForm", () => {
       ),
     ).toEqual({
       name: "Enter a name.",
-      message: "Enter the message Erato sends you.",
+      message: "Enter the message you want to receive.",
       date: "This time is in the past. Pick a time in the future.",
     });
     expect(validateScheduledForm(values(), NOW, ZONE)).toEqual({});

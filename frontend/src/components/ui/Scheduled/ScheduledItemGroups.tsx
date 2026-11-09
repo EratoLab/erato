@@ -10,6 +10,8 @@ interface ScheduledItemGroupsProps extends ScheduledItemActions {
   dateContext: ScheduledDateFormat;
   /** Reference time for the rows; the current time when omitted. */
   now?: Date;
+  /** What the deployment's Teams app is called; null when unknown. */
+  teamsAppName?: string | null;
 }
 
 /** One tab's items, a labelled section per day. */
@@ -17,6 +19,7 @@ export function ScheduledItemGroups({
   groups,
   dateContext,
   now,
+  teamsAppName = null,
   ...actions
 }: ScheduledItemGroupsProps) {
   const baseId = useId();
@@ -44,6 +47,7 @@ export function ScheduledItemGroups({
                   item={item}
                   dateContext={dateContext}
                   now={now}
+                  teamsAppName={teamsAppName}
                   {...actions}
                 />
               ))}

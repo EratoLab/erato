@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import ScheduledItemFormPage from "../ScheduledItemFormPage";
 
@@ -79,25 +80,32 @@ const json = (body: unknown, status = 200) =>
 let fetchMock: ReturnType<typeof vi.fn>;
 let writeResponse: () => Response;
 
-const renderAt = (path: string) =>
+const renderAt = (path: string, teamsAppName: string | null = null) =>
   render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <I18nProvider i18n={i18n}>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route path="/scheduled" element={<p>Scheduled list</p>} />
-            <Route path="/scheduled/new" element={<ScheduledItemFormPage />} />
-            <Route
-              path="/scheduled/:itemId/edit"
-              element={<ScheduledItemFormPage />}
-            />
-          </Routes>
-        </MemoryRouter>
-      </I18nProvider>
+      <StaticFeatureConfigProvider
+        config={{ scheduled: { enabled: true, teamsAppName } }}
+      >
+        <I18nProvider i18n={i18n}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route path="/scheduled" element={<p>Scheduled list</p>} />
+              <Route
+                path="/scheduled/new"
+                element={<ScheduledItemFormPage />}
+              />
+              <Route
+                path="/scheduled/:itemId/edit"
+                element={<ScheduledItemFormPage />}
+              />
+            </Routes>
+          </MemoryRouter>
+        </I18nProvider>
+      </StaticFeatureConfigProvider>
     </QueryClientProvider>,
   );
 
@@ -226,7 +234,21 @@ describe("ScheduledItemFormPage", () => {
       screen.getByRole("button", { name: "Advanced settings" }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByText(/Erato can't reach you in Teams yet/),
+      screen.getByText(/The assistant can't reach you in Teams yet/),
+    ).toBeInTheDocument();
+  });
+
+  it("names the configured Teams app in the setup hint", async () => {
+    list = {
+      ...connectedList,
+      channels: [{ channel: "teams_personal", status: "not_set_up" }],
+    };
+    renderAt("/scheduled/new", "Hugo");
+
+    expect(
+      await screen.findByText(
+        "Hugo can't reach you in Teams yet. Open Hugo in Microsoft Teams once: under Apps, search for Hugo and open it. After that, this channel works.",
+      ),
     ).toBeInTheDocument();
   });
 

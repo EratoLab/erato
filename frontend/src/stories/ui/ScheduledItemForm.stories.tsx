@@ -58,7 +58,7 @@ const meta = {
   },
   args: {
     title: "New reminder",
-    subtitle: "Choose when it happens and what Erato sends you.",
+    subtitle: "Choose when it happens and what you receive.",
     mode: "create",
     initialValues: emptyScheduledFormValues(NOW, TIME_ZONE),
     channelStatus: "connected",
@@ -159,6 +159,7 @@ export const ChannelNotSetUp: Story = {
   args: {
     initialValues: fromTemplate,
     channelStatus: "not_set_up",
+    teamsAppName: "Acme Assistant",
     initialAdvancedOpen: true,
   },
 };
@@ -172,8 +173,7 @@ export const ChannelRefused: Story = {
     initialValues: fromTemplate,
     channelStatus: "not_set_up",
     serverErrors: {
-      channel:
-        "Erato can't reach you on this delivery channel yet. Set it up first.",
+      channel: "This delivery channel can't reach you yet. Set it up first.",
     },
   },
 };

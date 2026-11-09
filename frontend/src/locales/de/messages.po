@@ -6583,7 +6583,7 @@ msgstr "Browser-Benachrichtigung"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.browser.helper"
-msgstr "Eine Benachrichtigung Ihres Browsers, solange Erato geöffnet ist"
+msgstr "Eine Benachrichtigung Ihres Browsers, solange diese App geöffnet ist"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6598,7 +6598,7 @@ msgstr "Desktop-Benachrichtigung"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.desktop.helper"
-msgstr "Eine Benachrichtigung auf Ihrem Computer über die Erato-Desktop-App"
+msgstr "Eine Benachrichtigung auf Ihrem Computer über die Desktop-App"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6623,12 +6623,22 @@ msgstr "Teams-Chat"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.teamsChat.helper"
-msgstr "Ihr Chat mit Erato in Microsoft Teams"
+msgstr "Ihr Chat mit {teamsAppName} in Microsoft Teams"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.helper.unnamed"
+msgstr "Ihr Chat mit dem Assistenten in Microsoft Teams"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
 msgid "scheduled.channel.teamsChat.notSetUp"
-msgstr "Erato kann Sie in Teams noch nicht erreichen. Öffnen Sie Erato einmal in Microsoft Teams: Suchen Sie unter „Apps“ nach Erato und öffnen Sie es. Danach funktioniert dieser Zustellweg."
+msgstr "{teamsAppName} kann Sie in Teams noch nicht erreichen. Öffnen Sie {teamsAppName} einmal in Microsoft Teams: Suchen Sie unter „Apps“ nach {teamsAppName} und öffnen Sie die App. Danach funktioniert dieser Zustellweg."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
+msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
+msgstr "Der Assistent kann Sie in Teams noch nicht erreichen. Öffnen Sie seine App einmal in Microsoft Teams unter „Apps“. Danach funktioniert dieser Zustellweg."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
@@ -6648,7 +6658,7 @@ msgstr "„{name}“ konnte nicht gelöscht werden"
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.empty.description"
-msgstr "Lassen Sie sich zu einem Zeitpunkt Ihrer Wahl erinnern, oder beschreiben Sie es in einem Chat, und Erato richtet es ein."
+msgstr "Lassen Sie sich zu einem Zeitpunkt Ihrer Wahl erinnern, oder beschreiben Sie es in einem Chat, und der Assistent richtet es ein."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -6853,7 +6863,7 @@ msgstr "Erinnerung"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemForm.tsx
 msgid "scheduled.form.reminder.description"
-msgstr "Was Erato Ihnen sendet."
+msgstr "Was Sie erhalten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemForm.tsx
@@ -6888,7 +6898,7 @@ msgstr "Änderungen gelten für alles, was noch nicht stattgefunden hat."
 #. js-lingui-explicit-id
 #: src/pages/ScheduledItemFormPage.tsx
 msgid "scheduled.form.subtitle.new"
-msgstr "Wählen Sie, wann es stattfindet und was Erato Ihnen sendet."
+msgstr "Wählen Sie, wann es stattfindet und was Sie erhalten."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledItemFormPage.tsx
@@ -7028,7 +7038,7 @@ msgstr "Wählen Sie den letzten Tag."
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledForm.ts
 msgid "scheduled.form.validation.message.required"
-msgstr "Geben Sie die Nachricht ein, die Erato Ihnen sendet."
+msgstr "Geben Sie die Nachricht ein, die Sie erhalten möchten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledForm.ts
@@ -7177,7 +7187,12 @@ msgstr "Konnte nicht zugestellt werden. Sie können es erneut planen."
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
 msgid "scheduled.item.failed.teamsChat"
-msgstr "Konnte nicht über {channelName} zugestellt werden. Prüfen Sie, ob Erato in Teams eingerichtet ist, und planen Sie es dann erneut."
+msgstr "Konnte nicht über {channelName} zugestellt werden. Prüfen Sie, ob {teamsAppName} in Teams eingerichtet ist, und planen Sie es dann erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Scheduled/ScheduledItemRow.tsx
+msgid "scheduled.item.failed.teamsChat.unnamed"
+msgstr "Konnte nicht über {channelName} zugestellt werden. Prüfen Sie, ob die App des Assistenten in Teams eingerichtet ist, und planen Sie es dann erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledItemRow.tsx
@@ -7242,7 +7257,7 @@ msgstr "Im Chat erstellen"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
 msgid "scheduled.new.createWithChat.description"
-msgstr "Beschreiben Sie es, und Erato richtet es ein"
+msgstr "Beschreiben Sie es, und der Assistent richtet es ein"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
@@ -7262,7 +7277,7 @@ msgstr "Geplante Aufgabe"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
 msgid "scheduled.new.scheduledTask.description"
-msgstr "Erato führt einen Prompt oder eine Prüfung für Sie aus. Folgt später"
+msgstr "Der Assistent führt einen Prompt oder eine Prüfung für Sie aus. Folgt später"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledNewMenu.tsx
@@ -7282,7 +7297,7 @@ msgstr "Sie haben die Höchstzahl von {max} anstehenden Einträgen erreicht. Bre
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
 msgid "scheduled.notice.notSetUp.body"
-msgstr "Erato kann Sie noch über keinen Zustellweg erreichen, daher lässt sich nichts Neues planen. Die erweiterten Einstellungen im Formular zeigen, wie Sie einen einrichten."
+msgstr "Noch kann Sie kein Zustellweg erreichen, daher lässt sich nichts Neues planen. Die erweiterten Einstellungen im Formular zeigen, wie Sie einen einrichten."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledPageNoticeAlert.tsx
@@ -7297,7 +7312,7 @@ msgstr "Die Zustellung ist hier noch nicht verfügbar, daher lässt sich nichts 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
 msgid "scheduled.page.subtitle"
-msgstr "Alles, was Erato zu einem Zeitpunkt Ihrer Wahl für Sie erledigt."
+msgstr "Alles, was der Assistent zu einem Zeitpunkt Ihrer Wahl für Sie erledigt."
 
 #. js-lingui-explicit-id
 #: src/pages/ScheduledPage.tsx
@@ -7307,7 +7322,7 @@ msgstr "Geplant"
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts
 msgid "scheduled.refusal.channelNotSetUp"
-msgstr "Erato kann Sie über diesen Zustellweg noch nicht erreichen. Richten Sie ihn zuerst ein."
+msgstr "Dieser Zustellweg kann Sie noch nicht erreichen. Richten Sie ihn zuerst ein."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/scheduledApi.ts

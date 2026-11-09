@@ -35,6 +35,7 @@ import {
   useRecentChats,
   useUpdateScheduledItem,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { useScheduledFeature } from "@/providers/FeatureConfigProvider";
 import { resolveRecentChatTitle } from "@/utils/chat/recentChatSession";
 
 import type { ScheduledLinkableChat } from "@/components/ui/Scheduled/ScheduledItemForm";
@@ -71,6 +72,7 @@ export default function ScheduledItemFormPage() {
     sourceId ? { pathParams: { itemId: sourceId } } : skipToken,
   );
   const { templates, isLoading: templatesLoading } = useScheduledTemplates();
+  const { teamsAppName } = useScheduledFeature();
   const recentChats = useRecentChats({
     queryParams: { limit: LINKABLE_CHATS },
   });
@@ -162,7 +164,7 @@ export default function ScheduledItemFormPage() {
     }
     return t({
       id: "scheduled.form.subtitle.new",
-      message: "Choose when it happens and what Erato sends you.",
+      message: "Choose when it happens and what you receive.",
     });
   })();
 
@@ -247,6 +249,7 @@ export default function ScheduledItemFormPage() {
           initialValues={initialValues}
           timeZone={timeZone}
           channelStatus={channelStatus}
+          teamsAppName={teamsAppName}
           // Without a channel nothing can be scheduled, so the setup hint in
           // the delivery settings shows before the first try.
           initialAdvancedOpen={

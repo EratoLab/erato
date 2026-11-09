@@ -77,7 +77,8 @@ export function ScheduledNewMenu({
           }),
           description: t({
             id: "scheduled.new.scheduledTask.description",
-            message: "Erato runs a prompt or check for you. Coming later",
+            message:
+              "The assistant runs a prompt or check for you. Coming later",
           }),
           icon: <PlayIcon className="size-4" />,
           onClick: () => undefined,
@@ -95,7 +96,7 @@ export function ScheduledNewMenu({
           }),
           description: t({
             id: "scheduled.new.createWithChat.description",
-            message: "Describe it and Erato sets it up",
+            message: "Describe it and the assistant sets it up",
           }),
           icon: <ChatBubbleIcon className="size-4" />,
           onClick: () => onCreateWithChat?.(),
