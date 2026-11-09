@@ -5374,7 +5374,7 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
         [
             ("", "group"),
             ("/destination", "group"),
-            ("/destination/page_id", "id"),
+            ("/destination/page_id", "machine_id"),
             ("/pages", "list"),
             ("/pages/0", "group"),
             ("/pages/0/title", "value"),
@@ -5685,8 +5685,9 @@ async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgr
     assert!(status.get("resolved").is_none(), "{status}");
 }
 
-/// A call the rules are unsure of shows the mapping a model gave an earlier
-/// call of the same shape for the same user, with this call's values.
+/// A mapping a model gave an earlier call of the same shape supplies only a
+/// verb or kind the rules lack, so a call whose verb and kind the rules know
+/// shows what the rules say, with this call's values.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -5695,11 +5696,12 @@ async fn a_resumed_turn_names_the_record_its_own_read_returned(pool: Pool<Postgr
 /// - `uses-mocked-llm`
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn a_call_the_rules_are_unsure_of_shows_the_users_cached_model_mapping(pool: Pool<Postgres>) {
-    let (label, _) = label_of_a_call_with_a_cached_mapping(pool, true).await;
+async fn a_cached_mapping_adds_nothing_where_the_rules_have_a_verb_and_kind(pool: Pool<Postgres>) {
+    let (label, rules) = label_of_a_call_with_a_cached_mapping(pool, true).await;
+    assert_eq!(label, rules);
     assert_eq!(
         (&label["source"], &label["action"], &label["object_kind"]),
-        (&json!("model"), &json!("update"), &json!("row"))
+        (&json!("rules"), &json!("update"), &json!("row"))
     );
     assert_eq!(
         label_field(&label, "status")["values"][0]["text"],
