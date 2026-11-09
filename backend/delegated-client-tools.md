@@ -383,7 +383,7 @@ the freshness, read from the same place: `detail` is the call's receipt input fi
 (`replay.keep_input_fields` without `child_context_input`) and the reported
 `changes`, and `counts` are the freshness counts. Only short tokens and integers
 are copied from the host. For Word the part stays empty until the overlay keeps a
-part field in its receipt (ERMAIN-1003/1004). A resumed child's events are folded
+part field in its receipt (ERMAIN-1004). A resumed child's events are folded
 into the trace its park left behind.
 
 ## Frontend
@@ -411,9 +411,10 @@ and asks nothing of the user.
 runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
 same fake host without one on `outlook_mailbox`, the `desktop_sidecar` and
-`desktop_sidecar_web` rows (ERMAIN-1034), and the `word_document` and
-`outlook_mailbox` rows, which stay ignored until ERMAIN-1003 and ERMAIN-1006
-enable them. A row marked `slow_path` also runs the slow-path cases
+`desktop_sidecar_web` rows (ERMAIN-1034), the `word_document` row (ERMAIN-1003)
+and the `outlook_mailbox` row, which stays ignored until ERMAIN-1006 enables it.
+The dispatch case checks that the task's schema asks, in none of its
+alternatives, for the context input or the fields the host fills. A row marked `slow_path` also runs the slow-path cases
 (`delegated/slow_path.rs`): the fake host on `outlook_mailbox`, both sidecar
 rows and the ignored `outlook_mailbox` row. A row's `envelope` says how every
 parent-side request of the harness (submit, regenerate, retry) sends its

@@ -488,6 +488,47 @@ Conformance:           backend rows desktop_sidecar (add-in) and
                        erato-desktop-sidecar (draft)
 ```
 
+Word (ERMAIN-1003):
+
+```text
+Host context:          word_document; identity a SHA-256 of the document
+                       identity and the pane load
+                       (wordDocumentOperationBinding.ts), device = this
+                       client's operation device id; realm office-addin
+Context version:       the capture token of the parent turn's Send;
+                       document_snapshot -> snapshot; the pane fills
+                       documentIdentity from the capture (child_host_inputs)
+Read tools:            word/read_document_blocks, through executeChildRead:
+                       section pages, target, target.queries and table_cell,
+                       read-only; complete pagination answers
+                       read-only-complete
+Write tools:           word/submit_document_plan,
+                       word/word_submit_comment_changes; the comment read
+                       word/word_read_comments stays with the coordinator too
+                       (ERMAIN-962)
+Loss code:             capture-unavailable: a new Send, inclusion switched off
+                       (also by switching the pane to a chat without it), a
+                       used or cleared capture
+Freshness:             the paragraph-event journal (ERMAIN-1010); capturedAt;
+                       blind spots: no paragraph events, a capture without
+                       paragraph ids, another pane load, a position the journal
+                       no longer keeps, Word replacing the capture's ids, an
+                       entry naming more ids than it keeps, a change it cannot
+                       place
+Child facet:           word_delegated_read (overlay, ERMAIN-1004)
+Approval scope:        context; covers the document in this pane load (scope id
+                       = binding identity); ends on any journal entry but the
+                       owner chat's own writes; listed as scoped only while
+                       paragraph events run
+Outlives the pane:     no
+Device approvals:      none
+Framing:               contentNotice on every read-only result; ERMAIN-946
+                       before enablement
+Conformance:           backend row word_document; frontend
+                       word/utils/__tests__/wordGrantReadConformance.test.ts;
+                       overlay ERMAIN-1004
+```
+
 ### Native gate matrix template
 
 Each cell holds "date · build · result". Windows first, then Mac and the web.
@@ -550,10 +591,10 @@ Status:
 
 - fake host: passes on both sides, with and without a context version
   (`frontend/src/conformance/clientToolHostAdapter.test.ts`);
-- `word_document`: registered and skipped until ERMAIN-1003
-  (`word/utils/__tests__/wordGrantReadConformance.test.ts`); its approval scope
-  producer is tested on its own against the change journal
-  (`word/utils/__tests__/wordApprovalScope.test.ts`), the native gate is pending;
+- `word_document`: passes on both sides, in a pane without paragraph events
+  and with them under a document approval
+  (`word/utils/__tests__/wordGrantReadConformance.test.ts`); the native gate is
+  pending;
 - `outlook_mailbox`: registered and skipped until ERMAIN-1006
   (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`);
 - `desktop_sidecar`: passes with the server checking the owner
