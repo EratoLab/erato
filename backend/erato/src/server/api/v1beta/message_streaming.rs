@@ -567,10 +567,11 @@ fn gate_mcp_tool_call(
     }
 }
 
-/// The gate for one of Erato's own reminder tools. `display` is what the card
-/// names, `None` when the call would change nothing and so runs unasked. These
-/// tools are never offered in a delegated run, and a call from one is refused
-/// rather than parked.
+/// The gate for one of Erato's own reminder tools, for a call that asks by
+/// `chat_tools::asks_for_approval` (the caller checks first, before describing
+/// the call). `display` is what the card names, `None` when the call would
+/// change nothing and so runs unasked. These tools are never offered in a
+/// delegated run, and a call from one is refused rather than parked.
 fn gate_builtin_tool_call(
     config: &McpToolApprovalConfig,
     tool_call: &genai::chat::ToolCall,
@@ -578,9 +579,7 @@ fn gate_builtin_tool_call(
     is_delegated_run: bool,
 ) -> ToolCallGate {
     use crate::services::scheduled_items::chat_tools;
-    let Some(display) =
-        display.filter(|_| chat_tools::asks_for_approval(&tool_call.fn_name, config))
-    else {
+    let Some(display) = display else {
         return ToolCallGate::Run(None);
     };
     if is_delegated_run {
@@ -14238,10 +14237,7 @@ mod tests {
             })
         };
         let asks = |config: &McpToolApprovalConfig, name: &str| {
-            matches!(
-                super::gate_builtin_tool_call(config, &call(name), display(), false),
-                ToolCallGate::Ask(_)
-            )
+            crate::services::scheduled_items::chat_tools::asks_for_approval(name, config)
         };
         for preset in [
             McpToolApprovalPreset::Permissive,

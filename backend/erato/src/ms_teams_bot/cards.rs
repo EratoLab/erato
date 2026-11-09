@@ -227,9 +227,8 @@ fn build_approval_card(
             let when = item.display.as_ref().and_then(|d| d.description.as_deref());
             body.extend(when.map(|when| plain_text(when, json!({}))));
             // The text that will be delivered, which may come from content the
-            // model read rather than from the user.
+            // model read rather than from the user, so no card size drops it.
             if item.tool_name == CREATE_REMINDER
-                && detail < Detail::NoArguments
                 && let Some(message) = item.input["message"].as_str()
             {
                 body.push(plain_text(
@@ -272,6 +271,7 @@ fn build_approval_card(
             ));
         }
         if count > 1 {
+            let ((approve, _), (deny, _)) = answers(Some(item));
             body.push(json!({
                 "type": "Input.ChoiceSet",
                 "id": input_id(index),
@@ -279,8 +279,8 @@ fn build_approval_card(
                 "isRequired": true,
                 "errorMessage": Msg::ChooseApproveOrDeny.text(lang),
                 "choices": [
-                    {"title": Msg::Approve.text(lang), "value": "approve"},
-                    {"title": Msg::Deny.text(lang), "value": "reject"},
+                    {"title": approve.text(lang), "value": "approve"},
+                    {"title": deny.text(lang), "value": "reject"},
                 ],
             }));
         }
@@ -331,25 +331,32 @@ fn build_approval_card(
             button(Msg::DenyAll, "destructive", Some(ApprovalChoice::Reject)),
         ]
     } else {
-        let item = set.items.first().filter(|item| item.own_tool);
-        let ((approve, approve_style), (deny, deny_style)) =
-            match item.map(|item| item.tool_name.as_str()) {
-                Some(CANCEL_REMINDER) => (
-                    (Msg::CancelReminderConfirm, "destructive"),
-                    (Msg::KeepReminder, "default"),
-                ),
-                Some(CREATE_REMINDER) => (
-                    (Msg::CreateReminderConfirm, "positive"),
-                    (Msg::CreateReminderDeny, "destructive"),
-                ),
-                _ => ((Msg::Approve, "positive"), (Msg::Deny, "destructive")),
-            };
+        let ((approve, approve_style), (deny, deny_style)) = answers(set.items.first());
         vec![
             button(approve, approve_style, Some(ApprovalChoice::Approve)),
             button(deny, deny_style, Some(ApprovalChoice::Reject)),
         ]
     };
     adaptive_card(body, actions)
+}
+
+/// The two answers to an item with their button styles. A reminder question
+/// keeps its own words on a shared card too, as on the web.
+fn answers(item: Option<&PendingApprovalItem>) -> ((Msg, &'static str), (Msg, &'static str)) {
+    match item
+        .filter(|item| item.own_tool)
+        .map(|item| item.tool_name.as_str())
+    {
+        Some(CANCEL_REMINDER) => (
+            (Msg::CancelReminderConfirm, "destructive"),
+            (Msg::KeepReminder, "default"),
+        ),
+        Some(CREATE_REMINDER) => (
+            (Msg::CreateReminderConfirm, "positive"),
+            (Msg::CreateReminderDeny, "destructive"),
+        ),
+        _ => ((Msg::Approve, "positive"), (Msg::Deny, "destructive")),
+    }
 }
 
 /// Sent when the bot joins someone's personal chat, so the first thing they
@@ -665,6 +672,63 @@ mod tests {
             action_titles(&approval_card(&set, "Hugo", Lang::De)),
             ["Planen", "Nicht planen"]
         );
+    }
+
+    /// On a card shared with other decisions, a create keeps the message it
+    /// will deliver even when the size limit drops every other detail, and
+    /// each reminder question keeps its own answers.
+    #[test]
+    fn a_shared_card_keeps_the_reminders_message_and_answers() {
+        let mut create = reminder_cancel().items.remove(0);
+        create.approval_id = "call_create".into();
+        create.tool_name = CREATE_REMINDER.into();
+        create.input = json!({
+            "name": "Follow up on the offer",
+            "message": "Re-verify at https://example.invalid/login",
+        });
+        let cancel = reminder_cancel().items.remove(0);
+        let escaped = |bytes: usize| "\"\\".repeat(bytes / 2);
+        let mut shared = set(30);
+        shared.kind = ApprovalKind::BuiltinTool;
+        for item in &mut shared.items {
+            item.tool_name = "t".repeat(200);
+            item.source = Some("sharepoint-production".into());
+            item.display = Some(ToolDisplay {
+                title: escaped(200),
+                description: Some(escaped(4_000)),
+            });
+            item.input = json!({"text": escaped(5_000)});
+        }
+        shared.items.insert(0, create);
+        shared.items.insert(1, cancel);
+
+        let card = approval_card(&shared, "Hugo", Lang::En);
+        assert!(card_fits(&card));
+        let all = texts(&card);
+        assert!(all.contains(&Msg::OmittedDetails.fill(Lang::En, &[("app", "Hugo")])));
+        assert!(
+            all.iter()
+                .any(|text| text == "Re-verify at https://example.invalid/login"),
+            "{all:?}"
+        );
+        let choices: Vec<Vec<&str>> = card["content"]["body"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|block| block["type"] == "Input.ChoiceSet")
+            .map(|block| {
+                block["choices"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|choice| choice["title"].as_str().unwrap())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(choices.len(), 32);
+        assert_eq!(choices[0], ["Schedule", "Don't schedule"]);
+        assert_eq!(choices[1], ["Cancel it", "Keep it"]);
+        assert_eq!(choices[2], ["Approve", "Deny"]);
     }
 
     #[test]

@@ -59,7 +59,7 @@ msgstr "Allow this action?"
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.description"
-msgstr "{itemCount, plural, one {The response continues once you decide.} other {They are shown one at a time, oldest first. The response continues once all of them are decided.}}"
+msgstr "{itemCount, plural, one {The response continues once you decide.} other {They are shown one at a time. The response continues once all of them are decided.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx

@@ -106,7 +106,7 @@ export const ApprovalQueueCard = ({
                 message: plural(itemCount, {
                   one: "The response continues once you decide.",
                   other:
-                    "They are shown one at a time, oldest first. The response continues once all of them are decided.",
+                    "They are shown one at a time. The response continues once all of them are decided.",
                 }),
               })}
             </p>
