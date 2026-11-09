@@ -581,6 +581,11 @@ under the paths the browser fetches them from:
 - `composition.windows`: the archive's `windows`;
 - `parts`: `{app: {version, commit, library}, theme: {name} | null,
 catalogs: {locales: [...]}, overrides: {present}, kits: [{name}]}`;
+- when known, `parts.app.sharedSurfaceMinor` (the library surface the archive
+  was built against), `parts.web.sharedSurfaceMinor` (the one the deployment's
+  web app was built against) and `parts.surfaceMatches`. Component kits and new
+  theme tokens target the web app's version, so the backend logs a warning at
+  assembly when the two differ;
 - `digest`: the lowercase hex SHA-256 of the canonical JSON of `files`
   (compact, keys sorted), the identity clients and sidecars compare.
 

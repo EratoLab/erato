@@ -369,6 +369,7 @@ export const DEFAULT_STUBS = {
   DelegatedRunOpenProvider: StubPassthrough,
   DelegatedRunsSection: StubNothing,
   DesktopSidecarClientTools: StubNothing,
+  DesktopSidecarConfigurationSync: StubNothing,
   DesktopSidecarProvider: StubPassthrough,
   FeatureConfigProvider: StubPassthrough,
   FeedbackCommentDialog: StubNothing,

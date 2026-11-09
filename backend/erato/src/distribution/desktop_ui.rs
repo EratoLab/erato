@@ -54,6 +54,8 @@ pub const TOKEN_TTL_SECONDS: i64 = 24 * 60 * 60;
 const PACKAGE_ROOT: &str = "package";
 const PACKAGE_FILES: [&str; 2] = ["package.json", "manifest.json"];
 const IMPORT_MAP_MANIFEST_PATH: &str = "public/platform-desktop-ui/import-map.manifest.json";
+/// The web bundle's import map, which also records its library surface.
+const WEB_IMPORT_MAP_MANIFEST: &str = "import-map.manifest.json";
 const COMMON_LOCALES_PATH: &str = "public/common/locales";
 const OVERRIDES_PATH: &str = "public/common/overrides";
 const THEMES_PATH: &str = "public/common/custom-theme";
@@ -114,6 +116,8 @@ pub struct DesktopUiBundle {
     pub version: String,
     pub commit: String,
     pub library_commit: String,
+    /// The library surface the archive was built against, when it says.
+    pub shared_surface_minor: Option<u64>,
     pub host_api: u64,
 }
 
@@ -171,6 +175,10 @@ impl DesktopUiBundle {
             "manifest.json and package.json disagree about the package name or version"
         );
         let commit = required_string(&manifest, "commit")?;
+        let shared_surface_minor = manifest
+            .get("library")
+            .and_then(|library| library.get("sharedSurfaceMinor"))
+            .and_then(Value::as_u64);
         let library_commit = manifest
             .get("library")
             .and_then(|library| library.get("commit"))
@@ -202,6 +210,7 @@ impl DesktopUiBundle {
             version,
             commit,
             library_commit,
+            shared_surface_minor,
             host_api,
         })
     }
@@ -734,9 +743,8 @@ pub fn assemble(
     manifest.insert("files".into(), serde_json::to_value(&entries)?);
     manifest.insert("totalBytes".into(), json!(total_bytes));
     manifest.insert("composition".into(), composition);
-    manifest.insert(
-        "parts".into(),
-        json!({
+    let web_surface_minor = web_shared_surface_minor(&main_root);
+    let mut parts = json!({
             "app": {
                 "version": bundle.version,
                 "commit": bundle.commit,
@@ -751,8 +759,9 @@ pub fn assemble(
                 .iter()
                 .map(|kit| json!({ "name": kit.name }))
                 .collect::<Vec<_>>(),
-        }),
-    );
+    });
+    record_surface_versions(&mut parts, bundle.shared_surface_minor, web_surface_minor);
+    manifest.insert("parts".into(), parts);
     manifest.insert("digest".into(), json!(digest));
     let manifest = serde_json::to_vec_pretty(&Value::Object(manifest))?;
 
@@ -770,6 +779,37 @@ pub fn assemble(
         host_api: bundle.host_api,
         total_bytes,
     })
+}
+
+/// The library surface the deployment's web app was built against.
+fn web_shared_surface_minor(main_root: &Path) -> Option<u64> {
+    let manifest = fs::read_to_string(main_root.join(WEB_IMPORT_MAP_MANIFEST)).ok()?;
+    serde_json::from_str::<Value>(&manifest)
+        .ok()?
+        .get("sharedSurfaceMinor")?
+        .as_u64()
+}
+
+/// Records the known library surfaces and warns when they differ: component
+/// kits and new theme tokens target the web app's version, so a package built
+/// against another one can render them differently.
+fn record_surface_versions(parts: &mut Value, package: Option<u64>, web: Option<u64>) {
+    if let Some(minor) = package {
+        parts["app"]["sharedSurfaceMinor"] = json!(minor);
+    }
+    if let Some(minor) = web {
+        parts["web"] = json!({ "sharedSurfaceMinor": minor });
+    }
+    if let (Some(package), Some(web)) = (package, web) {
+        parts["surfaceMatches"] = json!(package == web);
+        if package != web {
+            tracing::warn!(
+                package_surface_minor = package,
+                web_surface_minor = web,
+                "The desktop UI package was built against another library version than the web app"
+            );
+        }
+    }
 }
 
 fn composition_env(config: &AppConfig, theme: Option<&str>) -> Map<String, Value> {
@@ -1431,6 +1471,47 @@ pub(crate) mod tests {
                 "kits": [{ "name": "example" }],
             })
         );
+    }
+
+    #[test]
+    fn reports_whether_package_and_web_app_share_a_library_surface() {
+        let dir = tempfile::tempdir().unwrap();
+        let (config, distribution) = deployment(dir.path());
+        write(
+            &dir.path().join("web").join(WEB_IMPORT_MAP_MANIFEST),
+            br#"{"imports":{},"sharedSurfaceMinor":27}"#,
+        );
+        let parts_for = |minor: u64| {
+            let bundle = DesktopUiBundle::from_archive(&fixture_archive_with(|manifest| {
+                manifest.insert(
+                    "library".into(),
+                    json!({
+                        "commit": "fedcba9876543210fedcba9876543210fedcba98",
+                        "sharedSurfaceMinor": minor,
+                    }),
+                );
+            }))
+            .unwrap();
+            let artifact = DesktopUiArtifact {
+                version: "0.1.0".into(),
+                bundle,
+            };
+            let package = assemble(
+                &artifact,
+                &config,
+                &distribution,
+                &DistributionBundle::default(),
+                PACKAGE_BUDGET_BYTES,
+                PACKAGE_MAX_ARCHIVE_BYTES,
+            )
+            .unwrap();
+            manifest_of(&package)["parts"].clone()
+        };
+        let drifted = parts_for(26);
+        assert_eq!(drifted["app"]["sharedSurfaceMinor"], 26);
+        assert_eq!(drifted["web"]["sharedSurfaceMinor"], 27);
+        assert_eq!(drifted["surfaceMatches"], false);
+        assert_eq!(parts_for(27)["surfaceMatches"], true);
     }
 
     #[test]

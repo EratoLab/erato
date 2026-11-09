@@ -339,6 +339,7 @@ export { FeedbackViewDialog } from "@/components/ui/Feedback/FeedbackViewDialog"
 export { I18nProvider } from "@/providers/I18nProvider";
 export { ProfileProvider } from "@/providers/ProfileProvider";
 export {
+  DesktopSidecarConfigurationSync,
   DesktopSidecarProvider,
   DEFAULT_DESKTOP_SIDECAR_ENDPOINT,
   resolveDesktopSidecarEndpoint,

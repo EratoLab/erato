@@ -1,6 +1,7 @@
 import {
   ChatContextProviders,
   chatDetailQuery,
+  DesktopSidecarConfigurationSync,
   getSupportedFileTypes,
   mapMessageToUiMessage,
   recentChatsQuery,
@@ -129,6 +130,8 @@ export function AddinChatProviderCore({
 
   return (
     <AddinHistoryFilterStoreContext.Provider value={filterStore}>
+      {/* Offers the deployment's desktop UI package, as the web app does. */}
+      <DesktopSidecarConfigurationSync />
       <SessionController chats={sessionHistory.chats}>
         {(session) => (
           <AddinChatDataProvider

@@ -25,13 +25,25 @@ import type {
 export const JOB_POLL_INTERVAL_MS = 1_500;
 
 /**
- * Who asks for a review, as the review window names it: this surface and its
- * active language. Display data; a sidecar built before it ignores the field.
+ * Who asks for a review and how this client looks right now: the review
+ * window names the surface and follows its language, colour and text size.
+ * The colour is the one ThemeProvider resolved, because a person on the system
+ * setting sees their Office host's colour in an add-in, not the operating
+ * system's. Display data; a sidecar built before it ignores the fields.
  */
-function reviewClient(): { platform: string; locale?: string } {
+function reviewClient(): {
+  platform: string;
+  locale?: string;
+  theme_mode?: string;
+  text_size: string;
+} {
+  const root = document.documentElement;
+  const colour = root.getAttribute("data-theme");
   return {
     platform: getClientPlatform(),
     ...(i18n.locale ? { locale: i18n.locale } : {}),
+    ...(colour ? { theme_mode: colour } : {}),
+    text_size: root.getAttribute("data-text-size") ?? "default",
   };
 }
 

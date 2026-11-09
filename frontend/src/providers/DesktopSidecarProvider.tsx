@@ -219,16 +219,25 @@ export function DesktopSidecarConfigurationSync() {
   const { client, snapshot } = useDesktopSidecar();
   const { profile } = useProfileApi();
   const queryClient = useQueryClient();
+  const configurable =
+    snapshot.state === "ready" &&
+    client?.supports("sidecar.configure.v1") === true;
   const { data: organizationConfiguration } = useOrganizationConfiguration(
     {},
-    { retry: false },
+    { retry: false, enabled: configurable },
   );
+  // Undefined until it loads, which is not the same as a loaded profile with
+  // no organization_user_id: that person has no work identity, and the sidecar
+  // picks its default sources on that basis.
+  const profileLoaded = profile !== undefined;
+  const email = profile?.email;
+  const organizationUserId = profile?.organization_user_id;
 
   useEffect(() => {
     if (
       !client ||
-      snapshot.state !== "ready" ||
-      !client.supports("sidecar.configure.v1") ||
+      !configurable ||
+      !profileLoaded ||
       !organizationConfiguration
     ) {
       return;
@@ -248,8 +257,8 @@ export function DesktopSidecarConfigurationSync() {
         ...status.configuration,
         organization_configuration: organizationConfiguration,
         signed_in_user: signedInUser({
-          organization_user_id: profile?.organization_user_id,
-          email: profile?.email,
+          organization_user_id: organizationUserId,
+          email,
         }),
       };
       // Configuration trust is enforced by the sidecar. Optional mailbox
@@ -271,11 +280,7 @@ export function DesktopSidecarConfigurationSync() {
       await client.invoke(
         "sidecar.configure.v1",
         {
-          ...initializeMailboxConfiguration(
-            configuration,
-            mailboxes,
-            profile?.email,
-          ),
+          ...initializeMailboxConfiguration(configuration, mailboxes, email),
           ...(uiPackage ? { ui_package: uiPackage } : {}),
         },
         { signal: controller.signal },
@@ -303,12 +308,13 @@ export function DesktopSidecarConfigurationSync() {
     };
   }, [
     client,
+    configurable,
+    email,
     organizationConfiguration,
-    profile?.email,
-    profile?.organization_user_id,
+    organizationUserId,
+    profileLoaded,
     queryClient,
     snapshot.instanceId,
-    snapshot.state,
     snapshot.ui,
   ]);
 

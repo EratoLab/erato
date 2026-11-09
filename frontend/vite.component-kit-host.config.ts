@@ -14,6 +14,7 @@ import {
   iconCatalogManualChunk,
   iconCatalogPlugin,
 } from "./vite.icon-catalogs";
+import { ERATO_SHARED_SURFACE_MINOR } from "./src/shared/surfaceVersion";
 
 const componentKitHostManifestPlugin = (): Plugin => ({
   name: "component-kit-host-manifest",
@@ -35,7 +36,13 @@ const componentKitHostManifestPlugin = (): Plugin => ({
     this.emitFile({
       type: "asset",
       fileName: IMPORT_MAP_MANIFEST_FILE_NAME,
-      source: JSON.stringify({ imports }, null, 2),
+      // A desktop UI package records this, so a backend can compare it with
+      // the web app it serves.
+      source: JSON.stringify(
+        { imports, sharedSurfaceMinor: ERATO_SHARED_SURFACE_MINOR },
+        null,
+        2,
+      ),
     });
   },
 });
