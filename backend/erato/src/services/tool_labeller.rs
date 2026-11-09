@@ -6,7 +6,9 @@
 //! hostile labeller only costs the call the model's verb.
 
 use crate::config::{AppConfig, McpRuntimeConfig};
-use crate::models::message::{ContentPart, ContentPartText, ToolCallLabel, ToolDisplayMetadata};
+use crate::models::message::{
+    ContentPart, ContentPartText, ToolCallAction, ToolCallLabel, ToolDisplayMetadata,
+};
 use crate::policy::engine::PolicyEngine;
 use crate::policy::types::Subject;
 use crate::services::delegation::TaskModelPermissions;
@@ -510,6 +512,10 @@ fn shown_label(
     mapping: &ToolCallLabelMapping,
 ) -> Option<ToolCallLabel> {
     let rules = guarded_rules(&job.tool, &job.arguments, job.approval_argument.as_deref());
+    // An answer that contradicts the rules' verb says nothing about the kind either.
+    if rules.mapping.action != ToolCallAction::Other && mapping.action != rules.mapping.action {
+        return None;
+    }
     mcp_tool_call_display_from(
         config,
         &job.server_id,
@@ -632,8 +638,8 @@ async fn trace(
 mod tests {
     use super::*;
     use crate::models::message::{
-        ApprovalItem, ContentPartToolApprovalRequest, ToolApprovalAnnotations, ToolCallAction,
-        ToolCallLabelSource, ToolCallObjectKind, ToolUse,
+        ApprovalItem, ContentPartToolApprovalRequest, ToolApprovalAnnotations, ToolCallLabelSource,
+        ToolCallObjectKind, ToolUse,
     };
     use crate::services::tool_display::label::{ToolCallLabelItemMapping, generic_label};
     use crate::services::tool_display::tool_row_display;
@@ -992,6 +998,29 @@ mod tests {
         .unwrap();
         assert_eq!(label.source, ToolCallLabelSource::Generic);
         assert!(label.items.is_empty());
+    }
+
+    #[test]
+    fn an_answer_that_contradicts_the_rules_verb_adds_nothing() {
+        let config = McpRuntimeConfig::default();
+        let tool = rmcp::model::Tool::new(
+            "update_gizmo",
+            "Updates a gizmo.",
+            rmcp::model::JsonObject::new(),
+        );
+        let call = job(tool, json!({"gizmo_id": "g1", "status": "won"}));
+        let item = ToolCallLabelItemMapping::default();
+        assert_eq!(
+            shown_label(
+                &config,
+                &call,
+                &mapping(ToolCallAction::Delete, item.clone())
+            ),
+            None
+        );
+        let agrees = shown_label(&config, &call, &mapping(ToolCallAction::Update, item)).unwrap();
+        assert_eq!(agrees.source, ToolCallLabelSource::Model);
+        assert_eq!(agrees.action, ToolCallAction::Update);
     }
 
     #[test]

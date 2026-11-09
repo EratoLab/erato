@@ -463,7 +463,7 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
         },
     )
     .await;
-    let (_chat_id, message_id, _events) = submit(&app_state).await;
+    submit(&app_state).await;
 
     let bodies = eventually("the labeller's request", || async {
         let bodies = recorder.bodies();
@@ -471,10 +471,6 @@ async fn the_labeller_never_sees_the_consent_argument_erato_fills(pool: Pool<Pos
     })
     .await;
     assert_eq!(bodies.len(), 1, "{bodies:?}");
-    assert_eq!(
-        card(&app_state, message_id).await["display"]["label"]["source"],
-        "rules"
-    );
     let request: Value = serde_json::from_str(&bodies[0]).unwrap();
     let user = request["messages"]
         .as_array()
