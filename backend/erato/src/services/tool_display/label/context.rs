@@ -6,9 +6,11 @@
 //! whose result gave them, and never reach a recipient, an address, a phone
 //! number or a link.
 
-use super::arguments::{MAX_ID_CHARS, looks_like_a_uuid, names_an_id};
+use super::arguments::{MAX_ID_CHARS, MAX_LIST_ENTRIES, looks_like_a_uuid, names_an_id};
+use super::change::{Unwrapped, is_plural, unwrap};
 use super::pointer;
 use super::recipients::{is_phone_shaped, is_recipient_member};
+use super::rules;
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
@@ -24,7 +26,7 @@ use unicode_normalization::UnicodeNormalization;
 /// Records kept for one turn; the ones seen least recently go first.
 pub const MAX_RECORDS: usize = 500;
 pub const MAX_RECORDS_PER_RESULT: usize = 200;
-pub const MAX_FIELDS_PER_RECORD: usize = 32;
+pub const MAX_FIELDS_PER_RECORD: usize = 64;
 /// JSON nodes read from one result or one call's arguments; in a result an
 /// object costs one per member and an array one per entry.
 pub const MAX_NODES_PER_VALUE: usize = 5_000;
@@ -110,6 +112,8 @@ impl RecordKey {
 pub(super) struct Record {
     name: Option<String>,
     fields: HashMap<String, String>,
+    /// Fields that held a list, as the entries' texts.
+    lists: HashMap<String, Vec<String>>,
     /// A non-UUID ID that named two different things: it resolves to nothing.
     ambiguous: bool,
 }
@@ -117,6 +121,10 @@ pub(super) struct Record {
 impl Record {
     pub(super) fn field(&self, member: &str) -> Option<String> {
         self.fields.get(member).cloned()
+    }
+
+    pub(super) fn list(&self, member: &str) -> Option<&[String]> {
+        self.lists.get(member).map(Vec::as_slice)
     }
 }
 
@@ -363,7 +371,32 @@ impl ToolResultContext {
             reached = Some(value);
             ControlFlow::Break(())
         });
-        self.record(server, id_key(reached?)?)
+        let reached = reached?;
+        self.record(server, id_key(reached)?)
+            .or_else(|| self.read_record(arguments, path, reached, server))
+    }
+
+    /// The record an earlier read of this same member and value, in the same
+    /// place, returned: `get_issue {repo, issue_number: 4211}` is about the
+    /// record `update_issue {repo, issue_number: 4211}` changes, though a bare
+    /// 4211 could be anything.
+    fn read_record(
+        &self,
+        arguments: &Value,
+        path: &str,
+        id: &Value,
+        server: &str,
+    ) -> Option<&Record> {
+        let member = pointer::member_names(path);
+        let [member] = member.as_slice() else {
+            return None;
+        };
+        self.records
+            .get(&RecordKey::new(
+                server,
+                qualified_key(arguments, member, id)?,
+            ))
+            .filter(|record| !record.ambiguous)
     }
 
     fn read(&mut self, tool: &ToolUse) {
@@ -420,8 +453,36 @@ impl ToolResultContext {
                     records: MAX_RECORDS_PER_RESULT,
                 };
                 self.read_node(output, server, &words, &mut walk, 0);
+                self.read_named_record(tool.input.as_ref(), output, server, &mut walk);
             }
             None => {}
+        }
+    }
+
+    /// A read that names one record by one ID, and returns one object: that
+    /// object is the record, under the ID as the read named it.
+    fn read_named_record(
+        &mut self,
+        input: Option<&Value>,
+        output: &Value,
+        server: &str,
+        walk: &mut Walk,
+    ) {
+        let (Some(input), Some(mut object)) = (input, output.as_object()) else {
+            return;
+        };
+        if let [only] = object.values().collect::<Vec<_>>().as_slice()
+            && let Some(inner) = only.as_object()
+        {
+            object = inner;
+        }
+        let Some((_, key)) = one_named_id(input) else {
+            return;
+        };
+        let name = name_of(object);
+        let (fields, lists) = values_of(object, "", walk);
+        if name.is_some() || !fields.is_empty() || !lists.is_empty() {
+            self.merge(RecordKey::new(server, key), name, fields, lists);
         }
     }
 
@@ -444,10 +505,10 @@ impl ToolResultContext {
                 }
                 if let Some((member, key)) = own_id(object, words) {
                     let name = name_of(object);
-                    let fields = fields_of(object, member, words, walk);
-                    if name.is_some() || !fields.is_empty() {
+                    let (fields, lists) = values_of(object, member, walk);
+                    if name.is_some() || !fields.is_empty() || !lists.is_empty() {
                         walk.records -= 1;
-                        self.merge(RecordKey::new(server, key), name, fields);
+                        self.merge(RecordKey::new(server, key), name, fields, lists);
                     }
                 }
                 for child in object.values().filter(|child| is_container(child)) {
@@ -476,9 +537,12 @@ impl ToolResultContext {
             return;
         }
         for (key, record) in &mut self.records {
-            if !record.fields.is_empty() && ids.contains(&key.id) {
+            let named = ids.contains(&key.id)
+                || qualified_value(&key.id).is_some_and(|id| ids.contains(id));
+            if (!record.fields.is_empty() || !record.lists.is_empty()) && named {
                 let before = record_bytes(key, record);
                 record.fields.clear();
+                record.lists.clear();
                 let after = record_bytes(key, record);
                 self.bytes = self.bytes.saturating_sub(before - after);
             }
@@ -488,6 +552,7 @@ impl ToolResultContext {
     fn retire_all(&mut self) {
         for record in self.records.values_mut() {
             record.fields.clear();
+            record.lists.clear();
         }
         self.bytes = self
             .records
@@ -513,11 +578,22 @@ impl ToolResultContext {
             return;
         }
         if let Some(name) = created_name(arguments) {
-            self.merge(RecordKey::new(server, key), Some(name), HashMap::new());
+            self.merge(
+                RecordKey::new(server, key),
+                Some(name),
+                HashMap::new(),
+                HashMap::new(),
+            );
         }
     }
 
-    fn merge(&mut self, key: RecordKey, name: Option<String>, fields: HashMap<String, String>) {
+    fn merge(
+        &mut self,
+        key: RecordKey,
+        name: Option<String>,
+        fields: HashMap<String, String>,
+        lists: HashMap<String, Vec<String>>,
+    ) {
         if !indexable(&key.id) {
             return;
         }
@@ -549,6 +625,13 @@ impl ToolResultContext {
                             record.fields.insert(member, value);
                         }
                     }
+                    for (member, entries) in lists {
+                        if record.lists.len() < MAX_FIELDS_PER_RECORD
+                            || record.lists.contains_key(&member)
+                        {
+                            record.lists.insert(member, entries);
+                        }
+                    }
                 }
                 record
             }
@@ -560,6 +643,7 @@ impl ToolResultContext {
                 Record {
                     name,
                     fields,
+                    lists,
                     ambiguous: false,
                 }
             }
@@ -589,11 +673,87 @@ fn record_bytes(key: &RecordKey, record: &Record) -> usize {
         .iter()
         .map(|(member, value)| OVERHEAD + member.len() + value.len())
         .sum();
+    let lists: usize = record
+        .lists
+        .iter()
+        .map(|(member, entries)| {
+            OVERHEAD + member.len() + entries.iter().map(String::len).sum::<usize>()
+        })
+        .sum();
     OVERHEAD
         + key.server.len()
         + key.id.len()
         + record.name.as_ref().map_or(0, String::len)
         + fields
+        + lists
+}
+
+/// Separates the parts of a member-qualified record key; no ID holds it.
+const QUALIFIED_SEPARATOR: char = '\u{1f}';
+
+/// The ID a call's arguments name a record by, when they name just one, and
+/// the key that record is kept under. Members naming a place are the key's
+/// scope; a recipient, address or phone number is never an ID.
+fn one_named_id(arguments: &Value) -> Option<(&str, String)> {
+    let top = arguments.as_object()?;
+    let mut ids = top.iter().filter(|(member, value)| {
+        matches!(value, Value::String(_) | Value::Number(_))
+            && (names_an_id(member) || is_any_of(member, &rules::ID_MEMBERS))
+            && !is_any_of(member, &rules::TARGET_MEMBERS)
+            && !is_any_of(member, &rules::PLACE_MEMBERS)
+            && !is_recipient_member(member)
+    });
+    let (member, value) = ids.next()?;
+    if ids.next().is_some() {
+        return None;
+    }
+    Some((member.as_str(), qualified_key(arguments, member, value)?))
+}
+
+fn is_any_of(member: &str, names: &[&str]) -> bool {
+    names.iter().any(|name| member.eq_ignore_ascii_case(name))
+}
+
+fn qualified_key(arguments: &Value, member: &str, id: &Value) -> Option<String> {
+    if is_recipient_member(member) {
+        return None;
+    }
+    let id = id_key(id)?;
+    if is_phone_shaped(&id) || id.contains('@') || id.contains("://") {
+        return None;
+    }
+    let top = arguments.as_object()?;
+    let mut scope: Vec<String> = top
+        .iter()
+        .filter(|(name, _)| {
+            name.as_str() != member
+                && (is_any_of(name, &rules::PLACE_MEMBERS)
+                    || is_any_of(name, &rules::TARGET_MEMBERS)
+                    || name.eq_ignore_ascii_case("owner"))
+        })
+        .filter_map(|(name, value)| {
+            Some(format!(
+                "{}={}",
+                name.to_ascii_lowercase(),
+                scalar_text(value)?
+            ))
+        })
+        .collect();
+    scope.sort_unstable();
+    Some(format!(
+        "{}{sep}{id}{sep}{}",
+        member.to_ascii_lowercase(),
+        scope.join("&"),
+        sep = QUALIFIED_SEPARATOR
+    ))
+}
+
+/// The ID inside a member-qualified key.
+fn qualified_value(key: &str) -> Option<&str> {
+    let mut parts = key.split(QUALIFIED_SEPARATOR);
+    parts.next();
+    let id = parts.next()?;
+    parts.next().map(|_| id)
 }
 
 /// Drops what a chat's results said about a label's values, keeping the
@@ -824,38 +984,45 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
 /// A record's scalar members, the IDs of the records it links to, and the
 /// scalar members of plain objects one level down (such as `properties`).
 /// Each object member costs the walk its width, as it is read here too.
-fn fields_of(
+/// A record's values, by member: scalars and lists, read through the wrappers
+/// servers put around them, and one level of nested objects such as
+/// `properties` or `fields`.
+fn values_of(
     object: &Map<String, Value>,
     id_member: &str,
-    words: &HashSet<String>,
     walk: &mut Walk,
-) -> HashMap<String, String> {
+) -> (HashMap<String, String>, HashMap<String, Vec<String>>) {
     let mut fields = HashMap::new();
+    let mut lists = HashMap::new();
     let mut nested = Vec::new();
     for (member, value) in object {
         if fields.len() == MAX_FIELDS_PER_RECORD {
-            return fields;
+            return (fields, lists);
         }
         if member == id_member || member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some() {
             continue;
         }
-        let text = match value {
-            Value::Object(inner) => {
-                if !walk.take(inner.len()) {
-                    break;
-                }
-                match own_id(inner, words) {
-                    Some((link, _)) => inner.get(link).and_then(scalar_text),
-                    None => {
-                        nested.push(inner);
-                        None
+        if let Value::Object(inner) = value {
+            if !walk.take(inner.len()) {
+                break;
+            }
+            // Only a pure link stands for its ID: `properties` holding one
+            // `*_id` among its values is the record's values, not a link.
+            match link_id_member(inner) {
+                Some(link) => {
+                    if let Some(text) = inner.get(link).and_then(scalar_text) {
+                        fields.insert(member.clone(), text);
                     }
                 }
+                None => match record_value(member, value) {
+                    Some(RecordValue::Unread) | None => nested.push(inner),
+                    Some(read) => read.keep(member, &mut fields, &mut lists),
+                },
             }
-            value => scalar_text(value),
-        };
-        if let Some(text) = text {
-            fields.insert(member.clone(), text);
+            continue;
+        }
+        if let Some(read) = record_value(member, value) {
+            read.keep(member, &mut fields, &mut lists);
         }
     }
     for (member, value) in nested.into_iter().flatten() {
@@ -864,12 +1031,59 @@ fn fields_of(
         }
         if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_none()
             && !fields.contains_key(member)
-            && let Some(text) = scalar_text(value)
+            && !lists.contains_key(member)
+            && let Some(read) = record_value(member, value)
         {
-            fields.insert(member.clone(), text);
+            read.keep(member, &mut fields, &mut lists);
         }
     }
-    fields
+    (fields, lists)
+}
+
+/// One value of a record, past its wrappers.
+enum RecordValue {
+    Text(String),
+    List(Vec<String>),
+    /// An object or list none of whose shapes this reads.
+    Unread,
+}
+
+impl RecordValue {
+    fn keep(
+        self,
+        member: &str,
+        fields: &mut HashMap<String, String>,
+        lists: &mut HashMap<String, Vec<String>>,
+    ) {
+        match self {
+            Self::Text(text) => {
+                fields.insert(member.to_string(), text);
+            }
+            Self::List(entries) => {
+                lists.insert(member.to_string(), entries);
+            }
+            Self::Unread => {}
+        }
+    }
+}
+
+fn record_value(member: &str, value: &Value) -> Option<RecordValue> {
+    match unwrap(value, is_plural(member)) {
+        Unwrapped::Empty if value.is_array() => Some(RecordValue::List(Vec::new())),
+        Unwrapped::Empty => None,
+        Unwrapped::Scalar(scalar) => scalar_text(scalar).map(RecordValue::Text),
+        Unwrapped::List(entries) => Some(RecordValue::List(
+            entries
+                .into_iter()
+                .take(MAX_LIST_ENTRIES)
+                .filter_map(|entry| match unwrap(entry, false) {
+                    Unwrapped::Scalar(scalar) => scalar_text(scalar),
+                    _ => None,
+                })
+                .collect(),
+        )),
+        Unwrapped::Other => Some(RecordValue::Unread),
+    }
 }
 
 fn scalar_text(value: &Value) -> Option<String> {

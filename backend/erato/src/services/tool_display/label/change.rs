@@ -596,6 +596,7 @@ impl<'a> Walk<'a> {
                     self.saw_list = true;
                     if !self.says.adds_to_list {
                         effect.effect = ToolCallEffectKind::ListReplaced;
+                        self.diff_list(member, path, &entries, &mut effect);
                     }
                 }
             }
@@ -713,6 +714,56 @@ impl<'a> Walk<'a> {
             };
             effect.values.extend(shown);
         }
+    }
+
+    /// What a replaced list loses and keeps, where an earlier result showed
+    /// the list. A list that loses nothing replaces nothing.
+    fn diff_list(
+        &mut self,
+        member: &str,
+        path: &str,
+        entries: &[&Value],
+        effect: &mut ToolCallEffect,
+    ) {
+        let Some(old) = self
+            .earlier
+            .as_ref()
+            .and_then(|earlier| earlier.record.list(member))
+            .map(<[String]>::to_vec)
+        else {
+            return;
+        };
+        self.used_earlier = true;
+        let new: Vec<String> = entries
+            .iter()
+            .filter_map(|entry| match unwrap(entry, false) {
+                Unwrapped::Scalar(scalar) => scalar_text(scalar),
+                _ => None,
+            })
+            .collect();
+        let as_value = |text: &String| Value::String(text.clone());
+        for entry in &old {
+            let shown = self.shown(&as_value(entry), path);
+            if new.contains(entry) {
+                effect.kept.extend(shown);
+            } else {
+                effect.removed.extend(shown);
+            }
+        }
+        if !effect.removed.is_empty() {
+            return;
+        }
+        effect.effect = if old.iter().collect::<HashSet<_>>() == new.iter().collect::<HashSet<_>>()
+        {
+            ToolCallEffectKind::Unchanged
+        } else {
+            ToolCallEffectKind::Changed
+        };
+        effect.old = Some(ToolCallEffectValue {
+            text: old.join(", "),
+            truncated: false,
+            machine_id: false,
+        });
     }
 
     fn push(&mut self, effect: ToolCallEffect) {

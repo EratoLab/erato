@@ -828,6 +828,233 @@ fn a_mapping_from_any_source_is_described_the_same_way() {
     assert_eq!(effect(&change, "stage").effect, ToolCallEffectKind::Set);
 }
 
+fn read_of(tool_name: &str, input: Value, output: Value) -> ToolResultContext {
+    earlier(vec![(tool_name, input, output)])
+}
+
+#[test]
+fn old_values_show_what_changes_and_what_stays_the_same() {
+    let context = read_of(
+        "read_company",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "name": "Tailspin", "city": "Berlin", "stage": "lead", "seats": 120}),
+    );
+    let (change, _) = change_with(
+        &tool("update_company", "", None),
+        json!({"id": RECORD, "properties": {"city": "Berlin", "stage": "customer", "seats": 120, "phone": null}}),
+        &context,
+    );
+    assert_eq!(
+        effect(&change, "city").effect,
+        ToolCallEffectKind::Unchanged
+    );
+    let stage = effect(&change, "stage");
+    assert_eq!(stage.effect, ToolCallEffectKind::Changed);
+    assert_eq!(stage.old.as_ref().unwrap().text, "lead");
+    assert_eq!(
+        effect(&change, "seats").effect,
+        ToolCallEffectKind::Unchanged
+    );
+    assert!(
+        change
+            .notes
+            .contains(&ToolCallChangeNote::OldValuesFromEarlier)
+    );
+    assert!(!change.notes.contains(&ToolCallChangeNote::NothingChanges));
+}
+
+#[test]
+fn wrapped_old_values_are_read_like_wrapped_new_ones() {
+    let context = read_of(
+        "read_page",
+        json!({"page_id": RECORD}),
+        json!({"id": RECORD, "properties": {
+            "Stage": {"select": {"name": "Prüfung"}},
+            "Förderbetrag (€)": {"number": 9000},
+            "Owner": {"people": [{"name": "Tess Tester"}]},
+            "Due date": {"date": {"start": "2026-11-30"}},
+        }}),
+    );
+    let (change, _) = change_with(
+        &tool("API-patch-page", "", None),
+        json!({"page_id": RECORD, "properties": {
+            "Stage": {"select": {"name": "Abgelehnt"}},
+            "Förderbetrag (€)": {"number": 12000},
+            "Owner": {"people": []},
+            "Due date": {"date": null},
+        }}),
+        &context,
+    );
+    assert_eq!(
+        effect(&change, "Stage").old.as_ref().unwrap().text,
+        "Prüfung"
+    );
+    assert_eq!(
+        effect(&change, "Förderbetrag (€)")
+            .old
+            .as_ref()
+            .unwrap()
+            .text,
+        "9000"
+    );
+    assert_eq!(
+        effect(&change, "Due date").effect,
+        ToolCallEffectKind::Emptied
+    );
+    assert_eq!(
+        effect(&change, "Due date").old.as_ref().unwrap().text,
+        "2026-11-30"
+    );
+    assert_eq!(effect(&change, "Owner").effect, ToolCallEffectKind::Emptied);
+}
+
+#[test]
+fn a_replaced_list_says_what_goes_and_what_stays() {
+    let read = |labels: Value| {
+        read_of(
+            "get_issue",
+            json!({"owner": "contoso", "repo": "uploader", "issue_number": 4211}),
+            json!({"id": 99, "number": 4211, "title": "Upload fails", "labels": labels}),
+        )
+    };
+    let description = "This replaces the current labels.";
+    let call =
+        json!({"owner": "contoso", "repo": "uploader", "issue_number": 4211, "labels": ["bug"]});
+    let labels = json!([{"name": "bug"}, {"name": "p1"}, {"name": "backend"}]);
+    let (change, _) = change_with(
+        &tool("update_issue_labels", description, None),
+        call.clone(),
+        &read(labels),
+    );
+    let row = effect(&change, "labels");
+    assert_eq!(row.effect, ToolCallEffectKind::ListReplaced);
+    assert_eq!(texts(&row.removed), ["p1", "backend"]);
+    assert_eq!(texts(&row.kept), ["bug"]);
+    assert!(
+        change
+            .notes
+            .contains(&ToolCallChangeNote::ToolSaysReplacesList)
+    );
+    assert!(
+        change
+            .notes
+            .contains(&ToolCallChangeNote::OldValuesFromEarlier)
+    );
+
+    // A list that loses nothing and changes nothing says so.
+    let (same, _) = change_with(
+        &tool("update_issue_labels", description, None),
+        call.clone(),
+        &read(json!([{"name": "bug"}])),
+    );
+    assert_eq!(
+        effect(&same, "labels").effect,
+        ToolCallEffectKind::Unchanged
+    );
+
+    // Only adding removes nothing: it is a change, not a loss.
+    let (added, _) = change_with(
+        &tool("update_issue_labels", description, None),
+        call,
+        &read(json!([])),
+    );
+    assert_eq!(effect(&added, "labels").effect, ToolCallEffectKind::Changed);
+    assert!(effect(&added, "labels").removed.is_empty());
+}
+
+#[test]
+fn a_read_of_another_place_or_member_says_nothing_about_this_record() {
+    let context = read_of(
+        "get_issue",
+        json!({"owner": "contoso", "repo": "uploader", "issue_number": 4211}),
+        json!({"title": "Upload fails", "state": "open"}),
+    );
+    let other_repo = change_with(
+        &tool("update_issue", "", None),
+        json!({"owner": "contoso", "repo": "other", "issue_number": 4211, "state": "closed"}),
+        &context,
+    )
+    .0;
+    assert_eq!(effect(&other_repo, "state").effect, ToolCallEffectKind::Set);
+    let other_member = change_with(
+        &tool("update_project", "", None),
+        json!({"owner": "contoso", "repo": "uploader", "pull_number": 4211, "state": "closed"}),
+        &context,
+    )
+    .0;
+    assert_eq!(
+        effect(&other_member, "state").effect,
+        ToolCallEffectKind::Set
+    );
+    let same = change_with(
+        &tool("update_issue", "", None),
+        json!({"owner": "contoso", "repo": "uploader", "issue_number": 4211, "state": "closed"}),
+        &context,
+    )
+    .0;
+    assert_eq!(effect(&same, "state").old.as_ref().unwrap().text, "open");
+}
+
+#[test]
+fn a_call_that_names_a_record_retires_what_a_read_said_about_it() {
+    let context = earlier(vec![
+        (
+            "get_issue",
+            json!({"repo": "uploader", "issue_number": 4211}),
+            json!({"title": "Upload fails", "state": "open", "labels": ["bug"]}),
+        ),
+        (
+            "other_call",
+            json!({"note": "touches 4211", "issue_number": 4211}),
+            json!({}),
+        ),
+    ]);
+    let change = change_with(
+        &tool("update_issue", "", None),
+        json!({"repo": "uploader", "issue_number": 4211, "state": "closed", "labels": ["x"]}),
+        &context,
+    )
+    .0;
+    assert_eq!(effect(&change, "state").effect, ToolCallEffectKind::Set);
+    assert!(effect(&change, "labels").removed.is_empty());
+}
+
+#[test]
+fn every_value_equal_to_what_was_read_is_said_once() {
+    let context = read_of(
+        "get_issue",
+        json!({"repo": "uploader", "issue_number": 7}),
+        json!({"state": "open", "title": "A", "labels": ["bug"]}),
+    );
+    let same = change_with(
+        &tool("issue_write", "", None),
+        json!({"method": "update", "repo": "uploader", "issue_number": 7, "state": "open", "title": "A", "labels": ["bug"]}),
+        &context,
+    )
+    .0;
+    assert!(
+        same.notes.contains(&ToolCallChangeNote::NothingChanges),
+        "{same:#?}"
+    );
+}
+
+#[test]
+fn a_phone_shaped_or_recipient_id_never_gets_a_read_record() {
+    let context = read_of(
+        "get_contact",
+        json!({"contact_id": "+49 170 1234567"}),
+        json!({"name": "Mallory", "state": "open"}),
+    );
+    let change = change_with(
+        &tool("update_contact", "", None),
+        json!({"contact_id": "+49 170 1234567", "state": "closed"}),
+        &context,
+    )
+    .0;
+    assert_eq!(effect(&change, "state").effect, ToolCallEffectKind::Set);
+    assert_eq!(context.name_of_id(SERVER, "+49 170 1234567"), None);
+}
+
 #[test]
 fn a_batch_says_per_field_what_all_its_rows_do_and_whether_any_row_loses_something() {
     let rows: Vec<_> = (0..200)
