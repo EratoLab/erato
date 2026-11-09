@@ -6637,8 +6637,8 @@ msgstr "{teamsAppName} can't reach you in Teams yet. Open {teamsAppName} in Micr
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
-msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
-msgstr "The assistant can't reach you in Teams yet. Open its app in Microsoft Teams once, under Apps. After that, this channel works."
+#~ msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
+#~ msgstr "The assistant can't reach you in Teams yet. Open its app in Microsoft Teams once, under Apps. After that, this channel works."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx

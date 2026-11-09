@@ -6637,8 +6637,8 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
-msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
-msgstr ""
+#~ msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
+#~ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx

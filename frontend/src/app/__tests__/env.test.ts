@@ -140,3 +140,27 @@ describe("env reduced UI controls", () => {
     },
   );
 });
+
+describe("env teamsAppName", () => {
+  afterEach(() => {
+    delete window.TEAMS_APP_NAME;
+    vi.unstubAllEnvs();
+  });
+
+  it("reads the name the backend sends", () => {
+    window.TEAMS_APP_NAME = "Hugo";
+    expect(env().teamsAppName).toBe("Hugo");
+  });
+
+  it("treats a missing or blank name as unknown", () => {
+    expect(env().teamsAppName).toBeNull();
+    window.TEAMS_APP_NAME = "   ";
+    expect(env().teamsAppName).toBeNull();
+  });
+
+  it("prefers the Vite override", () => {
+    window.TEAMS_APP_NAME = "Hugo";
+    vi.stubEnv("VITE_TEAMS_APP_NAME", "Erato Dev");
+    expect(env().teamsAppName).toBe("Erato Dev");
+  });
+});

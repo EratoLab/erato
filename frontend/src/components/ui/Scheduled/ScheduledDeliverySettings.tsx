@@ -63,11 +63,9 @@ function teamsChatTexts(teamsAppName: string | null) {
       id: "scheduled.channel.teamsChat.helper.unnamed",
       message: "Your chat with the assistant in Microsoft Teams",
     }),
-    notSetUp: t({
-      id: "scheduled.channel.teamsChat.notSetUp.unnamed",
-      message:
-        "The assistant can't reach you in Teams yet. Open its app in Microsoft Teams once, under Apps. After that, this channel works.",
-    }),
+    // A Teams channel that can be not set up always comes with the app's
+    // name, so only local setups get here; vague steps would help nobody.
+    notSetUp: null,
   };
 }
 
@@ -172,7 +170,7 @@ export function ScheduledDeliverySettings({
               </StatusPill>
             }
           >
-            {channelStatus === "not_set_up" ? (
+            {channelStatus === "not_set_up" && teamsChat.notSetUp ? (
               <p className="p-3 text-xs text-theme-fg-secondary">
                 {teamsChat.notSetUp}
               </p>

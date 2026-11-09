@@ -178,8 +178,8 @@ describe("ScheduledItemForm", () => {
     fireEvent.click(toggle);
     expect(screen.getByRole("radio", { name: /Teams chat/ })).toBeChecked();
     expect(
-      screen.getByText(/The assistant can't reach you in Teams yet/),
-    ).toBeInTheDocument();
+      screen.queryByText(/can't reach you in Teams yet/),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("radio", { name: /Desktop notification/ }),
     ).toBeDisabled();

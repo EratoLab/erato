@@ -6637,8 +6637,8 @@ msgstr "{teamsAppName} kann Sie in Teams noch nicht erreichen. Öffnen Sie {team
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx
-msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
-msgstr "Der Assistent kann Sie in Teams noch nicht erreichen. Öffnen Sie seine App einmal in Microsoft Teams unter „Apps“. Danach funktioniert dieser Zustellweg."
+#~ msgid "scheduled.channel.teamsChat.notSetUp.unnamed"
+#~ msgstr "Der Assistent kann Sie in Teams noch nicht erreichen. Öffnen Sie seine App einmal in Microsoft Teams unter „Apps“. Danach funktioniert dieser Zustellweg."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Scheduled/ScheduledDeliverySettings.tsx

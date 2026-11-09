@@ -227,14 +227,14 @@ describe("ScheduledItemFormPage", () => {
       ...connectedList,
       channels: [{ channel: "teams_personal", status: "not_set_up" }],
     };
-    renderAt("/scheduled/new?template=follow-up-offer");
+    renderAt("/scheduled/new?template=follow-up-offer", "Hugo");
     await screen.findByDisplayValue("Follow up on the offer");
 
     expect(
       screen.getByRole("button", { name: "Advanced settings" }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByText(/The assistant can't reach you in Teams yet/),
+      screen.getByText(/Hugo can't reach you in Teams yet/),
     ).toBeInTheDocument();
   });
 

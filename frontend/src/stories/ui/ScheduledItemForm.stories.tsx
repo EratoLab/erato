@@ -172,6 +172,7 @@ export const ChannelRefused: Story = {
   args: {
     initialValues: fromTemplate,
     channelStatus: "not_set_up",
+    teamsAppName: "Acme Assistant",
     serverErrors: {
       channel: "This delivery channel can't reach you yet. Set it up first.",
     },
