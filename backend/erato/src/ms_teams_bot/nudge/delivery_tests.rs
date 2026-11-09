@@ -1,15 +1,17 @@
 //! The Teams side of a tip: the card reaches the user's personal
 //! conversation through the Connector, Connector refusals are mapped, and
 //! installing the app records the conversation for known users. A user
-//! reminder arrives as the committed sample card.
+//! reminder arrives as the committed sample card, and its buttons replace
+//! the card in place.
 use super::*;
 use crate::config::AppConfig;
 use crate::models::user::{get_or_create_user, record_entra_object_id};
 use crate::models::user_preference::teams_nudges_opted_out;
 use crate::ms_teams_bot::activity::{Activity, ConversationKind};
-use crate::ms_teams_bot::handler::{on_bot_added, on_message};
+use crate::ms_teams_bot::handler::{on_bot_added, on_message, settle_delivered_card};
+use crate::ms_teams_bot::streaming::ReplyTarget;
 use crate::services::scheduled_deliveries::{
-    ExecutorSettings, NewDelivery, find, run_delivery_tick, schedule,
+    ExecutorSettings, NewDelivery, run_delivery_tick, schedule,
 };
 use crate::services::scheduled_items::recurrence::{LocalTime, Trigger};
 use crate::services::scheduled_items::{
@@ -30,6 +32,8 @@ static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../sqitch/deploy");
 #[derive(Default)]
 struct FakeConnector {
     outgoing: Vec<(String, Value)>,
+    /// Replaced activities: conversation, activity id, new activity.
+    updated: Vec<(String, String, Value)>,
     answer: Option<(u16, Value)>,
 }
 
@@ -48,12 +52,29 @@ async fn connector_reply(
     }
 }
 
+async fn connector_update(
+    State(shared): State<Shared>,
+    Path((conversation, activity_id)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> (StatusCode, Json<Value>) {
+    shared
+        .lock()
+        .unwrap()
+        .updated
+        .push((conversation, activity_id.clone(), body));
+    (StatusCode::OK, Json(json!({"id": activity_id})))
+}
+
 async fn harness(pool: sqlx::PgPool) -> (AppState, Arc<TeamsBot>, Shared, String) {
     let shared: Shared = Arc::default();
     let routes = Router::new()
         .route(
             "/v3/conversations/{conversation}/activities",
             post(connector_reply),
+        )
+        .route(
+            "/v3/conversations/{conversation}/activities/{activity}",
+            axum::routing::put(connector_update),
         )
         .with_state(shared.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -163,10 +184,18 @@ async fn the_card_reaches_the_personal_conversation_and_refusals_are_mapped(pool
     let outcome = channel
         .deliver(&state.db, &user, &row, &content(token))
         .await;
+    let posted = DeliveryContent {
+        actions: Vec::new(),
+        ..content(token)
+    };
     assert_eq!(
         outcome,
         DeliveryOutcome::Delivered {
-            details: json!({"activity_id": "activity-1", "conversation_id": "a:personal"})
+            details: json!({
+                "activity_id": "activity-1",
+                "conversation_id": "a:personal",
+                "content": posted,
+            })
         }
     );
     let (conversation, activity) = shared.lock().unwrap().outgoing.remove(0);
@@ -516,29 +545,24 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
         ))
         .await
         .unwrap();
-    let mut registry = DeliveryRegistry::new();
-    registry.register_producer(Arc::new(ReminderProducer::new(Some(
-        "https://erato.example.com".into(),
-    ))));
-    registry.register_channel(Arc::new(TeamsPersonalChannel::new(bot)));
-    let executor = ExecutorSettings {
-        batch_size: 10,
-        claim_timeout: Duration::from_secs(300),
-        max_attempts: 3,
-        retry_delay: Duration::from_secs(60),
-    };
-    let tick = run_delivery_tick(&state.db, &executor, &registry).await;
+    let registry = reminder_registry(bot);
+    let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
     assert_eq!(tick.delivered, 1, "{tick:?}");
 
     let (conversation, activity) = shared.lock().unwrap().outgoing.remove(0);
     assert_eq!(conversation, "a:personal");
+    let token = submit_of(&activity, DONE_COMMAND)["token"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let mut sample = serde_json::to_string_pretty(&activity).unwrap();
     for (id, placeholder) in [
-        (chat_id, "CHAT_ID"),
-        (occurrence.id, "DELIVERY_ID"),
-        (item.id, "ITEM_ID"),
+        (chat_id.to_string(), "CHAT_ID"),
+        (occurrence.id.to_string(), "DELIVERY_ID"),
+        (item.id.to_string(), "ITEM_ID"),
+        (token, "TOKEN"),
     ] {
-        sample = sample.replace(&id.to_string(), placeholder);
+        sample = sample.replace(&id, placeholder);
     }
     sample.push('\n');
     let mut snapshot = insta::Settings::clone_current();
@@ -546,4 +570,353 @@ async fn a_reminder_arrives_as_the_sample_card(pool: sqlx::PgPool) {
     snapshot.bind(|| {
         insta::assert_binary_snapshot!("scheduled_reminder_card.json", sample.into_bytes())
     });
+}
+
+fn reminder_registry(bot: Arc<TeamsBot>) -> DeliveryRegistry {
+    let mut registry = DeliveryRegistry::new();
+    registry.register_producer(Arc::new(ReminderProducer::new(Some(
+        "https://erato.example.com".into(),
+    ))));
+    registry.register_channel(Arc::new(TeamsPersonalChannel::new(bot)));
+    registry
+}
+
+fn executor() -> ExecutorSettings {
+    ExecutorSettings {
+        batch_size: 10,
+        claim_timeout: Duration::from_secs(300),
+        max_attempts: 3,
+        retry_delay: Duration::from_secs(60),
+    }
+}
+
+/// The `data` of the card's button with this command.
+fn submit_of(activity: &Value, command: &str) -> Value {
+    activity["attachments"][0]["content"]["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|action| action["data"]["command"] == command)
+        .unwrap_or_else(|| panic!("no `{command}` button on {activity}"))["data"]
+        .clone()
+}
+
+fn buttons(activity: &Value) -> Vec<String> {
+    activity["attachments"][0]["content"]["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|action| action["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+async fn make_due(state: &AppState, id: Uuid) {
+    state
+        .db
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE scheduled_deliveries SET due_at = now() - interval '1 second' WHERE id = $1",
+            [id.into()],
+        ))
+        .await
+        .unwrap();
+}
+
+const REMINDER_OID: &str = "4a1b3c5d-0000-4000-8000-00000000f00d";
+
+/// A one-off reminder delivered as a card to a user known by Entra object
+/// id: the item, its occurrence and the card.
+async fn deliver_reminder(
+    state: &AppState,
+    bot: &Arc<TeamsBot>,
+    host: &Host,
+    shared: &Shared,
+    base: &str,
+) -> (ScheduledItem, Model, Value) {
+    let user = get_or_create_user(&state.db, "https://issuer.example", "snoozer", None)
+        .await
+        .unwrap();
+    record_entra_object_id(&state.db, &user, REMINDER_OID)
+        .await
+        .unwrap();
+    host.upsert_conversation(
+        "a:personal",
+        ConversationKind::Personal,
+        user.id,
+        base,
+        "29:user",
+    )
+    .await
+    .unwrap();
+    let item = scheduled_items::create(
+        &state.db,
+        user.id,
+        ItemInput {
+            kind: REMINDER.into(),
+            name: "Call Alex back".into(),
+            message: "Ask about the revised rates.".into(),
+            linked_chat_id: None,
+            channel: CHANNEL.into(),
+            trigger: Trigger::Once {
+                date: Utc::now().date_naive() + ChronoDuration::days(1),
+                time: LocalTime::new(9, 0).unwrap(),
+            },
+            time_zone: chrono_tz::Europe::Berlin,
+        },
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let occurrence = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    make_due(state, occurrence.id).await;
+    run_delivery_tick(&state.db, &executor(), &reminder_registry(bot.clone())).await;
+    let card = shared.lock().unwrap().outgoing[0].1.clone();
+    assert_eq!(buttons(&card), ["Done", "Snooze 30 min", "Tomorrow 9:00"]);
+    (item, occurrence, card)
+}
+
+/// The reminder user's press of a card button.
+fn press_on(base: &str, data: Value) -> Activity {
+    serde_json::from_value(json!({
+        "type": "message", "id": "m1", "serviceUrl": base, "value": data,
+        "from": {"id": "29:user", "aadObjectId": REMINDER_OID}, "recipient": {"id": "28:bot"},
+        "conversation": {"id": "a:personal", "conversationType": "personal", "tenantId": "tenant"}
+    }))
+    .unwrap()
+}
+
+/// Snooze on a delivered reminder replaces the card in place with a
+/// "Snoozed until" line and no buttons, and brings the reminder back as a
+/// card with its own token; Done closes that card and stores
+/// `acknowledged_at`. A used button gets a reply pointing to the Scheduled
+/// page. None of it needs a sign-in.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn reminder_buttons_replace_the_card_in_place(pool: sqlx::PgPool) {
+    let (state, mut bot, shared, base) = harness(pool).await;
+    Arc::get_mut(&mut bot).unwrap().settings.public_base_url =
+        Some("https://erato.example.com/".into());
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    let registry = reminder_registry(bot.clone());
+    let press = |data: Value| press_on(&base, data);
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let (conversation, activity_id, settled) = shared.lock().unwrap().updated[0].clone();
+    assert_eq!(
+        (conversation.as_str(), activity_id.as_str()),
+        ("a:personal", "activity-1")
+    );
+    assert_eq!(settled["id"], "activity-1");
+    let body = &settled["attachments"][0]["content"]["body"];
+    assert_eq!(body[0]["text"], "Call Alex back");
+    assert_eq!(body[1]["text"], "Ask about the revised rates.");
+    assert!(
+        body[2]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Snoozed until "),
+        "{body}"
+    );
+    assert!(buttons(&settled).is_empty());
+    assert_eq!(
+        shared.lock().unwrap().outgoing.len(),
+        1,
+        "the card changes; no message is added"
+    );
+    let redelivery = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    assert_ne!(redelivery.id, occurrence.id);
+    assert_eq!(
+        redelivery.dedupe_key.as_deref(),
+        Some(format!("{}:snooze", item.id).as_str())
+    );
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&card, DONE_COMMAND)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "This button was already used or has expired. You can find your reminders on the [Scheduled page](https://erato.example.com/scheduled)."
+    );
+
+    make_due(&state, redelivery.id).await;
+    let tick = run_delivery_tick(&state.db, &executor(), &registry).await;
+    assert_eq!(tick.delivered, 1, "{tick:?}");
+    let again = shared.lock().unwrap().outgoing[2].1.clone();
+    assert_eq!(again["summary"], "Call Alex back");
+    assert_ne!(
+        submit_of(&again, DONE_COMMAND)["token"],
+        submit_of(&card, DONE_COMMAND)["token"],
+        "the re-delivered card has its own token"
+    );
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press(submit_of(&again, DONE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[1].2.clone();
+    assert_eq!(
+        settled["attachments"][0]["content"]["body"][2]["text"],
+        "Marked as done."
+    );
+    assert!(buttons(&settled).is_empty());
+    let acknowledged = find(&state.db, redelivery.id).await.unwrap().unwrap();
+    assert!(
+        acknowledged.outcome["acknowledged_at"].is_string(),
+        "{}",
+        acknowledged.outcome
+    );
+    assert_eq!(shared.lock().unwrap().outgoing.len(), 3);
+}
+
+/// A press whose service call fails changes nothing and gives the token
+/// back: the card keeps its buttons, and the next press works.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_failed_press_leaves_the_card_usable(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    let set_zone = |zone: &'static str| {
+        let db = state.db.clone();
+        async move {
+            db.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE scheduled_items SET time_zone = $2 WHERE id = $1",
+                [item.id.into(), zone.into()],
+            ))
+            .await
+            .unwrap();
+        }
+    };
+    // The snooze fails inside its transaction on a zone it cannot read.
+    set_zone("Nowhere/Invalid").await;
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let sent = replies(&shared, 2).await;
+    assert_eq!(
+        sent[1]["text"],
+        "Something went wrong. Please try the button again."
+    );
+    assert!(shared.lock().unwrap().updated.is_empty());
+    let row = find(&state.db, occurrence.id).await.unwrap().unwrap();
+    assert!(
+        row.outcome.get("action_claimed_at").is_none()
+            && row.outcome.get("action_command").is_none(),
+        "{}",
+        row.outcome
+    );
+
+    set_zone("Europe/Berlin").await;
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert!(
+        settled["attachments"][0]["content"]["body"][2]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Snoozed until "),
+        "{settled}"
+    );
+    assert!(buttons(&settled).is_empty());
+}
+
+/// A snooze that went through stays a snooze when reading the user's time
+/// zone afterwards fails: the card settles with its "Snoozed until" line
+/// instead of an error reply, and the reminder comes back.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_committed_snooze_is_not_reported_as_an_error(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (item, occurrence, card) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    // The snooze never reads user preferences; only the note after it does.
+    state
+        .db
+        .execute_unprepared("ALTER TABLE user_preferences RENAME TO user_preferences_gone")
+        .await
+        .unwrap();
+
+    on_message(
+        bot.clone(),
+        host.clone(),
+        press_on(&base, submit_of(&card, SNOOZE_COMMAND)),
+    )
+    .await;
+    let outgoing: Vec<Value> = shared
+        .lock()
+        .unwrap()
+        .outgoing
+        .iter()
+        .map(|(_, activity)| activity.clone())
+        .collect();
+    assert_eq!(outgoing.len(), 1, "no message is added: {outgoing:?}");
+    let settled = shared.lock().unwrap().updated[0].2.clone();
+    assert!(
+        settled["attachments"][0]["content"]["body"][2]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Snoozed until "),
+        "{settled}"
+    );
+    assert!(buttons(&settled).is_empty());
+    let redelivery = current_occurrence(&state.db, &item).await.unwrap().unwrap();
+    assert_ne!(redelivery.id, occurrence.id);
+    assert_eq!(
+        redelivery.dedupe_key.as_deref(),
+        Some(format!("{}:snooze", item.id).as_str())
+    );
+}
+
+/// When the delivered card cannot be read back, its note still reaches the
+/// user, as a message.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "MIGRATOR")]
+async fn a_note_goes_out_as_a_message_when_the_card_cannot_be_read(pool: sqlx::PgPool) {
+    let (state, bot, shared, base) = harness(pool).await;
+    let host = Host::new(state.clone());
+    let (_, occurrence, _) = deliver_reminder(&state, &bot, &host, &shared, &base).await;
+    state.db.close_by_ref().await.unwrap();
+    let target = ReplyTarget {
+        connector: &bot.connector,
+        service_url: &base,
+        conversation_id: "a:personal",
+        reply_to_id: None,
+        mention: None,
+    };
+
+    settle_delivered_card(&host, &target, occurrence.id, "Snoozed until 9:30.")
+        .await
+        .unwrap();
+    let sent = replies(&shared, 2).await;
+    assert_eq!(sent[1]["text"], "Snoozed until 9:30.");
+    assert!(shared.lock().unwrap().updated.is_empty());
 }

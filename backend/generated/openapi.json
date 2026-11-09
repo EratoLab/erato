@@ -4208,7 +4208,7 @@
             }
           },
           "409": {
-            "description": "The item is over or nothing is waiting to be delivered",
+            "description": "The item is over (`finished`), nothing is waiting to be delivered (`nothing_to_snooze`), or a reminder snoozed after delivery would not come back before its next regular time (`next_occurrence_first`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -12340,6 +12340,7 @@
           "finished",
           "in_flight",
           "nothing_to_snooze",
+          "next_occurrence_first",
           "not_finished",
           "internal"
         ]

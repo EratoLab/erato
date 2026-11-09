@@ -27,6 +27,36 @@
             "type": "Action.OpenUrl",
             "title": "Q4 rate comparison",
             "url": "https://erato.example.com/chat/CHAT_ID"
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Done",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "done",
+              "token": "TOKEN"
+            }
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Snooze 30 min",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "snooze",
+              "token": "TOKEN"
+            }
+          },
+          {
+            "type": "Action.Submit",
+            "title": "Tomorrow 9:00",
+            "data": {
+              "action": "erato_delivery_action",
+              "delivery_id": "DELIVERY_ID",
+              "command": "tomorrow",
+              "token": "TOKEN"
+            }
           }
         ]
       }

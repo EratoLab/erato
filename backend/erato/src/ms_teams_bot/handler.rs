@@ -16,7 +16,10 @@ use super::nudge;
 use super::render::{self, Mention};
 use super::streaming::{PROGRESS_INTERVAL, ReplyTarget, StreamingReply, WORKING_STATUS};
 use super::user_token::sign_in_activity;
+use crate::services::scheduled_items::{self, Refusal, wording};
 use axum::http::StatusCode;
+use chrono::Utc;
+use chrono_tz::Tz;
 use eyre::{Report, eyre};
 use sea_orm::prelude::Uuid;
 use serde_json::{Value, json};
@@ -454,11 +457,13 @@ async fn on_control(
     }
 }
 
-/// A button on a delivered card (a tip's "Don't remind me"). The token is
-/// claimed once, for the user who got the card in the conversation it was
-/// sent to, so a forwarded or replayed card does nothing. No sign-in: an
-/// unsubscribe must work for someone whose Graph consent never completes,
-/// and the token already binds recipient and conversation.
+/// A button on a delivered card (a tip's "Don't remind me", a reminder's
+/// Done and snooze buttons). The token is claimed once, for the user who got
+/// the card in the conversation it was sent to, so a forwarded or replayed
+/// card does nothing. No sign-in: an unsubscribe must work for someone whose
+/// Graph consent never completes, and the token already binds recipient and
+/// conversation. A reminder's buttons call the services the Scheduled page
+/// calls and show the outcome on the card itself, which loses its buttons.
 async fn on_delivery_action(
     bot: &TeamsBot,
     host: &Host,
@@ -477,16 +482,132 @@ async fn on_delivery_action(
         .claim_delivery_action(user.id, conversation_id, &submit)
         .await?
     {
-        return target
-            .send_text("This button was already used or has expired.")
-            .await;
+        let text = match command {
+            nudge::DeliveryCommand::OptOut => {
+                "This button was already used or has expired.".to_string()
+            }
+            _ => reminder_button_gone_text(scheduled_page_url(bot).as_deref()),
+        };
+        return target.send_text(&text).await;
     }
-    match command {
+    let note = match run_delivery_command(host, user.id, submit.delivery_id, command).await {
+        Ok(Some(note)) => note,
+        Ok(None) => return target.send_text(&reminders_text(bot, false)).await,
+        Err(error) => {
+            // Nothing changed, so the press may be tried again.
+            tracing::error!(%error, delivery_id = %submit.delivery_id, "A delivered card's button failed");
+            if let Err(error) = host.release_delivery_action(&submit).await {
+                tracing::warn!(%error, delivery_id = %submit.delivery_id, "Could not release a delivered card's button");
+            }
+            return target.send_text(BUTTON_FAILED).await;
+        }
+    };
+    settle_delivered_card(host, target, submit.delivery_id, &note).await
+}
+
+/// Call the service behind a claimed button. `Err` only when that call
+/// failed and changed nothing; a refusal is a note like any outcome. `None`
+/// for the opt-out, which answers with a message instead of a note.
+async fn run_delivery_command(
+    host: &Host,
+    user_id: Uuid,
+    delivery_id: Uuid,
+    command: nudge::DeliveryCommand,
+) -> Result<Option<String>, Report> {
+    let (item, until) = match command {
         nudge::DeliveryCommand::OptOut => {
-            host.set_teams_nudges_opt_out(user.id, true).await?;
-            target.send_text(&reminders_text(bot, false)).await
+            host.set_teams_nudges_opt_out(user_id, true).await?;
+            return Ok(None);
+        }
+        nudge::DeliveryCommand::Done => {
+            return Ok(Some(
+                match host.acknowledge_reminder(user_id, delivery_id).await? {
+                    Ok(_) => REMINDER_DONE_NOTE.to_string(),
+                    Err(refusal) => reminder_refusal_note(refusal).to_string(),
+                },
+            ));
+        }
+        nudge::DeliveryCommand::Snooze(choice) => match host
+            .snooze_delivered_reminder(user_id, delivery_id, choice)
+            .await?
+        {
+            Ok(snoozed) => snoozed,
+            Err(refusal) => return Ok(Some(reminder_refusal_note(refusal).to_string())),
+        },
+    };
+    // The snooze is committed; from here on nothing may fail.
+    let user_zone = host
+        .stored_time_zone(user_id)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(%error, "Could not read the user's time zone");
+            None
+        });
+    let zone = scheduled_items::zone_of(&item).unwrap_or(user_zone.unwrap_or(Tz::UTC));
+    Ok(Some(format!(
+        "Snoozed until {}.",
+        wording::when(until, zone, user_zone, Utc::now())
+    )))
+}
+
+/// Replace a delivered card with its settled form; when that fails, the note
+/// goes out as a message.
+pub(super) async fn settle_delivered_card(
+    host: &Host,
+    target: &ReplyTarget<'_>,
+    delivery_id: Uuid,
+    note: &str,
+) -> Result<(), Report> {
+    match host.delivered_card(delivery_id).await {
+        Ok(Some((activity_id, content))) => {
+            let card = nudge::settled_delivery_card(&content, delivery_id, note);
+            match target.update(&activity_id, card).await {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    tracing::warn!(%error, %delivery_id, "Could not replace a delivered card")
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, %delivery_id, "Could not read a delivered card"),
+    }
+    target.send_text(note).await
+}
+
+fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+    bot.settings
+        .public_base_url
+        .as_deref()
+        .map(|base| format!("{}/scheduled", base.trim_end_matches('/')))
+}
+
+const REMINDER_DONE_NOTE: &str = "Marked as done.";
+const BUTTON_FAILED: &str = "Something went wrong. Please try the button again.";
+
+/// Why a reminder's button did nothing, shown on the card in its place.
+fn reminder_refusal_note(refusal: Refusal) -> &'static str {
+    match refusal {
+        Refusal::NotFound => "This reminder no longer exists.",
+        Refusal::Finished => "This reminder was cancelled.",
+        Refusal::InFlight => "Not snoozed: this reminder is arriving right now.",
+        Refusal::NextOccurrenceFirst => {
+            "Not snoozed: this reminder is due again by then, or already was."
+        }
+        Refusal::NoFutureOccurrence => "Not snoozed: that time has passed.",
+        Refusal::NothingToSnooze | Refusal::NotFinished => {
+            "This reminder cannot be changed right now."
         }
     }
+}
+
+fn reminder_button_gone_text(scheduled_url: Option<&str>) -> String {
+    let page = match scheduled_url {
+        Some(url) => format!("[Scheduled page]({url})"),
+        None => "Scheduled page".to_string(),
+    };
+    format!(
+        "This button was already used or has expired. You can find your reminders on the {page}."
+    )
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
@@ -1396,6 +1517,23 @@ mod tests {
             approvals: None,
             needs_client: false,
         }
+    }
+
+    #[test]
+    fn a_gone_reminder_button_points_to_the_scheduled_page() {
+        assert_eq!(
+            reminder_button_gone_text(Some("https://erato.example.com/scheduled")),
+            "This button was already used or has expired. You can find your reminders on the [Scheduled page](https://erato.example.com/scheduled)."
+        );
+        assert!(reminder_button_gone_text(None).ends_with("on the Scheduled page."));
+    }
+
+    #[test]
+    fn a_snooze_after_the_next_occurrence_is_refused_as_due_again() {
+        assert_eq!(
+            reminder_refusal_note(Refusal::NextOccurrenceFirst),
+            "Not snoozed: this reminder is due again by then, or already was."
+        );
     }
 
     #[test]

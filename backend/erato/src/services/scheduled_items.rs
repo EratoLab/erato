@@ -12,22 +12,30 @@
 //! item (`occurrence_at`), not from when the last one went out, so snoozing
 //! moves only the current occurrence. Edits that change the trigger
 //! reschedule the open occurrence; cancelling ends the series.
+//!
+//! Snoozing a reminder after it arrived (from its card) brings back that one
+//! reminder as a re-delivery row of its own, keyed `{item_id}:snooze`, so the
+//! regular occurrence keeps its row and the dedupe index stays one open row
+//! per key. Everything that asks for the item's open occurrence sees the
+//! re-delivery too, and the producer leaves the item alone until it settles.
 
 pub mod recurrence;
+pub mod wording;
 
 use crate::db::entity::prelude::{Chats, ScheduledItems};
 use crate::db::entity::scheduled_deliveries::{self, CreatedBy, DeliveryState};
 use crate::db::entity::scheduled_items::{self, ItemStatus, Model};
 use crate::models::chat::resolve_chat_display_name;
+use crate::models::user_preference::user_time_zone;
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
-    DeliveryContent, DeliveryLink, DeliveryProducer, NewDelivery, ResolvedContent, StillDue,
-    cancel_open, schedule, snooze,
+    self as deliveries, DeliveryAction, DeliveryContent, DeliveryLink, DeliveryProducer,
+    NewDelivery, ResolvedContent, StillDue, cancel_open, schedule, snooze, store_action_token,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveTime, SecondsFormat, SubsecRound, Utc};
 use chrono_tz::Tz;
 use eyre::{Report, eyre};
-use recurrence::Trigger;
+use recurrence::{Trigger, local_time, resolve_local};
 use sea_orm::prelude::Uuid;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend,
@@ -45,9 +53,69 @@ pub const MAX_ACTIVE_ITEMS: u64 = 10;
 /// Items one `produce` pass advances; the rest wait for the next tick.
 const PRODUCE_BATCH: i64 = 200;
 const OPEN_STATES: &str = "('pending', 'claimed', 'snoozed')";
+const REDELIVERY_SUFFIX: &str = ":snooze";
+/// Commands of the buttons on a delivered reminder's card.
+pub const DONE_COMMAND: &str = "done";
+pub const SNOOZE_COMMAND: &str = "snooze";
+pub const TOMORROW_COMMAND: &str = "tomorrow";
+/// The hour "Tomorrow" brings a reminder back at, as the web's
+/// `SCHEDULED_SNOOZE_HOUR`.
+pub const SNOOZE_HOUR: u32 = 9;
+const SNOOZE_MINUTES: i64 = 30;
 
 fn statement(id: &'static str, sql: &str, values: Vec<sea_orm::Value>) -> Statement {
     named_statement_from_sql_and_values(DbBackend::Postgres, id, sql, values)
+}
+
+fn redelivery_key(item_id: Uuid) -> String {
+    format!("{item_id}{REDELIVERY_SUFFIX}")
+}
+
+/// The item a row belongs to, whether a regular occurrence or a re-delivery.
+fn item_key(dedupe_key: &str) -> &str {
+    dedupe_key
+        .strip_suffix(REDELIVERY_SUFFIX)
+        .unwrap_or(dedupe_key)
+}
+
+fn item_id_of(row: &scheduled_deliveries::Model) -> Option<Uuid> {
+    row.payload
+        .get("item_id")
+        .and_then(Value::as_str)
+        .or(row.dedupe_key.as_deref().map(item_key))
+        .and_then(|id| Uuid::parse_str(id).ok())
+}
+
+/// When a delivered reminder comes back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnoozeChoice {
+    /// In 30 minutes.
+    HalfAnHour,
+    /// Tomorrow at [`SNOOZE_HOUR`] in the item's zone.
+    TomorrowMorning,
+}
+
+impl SnoozeChoice {
+    pub const ALL: [Self; 2] = [Self::HalfAnHour, Self::TomorrowMorning];
+
+    pub fn until(self, zone: Tz, now: DateTime<Utc>) -> DateTime<Utc> {
+        match self {
+            // As Postgres stores it, so the time returned is the one kept.
+            Self::HalfAnHour => (now + chrono::Duration::minutes(SNOOZE_MINUTES)).trunc_subsecs(6),
+            Self::TomorrowMorning => {
+                let tomorrow = local_time(zone, now).date() + chrono::Duration::days(1);
+                let morning = NaiveTime::from_hms_opt(SNOOZE_HOUR, 0, 0).unwrap_or_default();
+                resolve_local(zone, tomorrow.and_time(morning))
+            }
+        }
+    }
+
+    pub fn command(self) -> &'static str {
+        match self {
+            Self::HalfAnHour => SNOOZE_COMMAND,
+            Self::TomorrowMorning => TOMORROW_COMMAND,
+        }
+    }
 }
 
 /// Why a change to an item was not made.
@@ -64,6 +132,9 @@ pub enum Refusal {
     InFlight,
     /// There is no open occurrence to snooze.
     NothingToSnooze,
+    /// A reminder snoozed after delivery would not come back before its next
+    /// regular occurrence, or that occurrence already came.
+    NextOccurrenceFirst,
     /// The item may still deliver something, so it cannot be deleted.
     NotFinished,
 }
@@ -153,7 +224,31 @@ pub async fn update(
         || item.time_zone != input.time_zone.name();
     let mut occurrence_at = item.occurrence_at;
     if rescheduled {
-        match lock_current_occurrence(&txn, &item).await? {
+        let (regular, redelivery) = lock_open_occurrences(&txn, &item).await?;
+        // A new schedule replaces a snooze after delivery as it replaces one
+        // before; a one-off's re-delivery is all that is left of it, so it
+        // moves instead.
+        let current = match (regular, redelivery) {
+            (None, Some(redelivery))
+                if matches!(input.trigger, Trigger::Once { .. }) || !redelivery.state.is_open() =>
+            {
+                Some(redelivery)
+            }
+            (regular, redelivery) => {
+                if redelivery.is_some() {
+                    cancel_open(
+                        &txn,
+                        item.user_id,
+                        Some(&item.kind),
+                        Some(&redelivery_key(item.id)),
+                        "replaced by a new schedule",
+                    )
+                    .await?;
+                }
+                regular
+            }
+        };
+        match current {
             Some(row) if row.state.is_open() => {
                 // The open occurrence is replaced, so it does not count.
                 let before = count_of(&item).saturating_sub(1);
@@ -209,41 +304,53 @@ pub async fn cancel(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Ch
     let mut model = item.into_active_model();
     model.status = ActiveValue::Set(ItemStatus::Cancelled);
     let item = model.update(&txn).await?;
-    cancel_open(
-        &txn,
-        item.user_id,
-        Some(&item.kind),
-        Some(&item.id.to_string()),
-        "cancelled by the user",
-    )
-    .await?;
+    for key in [item.id.to_string(), redelivery_key(item.id)] {
+        cancel_open(
+            &txn,
+            item.user_id,
+            Some(&item.kind),
+            Some(&key),
+            "cancelled by the user",
+        )
+        .await?;
+    }
     txn.commit().await?;
     Ok(Ok(item))
 }
 
-/// Move the item's open occurrence to `until`. The next occurrence keeps
-/// its regular time.
+/// Move the item's open occurrence (the one arriving first, which may be a
+/// re-delivery) to `until`. The next occurrence keeps its regular time, and
+/// a re-delivery only moves to a time before it, as from its card.
 pub async fn snooze_occurrence(
     db: &DatabaseConnection,
     user_id: Uuid,
     item_id: Uuid,
     until: DateTime<Utc>,
 ) -> Change<Model> {
-    let Some(item) = find(db, user_id, item_id).await? else {
+    let txn = db.begin().await?;
+    let Some(item) = lock(&txn, Some(user_id), item_id).await? else {
         return Ok(Err(Refusal::NotFound));
     };
     if item.status != ItemStatus::Active {
         return Ok(Err(Refusal::Finished));
     }
-    let Some(row) = current_occurrence(db, &item)
+    let Some(row) = current_occurrence(&txn, &item)
         .await?
         .filter(|row| row.state.is_open())
     else {
         return Ok(Err(Refusal::NothingToSnooze));
     };
-    if !snooze(db, row.id, until).await? {
+    if row.dedupe_key.as_deref() == Some(redelivery_key(item.id).as_str())
+        && !next_regular_after(&txn, &item, &row, Utc::now())
+            .await?
+            .allows(until)
+    {
+        return Ok(Err(Refusal::NextOccurrenceFirst));
+    }
+    if !snooze(&txn, row.id, until).await? {
         return Ok(Err(Refusal::NothingToSnooze));
     }
+    txn.commit().await?;
     Ok(Ok(item))
 }
 
@@ -271,17 +378,201 @@ pub async fn delete(db: &DatabaseConnection, user_id: Uuid, item_id: Uuid) -> Ch
     txn.execute_raw(statement(
         "scheduled_items.delete_occurrences",
         "DELETE FROM scheduled_deliveries
-         WHERE user_id = $1 AND kind = $2 AND dedupe_key = $3",
+         WHERE user_id = $1 AND kind = $2 AND dedupe_key IN ($3, $4)",
         vec![
             item.user_id.into(),
             item.kind.clone().into(),
             item.id.to_string().into(),
+            redelivery_key(item.id).into(),
         ],
     ))
     .await?;
     ScheduledItems::delete_by_id(item.id).exec(&txn).await?;
     txn.commit().await?;
     Ok(Ok(()))
+}
+
+/// The user pressed Done on a delivered reminder's card. Only
+/// `outcome.acknowledged_at` is stored: the page's Done means the reminder
+/// happened as planned, so the item's status and schedule stay as they are.
+pub async fn acknowledge(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    delivery_id: Uuid,
+) -> Change<Model> {
+    let Some(row) = deliveries::find(db, delivery_id)
+        .await?
+        .filter(|row| row.user_id == user_id && row.state == DeliveryState::Delivered)
+    else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    let item = match item_id_of(&row) {
+        Some(item_id) => find(db, user_id, item_id).await?,
+        None => None,
+    };
+    let Some(item) = item.filter(|item| item.kind == row.kind) else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    db.execute_raw(statement(
+        "scheduled_items.acknowledge",
+        "UPDATE scheduled_deliveries
+         SET outcome = outcome || jsonb_build_object('acknowledged_at', $2::text)
+         WHERE id = $1 AND state = 'delivered' AND outcome->'acknowledged_at' IS NULL",
+        vec![
+            row.id.into(),
+            Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true).into(),
+        ],
+    ))
+    .await?;
+    Ok(Ok(item))
+}
+
+/// Bring a delivered reminder back at `choice`'s time, as a re-delivery of
+/// its own; the regular schedule stays. The time must come before the item's
+/// next regular occurrence, so two cards for the same reminder are never out
+/// at once. An item that has ended is active again until the re-delivery is
+/// settled. Returns the item and the time it comes back.
+pub async fn snooze_delivered(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    delivery_id: Uuid,
+    choice: SnoozeChoice,
+) -> Change<(Model, DateTime<Utc>)> {
+    let txn = db.begin().await?;
+    let Some(row) = deliveries::find(&txn, delivery_id)
+        .await?
+        .filter(|row| row.user_id == user_id)
+    else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    let item = match item_id_of(&row) {
+        Some(item_id) => lock(&txn, Some(user_id), item_id).await?,
+        None => None,
+    };
+    let Some(item) = item.filter(|item| item.kind == row.kind) else {
+        return Ok(Err(Refusal::NotFound));
+    };
+    if item.status == ItemStatus::Cancelled {
+        return Ok(Err(Refusal::Finished));
+    }
+    if row.state != DeliveryState::Delivered {
+        return Ok(Err(Refusal::NothingToSnooze));
+    }
+    let now = Utc::now();
+    let until = choice.until(zone_of(&item)?, now);
+    if !next_regular_after(&txn, &item, &row, now)
+        .await?
+        .allows(until)
+    {
+        return Ok(Err(Refusal::NextOccurrenceFirst));
+    }
+    let redelivery = match lock_open_occurrences(&txn, &item).await?.1 {
+        Some(open) if !open.state.is_open() => return Ok(Err(Refusal::InFlight)),
+        // Another card of the item was snoozed and has not come back yet.
+        Some(open) => open,
+        None => schedule(
+            &txn,
+            NewDelivery {
+                user_id,
+                kind: item.kind.clone(),
+                due_at: until,
+                created_by: CreatedBy::User,
+                origin: json!({"scheduled_item_id": item.id, "snoozed_from": row.id}),
+                payload: json!({
+                    "item_id": item.id,
+                    "occurrence": row.payload.get("occurrence"),
+                    "scheduled_for": row.payload.get("scheduled_for"),
+                    "snoozed_from": row.id,
+                }),
+                dedupe_key: Some(redelivery_key(item.id)),
+            },
+        )
+        .await?
+        .ok_or_else(|| eyre!("a re-delivery appeared while its item was locked"))?,
+    };
+    snooze(&txn, redelivery.id, until).await?;
+    let item = if item.status == ItemStatus::Ended {
+        let mut model = item.into_active_model();
+        model.status = ActiveValue::Set(ItemStatus::Active);
+        model.update(&txn).await?
+    } else {
+        item
+    };
+    txn.commit().await?;
+    Ok(Ok((item, until)))
+}
+
+/// The snooze buttons a delivered card offers: those whose time comes before
+/// the item's next regular occurrence.
+pub async fn snooze_choices<C: ConnectionTrait>(
+    db: &C,
+    item: &Model,
+    row: &scheduled_deliveries::Model,
+    now: DateTime<Utc>,
+) -> Result<Vec<SnoozeChoice>, Report> {
+    let next = next_regular_after(db, item, row, now).await?;
+    let zone = zone_of(item)?;
+    Ok(SnoozeChoice::ALL
+        .into_iter()
+        .filter(|choice| next.allows(choice.until(zone, now)))
+        .collect())
+}
+
+/// The regular occurrence after the one a delivered card carried.
+enum NextRegular {
+    None,
+    At(DateTime<Utc>),
+    /// It was delivered (or settled) already, so the card is out of date.
+    AlreadyCame,
+}
+
+impl NextRegular {
+    fn allows(&self, until: DateTime<Utc>) -> bool {
+        match self {
+            Self::None => true,
+            Self::At(next) => until < *next,
+            Self::AlreadyCame => false,
+        }
+    }
+}
+
+/// What follows the occurrence `row` carried: the next regular row's time,
+/// or the time the producer will give it.
+async fn next_regular_after<C: ConnectionTrait>(
+    db: &C,
+    item: &Model,
+    row: &scheduled_deliveries::Model,
+    now: DateTime<Utc>,
+) -> Result<NextRegular, Report> {
+    let count = count_of(item);
+    let carried = row
+        .payload
+        .get("occurrence")
+        .and_then(Value::as_u64)
+        .and_then(|number| u32::try_from(number).ok())
+        .unwrap_or(count);
+    if count > carried + 1 {
+        return Ok(NextRegular::AlreadyCame);
+    }
+    let (regular, _) = open_occurrences(db, item, "scheduled_items.open_occurrences", "").await?;
+    if let Some(regular) = regular.filter(|regular| regular.id != row.id) {
+        return Ok(NextRegular::At(regular.due_at.with_timezone(&Utc)));
+    }
+    if count > carried {
+        return Ok(NextRegular::AlreadyCame);
+    }
+    if item.status != ItemStatus::Active {
+        return Ok(NextRegular::None);
+    }
+    let after = item
+        .occurrence_at
+        .map_or(now, |at| at.with_timezone(&Utc).max(now));
+    Ok(
+        match trigger_of(item)?.next_after(zone_of(item)?, after, count) {
+            Some(at) => NextRegular::At(at),
+            None => NextRegular::None,
+        },
+    )
 }
 
 async fn find(
@@ -306,7 +597,8 @@ pub enum DisplayStatus {
     Cancelled,
 }
 
-/// An item with its open occurrence and its latest settled one.
+/// An item with its open occurrence (the one arriving first, a re-delivery
+/// included) and its latest settled one.
 #[derive(Debug, Clone)]
 pub struct ItemView {
     pub item: Model,
@@ -315,8 +607,10 @@ pub struct ItemView {
 }
 
 /// The one place that maps an item and its occurrences to what the page
-/// shows. "Done" means delivered; whether it should mean "the user pressed
-/// Done" is still open, and `acknowledged_at` is reported separately.
+/// shows. Done means the reminder happened as planned (delivered): the Done
+/// button on its card only closes that card and is reported as
+/// `acknowledged_at`, so a user who never presses it does not see the
+/// reminder as unfinished.
 pub fn display_status(view: &ItemView, now: DateTime<Utc>) -> DisplayStatus {
     if view.item.status == ItemStatus::Cancelled {
         return DisplayStatus::Cancelled;
@@ -421,28 +715,38 @@ async fn views(
     if items.is_empty() {
         return Ok(Vec::new());
     }
-    let ids = items
+    let keys = items
         .iter()
-        .map(|item| item.id.to_string())
+        .flat_map(|item| [item.id.to_string(), redelivery_key(item.id)])
         .collect::<Vec<_>>()
         .join(",");
-    // Per item, the open occurrence and the newest settled one.
+    // Per item, over its regular rows and its re-deliveries: the open row
+    // that arrives first and the settled one that was due last. A re-delivery
+    // can be created before the next regular row and settle after it, so
+    // creation order does not tell which is the latest. A cancelled
+    // re-delivery is a snooze that was dropped, not an outcome.
     let sql = format!(
-        "SELECT DISTINCT ON (dedupe_key, state IN {OPEN_STATES}) *
+        "SELECT DISTINCT ON (split_part(dedupe_key, ':', 1), state IN {OPEN_STATES}) *
          FROM scheduled_deliveries
          WHERE user_id = $1 AND dedupe_key = ANY(string_to_array($2, ','))
-         ORDER BY dedupe_key, state IN {OPEN_STATES}, created_at DESC, id DESC"
+           AND NOT (state = 'cancelled' AND dedupe_key LIKE '%{REDELIVERY_SUFFIX}')
+         ORDER BY split_part(dedupe_key, ':', 1), state IN {OPEN_STATES},
+                  CASE WHEN state IN {OPEN_STATES} THEN due_at END ASC, due_at DESC, id DESC"
     );
     let rows = scheduled_deliveries::Model::find_by_statement(statement(
         "scheduled_items.occurrences",
         &sql,
-        vec![user_id.into(), ids.into()],
+        vec![user_id.into(), keys.into()],
     ))
     .all(db)
     .await?;
     let mut by_item: HashMap<String, (Option<_>, Option<_>)> = HashMap::new();
     for row in rows {
-        let Some(key) = row.dedupe_key.clone() else {
+        let Some(key) = row
+            .dedupe_key
+            .as_deref()
+            .map(|key| item_key(key).to_string())
+        else {
             continue;
         };
         let entry = by_item.entry(key).or_default();
@@ -468,49 +772,76 @@ async fn views(
         .collect())
 }
 
-/// The item's occurrence that is not settled yet, if any.
+/// The item's occurrence that is not settled yet, if any: of a regular one
+/// and a re-delivery, the one that arrives first.
 pub async fn current_occurrence<C: ConnectionTrait>(
     db: &C,
     item: &Model,
 ) -> Result<Option<scheduled_deliveries::Model>, Report> {
-    occurrence_query(db, item, "scheduled_items.current_occurrence", "").await
+    let (regular, redelivery) =
+        open_occurrences(db, item, "scheduled_items.current_occurrence", "").await?;
+    Ok(match (regular, redelivery) {
+        (Some(regular), Some(redelivery)) => Some(if redelivery.due_at < regular.due_at {
+            redelivery
+        } else {
+            regular
+        }),
+        (regular, redelivery) => regular.or(redelivery),
+    })
 }
 
-async fn lock_current_occurrence<C: ConnectionTrait>(
+async fn lock_open_occurrences<C: ConnectionTrait>(
     db: &C,
     item: &Model,
-) -> Result<Option<scheduled_deliveries::Model>, Report> {
-    occurrence_query(
+) -> Result<OpenOccurrences, Report> {
+    open_occurrences(
         db,
         item,
-        "scheduled_items.lock_current_occurrence",
+        "scheduled_items.lock_open_occurrences",
         "FOR UPDATE",
     )
     .await
 }
 
-async fn occurrence_query<C: ConnectionTrait>(
+/// The item's open regular occurrence and its open re-delivery.
+type OpenOccurrences = (
+    Option<scheduled_deliveries::Model>,
+    Option<scheduled_deliveries::Model>,
+);
+
+async fn open_occurrences<C: ConnectionTrait>(
     db: &C,
     item: &Model,
     id: &'static str,
     lock: &str,
-) -> Result<Option<scheduled_deliveries::Model>, Report> {
+) -> Result<OpenOccurrences, Report> {
     let sql = format!(
         "SELECT * FROM scheduled_deliveries
-         WHERE user_id = $1 AND kind = $2 AND dedupe_key = $3 AND state IN {OPEN_STATES}
+         WHERE user_id = $1 AND kind = $2 AND dedupe_key IN ($3, $4) AND state IN {OPEN_STATES}
          {lock}"
     );
-    Ok(scheduled_deliveries::Model::find_by_statement(statement(
+    let regular_key = item.id.to_string();
+    let mut open = (None, None);
+    for row in scheduled_deliveries::Model::find_by_statement(statement(
         id,
         &sql,
         vec![
             item.user_id.into(),
             item.kind.clone().into(),
-            item.id.to_string().into(),
+            regular_key.clone().into(),
+            redelivery_key(item.id).into(),
         ],
     ))
-    .one(db)
-    .await?)
+    .all(db)
+    .await?
+    {
+        if row.dedupe_key.as_deref() == Some(regular_key.as_str()) {
+            open.0 = Some(row);
+        } else {
+            open.1 = Some(row);
+        }
+    }
+    Ok(open)
 }
 
 async fn lock<C: ConnectionTrait>(
@@ -571,7 +902,8 @@ async fn reschedule<C: ConnectionTrait>(
     Ok(())
 }
 
-/// Give an active item without an open occurrence its next one, or end it.
+/// Give an active item without an open occurrence (a re-delivery counts) its
+/// next one, or end it.
 /// The item's row lock serializes replicas that picked the same item, so
 /// they create one occurrence between them. Returns whether one was created.
 async fn advance(db: &DatabaseConnection, item_id: Uuid) -> Result<bool, Report> {
@@ -638,13 +970,7 @@ impl ReminderProducer {
         db: &DatabaseConnection,
         row: &scheduled_deliveries::Model,
     ) -> Result<Option<Model>, Report> {
-        let Some(item_id) = row
-            .payload
-            .get("item_id")
-            .and_then(Value::as_str)
-            .or(row.dedupe_key.as_deref())
-            .and_then(|id| Uuid::parse_str(id).ok())
-        else {
+        let Some(item_id) = item_id_of(row) else {
             return Ok(None);
         };
         Ok(ScheduledItems::find_by_id(item_id)
@@ -672,7 +998,8 @@ impl DeliveryProducer for ReminderProducer {
                AND NOT EXISTS (
                    SELECT 1 FROM scheduled_deliveries d
                    WHERE d.user_id = i.user_id AND d.kind = i.kind
-                     AND d.dedupe_key = i.id::text AND d.state IN {OPEN_STATES})
+                     AND d.dedupe_key IN (i.id::text, i.id::text || '{REDELIVERY_SUFFIX}')
+                     AND d.state IN {OPEN_STATES})
              ORDER BY i.occurrence_at NULLS FIRST
              LIMIT $2"
         );
@@ -739,6 +1066,26 @@ impl DeliveryProducer for ReminderProducer {
             })
             .into_iter()
             .collect();
+        // One token for the card: the first button pressed wins.
+        let token = Uuid::new_v4();
+        store_action_token(db, row, token).await?;
+        let zone = zone_of(&item)?;
+        let user_zone = user_time_zone(db, &item.user_id).await?;
+        let mut actions = vec![DeliveryAction {
+            title: wording::DONE_BUTTON.to_string(),
+            command: DONE_COMMAND.to_string(),
+            token: Some(token),
+        }];
+        actions.extend(
+            snooze_choices(db, &item, row, Utc::now())
+                .await?
+                .into_iter()
+                .map(|choice| DeliveryAction {
+                    title: wording::snooze_button(choice, zone, user_zone),
+                    command: choice.command().to_string(),
+                    token: Some(token),
+                }),
+        );
         Ok(ResolvedContent {
             channel: item.channel.clone(),
             content: DeliveryContent {
@@ -746,7 +1093,7 @@ impl DeliveryProducer for ReminderProducer {
                 text: item.message.clone(),
                 summary: Some(item.name),
                 links,
-                actions: Vec::new(),
+                actions,
             },
         })
     }

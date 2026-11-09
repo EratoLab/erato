@@ -17,12 +17,12 @@ use crate::db::entity::prelude::{ScheduledDeliveries, Users};
 use crate::db::entity::scheduled_deliveries::{CreatedBy, DeliveryState, Model};
 use crate::db::entity::users;
 use crate::metrics_constants::{
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_CANCEL, POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED, POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM, POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE,
-    POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_ARM_ACTIONS, POSTGRES_QUERY_SCHEDULED_DELIVERY_CANCEL,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_CLAIM, POSTGRES_QUERY_SCHEDULED_DELIVERY_COUNT_DELIVERED,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_DEFER, POSTGRES_QUERY_SCHEDULED_DELIVERY_RECLAIM,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_RETRY, POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SCHEDULE_ONCE, POSTGRES_QUERY_SCHEDULED_DELIVERY_SETTLE,
+    POSTGRES_QUERY_SCHEDULED_DELIVERY_SNOOZE, POSTGRES_QUERY_SCHEDULED_DELIVERY_TOUCH,
 };
 use crate::query_metrics::named_statement_from_sql_and_values;
 use chrono::{DateTime, FixedOffset, Utc};
@@ -402,8 +402,8 @@ pub async fn cancel_open<C: ConnectionTrait>(
 /// Move an open row to a later time. `false` when the row is not open (in
 /// flight or settled). Each snooze is counted in the outcome, and the
 /// snoozed time becomes the occurrence's due time (see [`occurrence_due_at`]).
-pub async fn snooze(
-    db: &DatabaseConnection,
+pub async fn snooze<C: ConnectionTrait>(
+    db: &C,
     id: Uuid,
     until: DateTime<Utc>,
 ) -> Result<bool, Report> {
@@ -442,8 +442,48 @@ pub async fn count_delivered(
     Ok(count.map(|row| row.count.max(0) as u64).unwrap_or(0))
 }
 
-pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>, Report> {
+pub async fn find<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Option<Model>, Report> {
     Ok(ScheduledDeliveries::find_by_id(id).one(db).await?)
+}
+
+/// How long the buttons on a delivered card stay usable.
+pub const ACTION_TTL_DAYS: i32 = 30;
+
+/// Arm the card a claimed row is about to become with its single-use token
+/// (see [`DeliveryAction`]), fenced on the claim so a lost claim cannot arm
+/// a card for a row someone else delivers. A press recorded for an earlier
+/// token does not carry over to the new one.
+pub async fn store_action_token(
+    db: &DatabaseConnection,
+    row: &Model,
+    token: Uuid,
+) -> Result<(), Report> {
+    let claim_token = row
+        .claim_token
+        .clone()
+        .ok_or_else(|| eyre::eyre!("card actions armed for an unclaimed row"))?;
+    let result = db
+        .execute_raw(statement(
+            POSTGRES_QUERY_SCHEDULED_DELIVERY_ARM_ACTIONS,
+            "UPDATE scheduled_deliveries
+             SET outcome = (outcome - 'action_claimed_at' - 'action_command') || jsonb_build_object(
+                 'action_token', $3::text,
+                 'action_expires_at', (now() + make_interval(days => $4))::text)
+             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
+            vec![
+                row.id.into(),
+                claim_token.into(),
+                token.to_string().into(),
+                ACTION_TTL_DAYS.into(),
+            ],
+        ))
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(eyre::eyre!(
+            "the delivery claim was lost before the card was built"
+        ));
+    }
+    Ok(())
 }
 
 /// When the row's occurrence was due: the time it was scheduled for, or

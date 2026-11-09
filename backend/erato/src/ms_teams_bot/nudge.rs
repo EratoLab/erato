@@ -15,14 +15,18 @@ use super::host::Host;
 use super::render;
 use crate::db::entity::prelude::MsTeamsConversations;
 use crate::db::entity::scheduled_deliveries::{CreatedBy, Model};
+use crate::db::entity::scheduled_items::Model as ScheduledItem;
 use crate::db::entity::{ms_teams_conversations, users};
 use crate::distribution::runtime::ReloadableAppState;
-use crate::models::user_preference::set_teams_nudges_opt_out;
+use crate::models::user_preference::{set_teams_nudges_opt_out, user_time_zone};
 use crate::query_metrics::named_statement_from_sql_and_values;
 use crate::services::scheduled_deliveries::{
     DeliveryAction, DeliveryChannel, DeliveryContent, DeliveryLink, DeliveryOutcome,
     DeliveryProducer, DeliveryRegistry, NewDelivery, ResolvedContent, StillDue, count_delivered,
-    schedule_once,
+    find, schedule_once, store_action_token,
+};
+use crate::services::scheduled_items::{
+    self, Change, DONE_COMMAND, SNOOZE_COMMAND, SnoozeChoice, TOMORROW_COMMAND,
 };
 use chrono::{
     DateTime, Datelike, Duration as ChronoDuration, FixedOffset, TimeZone, Timelike, Utc,
@@ -52,8 +56,6 @@ pub const OPT_OUT_COMMAND: &str = "opt_out";
 /// The producer rule runs at most this often per replica; the dedupe key
 /// keeps several replicas from scheduling the same tip.
 const PRODUCE_INTERVAL: Duration = Duration::from_secs(60 * 60);
-/// How long a tip card's button stays usable.
-const ACTION_TTL_DAYS: i32 = 30;
 
 fn statement(id: &'static str, sql: &str, values: Vec<sea_orm::Value>) -> Statement {
     named_statement_from_sql_and_values(DbBackend::Postgres, id, sql, values)
@@ -512,41 +514,6 @@ impl DeliveryProducer for InactivityNudgeProducer {
     }
 }
 
-/// Keep the card's single-use token on the row it belongs to, fenced on the
-/// claim so a lost claim cannot arm a card for a row someone else delivers.
-async fn store_action_token(
-    db: &DatabaseConnection,
-    row: &Model,
-    token: Uuid,
-) -> Result<(), Report> {
-    let claim_token = row
-        .claim_token
-        .clone()
-        .ok_or_else(|| eyre!("nudge content resolved for an unclaimed row"))?;
-    let result = db
-        .execute_raw(statement(
-            "teams_nudge.store_action",
-            "UPDATE scheduled_deliveries
-             SET outcome = outcome || jsonb_build_object(
-                 'action_token', $3::text,
-                 'action_expires_at', (now() + make_interval(days => $4))::text)
-             WHERE id = $1 AND claim_token = $2 AND state = 'claimed'",
-            vec![
-                row.id.into(),
-                claim_token.into(),
-                token.to_string().into(),
-                ACTION_TTL_DAYS.into(),
-            ],
-        ))
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(eyre!(
-            "the delivery claim was lost before the card was built"
-        ));
-    }
-    Ok(())
-}
-
 /// A button press on a delivered card, as Teams sends it back.
 #[derive(Debug, Deserialize)]
 pub struct DeliverySubmit {
@@ -560,7 +527,12 @@ pub struct DeliverySubmit {
 /// unknown command cannot burn a single-use token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryCommand {
+    /// A tip's "Don't remind me".
     OptOut,
+    /// A reminder's Done: closes its card.
+    Done,
+    /// A reminder's Snooze 30 min or Tomorrow 9:00.
+    Snooze(SnoozeChoice),
 }
 
 impl DeliverySubmit {
@@ -572,6 +544,9 @@ impl DeliverySubmit {
     pub fn command(&self) -> Option<DeliveryCommand> {
         match self.command.as_str() {
             OPT_OUT_COMMAND => Some(DeliveryCommand::OptOut),
+            DONE_COMMAND => Some(DeliveryCommand::Done),
+            SNOOZE_COMMAND => Some(DeliveryCommand::Snooze(SnoozeChoice::HalfAnHour)),
+            TOMORROW_COMMAND => Some(DeliveryCommand::Snooze(SnoozeChoice::TomorrowMorning)),
             _ => None,
         }
     }
@@ -597,6 +572,20 @@ pub fn reminders_command(text: &str) -> Option<bool> {
 /// The card a delivered message is rendered as: its text, link buttons and
 /// single-use action buttons that name the delivery row.
 pub fn delivery_card(content: &DeliveryContent, delivery_id: Uuid) -> Value {
+    card_with_note(content, delivery_id, None)
+}
+
+/// The card once one of its buttons was used: the same text and links, no
+/// action buttons, and a line saying what happened.
+pub fn settled_delivery_card(content: &DeliveryContent, delivery_id: Uuid, note: &str) -> Value {
+    let content = DeliveryContent {
+        actions: Vec::new(),
+        ..content.clone()
+    };
+    card_with_note(&content, delivery_id, Some(note))
+}
+
+fn card_with_note(content: &DeliveryContent, delivery_id: Uuid, note: Option<&str>) -> Value {
     let mut body = Vec::new();
     if let Some(title) = content.title.as_deref().filter(|title| !title.is_empty()) {
         body.push(json!({
@@ -606,6 +595,12 @@ pub fn delivery_card(content: &DeliveryContent, delivery_id: Uuid) -> Value {
     }
     if !content.text.is_empty() {
         body.push(json!({"type": "TextBlock", "text": content.text, "wrap": true}));
+    }
+    if let Some(note) = note {
+        body.push(json!({
+            "type": "TextBlock", "text": note, "wrap": true,
+            "isSubtle": true, "spacing": "Medium",
+        }));
     }
     let mut actions: Vec<Value> = content
         .links
@@ -679,10 +674,16 @@ impl DeliveryChannel for TeamsPersonalChannel {
             )
             .await
         {
+            // The posted content, without its tokens, lets a button press
+            // replace the card in place later.
             Ok(activity_id) => DeliveryOutcome::Delivered {
                 details: json!({
                     "activity_id": activity_id,
                     "conversation_id": conversation.conversation_id,
+                    "content": DeliveryContent {
+                        actions: Vec::new(),
+                        ..content.clone()
+                    },
                 }),
             },
             Err(error) => outcome_for_error(&error),
@@ -749,12 +750,65 @@ impl Host {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Give back a claimed token whose press changed nothing, so the card's
+    /// buttons work again.
+    pub async fn release_delivery_action(&self, submit: &DeliverySubmit) -> Result<(), Report> {
+        self.app_state
+            .db
+            .execute_raw(statement(
+                "teams_nudge.release_action",
+                "UPDATE scheduled_deliveries
+                 SET outcome = outcome - 'action_claimed_at' - 'action_command'
+                 WHERE id = $1 AND state = 'delivered'
+                   AND outcome->>'action_token' = $2
+                   AND outcome->>'action_claimed_at' IS NOT NULL",
+                vec![submit.delivery_id.into(), submit.token.to_string().into()],
+            ))
+            .await?;
+        Ok(())
+    }
+
     pub async fn set_teams_nudges_opt_out(
         &self,
         user_id: Uuid,
         opted_out: bool,
     ) -> Result<(), Report> {
         set_teams_nudges_opt_out(&self.app_state.db, &user_id, opted_out).await
+    }
+
+    pub async fn acknowledge_reminder(
+        &self,
+        user_id: Uuid,
+        delivery_id: Uuid,
+    ) -> Change<ScheduledItem> {
+        scheduled_items::acknowledge(&self.app_state.db, user_id, delivery_id).await
+    }
+
+    pub async fn snooze_delivered_reminder(
+        &self,
+        user_id: Uuid,
+        delivery_id: Uuid,
+        choice: SnoozeChoice,
+    ) -> Change<(ScheduledItem, DateTime<Utc>)> {
+        scheduled_items::snooze_delivered(&self.app_state.db, user_id, delivery_id, choice).await
+    }
+
+    pub async fn stored_time_zone(&self, user_id: Uuid) -> Result<Option<Tz>, Report> {
+        user_time_zone(&self.app_state.db, &user_id).await
+    }
+
+    /// Where a delivered card was posted and what it said, for replacing it.
+    pub async fn delivered_card(
+        &self,
+        delivery_id: Uuid,
+    ) -> Result<Option<(String, DeliveryContent)>, Report> {
+        let Some(row) = find(&self.app_state.db, delivery_id).await? else {
+            return Ok(None);
+        };
+        let delivered = &row.outcome["delivered"];
+        let activity_id = delivered["activity_id"].as_str().map(str::to_string);
+        let content = serde_json::from_value(delivered["content"].clone()).ok();
+        Ok(activity_id.zip(content))
     }
 }
 
@@ -899,6 +953,54 @@ mod tests {
             DeliverySubmit::from_value(&json!({"action": "other", "delivery_id": delivery_id, "command": "x", "token": token}))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn reminder_buttons_parse_to_their_commands() {
+        let command = |command: &str| {
+            DeliverySubmit::from_value(&json!({
+                "action": ACTION, "delivery_id": Uuid::new_v4(),
+                "command": command, "token": Uuid::new_v4(),
+            }))
+            .unwrap()
+            .command()
+        };
+        assert_eq!(command(OPT_OUT_COMMAND), Some(DeliveryCommand::OptOut));
+        assert_eq!(command(DONE_COMMAND), Some(DeliveryCommand::Done));
+        assert_eq!(
+            command(SNOOZE_COMMAND),
+            Some(DeliveryCommand::Snooze(SnoozeChoice::HalfAnHour))
+        );
+        assert_eq!(
+            command(TOMORROW_COMMAND),
+            Some(DeliveryCommand::Snooze(SnoozeChoice::TomorrowMorning))
+        );
+        assert_eq!(command("later"), None);
+    }
+
+    #[test]
+    fn a_settled_card_keeps_its_text_and_links_but_loses_its_buttons() {
+        let content = DeliveryContent {
+            title: Some("Call Ms Schulz".into()),
+            text: "About the delivery date.".into(),
+            summary: Some("Call Ms Schulz".into()),
+            links: vec![DeliveryLink {
+                title: "Q4 rate comparison".into(),
+                url: "https://erato.example.com/chat/1".into(),
+            }],
+            actions: vec![DeliveryAction {
+                title: "Done".into(),
+                command: DONE_COMMAND.into(),
+                token: Some(Uuid::new_v4()),
+            }],
+        };
+        let activity = settled_delivery_card(&content, Uuid::new_v4(), "Marked as done.");
+        assert_eq!(activity["summary"], "Call Ms Schulz");
+        let card = &activity["attachments"][0]["content"];
+        assert_eq!(card["body"][1]["text"], "About the delivery date.");
+        assert_eq!(card["body"][2]["text"], "Marked as done.");
+        assert_eq!(card["actions"].as_array().unwrap().len(), 1);
+        assert_eq!(card["actions"][0]["type"], "Action.OpenUrl");
     }
 
     #[test]
