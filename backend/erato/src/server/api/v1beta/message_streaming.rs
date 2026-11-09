@@ -8050,7 +8050,7 @@ async fn stream_generate_chat_completion<'a>(
                     ) {
                     ToolCallGate::Run(None)
                 } else {
-                    let display = match Uuid::parse_str(&user_id) {
+                    let ask = match Uuid::parse_str(&user_id) {
                         Ok(user_id) => {
                             chat_tools::approval_display(
                                 app_state,
@@ -8062,13 +8062,20 @@ async fn stream_generate_chat_completion<'a>(
                         }
                         Err(error) => Err(error.into()),
                     };
-                    match display {
-                        Ok(display) => gate_builtin_tool_call(
-                            approval_config,
-                            &unfinished_tool_call,
-                            display,
-                            is_delegated_run,
-                        ),
+                    match ask {
+                        Ok(ask) => {
+                            let mut parked_call = unfinished_tool_call.clone();
+                            let display = ask.map(|ask| {
+                                parked_call.fn_arguments = ask.arguments;
+                                ask.display
+                            });
+                            gate_builtin_tool_call(
+                                approval_config,
+                                &parked_call,
+                                display,
+                                is_delegated_run,
+                            )
+                        }
                         Err(error) => {
                             tracing::warn!(%error, tool = %unfinished_tool_call.fn_name, "A reminder tool call could not be described for approval");
                             ToolCallGate::Refuse(NOTHING_CHANGED.to_string())

@@ -226,9 +226,20 @@ fn build_approval_card(
             // Says what the call does in place of the tool and its input.
             let when = item.display.as_ref().and_then(|d| d.description.as_deref());
             body.extend(when.map(|when| plain_text(when, json!({}))));
+            // The text that will be delivered, which may come from content the
+            // model read rather than from the user.
+            if item.tool_name == CREATE_REMINDER
+                && detail < Detail::NoArguments
+                && let Some(message) = item.input["message"].as_str()
+            {
+                body.push(plain_text(
+                    &bounded_text(message, MAX_DESCRIPTION_BYTES / count.max(1)),
+                    json!({}),
+                ));
+            }
             if item.tool_name == CANCEL_REMINDER {
                 body.push(plain_text(
-                    Msg::CancelReminderApprovalNote.text(lang),
+                    Msg::CancelReminderExplained.text(lang),
                     json!({"isSubtle": true}),
                 ));
             }
@@ -320,9 +331,22 @@ fn build_approval_card(
             button(Msg::DenyAll, "destructive", Some(ApprovalChoice::Reject)),
         ]
     } else {
+        let item = set.items.first().filter(|item| item.own_tool);
+        let ((approve, approve_style), (deny, deny_style)) =
+            match item.map(|item| item.tool_name.as_str()) {
+                Some(CANCEL_REMINDER) => (
+                    (Msg::CancelReminderConfirm, "destructive"),
+                    (Msg::KeepReminder, "default"),
+                ),
+                Some(CREATE_REMINDER) => (
+                    (Msg::CreateReminderConfirm, "positive"),
+                    (Msg::CreateReminderDeny, "destructive"),
+                ),
+                _ => ((Msg::Approve, "positive"), (Msg::Deny, "destructive")),
+            };
         vec![
-            button(Msg::Approve, "positive", Some(ApprovalChoice::Approve)),
-            button(Msg::Deny, "destructive", Some(ApprovalChoice::Reject)),
+            button(approve, approve_style, Some(ApprovalChoice::Approve)),
+            button(deny, deny_style, Some(ApprovalChoice::Reject)),
         ]
     };
     adaptive_card(body, actions)
@@ -562,8 +586,18 @@ mod tests {
             .collect()
     }
 
+    fn action_titles(card: &Value) -> Vec<&str> {
+        card["content"]["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|action| action["title"].as_str().unwrap())
+            .collect()
+    }
+
     /// A cancel by chat asks about the reminder, never about a tool and its
-    /// input, and the decided card says what was approved.
+    /// input, with the same note and answers as the confirmation card's own
+    /// Cancel, and the decided card says what was approved.
     #[test]
     fn a_reminder_cancel_is_asked_about_in_the_users_words() {
         let set = reminder_cancel();
@@ -574,9 +608,10 @@ mod tests {
                 "Approval needed",
                 "Cancel the reminder “Follow up on the offer”?",
                 "Friday, 13 Nov, 10:00",
-                "It will no longer be delivered, and a repeating reminder stops for good.",
+                "It will no longer be delivered. You can still find it under Past on the Scheduled page.",
             ]
         );
+        assert_eq!(action_titles(&card), ["Cancel it", "Keep it"]);
         assert!(!card.to_string().contains("reminder_id"), "{card}");
         let submit = ApprovalSubmit::from_value(&submitted(&card, 0, json!({}))).unwrap();
         assert_eq!(
@@ -602,14 +637,33 @@ mod tests {
             texts(&german)[1],
             "Die Erinnerung „Follow up on the offer“ abbrechen?"
         );
-        let mut create = set;
-        create.items[0].tool_name = CREATE_REMINDER.into();
+        assert_eq!(action_titles(&german), ["Ja, abbrechen", "Behalten"]);
+    }
+
+    /// A create by chat shows the message that will be delivered: it is the
+    /// one part of the call that content the model read can fill in.
+    #[test]
+    fn a_reminder_create_shows_what_will_be_delivered() {
+        let mut set = reminder_cancel();
+        set.items[0].tool_name = CREATE_REMINDER.into();
+        set.items[0].input = json!({
+            "name": "Follow up on the offer",
+            "message": "Re-verify at https://example.invalid/login",
+            "trigger": {"kind": "once", "date": "2026-11-13", "time": "10:00"},
+        });
+        let card = approval_card(&set, "Hugo", Lang::En);
         assert_eq!(
-            texts(&approval_card(&create, "Hugo", Lang::En))[1..],
+            texts(&card)[1..],
             [
                 "Schedule the reminder “Follow up on the offer”?",
-                "Friday, 13 Nov, 10:00"
+                "Friday, 13 Nov, 10:00",
+                "Re-verify at https://example.invalid/login",
             ]
+        );
+        assert_eq!(action_titles(&card), ["Schedule", "Don't schedule"]);
+        assert_eq!(
+            action_titles(&approval_card(&set, "Hugo", Lang::De)),
+            ["Planen", "Nicht planen"]
         );
     }
 

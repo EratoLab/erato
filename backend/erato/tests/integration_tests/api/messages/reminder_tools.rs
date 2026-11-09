@@ -718,6 +718,71 @@ async fn a_create_asks_under_the_restrictive_preset(pool: Pool<Postgres>) {
     assert_eq!(upcoming(&server).await.len(), 1);
 }
 
+/// "Remind me in 90 minutes", approved later: the parked call already holds
+/// the one-off its card names, so the reminder is stored at that time and not
+/// moved by how long the user took to answer.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_approved_relative_create_stores_the_time_its_card_showed(pool: Pool<Postgres>) {
+    let (state, server, _user_id, chat_id, llm) = setup_with_approval(
+        pool,
+        MockSet::new(),
+        true,
+        "en-US",
+        Some(McpToolApprovalPreset::Restrictive),
+    )
+    .await;
+    tool_turn(
+        &mut llm.mocks(),
+        &[],
+        (
+            "call_create",
+            "create_reminder",
+            json!({
+                "name": "Stretch",
+                "message": "Time to stretch.",
+                "trigger": {"kind": "in", "minutes": 90},
+            }),
+        ),
+    );
+    answer_turn(&mut llm.mocks(), "call_create", "Scheduled.");
+
+    send(&server, chat_id, "Remind me in 90 minutes to stretch").await;
+    let (message_id, request) = parked(&state, chat_id).await;
+    let input = &request["approvals"][0]["input"];
+    assert_eq!(input["trigger"]["kind"], "once", "{request}");
+    assert_eq!(request["input"], *input);
+    assert_eq!(input["message"], "Time to stretch.");
+    let date: NaiveDate = input["trigger"]["date"].as_str().unwrap().parse().unwrap();
+    let time = input["trigger"]["time"].as_str().unwrap().to_string();
+    let local = date.and_time(chrono::NaiveTime::parse_from_str(&time, "%H:%M").unwrap());
+    let at = BERLIN
+        .from_local_datetime(&local)
+        .earliest()
+        .unwrap()
+        .with_timezone(&Utc);
+    let minutes_ahead = (at - Utc::now()).num_minutes();
+    assert!((89..=91).contains(&minutes_ahead), "{at}");
+    assert_eq!(
+        request["approvals"][0]["display"]["description"],
+        wording::exact_when(at, BERLIN, Some(BERLIN), Utc::now(), Lang::En)
+    );
+
+    let events = decide(
+        &server,
+        message_id,
+        &request["approvals"][0]["approval_id"],
+        "approve",
+    )
+    .await;
+    assert_eq!(tool_output(&events, "call_create")["status"], "created");
+    let items = upcoming(&server).await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        items[0]["next_occurrence"]["local"],
+        format!("{date}T{time}:00")
+    );
+}
+
 /// Under the permissive preset a create runs at once: its confirmation card
 /// with Cancel is the check.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
