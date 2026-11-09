@@ -1649,6 +1649,7 @@ mod tests {
     #[test]
     fn a_builtin_tool_approval_gets_a_card_in_teams() {
         let completion = completion_from_content(
+            &FacetsConfig::default(),
             Uuid::nil(),
             Uuid::nil(),
             &[mixed_approval(ToolApprovalKind::BuiltinTool)],
