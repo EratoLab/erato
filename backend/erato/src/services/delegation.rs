@@ -3808,6 +3808,7 @@ mod tests {
             delegation: overrides,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         }
     }
 

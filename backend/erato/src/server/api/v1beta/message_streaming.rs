@@ -13681,6 +13681,50 @@ mod tests {
     }
 
     #[test]
+    fn builtin_schedule_facet_selects_the_reminder_tools_past_a_global_allowlist() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use crate::services::scheduled_items::chat_tools::TOOL_NAMES;
+        use erato_config::config::{BUILTIN_SCHEDULE_FACET_ID, FacetsConfig};
+
+        let mut facets = FacetsConfig {
+            tool_call_allowlist: vec!["search/*".to_string()],
+            ..Default::default()
+        };
+        facets.inject_builtin_schedule_facet(true);
+        let allowed = |selected: &[String], namespace: &str, name: &str| {
+            build_mcp_tool_allowlist(&facets, selected).is_none_or(|allowlist| {
+                super::is_qualified_tool_allowed(namespace, name, &allowlist)
+            })
+        };
+
+        for name in TOOL_NAMES {
+            assert!(!allowed(&[], "erato", name), "{name} offered unselected");
+        }
+        let selected = [BUILTIN_SCHEDULE_FACET_ID.to_string()];
+        for name in TOOL_NAMES {
+            assert!(allowed(&selected, "erato", name), "{name} not offered");
+        }
+        assert!(allowed(&selected, "search", "web"));
+        assert!(!allowed(&selected, "erato", "delegate_task"));
+    }
+
+    #[test]
+    fn builtin_schedule_facet_alone_restricts_mcp_tools_while_selected() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use erato_config::config::{BUILTIN_SCHEDULE_FACET_ID, FacetsConfig};
+
+        let mut facets = FacetsConfig::default();
+        facets.inject_builtin_schedule_facet(true);
+
+        assert_eq!(build_mcp_tool_allowlist(&facets, &[]), None);
+        let allowlist =
+            build_mcp_tool_allowlist(&facets, &[BUILTIN_SCHEDULE_FACET_ID.to_string()]).unwrap();
+        assert!(!super::is_qualified_tool_allowed(
+            "search", "web", &allowlist
+        ));
+    }
+
+    #[test]
     fn reserved_patterns_are_dropped_from_template_expansions() {
         // A facet that pairs the built-in with a real MCP pattern must render
         // only the MCP tools in its prompt template.

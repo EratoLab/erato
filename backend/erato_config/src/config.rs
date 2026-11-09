@@ -1769,6 +1769,13 @@ impl AppConfig {
             }
         }
 
+        // After the operator-trap warnings: the built-in allowlists only
+        // reserved tools on purpose, which would trip the MCP warning above.
+        let scheduled_deliveries_enabled = config.scheduled_deliveries.enabled;
+        config
+            .facets
+            .inject_builtin_schedule_facet(scheduled_deliveries_enabled);
+
         // Every `child_facet_ids` entry, global or per facet, must name a
         // configured facet.
         for id in &config.delegation.tasks.child_facet_ids {
@@ -6120,6 +6127,143 @@ pub struct FacetsConfig {
     pub default_selected_facets: Vec<String>,
 }
 
+/// Id of the built-in facet that "Create with chat" on the Scheduled page
+/// preselects.
+pub const BUILTIN_SCHEDULE_FACET_ID: &str = "schedule";
+
+const BUILTIN_SCHEDULE_FACET_PROMPT: &str = "The user wants to schedule something. \
+Use the `create_reminder` tool to create a reminder: at the chosen time it delivers a \
+message to the user, and nothing else runs. If the date or time is unclear (for example \
+\"next week\" or \"in the afternoon\"), ask the user instead of guessing. Say that \
+something is scheduled only after `create_reminder` succeeded; if it fails or is not \
+available, say so. A scheduled task that runs something later (a prompt or a check) is \
+not available yet: say so and offer a reminder instead. Use `list_reminders` and \
+`cancel_reminder` to show or cancel the user's reminders.";
+
+impl FacetsConfig {
+    /// Adds the built-in `schedule` facet while scheduled deliveries are on.
+    /// A configured `[facets.facets.schedule]` replaces it as a whole.
+    pub fn inject_builtin_schedule_facet(&mut self, scheduled_deliveries_enabled: bool) {
+        if !scheduled_deliveries_enabled {
+            return;
+        }
+        self.facets
+            .entry(BUILTIN_SCHEDULE_FACET_ID.to_string())
+            .or_insert_with(builtin_schedule_facet);
+    }
+}
+
+fn builtin_schedule_facet() -> FacetConfig {
+    FacetConfig {
+        display_name: "Schedule".to_string(),
+        icon: Some("iconoir-calendar".to_string()),
+        additional_system_prompt: Some(PromptSourceSpecification::Static {
+            content: BUILTIN_SCHEDULE_FACET_PROMPT.to_string(),
+        }),
+        // Selecting the facet must offer the reminder tools even where a
+        // global allowlist leaves them out.
+        tool_call_allowlist: ["create_reminder", "list_reminders", "cancel_reminder"]
+            .into_iter()
+            .map(|name| format!("{RESERVED_TOOL_NAMESPACE}/{name}"))
+            .collect(),
+        // The prompt names the tools itself; the generic template would list
+        // them again under their namespaced names.
+        disable_facet_prompt_template: true,
+        // Users who arrive through "Create with chat" did not pick the facet,
+        // so an icon alone would not tell them the mode.
+        show_indicator_with_display_name: Some(true),
+        ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod builtin_schedule_facet_tests {
+    use super::*;
+
+    fn parse_facets(toml: &str) -> FacetsConfig {
+        Config::builder()
+            .add_source(File::from_str(toml, FileFormat::Toml))
+            .build()
+            .unwrap()
+            .try_deserialize()
+            .unwrap()
+    }
+
+    #[test]
+    fn injected_only_while_scheduled_deliveries_are_enabled() {
+        let mut facets = FacetsConfig::default();
+        facets.inject_builtin_schedule_facet(false);
+        assert!(facets.facets.is_empty());
+
+        facets.inject_builtin_schedule_facet(true);
+        let schedule = &facets.facets[BUILTIN_SCHEDULE_FACET_ID];
+        assert_eq!(schedule.display_name, "Schedule");
+        assert_eq!(schedule.icon.as_deref(), Some("iconoir-calendar"));
+        assert_eq!(
+            schedule.tool_call_allowlist,
+            [
+                "erato/create_reminder",
+                "erato/list_reminders",
+                "erato/cancel_reminder"
+            ]
+        );
+        assert_eq!(schedule.show_indicator_with_display_name, Some(true));
+        assert!(schedule.disable_facet_prompt_template);
+        assert!(!schedule.hidden);
+        let Some(PromptSourceSpecification::Static { content }) =
+            &schedule.additional_system_prompt
+        else {
+            panic!("expected an inline prompt");
+        };
+        assert!(content.contains("create_reminder"));
+    }
+
+    #[test]
+    fn a_configured_schedule_facet_replaces_the_builtin() {
+        let mut facets = parse_facets(
+            r#"
+            [facets.schedule]
+            display_name = "Planen"
+            "#,
+        );
+        facets.inject_builtin_schedule_facet(true);
+        let schedule = &facets.facets[BUILTIN_SCHEDULE_FACET_ID];
+        assert_eq!(schedule.display_name, "Planen");
+        assert!(schedule.tool_call_allowlist.is_empty());
+        assert_eq!(schedule.show_indicator_with_display_name, None);
+    }
+
+    #[test]
+    fn indicator_override_parses_per_facet() {
+        let facets = parse_facets(
+            r#"
+            [facets.shown]
+            display_name = "Shown"
+            show_indicator_with_display_name = true
+
+            [facets.hidden_label]
+            display_name = "Icon only"
+            show_indicator_with_display_name = false
+
+            [facets.global]
+            display_name = "Global"
+            "#,
+        );
+        assert_eq!(
+            facets.facets["shown"].show_indicator_with_display_name,
+            Some(true)
+        );
+        assert_eq!(
+            facets.facets["hidden_label"].show_indicator_with_display_name,
+            Some(false)
+        );
+        assert_eq!(
+            facets.facets["global"].show_indicator_with_display_name,
+            None
+        );
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
 pub struct ActionFacetsConfig {
     // Map of action facet id to action facet configuration.
@@ -6272,6 +6416,12 @@ pub struct FacetConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub child_host_context: Option<ClientToolHostContext>,
+
+    // Whether this facet's chat box indicator includes its display name.
+    // `None` follows `facets.show_facet_indicator_with_display_name`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub show_indicator_with_display_name: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Default, Facet, HeapSize)]
