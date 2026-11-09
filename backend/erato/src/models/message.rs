@@ -626,6 +626,12 @@ pub struct ToolCallChange {
     /// The call set an approval value of its own, which is left out.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub consent_left_out: bool,
+    /// Statements past the cap, which the card counts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub opaque_omitted: u32,
+    /// Long texts past the cap, which the card counts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub texts_omitted: u32,
 }
 
 /// One value a call writes and what happens to what is there.
@@ -654,6 +660,12 @@ pub struct ToolCallEffect {
     /// What a replaced list keeps, where an earlier result showed the list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub kept: Vec<ToolCallEffectValue>,
+    /// What a replaced list gains, where an earlier result showed the list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added: Vec<ToolCallEffectValue>,
+    /// The value is a list, whichever effect it has.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub list: bool,
     /// The value only links to another record.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub link: bool,
@@ -764,12 +776,36 @@ pub struct ToolCallRecipients {
 pub struct ToolCallRecipientGroup {
     pub name: String,
     pub raw_name: String,
+    /// To, copy or blind copy, in words a card can say.
+    #[serde(default)]
+    pub kind: ToolCallRecipientKind,
     pub count: u32,
     /// Every address as written, capped; machine IDs are counted, not listed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub omitted: u32,
+}
+
+/// How a group of recipients is addressed.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    ToSchema,
+    erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallRecipientKind {
+    #[default]
+    To,
+    Cc,
+    Bcc,
 }
 
 /// What a filter selects, in words.
@@ -785,12 +821,18 @@ pub struct ToolCallFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub text: Option<ToolCallEffectValue>,
+    /// Conditions past the cap, which the card counts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub omitted: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolCallFilterPart {
     pub name: String,
     pub value: ToolCallEffectValue,
+    /// The condition asks for an empty value.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_empty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
@@ -900,11 +942,17 @@ pub struct ToolCallBatchRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub name: Option<String>,
+    /// `name` came from an earlier result naming a machine ID, not the call.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub name_from_earlier: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub action: Option<ToolCallAction>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<ToolCallEffect>,
+    /// Fields of the row past the cap, which the card counts.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub effects_omitted: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
@@ -1162,6 +1210,9 @@ pub struct ToolArgumentNode {
     /// Members or entries left out of `children`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub omitted: u32,
+    /// The member's own name is a machine identifier, which a card does not show.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub machine_name: bool,
 }
 
 /// How the readable view shows one argument.

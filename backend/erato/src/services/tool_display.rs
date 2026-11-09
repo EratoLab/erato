@@ -181,14 +181,20 @@ fn labelled_display(
         if let Some(stored) = &labelled.stored {
             label.arguments = Some(label::readable_arguments(stored).0);
         }
+        let rules_action = label::guarded_rules(tool, arguments, consent)
+            .mapping
+            .action;
         let facts = label::change::ChangeFacts {
             tool,
             arguments,
             approval_argument: consent,
             context,
             server: scope.as_deref(),
+            rules_action,
         };
-        if let Some((change, hidden)) = label::change::describe(&label, facts) {
+        if let Some((change, hidden)) =
+            label::change::guarded_describe(|| label::change::describe(&label, facts))
+        {
             label.change = Some(change);
             if hidden
                 && !label

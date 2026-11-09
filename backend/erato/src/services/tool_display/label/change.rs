@@ -7,17 +7,20 @@
 
 use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::names_an_id;
-use super::context::{ToolResultContext, is_link, link_id_member, name_words, text_prefix};
+use super::context::{
+    ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match, list_entry,
+    name_words, text_prefix,
+};
 use super::machine_id::is_machine_id;
 use super::pointer::escape;
 use super::recipients::{ADDRESS_MEMBERS, bare_member, is_phone_shaped};
 use super::rules::{self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, recipients_in};
 use crate::models::message::{
     ToolCallAction, ToolCallBatch, ToolCallBatchField, ToolCallBatchOperation, ToolCallBatchRow,
-    ToolCallChange, ToolCallChangeNote, ToolCallEffect, ToolCallEffectCounts, ToolCallEffectKind,
-    ToolCallEffectValue, ToolCallFilter, ToolCallFilterPart, ToolCallFlag, ToolCallLabel,
-    ToolCallLabelItem, ToolCallOpaque, ToolCallOpaqueKind, ToolCallRecipientGroup,
-    ToolCallTextChange,
+    ToolCallChange, ToolCallChangeNote, ToolCallEffect, ToolCallEffectKind, ToolCallEffectValue,
+    ToolCallFilter, ToolCallFilterPart, ToolCallFlag, ToolCallLabel, ToolCallLabelItem,
+    ToolCallLabelSource, ToolCallOpaque, ToolCallOpaqueKind, ToolCallRecipientGroup,
+    ToolCallRecipientKind, ToolCallTextChange,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
@@ -30,8 +33,23 @@ const MAX_EFFECTS: usize = 64;
 const MAX_LOSS_EFFECTS: usize = 128;
 /// JSON nodes one description reads.
 const MAX_NODES: usize = 20_000;
-/// Bytes of value text in one description, so a huge call stores little.
+/// Bytes one description stores, values, names, paths and the cost of each
+/// stored entry alike, so a huge call stores little.
 const MAX_CHANGE_BYTES: usize = 48 * 1024;
+/// What is lost still gets stored once everything else has used its share.
+const LOSS_RESERVE_BYTES: usize = 8 * 1024;
+/// What one stored effect or row costs beyond its text, as JSON.
+const ENTRY_OVERHEAD_BYTES: usize = 96;
+const MAX_TEXTS: usize = 8;
+const MAX_FLAGS: usize = 16;
+const MAX_PLACES: usize = 6;
+/// Members or entries an object or list value reads out before the rest are
+/// dropped from its readable form.
+const MAX_READABLE_ENTRIES: usize = 8;
+const MAX_READABLE_DEPTH: usize = 3;
+/// A machine ID inside a value or name no result gives a name for. The card
+/// shows a phrase in its own language where this stands.
+pub(super) const HIDDEN_ID_MARK: char = '\u{E002}';
 const MAX_DEPTH: usize = 4;
 const MAX_LIST_VALUES: usize = 50;
 const MAX_RECIPIENT_VALUES: usize = 200;
@@ -177,22 +195,58 @@ pub struct ChangeFacts<'a> {
     pub arguments: &'a Value,
     pub approval_argument: Option<&'a str>,
     pub context: &'a ToolResultContext,
+    /// The verb the rules found. It alone decides what counts as emptied or
+    /// replaced; a model's verb only words the headline.
+    pub rules_action: ToolCallAction,
     /// The server whose earlier results may name this call's IDs.
     pub server: Option<&'a str>,
 }
 
 /// The call's change description, and whether cleaning a value or name it
-/// holds removed invisible characters. `None` for a label with no verb.
+/// holds removed invisible characters. A call with no verb claims no losses,
+/// and gets a description only for what reaches past its plain values.
 pub fn describe(label: &ToolCallLabel, facts: ChangeFacts<'_>) -> Option<(ToolCallChange, bool)> {
-    if label.action == ToolCallAction::Other {
-        return None;
-    }
+    let action = if label.source == ToolCallLabelSource::Generic {
+        ToolCallAction::Other
+    } else {
+        facts.rules_action
+    };
     let item = label.items.first();
-    let mut walk = Walk::new(label.action, item, &facts);
+    let mut walk = Walk::new(action, item, &facts);
     if let Value::Object(members) = facts.arguments {
         walk.members(members, "", 0, false, "");
     }
-    Some(walk.finish(&facts))
+    let (change, hidden) = walk.finish(&facts);
+    let says_something = action != ToolCallAction::Other
+        || change.recipients.is_some()
+        || change.filter.is_some()
+        || !change.flags.is_empty()
+        || !change.opaque.is_empty()
+        || !change.texts.is_empty()
+        || change.batch.is_some();
+    says_something.then_some((change, hidden))
+}
+
+/// Runs a description so that a bug in it costs the call only the description,
+/// and never the label or the names already on it.
+pub fn guarded_describe(
+    describe: impl FnOnce() -> Option<(ToolCallChange, bool)>,
+) -> Option<(ToolCallChange, bool)> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(describe))
+        .inspect_err(|_| {
+            tracing::error!(
+                "Showing a tool call without a change description: describing it panicked"
+            )
+        })
+        .ok()
+        .flatten()
+}
+
+#[derive(PartialEq)]
+enum Pushed {
+    Stored,
+    PastCountCap,
+    NoRoom,
 }
 
 struct Walk<'a> {
@@ -214,6 +268,7 @@ struct Walk<'a> {
     consent_left_out: bool,
     complete: bool,
     says: ToolText,
+    before_stored: bool,
     saw_list: bool,
     /// A value was compared with what an earlier result showed.
     used_earlier: bool,
@@ -275,6 +330,7 @@ impl<'a> Walk<'a> {
             consent_left_out: false,
             complete: true,
             says: ToolText::read(facts.tool.description.as_deref()),
+            before_stored: false,
             saw_list: false,
             used_earlier: false,
         }
@@ -461,9 +517,12 @@ impl<'a> Walk<'a> {
     }
 
     fn place(&mut self, member: &str, value: &Value) {
+        if self.places.len() == MAX_PLACES {
+            return;
+        }
         if let Some(text) = scalar_text(value) {
             let cleaned = self.clean(&text);
-            if !cleaned.is_empty() && !is_machine_id(&cleaned) {
+            if !cleaned.is_empty() && !is_machine_id(&cleaned) && self.take_bytes(&cleaned) {
                 self.places.push((place_order(member), cleaned));
             }
         }
@@ -476,6 +535,14 @@ impl<'a> Walk<'a> {
         );
         self.hidden |= cleaned.hidden_characters;
         cleaned.text
+    }
+
+    /// A member as written, shown under See more. A machine ID is never shown.
+    fn raw_name(&mut self, member: &str) -> String {
+        if is_machine_id(member) {
+            return String::new();
+        }
+        self.display_name(member)
     }
 
     fn display_name(&mut self, name: &str) -> String {
@@ -503,10 +570,10 @@ impl<'a> Walk<'a> {
     /// One value as a card shows it, a machine ID as its name if known.
     fn shown(&mut self, value: &Value, path: &str) -> Option<ToolCallEffectValue> {
         let raw = match value {
-            Value::String(text) => std::borrow::Cow::Borrowed(text.as_str()),
+            Value::String(text) => std::borrow::Cow::Owned(without_mark(text)),
             Value::Bool(_) | Value::Number(_) => std::borrow::Cow::Owned(value.to_string()),
             Value::Null => return None,
-            other => std::borrow::Cow::Owned(other.to_string()),
+            other => std::borrow::Cow::Owned(self.readable_form(other, 0)),
         };
         let cleaned = sanitize_display_text(
             text_prefix(&raw, MAX_LABEL_VALUE_CHARS * 8),
@@ -538,6 +605,49 @@ impl<'a> Walk<'a> {
         })
     }
 
+    /// An object or list as `Key: value, Key: value`, never as JSON text. A
+    /// machine ID reads as a mark the card turns into words: its name would
+    /// outlive the chat that gave it if the label were copied elsewhere.
+    fn readable_form(&mut self, value: &Value, depth: usize) -> String {
+        if depth >= MAX_READABLE_DEPTH {
+            return "\u{2026}".to_string();
+        }
+        match value {
+            Value::Object(members) => {
+                let shared = shared_prefix(members);
+                let mut parts = Vec::new();
+                for (member, inner) in members.iter().take(MAX_READABLE_ENTRIES) {
+                    let text = self.readable_form(inner, depth + 1);
+                    parts.push(format!(
+                        "{}: {text}",
+                        readable_name(member, shared.as_deref(), "")
+                    ));
+                }
+                if members.len() > MAX_READABLE_ENTRIES {
+                    parts.push("\u{2026}".to_string());
+                }
+                parts.join(", ")
+            }
+            Value::Array(entries) => {
+                let mut parts = Vec::new();
+                for entry in entries.iter().take(MAX_READABLE_ENTRIES) {
+                    parts.push(self.readable_form(entry, depth + 1));
+                }
+                if entries.len() > MAX_READABLE_ENTRIES {
+                    parts.push("\u{2026}".to_string());
+                }
+                parts.join(", ")
+            }
+            Value::String(text) if is_machine_id(text) => HIDDEN_ID_MARK.to_string(),
+            Value::String(text) => without_mark(text),
+            Value::Number(number) if is_machine_id(&number.to_string()) => {
+                HIDDEN_ID_MARK.to_string()
+            }
+            Value::Number(_) | Value::Bool(_) => value.to_string(),
+            Value::Null => "\u{2013}".to_string(),
+        }
+    }
+
     fn name_of_id(&self, id: &str, path: &str) -> Option<String> {
         if below_a_recipient(path) {
             return None;
@@ -557,13 +667,18 @@ impl<'a> Walk<'a> {
     }
 
     fn value(&mut self, member: &str, value: &Value, path: &str, name: String) {
+        let (bytes, complete) = (self.bytes, self.complete);
         let effect = self.effect(member, value, path, name);
-        self.push(effect);
+        if self.push(effect) == Pushed::PastCountCap {
+            // Counted but not stored, so it costs no room and hides nothing.
+            self.bytes = bytes;
+            self.complete = complete;
+        }
     }
 
     fn effect(&mut self, member: &str, value: &Value, path: &str, name: String) -> ToolCallEffect {
         let name = self.display_name(&name);
-        let raw_name = self.display_name(member);
+        let raw_name = self.raw_name(member);
         let update_like = is_update_like(self.action);
         let mut effect = ToolCallEffect {
             path: path.to_string(),
@@ -575,6 +690,8 @@ impl<'a> Walk<'a> {
             old: None,
             removed: Vec::new(),
             kept: Vec::new(),
+            added: Vec::new(),
+            list: false,
             link: false,
         };
         match unwrap(value, is_plural(member)) {
@@ -591,6 +708,7 @@ impl<'a> Walk<'a> {
                 self.classify_scalar(member, path, scalar, &mut effect);
             }
             Unwrapped::List(entries) => {
+                effect.list = true;
                 self.list_values(&entries, path, &mut effect);
                 if update_like && !only_adds(member) {
                     self.saw_list = true;
@@ -716,8 +834,9 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// What a replaced list loses and keeps, where an earlier result showed
-    /// the list. A list that loses nothing replaces nothing.
+    /// What a replaced list loses, keeps and gains, where an earlier result
+    /// showed the whole list. A list known only in part proves nothing, and a
+    /// list that loses nothing replaces nothing.
     fn diff_list(
         &mut self,
         member: &str,
@@ -729,44 +848,68 @@ impl<'a> Walk<'a> {
             .earlier
             .as_ref()
             .and_then(|earlier| earlier.record.list(member))
-            .map(<[String]>::to_vec)
+            .filter(|old| old.complete)
+            .map(|old| old.entries.clone())
+        else {
+            return;
+        };
+        let Some(new) = entries
+            .iter()
+            .map(|entry| list_entry(entry))
+            .collect::<Option<Vec<ListEntry>>>()
         else {
             return;
         };
         self.used_earlier = true;
-        let new: Vec<String> = entries
-            .iter()
-            .filter_map(|entry| match unwrap(entry, false) {
-                Unwrapped::Scalar(scalar) => scalar_text(scalar),
-                _ => None,
-            })
-            .collect();
-        let as_value = |text: &String| Value::String(text.clone());
+        let mut old_shown = Vec::new();
         for entry in &old {
-            let shown = self.shown(&as_value(entry), path);
-            if new.contains(entry) {
-                effect.kept.extend(shown);
+            let Some(shown) = self.shown(&Value::String(entry.text.clone()), path) else {
+                continue;
+            };
+            old_shown.push(shown.clone());
+            if new
+                .iter()
+                .any(|candidate| list_entries_match(candidate, entry))
+            {
+                effect.kept.push(shown);
             } else {
-                effect.removed.extend(shown);
+                effect.removed.push(shown);
+            }
+        }
+        for entry in &new {
+            if !old
+                .iter()
+                .any(|candidate| list_entries_match(candidate, entry))
+            {
+                effect
+                    .added
+                    .extend(self.shown(&Value::String(entry.text.clone()), path));
             }
         }
         if !effect.removed.is_empty() {
             return;
         }
-        effect.effect = if old.iter().collect::<HashSet<_>>() == new.iter().collect::<HashSet<_>>()
-        {
+        effect.effect = if effect.added.is_empty() {
             ToolCallEffectKind::Unchanged
         } else {
             ToolCallEffectKind::Changed
         };
-        effect.old = Some(ToolCallEffectValue {
-            text: old.join(", "),
-            truncated: false,
-            machine_id: false,
-        });
+        // A machine ID nobody named would have to show raw: no old value then.
+        effect.old = old_shown
+            .iter()
+            .all(|value| !(value.machine_id && value.text.is_empty()))
+            .then(|| ToolCallEffectValue {
+                text: old_shown
+                    .iter()
+                    .map(|value| value.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                truncated: old_shown.iter().any(|value| value.truncated),
+                machine_id: false,
+            });
     }
 
-    fn push(&mut self, effect: ToolCallEffect) {
+    fn push(&mut self, effect: ToolCallEffect) -> Pushed {
         let counts = &mut self.change.counts;
         let count = match effect.effect {
             ToolCallEffectKind::Emptied => &mut counts.emptied,
@@ -788,16 +931,44 @@ impl<'a> Walk<'a> {
         } else {
             MAX_EFFECTS
         };
-        if self.change.effects.len() < cap {
+        // A value past the count cap was read and counted, so nothing about
+        // it is unknown; only a loss that cannot be stored is.
+        if self.change.effects.len() >= cap {
+            self.complete &= !is_loss;
+            return if is_loss {
+                Pushed::NoRoom
+            } else {
+                Pushed::PastCountCap
+            };
+        }
+        if self.afford(&effect, is_loss) {
             self.change.effects.push(effect);
+            Pushed::Stored
         } else {
             self.complete = false;
+            Pushed::NoRoom
         }
     }
 
+    /// Whether an effect's path and names still fit what a description stores.
+    fn afford(&mut self, effect: &ToolCallEffect, is_loss: bool) -> bool {
+        let cost =
+            ENTRY_OVERHEAD_BYTES + effect.path.len() + effect.name.len() + effect.raw_name.len();
+        let reserve = if is_loss { 0 } else { LOSS_RESERVE_BYTES };
+        if self.bytes.saturating_sub(reserve) < cost {
+            return false;
+        }
+        self.bytes -= cost;
+        true
+    }
+
     fn flag(&mut self, member: &str, path: &str, name: String, dry_run: bool) {
+        if self.change.flags.len() == MAX_FLAGS {
+            self.complete = false;
+            return;
+        }
         let name = self.display_name(&name);
-        let raw_name = self.display_name(member);
+        let raw_name = self.raw_name(member);
         self.change.flags.push(ToolCallFlag {
             name,
             raw_name,
@@ -812,6 +983,7 @@ impl<'a> Walk<'a> {
             every_record: false,
             parts: Vec::new(),
             text: None,
+            omitted: 0,
         };
         match value {
             Value::Null => filter.every_record = true,
@@ -827,11 +999,27 @@ impl<'a> Walk<'a> {
                     let inner_path = format!("{path}/{}", escape(member));
                     let name = readable_name(member, shared.as_deref(), "");
                     let name = self.display_name(&name);
-                    if let Some(value) = self.shown(inner, &inner_path) {
-                        filter.parts.push(ToolCallFilterPart { name, value });
+                    let is_empty = matches!(unwrap(inner, false), Unwrapped::Empty);
+                    let value = if is_empty {
+                        Some(ToolCallEffectValue {
+                            text: String::new(),
+                            truncated: false,
+                            machine_id: false,
+                        })
+                    } else {
+                        self.shown(inner, &inner_path)
+                    };
+                    if let Some(value) = value {
+                        filter.parts.push(ToolCallFilterPart {
+                            name,
+                            value,
+                            is_empty,
+                        });
                     }
                 }
-                self.complete &= members.len() <= MAX_FILTER_PARTS;
+                filter.omitted = u32::try_from(members.len().saturating_sub(MAX_FILTER_PARTS))
+                    .unwrap_or(u32::MAX);
+                self.complete &= filter.omitted == 0;
             }
             other => filter.text = self.shown(other, path),
         }
@@ -841,7 +1029,14 @@ impl<'a> Walk<'a> {
     fn recipients(&mut self, member: &str, value: &'a Value, path: &str) {
         let name = readable_name(member, None, "");
         let name = self.display_name(&name);
-        let raw_name = self.display_name(member);
+        let raw_name = self.raw_name(member);
+        let kind = match recipients_in(member, &[value]) {
+            Some(Recipients::Copy) if bare_member(member).contains("bcc") => {
+                ToolCallRecipientKind::Bcc
+            }
+            Some(Recipients::Copy) => ToolCallRecipientKind::Cc,
+            _ => ToolCallRecipientKind::To,
+        };
         let entries: Vec<&Value> = match value {
             Value::Array(entries) => entries.iter().collect(),
             value if is_nobody(value) => Vec::new(),
@@ -853,24 +1048,32 @@ impl<'a> Walk<'a> {
             }
             return;
         }
+        let addresses: Vec<Option<String>> = entries
+            .into_iter()
+            .flat_map(|entry| match recipient_text(entry) {
+                Some(text) => split_addresses(&text).into_iter().map(Some).collect(),
+                None => vec![None],
+            })
+            .collect();
+        let count = u32::try_from(addresses.len()).unwrap_or(u32::MAX);
         let known = self.facts.context.organization_domains().is_some();
         let change = self.change.recipients.get_or_insert_with(Default::default);
         change.outside_known = known;
-        change.total = change
-            .total
-            .saturating_add(u32::try_from(entries.len()).unwrap_or(u32::MAX));
+        change.total = change.total.saturating_add(count);
         let mut group = ToolCallRecipientGroup {
             name,
             raw_name,
-            count: u32::try_from(entries.len()).unwrap_or(u32::MAX),
+            kind,
+            count,
             values: Vec::new(),
             omitted: 0,
         };
-        for entry in entries {
-            match recipient_text(entry) {
+        for address in addresses {
+            match address {
                 Some(address) if !is_machine_id(&address) => {
+                    // Checked as written, so a shortened copy never decides.
+                    self.check_outside(&address);
                     let shown = self.display_name(&address);
-                    self.check_outside(&shown);
                     if group.values.len() < MAX_RECIPIENT_VALUES && self.take_bytes(&shown) {
                         group.values.push(shown);
                     } else {
@@ -892,22 +1095,23 @@ impl<'a> Walk<'a> {
     }
 
     fn check_outside(&mut self, address: &str) {
+        let Some(domain) = email_domain(address) else {
+            self.note_unchecked();
+            return;
+        };
         let known = self.facts.context.organization_domains().is_some();
-        let domain = email_domain(address).map(str::to_string);
-        let inside = domain
-            .as_deref()
-            .is_some_and(|domain| self.facts.context.is_inside_organization(domain));
+        if !known || self.facts.context.is_inside_organization(domain) {
+            return;
+        }
+        let shown = self.display_name(address);
+        let fits = self.take_bytes(&shown);
         let Some(change) = self.change.recipients.as_mut() else {
             return;
         };
-        if domain.is_none() {
-            change.unchecked = change.unchecked.saturating_add(1);
-        } else if known && !inside {
-            if change.outside.len() < MAX_OUTSIDE {
-                change.outside.push(address.to_string());
-            } else {
-                change.outside_omitted = change.outside_omitted.saturating_add(1);
-            }
+        if change.outside.len() < MAX_OUTSIDE && fits {
+            change.outside.push(shown);
+        } else {
+            change.outside_omitted = change.outside_omitted.saturating_add(1);
         }
     }
 
@@ -916,6 +1120,7 @@ impl<'a> Walk<'a> {
             return false;
         };
         if self.change.opaque.len() == MAX_OPAQUE {
+            self.change.opaque_omitted = self.change.opaque_omitted.saturating_add(1);
             self.complete = false;
             return true;
         }
@@ -929,8 +1134,12 @@ impl<'a> Walk<'a> {
             MAX_STORED_TEXT_CHARS,
         );
         self.hidden |= cleaned.hidden_characters;
+        if !self.take_bytes(&cleaned.text) {
+            self.change.opaque_omitted = self.change.opaque_omitted.saturating_add(1);
+            return true;
+        }
         let name = self.display_name(name);
-        let raw_name = self.display_name(member);
+        let raw_name = self.raw_name(member);
         self.change.opaque.push(ToolCallOpaque {
             kind,
             name,
@@ -952,6 +1161,11 @@ impl<'a> Walk<'a> {
         if self.before.is_some_and(|before| before == path) {
             return;
         }
+        if self.change.texts.len() == MAX_TEXTS {
+            self.change.texts_omitted = self.change.texts_omitted.saturating_add(1);
+            self.complete = false;
+            return;
+        }
         let cleaned = sanitize_display_text(
             text_prefix(raw, MAX_STORED_TEXT_CHARS * 8),
             MAX_STORED_TEXT_CHARS,
@@ -963,8 +1177,12 @@ impl<'a> Walk<'a> {
             }
             return;
         }
+        if !self.take_bytes(&cleaned.text) {
+            self.change.texts_omitted = self.change.texts_omitted.saturating_add(1);
+            return;
+        }
         let name = self.display_name(name);
-        let raw_name = self.display_name(member);
+        let raw_name = self.raw_name(member);
         let before = self.before_text();
         self.change.texts.push(ToolCallTextChange {
             path: path.to_string(),
@@ -978,7 +1196,13 @@ impl<'a> Walk<'a> {
         });
     }
 
+    /// The text the call says it replaces, stored once however many texts
+    /// it writes.
     fn before_text(&mut self) -> Option<ToolCallEffectValue> {
+        if self.before_stored {
+            return None;
+        }
+        self.before_stored = true;
         let path = self.before?;
         let raw = self.facts.arguments.pointer(path)?.as_str()?;
         let cleaned = sanitize_display_text(
@@ -986,6 +1210,9 @@ impl<'a> Walk<'a> {
             MAX_STORED_TEXT_CHARS,
         );
         self.hidden |= cleaned.hidden_characters;
+        if !self.take_bytes(&cleaned.text) {
+            return None;
+        }
         (!cleaned.text.is_empty()).then_some(ToolCallEffectValue {
             truncated: cleaned.truncated,
             text: cleaned.text,
@@ -994,15 +1221,18 @@ impl<'a> Walk<'a> {
     }
 
     fn batch(&mut self, entries: &'a [Value], path: &str, name: &str) {
-        if self.change.batch.is_some() {
-            // One list of rows is the call's batch; a second is left to the raw call.
+        if let Some(batch) = self.change.batch.as_mut() {
+            // One list of rows is the call's batch; a second is left to the
+            // raw call, and what no row does can no longer be said.
+            batch.read_all = false;
             self.complete = false;
             return;
         }
         let name = self.display_name(name);
         let total = u32::try_from(entries.len()).unwrap_or(u32::MAX);
         let read = entries.len().min(MAX_ROWS_READ);
-        let read_all = read == entries.len();
+        // With no verb nothing counts as a loss, so none can be ruled out.
+        let mut read_all = read == entries.len() && self.action != ToolCallAction::Other;
         let mut operations: BTreeMap<u8, (ToolCallAction, u32)> = BTreeMap::new();
         let mut shapes: HashSet<u64> = HashSet::new();
         let mut tallies: Vec<FieldTally> = Vec::new();
@@ -1036,18 +1266,14 @@ impl<'a> Walk<'a> {
             for (member, value) in members {
                 if self.nodes == 0 {
                     self.complete = false;
+                    read_all = false;
                     break;
                 }
                 self.nodes -= 1;
                 let value_path = format!("{row_path}/{}", escape(member));
                 if is_verb_field(member, value)
                     || is_row_identifier(member, value)
-                    || rules::claim(
-                        self.facts.arguments,
-                        &value_path,
-                        self.facts.approval_argument,
-                    )
-                    .is_some()
+                    || self.row_member_left_out(&value_path, value)
                 {
                     continue;
                 }
@@ -1068,20 +1294,27 @@ impl<'a> Walk<'a> {
                         replaces = true;
                         tallies[at].lists += 1;
                     }
+                    // What such a value holds was not looked at.
+                    Unwrapped::Other => read_all = false,
                     _ => {}
                 }
                 tallies[at].rows += 1;
-                if tallies[at].first.len() < MAX_FIELD_SAMPLES
-                    && tallies[at].distinct.insert(hash)
-                    && !matches!(unwrap(value, false), Unwrapped::Empty)
-                {
-                    tallies[at].first.push((value, value_path));
-                } else if tallies[at].distinct.len() < MAX_DISTINCT_TRACKED {
-                    tallies[at].distinct.insert(hash);
+                // An emptied row is counted as that, not as one more value.
+                if !matches!(unwrap(value, false), Unwrapped::Empty) {
+                    let tally = &mut tallies[at];
+                    if tally.distinct.len() < MAX_DISTINCT_TRACKED {
+                        let new = tally.distinct.insert(hash);
+                        if new && tally.first.len() < MAX_FIELD_SAMPLES {
+                            tally.first.push((value, value_path));
+                        }
+                    }
                 }
             }
             rows_emptying += u32::from(empties);
             rows_replacing_lists += u32::from(replaces);
+            // A row's own operation is part of what it does.
+            let operation = action.map_or(u8::MAX, action_rank);
+            shape.push(("", u64::from(operation)));
             shape.sort_unstable();
             shapes.insert({
                 use std::hash::{Hash, Hasher};
@@ -1103,14 +1336,21 @@ impl<'a> Walk<'a> {
             let Some(Value::Object(members)) = entries.get(index) else {
                 continue;
             };
+            if self.bytes < ENTRY_OVERHEAD_BYTES {
+                self.complete = false;
+                break;
+            }
+            self.bytes -= ENTRY_OVERHEAD_BYTES;
             rows.push(self.batch_row(index, members, path));
         }
-        let same_change = read_all && shapes.len() == 1 && total > 1;
+        // Fields past a row's cap were never compared on the card.
+        let every_field_stated = !rows.is_empty()
+            && rows
+                .iter()
+                .all(|row: &ToolCallBatchRow| row.effects_omitted == 0);
+        let same_change = read_all && every_field_stated && shapes.len() == 1 && total > 1;
         let shared = same_change
-            .then(|| {
-                rows.first()
-                    .map(|row: &ToolCallBatchRow| row.effects.clone())
-            })
+            .then(|| rows.first().map(|row| row.effects.clone()))
             .flatten()
             .unwrap_or_default();
         let fields_omitted =
@@ -1151,26 +1391,29 @@ impl<'a> Walk<'a> {
         let shared = shared_prefix(members);
         let edit = text_edit(members);
         let mut name = None;
+        let mut name_from_earlier = false;
         let mut effects = Vec::new();
+        let mut effects_omitted = 0u32;
+        // A row only compares with what an earlier read said about that row.
+        let row_earlier = self.row_record(members);
+        let call_earlier = std::mem::replace(&mut self.earlier, row_earlier);
         for (member, value) in members {
             let value_path = format!("{row_path}/{}", escape(member));
             if is_verb_field(member, value)
-                || rules::claim(
-                    self.facts.arguments,
-                    &value_path,
-                    self.facts.approval_argument,
-                )
-                .is_some()
+                || self.row_member_left_out(&value_path, value)
                 || edit.is_some_and(|(before, _)| before == member.as_str())
             {
                 continue;
             }
             if is_row_identifier(member, value) {
-                let label = self.row_label(value, &value_path);
-                name = name.or(label);
+                if name.is_none() {
+                    name_from_earlier = is_machine_id(value.as_str().unwrap_or_default());
+                    name = self.row_label(value, &value_path);
+                }
                 continue;
             }
             if effects.len() == MAX_ROW_EFFECTS {
+                effects_omitted = effects_omitted.saturating_add(1);
                 continue;
             }
             let readable = readable_name(member, shared.as_deref(), "");
@@ -1180,14 +1423,44 @@ impl<'a> Walk<'a> {
                 }
                 _ => self.effect(member, value, &value_path, readable),
             };
-            effects.push(effect);
+            let stored = self.afford(&effect, effect.effect == ToolCallEffectKind::Emptied);
+            if stored {
+                effects.push(effect);
+            } else {
+                effects_omitted = effects_omitted.saturating_add(1);
+                self.complete = false;
+            }
         }
+        self.earlier = call_earlier;
         ToolCallBatchRow {
             number,
             name,
+            name_from_earlier,
             action: row_action(members),
             effects,
+            effects_omitted,
         }
+    }
+
+    /// Whether a row member is consent or a lookup's name. A name left empty
+    /// in a row shaped like a lookup is still a value the row empties.
+    fn row_member_left_out(&self, path: &str, value: &Value) -> bool {
+        match rules::claim(self.facts.arguments, path, self.facts.approval_argument) {
+            Some(Claim::Consent) => true,
+            Some(Claim::LookupName) => !matches!(unwrap(value, false), Unwrapped::Empty),
+            None => false,
+        }
+    }
+
+    /// What an earlier read said about this row, by its own ID.
+    fn row_record(&self, members: &Map<String, Value>) -> Option<EarlierRecord<'a>> {
+        let server = self.facts.server?;
+        let id = members
+            .iter()
+            .find(|(member, value)| names_an_id(member) && is_scalar(value))
+            .and_then(|(_, value)| scalar_text(value))?;
+        let record = self.facts.context.record_by_id(server, &id)?;
+        Some(EarlierRecord { record, server })
     }
 
     fn batch_field(&mut self, tally: FieldTally<'a>) -> ToolCallBatchField {
@@ -1198,7 +1471,7 @@ impl<'a> Walk<'a> {
             .collect();
         ToolCallBatchField {
             name: self.display_name(&tally.name),
-            raw_name: self.display_name(tally.raw_name),
+            raw_name: self.raw_name(tally.raw_name),
             rows: tally.rows,
             emptied: tally.emptied,
             lists_replaced: tally.lists,
@@ -1313,12 +1586,22 @@ impl<'a> Walk<'a> {
             && self.change.texts.is_empty()
             && self.change.opaque.is_empty()
             && self.change.batch.is_none()
+            && self.change.recipients.is_none()
+            && self.change.filter.is_none()
+            && self.change.flags.is_empty()
+            && !self.consent_left_out
+            && self.complete
         {
             notes.push(ToolCallChangeNote::NothingChanges);
         }
         self.change.notes = notes;
         (self.change, self.hidden)
     }
+}
+
+/// A call's own text can never pose as the mark for a hidden ID.
+fn without_mark(text: &str) -> String {
+    text.replace(HIDDEN_ID_MARK, "")
 }
 
 fn is_update_like(action: ToolCallAction) -> bool {
@@ -1491,7 +1774,11 @@ fn readable_name(member: &str, shared: Option<&str>, prefix: &str) -> String {
     if member.is_empty() {
         return prefix.trim_end_matches(" · ").to_string();
     }
-    let humanised = member_words(member, shared);
+    let humanised = if is_machine_id(member) {
+        HIDDEN_ID_MARK.to_string()
+    } else {
+        without_mark(&member_words(member, shared))
+    };
     format!("{prefix}{humanised}")
 }
 
@@ -1591,7 +1878,7 @@ pub(super) fn unwrap(value: &Value, list_like: bool) -> Unwrapped<'_> {
     for _ in 0..8 {
         match current {
             Value::Null => return Unwrapped::Empty,
-            Value::String(text) if text.is_empty() => return Unwrapped::Empty,
+            Value::String(text) if text.trim().is_empty() => return Unwrapped::Empty,
             Value::String(_) | Value::Number(_) | Value::Bool(_) => {
                 return Unwrapped::Scalar(current);
             }
@@ -1693,20 +1980,65 @@ fn recipient_text(value: &Value) -> Option<String> {
     }
 }
 
-/// The domain of `Display Name <a@b>` or `a@b`, read only from plain ASCII.
+/// The addresses a text holds: `a@b, "Doe, Jo" <c@d>; e@f` is three. Commas
+/// and semicolons inside quotes or angle brackets do not split, and a text
+/// with no `@` stays one recipient.
+fn split_addresses(text: &str) -> Vec<String> {
+    let text = text.trim();
+    if !text.contains('@') {
+        return vec![text.to_string()];
+    }
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    let mut angled = false;
+    for c in text.chars() {
+        match c {
+            '"' => {
+                quoted = !quoted;
+                current.push(c);
+            }
+            '<' if !quoted => {
+                angled = true;
+                current.push(c);
+            }
+            '>' if !quoted => {
+                angled = false;
+                current.push(c);
+            }
+            ',' | ';' if !quoted && !angled => {
+                if !current.trim().is_empty() {
+                    out.push(current.trim().to_string());
+                }
+                current.clear();
+            }
+            c => current.push(c),
+        }
+    }
+    if !current.trim().is_empty() {
+        out.push(current.trim().to_string());
+    }
+    out
+}
+
+/// The domain of `Display Name <a@b>` or `a@b`, read only from a plain ASCII
+/// host name. Anything else cannot be checked, and the caller says so.
 fn email_domain(address: &str) -> Option<&str> {
-    let bare = address
-        .rsplit_once('<')
-        .map(|(_, rest)| rest.trim_end_matches('>'))
-        .unwrap_or(address)
-        .trim();
+    let bare = match address.rsplit_once('<') {
+        Some((_, rest)) => rest.strip_suffix('>')?,
+        None => address,
+    }
+    .trim();
     let (local, domain) = bare.split_once('@')?;
+    let host_name = !domain.is_empty()
+        && domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'));
     (!local.is_empty()
-        && !domain.is_empty()
-        && !domain.contains('@')
-        && domain.is_ascii()
+        && !local.contains(['"', '<', '>', ' ', ','])
+        && host_name
         && !is_phone_shaped(bare))
-    .then_some(domain)
+    .then_some(domain.trim_end_matches('.'))
 }
 
 /// Whether a row member is what identifies the row rather than a value it
@@ -1726,7 +2058,9 @@ fn is_row_identifier(member: &str, value: &Value) -> bool {
         "key",
         "sku",
     ];
+    let names_nothing = value.as_str().is_some_and(|text| text.trim().is_empty());
     is_scalar(value)
+        && !names_nothing
         && (names_an_id(member)
             || is_one_of(member, &ROW_NAMES)
             || value.as_str().is_some_and(is_machine_id))
@@ -1931,6 +2265,17 @@ fn findings(kind: ToolCallOpaqueKind, text: &str) -> Vec<String> {
     found
 }
 
+const RESTORABLE_PHRASES: [&str; 4] = [
+    "can be restored",
+    "can be recovered",
+    "to the trash",
+    "to trash",
+];
+/// A sentence with one of these says the opposite or is unclear: no claim.
+const NEGATIONS: [&str; 7] = [
+    "not ", "n't", "no way", "never", "cannot", "without", "unable",
+];
+
 /// What a tool's own description says about what it does, as closed facts.
 /// Text the server wrote only ever selects one of these.
 struct ToolText {
@@ -1953,17 +2298,18 @@ impl ToolText {
                 || has("replaces all")
                 || has("overwrites")
                 || has("will be replaced"),
-            adds_to_list: has("append-only") || has("only adds") || has("never removed"),
+            adds_to_list: has("append-only") || has("only adds"),
             ignored_if_missing: has("ignored if") || has("ignores this") || has("silently ignored"),
             permanent: (has("permanently") && !has("not permanently"))
                 || has("cannot be undone")
                 || has("irreversible"),
             restorable: has("not permanently")
-                || has("can be restored")
-                || has("to restore")
-                || has("can be recovered")
-                || has("to the trash")
-                || has("to trash"),
+                || lower.split(['.', ';', '\n']).any(|sentence| {
+                    RESTORABLE_PHRASES
+                        .iter()
+                        .any(|phrase| sentence.contains(phrase))
+                        && !NEGATIONS.iter().any(|word| sentence.contains(word))
+                }),
         }
     }
 
@@ -1979,50 +2325,70 @@ impl ToolText {
 }
 
 /// Drops what earlier results in the chat said, for a label copied into
-/// another chat: values stay as written, and machine IDs lose the names
-/// that earlier results gave them.
+/// another chat: values stay as written, machine IDs lose the names earlier
+/// results gave them, and what was known only by comparison becomes "set".
 pub fn forget_earlier(change: &mut ToolCallChange) {
-    let counts = &mut change.counts;
-    *counts = ToolCallEffectCounts::default();
-    let fix = |effect: &mut ToolCallEffect, counts: &mut ToolCallEffectCounts| {
+    fn forget_value(value: &mut ToolCallEffectValue) {
+        if value.machine_id {
+            value.text.clear();
+        }
+    }
+    fn forget_effect(effect: &mut ToolCallEffect) {
         effect.old = None;
         effect.removed.clear();
         effect.kept.clear();
-        for value in &mut effect.values {
-            if value.machine_id {
-                value.text.clear();
-            }
-        }
+        effect.added.clear();
+        effect.values.iter_mut().for_each(forget_value);
         if matches!(
             effect.effect,
             ToolCallEffectKind::Changed | ToolCallEffectKind::Unchanged
         ) {
-            effect.effect = ToolCallEffectKind::Set;
+            effect.effect = if effect.list {
+                ToolCallEffectKind::ListReplaced
+            } else {
+                ToolCallEffectKind::Set
+            };
         }
-        let count = match effect.effect {
-            ToolCallEffectKind::Emptied => &mut counts.emptied,
-            ToolCallEffectKind::ListReplaced => &mut counts.list_replaced,
-            ToolCallEffectKind::Changed => &mut counts.changed,
-            ToolCallEffectKind::Set => &mut counts.set,
-            ToolCallEffectKind::Unchanged => &mut counts.unchanged,
-            ToolCallEffectKind::Unreadable => &mut counts.unreadable,
-        };
-        *count = count.saturating_add(1);
-    };
-    for effect in &mut change.effects {
-        fix(effect, counts);
+    }
+    let lists_compared = change
+        .effects
+        .iter()
+        .filter(|effect| {
+            effect.list
+                && matches!(
+                    effect.effect,
+                    ToolCallEffectKind::Changed | ToolCallEffectKind::Unchanged
+                )
+        })
+        .count();
+    let lists_compared = u32::try_from(lists_compared).unwrap_or(u32::MAX);
+    // Counts cover values past the stored cap, so they move as a whole.
+    let counts = &mut change.counts;
+    let compared = counts.changed.saturating_add(counts.unchanged);
+    counts.list_replaced = counts.list_replaced.saturating_add(lists_compared);
+    counts.set = counts
+        .set
+        .saturating_add(compared.saturating_sub(lists_compared));
+    counts.changed = 0;
+    counts.unchanged = 0;
+    change.effects.iter_mut().for_each(forget_effect);
+    if let Some(filter) = change.filter.as_mut() {
+        filter.text.iter_mut().for_each(forget_value);
+        filter
+            .parts
+            .iter_mut()
+            .for_each(|part| forget_value(&mut part.value));
     }
     if let Some(batch) = change.batch.as_mut() {
-        for effect in batch
-            .shared
-            .iter_mut()
-            .chain(batch.rows.iter_mut().flat_map(|row| row.effects.iter_mut()))
-        {
-            effect.old = None;
-            for value in &mut effect.values {
-                if value.machine_id {
-                    value.text.clear();
-                }
+        batch.shared.iter_mut().for_each(forget_effect);
+        batch.fields.iter_mut().for_each(|field| {
+            field.samples.iter_mut().for_each(forget_value);
+        });
+        for row in &mut batch.rows {
+            row.effects.iter_mut().for_each(forget_effect);
+            if row.name_from_earlier {
+                row.name = None;
+                row.name_from_earlier = false;
             }
         }
     }

@@ -72,6 +72,39 @@ pub struct ToolResultContext {
     organization: Option<OrganizationDomains>,
 }
 
+/// Mail providers anyone can sign up with: an address there says nothing about
+/// which organisation a person belongs to.
+const PUBLIC_MAIL_DOMAINS: [&str; 20] = [
+    "gmail.com",
+    "googlemail.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "yahoo.com",
+    "icloud.com",
+    "me.com",
+    "mac.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+    "gmx.de",
+    "gmx.net",
+    "web.de",
+    "t-online.de",
+    "mail.com",
+    "yandex.com",
+    "zoho.com",
+];
+
+fn normalized_domain(domain: &str) -> String {
+    domain
+        .trim()
+        .trim_start_matches('@')
+        .trim_matches('.')
+        .to_ascii_lowercase()
+}
+
 /// The signed-in user's email domain and the operator's extra ones.
 #[derive(Debug, Clone, Default)]
 struct OrganizationDomains {
@@ -81,7 +114,7 @@ struct OrganizationDomains {
 impl OrganizationDomains {
     /// A subdomain counts: only the domain's owner can issue one.
     fn holds(&self, domain: &str) -> bool {
-        let domain = domain.to_ascii_lowercase();
+        let domain = normalized_domain(domain);
         self.domains.iter().any(|known| {
             domain == *known
                 || domain
@@ -112,8 +145,8 @@ impl RecordKey {
 pub(super) struct Record {
     name: Option<String>,
     fields: HashMap<String, String>,
-    /// Fields that held a list, as the entries' texts.
-    lists: HashMap<String, Vec<String>>,
+    /// Fields that held a list.
+    lists: HashMap<String, RecordList>,
     /// A non-UUID ID that named two different things: it resolves to nothing.
     ambiguous: bool,
 }
@@ -123,26 +156,90 @@ impl Record {
         self.fields.get(member).cloned()
     }
 
-    pub(super) fn list(&self, member: &str) -> Option<&[String]> {
-        self.lists.get(member).map(Vec::as_slice)
+    pub(super) fn list(&self, member: &str) -> Option<&RecordList> {
+        self.lists.get(member)
     }
+}
+
+/// A list a result showed. `complete` says every entry was read.
+#[derive(Debug, Clone, Default)]
+pub(super) struct RecordList {
+    pub entries: Vec<ListEntry>,
+    pub complete: bool,
+}
+
+/// One entry of a list, by what a person calls it and, where it has one, by
+/// its own ID, so a list of names compares with a list of IDs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ListEntry {
+    pub text: String,
+    pub id: Option<String>,
+}
+
+const LIST_NAME_KEYS: [&str; 8] = [
+    "name",
+    "title",
+    "label",
+    "displayname",
+    "login",
+    "key",
+    "value",
+    "email",
+];
+
+/// An entry of a list as text: an object by its name or label, a wrapper by
+/// what it holds. `None` when it cannot be read.
+pub(super) fn list_entry(value: &Value) -> Option<ListEntry> {
+    if let Value::Object(members) = value {
+        let scalar = |keys: &[&str]| {
+            keys.iter().find_map(|key| {
+                members
+                    .iter()
+                    .find(|(member, _)| member.eq_ignore_ascii_case(key))
+                    .and_then(|(_, value)| scalar_text(value))
+            })
+        };
+        let id = scalar(&["id"]);
+        if let Some(text) = scalar(&LIST_NAME_KEYS) {
+            return Some(ListEntry { text, id });
+        }
+        if let Some(text) = id {
+            return Some(ListEntry {
+                id: Some(text.clone()),
+                text,
+            });
+        }
+    }
+    match unwrap(value, false) {
+        Unwrapped::Scalar(scalar) => scalar_text(scalar).map(|text| ListEntry { text, id: None }),
+        _ => None,
+    }
+}
+
+/// Whether two list entries are the same thing, by name or by ID.
+pub(super) fn list_entries_match(a: &ListEntry, b: &ListEntry) -> bool {
+    a.text == b.text
+        || a.id.is_some() && a.id == b.id
+        || a.id.as_deref() == Some(b.text.as_str())
+        || b.id.as_deref() == Some(a.text.as_str())
 }
 
 impl ToolResultContext {
     /// Records who counts as inside the organisation for this chat's user:
-    /// `user_email`'s domain plus `extra_domains`. With no user domain nothing
-    /// is known, whatever is configured, so no card claims none are outside.
+    /// `user_email`'s domain plus `extra_domains`. With no user domain, or one
+    /// of a public mail provider, nothing is known, whatever is configured,
+    /// so no card claims none are outside.
     pub fn with_organization(mut self, user_email: Option<&str>, extra_domains: &[String]) -> Self {
         let own = user_email
             .and_then(|email| email.rsplit_once('@'))
-            .map(|(_, domain)| domain.trim().to_ascii_lowercase())
-            .filter(|domain| !domain.is_empty());
+            .map(|(_, domain)| normalized_domain(domain))
+            .filter(|domain| !domain.is_empty() && !PUBLIC_MAIL_DOMAINS.contains(&domain.as_str()));
         self.organization = own.map(|own| {
             let mut domains = vec![own];
             domains.extend(
                 extra_domains
                     .iter()
-                    .map(|domain| domain.trim().trim_start_matches('@').to_ascii_lowercase())
+                    .map(|domain| normalized_domain(domain))
                     .filter(|domain| !domain.is_empty()),
             );
             OrganizationDomains { domains }
@@ -312,6 +409,11 @@ impl ToolResultContext {
             })
     }
 
+    /// The record a result reported under `id` itself.
+    pub(super) fn record_by_id(&self, server: &str, id: &str) -> Option<&Record> {
+        self.record(server, text_key(id)?)
+    }
+
     /// What a result calls the record `id` stands for.
     pub(super) fn name_of_id(&self, server: &str, id: &str) -> Option<&str> {
         self.record(server, text_key(id)?)?.name.as_deref()
@@ -476,9 +578,16 @@ impl ToolResultContext {
         {
             object = inner;
         }
-        let Some((_, key)) = one_named_id(input) else {
+        let Some((id, key)) = one_named_id(input) else {
             return;
         };
+        // Without the ID echoed back, the object may be about anything else.
+        if !object
+            .values()
+            .any(|value| id_key(value).as_deref() == Some(id.as_str()))
+        {
+            return;
+        }
         let name = name_of(object);
         let (fields, lists) = values_of(object, "", walk);
         if name.is_some() || !fields.is_empty() || !lists.is_empty() {
@@ -592,7 +701,7 @@ impl ToolResultContext {
         key: RecordKey,
         name: Option<String>,
         fields: HashMap<String, String>,
-        lists: HashMap<String, Vec<String>>,
+        lists: HashMap<String, RecordList>,
     ) {
         if !indexable(&key.id) {
             return;
@@ -676,8 +785,14 @@ fn record_bytes(key: &RecordKey, record: &Record) -> usize {
     let lists: usize = record
         .lists
         .iter()
-        .map(|(member, entries)| {
-            OVERHEAD + member.len() + entries.iter().map(String::len).sum::<usize>()
+        .map(|(member, list)| {
+            OVERHEAD
+                + member.len()
+                + list
+                    .entries
+                    .iter()
+                    .map(|entry| entry.text.len() + entry.id.as_ref().map_or(0, String::len))
+                    .sum::<usize>()
         })
         .sum();
     OVERHEAD
@@ -694,7 +809,7 @@ const QUALIFIED_SEPARATOR: char = '\u{1f}';
 /// The ID a call's arguments name a record by, when they name just one, and
 /// the key that record is kept under. Members naming a place are the key's
 /// scope; a recipient, address or phone number is never an ID.
-fn one_named_id(arguments: &Value) -> Option<(&str, String)> {
+fn one_named_id(arguments: &Value) -> Option<(String, String)> {
     let top = arguments.as_object()?;
     let mut ids = top.iter().filter(|(member, value)| {
         matches!(value, Value::String(_) | Value::Number(_))
@@ -707,7 +822,7 @@ fn one_named_id(arguments: &Value) -> Option<(&str, String)> {
     if ids.next().is_some() {
         return None;
     }
-    Some((member.as_str(), qualified_key(arguments, member, value)?))
+    Some((id_key(value)?, qualified_key(arguments, member, value)?))
 }
 
 fn is_any_of(member: &str, names: &[&str]) -> bool {
@@ -991,7 +1106,7 @@ fn values_of(
     object: &Map<String, Value>,
     id_member: &str,
     walk: &mut Walk,
-) -> (HashMap<String, String>, HashMap<String, Vec<String>>) {
+) -> (HashMap<String, String>, HashMap<String, RecordList>) {
     let mut fields = HashMap::new();
     let mut lists = HashMap::new();
     let mut nested = Vec::new();
@@ -1043,7 +1158,7 @@ fn values_of(
 /// One value of a record, past its wrappers.
 enum RecordValue {
     Text(String),
-    List(Vec<String>),
+    List(RecordList),
     /// An object or list none of whose shapes this reads.
     Unread,
 }
@@ -1053,7 +1168,7 @@ impl RecordValue {
         self,
         member: &str,
         fields: &mut HashMap<String, String>,
-        lists: &mut HashMap<String, Vec<String>>,
+        lists: &mut HashMap<String, RecordList>,
     ) {
         match self {
             Self::Text(text) => {
@@ -1069,19 +1184,24 @@ impl RecordValue {
 
 fn record_value(member: &str, value: &Value) -> Option<RecordValue> {
     match unwrap(value, is_plural(member)) {
-        Unwrapped::Empty if value.is_array() => Some(RecordValue::List(Vec::new())),
+        Unwrapped::Empty if value.is_array() => Some(RecordValue::List(RecordList {
+            entries: Vec::new(),
+            complete: true,
+        })),
         Unwrapped::Empty => None,
         Unwrapped::Scalar(scalar) => scalar_text(scalar).map(RecordValue::Text),
-        Unwrapped::List(entries) => Some(RecordValue::List(
-            entries
+        Unwrapped::List(entries) => {
+            let total = entries.len();
+            let read: Vec<ListEntry> = entries
                 .into_iter()
                 .take(MAX_LIST_ENTRIES)
-                .filter_map(|entry| match unwrap(entry, false) {
-                    Unwrapped::Scalar(scalar) => scalar_text(scalar),
-                    _ => None,
-                })
-                .collect(),
-        )),
+                .filter_map(list_entry)
+                .collect();
+            Some(RecordValue::List(RecordList {
+                complete: read.len() == total,
+                entries: read,
+            }))
+        }
         Unwrapped::Other => Some(RecordValue::Unread),
     }
 }

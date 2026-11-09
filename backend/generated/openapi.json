@@ -13387,6 +13387,10 @@
           "kind": {
             "$ref": "#/components/schemas/ToolArgumentKind"
           },
+          "machine_name": {
+            "type": "boolean",
+            "description": "The member's own name is a machine identifier, which a card does not show."
+          },
           "omitted": {
             "type": "integer",
             "format": "int32",
@@ -13578,9 +13582,19 @@
               "$ref": "#/components/schemas/ToolCallEffect"
             }
           },
+          "effects_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Fields of the row past the cap, which the card counts.",
+            "minimum": 0
+          },
           "name": {
             "type": "string",
             "description": "What it is called; absent when only a machine ID identifies it."
+          },
+          "name_from_earlier": {
+            "type": "boolean",
+            "description": "`name` came from an earlier result naming a machine ID, not the call."
           },
           "number": {
             "type": "integer",
@@ -13638,6 +13652,12 @@
             },
             "description": "Content the card cannot read: SQL, shell, code or an instruction."
           },
+          "opaque_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Statements past the cap, which the card counts.",
+            "minimum": 0
+          },
           "place": {
             "type": "string",
             "description": "Where the record lives when no target says so: the table, the project,\njoined when the call names several."
@@ -13651,6 +13671,12 @@
               "$ref": "#/components/schemas/ToolCallTextChange"
             },
             "description": "Long text the call writes, shown as a block."
+          },
+          "texts_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Long texts past the cap, which the card counts.",
+            "minimum": 0
           }
         }
       },
@@ -13683,6 +13709,13 @@
           "effect"
         ],
         "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallEffectValue"
+            },
+            "description": "What a replaced list gains, where an earlier result showed the list."
+          },
           "effect": {
             "$ref": "#/components/schemas/ToolCallEffectKind"
           },
@@ -13696,6 +13729,10 @@
           "link": {
             "type": "boolean",
             "description": "The value only links to another record."
+          },
+          "list": {
+            "type": "boolean",
+            "description": "The value is a list, whichever effect it has."
           },
           "name": {
             "type": "string",
@@ -13811,6 +13848,12 @@
             "type": "boolean",
             "description": "The filter is empty: every record."
           },
+          "omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Conditions past the cap, which the card counts.",
+            "minimum": 0
+          },
           "parts": {
             "type": "array",
             "items": {
@@ -13833,6 +13876,10 @@
           "value"
         ],
         "properties": {
+          "is_empty": {
+            "type": "boolean",
+            "description": "The condition asks for an empty value."
+          },
           "name": {
             "type": "string"
           },
@@ -14102,6 +14149,10 @@
             "format": "int32",
             "minimum": 0
           },
+          "kind": {
+            "$ref": "#/components/schemas/ToolCallRecipientKind",
+            "description": "To, copy or blind copy, in words a card can say."
+          },
           "name": {
             "type": "string"
           },
@@ -14121,6 +14172,15 @@
             "description": "Every address as written, capped; machine IDs are counted, not listed."
           }
         }
+      },
+      "ToolCallRecipientKind": {
+        "type": "string",
+        "description": "How a group of recipients is addressed.",
+        "enum": [
+          "to",
+          "cc",
+          "bcc"
+        ]
       },
       "ToolCallRecipients": {
         "type": "object",

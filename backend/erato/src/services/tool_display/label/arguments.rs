@@ -116,11 +116,13 @@ impl View {
         depth: usize,
     ) -> ToolArgumentNode {
         self.budget = self.budget.saturating_sub(1);
+        let machine_name = key.is_some_and(is_machine_id);
         let mut node = ToolArgumentNode {
             path,
             kind: kind_of(value, key),
             children: Vec::new(),
             omitted: 0,
+            machine_name,
         };
         match value {
             Value::Object(members) => {
