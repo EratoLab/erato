@@ -383,8 +383,14 @@ the freshness, read from the same place: `detail` is the call's receipt input fi
 (`replay.keep_input_fields` without `child_context_input`) and the reported
 `changes`, and `counts` are the freshness counts. Only short tokens and integers
 are copied from the host. For Word the part stays empty until the overlay keeps a
-part field in its receipt (ERMAIN-1004). A resumed child's events are folded
-into the trace its park left behind.
+part field in its receipt (ERMAIN-1004). Outlook's `fetch_availability`
+keeps no receipt by decision (ERMAIN-1006). A `[replay]` receipt shortens only
+what the model sees of calls from earlier user turns (the stored result stays
+full), but it would also shorten the coordinator's own earlier calls, and on the
+turn the user picks a slot the model must copy the earlier result's
+`suggestedSlots` `startIso`/`endIso` verbatim. Its trace step shows the tool and
+the freshness without a part, a deviation from contract §12. A resumed child's
+events are folded into the trace its park left behind.
 
 ## Frontend
 
@@ -412,12 +418,14 @@ runs the host-facing cases once for each row in `delegated/rows.rs`, against a
 test-driven pane: a fake host with a context version on `word_document`, the
 same fake host without one on `outlook_mailbox`, the `desktop_sidecar` and
 `desktop_sidecar_web` rows (ERMAIN-1034), the `word_document` row (ERMAIN-1003)
-and the `outlook_mailbox` row, which stays ignored until ERMAIN-1006 enables it.
-The dispatch case checks that the task's schema asks, in none of its
-alternatives, for the context input or the fields the host fills. A row marked `slow_path` also runs the slow-path cases
+and the `outlook_mailbox` row (ERMAIN-1006). The dispatch case checks that the
+task's schema asks, in none of its alternatives, for the context input or the
+fields the host fills. A row marked `slow_path` also runs the slow-path cases
 (`delegated/slow_path.rs`): the fake host on `outlook_mailbox`, both sidecar
-rows and the ignored `outlook_mailbox` row. A row's `envelope` says how every
-parent-side request of the harness (submit, regenerate, retry) sends its
+rows and the `outlook_mailbox` row. The overlay gives Outlook's
+`fetch_availability` no `durable` table, so its tasks read live; the slow-path
+cases add one and hold the backend to the host's binding. A row's `envelope`
+says how every parent-side request of the harness (submit, regenerate, retry) sends its
 binding, as the shells send it: as `X-Erato-Executor`, in
 `X-Erato-Additional-Executors` beside another `X-Erato-Executor` (the
 `desktop_sidecar` row, with a fake Office binding, as an add-in sends it), or

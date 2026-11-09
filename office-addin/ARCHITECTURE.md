@@ -417,7 +417,7 @@ lineage check, read-only mode, freshness shape and loss outcomes.
 | --- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | A host context kind and a binding sent as `X-Erato-Executor`, or beside it  | The kind is compiled (`ClientToolHostContext` in `backend/erato_config/src/config.rs`). The pane registers its binding per tool with `registerOperationExecutor`; Word builds it in `word/utils/wordDocumentOperationBinding.ts`, Outlook in `outlook/hooks/useOutlookClientTools.ts`. A host whose pane also serves another host's binding registers with `{ additional: true }` (the desktop sidecar, `DesktopSidecarClientTools`): its binding travels in `X-Erato-Additional-Executors`, one per kind, and `X-Erato-Executor` stays what an older server routes by.                                                                       |
 | 2   | The executor stream, handlers by tool, grant-capable tools advertised       | The shared coordinator opens one stream per binding (`openExecutorStream` in `frontend/src/lib/clientOperations/`); an additional binding's stream is held by one tab of the browser profile at a time (Web Locks) and moves to a visible tab once the holder is hidden and runs no call it delivered. Register each read with `registerClientToolExecutor(name, execute, isAvailable, { acceptsGrantCalls: true })`; only those are listed in `X-Erato-Child-Client-Tools`.                                                                                                                                                                  |
-| 3   | The lineage check (§7)                                                      | The handler compares `ClientToolCallContext.hostGrant` with its own context owner and version before it reads anything. A context that outlives the pane has no owner turn on the device (the desktop sidecar): it checks the requesting ids and the context version, the server checks the owner at offer, dispatch, claim and every renewal, and its kit harness says `ownerCheck: "server"`.                                                                                                                                                                                                                                               |
+| 3   | The lineage check (§7)                                                      | The handler compares `ClientToolCallContext.hostGrant` with its own context owner and version before it reads anything. A context that outlives the pane has no owner turn on the device (the desktop sidecar, Outlook's availability read): it checks the requesting ids and the context version, the server checks the owner at offer, dispatch, claim and every renewal, and its kit harness says `ownerCheck: "server"`.                                                                                                                                                                                                                  |
 | 4   | A read-only mode for every child-eligible tool                              | Configuration marks the tool: `child_access = "read"` and `host_context`, plus `child_context_arg` and `child_context_input` for a captured context version, and `child_host_inputs` for fields the handler fills from its own context (the task's model is not asked for them). Under `hostGrant` the handler returns no write token and no write guidance and leaves the coordinator's state alone. Write tools are registered without `acceptsGrantCalls`: `runClientToolCall`, the only place a `hostGrant` is made, used by the live dispatcher and the durable handler, answers a grant call to them with an error and never runs them. |
 | 5   | A freshness producer, with its blind spots documented                       | `result.freshness` on every read (§10), listed in the host context template below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 6   | Typed loss outcomes (§6)                                                    | A terminal `ok: false`: `validationErrors[].code` set to `capture-unavailable` (Word) or `context_unavailable`, with `submissionFeedback: { terminal: true, recovery: "cannot_continue" }`. A refusal on the device answers with the code `declined`, which becomes the `declined` outcome on both paths. On the slow path a `context_unavailable` loss completes nothing: the claim lapses and the call waits for a client that can serve it.                                                                                                                                                                                                |
@@ -529,6 +529,41 @@ Conformance:           backend row word_document; frontend
                        overlay ERMAIN-1004
 ```
 
+Outlook (ERMAIN-1006):
+
+```text
+Host context:          outlook_mailbox; identity = SHA-256 of the normalized
+                       mailbox address; realm office-addin
+Context version:       none (outlook_schedule sends only now_iso and timezone)
+Read tools:            outlook/fetch_availability; tasks get availability
+                       without event subjects
+Write tools:           none registered: outlook.reply, reply_all and
+                       create_appointment are client actions the coordinator
+                       proposes
+Loss code:             context_unavailable, also when the pane has no
+                       calendar access
+Freshness:             readAt; changes none and all-zero counts on every task
+                       read, since each read is live; an item switch or an
+                       appointment-form edit is not a change (availability does
+                       not depend on the item); no blind spot. The coordinator's
+                       own reads stay as they were
+Trace part:            none: no receipt, since a receipt would also shorten
+                       the coordinator's own earlier calls, and on the turn the
+                       user picks a slot the model must copy the earlier
+                       result's suggestedSlots startIso/endIso verbatim
+                       (deviation from contract §12)
+Child facet:           outlook_delegated_scheduling (overlay)
+Approval scope:        context; covers the parent turn; nothing on the device
+Outlives the pane:     yes, but the overlay keeps the read live (no durable
+                       table): the user has just sent the request from that
+                       pane, so a closed pane answers at once
+Device approvals:      none
+Framing:               ERMAIN-946, before the overlay merges
+Conformance:           backend row outlook_mailbox; frontend
+                       outlook/hooks/__tests__/outlookGrantReadConformance.test.ts;
+                       overlay erato-action-facets (draft)
+```
+
 ### Native gate matrix template
 
 Each cell holds "date · build · result". Windows first, then Mac and the web.
@@ -553,6 +588,9 @@ own insert, comment or import Apply is still settling counts as the chat's own,
 so it does not end a document approval (ERMAIN-1010's time windows: 3 s after an
 insert or comment, up to 120 s for a Word PC import). So does an edit to a
 paragraph an in-place Apply changed, while the Apply runs and up to 6 s after.
+
+Outlook: every check is pending for OWA (Chrome), classic Outlook in the
+Windows VM and new Outlook.
 
 Desktop sidecar: every check is pending for classic Outlook on Windows, Mac (Full
 Disk Access per build), the web app and the Teams personal app, plus two of its
@@ -595,8 +633,9 @@ Status:
   and with them under a document approval
   (`word/utils/__tests__/wordGrantReadConformance.test.ts`); the native gate is
   pending;
-- `outlook_mailbox`: registered and skipped until ERMAIN-1006
-  (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`);
+- `outlook_mailbox`: passes with the server checking the owner
+  (`outlook/hooks/__tests__/outlookGrantReadConformance.test.ts`; backend row
+  `outlook_mailbox`, slow path included), the native gate is pending;
 - `desktop_sidecar`: passes with the server checking the owner
   (`frontend/src/lib/desktopSidecar/chatTools.conformance.test.ts`; backend rows
   `desktop_sidecar` and `desktop_sidecar_web`, slow path included).

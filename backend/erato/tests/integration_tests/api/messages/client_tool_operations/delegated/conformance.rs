@@ -215,11 +215,9 @@ host_conformance!(
 // A host's row is enabled by the issue that makes its pane take grant calls,
 // so a passing row never stands for a host whose pane would refuse them.
 host_conformance!(word_document: word_document());
-host_conformance!(
-    outlook_mailbox: outlook_mailbox(),
-    slow_path,
-    ignore = "ERMAIN-1006: enabled once the Outlook pane takes grant calls"
-);
+// The overlay gives `fetch_availability` no `[durable]` table; the slow-path
+// cases add one, so they hold the backend to a pane that could serve one.
+host_conformance!(outlook_mailbox: outlook_mailbox(), slow_path);
 host_conformance!(desktop_sidecar: desktop_sidecar(), slow_path, per_call);
 host_conformance!(desktop_sidecar_web: desktop_sidecar_web(), slow_path, per_call);
 
