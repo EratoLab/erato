@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 
+import type { OperationRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 /**
  * Which review each tool call waits on, kept beyond the page that opened it:
  * a review goes on while no page is open, so the next page finds the decision
@@ -16,7 +18,8 @@ export type SidecarReviewLink = { at: number } & (
       chatIds?: string[];
     }
   // The job ended without a decision, so the call waits for the user to ask
-  // again, and the same chats wait with it.
+  // again, and the same chats wait with it. A task's call ends with its
+  // review, so once that call has its answer the link names no chats.
   | { state: "ended"; chatIds?: string[] }
   // The user asked again; the call's next run starts a new review.
   | { state: "asking" }
@@ -131,6 +134,14 @@ export const markReviewEnded = (key: string): void =>
     };
   });
 
+/**
+ * A task's review ended without a decision. Its call ends with it, so no chat
+ * waits on the user for it any more; the link stays, naming no chats, so the
+ * item of the response the task runs for can say the review ended.
+ */
+export const markTaskReviewEnded = (key: string): void =>
+  set(key, { state: "ended", at: Date.now() });
+
 export const askForReviewAgain = (key: string): void =>
   set(key, { state: "asking", at: Date.now() });
 
@@ -158,3 +169,17 @@ export const reviewHasEnded = (
   toolCallId: string,
 ): boolean =>
   reviewLink(reviewLinkKey(messageId, toolCallId))?.state === "ended";
+
+/**
+ * Whether a parked call waits for the user to ask again, so no run may claim
+ * it. Only the user's own call does: a task's call ends with its review, so
+ * its next run reports that instead of waiting.
+ */
+export const waitsToAskAgain = ({
+  message_id,
+  tool_call_id,
+  lineage,
+}: Pick<
+  OperationRequest,
+  "message_id" | "tool_call_id" | "lineage"
+>): boolean => !lineage && reviewHasEnded(message_id, tool_call_id);

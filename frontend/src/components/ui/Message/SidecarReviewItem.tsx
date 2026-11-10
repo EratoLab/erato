@@ -21,16 +21,23 @@ import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks"
  * its title politely and takes keyboard focus when the button that had it
  * goes away. While the app cannot be reached, its action stays focusable but
  * inert, and a visible line says why.
+ *
+ * A task's review shows inside the task's item on the response it runs for,
+ * so that response's slot holds it too. A task's call ends with its review,
+ * so an ended one has nothing to ask again.
  */
 export const SidecarReviewItem = ({
   linkKey,
   link,
   toolName,
+  forTask = false,
 }: {
   linkKey: string;
   link: SidecarReviewLink;
   /** The waiting call's tool, to say what is waiting. */
   toolName: string | undefined;
+  /** The call is a task's, and the item sits inside that task's item. */
+  forTask?: boolean;
 }) => {
   const { client } = useDesktopSidecar();
   const [openFailed, setOpenFailed] = useState(false);
@@ -38,7 +45,8 @@ export const SidecarReviewItem = ({
   const unreachableReasonId = useId();
   const canReachApp = client?.supports("jobs.review.v1") === true;
   const isEnded = link.state === "ended";
-  const hasAction = link.state === "open" || isEnded;
+  const canAskAgain = isEnded && !forTask;
+  const hasAction = link.state === "open" || canAskAgain;
   const title = isEnded
     ? t({
         id: "sidecarReview.ended.title",
@@ -92,7 +100,7 @@ export const SidecarReviewItem = ({
       aria-label={title}
       data-testid="sidecar-review-item"
       data-review-state={link.state}
-      className={`${APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
+      className={`${forTask ? "mt-1 rounded-md" : APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
     >
       <div>
         <p className="text-sm font-medium text-theme-fg-primary">{title}</p>
@@ -103,11 +111,17 @@ export const SidecarReviewItem = ({
         )}
         <p className="text-xs text-theme-fg-muted">
           {isEnded
-            ? t({
-                id: "sidecarReview.ended.description",
-                message:
-                  "Nothing was shared. A review ends one hour after it starts.",
-              })
+            ? forTask
+              ? t({
+                  id: "sidecarReview.ended.taskDescription",
+                  message:
+                    "Nothing was shared. The task goes on without this result. A review ends one hour after it starts.",
+                })
+              : t({
+                  id: "sidecarReview.ended.description",
+                  message:
+                    "Nothing was shared. A review ends one hour after it starts.",
+                })
             : t({
                 id: "sidecarReview.open.description",
                 message: "A review ends one hour after it starts.",
@@ -131,7 +145,7 @@ export const SidecarReviewItem = ({
           {t({ id: "sidecarReview.open.action", message: "Open" })}
         </Button>
       )}
-      {isEnded && (
+      {canAskAgain && (
         <Button
           variant="secondary"
           size="sm"

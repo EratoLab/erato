@@ -30,7 +30,7 @@ vi.mock("@/providers/DesktopSidecarProvider", () => ({
 const key = reviewLinkKey("message-1", "call");
 
 /** Renders the item for the call's link as the store holds it now. */
-function ItemFor() {
+function ItemFor({ forTask }: { forTask?: boolean }) {
   const link = useSidecarReviewLinks((state) => state.links[key]) as
     | SidecarReviewLink
     | undefined;
@@ -39,6 +39,7 @@ function ItemFor() {
       linkKey={key}
       link={link}
       toolName="search_sidecar_index"
+      forTask={forTask}
     />
   ) : null;
 }
@@ -82,6 +83,28 @@ describe("SidecarReviewItem", () => {
       ),
     );
     expect(screen.getByTestId("sidecar-review-ask-again")).toBeInTheDocument();
+  });
+
+  it("shows a task's review with Open, and once it ended offers nothing to ask again", async () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"]);
+    invoke.mockResolvedValue({ handle: "handle-1", state: "expired" });
+    render(<ItemFor forTask />);
+    const item = screen.getByTestId("sidecar-review-item");
+    expect(item).toHaveTextContent(
+      "Waiting for your review in the Erato desktop app",
+    );
+    const open = screen.getByTestId("sidecar-review-open");
+    open.focus();
+    fireEvent.click(open);
+    await waitFor(() =>
+      expect(item).toHaveTextContent("This review has ended"),
+    );
+    expect(item).toHaveTextContent(
+      "Nothing was shared. The task goes on without this result.",
+    );
+    expect(screen.queryByTestId("sidecar-review-ask-again")).toBeNull();
+    // Open went away with the open review, so the item keeps the focus.
+    expect(item).toHaveFocus();
   });
 
   it("says so when the app cannot show the review", async () => {

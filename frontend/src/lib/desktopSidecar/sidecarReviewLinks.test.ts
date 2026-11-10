@@ -5,12 +5,14 @@ import {
   askForReviewAgain,
   forgetReview,
   markReviewEnded,
+  markTaskReviewEnded,
   rememberReview,
   reviewHasEnded,
   reviewLink,
   reviewLinkKey,
   useChatsInReview,
   useSidecarReviewLinks,
+  waitsToAskAgain,
 } from "./sidecarReviewLinks";
 
 const STORAGE_KEY = "erato.desktopSidecar.reviewLinks.v1";
@@ -45,6 +47,38 @@ describe("sidecar review links", () => {
     askForReviewAgain(key);
     rerender();
     expect(result.current.size).toBe(0);
+  });
+
+  it("keeps a task's ended review for its parent's item, with no chat waiting on it", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"]);
+    const { result, rerender } = renderHook(() => useChatsInReview());
+
+    markTaskReviewEnded(key);
+    rerender();
+    expect(reviewLink(key)).toEqual({ state: "ended", at: expect.any(Number) });
+    expect(result.current.size).toBe(0);
+  });
+
+  it("holds only the user's own call while its review waits to be asked again", () => {
+    const own = {
+      message_id: "message-1",
+      tool_call_id: "call-1",
+    } as const;
+    const task = {
+      ...own,
+      lineage: {
+        owner_chat_id: "origin-chat",
+        owner_message_id: "origin-message",
+        requesting_chat_id: "task-chat",
+        requesting_message_id: "message-1",
+      },
+    };
+    rememberReview(key, "handle-1");
+    expect(waitsToAskAgain(own)).toBe(false);
+    markReviewEnded(key);
+    expect(waitsToAskAgain(own)).toBe(true);
+    // A task's call ends with its review, so its next run says so.
+    expect(waitsToAskAgain(task)).toBe(false);
   });
 
   it("keeps a call's job beyond the page that opened it, with ids only", () => {

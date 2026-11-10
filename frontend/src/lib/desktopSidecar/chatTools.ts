@@ -33,7 +33,11 @@ import {
   runsAsSidecarJob,
   SidecarReviewEndedError,
 } from "./sidecarJobs";
-import { forgetReview, reviewLinkKey } from "./sidecarReviewLinks";
+import {
+  forgetReview,
+  markTaskReviewEnded,
+  reviewLinkKey,
+} from "./sidecarReviewLinks";
 import {
   cachedSourceDirectory,
   lacks,
@@ -1063,10 +1067,15 @@ export function createSidecarChatTools(
                 error: REVIEW_ENDED.expired,
                 stillWaiting: true,
               };
-            if (context)
-              forgetReview(
-                reviewLinkKey(context.messageId, context.toolCallId),
+            if (context) {
+              const review = reviewLinkKey(
+                context.messageId,
+                context.toolCallId,
               );
+              // A task's review that ran out stays on its parent's item.
+              if (error.state === "expired") markTaskReviewEnded(review);
+              else forgetReview(review);
+            }
             return declined(REVIEW_ENDED[error.state], context);
           }
           if (grant && isLostSidecar(error))
