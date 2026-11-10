@@ -11,7 +11,6 @@ import { FilePreviewContent } from "../FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "../FilePreview/OutlookSourceAction";
 import { AttachmentTile } from "../FileUpload/AttachmentTile";
 import { ModalBase } from "../Modal/ModalBase";
-import { mcpToolDecisionLabel } from "../Settings/McpToolDecisionControl";
 
 import type { ClientToolFileApprovalRequest } from "@/hooks/chat/store/clientToolFileApprovalStore";
 
@@ -63,10 +62,15 @@ export function ClientToolFileApprovals({
 }
 
 /** A deployment default of never allow reads the same as a saved one. Names
- * the setting with the label the file setting shows. */
+ * the setting with the label the file setting shows: the same catalog entry as
+ * mcpToolDecisionLabel("never"), without importing the settings control, which
+ * would put it on the component-kit surface. */
 function BlockedAfterReviewNotice({ fileNames }: { fileNames: string[] }) {
   const names = fileNames.join(", ");
-  const neverAllow = mcpToolDecisionLabel("never");
+  const neverAllow = t({
+    id: "preferences.dialog.mcpServers.approvals.never.label",
+    message: "Never allow",
+  });
   return (
     <Alert
       type="warning"

@@ -6139,6 +6139,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Never allow"

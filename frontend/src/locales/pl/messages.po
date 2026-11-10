@@ -6139,6 +6139,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Trzyma to narzędzie z dala od asystenta i blokuje je nawet wtedy, gdy potwierdzenie już czeka."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Nigdy nie zezwalaj"
