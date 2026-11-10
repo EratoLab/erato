@@ -2495,6 +2495,11 @@ export const ChatInput = ({
       return;
     }
 
+    if (speechEnabled && useSpeechPlayback.getState().enabled) {
+      // Resume playback from the user gesture, before microphone startup.
+      void enableSpeechPlayback(true);
+    }
+
     toast.dismiss(AUDIO_MODE_SELECTOR_TOAST_ID);
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
@@ -2508,6 +2513,7 @@ export const ChatInput = ({
     clearPendingAutoSendTimeout,
     isAudioMode,
     setIsAudioMode,
+    speechEnabled,
   ]);
 
   useEffect(() => {

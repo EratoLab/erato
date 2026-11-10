@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import { componentRegistry } from "@/config/componentRegistry";
+import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
@@ -2285,6 +2286,53 @@ describe("ChatInput", () => {
   });
 
   describe("audio mode button (conversational dictation)", () => {
+    it.each([
+      { speechEnabled: true, preference: true },
+      { speechEnabled: true, preference: false },
+      { speechEnabled: false, preference: true },
+    ])(
+      "initializes audio-back with speech enabled=$speechEnabled and preference=$preference",
+      async ({ speechEnabled, preference }) => {
+        const resume = vi.fn(async () => {});
+        const AudioContextMock = vi.fn(function () {
+          return { resume, state: "running" };
+        });
+        vi.stubGlobal("AudioContext", AudioContextMock);
+        useSpeechPlayback.setState({ enabled: preference });
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled,
+          maxRecordingDurationSeconds: 1200,
+        });
+        const queryClient = new QueryClient({
+          defaultOptions: { queries: { retry: false } },
+        });
+        const { i18n } = await import("@lingui/core");
+        render(
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput onSendMessage={vi.fn()} />
+            </I18nProvider>
+          </QueryClientProvider>,
+        );
+
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+
+        if (speechEnabled) {
+          expect(
+            screen.getByRole("button", { name: "Audio-back" }),
+          ).toHaveAttribute("aria-pressed", String(preference));
+        } else {
+          expect(
+            screen.queryByRole("button", { name: "Audio-back" }),
+          ).toBeNull();
+        }
+        expect(resume).toHaveBeenCalledTimes(
+          speechEnabled && preference ? 1 : 0,
+        );
+      },
+    );
+
     const createSubmitHandlerThatSends =
       (
         message: string,
