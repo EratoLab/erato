@@ -788,27 +788,40 @@ impl<'a> Walk<'a> {
     }
 
     fn meaning_of(&self, member: &str, path: &str, code: &str) -> Option<ToolCallValueMeaning> {
-        let meaning = |label: String, source| {
-            let label = sanitize_display_text(&label, MAX_CHOICE_LABEL_CHARS).text;
-            (!label.is_empty()).then_some(ToolCallValueMeaning { label, source })
+        let meaning = |label: &str, source| {
+            let cleaned = sanitize_display_text(label, MAX_CHOICE_LABEL_CHARS);
+            (!cleaned.text.is_empty() && !cleaned.truncated && !is_machine_id(&cleaned.text))
+                .then_some(ToolCallValueMeaning {
+                    label: cleaned.text,
+                    source,
+                })
         };
-        if let Some(label) = self
-            .facts
-            .glossary
-            .and_then(|glossary| glossary.choice_labels.get(member)?.get(code))
-        {
-            return meaning(label.clone(), ToolCallValueMeaningSource::Glossary);
-        }
         let schema = schema_choice_label(&self.facts.tool.input_schema, path, code);
         let earlier = self.earlier.as_ref().and_then(|earlier| {
             self.facts
                 .context
                 .earlier_choice_label(earlier.server, earlier.record, member, code)
         });
+        let disagrees = |label: &str, other: &Option<String>| {
+            other
+                .as_deref()
+                .is_some_and(|other| !other.eq_ignore_ascii_case(label))
+        };
+        if let Some(label) = self
+            .facts
+            .glossary
+            .and_then(|glossary| glossary.choice_labels.get(member)?.get(code))
+        {
+            // A glossary entry holds for every table of the server; a tool
+            // or a read that numbers this field otherwise is about another.
+            return (!disagrees(label, &schema) && !disagrees(label, &earlier))
+                .then(|| meaning(label, ToolCallValueMeaningSource::Glossary))
+                .flatten();
+        }
         match (schema, earlier) {
             (Some(schema), Some(earlier)) if !schema.eq_ignore_ascii_case(&earlier) => None,
-            (_, Some(earlier)) => meaning(earlier, ToolCallValueMeaningSource::Earlier),
-            (Some(schema), None) => meaning(schema, ToolCallValueMeaningSource::Tool),
+            (_, Some(earlier)) => meaning(&earlier, ToolCallValueMeaningSource::Earlier),
+            (Some(schema), None) => meaning(&schema, ToolCallValueMeaningSource::Tool),
             (None, None) => None,
         }
     }

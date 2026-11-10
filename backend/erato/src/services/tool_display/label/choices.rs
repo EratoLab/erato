@@ -11,8 +11,7 @@ use crate::services::display_text::sanitize_display_text;
 use rmcp::model::JsonObject;
 use serde_json::{Map, Value};
 
-/// A label longer than this is a sentence, not the name of a choice.
-pub(super) const MAX_CHOICE_LABEL_CHARS: usize = 64;
+pub(super) use erato_config::config::MAX_CHOICE_LABEL_CHARS;
 const MAX_DESCRIPTION_BYTES: usize = 2 * 1024;
 const MAX_LIST_ENTRIES: usize = 64;
 const MAX_SCHEMA_DEPTH: usize = 8;
@@ -62,17 +61,21 @@ fn member_of<'a>(object: &'a Map<String, Value>, segment: &str) -> Option<&'a Ma
                 .then(|| object.get("items").and_then(Value::as_object))
                 .flatten()
         });
-    found.or_else(|| {
-        ["allOf", "anyOf", "oneOf"].iter().find_map(|combiner| {
-            object
-                .get(*combiner)?
-                .as_array()?
-                .iter()
-                .take(MAX_VARIANTS)
-                .filter_map(Value::as_object)
-                .find_map(|variant| member_of(variant, segment))
-        })
-    })
+    if found.is_some() {
+        return found;
+    }
+    // Variants may each number the member their own way: only one that is
+    // alone in holding it says what it is.
+    let mut held = ["allOf", "anyOf", "oneOf"]
+        .iter()
+        .filter_map(|combiner| object.get(*combiner)?.as_array())
+        .flat_map(|variants| variants.iter().take(MAX_VARIANTS))
+        .filter_map(Value::as_object)
+        .filter_map(|variant| member_of(variant, segment));
+    match (held.next(), held.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
 }
 
 fn same_choice(value: &Value, code: &str) -> bool {
@@ -102,22 +105,23 @@ fn listed_choice(property: &Map<String, Value>, code: &str) -> Option<String> {
             return names.get(at)?.as_str().and_then(label_from);
         }
     }
-    ["oneOf", "anyOf"].iter().find_map(|combiner| {
-        property
-            .get(*combiner)?
-            .as_array()?
-            .iter()
-            .take(MAX_VARIANTS)
-            .filter_map(Value::as_object)
-            .find(|variant| constant_of(variant).is_some_and(|value| same_choice(value, code)))
-            .and_then(|variant| {
-                variant
-                    .get("title")
-                    .or_else(|| variant.get("description"))
-                    .and_then(Value::as_str)
-            })
-            .and_then(label_from)
-    })
+    let mut titled = ["oneOf", "anyOf"]
+        .iter()
+        .filter_map(|combiner| property.get(*combiner)?.as_array())
+        .flat_map(|variants| variants.iter().take(MAX_VARIANTS))
+        .filter_map(Value::as_object)
+        .filter(|variant| constant_of(variant).is_some_and(|value| same_choice(value, code)))
+        .map(|variant| {
+            variant
+                .get("title")
+                .or_else(|| variant.get("description"))
+                .and_then(Value::as_str)
+                .and_then(label_from)
+        });
+    match (titled.next(), titled.next()) {
+        (Some(only), None) => only,
+        _ => None,
+    }
 }
 
 fn constant_of(variant: &Map<String, Value>) -> Option<&Value> {
@@ -132,7 +136,7 @@ fn constant_of(variant: &Map<String, Value>) -> Option<&Value> {
 /// One entry of `0 = None, 1 = Urgent` or `1: Urgent`, its label cut before
 /// any sentence that follows it.
 fn entry_of(part: &str) -> Option<(&str, String)> {
-    let part = part.trim_start_matches(|c: char| c.is_whitespace() || matches!(c, '-' | '*'));
+    let part = without_bullet(part);
     let code_end = part
         .find(|c: char| !c.is_ascii_digit())
         .filter(|end| (1..=6).contains(end))?;
@@ -145,6 +149,16 @@ fn entry_of(part: &str) -> Option<(&str, String)> {
         .trim_end_matches('.');
     let label = label_from(label.trim())?;
     (!label.contains(['=', ':']) && label.chars().any(char::is_alphabetic)).then_some((code, label))
+}
+
+/// `part` without a leading `- ` or `* `. A `-` right before a digit is the
+/// number's sign.
+fn without_bullet(part: &str) -> &str {
+    let part = part.trim_start();
+    match part.strip_prefix(['-', '*']) {
+        Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        _ => part,
+    }
 }
 
 /// The code's label in the description's explicit list. A list needs two
@@ -192,7 +206,7 @@ fn list_start(text: &str) -> Option<usize> {
         let standalone = text[..at]
             .chars()
             .next_back()
-            .is_none_or(|before| before.is_whitespace() || matches!(before, '(' | '-' | '*'));
+            .is_none_or(|before| before.is_whitespace() || before == '(');
         let part = text[at..]
             .split([',', ';', '\n'])
             .next()
@@ -307,6 +321,32 @@ mod tests {
             Some("Nine")
         );
         assert_eq!(schema_choice_label(&schema, "/missing/priority", "1"), None);
+    }
+
+    #[test]
+    fn variants_that_number_a_member_differently_say_nothing() {
+        let schema = json!({"properties": {"either": {"oneOf": [
+            {"properties": {"priority": {"description": "1=Blocker, 2=Minor"}}},
+            {"properties": {"priority": {"description": "1=Low, 2=High"}}},
+        ]}}})
+        .as_object()
+        .unwrap()
+        .clone();
+        assert_eq!(schema_choice_label(&schema, "/either/priority", "1"), None);
+        let twice = json!({"oneOf": [
+            {"const": 1, "title": "Urgent"},
+            {"const": 1, "title": "Low"},
+        ]});
+        assert_eq!(label_of(twice, "1"), None);
+    }
+
+    #[test]
+    fn a_minus_before_a_digit_is_its_sign_and_no_bullet() {
+        let property = json!({"description": "-1 = Inherit, 0 = None, 2 = High"});
+        assert_eq!(label_of(property.clone(), "1"), None);
+        assert_eq!(label_of(property, "2").as_deref(), Some("High"));
+        let bullets = json!({"description": "* 1: Urgent\n*  2: High"});
+        assert_eq!(label_of(bullets, "2").as_deref(), Some("High"));
     }
 
     #[test]

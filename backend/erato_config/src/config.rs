@@ -4123,6 +4123,9 @@ const MAX_GLOSSARY_ENTRIES: usize = 5_000;
 /// A field name, choice value or label longer than this reads as nothing on
 /// a card.
 const MAX_GLOSSARY_KEY_BYTES: usize = 128;
+/// A choice label longer than this is a sentence, not the name of a choice,
+/// and a card shows none.
+pub const MAX_CHOICE_LABEL_CHARS: usize = 64;
 
 impl McpGlossaryConfig {
     /// Called from both config load paths, like `validate_mcp_server_ids`.
@@ -4166,6 +4169,15 @@ impl McpGlossaryConfig {
                 }
                 if !usable(label) {
                     return Err(text_error("choice label", label));
+                }
+                if label.chars().count() > MAX_CHOICE_LABEL_CHARS {
+                    return Err(eyre!(
+                        "MCP server '{server_id}': glossary choice label '{}' must be at most {MAX_CHOICE_LABEL_CHARS} characters",
+                        label
+                            .chars()
+                            .take(MAX_CHOICE_LABEL_CHARS)
+                            .collect::<String>()
+                    ));
                 }
             }
         }

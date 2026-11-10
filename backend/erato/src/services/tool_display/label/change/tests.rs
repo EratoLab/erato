@@ -2413,28 +2413,87 @@ fn a_label_from_a_read_only_counts_for_records_of_that_read() {
 #[test]
 fn the_glossary_names_fields_and_values_with_the_raw_name_beside_it() {
     let glossary: erato_config::config::McpGlossaryConfig = serde_json::from_value(json!({
-        "field_names": {"customertypecode": "Customer type"},
-        "choice_labels": {"customertypecode": {"8": "Prospect"}},
+        "field_names": {"itemtypecode": "Item type"},
+        "choice_labels": {"itemtypecode": {"8": "Spare part"}},
     }))
     .unwrap();
     let change = with_glossary(
         &tool("update_record", "", None),
-        json!({"id": RECORD, "fields": {"customertypecode": 8, "estimatedclosedate": "2026-01-01"}}),
+        json!({"id": RECORD, "fields": {"itemtypecode": 8, "expectedenddate": "2026-01-01"}}),
         &glossary,
     );
-    let row = effect(&change, "customertypecode");
-    assert_eq!(row.name, "Customer type (customertypecode)");
+    let row = effect(&change, "itemtypecode");
+    assert_eq!(row.name, "Item type (itemtypecode)");
     assert_eq!(
         row.values[0].meaning.as_ref().unwrap(),
         &ToolCallValueMeaning {
-            label: "Prospect".into(),
+            label: "Spare part".into(),
             source: ToolCallValueMeaningSource::Glossary,
         }
     );
+    assert_eq!(effect(&change, "expectedenddate").name, "Expected end date");
+}
+
+#[test]
+fn a_glossary_label_the_tool_or_a_read_contradicts_says_nothing() {
+    let glossary: erato_config::config::McpGlossaryConfig = serde_json::from_value(json!({
+        "choice_labels": {"priority": {"2": "Won", "1": "low"}},
+    }))
+    .unwrap();
+    let schema = json!({"type": "object", "properties": {
+        "id": {"type": "string"},
+        "priority": {"type": "number", "description": "1=Low, 2=High"},
+    }});
+    let update = tool_with_schema("update_issue", "", schema);
+    let meaning_with = |code: i64, context: &ToolResultContext| {
+        let arguments = json!({"id": RECORD, "priority": code});
+        let label = labelled(&update, &arguments, context);
+        let change = describe(
+            &label,
+            ChangeFacts {
+                tool: &update,
+                arguments: &arguments,
+                approval_argument: None,
+                context,
+                server: Some(SERVER),
+                rules_action: label.action,
+                glossary: Some(&glossary),
+                destructive_hint_source: Default::default(),
+            },
+        )
+        .unwrap()
+        .0;
+        effect(&change, "priority").values[0].meaning.clone()
+    };
+    let nothing_read = ToolResultContext::default();
+    assert_eq!(meaning_with(2, &nothing_read), None);
     assert_eq!(
-        effect(&change, "estimatedclosedate").name,
-        "Estimated close date"
+        meaning_with(1, &nothing_read),
+        Some(ToolCallValueMeaning {
+            label: "low".into(),
+            source: ToolCallValueMeaningSource::Glossary,
+        })
     );
+    let plain = tool("update_issue", "", None);
+    let arguments = json!({"id": RECORD, "priority": 2});
+    let read = read_issue(json!({"name": "Lost", "value": 2}));
+    let label = labelled(&plain, &arguments, &read);
+    let change = describe(
+        &label,
+        ChangeFacts {
+            tool: &plain,
+            arguments: &arguments,
+            approval_argument: None,
+            context: &read,
+            server: Some(SERVER),
+            rules_action: label.action,
+            glossary: Some(&glossary),
+            destructive_hint_source: Default::default(),
+        },
+    )
+    .unwrap()
+    .0;
+    assert_eq!(effect(&change, "priority").values[0].meaning, None);
 }
 
 #[test]

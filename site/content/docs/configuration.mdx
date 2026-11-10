@@ -4445,9 +4445,11 @@ approval_argument = "hasUserApproved"
 {/* erato_toml_config_key: mcp_servers.<server-id>.glossary.field_names */}
 {/* erato_toml_config_key: mcp_servers.<server-id>.glossary.choice_labels */}
 
-How this server's machine names read on approval cards and in the chat's trace of tool calls. `field_names` gives what people call a field, keyed by the field's exact name in the tool's arguments. `choice_labels` gives what each value of a choice field means, keyed by the field's exact name and then by the value as the tool writes it. A field named here shows the raw name beside it, so a card always says which field it is, and a choice value shows its meaning next to the value as written, for example `Open (1)`.
+How this server's machine names read on approval cards and in the chat's trace of tool calls. `field_names` gives what people call a field, keyed by the field's exact name in the tool's arguments. `choice_labels` gives what each value of a choice field means, keyed by the field's exact name and then by the value as the tool writes it. A field named here shows the raw name beside it, so a card always says which field it is, and a choice value shows its meaning next to the value as written, for example `High (2)`.
 
-The glossary changes only how a call reads. It never changes what a call does or whether it asks for approval. Names and labels are checked at startup: each must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters, and a server's glossary holds at most 5000 entries.
+An entry holds for every tool and table of the server, so only list fields whose values mean the same everywhere. Where the tool's own schema or an earlier result in the chat gives the same value another meaning, the card shows none.
+
+The glossary changes only how a call reads. It never changes what a call does or whether it asks for approval. Names and labels are checked at startup: each must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters, a choice label must be at most 64 characters, and a server's glossary holds at most 5000 entries.
 
 **Type:** table
 
@@ -4456,12 +4458,12 @@ The glossary changes only how a call reads. It never changes what a call does or
 **Example:**
 
 ```toml
-[mcp_servers.crm.glossary.field_names]
-estimatedclosedate = "Expected close"
+[mcp_servers.tracker.glossary.field_names]
+duedate = "Due"
 
-[mcp_servers.crm.glossary.choice_labels.statuscode]
-1 = "Open"
-2 = "Won"
+[mcp_servers.tracker.glossary.choice_labels.priority]
+1 = "Low"
+2 = "High"
 ```
 
 ##### `mcp_servers.<server-id>.glossary.field_names.<field-name>`
@@ -4477,7 +4479,7 @@ What people call the field. Keyed by the field's exact name in the tool's argume
 {/* erato_toml_config_key: mcp_servers.<server-id>.glossary.choice_labels.<field-name> */}
 {/* erato_toml_config_key: mcp_servers.<server-id>.glossary.choice_labels.<field-name>.<choice-value> */}
 
-What each value of the choice field means, keyed by the value as the tool writes it, for example `1 = "Open"`.
+What each value of the choice field means, keyed by the value as the tool writes it, for example `1 = "Low"`.
 
 **Type:** table of `string`
 

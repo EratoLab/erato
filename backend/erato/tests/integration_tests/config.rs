@@ -6127,7 +6127,7 @@ fn mcp_runtime_config_from(toml: &str) -> Result<McpRuntimeConfig, eyre::Report>
 }
 
 const GLOSSARY_SERVER: &str = r#"
-[mcp_servers.crm]
+[mcp_servers.records]
 transport_type = "streamable_http"
 url = "https://example.test/mcp"
 "#;
@@ -6136,33 +6136,35 @@ url = "https://example.test/mcp"
 fn test_mcp_glossary_is_read_with_exact_names() {
     let config = mcp_runtime_config_from(&format!(
         r#"{GLOSSARY_SERVER}
-[mcp_servers.crm.glossary.field_names]
-estimatedCloseDate = "Expected close"
-[mcp_servers.crm.glossary.choice_labels.statuscode]
+[mcp_servers.records.glossary.field_names]
+dueDate = "Due"
+[mcp_servers.records.glossary.choice_labels.priority]
 1 = "Open"
 "#
     ))
     .unwrap();
-    let glossary = &config.mcp_servers["crm"].glossary;
+    let glossary = &config.mcp_servers["records"].glossary;
     assert_eq!(
-        glossary
-            .field_names
-            .get("estimatedCloseDate")
-            .map(String::as_str),
-        Some("Expected close")
+        glossary.field_names.get("dueDate").map(String::as_str),
+        Some("Due")
     );
     assert_eq!(
-        glossary.choice_labels["statuscode"]
+        glossary.choice_labels["priority"]
             .get("1")
             .map(String::as_str),
         Some("Open")
     );
     // A server without one has an empty glossary, and an unknown key is refused.
     let config = mcp_runtime_config_from(GLOSSARY_SERVER).unwrap();
-    assert!(config.mcp_servers["crm"].glossary.field_names.is_empty());
+    assert!(
+        config.mcp_servers["records"]
+            .glossary
+            .field_names
+            .is_empty()
+    );
     assert!(
         mcp_runtime_config_from(&format!(
-            "{GLOSSARY_SERVER}\n[mcp_servers.crm.glossary]\nfields = {{}}\n"
+            "{GLOSSARY_SERVER}\n[mcp_servers.records.glossary]\nfields = {{}}\n"
         ))
         .is_err()
     );
@@ -6172,22 +6174,34 @@ estimatedCloseDate = "Expected close"
 fn test_mcp_glossary_with_a_bad_entry_is_refused_at_startup() {
     let bad = [
         // Blank name for a field.
-        "[mcp_servers.crm.glossary.field_names]\nowner = \"  \"\n",
+        "[mcp_servers.records.glossary.field_names]\nowner = \"  \"\n",
         // Hidden characters in a field name or a label.
-        "[mcp_servers.crm.glossary.field_names]\nowner = \"Own\\u202Eer\"\n",
-        "[mcp_servers.crm.glossary.choice_labels.status]\n1 = \"Open\\u200B\"\n",
+        "[mcp_servers.records.glossary.field_names]\nowner = \"Own\\u202Eer\"\n",
+        "[mcp_servers.records.glossary.choice_labels.status]\n1 = \"Open\\u200B\"\n",
         // A label longer than any card shows.
         &format!(
-            "[mcp_servers.crm.glossary.choice_labels.status]\n1 = \"{}\"\n",
+            "[mcp_servers.records.glossary.choice_labels.status]\n1 = \"{}\"\n",
             "x".repeat(129)
+        ),
+        // A choice label a card would cut.
+        &format!(
+            "[mcp_servers.records.glossary.choice_labels.status]\n1 = \"{}\"\n",
+            "x".repeat(65)
         ),
     ];
     for entry in bad {
         let error =
             mcp_runtime_config_from(&format!("{GLOSSARY_SERVER}\n{entry}")).expect_err(entry);
-        assert!(error.to_string().contains("crm"), "{error:?}");
+        assert!(error.to_string().contains("records"), "{error:?}");
     }
-    let mut huge = String::from("[mcp_servers.crm.glossary.field_names]\n");
+    assert!(
+        mcp_runtime_config_from(&format!(
+            "{GLOSSARY_SERVER}\n[mcp_servers.records.glossary.choice_labels.status]\n1 = \"{}\"\n",
+            "\u{e9}".repeat(64)
+        ))
+        .is_ok()
+    );
+    let mut huge = String::from("[mcp_servers.records.glossary.field_names]\n");
     for index in 0..5_001 {
         huge.push_str(&format!("field{index} = \"x\"\n"));
     }

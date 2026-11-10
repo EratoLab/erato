@@ -140,11 +140,12 @@ chat_provider_ids = ["test-token-limit"]
 # # name is shown with the raw name beside it; it never changes what a call does.
 # [mcp_servers.file_provider.glossary.field_names]
 # # The field's exact name = what people call it.
-# estimatedclosedate = "Expected close"
-# [mcp_servers.file_provider.glossary.choice_labels.statuscode]
-# # Value as the tool writes it = what it means.
-# 1 = "Open"
-# 2 = "Won"
+# duedate = "Due"
+# [mcp_servers.file_provider.glossary.choice_labels.priority]
+# # Value as the tool writes it = what it means. An entry holds for every tool
+# # and table of the server.
+# 1 = "Low"
+# 2 = "High"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)
