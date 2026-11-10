@@ -130,6 +130,24 @@ pub fn chat_link(public_base_url: Option<&str>, chat_id: &str) -> Option<String>
     public_base_url.map(|base| format!("{}/chat/{chat_id}", base.trim_end_matches('/')))
 }
 
+/// `text` as a short label inside a line of Teams Markdown: its first line,
+/// without the characters that make links or formatting, cut to `max_bytes`.
+pub fn inline_label(text: &str, max_bytes: usize) -> String {
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    let plain: String = line
+        .chars()
+        .filter(|c| !matches!(c, '[' | ']' | '(' | ')' | '*' | '_' | '`' | '<' | '>'))
+        .collect();
+    bounded_text(
+        &plain.split_whitespace().collect::<Vec<_>>().join(" "),
+        max_bytes,
+    )
+}
+
 fn escape_mention_name(name: &str) -> String {
     name.replace(['<', '>'], "")
 }

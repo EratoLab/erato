@@ -83,6 +83,20 @@ texts! {
         "[Öffnen Sie den Chat in {app}]({link}), um fortzufahren.";
     OpenChatToContinuePlain => "Open the chat in {app} to continue.",
         "Öffnen Sie den Chat in {app}, um fortzufahren.";
+    QuotedTask => "“{task}”", "„{task}“";
+    TaskNeedsApp => "The task {task} needs the {app} app.", "Die Aufgabe {task} erfordert die {app}-App.";
+    TasksNeedApp => "These tasks need the {app} app: {tasks}.",
+        "Diese Aufgaben erfordern die {app}-App: {tasks}.";
+    OpenChatToAskAgain => "[Open the chat in {app}]({link}) and ask there again.",
+        "[Öffnen Sie den Chat in {app}]({link}) und stellen Sie die Frage dort noch einmal.";
+    OpenChatToAskAgainPlain => "Open the chat in {app} and ask there again.",
+        "Öffnen Sie den Chat in {app} und stellen Sie die Frage dort noch einmal.";
+    AskAgainInChatAfterStep => "After this step, ask again in the chat in {app}.",
+        "Stellen Sie die Frage nach diesem Schritt im Chat in {app} noch einmal.";
+    AskAgainInWord => "Open the document in Word and ask again in the {app} add-in there.",
+        "Öffnen Sie das Dokument in Word und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
+    AskAgainInOutlook => "Open Outlook and ask again in the {app} add-in there.",
+        "Öffnen Sie Outlook und stellen Sie die Frage dort im {app}-Add-in noch einmal.";
     NoText => "(The answer contained no text.)", "(Die Antwort enthielt keinen Text.)";
     UnavailableFile => "Unavailable file", "Nicht verfügbare Datei";
     File => "File", "Datei";
@@ -265,6 +279,14 @@ texts! {
     CreateReminderConfirm => "Schedule", "Planen";
     CreateReminderDeny => "Don't schedule", "Nicht planen";
     KeepReminder => "Keep it", "Behalten";
+    UpcomingReminders => "Your upcoming reminders", "Ihre anstehenden Erinnerungen";
+    NoUpcomingReminders => "You have no upcoming reminders. Ask me to schedule one, or use the {page}.",
+        "Sie haben keine anstehenden Erinnerungen. Bitten Sie mich, eine zu planen, oder nutzen Sie die Seite {page}.";
+    NamedReminderCancelled => "“{name}” was cancelled.", "„{name}“ wurde abgebrochen.";
+    ContinuingChat => "Your next message here continues “{chat}”.",
+        "Ihre nächste Nachricht hier setzt „{chat}“ fort.";
+    ReminderChatUnavailable => "The chat this reminder came from is no longer available.",
+        "Der Chat, aus dem diese Erinnerung stammt, ist nicht mehr verfügbar.";
 }
 
 impl Msg {

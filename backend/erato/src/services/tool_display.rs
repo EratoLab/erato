@@ -4,7 +4,7 @@
 pub mod label;
 
 use crate::config::McpRuntimeConfig;
-use crate::models::message::ToolDisplayMetadata;
+use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
 };
@@ -98,6 +98,9 @@ pub fn mcp_tool_call_display_from(
 /// label treats as a flag: the tool's, else the server's configured one.
 struct LabelledArguments<'a> {
     arguments: std::borrow::Cow<'a, serde_json::Value>,
+    /// The arguments as stored, which a readable view's paths must reach;
+    /// `None` when they are `arguments`.
+    stored: Option<std::borrow::Cow<'a, serde_json::Value>>,
     consent: Option<&'a str>,
 }
 
@@ -108,20 +111,39 @@ impl<'a> LabelledArguments<'a> {
         arguments: &'a serde_json::Value,
         approval_argument: Option<&'a str>,
     ) -> Self {
+        let (arguments, stored) = labelled_read(arguments, approval_argument);
         Self {
-            arguments: without_approval_argument(arguments, approval_argument),
+            arguments,
+            stored,
             consent: label_consent_argument(config, server_id, approval_argument),
         }
     }
 }
 
 /// A call's arguments as its label reads them and a model labelling it sees
-/// them: without the tool's consent argument, which Erato sets at dispatch.
+/// them: without the tool's consent argument, which Erato sets at dispatch,
+/// and with the members a string holds as JSON read as members.
 pub fn labelled_arguments(
     arguments: &serde_json::Value,
     approval_argument: Option<&str>,
 ) -> serde_json::Value {
-    without_approval_argument(arguments, approval_argument).into_owned()
+    labelled_read(arguments, approval_argument).0.into_owned()
+}
+
+/// The arguments a label reads and, when reading JSON inside strings changed
+/// them, the arguments as stored.
+fn labelled_read<'a>(
+    arguments: &'a serde_json::Value,
+    approval_argument: Option<&str>,
+) -> (
+    std::borrow::Cow<'a, serde_json::Value>,
+    Option<std::borrow::Cow<'a, serde_json::Value>>,
+) {
+    let stored = without_approval_argument(arguments, approval_argument);
+    match label::json_strings_read(&stored) {
+        Some(read) => (std::borrow::Cow::Owned(read), Some(stored)),
+        None => (stored, None),
+    }
 }
 
 /// The consent argument a call's label treats as a flag: the tool's
@@ -155,6 +177,33 @@ fn labelled_display(
         if let Some(server) = &scope {
             context.resolve(&mut label, arguments, server);
         }
+        // The view's paths reach the input as stored.
+        if let Some(stored) = &labelled.stored {
+            label.arguments = Some(label::readable_arguments(stored).0);
+        }
+        let rules_action = label::guarded_rules(tool, arguments, consent)
+            .mapping
+            .action;
+        let facts = label::change::ChangeFacts {
+            tool,
+            arguments,
+            approval_argument: consent,
+            context,
+            server: scope.as_deref(),
+            rules_action,
+        };
+        if let Some((change, hidden)) =
+            label::change::guarded_describe(|| label::change::describe(&label, facts))
+        {
+            label.change = Some(change);
+            if hidden
+                && !label
+                    .warnings
+                    .contains(&ToolCallLabelWarning::HiddenCharacters)
+            {
+                label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
+            }
+        }
         label
     })
     .or_else(|| {
@@ -164,7 +213,10 @@ fn labelled_display(
     ToolDisplayMetadata {
         server_name: Some(config.mcp_server_display_name(server_id)),
         label,
-        read_only: shown_as_read_only(tool),
+        // The annotation is the server's word; a name that says something is
+        // lost wins over it.
+        read_only: shown_as_read_only(tool)
+            && !label::rules::sounds_like_a_loss(&tool.name, arguments),
         ..tool_display_metadata(tool)
     }
 }
@@ -778,7 +830,16 @@ mod tests {
         assert_eq!(
             mapping,
             label::McpCallMapping {
-                mapping: model.clone(),
+                mapping: label::with_model_verb(
+                    label::rules::rules_label(
+                        &tool.name,
+                        &serde_json::json!({"recordId": "rec-2", "stage": "lost"}),
+                        None,
+                        approval_argument,
+                    )
+                    .mapping,
+                    &model,
+                ),
                 unlabelled: None,
             }
         );

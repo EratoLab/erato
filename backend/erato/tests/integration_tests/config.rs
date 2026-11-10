@@ -4571,6 +4571,85 @@ allowed_args = ["selected_text"]
     assert_eq!(rewrite.allowed_args, vec!["selected_text"]);
 }
 
+fn migrated_config(config_content: &str) -> AppConfig {
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(config_content.as_bytes())
+        .expect("Failed to write to temporary file");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let temp_path = temp_file.path().to_str().unwrap();
+    let builder = AppConfig::config_schema_builder(Some(vec![temp_path.to_string()]), false)
+        .expect("Failed to create config builder")
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+    config.migrate()
+}
+
+const SCHEDULE_FACET_BASE_CONFIG: &str = r#"
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-3.5-turbo"
+
+[file_storage_providers.azblob_demo]
+provider_kind = "azblob"
+config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", account_name = "xxx", account_key = "xxx" }
+"#;
+
+#[test]
+fn test_deliverable_reminders_inject_the_builtin_schedule_facet() {
+    let without = migrated_config(SCHEDULE_FACET_BASE_CONFIG);
+    assert!(!without.facets.facets.contains_key("schedule"));
+    let without_bot = migrated_config(&format!(
+        "{SCHEDULE_FACET_BASE_CONFIG}\n[scheduled_deliveries]\nenabled = true\n"
+    ));
+    assert!(!without_bot.facets.facets.contains_key("schedule"));
+
+    let with = migrated_config(&format!(
+        "{SCHEDULE_FACET_BASE_CONFIG}{SCHEDULE_FACET_DELIVERABLE}"
+    ));
+    let schedule = &with.facets.facets["schedule"];
+    assert_eq!(schedule.display_name, "Schedule");
+    assert_eq!(schedule.show_indicator_with_display_name, Some(true));
+    assert!(schedule.tool_call_allowlist.is_empty());
+}
+
+const SCHEDULE_FACET_DELIVERABLE: &str = r#"
+[scheduled_deliveries]
+enabled = true
+
+[integrations.ms_office.teams.bot]
+enabled = true
+app_id = "11111111-1111-1111-1111-111111111111"
+tenant_id = "22222222-2222-2222-2222-222222222222"
+app_password = "secret"
+oauth_connection_name = "graph-sso"
+"#;
+
+#[test]
+fn test_configured_schedule_facet_overrides_the_builtin() {
+    let config = migrated_config(&format!(
+        "{SCHEDULE_FACET_BASE_CONFIG}{SCHEDULE_FACET_DELIVERABLE}
+[facets.facets.schedule]
+display_name = \"Planen\"
+icon = \"iconoir-clock\"
+tool_call_allowlist = [\"erato/create_reminder\"]
+"
+    ));
+    let schedule = &config.facets.facets["schedule"];
+    assert_eq!(schedule.display_name, "Planen");
+    assert_eq!(schedule.icon.as_deref(), Some("iconoir-clock"));
+    assert_eq!(schedule.show_indicator_with_display_name, None);
+}
+
 #[test]
 #[should_panic(expected = "has an empty template")]
 fn test_config_action_facet_empty_template_rejected() {

@@ -41,6 +41,9 @@ async function outlookMailboxDigest(emailAddress: string): Promise<string> {
  *
  * It also finishes parked `fetch_availability` operations for this device and
  * mailbox; the binding only routes, the fetcher decides whether this pane claims.
+ * Delegated tasks of a turn sent from this pane read availability through it
+ * (`acceptsGrantCalls`); the shared coordinator opens the executor stream for
+ * the binding.
  */
 export function useOutlookClientTools(): void {
   const { fetcher } = useOutlookCalendarFetcher();
@@ -81,7 +84,13 @@ export function useOutlookClientTools(): void {
         : undefined;
     };
     const unregister = [
-      registerClientToolExecutor(FETCH_AVAILABILITY_TOOL_NAME, execute),
+      // The parent turn is the approval scope, so the pane checks none.
+      registerClientToolExecutor(
+        FETCH_AVAILABILITY_TOOL_NAME,
+        execute,
+        undefined,
+        { acceptsGrantCalls: true },
+      ),
       registerOperationExecutor(FETCH_AVAILABILITY_TOOL_NAME, binding, {
         yields: true,
       }),

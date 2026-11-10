@@ -286,8 +286,9 @@ pub(super) fn word_document() -> HostRow {
     }
 }
 
-/// The overlay's Outlook availability read as it stands; ERMAIN-1006 adjusts
-/// the row to what ships.
+/// The overlay's Outlook availability read as it ships with ERMAIN-1006: no
+/// context version, and a live read that reports all-zero counts. The overlay
+/// keeps no receipt for it, so `part` serves only the cases that add one.
 pub(super) fn outlook_mailbox() -> HostRow {
     HostRow {
         host: ClientToolHostContext::OutlookMailbox,
@@ -311,7 +312,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
         freshness: json!({
             "readAt": "2026-10-20T10:00:00Z",
             "changes": "none",
-            "counts": counts(),
+            "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
         }),
         wait_note: wait_note(ClientToolHostContext::OutlookMailbox),
     }

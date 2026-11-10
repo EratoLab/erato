@@ -25,11 +25,13 @@ const Harness = ({
   locked,
   lockReason,
   onFocusAfterLast,
+  showFacetIndicatorWithDisplayName = false,
 }: {
   initial: FacetInfo[];
   locked?: boolean;
   lockReason?: string;
   onFocusAfterLast?: () => void;
+  showFacetIndicatorWithDisplayName?: boolean;
 }) => {
   const [selected, setSelected] = useState(initial);
   return (
@@ -37,6 +39,7 @@ const Harness = ({
       <button type="button">Add files and tools</button>
       <ComposerToolChips
         facets={selected}
+        showFacetIndicatorWithDisplayName={showFacetIndicatorWithDisplayName}
         onDeselect={(id) =>
           setSelected((current) => current.filter((item) => item.id !== id))
         }
@@ -58,7 +61,7 @@ describe("ComposerToolChips", () => {
   });
 
   it("names the group and each chip by what its click does", () => {
-    render(<Harness initial={tools} />);
+    render(<Harness initial={tools} showFacetIndicatorWithDisplayName />);
     const group = screen.getByRole("group", { name: "Selected tools" });
     expect(group).not.toHaveStyle({ display: "contents" });
     expect(

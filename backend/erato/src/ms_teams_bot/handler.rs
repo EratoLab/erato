@@ -10,7 +10,8 @@ use super::cards::{self, ApprovalSubmit};
 use super::controls::{self, ControlCommand};
 use super::graph::{Graph, GraphIdentity, context_markdown};
 use super::host::{
-    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TeamsRequest,
+    ActionKind, Completion, GenerationUpdate, Host, RequestState, Session, StartError, TaskClient,
+    TeamsRequest,
 };
 use super::nudge;
 use super::reminders;
@@ -131,10 +132,12 @@ async fn process_message(
         .as_ref()
         .and_then(reminders::CardSubmit::from_value)
     {
-        if submit.keeps() {
-            return on_reminder_keep(bot, host, activity, target, sender, submit).await;
-        }
-        return on_reminder_cancel(bot, host, activity, target, sender, submit).await;
+        return match (submit.on_list(), submit.keeps()) {
+            (false, true) => on_reminder_keep(bot, host, activity, target, sender, submit).await,
+            (false, false) => on_reminder_cancel(bot, host, activity, target, sender, submit).await,
+            (true, true) => on_list_keep(bot, host, activity, target, sender, submit).await,
+            (true, false) => on_list_cancel(bot, host, activity, target, sender, submit).await,
+        };
     }
 
     let text = activity.text_without_bot_mention();
@@ -151,14 +154,20 @@ async fn process_message(
 
     // An unsubscribe must not depend on Graph consent: the activity is
     // verified at the route, and the sender is known by Entra object id.
-    if let Some(tips_on) = nudge::reminders_command(&text) {
-        if let Some(user) = known_user(bot, activity, target, sender).await? {
-            host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
-            target
-                .send_text(&reminders_text(bot, tips_on, lang))
-                .await?;
-        }
-        return Ok(());
+    if let Some(command) = nudge::reminders_command(&text) {
+        let Some(user) = known_user(bot, activity, target, sender).await? else {
+            return Ok(());
+        };
+        return match command {
+            nudge::RemindersCommand::Tips(tips_on) => {
+                host.set_teams_nudges_opt_out(user.id, !tips_on).await?;
+                target.send_text(&reminders_text(bot, tips_on, lang)).await
+            }
+            nudge::RemindersCommand::List => {
+                let card = reminders_list_card(bot, host, user.id, None, lang).await?;
+                target.send(&card).await.map(|_| ())
+            }
+        };
     }
 
     let Some(user) = authenticate(bot, host, activity, target, sender, allow_sign_in).await? else {
@@ -536,6 +545,9 @@ async fn on_delivery_action(
     let Some(user) = known_user(bot, activity, target, sender).await? else {
         return Ok(());
     };
+    if command == nudge::DeliveryCommand::ContinueChat {
+        return continue_reminder_chat(host, activity, target, user.id, &submit).await;
+    }
     let conversation_id = activity.conversation_id().unwrap_or_default();
     if !host
         .claim_delivery_action(user.id, conversation_id, &submit)
@@ -562,6 +574,44 @@ async fn on_delivery_action(
     settle_delivered_card(host, target, submit.delivery_id, &note).await
 }
 
+/// Continue here on a delivered reminder: its linked chat becomes this
+/// conversation's current chat, so the next message goes on there. The card
+/// stays as it is, and the press works as often as the user likes.
+async fn continue_reminder_chat(
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    submit: &nudge::DeliverySubmit,
+) -> Result<(), Report> {
+    let lang = target.lang;
+    let kind = activity.conversation_kind();
+    if !kind.is_personal() {
+        return target.send_text(Msg::ButtonNotSupported.text(lang)).await;
+    }
+    let Some(chat) = host
+        .reminder_chat_to_continue(user_id, submit.delivery_id, submit.target)
+        .await?
+    else {
+        return target
+            .send_text(Msg::ReminderChatUnavailable.text(lang))
+            .await;
+    };
+    let (conversation_id, service_url, from_id) = routing(activity)?;
+    let row = host
+        .upsert_conversation(conversation_id, kind, user_id, service_url, from_id)
+        .await?;
+    host.set_current_chat(&row, Some(chat.id)).await?;
+    let title = crate::models::chat::chat_title(
+        chat.title_by_user_provided.as_deref(),
+        chat.title_by_summary.as_deref(),
+    )
+    .unwrap_or(wording::untitled_chat(lang));
+    target
+        .send_text(&Msg::ContinuingChat.fill(lang, &[("chat", title)]))
+        .await
+}
+
 /// Call the service behind a claimed button. `Err` only when that call
 /// failed and changed nothing; a refusal is a note like any outcome. `None`
 /// for the opt-out, which answers with a message instead of a note.
@@ -584,6 +634,9 @@ async fn run_delivery_command(
                     Err(refusal) => reminder_refusal_note(refusal).text(lang).to_string(),
                 },
             ));
+        }
+        nudge::DeliveryCommand::ContinueChat => {
+            return Err(eyre!("Continue here is not a claimed button"));
         }
         nudge::DeliveryCommand::Snooze(choice) => match host
             .snooze_delivered_reminder(user_id, delivery_id, choice)
@@ -723,7 +776,7 @@ async fn on_reminder_keep(
 /// The line a confirmation card ends with once its reminder is no longer
 /// upcoming, as the web card's status reads.
 fn settled_note(status: Option<DisplayStatus>, scheduled_url: Option<&str>, lang: Lang) -> String {
-    let page = scheduled_page_link(scheduled_url, lang);
+    let page = reminders::scheduled_page_link(scheduled_url, lang);
     match status {
         Some(DisplayStatus::Cancelled) => Msg::ReminderCancelled.text(lang).to_string(),
         Some(DisplayStatus::Failed) => Msg::ReminderNotDelivered.fill(lang, &[("page", &page)]),
@@ -755,7 +808,8 @@ async fn current_confirmation_card(
     )))
 }
 
-/// One confirmation card per reminder the turn scheduled, after its answer.
+/// One confirmation card per reminder the turn scheduled, after its answer,
+/// then the list card when it listed the user's reminders and they have any.
 /// A reminder the turn also cancelled is confirmed as cancelled. A card that
 /// cannot be built or sent is logged: the reminder is stored and the answer
 /// already went out.
@@ -764,10 +818,10 @@ pub(super) async fn send_reminder_confirmations(
     host: &Host,
     target: &ReplyTarget<'_>,
     user_id: Uuid,
-    reminders: &[Uuid],
+    reminders: &reminders::TurnReminders,
 ) {
     let scheduled_url = scheduled_page_url(bot);
-    for item_id in reminders {
+    for item_id in &reminders.created {
         let card = match current_confirmation_card(
             host,
             user_id,
@@ -788,13 +842,131 @@ pub(super) async fn send_reminder_confirmations(
             tracing::warn!(%error, %item_id, "Could not send a reminder's confirmation card");
         }
     }
+    if !reminders.listed {
+        return;
+    }
+    let card = match host.upcoming_reminders(user_id, target.lang).await {
+        Ok(upcoming) if upcoming.is_empty() => return,
+        Ok(upcoming) => reminders::list_card(&upcoming, base_url(bot), None, target.lang),
+        Err(error) => {
+            tracing::warn!(%error, "Could not build the reminders list card");
+            return;
+        }
+    };
+    if let Err(error) = target.send(&card).await {
+        tracing::warn!(%error, "Could not send the reminders list card");
+    }
 }
 
-fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+fn base_url(bot: &TeamsBot) -> Option<&str> {
     bot.settings
         .public_base_url
         .as_deref()
-        .map(|base| format!("{}/scheduled", base.trim_end_matches('/')))
+        .map(|base| base.trim_end_matches('/'))
+}
+
+/// The user's upcoming reminders as the list card, with a note on the last
+/// press.
+async fn reminders_list_card(
+    bot: &TeamsBot,
+    host: &Host,
+    user_id: Uuid,
+    note: Option<&str>,
+    lang: Lang,
+) -> Result<Value, Report> {
+    let upcoming = host.upcoming_reminders(user_id, lang).await?;
+    Ok(reminders::list_card(&upcoming, base_url(bot), note, lang))
+}
+
+/// "Cancel it" on a row of the list card: the shared cancel for the user's
+/// own reminder, as on the confirmation card. The list then replaces the card
+/// in place, without that reminder and with a line on what happened; someone
+/// else's press only gets a reply.
+async fn on_list_cancel(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CardSubmit,
+) -> Result<(), Report> {
+    let lang = target.lang;
+    let Some(user) = known_user(bot, activity, target, sender).await? else {
+        return Ok(());
+    };
+    let note = match host.cancel_reminder(user.id, submit.item_id).await? {
+        Ok(item) => Msg::NamedReminderCancelled.fill(lang, &[("name", &item.name)]),
+        Err(refused) => match refused.code {
+            // Only the owner's press may redraw the card: it is drawn from the
+            // presser's reminders, and the card may be someone else's.
+            ScheduledItemErrorCode::NotFound => {
+                let reply = if host.reminder_exists(submit.item_id).await? {
+                    Msg::ReminderNotYours
+                } else {
+                    Msg::ReminderGone
+                };
+                return target.send_text(reply.text(lang)).await;
+            }
+            ScheduledItemErrorCode::Finished => settled_note(
+                host.reminder_status(user.id, submit.item_id).await?,
+                scheduled_page_url(bot).as_deref(),
+                lang,
+            ),
+            _ => Msg::ReminderUnchangeable.text(lang).to_string(),
+        },
+    };
+    replace_list_card(bot, host, activity, target, user.id, &note).await
+}
+
+/// "Keep it" on a row of the list card: the list goes back as it stands now,
+/// which folds the question away. Someone else's press changes nothing.
+async fn on_list_keep(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    sender: Sender,
+    submit: reminders::CardSubmit,
+) -> Result<(), Report> {
+    let (Ok(Some(user)), Some(card_id)) = (sender, activity.reply_to_id.as_deref()) else {
+        return Ok(());
+    };
+    if host
+        .reminder_status(user.id, submit.item_id)
+        .await?
+        .is_none()
+    {
+        return Ok(());
+    }
+    let card = reminders_list_card(bot, host, user.id, None, target.lang).await?;
+    if let Err(error) = target.update(card_id, card).await {
+        tracing::warn!(%error, "Could not put back the reminders list card");
+    }
+    Ok(())
+}
+
+/// Replace the pressed list card with the current list and `note`; when that
+/// fails, the note goes out as a message.
+async fn replace_list_card(
+    bot: &TeamsBot,
+    host: &Host,
+    activity: &Activity,
+    target: &ReplyTarget<'_>,
+    user_id: Uuid,
+    note: &str,
+) -> Result<(), Report> {
+    if let Some(card_id) = activity.reply_to_id.as_deref() {
+        let card = reminders_list_card(bot, host, user_id, Some(note), target.lang).await?;
+        match target.update(card_id, card).await {
+            Ok(()) => return Ok(()),
+            Err(error) => tracing::warn!(%error, "Could not replace the reminders list card"),
+        }
+    }
+    target.send_text(note).await
+}
+
+fn scheduled_page_url(bot: &TeamsBot) -> Option<String> {
+    base_url(bot).map(|base| format!("{base}{}", scheduled_items::chat_tools::SCHEDULED_PATH))
 }
 
 /// Why a reminder's button did nothing, shown on the card in its place.
@@ -810,15 +982,10 @@ fn reminder_refusal_note(refusal: Refusal) -> Msg {
 }
 
 fn reminder_button_gone_text(scheduled_url: Option<&str>, lang: Lang) -> String {
-    Msg::ReminderButtonGone.fill(lang, &[("page", &scheduled_page_link(scheduled_url, lang))])
-}
-
-fn scheduled_page_link(scheduled_url: Option<&str>, lang: Lang) -> String {
-    let name = Msg::ScheduledPage.text(lang);
-    match scheduled_url {
-        Some(url) => format!("[{name}]({url})"),
-        None => name.to_string(),
-    }
+    Msg::ReminderButtonGone.fill(
+        lang,
+        &[("page", &reminders::scheduled_page_link(scheduled_url, lang))],
+    )
 }
 
 /// The sender as Erato knows them, by Entra object id alone: enough for
@@ -1542,6 +1709,9 @@ async fn citation_sources(
     }
 }
 
+/// How much of a task's brief names it in an answer.
+const TASK_LABEL_BYTES: usize = 100;
+
 pub(super) fn completion_text(
     completion: &Completion,
     chat_link: Option<&str>,
@@ -1556,8 +1726,47 @@ pub(super) fn completion_text(
             format!("{text}\n\n**{}**", Msg::ApprovalNeededToContinue.text(lang))
         };
     }
+    let app = ("app", app_name);
+    // One line per client, in the order the tasks ran.
+    let mut groups: Vec<(Option<TaskClient>, Vec<String>)> = Vec::new();
+    for task in &completion.client_tasks {
+        let label = render::inline_label(&task.brief, TASK_LABEL_BYTES);
+        let label = Msg::QuotedTask.fill(lang, &[("task", &label)]);
+        match groups.iter_mut().find(|(client, _)| *client == task.client) {
+            Some((_, labels)) => labels.push(label),
+            None => groups.push((task.client, vec![label])),
+        }
+    }
+    for (client, tasks) in groups {
+        let note = match tasks.as_slice() {
+            [task] => Msg::TaskNeedsApp.fill(lang, &[app, ("task", task)]),
+            _ => Msg::TasksNeedApp.fill(lang, &[app, ("tasks", &tasks.join(", "))]),
+        };
+        let next = match client {
+            Some(TaskClient::Word) => Some(Msg::AskAgainInWord.fill(lang, &[app])),
+            Some(TaskClient::Outlook) => Some(Msg::AskAgainInOutlook.fill(lang, &[app])),
+            // The step's own line below links the chat; continuing there does
+            // not run a finished task again.
+            Some(TaskClient::Chat) if completion.needs_client => {
+                Some(Msg::AskAgainInChatAfterStep.fill(lang, &[app]))
+            }
+            Some(TaskClient::Chat) => Some(match chat_link {
+                Some(link) => Msg::OpenChatToAskAgain.fill(lang, &[app, ("link", link)]),
+                None => Msg::OpenChatToAskAgainPlain.fill(lang, &[app]),
+            }),
+            None => None,
+        };
+        let note = match next {
+            Some(next) => format!("_{note}_ {next}"),
+            None => format!("_{note}_"),
+        };
+        text = if text.is_empty() {
+            note
+        } else {
+            format!("{text}\n\n{note}")
+        };
+    }
     if completion.needs_client {
-        let app = ("app", app_name);
         let open = match chat_link {
             Some(link) => Msg::OpenChatToContinue.fill(lang, &[app, ("link", link)]),
             None => Msg::OpenChatToContinuePlain.fill(lang, &[app]),
@@ -1808,7 +2017,8 @@ mod tests {
             earlier_text: String::new(),
             approvals: None,
             needs_client: false,
-            reminders: Vec::new(),
+            reminders: Default::default(),
+            client_tasks: Vec::new(),
         }
     }
 
@@ -1898,6 +2108,118 @@ mod tests {
         assert!(is_new_chat_command(" /new "));
         assert!(is_new_chat_command("New Chat"));
         assert!(!is_new_chat_command("/new idea for the roadmap"));
+    }
+
+    fn task(brief: &str, client: TaskClient) -> crate::ms_teams_bot::host::ClientTask {
+        crate::ms_teams_bot::host::ClientTask {
+            brief: brief.into(),
+            client: Some(client),
+        }
+    }
+
+    #[test]
+    fn an_answer_names_the_tasks_that_need_the_app() {
+        let link = Some("https://erato.example/chat/1");
+        let mut one = completion("Here is what I found.");
+        one.client_tasks = vec![task("Search my files\nfrom last week", TaskClient::Chat)];
+        assert_eq!(
+            completion_text(&one, link, "Erato", Lang::En),
+            "Here is what I found.\n\n_The task “Search my files” needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) and ask there again."
+        );
+        assert_eq!(
+            completion_text(&one, None, "Hugo", Lang::De),
+            "Here is what I found.\n\n_Die Aufgabe „Search my files“ erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo und stellen Sie die Frage dort noch einmal."
+        );
+
+        let mut two = completion("");
+        two.client_tasks = vec![
+            task("Search my files", TaskClient::Chat),
+            task("Search my notes", TaskClient::Chat),
+        ];
+        assert_eq!(
+            completion_text(&two, None, "Erato", Lang::En),
+            "_These tasks need the Erato app: “Search my files”, “Search my notes”._ Open the chat in Erato and ask there again."
+        );
+        assert_eq!(
+            completion_text(&two, link, "Hugo", Lang::De),
+            "_Diese Aufgaben erfordern die Hugo-App: „Search my files“, „Search my notes“._ [Öffnen Sie den Chat in Hugo](https://erato.example/chat/1) und stellen Sie die Frage dort noch einmal."
+        );
+    }
+
+    #[test]
+    fn a_task_that_needs_word_or_outlook_points_there_not_to_the_chat() {
+        let link = Some("https://erato.example/chat/1");
+        let mut mixed = completion("Partial answer");
+        mixed.client_tasks = vec![
+            task("Read my calendar", TaskClient::Outlook),
+            task("Summarize the draft", TaskClient::Word),
+            task("Read my inbox", TaskClient::Outlook),
+            crate::ms_teams_bot::host::ClientTask {
+                brief: "Facet since removed".into(),
+                client: None,
+            },
+        ];
+        assert_eq!(
+            completion_text(&mixed, link, "Erato", Lang::En),
+            "Partial answer\n\n_These tasks need the Erato app: “Read my calendar”, “Read my inbox”._ Open Outlook and ask again in the Erato add-in there.\n\n_The task “Summarize the draft” needs the Erato app._ Open the document in Word and ask again in the Erato add-in there.\n\n_The task “Facet since removed” needs the Erato app._"
+        );
+        assert_eq!(
+            completion_text(&mixed, link, "Hugo", Lang::De),
+            "Partial answer\n\n_Diese Aufgaben erfordern die Hugo-App: „Read my calendar“, „Read my inbox“._ Öffnen Sie Outlook und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Die Aufgabe „Summarize the draft“ erfordert die Hugo-App._ Öffnen Sie das Dokument in Word und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Die Aufgabe „Facet since removed“ erfordert die Hugo-App._"
+        );
+    }
+
+    #[test]
+    fn a_step_that_needs_the_app_links_the_chat_once_after_the_tasks() {
+        let mut both = completion("Partial answer");
+        both.client_tasks = vec![
+            task("Search my files", TaskClient::Chat),
+            task("Read my calendar", TaskClient::Outlook),
+        ];
+        both.needs_client = true;
+        assert_eq!(
+            completion_text(
+                &both,
+                Some("https://erato.example/chat/1"),
+                "Erato",
+                Lang::En
+            ),
+            "Partial answer\n\n_The task “Search my files” needs the Erato app._ After this step, ask again in the chat in Erato.\n\n_The task “Read my calendar” needs the Erato app._ Open Outlook and ask again in the Erato add-in there.\n\n_This step needs the Erato app._ [Open the chat in Erato](https://erato.example/chat/1) to continue."
+        );
+        assert_eq!(
+            completion_text(&both, None, "Hugo", Lang::De),
+            "Partial answer\n\n_Die Aufgabe „Search my files“ erfordert die Hugo-App._ Stellen Sie die Frage nach diesem Schritt im Chat in Hugo noch einmal.\n\n_Die Aufgabe „Read my calendar“ erfordert die Hugo-App._ Öffnen Sie Outlook und stellen Sie die Frage dort im Hugo-Add-in noch einmal.\n\n_Dieser Schritt erfordert die Hugo-App._ Öffnen Sie den Chat in Hugo, um fortzufahren."
+        );
+    }
+
+    #[test]
+    fn a_task_brief_cannot_add_links_or_formatting() {
+        let mut forged = completion("");
+        forged.client_tasks = vec![task(
+            &format!(
+                "  [x](https://evil.example) **now** `code` _it_ <at>Bob</at> {}",
+                "long ".repeat(40)
+            ),
+            TaskClient::Chat,
+        )];
+        let text = completion_text(&forged, None, "Erato", Lang::En);
+        let label = text
+            .split_once('“')
+            .and_then(|(_, rest)| rest.split_once('”'))
+            .map(|(label, _)| label)
+            .expect("a quoted label");
+        assert!(
+            !label.contains(['[', ']', '(', ')', '*', '_', '`', '<', '>']),
+            "{label}"
+        );
+        assert!(
+            label.starts_with("xhttps://evil.example now code it atBob/at long long"),
+            "{label}"
+        );
+        assert!(
+            label.ends_with('…') && label.len() <= TASK_LABEL_BYTES,
+            "{label}"
+        );
     }
 
     #[test]

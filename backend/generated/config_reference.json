@@ -2313,6 +2313,17 @@
     "security_relevance": "unknown",
     "stability": "deprecated"
   },
+  "experimental_facets.facets.<facet-id>.show_indicator_with_display_name": {
+    "default_value_security": "unknown",
+    "deprecated": {
+      "note": "Please use `facets.facets.<facet-id>.show_indicator_with_display_name` instead.",
+      "replacement_key": "facets.facets.<facet-id>.show_indicator_with_display_name"
+    },
+    "hide_in_docs": true,
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "deprecated"
+  },
   "experimental_facets.facets.<facet-id>.tool_call_allowlist.[]": {
     "default_value_security": "unknown",
     "deprecated": {
@@ -2605,6 +2616,12 @@
   "facets.facets.<facet-id>.model_settings.verbosity": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "facets.facets.<facet-id>.show_indicator_with_display_name": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
     "security_relevance": "unknown",
     "stability": "unstable"
   },
@@ -4266,6 +4283,12 @@
   "mcp_servers_global.max_wait_seconds": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers_global.organization_email_domains.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
     "security_relevance": "unknown",
     "stability": "unstable"
   },

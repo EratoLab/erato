@@ -1071,6 +1071,22 @@ impl RecordsServer {
     ) -> String {
         format!("record {id} updated to {status}")
     }
+
+    #[tool(
+        description = "Updates the gizmo's status",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    fn update_gizmo(
+        &self,
+        Parameters(UpdateRecordParams { id, status }): Parameters<UpdateRecordParams>,
+    ) -> String {
+        format!("gizmo {id} updated to {status}")
+    }
 }
 
 impl ServerHandler for RecordsServer {
@@ -1538,9 +1554,9 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
         },
         MechanismSummary {
             name: "Records server",
-            description: "A closed-world read and an open-world update of one record",
+            description: "A closed-world read and open-world updates of one record",
             endpoint: "Streamable HTTP /mcp/records",
-            tools: &["read_record", "update_record"],
+            tools: &["read_record", "update_record", "update_gizmo"],
         },
         MechanismSummary {
             name: "Untrusted text server",

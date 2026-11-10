@@ -83,8 +83,8 @@ export interface OutlookActionFacetInput {
    */
   calendarAvailable: boolean;
   /**
-   * The latest assistant message RECENTLY read the calendar or
-   * proposed/adjusted an appointment (`containsSchedulingSignal`; recency is
+   * The latest assistant message RECENTLY read the calendar (itself or
+   * through delegated tasks) or proposed/adjusted an appointment (`containsSchedulingSignal`; recency is
    * judged by the caller at send time via `isSchedulingThreadFresh`) — the
    * user's follow-up most likely picks or tweaks a slot, so the scheduling
    * facet must claim the single facet slot even in read/compose contexts that
