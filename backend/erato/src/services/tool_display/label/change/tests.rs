@@ -2771,3 +2771,59 @@ fn a_link_among_a_new_records_values_is_a_value_named_after_what_it_links_to() {
     );
     assert_eq!(texts(&effect(&note, "folder_id").values), ["fld_1"]);
 }
+
+#[test]
+fn a_record_named_only_by_an_id_no_result_held_says_so_and_its_name_reads_as_new() {
+    let update = tool("update_record", "", None);
+    let arguments = json!({"tablename": "account", "recordId": RECORD, "item": {
+        "name": "Renamed",
+        "phone": "+49 30 5550111",
+    }});
+    let (change, _) = change_with(&update, arguments.clone(), &ToolResultContext::default());
+    assert!(change.record_unread);
+    assert!(effect(&change, "name").new_name);
+    assert_eq!(effect(&change, "name").effect, ToolCallEffectKind::Set);
+    assert!(!effect(&change, "phone").new_name);
+    let mut forgotten = change.clone();
+    forget_earlier(&mut forgotten);
+    assert!(!forgotten.record_unread && !effect(&forgotten, "name").new_name);
+
+    // Any result that showed the ID, named or not, and any readable ID or
+    // title on the card, says nothing of the kind.
+    for context in [
+        earlier(vec![(
+            "read_query",
+            json!({"querytext": "SELECT name, accountid FROM account"}),
+            json!([{"name": "Old name", "accountid": RECORD}]),
+        )]),
+        earlier(vec![(
+            "describe",
+            json!({"path": "tables/account"}),
+            json!(format!("Row {RECORD} has 12 columns.")),
+        )]),
+    ] {
+        let (change, _) = change_with(&update, arguments.clone(), &context);
+        assert!(!change.record_unread);
+        assert!(!effect(&change, "name").new_name);
+    }
+    for arguments in [
+        json!({"tablename": "account", "recordId": "ACC-4211", "item": {"name": "Renamed"}}),
+        json!({"tablename": "account", "recordId": [RECORD, ACCOUNT], "item": {"name": "Renamed"}}),
+    ] {
+        let (change, _) = change_with(&update, arguments, &ToolResultContext::default());
+        assert!(!change.record_unread);
+    }
+    let (deleted, _) = change_with(
+        &tool("delete_record", "", None),
+        json!({"tablename": "account", "recordId": RECORD}),
+        &ToolResultContext::default(),
+    );
+    assert!(deleted.record_unread);
+    let (created, _) = change_with(
+        &tool("create_record", "", None),
+        json!({"tablename": "account", "item": {"name": "New", "parent_record_id": RECORD}}),
+        &ToolResultContext::default(),
+    );
+    assert!(!created.record_unread);
+    assert!(created.effects.iter().all(|effect| !effect.new_name));
+}

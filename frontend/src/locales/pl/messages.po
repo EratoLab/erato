@@ -8613,6 +8613,7 @@ msgstr "Wyjście"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+#: src/lib/toolCallGist/gistLabels.ts
 msgid "toolCall.technicalDetails"
 msgstr "Szczegóły techniczne"
 
@@ -9283,6 +9284,11 @@ msgstr "{label} ({text})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.newName"
+msgstr "ustawione na"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.value.toolSaysMeaning"
 msgstr "{text} (według narzędzia: {label})"
 
@@ -9752,6 +9758,11 @@ msgstr "Zmiana tekstu"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.textChanges"
 msgstr "{changes, plural, one {# zmiana tekstu} few {# zmiany tekstu} many {# zmian tekstu} other {# zmiany tekstu}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.unreadRecord"
+msgstr "{kind, select, page {Która {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} database {Która {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} folder {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} note {Która {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} comment {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} paragraph {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} document {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} email {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} message {Która {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} event {Które {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} file {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} task {Które {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} row {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})} other {Który {noun}: nie odczytano w tym czacie (identyfikator jest w sekcji {details})}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

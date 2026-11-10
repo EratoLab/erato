@@ -623,6 +623,11 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub table: Option<String>,
+    /// The one record the call acts on is named only by a machine ID that no
+    /// result in this chat held, every result read whole: a card says the
+    /// record was not read here and where its ID is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_unread: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<ToolCallChangeNote>,
     /// Every value was read and classified. Only then may a card state what
@@ -675,6 +680,11 @@ pub struct ToolCallEffect {
     /// The value only links to another record.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub link: bool,
+    /// A name the call gives a record nobody read in this chat (see
+    /// `record_unread`): a card reads it as a new value, never as the name of
+    /// the record being changed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub new_name: bool,
 }
 
 /// One value as a card shows it.

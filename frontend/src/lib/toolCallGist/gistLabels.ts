@@ -692,6 +692,37 @@ export const gistLineSentence = (
   });
 };
 
+/**
+ * The line under an item's sentence when the one record it acts on is named
+ * only by an ID no result in this chat held, so nothing could name it: which
+ * record it is stays unknown here, and the ID is in the card's details.
+ */
+export const gistUnreadRecordLine = (gist: Gist): string => {
+  const kind = gist.kind;
+  const noun = gistKindLabel(kind, 1, gist.change?.table);
+  const details = t({
+    id: "toolCall.technicalDetails",
+    message: "Technical details",
+  });
+  return t({
+    id: "toolGist.unreadRecord",
+    message: select(kind, {
+      other: `Which ${noun}: not read in this chat (its ID is in ${details})`,
+    }),
+  });
+};
+
+/**
+ * Whether an item's line is followed by the line that its record was not
+ * read: the backend says so for the label's first item only, and only a line
+ * that names nothing needs it.
+ */
+export const showsUnreadRecord = (gist: Gist, item: GistItem): boolean =>
+  gist.change?.recordUnread === true &&
+  gist.items[0] === item &&
+  item.count === 1 &&
+  item.names.length === 0;
+
 const plainValues = (values: GistValue[]) =>
   listedValues(values)
     .map((value) =>

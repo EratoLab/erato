@@ -44,6 +44,8 @@ export interface ChangeEffect {
   /** The value is a list, whatever the card can say about what happens to it. */
   list: boolean;
   link: boolean;
+  /** A name the call gives a record nobody read in this chat: a new value, not its name. */
+  newName: boolean;
 }
 
 export interface ChangeText {
@@ -158,6 +160,8 @@ export interface GistChange {
   place?: string;
   /** The table the record is one of, read as part of its kind, never as a place. */
   table?: string;
+  /** The one record the call acts on was never read in this chat, so no name is known. */
+  recordUnread: boolean;
   notes: ToolCallChangeNote[];
   complete: boolean;
   consentLeftOut: boolean;
@@ -292,6 +296,7 @@ class Reader {
       added: this.values(raw.added, MAX_LIST_VALUES),
       list: raw.list === true,
       link: raw.link === true,
+      newName: raw.new_name === true,
     };
   }
 
@@ -483,6 +488,7 @@ export const readChange = (raw: unknown): GistChange | undefined => {
     batch: reader.batch(raw.batch),
     place: typeof raw.place === "string" ? reader.text(raw.place) : undefined,
     table: typeof raw.table === "string" ? reader.text(raw.table) : undefined,
+    recordUnread: raw.record_unread === true,
     notes: listOf(raw.notes, MAX_NOTES).filter(
       (note): note is ToolCallChangeNote => isOneOf(CHANGE_NOTES, note),
     ),

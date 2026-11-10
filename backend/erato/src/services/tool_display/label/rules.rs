@@ -149,7 +149,7 @@ const MESSAGE_NOUNS: [&str; 3] = ["message", "messages", "chat"];
 /// Names that create or update depending on whether the arguments carry an ID.
 const SAVE_VERBS: [&str; 3] = ["save", "put", "sync"];
 
-const TITLE_MEMBERS: [&str; 11] = [
+pub(super) const TITLE_MEMBERS: [&str; 11] = [
     "title",
     "name",
     "subject",

@@ -53,6 +53,7 @@ import {
   listWouldGoLabel,
   listWouldStayLabel,
   machineIdPhrase,
+  newNamePhrase,
   opaqueCutLine,
   outsideLine,
   plainChangeValue,
@@ -65,7 +66,11 @@ import {
   uncheckedLine,
   writeInsideReadLine,
 } from "@/lib/toolCallGist/changeLabels";
-import { gistWarningLabel } from "@/lib/toolCallGist/gistLabels";
+import {
+  gistUnreadRecordLine,
+  gistWarningLabel,
+  showsUnreadRecord,
+} from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 import {
   NEW_TEXT_CLASS,
@@ -316,6 +321,17 @@ const ValueList = ({
   );
 };
 
+/** "set to" before a name given to a record nobody read, so it never reads as that record's name. */
+const NewName = ({ effect }: { effect: ChangeEffect }) =>
+  effect.newName ? (
+    <span
+      className="text-theme-fg-muted"
+      data-testid="tool-call-change-new-name"
+    >
+      {newNamePhrase()}{" "}
+    </span>
+  ) : null;
+
 const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
   if (effect.values.length === 0) {
     return (
@@ -336,7 +352,10 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
       {value}
     </OldToNew>
   ) : (
-    value
+    <>
+      <NewName effect={effect} />
+      {value}
+    </>
   );
 };
 
@@ -667,7 +686,10 @@ const RowChange = ({ effect }: { effect: ChangeEffect }) => {
           {value}
         </OldToNew>
       ) : (
-        value
+        <>
+          <NewName effect={effect} />
+          {value}
+        </>
       )}
     </>
   );
@@ -1076,18 +1098,24 @@ export const ToolCallChangeCard = ({
         data-testid="tool-call-gist-scroll"
       >
         {gist.items.map((item, index) => (
-          <p
-            key={index}
-            className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
-            data-testid="tool-call-gist-line"
-          >
-            <ToolCallGistLine
-              gist={gist}
-              item={item}
-              phase={phase}
-              variant="card"
-            />
-          </p>
+          <Fragment key={index}>
+            <p
+              className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+              data-testid="tool-call-gist-line"
+            >
+              <ToolCallGistLine
+                gist={gist}
+                item={item}
+                phase={phase}
+                variant="card"
+              />
+            </p>
+            {showsUnreadRecord(gist, item) && (
+              <p className={MUTED} data-testid="tool-call-gist-unread">
+                {gistUnreadRecordLine(gist)}
+              </p>
+            )}
+          </Fragment>
         ))}
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody

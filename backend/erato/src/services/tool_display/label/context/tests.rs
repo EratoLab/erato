@@ -2078,3 +2078,56 @@ fn a_path_that_points_at_a_record_by_its_id_names_that_record() {
         None
     );
 }
+
+#[test]
+fn an_id_counts_as_never_read_only_when_no_result_held_it_in_any_form() {
+    let arguments = json!({ "recordId": ACCOUNT });
+    let never = |context: &ToolResultContext| context.never_read(&arguments, "/recordId");
+    assert!(never(&ToolResultContext::default()));
+    assert!(never(&after(vec![read_query(
+        "other",
+        "SELECT name, accountid FROM account",
+        json!([{ "name": "Another", "accountid": OTHER_CONTACT }]),
+    )])));
+    // Held anywhere: as a value, in text, in a link path, as a member name,
+    // or by a result the index keeps nothing of.
+    for output in [
+        json!([{ "accountid": ACCOUNT }]),
+        json!(format!("Found account {ACCOUNT} with 3 contacts.")),
+        json!({ "parent": format!("/accounts({ACCOUNT})") }),
+        json!({ ACCOUNT: { "stage": "won" } }),
+        json!({ "deep": [[[[[[[[[[{ "ref": ACCOUNT.to_uppercase() }]]]]]]]]]] }),
+    ] {
+        let context = after(vec![call("read", "search", json!({}), output.clone())]);
+        assert!(!never(&context), "{output}");
+    }
+    let unplaced = ToolUse {
+        display: on(None),
+        ..call("read", "search", json!({}), json!([{ "id": ACCOUNT }]))
+    };
+    assert!(!never(&after(vec![unplaced])));
+
+    // A task's child, or a result too large to read whole, may have read it.
+    let task = call(
+        "task",
+        erato_config::config::DELEGATE_TASK_TOOL_NAME,
+        json!({ "task": "Look around" }),
+        json!({ "status": "completed", "result": "Done." }),
+    );
+    assert!(!never(&after(vec![task])));
+    let huge: Vec<_> = (0..MAX_ID_SCAN_NODES).map(|index| json!(index)).collect();
+    let big = call("read", "search", json!({}), json!(huge));
+    assert!(!never(&after(vec![big])));
+    // A failed call's error text is no read, and a recipient is never asked about.
+    let failed = ToolUse {
+        status: ToolCallStatus::Error,
+        ..call(
+            "read",
+            "get_row",
+            json!({}),
+            json!(format!("No row {ACCOUNT}.")),
+        )
+    };
+    assert!(never(&after(vec![failed])));
+    assert!(!ToolResultContext::default().never_read(&json!({ "to": ACCOUNT }), "/to"));
+}

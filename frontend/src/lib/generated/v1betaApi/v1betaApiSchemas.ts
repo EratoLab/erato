@@ -4668,6 +4668,12 @@ export type ToolCallChange = {
   place?: string;
   recipients?: ToolCallRecipients;
   /**
+   * The one record the call acts on is named only by a machine ID that no
+   * result in this chat held, every result read whole: a card says the
+   * record was not read here and where its ID is.
+   */
+  record_unread?: boolean;
+  /**
    * The table the record is one of, as the call names it, when that says
    * more than the label's kind: a card reads it as part of the kind
    * ("account row"), never as where the record goes.
@@ -4731,6 +4737,12 @@ export type ToolCallEffect = {
    * A readable name, display-cleaned.
    */
   name: string;
+  /**
+   * A name the call gives a record nobody read in this chat (see
+   * `record_unread`): a card reads it as a new value, never as the name of
+   * the record being changed.
+   */
+  new_name?: boolean;
   old?: ToolCallEffectValue;
   /**
    * List values past the cap.

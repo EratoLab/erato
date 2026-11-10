@@ -353,6 +353,10 @@ export const linkPhrase = (name: string | undefined): string =>
       })
     : t({ id: "toolChange.value.linkTo", message: `link to ${name}` });
 
+/** Before a name a call gives a record nobody read, so it reads as a new value. */
+export const newNamePhrase = (): string =>
+  t({ id: "toolChange.value.newName", message: "set to" });
+
 export const cutValuePhrase = (): string =>
   t({
     id: "toolChange.value.cut",

@@ -978,3 +978,59 @@ describe("the scroll box", () => {
     clientHeight.mockRestore();
   });
 });
+
+describe("a card for a record no result in the chat named", () => {
+  const renderUnread = (raw: object) => {
+    const change = readAs(raw);
+    const gist: Gist = {
+      ...gistFor(change),
+      items: [{ ...gistFor(change).items[0], where: [] }],
+    };
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard gist={gist} change={change} phase="ask" />
+      </I18nProvider>,
+    );
+  };
+  const renamed = (newName: boolean) => ({
+    path: "/item/name",
+    name: "Name",
+    raw_name: "name",
+    effect: "set",
+    values: [{ text: "Renamed" }],
+    new_name: newName,
+  });
+
+  it("says under the line that the record was not read, and reads a new name as one", () => {
+    renderUnread({
+      table: "account",
+      record_unread: true,
+      effects: [renamed(true)],
+      counts: { set: 1 },
+    });
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Update account row",
+    );
+    expect(screen.getByTestId("tool-call-gist-unread")).toHaveTextContent(
+      "Which account row: not read in this chat (its ID is in Technical details)",
+    );
+    const row = screen.getByTestId("tool-call-change-row");
+    expect(row).toHaveTextContent("Nameset to Renamed");
+    expect(
+      within(row).getByTestId("tool-call-change-new-name"),
+    ).toBeInTheDocument();
+  });
+
+  it("says neither when the backend does not", () => {
+    renderUnread({
+      table: "account",
+      effects: [renamed(false)],
+      counts: { set: 1 },
+    });
+    expect(screen.queryByTestId("tool-call-gist-unread")).toBeNull();
+    expect(screen.queryByTestId("tool-call-change-new-name")).toBeNull();
+    expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
+      "NameRenamed",
+    );
+  });
+});

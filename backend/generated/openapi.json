@@ -13670,6 +13670,10 @@
           "recipients": {
             "$ref": "#/components/schemas/ToolCallRecipients"
           },
+          "record_unread": {
+            "type": "boolean",
+            "description": "The one record the call acts on is named only by a machine ID that no\nresult in this chat held, every result read whole: a card says the\nrecord was not read here and where its ID is."
+          },
           "table": {
             "type": "string",
             "description": "The table the record is one of, as the call names it, when that says\nmore than the label's kind: a card reads it as part of the kind\n(\"account row\"), never as where the record goes."
@@ -13747,6 +13751,10 @@
           "name": {
             "type": "string",
             "description": "A readable name, display-cleaned."
+          },
+          "new_name": {
+            "type": "boolean",
+            "description": "A name the call gives a record nobody read in this chat (see\n`record_unread`): a card reads it as a new value, never as the name of\nthe record being changed."
           },
           "old": {
             "$ref": "#/components/schemas/ToolCallEffectValue",

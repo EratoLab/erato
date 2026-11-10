@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { messages as frMessages } from "@/locales/fr/messages.json";
 
 import {
   MAX_COLLAPSED_NAMES,
@@ -22,7 +23,12 @@ import {
   changeSummaryLine,
 } from "./changeLabels";
 import { gistOf, gistShownPaths, unshownArguments } from "./gist";
-import { gistLineSentence, gistPlainLine } from "./gistLabels";
+import {
+  gistLineSentence,
+  gistPlainLine,
+  gistUnreadRecordLine,
+  showsUnreadRecord,
+} from "./gistLabels";
 
 import type { ChangeBatch, GistChange } from "./change";
 import type {
@@ -621,5 +627,76 @@ describe("the table a record is one of", () => {
     expect(gistPlainLine(created, created.items[0], "ask")).toBe(
       "account-Zeile “Example Ltd” erstellen",
     );
+  });
+});
+
+describe("a record no result in the chat named", () => {
+  afterEach(() => {
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("says which record is unknown here and where its ID is, only when the backend says so", () => {
+    const gist = gistOf(
+      byHiddenId({ table: "account", record_unread: true }),
+      {},
+    )!;
+    expect(showsUnreadRecord(gist, gist.items[0])).toBe(true);
+    expect(gistUnreadRecordLine(gist)).toBe(
+      "Which account row: not read in this chat (its ID is in Technical details)",
+    );
+    i18n.load("de", deMessages as unknown as Messages);
+    i18n.activate("de");
+    expect(gistUnreadRecordLine(gist)).toBe(
+      "Welche account-Zeile: in diesem Chat nicht gelesen (ID unter Technische Details)",
+    );
+    const page = gistOf(
+      byHiddenId({ record_unread: true }, { object_kind: "document" }),
+      {},
+    )!;
+    expect(gistUnreadRecordLine(page)).toBe(
+      "Welches Dokument: in diesem Chat nicht gelesen (ID unter Technische Details)",
+    );
+    i18n.load("fr", frMessages as unknown as Messages);
+    i18n.activate("fr");
+    expect(gistUnreadRecordLine(gist)).toBe(
+      "Quelle ligne account : non lue dans ce chat (son identifiant est dans Détails techniques)",
+    );
+  });
+
+  it("says nothing when a name is known or the backend does not say so", () => {
+    const read = gistOf(byHiddenId({ table: "account" }), {})!;
+    expect(showsUnreadRecord(read, read.items[0])).toBe(false);
+    const named = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/recordId",
+              values: [
+                {
+                  path: "/recordId",
+                  text: UUID,
+                  machine_id: true,
+                  resolved: "Example Ltd",
+                },
+              ],
+            },
+          },
+        ],
+        change: { record_unread: true, counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(showsUnreadRecord(named, named.items[0])).toBe(false);
+  });
+
+  it("reads a name the call gives such a record as a new value", () => {
+    const read = change([effect("name", "set", { new_name: true })], {
+      record_unread: true,
+    });
+    expect(read.recordUnread).toBe(true);
+    expect(read.effects[0].newName).toBe(true);
+    expect(change([effect("name", "set")]).effects[0].newName).toBe(false);
   });
 });

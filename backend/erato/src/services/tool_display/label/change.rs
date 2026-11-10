@@ -16,7 +16,8 @@ use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer::escape;
 use super::recipients::{ADDRESS_MEMBERS, bare_member, is_phone_shaped};
 use super::rules::{
-    self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, WRAPPER_MEMBERS, recipients_in,
+    self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, TITLE_MEMBERS, WRAPPER_MEMBERS,
+    recipients_in,
 };
 use crate::models::message::{
     ToolCallAction, ToolCallBatch, ToolCallBatchField, ToolCallBatchOperation, ToolCallBatchRow,
@@ -245,6 +246,8 @@ struct Walk<'a> {
     /// What the label says the record is; a table that only repeats it is
     /// left out.
     kind: ToolCallObjectKind,
+    /// See [`ToolCallChange::record_unread`].
+    record_unread: bool,
     /// Paths the line names: the record, its title, where it goes.
     named: HashSet<&'a str>,
     /// Those of them whose value the line can show, a machine ID only by name.
@@ -285,6 +288,8 @@ impl<'a> Walk<'a> {
         item: Option<&'a ToolCallLabelItem>,
         facts: &'a ChangeFacts<'a>,
     ) -> Self {
+        let record_unread =
+            action != ToolCallAction::Other && item.is_some_and(|item| record_unread(item, facts));
         let named_values = item
             .into_iter()
             .flat_map(|item| [&item.id, &item.title, &item.target])
@@ -318,6 +323,7 @@ impl<'a> Walk<'a> {
             facts,
             action,
             kind,
+            record_unread,
             named,
             named_shown,
             before,
@@ -735,6 +741,7 @@ impl<'a> Walk<'a> {
             added: Vec::new(),
             list: false,
             link: false,
+            new_name: false,
         };
         match unwrap(value, is_plural(member)) {
             Unwrapped::Empty => {
@@ -750,6 +757,11 @@ impl<'a> Walk<'a> {
                     .map(|value| self.with_meaning(value, member, path, scalar));
                 effect.values.extend(shown);
                 self.classify_scalar(member, path, scalar, &mut effect);
+                effect.new_name = self.record_unread
+                    && update_like
+                    && effect.effect == ToolCallEffectKind::Set
+                    && !effect.link
+                    && is_one_of(member, &TITLE_MEMBERS);
             }
             Unwrapped::List(entries) => {
                 effect.list = true;
@@ -1651,6 +1663,7 @@ impl<'a> Walk<'a> {
         let action = self.action;
         self.change.complete = self.complete;
         self.change.consent_left_out = self.consent_left_out;
+        self.change.record_unread = self.record_unread;
         if self.places.len() > 1 {
             self.places.sort_by_key(|(order, _)| *order);
             let joined: Vec<&str> = self.places.iter().map(|(_, text)| text.as_str()).collect();
@@ -1757,6 +1770,27 @@ fn is_table_name(text: &str) -> bool {
         && text
             .chars()
             .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+/// Whether the one record an item names is named only by a machine ID no
+/// result in this chat held: no title names it, its single ID is a machine
+/// ID nothing resolved, and the chat's results, all read whole, never showed
+/// that ID in any form.
+fn record_unread(item: &ToolCallLabelItem, facts: &ChangeFacts<'_>) -> bool {
+    let titled = item
+        .title
+        .as_ref()
+        .is_some_and(|title| !title.values.is_empty());
+    let Some(id) = item.id.as_ref().filter(|id| id.omitted == 0) else {
+        return false;
+    };
+    let [only] = id.values.as_slice() else {
+        return false;
+    };
+    !titled
+        && only.machine_id
+        && only.resolved.is_none()
+        && facts.context.never_read(facts.arguments, &only.path)
 }
 
 /// A call's own text can never pose as the mark for a hidden ID.
@@ -2532,6 +2566,7 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
         }
     }
     fn forget_effect(effect: &mut ToolCallEffect) {
+        effect.new_name = false;
         effect.old = None;
         effect.removed.clear();
         effect.kept.clear();
@@ -2596,6 +2631,8 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
             ToolCallChangeNote::OldValuesFromEarlier | ToolCallChangeNote::NothingChanges
         )
     });
+    // Whether a chat read the record says nothing about another chat.
+    change.record_unread = false;
 }
 
 #[cfg(test)]

@@ -8613,6 +8613,7 @@ msgstr "Ausgabe"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+#: src/lib/toolCallGist/gistLabels.ts
 msgid "toolCall.technicalDetails"
 msgstr "Technische Details"
 
@@ -9283,6 +9284,11 @@ msgstr "{label} ({text})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.newName"
+msgstr "gesetzt auf"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.value.toolSaysMeaning"
 msgstr "{text} (laut Tool: {label})"
 
@@ -9752,6 +9758,11 @@ msgstr "Textänderung"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.textChanges"
 msgstr "{changes, plural, one {# Textänderung} other {# Textänderungen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.unreadRecord"
+msgstr "{kind, select, page {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} database {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} folder {Welcher {noun}: in diesem Chat nicht gelesen (ID unter {details})} note {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} comment {Welcher {noun}: in diesem Chat nicht gelesen (ID unter {details})} paragraph {Welcher {noun}: in diesem Chat nicht gelesen (ID unter {details})} document {Welches {noun}: in diesem Chat nicht gelesen (ID unter {details})} email {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} message {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} event {Welcher {noun}: in diesem Chat nicht gelesen (ID unter {details})} file {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} task {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} row {Welche {noun}: in diesem Chat nicht gelesen (ID unter {details})} other {Welches {noun}: in diesem Chat nicht gelesen (ID unter {details})}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

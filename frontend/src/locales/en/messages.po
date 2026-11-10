@@ -8613,6 +8613,7 @@ msgstr "Output"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalReferent.tsx
+#: src/lib/toolCallGist/gistLabels.ts
 msgid "toolCall.technicalDetails"
 msgstr "Technical details"
 
@@ -9283,6 +9284,11 @@ msgstr "{label} ({text})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.value.newName"
+msgstr "set to"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.value.toolSaysMeaning"
 msgstr "{text} (the tool says: {label})"
 
@@ -9752,6 +9758,11 @@ msgstr "Text change"
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.textChanges"
 msgstr "{changes, plural, one {# text change} other {# text changes}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.unreadRecord"
+msgstr "{kind, select, other {Which {noun}: not read in this chat (its ID is in {details})}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts

@@ -74,6 +74,12 @@ pub struct ToolResultContext {
     /// Which read a record's values came from, so a code's label is only taken
     /// from the same read: another table may number its choices differently.
     reads: u32,
+    /// Every ID any successful result in the chat held, as a hash of its
+    /// lookup key, whether or not the index keeps a record for it.
+    seen_ids: HashSet<u64>,
+    /// Some result went unread or was read only in part, so an ID missing
+    /// from `seen_ids` may still have been read.
+    partial: bool,
 }
 
 /// Mail providers anyone can sign up with: an address there says nothing about
@@ -304,6 +310,7 @@ impl ToolResultContext {
             })
             .collect();
         let first_read = calls.len().saturating_sub(MAX_CALLS_READ);
+        context.partial |= first_read > 0;
         for (index, tool) in calls.into_iter().enumerate() {
             if index >= first_read {
                 context.read(tool);
@@ -566,7 +573,45 @@ impl ToolResultContext {
             self.records.clear();
             self.order.clear();
             self.bytes = 0;
+            self.partial = true;
         }
+    }
+
+    /// Whether no result in this chat held the ID at `path`, as far as every
+    /// result was read whole: only then may a card say the record it names
+    /// was not read here. A value below a recipient is never such an ID.
+    pub(super) fn never_read(&self, arguments: &Value, path: &str) -> bool {
+        if self.partial || below_a_recipient(path) {
+            return false;
+        }
+        let mut reached = None;
+        pointer::visit(arguments, path, |_, value| {
+            reached = Some(value);
+            ControlFlow::Break(())
+        });
+        reached
+            .and_then(id_key)
+            .is_some_and(|key| !self.seen_ids.contains(&id_hash(&key)))
+    }
+
+    /// Notes every ID a result holds, in its values, its member names and
+    /// the text it holds, so a card never says an ID was not read when a
+    /// result showed it in any form.
+    fn note_seen_ids(&mut self, output: &Value) {
+        let mut scan = IdScan {
+            nodes: MAX_ID_SCAN_NODES,
+            bytes: MAX_ID_SCAN_TOTAL_BYTES,
+        };
+        let mut found = Vec::new();
+        let whole = result_ids(output, &mut found, &mut scan, 0);
+        for key in found {
+            if self.seen_ids.len() >= MAX_SEEN_IDS {
+                self.partial = true;
+                return;
+            }
+            self.seen_ids.insert(id_hash(&key));
+        }
+        self.partial |= !whole;
     }
 
     fn read_settled(&mut self, tool: &ToolUse) {
@@ -578,7 +623,13 @@ impl ToolResultContext {
         // returned stays in the child's chat.
         if crate::services::delegation::is_delegation_tool_name(&tool.tool_name) {
             self.retire_all();
+            self.partial = true;
             return;
+        }
+        if tool.status == ToolCallStatus::Success
+            && let Some(output) = &tool.output
+        {
+            self.note_seen_ids(output);
         }
         // Whatever a call named may have changed, failed calls included, so
         // the values read before it no longer count as the earlier ones. On
@@ -1631,6 +1682,70 @@ fn argument_ids(arguments: &Value, skip_links: bool) -> Option<Vec<String>> {
     let mut keys = Vec::new();
     let mut nodes = MAX_NODES_PER_VALUE;
     collect(arguments, skip_links, &mut keys, &mut nodes, 0).then_some(keys)
+}
+
+/// IDs one chat's results are noted for; past this an ID missing among them
+/// may have been read.
+const MAX_SEEN_IDS: usize = 50_000;
+/// What one result's IDs are read from at most: far more than the index
+/// reads of it, as an ID anywhere counts.
+const MAX_ID_SCAN_NODES: usize = 100_000;
+const MAX_ID_SCAN_DEPTH: usize = 64;
+const MAX_ID_SCAN_TOTAL_BYTES: usize = 4 * 1024 * 1024;
+
+fn id_hash(key: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// What reading one result's IDs may still spend.
+struct IdScan {
+    nodes: usize,
+    bytes: usize,
+}
+
+/// Every ID a result holds, as lookup keys: values and member names as
+/// [`argument_ids`] reads them, and machine IDs written inside text. `false`
+/// when a cap left some of it unread.
+fn result_ids(value: &Value, keys: &mut Vec<String>, scan: &mut IdScan, depth: usize) -> bool {
+    if scan.nodes == 0 || depth > MAX_ID_SCAN_DEPTH || keys.len() > MAX_SEEN_IDS {
+        return false;
+    }
+    scan.nodes -= 1;
+    match value {
+        Value::Object(object) => object.iter().all(|(member, child)| {
+            text_ids(member, keys, scan) && result_ids(child, keys, scan, depth + 1)
+        }),
+        Value::Array(entries) => entries
+            .iter()
+            .all(|entry| result_ids(entry, keys, scan, depth + 1)),
+        Value::String(text) => text_ids(text, keys, scan),
+        value => {
+            keys.extend(id_key(value));
+            true
+        }
+    }
+}
+
+/// The IDs a text is or holds: itself, the UUIDs in it, and its words that
+/// are machine IDs.
+fn text_ids(text: &str, keys: &mut Vec<String>, scan: &mut IdScan) -> bool {
+    let Some(left) = scan.bytes.checked_sub(text.len()) else {
+        return false;
+    };
+    scan.bytes = left;
+    keys.extend(text_key(text));
+    keys.extend(uuid_keys(text));
+    keys.extend(
+        text.split(|c: char| {
+            !(c.is_alphanumeric() || matches!(c, '_' | '-' | '(' | ')' | '/' | '{' | '}'))
+        })
+        .filter(|token| token.len() <= MAX_ID_CHARS && is_machine_id(token))
+        .filter_map(text_key),
+    );
+    true
 }
 
 /// The UUIDs written anywhere in `text`, as lookup keys.
