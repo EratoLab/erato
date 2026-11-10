@@ -42,6 +42,7 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: Some(false),
         },
     );
     facets.insert(
@@ -60,6 +61,7 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
 
@@ -118,6 +120,8 @@ async fn test_facets_endpoint(pool: Pool<Postgres>) {
     assert_eq!(facets[0]["id"], "extended_thinking");
     assert_eq!(facets[1]["id"], "web_search");
     assert_eq!(facets[1]["default_enabled"], true);
+    assert_eq!(facets[0]["show_indicator_with_display_name"], false);
+    assert!(facets[1].get("show_indicator_with_display_name").is_none());
 }
 
 /// Action facets expose their configured `client_actions` so the client can
@@ -292,6 +296,7 @@ async fn test_facets_endpoint_filters_by_policy(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
     facets.insert(
@@ -310,6 +315,7 @@ async fn test_facets_endpoint_filters_by_policy(pool: Pool<Postgres>) {
             delegation: None,
             child_chat_provider: None,
             child_host_context: None,
+            show_indicator_with_display_name: None,
         },
     );
 

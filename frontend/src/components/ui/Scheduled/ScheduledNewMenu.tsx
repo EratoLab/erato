@@ -13,11 +13,11 @@ import {
 
 export interface ScheduledNewMenuProps {
   onNewReminder: () => void;
-  /** Omitted until a chat can open with the schedule facet (ERMAIN-1143). */
+  /** Omitted while the user has no schedule facet: the item stays disabled. */
   onCreateWithChat?: () => void;
   /**
-   * Set at the limit of upcoming items: Reminder is disabled and says why
-   * instead of opening a form the API would refuse.
+   * Set at the limit of upcoming items: Reminder and Create with chat are
+   * disabled and say why instead of opening what the API would refuse.
    */
   limitNotice?: string | null;
 }
@@ -94,13 +94,15 @@ export function ScheduledNewMenu({
             id: "scheduled.new.createWithChat",
             message: "Create with chat",
           }),
-          description: t({
-            id: "scheduled.new.createWithChat.description",
-            message: "Describe it and the assistant sets it up",
-          }),
+          description:
+            limitNotice ??
+            t({
+              id: "scheduled.new.createWithChat.description",
+              message: "Describe it and the assistant sets it up",
+            }),
           icon: <ChatBubbleIcon className="size-4" />,
           onClick: () => onCreateWithChat?.(),
-          disabled: onCreateWithChat == null,
+          disabled: onCreateWithChat == null || Boolean(limitNotice),
           closesImmediately: true,
         },
       ]}

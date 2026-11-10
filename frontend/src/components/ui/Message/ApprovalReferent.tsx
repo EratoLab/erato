@@ -9,6 +9,8 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import {
   McpToolDescription,
   ToolArgumentView,
+  ToolCallChangeBody,
+  ToolCallChangeCard,
   ToolCallGist,
   ToolCallIdentity,
   ToolCallInput,
@@ -125,6 +127,26 @@ const CardNotes = ({ notes }: { notes: ToolCallCardNotes }) => (
   </>
 );
 
+const ServerLine = ({
+  display,
+  serverId,
+  isClientTool,
+}: {
+  display: ToolDisplayMetadata | null;
+  serverId: string;
+  isClientTool: boolean;
+}) => (
+  <div className="flex min-w-0 items-center gap-2">
+    {referentIcon(isClientTool)}
+    <span
+      dir="auto"
+      className="min-w-0 break-words text-xs text-theme-fg-muted [unicode-bidi:isolate]"
+    >
+      {referentSource(display, serverId, isClientTool)}
+    </span>
+  </div>
+);
+
 type ResolvedReferentProps = Omit<ApprovalReferentProps, "display"> & {
   display: ToolDisplayMetadata | null;
 };
@@ -184,19 +206,33 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
   const { display, input, serverId, isClientTool, className } = props;
   const card = useToolCallCard(display?.label, input);
 
+  if (card.kind === "gist" && card.gist.change) {
+    return (
+      <div className={clsx("space-y-2", className)}>
+        <ServerLine
+          display={display}
+          serverId={serverId}
+          isClientTool={isClientTool}
+        />
+        <ToolCallChangeCard
+          gist={card.gist}
+          change={card.gist.change}
+          phase="ask"
+          notes={<CardNotes notes={card.notes} />}
+        />
+      </div>
+    );
+  }
+
   if (card.kind === "gist") {
     const { rest } = card;
     return (
       <div className={clsx("space-y-2", className)}>
-        <div className="flex min-w-0 items-center gap-2">
-          {referentIcon(isClientTool)}
-          <span
-            dir="auto"
-            className="min-w-0 break-words text-xs text-theme-fg-muted [unicode-bidi:isolate]"
-          >
-            {referentSource(display, serverId, isClientTool)}
-          </span>
-        </div>
+        <ServerLine
+          display={display}
+          serverId={serverId}
+          isClientTool={isClientTool}
+        />
         <ToolCallGist
           gist={card.gist}
           phase="ask"
@@ -267,6 +303,9 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
         <div className="mt-2 space-y-2">
           <CardNotes notes={card.notes} />
           {card.truncated && <TruncatedArgumentsNote />}
+          {card.change && (
+            <ToolCallChangeBody change={card.change} values={false} />
+          )}
           <ArgumentsScrollBox>
             <ToolArgumentView view={card.view} values={card.values} />
           </ArgumentsScrollBox>
@@ -277,7 +316,16 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
   return (
     <RawReferent
       {...props}
-      notes={card.kind === "generic" && <CardNotes notes={card.notes} />}
+      notes={
+        card.kind === "generic" && (
+          <>
+            <CardNotes notes={card.notes} />
+            {card.change && (
+              <ToolCallChangeBody change={card.change} values={false} />
+            )}
+          </>
+        )
+      }
     />
   );
 };

@@ -293,7 +293,7 @@ describe("gistOf", () => {
     ["a verb without a sentence", { ...createRow, action: "other" }],
     [
       "a verb from a newer server",
-      { ...createRow, action: "archive" as ToolCallLabel["action"] },
+      { ...createRow, action: "teleport" as ToolCallLabel["action"] },
     ],
     [
       "a kind from a newer server",

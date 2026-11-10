@@ -75,8 +75,8 @@ pub struct Completion {
     pub approvals: Option<PendingApprovalSet>,
     /// The turn stopped on a client tool, which only the web app can run.
     pub needs_client: bool,
-    /// Reminders the turn scheduled that still need their confirmation card.
-    pub reminders: Vec<Uuid>,
+    /// What the turn did with reminders that still needs its card.
+    pub reminders: super::reminders::TurnReminders,
     /// The turn's tasks that needed a client tool, which a turn sent from
     /// Teams never has.
     pub client_tasks: Vec<ClientTask>,
@@ -1026,7 +1026,7 @@ fn completion_from_content(
         approvals,
         needs_client: client_tool_approval
             || matches!(content.last(), Some(ContentPart::ClientToolPending(_))),
-        reminders: super::reminders::created_reminders(content),
+        reminders: super::reminders::turn_reminders(content),
         client_tasks: tasks_without_client(facets, content),
     }
 }
@@ -1347,7 +1347,6 @@ mod tests {
             approvals: Vec::new(),
             pending_tool_calls: Vec::new(),
             approval_scope: None,
-            labels_updated_at: None,
         })
     }
 

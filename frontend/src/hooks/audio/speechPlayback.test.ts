@@ -28,8 +28,50 @@ beforeEach(() => {
   starts.length = 0;
   stops.mockClear();
   vi.stubGlobal("AudioContext", MockAudioContext);
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn((key: string) => storage.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
+  });
 });
 describe("speech playback", () => {
+  it("defaults to enabled without starting playback outside audio mode", async () => {
+    const p = await import("./speechPlayback");
+    expect(p.useSpeechPlayback.getState().enabled).toBe(true);
+    p.beginSpeechResponse();
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
+    expect(starts).toHaveLength(0);
+  });
+
+  it.each([false, true])(
+    "remembers the preference %s after reload",
+    async (enabled) => {
+      const p = await import("./speechPlayback");
+      await p.enableSpeechPlayback(enabled);
+      vi.resetModules();
+      const reloaded = await import("./speechPlayback");
+      expect(reloaded.useSpeechPlayback.getState().enabled).toBe(enabled);
+    },
+  );
+
+  it("supports playback when localStorage is unavailable", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("Storage unavailable");
+      },
+      setItem: () => {
+        throw new Error("Storage unavailable");
+      },
+    });
+    const p = await import("./speechPlayback");
+    expect(p.useSpeechPlayback.getState().enabled).toBe(true);
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse();
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000);
+    expect(starts).toHaveLength(1);
+  });
+
   it("queues PCM in order and deduplicates replayed events", async () => {
     const p = await import("./speechPlayback");
     p.useSpeechPlayback.setState({ conversational: true });
