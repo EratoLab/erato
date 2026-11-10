@@ -6,6 +6,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useTabChatActivity } from "@/hooks/chat/useTabChatActivity";
 import {
+  markReviewEnded,
   rememberReview,
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -177,6 +178,18 @@ describe("useTabChatActivity", () => {
       rememberReview(reviewLinkKey("message-1", "call-1"), "handle-1", [
         "chat-a",
       ]);
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+
+      expect(result.current).toBe("attention");
+    });
+
+    it("keeps asking for attention once that review has ended", () => {
+      const key = reviewLinkKey("message-1", "call-1");
+      rememberReview(key, "handle-1", ["chat-a"]);
+      markReviewEnded(key);
       const { result } = renderHook(() => useTabChatActivity());
       act(() => {
         setHidden(true);

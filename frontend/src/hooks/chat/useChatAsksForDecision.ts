@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { useChatsInOpenReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
+import { useChatsInReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 import {
   hasDecisionIn,
@@ -10,8 +10,9 @@ import { useGenerationStatusStore } from "./store/generationStatusStore";
 
 /**
  * Whether a chat asks the user something now: a confirmation card that is
- * still open, or a review waiting in the Erato desktop app while the chat is
- * parked on it. A chat that only waits, for an app or for its tasks, does not.
+ * still open, or a review in the Erato desktop app while the chat is parked on
+ * it, also one that has ended and waits for the user to ask again. A chat that
+ * only waits, for an app or for its tasks, does not.
  *
  * The server cannot tell a review from any other wait for an app. Only the
  * browser that opened the review knows about it, so this adds what the status
@@ -25,7 +26,7 @@ export const useChatAsksForDecision = (chatId: string): boolean => {
   const parked = useGenerationStatusStore(
     (state) => state.statusByChatId[chatId]?.kind === "action_required",
   );
-  const inReview = useChatsInOpenReview().has(chatId);
+  const inReview = useChatsInReview().has(chatId);
   return hasCard || (parked && inReview);
 };
 
@@ -40,7 +41,7 @@ export const useChatsAskingForDecision = (): ReadonlySet<string> => {
   const statusByChatId = useGenerationStatusStore(
     (state) => state.statusByChatId,
   );
-  const inReview = useChatsInOpenReview();
+  const inReview = useChatsInReview();
   return useMemo(() => {
     const asking = new Set<string>();
     for (const chatId of Object.keys(pendingIdsByChatId)) {

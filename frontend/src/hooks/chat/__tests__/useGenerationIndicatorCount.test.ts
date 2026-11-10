@@ -6,6 +6,7 @@ import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusSto
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicatorCount";
 import {
+  markReviewEnded,
   rememberReview,
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -67,6 +68,30 @@ describe("useGenerationIndicatorCount", () => {
     ]);
 
     expect(count()).toBe(1);
+  });
+
+  it("counts a chat whose review has ended only while it still waits", () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-a": {
+          kind: "action_required",
+          startedAt,
+          localSeenAt: 0,
+          waitingOnly: true,
+        },
+      },
+    });
+    const key = reviewLinkKey("message-1", "call-1");
+    rememberReview(key, "handle-1", ["chat-a"]);
+    markReviewEnded(key);
+
+    expect(count()).toBe(1);
+
+    useGenerationStatusStore.setState({
+      statusByChatId: { "chat-a": { kind: "cleared", startedAt } },
+    });
+
+    expect(count()).toBe(0);
   });
 
   it("counts chats the user is not looking at", () => {

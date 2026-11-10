@@ -87,7 +87,7 @@ export const buildArchiveMenuItems = ({
           ? t({
               id: "chat.history.menu.confirm_archive.waiting",
               message:
-                "This chat is waiting for a connected app or for its tasks. Archiving abandons it, and unarchiving will not resume the response.",
+                "This chat is waiting for a connected app or for its tasks. Archiving abandons the wait, and unarchiving will not resume the response.",
             })
           : null;
 

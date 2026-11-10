@@ -6,7 +6,7 @@ import {
 } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
-import { useChatsInOpenReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
+import { useChatsInReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 export type TabChatActivity = "idle" | "working" | "ready" | "attention";
 
@@ -45,10 +45,10 @@ export const useTabChatActivity = (): TabChatActivity => {
   const hasDecision = useConfirmationRegistryStore((state) =>
     hasDecisionIn(state, chatId),
   );
-  const inReview = useChatsInOpenReview();
+  const inReview = useChatsInReview();
   // A chat that only waits for an app or for its tasks asks for nothing, unless
-  // this browser holds an open prompt or review for it. The server sees
-  // neither, so the status it reports cannot rule them out.
+  // this browser holds an open prompt for it or a review, open or ended. The
+  // server sees neither, so the status it reports cannot rule them out.
   const awaitingApproval = useGenerationStatusStore((state) => {
     if (chatId === null) return false;
     const status = state.statusByChatId[chatId];

@@ -10,6 +10,7 @@ import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationReg
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatHistoryStore } from "@/hooks/chat/useChatHistory";
 import {
+  markReviewEnded,
   rememberReview,
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -1066,6 +1067,33 @@ describe("ChatHistoryList", () => {
         );
       });
 
+      it("stays marked while its review has ended and waits for Ask again", async () => {
+        waitOnly();
+        const key = reviewLinkKey("message-1", "call-1");
+        rememberReview(key, "handle-1", ["chat-1"]);
+        markReviewEnded(key);
+        await renderList();
+
+        expect(screen.getByTestId("chat-generation-status")).toHaveAttribute(
+          "data-status",
+          "action_required",
+        );
+      });
+
+      it("is not marked by an ended review once the chat no longer waits", async () => {
+        useGenerationStatusStore.setState({
+          statusByChatId: {
+            "chat-1": { kind: "cleared", startedAt: new Date().toISOString() },
+          },
+        });
+        const key = reviewLinkKey("message-1", "call-1");
+        rememberReview(key, "handle-1", ["chat-1"]);
+        markReviewEnded(key);
+        await renderList();
+
+        expect(screen.queryByTestId("chat-generation-status")).toBeNull();
+      });
+
       it("is not marked by a remembered review once the chat has moved on", async () => {
         useGenerationStatusStore.setState({
           statusByChatId: {
@@ -1096,7 +1124,7 @@ describe("ChatHistoryList", () => {
         ).toHaveAttribute(
           "data-confirm-message",
           expect.stringContaining(
-            "waiting for a connected app or for its tasks",
+            "waiting for a connected app or for its tasks. Archiving abandons the wait,",
           ),
         );
       });
