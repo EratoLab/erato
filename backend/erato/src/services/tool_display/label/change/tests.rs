@@ -4427,3 +4427,140 @@ fn an_empty_removal_list_in_a_batch_row_empties_nothing() {
     assert_eq!(field.rows, 1);
     assert!(!batch.read_all);
 }
+
+#[test]
+fn a_row_deletes_when_any_of_its_operation_fields_says_so_whichever_comes_first() {
+    let tool = tool_with_schema(
+        "batch_update_pages",
+        "",
+        json!({"type": "object", "properties": {
+            "pages": {"type": "array", "items": {"type": "object", "properties": {
+                "kind": {"type": "string"},
+                "mode": {"type": "string"},
+                "op": {"type": "string"},
+                "id": {"type": "string"},
+                "title": {"type": "string"},
+            }}},
+        }}),
+    );
+    for (member, value) in [("kind", "Page"), ("mode", "permanent")] {
+        let mut deleted = serde_json::Map::new();
+        deleted.insert(member.into(), json!(value));
+        deleted.insert("op".into(), json!("delete"));
+        deleted.insert("id".into(), json!("p1"));
+        let arguments = json!({"pages": [
+            deleted,
+            {"op": "update", "id": "p2", "title": "Q3 plan"},
+        ]});
+        let (change, _) = change_with(&tool, arguments.clone(), &ToolResultContext::default());
+        let batch = change.batch.as_ref().unwrap();
+        assert_eq!(batch.deletions, 1, "{arguments}");
+        assert_eq!(
+            batch.rows[0].action,
+            Some(ToolCallAction::Delete),
+            "{arguments}"
+        );
+    }
+}
+
+#[test]
+fn a_row_whose_kind_is_one_lower_case_word_that_deletes_counts_as_a_deletion() {
+    // Past the verb fields a label reads, only the batch can still say it.
+    let mut changes: Vec<Value> = (0..33)
+        .map(|n| json!({"kind": "update", "id": format!("t{n}"), "title": "Draft"}))
+        .collect();
+    changes.push(json!({"kind": "delete", "id": "z"}));
+    let (change, _) = change_with(
+        &tool("apply_changes", "", None),
+        json!({"changes": changes}),
+        &ToolResultContext::default(),
+    );
+    let batch = change.batch.as_ref().unwrap();
+    assert_eq!(batch.deletions, 1, "{batch:#?}");
+    assert_eq!(batch.rows[0].number, 34);
+    assert_eq!(batch.rows[0].action, Some(ToolCallAction::Delete));
+
+    assert_eq!(
+        rules::row_field_action("kind", "archive"),
+        Some(ToolCallAction::Archive)
+    );
+    // A kind that is a type's name or names another verb says nothing of
+    // what the row does.
+    for kind in ["HardDelete", "Delete", "pull_request", "update", "comment"] {
+        assert_eq!(rules::row_field_action("kind", kind), None, "{kind}");
+    }
+    assert_eq!(
+        rules::row_field_action("op", "HardDelete"),
+        Some(ToolCallAction::Delete)
+    );
+}
+
+#[test]
+fn an_empty_removal_list_on_a_card_empties_nothing() {
+    let change = change_of("update_issue", json!({"id": "ENG-1", "removeLabels": []}));
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.raw_name != "removeLabels"),
+        "{change:#?}"
+    );
+    assert_eq!(change.counts.emptied, 0);
+    assert!(!change.complete);
+}
+
+#[test]
+fn a_list_named_for_adding_whose_description_drops_or_clears_others_may_replace_it() {
+    for description in [
+        "Labels for the issue. Labels not in this list are removed.",
+        "Labels for the issue. Existing labels are cleared first.",
+        "Labels for the issue; any other labels are dropped.",
+        "Labels for the issue. Other labels are cleared.",
+    ] {
+        let update = tool_with_schema(
+            "update_issue",
+            "",
+            json!({"type": "object", "properties": {
+                "id": {"type": "string"},
+                "addLabels": {"type": "array", "items": {"type": "string"}, "description": description},
+            }}),
+        );
+        let change = change_with(
+            &update,
+            json!({"id": "ENG-1", "addLabels": ["urgent"]}),
+            &ToolResultContext::default(),
+        )
+        .0;
+        assert_eq!(
+            effect(&change, "addLabels").effect,
+            ToolCallEffectKind::ListReplaced,
+            "{description}"
+        );
+        assert_eq!(
+            change.notes,
+            [ToolCallChangeNote::ListReplaceUnknown],
+            "{description}"
+        );
+    }
+
+    // A description that only agrees with the name leaves it to the name.
+    let update = tool_with_schema(
+        "update_issue",
+        "",
+        json!({"type": "object", "properties": {
+            "id": {"type": "string"},
+            "removeLabels": {"type": "array", "items": {"type": "string"},
+                "description": "Labels that get removed from the issue."},
+        }}),
+    );
+    let change = change_with(
+        &update,
+        json!({"id": "ENG-1", "removeLabels": ["urgent"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(
+        effect(&change, "removeLabels").effect,
+        ToolCallEffectKind::ListRemoved
+    );
+}

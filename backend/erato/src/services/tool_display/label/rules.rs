@@ -843,6 +843,20 @@ pub(super) fn field_action(member: &str, value: &str) -> Option<ToolCallAction> 
     action_of(value)
 }
 
+/// What a batch row's verb field says the row does. A `kind` still names no
+/// verb, but one that is a single lower-case word that deletes or archives,
+/// as in `{kind: "delete"}`, states a loss a batch never leaves uncounted.
+pub(super) fn row_field_action(member: &str, value: &str) -> Option<ToolCallAction> {
+    if !names_a_kind(member) {
+        return field_action(member, value);
+    }
+    if value.is_empty() || !value.chars().all(|c| c.is_ascii_lowercase()) {
+        return None;
+    }
+    action_of(value)
+        .filter(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Archive))
+}
+
 /// Whether a verb field's value has a word that deletes or archives while
 /// the verb its field gives does neither: `kind: "HardDelete"` gives none,
 /// `op: "createOrDelete"` names two.

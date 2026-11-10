@@ -447,6 +447,12 @@ impl<'a> Walk<'a> {
         if self.opaque(member, value, path, &name) {
             return;
         }
+        // `removeLabels: []` removes nothing, by the tool's word, and empties
+        // nothing; only that word says so.
+        if is_update_like(self.action) && self.adds_or_removes_nothing(member, value, path) {
+            self.complete = false;
+            return;
+        }
         match value {
             Value::String(text) if self.is_long_text(member, text) => {
                 self.text(member, value, path, &name);
@@ -1610,7 +1616,7 @@ impl<'a> Walk<'a> {
             };
             let action = row_action(members);
             // A row whose own verb may delete says nothing a card can rule out.
-            if row_hides_a_loss(members) {
+            if row_hides_a_loss(members, action) {
                 read_all = false;
             }
             let is_delete = action == Some(ToolCallAction::Delete)
@@ -2690,20 +2696,28 @@ fn is_row_identifier(member: &str, value: &Value) -> bool {
             || value.as_str().is_some_and(is_machine_id))
 }
 
-/// What a row's own verb field says it does, if it names one.
+/// What a row's verb fields say it does: a delete or archive any of them
+/// states, whichever field comes first, as in `{kind: "Page", op:
+/// "delete"}`, else the first verb one names.
 fn row_action(members: &Map<String, Value>) -> Option<ToolCallAction> {
-    let (member, found) = members.iter().find_map(|(member, value)| {
-        is_verb_field(member, value)
-            .then(|| value.as_str().map(|text| (member, text)))
-            .flatten()
-    })?;
-    rules::field_action(member, found)
+    let actions: Vec<ToolCallAction> = members
+        .iter()
+        .filter(|(member, value)| is_verb_field(member, value))
+        .filter_map(|(member, value)| rules::row_field_action(member, value.as_str()?))
+        .collect();
+    [ToolCallAction::Delete, ToolCallAction::Archive]
+        .into_iter()
+        .find(|loss| actions.contains(loss))
+        .or_else(|| actions.first().copied())
 }
 
-/// Whether a row's verb field has a word that deletes or archives while its
-/// verb, if any, does neither.
-fn row_hides_a_loss(members: &Map<String, Value>) -> bool {
-    members.iter().any(|(member, value)| {
+/// Whether a row's verb field has a word that deletes or archives while the
+/// row's verb does neither.
+fn row_hides_a_loss(members: &Map<String, Value>, action: Option<ToolCallAction>) -> bool {
+    !matches!(
+        action,
+        Some(ToolCallAction::Delete | ToolCallAction::Archive)
+    ) && members.iter().any(|(member, value)| {
         is_verb_field(member, value)
             && value
                 .as_str()
@@ -2947,7 +2961,7 @@ const REMOVES_PHRASES: [&[&str]; 6] = [
 /// A sentence with one of these sets a condition, negates, or speaks of the
 /// whole list, as "Pass an empty array to remove all labels" or "Labels not
 /// in this list will be removed" do: it says nothing of what the member holds.
-const NOT_WHAT_IT_HOLDS: [&str; 31] = [
+const NOT_WHAT_IT_HOLDS: [&str; 32] = [
     "if",
     "when",
     "unless",
@@ -2969,6 +2983,7 @@ const NOT_WHAT_IT_HOLDS: [&str; 31] = [
     "current",
     "currently",
     "rest",
+    "other",
     "others",
     "replace",
     "replaces",
@@ -2981,7 +2996,7 @@ const NOT_WHAT_IT_HOLDS: [&str; 31] = [
     "instead",
 ];
 const ADD_WORDS: [&str; 6] = ["add", "adds", "added", "adding", "append", "appended"];
-const REMOVE_WORDS: [&str; 13] = [
+const REMOVE_WORDS: [&str; 17] = [
     "remove",
     "removes",
     "removed",
@@ -2995,6 +3010,10 @@ const REMOVE_WORDS: [&str; 13] = [
     "drops",
     "dropped",
     "dropping",
+    "clear",
+    "clears",
+    "cleared",
+    "clearing",
 ];
 /// Nouns that name the entries of a list by what identifies them, as in
 /// "Label IDs to add": the noun before them names what the list holds.
@@ -3005,7 +3024,8 @@ const ENTRY_NOUNS: [&str; 6] = ["id", "ids", "identifier", "identifiers", "key",
 enum Holds {
     Added,
     Removed,
-    /// It speaks of adding or removing, but not as what the member holds.
+    /// It speaks of adding or removing, or of more than the member holds,
+    /// but not as what the member holds.
     Unclear,
     Unsaid,
 }
@@ -3016,9 +3036,11 @@ enum Holds {
 /// `removeLabels` or "Label IDs to add to the issue" for `labelIds`, or one
 /// that ends a sentence that is only a noun phrase, as "The labels to
 /// remove". A description that anywhere sets a condition, negates, speaks of
-/// the whole list, both adds and removes, or adds or removes in more than
-/// one sentence never says it, as "Labels to add. This replaces existing
-/// labels." does not.
+/// the whole list, both adds and removes, adds or removes in more than one
+/// sentence, or removes where the member's name adds or adds where it
+/// removes never says it, as "Labels to add. This replaces existing labels."
+/// does not, and then neither does the name: "Labels not in this list are
+/// removed" keeps `addLabels` a list that may replace the labels.
 fn holds_of(description: &str, member: &str) -> Holds {
     let lower = text_prefix(description, MAX_DESCRIPTION_BYTES).to_lowercase();
     let nouns = member_nouns(member);
@@ -3040,8 +3062,15 @@ fn holds_of(description: &str, member: &str) -> Holds {
                 .any(|word| ADD_WORDS.contains(word) || REMOVE_WORDS.contains(word))
         })
         .count();
-    let unclear =
-        any(&NOT_WHAT_IT_HOLDS) || (any(&ADD_WORDS) && any(&REMOVE_WORDS)) || changing > 1;
+    let against_name = match member_list_verb(member) {
+        Some(ToolCallAction::Create) => any(&REMOVE_WORDS),
+        Some(ToolCallAction::Delete) => any(&ADD_WORDS),
+        _ => false,
+    };
+    let unclear = any(&NOT_WHAT_IT_HOLDS)
+        || (any(&ADD_WORDS) && any(&REMOVE_WORDS))
+        || changing > 1
+        || against_name;
     let (mut added, mut removed, mut mentioned) = (false, false, false);
     for words in &sentences {
         let adds = phrase_starts(words, &ADDS_PHRASES);
@@ -3075,7 +3104,7 @@ fn holds_of(description: &str, member: &str) -> Holds {
     match (added, removed) {
         (true, false) => Holds::Added,
         (false, true) => Holds::Removed,
-        _ if mentioned => Holds::Unclear,
+        _ if mentioned || unclear => Holds::Unclear,
         _ => Holds::Unsaid,
     }
 }
