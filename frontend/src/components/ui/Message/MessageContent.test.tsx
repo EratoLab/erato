@@ -2681,6 +2681,59 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(notice).not.toHaveTextContent("task");
     expect(screen.queryByTestId("sidecar-review-item")).toBeNull();
   });
+
+  it("shows the call's step waiting for its review, neither done nor interrupted", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
+  it("shows any other parked call's step waiting for a connected app", () => {
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent(
+      "Waiting for a connected app on this device",
+    );
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+  });
+
+  it("ends the step on done once the call returned and the turn went on", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          { ...search, status: "success" },
+          pending,
+          { content_type: "text", text: "Found the report." },
+        ]}
+      />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("keeps Interrupted for an unfinished call the row no longer waits on", () => {
+    renderWithTheme(
+      <MessageContent
+        messageId="message-1"
+        content={[search, pending, { content_type: "text", text: "Stopped." }]}
+      />,
+    );
+    expect(screen.getByTestId("tool-call-item")).toHaveTextContent(
+      "Interrupted",
+    );
+  });
 });
 
 it("renders persisted speech for explicit replay without autoplay", () => {

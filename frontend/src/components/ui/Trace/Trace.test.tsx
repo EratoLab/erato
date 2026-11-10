@@ -4,14 +4,21 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  CheckCircleIcon,
+  HourglassIcon,
+  ToolsIcon,
+} from "@/components/ui/icons";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { groupIntoTraceClusters, Trace } from "./Trace";
+import { railIconFor } from "./icons";
 
 import type { ToolDecision } from "./Trace";
 import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
+import type { ReactElement } from "react";
 
 beforeAll(() => {
   i18n.load("en", enMessages as unknown as Messages);
@@ -74,6 +81,7 @@ const renderTrace = (
     maskReasoningText?: boolean;
     isStreaming?: boolean;
     toolDecisions?: Record<string, ToolDecision>;
+    waitingCall?: { toolCallId: string; inReview: boolean };
   } = {},
 ) => {
   mockUseTraceFeature.mockReturnValue({
@@ -90,6 +98,7 @@ const renderTrace = (
           renderMarkdown={(text) => <span>{text}</span>}
           durationMs={null}
           toolDecisions={overrides.toolDecisions}
+          waitingCall={overrides.waitingCall}
         />
       </I18nProvider>
     </QueryClientProvider>,
@@ -161,6 +170,92 @@ describe("Trace — a call the writer never finished", () => {
 
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText("Interrupted")).toBeNull();
+  });
+});
+
+describe("Trace — a call the turn is parked on", () => {
+  const CHAT = "chat-under-test";
+  const WAITING = { toolCallId: "tool-abc", inReview: false };
+  const parkOnPage = (kind: "action_required" | "finished") =>
+    useGenerationStatusStore.setState({
+      currentChatId: CHAT,
+      statusByChatId: {
+        [CHAT]:
+          kind === "finished"
+            ? { kind, startedAt: new Date().toISOString() }
+            : {
+                kind,
+                startedAt: new Date().toISOString(),
+                localSeenAt: Date.now(),
+              },
+      },
+    });
+
+  beforeEach(() => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {},
+      currentChatId: null,
+    });
+  });
+
+  it("says the call waits for a connected app, not Done, while the chat reads parked", () => {
+    parkOnPage("action_required");
+    renderTrace([toolUsePart("in_progress")], { waitingCall: WAITING });
+
+    expect(
+      screen.getByText("Waiting for a connected app on this device"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Interrupted")).toBeNull();
+    // A trace whose call has not returned has not ended.
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
+  it("says the call waits, not Interrupted, when the page reads the chat as ended", () => {
+    parkOnPage("finished");
+    renderTrace([toolUsePart("in_progress")], { waitingCall: WAITING });
+
+    expect(
+      screen.getByText("Waiting for a connected app on this device"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Interrupted")).toBeNull();
+  });
+
+  it("names the review in the Erato desktop app when the call waits for one", () => {
+    renderTrace([toolUsePart("in_progress")], {
+      waitingCall: { ...WAITING, inReview: true },
+    });
+
+    expect(
+      screen.getByText("Review in the Erato desktop app"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Waiting for a connected app on this device"),
+    ).toBeNull();
+  });
+
+  it("ends on done once the call returned, with the trace Done again", () => {
+    renderTrace([toolUsePart("success")], { waitingCall: WAITING });
+
+    expect(
+      screen.queryByText("Waiting for a connected app on this device"),
+    ).toBeNull();
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("keeps Interrupted for an unfinished call the turn does not wait on", () => {
+    renderTrace([toolUsePart("in_progress")], {
+      waitingCall: { toolCallId: "another-call", inReview: true },
+    });
+
+    expect(screen.getByText("Interrupted")).toBeInTheDocument();
+    expect(screen.queryByText("Review in the Erato desktop app")).toBeNull();
+  });
+
+  it("draws the hourglass on the rail, never the check", () => {
+    const icon = railIconFor("tool_use", "waiting") as ReactElement;
+    expect(icon.type).toBe(HourglassIcon);
+    expect(icon.type).not.toBe(CheckCircleIcon);
+    expect(icon.type).not.toBe(ToolsIcon);
   });
 });
 

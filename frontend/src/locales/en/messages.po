@@ -10273,6 +10273,11 @@ msgid "trace.tool.running"
 msgstr "Running"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr "Review in the Erato desktop app"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.download"
 msgstr "Download"

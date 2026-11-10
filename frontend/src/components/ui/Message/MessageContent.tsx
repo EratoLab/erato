@@ -1406,6 +1406,23 @@ export const MessageContent = memo(function MessageContent({
   }, [content]);
 
   const waitingCall = React.useMemo(() => waitingCallOf(content), [content]);
+  // The trace step of the waiting call says it waits, and where: a review in
+  // the Erato desktop app is known by the link the review left, which a
+  // reload keeps, under the key the notice reads.
+  const waitingCallId = waitingCall?.tool_call_id;
+  const waitingCallInReview = useSidecarReviewLinks(
+    (state) =>
+      messageId !== undefined &&
+      waitingCallId !== undefined &&
+      Object.hasOwn(state.links, reviewLinkKey(messageId, waitingCallId)),
+  );
+  const traceWaitingCall = React.useMemo(
+    () =>
+      waitingCallId === undefined
+        ? undefined
+        : { toolCallId: waitingCallId, inReview: waitingCallInReview },
+    [waitingCallId, waitingCallInReview],
+  );
 
   // Only the last stop can still wait on tasks: an earlier one was carried
   // onto a later one or settled.
@@ -1802,6 +1819,7 @@ export const MessageContent = memo(function MessageContent({
                   }
                   hasError={hasError}
                   toolDecisions={toolDecisions}
+                  waitingCall={traceWaitingCall}
                 />
               </WaitingHostsContext.Provider>
               {/* Outside the trace, which folds away once the turn ends. */}

@@ -47,7 +47,21 @@ import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
   decision?: ToolDecision;
+  /**
+   * The waiting call waits for its review in the Erato desktop app, so its
+   * pill says where it waits instead of naming any connected app.
+   */
+  inReview?: boolean;
 }
+
+/** What a waiting step's pill says; the pill's own default names no app. */
+const waitingPillLabel = (inReview: boolean): string | undefined =>
+  inReview
+    ? t({
+        id: "trace.tool.waiting.review",
+        message: "Review in the Erato desktop app",
+      })
+    : undefined;
 
 /**
  * A result's link, named after the server only when it points at the
@@ -175,6 +189,7 @@ const PlainToolUseStep = ({
   isCollapsed,
   isLastStep,
   decision,
+  inReview = false,
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
@@ -319,9 +334,11 @@ const PlainToolUseStep = ({
             <ToolStatusPill
               status={status}
               label={
-                part.status === "preparing" && status !== "interrupted"
-                  ? t({ id: "trace.tool.preparing", message: "Preparing" })
-                  : undefined
+                status === "waiting"
+                  ? waitingPillLabel(inReview)
+                  : part.status === "preparing" && status !== "interrupted"
+                    ? t({ id: "trace.tool.preparing", message: "Preparing" })
+                    : undefined
               }
             />
           )

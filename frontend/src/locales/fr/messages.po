@@ -10273,6 +10273,11 @@ msgid "trace.tool.running"
 msgstr "En cours"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx
 msgid "ui.download"
 msgstr "Télécharger"

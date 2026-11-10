@@ -55,7 +55,15 @@ interface TraceProps {
   hasError?: boolean;
   /** Durable user decisions keyed by MCP tool-call id. */
   toolDecisions?: Record<string, ToolDecision>;
+  /**
+   * The call this message's turn is parked on, as its own last
+   * `client_tool_pending` part names it (`waitingCallOf`), and whether that
+   * call waits for its review in the Erato desktop app.
+   */
+  waitingCall?: WaitingCall;
 }
+
+type WaitingCall = { toolCallId: string; inReview: boolean };
 
 export type ToolApprovalStatus = "approved" | "denied";
 
@@ -95,6 +103,7 @@ export const Trace = ({
   durationMs = null,
   hasError = false,
   toolDecisions = {},
+  waitingCall,
 }: TraceProps) => {
   const logicalSteps = flattenToLogicalSteps(parts);
   const { maskReasoningText } = useTraceFeature();
@@ -124,6 +133,7 @@ export const Trace = ({
         showThinkingPlaceholder={showThinkingPlaceholder}
         maskReasoningText={maskReasoningText}
         toolDecisions={toolDecisions}
+        waitingCall={waitingCall}
       />
     );
   }
@@ -137,6 +147,7 @@ export const Trace = ({
       hasError={hasError}
       maskReasoningText={maskReasoningText}
       toolDecisions={toolDecisions}
+      waitingCall={waitingCall}
     />
   );
 };
@@ -149,6 +160,7 @@ interface ColdLoadTraceProps {
   hasError: boolean;
   maskReasoningText: boolean;
   toolDecisions: Record<string, ToolDecision>;
+  waitingCall: WaitingCall | undefined;
 }
 
 const ColdLoadTrace = ({
@@ -159,6 +171,7 @@ const ColdLoadTrace = ({
   hasError,
   maskReasoningText,
   toolDecisions,
+  waitingCall,
 }: ColdLoadTraceProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -180,6 +193,7 @@ const ColdLoadTrace = ({
           showThinkingPlaceholder={false}
           maskReasoningText={maskReasoningText}
           toolDecisions={toolDecisions}
+          waitingCall={waitingCall}
         />
       </TraceCollapse>
     </div>
@@ -201,6 +215,7 @@ interface TraceTimelineProps {
   /** When true, reasoning step titles and bodies are replaced with the mask label. */
   maskReasoningText: boolean;
   toolDecisions: Record<string, ToolDecision>;
+  waitingCall: WaitingCall | undefined;
 }
 
 const TraceTimeline = ({
@@ -208,16 +223,28 @@ const TraceTimeline = ({
   isTraceActive,
   hasLaterContent,
   renderMarkdown,
-  showDoneMarker,
+  showDoneMarker: wantsDoneMarker,
   showThinkingPlaceholder,
   maskReasoningText,
   toolDecisions,
+  waitingCall,
 }: TraceTimelineProps) => {
-  const placeholderIsLastNode = !showDoneMarker;
   // Read here rather than threaded from the parent: both the streaming and
   // the cold-load branch render this timeline, and only the cold-load one
   // could ever show an orphan — a prop would have to cross both for one.
   const isChatBusy = useIsCurrentChatBusy();
+  const statuses = logicalSteps.map((step, index) =>
+    stepStatus(
+      step,
+      index === logicalSteps.length - 1,
+      isTraceActive,
+      isChatBusy,
+      waitingCall?.toolCallId,
+    ),
+  );
+  // A trace whose call the turn waits on has not ended, so it is not Done.
+  const showDoneMarker = wantsDoneMarker && !statuses.includes("waiting");
+  const placeholderIsLastNode = !showDoneMarker;
 
   return (
     <div className="min-w-0 py-1.5">
@@ -228,7 +255,7 @@ const TraceTimeline = ({
         // the Done marker, or both.
         const isLastNodeInTimeline =
           isLastStep && !showDoneMarker && !showThinkingPlaceholder;
-        const status = stepStatus(step, isLastStep, isTraceActive, isChatBusy);
+        const status = statuses[index];
         const isCollapsed = !isLastStep || hasLaterContent;
 
         const stepNode = renderStep({
@@ -240,6 +267,7 @@ const TraceTimeline = ({
           renderMarkdown,
           maskReasoningText,
           toolDecisions,
+          inReview: status === "waiting" && waitingCall?.inReview === true,
         });
 
         return (
@@ -335,6 +363,8 @@ interface RenderStepArgs {
   renderMarkdown: (text: string) => ReactNode;
   maskReasoningText: boolean;
   toolDecisions: Record<string, ToolDecision>;
+  /** The step's call waits for its review in the Erato desktop app. */
+  inReview: boolean;
 }
 
 /**
@@ -403,6 +433,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
           decision={decisionForStep(args.step.part, args.toolDecisions)}
+          inReview={args.inReview}
         />
       );
     default: {
