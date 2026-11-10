@@ -2613,6 +2613,15 @@ pub struct ContinueStreamRequest {
     /// own call and would answer the children unseen.
     #[serde(default)]
     shows_child_items: bool,
+    /// Whether the client also shows each task child a `tool_call_limit` or
+    /// `builtin_tool` part carries as an item of its own. Those parts carry
+    /// children since later than `shows_child_items` says, and a client that
+    /// predates them sends that flag while it shows the limit's choice, or a
+    /// generic card for a kind it does not know, alone and answers every open
+    /// item with it. Decisions on such a part are refused without both flags
+    /// while a child is open.
+    #[serde(default)]
+    shows_limit_and_builtin_child_items: bool,
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
@@ -2651,6 +2660,7 @@ impl ContinueStreamRequest {
                 .collect(),
             decision: None,
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
@@ -14107,6 +14117,7 @@ mod tests {
             decisions: Vec::new(),
             decision: Some(decision),
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
@@ -14128,6 +14139,7 @@ mod tests {
                 .collect(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
@@ -14719,6 +14731,7 @@ mod tests {
             decisions,
             decision: None,
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
@@ -14766,8 +14779,29 @@ mod tests {
             &[parked_child("task-a", "2026-10-20T10:00:02Z")],
         );
         assert!(super::decision_needs_child_items(&state(mixed.clone())));
+        assert!(!super::decision_needs_limit_and_builtin_child_items(
+            &state(mixed.clone())
+        ));
+        mixed.kind = ToolApprovalKind::BuiltinTool;
+        assert!(
+            super::decision_needs_limit_and_builtin_child_items(&state(mixed.clone())),
+            "a client that predates built-in calls shows a generic card alone"
+        );
         mixed.kind = ToolApprovalKind::ClientTool;
         assert!(super::decision_needs_child_items(&state(mixed)));
+
+        let mut limit = crate::services::tool_call_budget::request(4, Vec::new());
+        assert!(!super::decision_needs_limit_and_builtin_child_items(
+            &state(limit.clone())
+        ));
+        super::fold_parked_children(
+            &mut limit,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        assert!(
+            super::decision_needs_limit_and_builtin_child_items(&state(limit)),
+            "a client that predates the limit's tasks shows its budget choice alone"
+        );
 
         assert!(!super::decision_needs_child_items(&state(gated_request(
             "own",
@@ -15373,6 +15407,7 @@ mod tests {
             decisions: Vec::new(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
@@ -21075,12 +21110,13 @@ fn resolve_submitted_decisions(
 }
 
 /// Whether deciding this stop needs a client that shows a parked child as an
-/// item of its own.
+/// item of its own (`shows_child_items`).
 ///
 /// A `delegated_task` part has always been read per item. An `mcp_tool`,
-/// `client_tool` or `tool_call_limit` part only carries children since the
-/// turn's own stop shares its part with them, and a client that predates that
-/// renders the own call or budget choice alone while it answers every open item.
+/// `client_tool`, `builtin_tool` or `tool_call_limit` part only carries
+/// children since the turn's own stop shares its part with them, and a client
+/// that predates that renders the own call or budget choice alone while it
+/// answers every open item.
 fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
     matches!(
         state.request.kind,
@@ -21089,6 +21125,20 @@ fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
             | ToolApprovalKind::BuiltinTool
             | ToolApprovalKind::ToolCallLimit
     ) && state.decidable().iter().any(|item| item.child.is_some())
+}
+
+/// Whether deciding this stop also needs a client that shows the children of a
+/// `tool_call_limit` or `builtin_tool` part (`shows_limit_and_builtin_child_items`).
+///
+/// Clients sent `shows_child_items` before either part carried children: one
+/// that predates the limit's tasks shows its budget choice alone, and one that
+/// predates built-in calls a generic card, each answering every open item with
+/// one click. The approval a task gets that way is one nobody saw.
+fn decision_needs_limit_and_builtin_child_items(state: &ParkedApprovalState) -> bool {
+    matches!(
+        state.request.kind,
+        ToolApprovalKind::BuiltinTool | ToolApprovalKind::ToolCallLimit
+    ) && decision_needs_child_items(state)
 }
 
 /// Why a set of decisions cannot answer a tool-call limit's stop, if it cannot.
@@ -21491,6 +21541,8 @@ pub(crate) async fn start_continuation(
         if names_waiting
             || (request.decision.is_some() && decidable.is_empty())
             || (!request.shows_child_items && decision_needs_child_items(&state))
+            || (!request.shows_limit_and_builtin_child_items
+                && decision_needs_limit_and_builtin_child_items(&state))
         {
             return Err((
                 axum::http::StatusCode::CONFLICT,
@@ -21656,7 +21708,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items`, names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -21946,6 +21998,7 @@ async fn resume_parked_child(
                 .collect(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             // None on purpose: the child goes on with the binding it was
             // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
@@ -22582,15 +22635,94 @@ fn names_child(open: &[ApprovalItem], approval_id: &str) -> bool {
         .any(|item| item.approval_id == approval_id && item.child.is_some())
 }
 
-/// Take the tasks' items off the tool-call limit's stop when the response ends
-/// there without asking the model again: on Stop, which stops it as the user's
-/// own Stop does, and on Answer now while a client submission still waits for
-/// its correction. As after that Stop, each task keeps its `input_required`
-/// slot and is answered in its own chat, whose card the stop no longer covers.
+/// Take the tasks' items off the tool-call limit's stop when the user chose
+/// Stop there, which stops the response as the user's own Stop does, the one
+/// exception CT-10 allows. As after that Stop, each task keeps its
+/// `input_required` slot and is answered in its own chat, whose card the stop
+/// no longer covers. Every other choice settles the tasks' items on the stop,
+/// as any stop does.
 fn release_task_items(content: &mut [ContentPart], request_index: usize) {
     if let Some(ContentPart::ToolApprovalRequest(request)) = content.get_mut(request_index) {
         request.approvals.retain(|item| item.child.is_none());
     }
+}
+
+/// Whether the response's last tool-call limit choice was Generate answer now
+/// while a client submission of the turn still waits for its correction.
+fn answers_now_with_a_pending_correction(
+    content: &[ContentPart],
+    generation_parameters: &GenerationParameters,
+) -> bool {
+    crate::services::tool_call_budget::choices(content)
+        .last()
+        .is_some_and(|(_, choice)| {
+            choice == crate::services::tool_call_budget::BudgetChoice::Answer
+        })
+        && generation_parameters
+            .turn_consumption
+            .submission_correction
+            .as_ref()
+            .is_some_and(|correction| correction.pending())
+}
+
+/// End a continuation at the tool-call limit's choice without asking the model
+/// again: on Stop (`stopped`), and on Generate answer now while a client
+/// submission still waits for its correction, which the choice leaves
+/// unresolved for the reason it gives.
+#[allow(clippy::too_many_arguments)]
+async fn end_at_budget_choice(
+    task: &Arc<StreamingTask>,
+    tx: Sender<Result<Event, Report>>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message: &messages::Model,
+    generation_parameters: &GenerationParameters,
+    content: Vec<ContentPart>,
+    stopped: bool,
+) -> Result<(), Report> {
+    let mut metadata = message
+        .generation_metadata
+        .as_ref()
+        .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+        .unwrap_or_default();
+    metadata.continuation_in_flight = None;
+    metadata.was_aborted = stopped.then_some(true);
+    if let Some(correction) = generation_parameters
+        .turn_consumption
+        .submission_correction
+        .as_ref()
+        .filter(|correction| correction.pending())
+    {
+        let mut correction = correction.clone();
+        correction.stop(if stopped {
+            crate::services::submission_correction::SubmissionReason::UserStopped
+        } else {
+            crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
+        });
+        metadata.submission_outcome = Some(correction.outcome.clone());
+        let mut consumption = generation_parameters.turn_consumption.clone();
+        consumption.submission_correction = Some(correction);
+        crate::services::client_operations::store::save_consumption(
+            &app_state.db,
+            message.id,
+            task.generation_id,
+            &consumption,
+        )
+        .await?;
+    }
+    update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        metadata,
+    )
+    .await?;
+    stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+        tx, task, app_state, policy, content, me_user, message.id,
+    )
+    .await
 }
 
 /// Apply a user's approval decisions to a parked turn and finish it.
@@ -22755,19 +22887,17 @@ pub(crate) async fn run_continuation(
                 }
             }
         }
-        let budget_choice = crate::services::tool_call_budget::choices(&parsed.content)
+        // Stop ends the response here. Every other choice settles the tasks'
+        // items in their lane below first, Generate answer now while a client
+        // submission waits for its correction included: that one ends without
+        // asking the model only once nothing is left open (see below the
+        // lanes), so an answer the user gave a task is never dropped.
+        let stopped = crate::services::tool_call_budget::choices(&parsed.content)
             .last()
-            .map(|(_, choice)| choice);
-        let pending_correction = generation_parameters
-            .turn_consumption
-            .submission_correction
-            .as_ref()
-            .filter(|correction| correction.pending());
-        let ends_here = budget_choice
-            == Some(crate::services::tool_call_budget::BudgetChoice::Stop)
-            || (budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Answer)
-                && pending_correction.is_some());
-        if ends_here {
+            .is_some_and(|(_, choice)| {
+                choice == crate::services::tool_call_budget::BudgetChoice::Stop
+            });
+        if stopped {
             release_task_items(&mut parsed.content, state.request_index);
         }
         update_message_content(
@@ -22778,52 +22908,17 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
-        if ends_here {
-            let mut metadata = message
-                .generation_metadata
-                .as_ref()
-                .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
-                .unwrap_or_default();
-            metadata.continuation_in_flight = None;
-            metadata.was_aborted = (budget_choice
-                == Some(crate::services::tool_call_budget::BudgetChoice::Stop))
-            .then_some(true);
-            if let Some(correction) = pending_correction {
-                let mut correction = correction.clone();
-                correction.stop(if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop) {
-                    crate::services::submission_correction::SubmissionReason::UserStopped
-                } else {
-                    crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
-                });
-                metadata.submission_outcome = Some(correction.outcome.clone());
-                let mut consumption = generation_parameters.turn_consumption.clone();
-                consumption.submission_correction = Some(correction);
-                crate::services::client_operations::store::save_consumption(
-                    &app_state.db,
-                    message.id,
-                    task.generation_id,
-                    &consumption,
-                )
-                .await?;
-            }
-            update_message_generation_metadata(
-                &app_state.db,
-                policy,
-                &me_user.to_subject(),
-                &message.id,
-                metadata,
-            )
-            .await?;
-            return stream_update_assistant_message_completion::<
-                MessageSubmitStreamingResponseMessage,
-            >(
-                tx,
+        if stopped {
+            return end_at_budget_choice(
                 task,
+                tx,
                 app_state,
                 policy,
-                parsed.content,
                 me_user,
-                message.id,
+                &message,
+                &generation_parameters,
+                parsed.content,
+                true,
             )
             .await;
         }
@@ -23682,6 +23777,25 @@ pub(crate) async fn run_continuation(
             parsed.content,
             me_user,
             message.id,
+        )
+        .await;
+    }
+
+    // Generate answer now while a client submission still waits for its
+    // correction asks the model nothing: the submission stays unresolved. It
+    // ends here once the tasks answered on the limit's stop have settled, on
+    // that stop's continuation or on the one after a task that asked again.
+    if answers_now_with_a_pending_correction(&parsed.content, &generation_parameters) {
+        return end_at_budget_choice(
+            task,
+            tx,
+            app_state,
+            policy,
+            me_user,
+            &message,
+            &generation_parameters,
+            parsed.content,
+            false,
         )
         .await;
     }

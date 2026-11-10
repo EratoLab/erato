@@ -306,10 +306,16 @@ calls, and the later resume reads the same choice. Stop ends the response as the
 user's own Stop does, the one exception CT-10 allows: the decision must withdraw
 every task item too (400 otherwise), the items are taken off the stop, and each
 task is answered in its own chat. Generate answer now while a client submission
-still waits for its correction ends the response without asking the model as
-well, and takes the tasks' items off the same way. The Teams bot asks each
-task's question on the limit's card; Continue and Generate answer now send the
-budget's choice beside them, and Stop withdraws all of them.
+still waits for its correction settles the tasks' items like any other choice
+and re-parks the same way; once nothing is left open it ends the response
+without asking the model, the submission unresolved (`user_requested_answer`).
+The Teams bot asks each task's question on the limit's card; Continue and
+Generate answer now send the budget's choice beside them, and Stop withdraws all
+of them. The web card says it shows these items, and those of a `builtin_tool`
+stop, with `shows_limit_and_builtin_child_items`: a client that predates them
+sends `shows_child_items` while it shows the limit's choice, or a generic card,
+alone. Without the newer flag a decision on such a stop with a task's item open
+gets the plain-text 409 asking to reload.
 
 `ChildApprovalRef.kind` says the child asked about a client tool, so the queue
 names this device and shows no MCP open-world warning. Always allow and Never

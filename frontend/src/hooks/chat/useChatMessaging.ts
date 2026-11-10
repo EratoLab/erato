@@ -2963,6 +2963,7 @@ export function useChatMessaging(
                     message_id: messageId,
                     decisions: [],
                     shows_child_items: true,
+                    shows_limit_and_builtin_child_items: true,
                   }
                 : buildContinueStreamBody({
                     messageId,

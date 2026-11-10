@@ -293,6 +293,8 @@ const TURN_ANSWER: &str = "TURN-ANSWER-AFTER-BOTH";
 /// The answer of a turn that stopped at the tool-call limit before the search
 /// ran, once its task has answered.
 const LIMIT_ANSWER: &str = "LIMIT-ANSWER-WITH-THE-TASK";
+/// The call of a task that asks a second time.
+const SECOND_PROBE: &str = "task-probe-2";
 /// Long enough that the own call is popped and parks before the task asks: a
 /// task that asked first holds that call back, which is not the case here.
 const TASK_ASKS_AFTER: Duration = Duration::from_millis(1_500);
@@ -351,15 +353,25 @@ async fn setup_search_and_paced_task(
             .path("/v1/chat/completions")
             .matcher(BodyContainsMatcher::new(
                 &[TASK_BRIEF, PROBE_RESULT],
-                &["child_run_id"],
+                &["child_run_id", SECOND_PROBE],
             ));
         let mut actions = vec![BodyAction::Delay(answers_after)];
         actions.extend(if asks_twice {
-            build_openai_tool_calls_streaming_response(&[("task-probe-2", PROBE, json!({}))])
+            build_openai_tool_calls_streaming_response(&[(SECOND_PROBE, PROBE, json!({}))])
         } else {
             build_openai_text_streaming_response(&[TASK_ANSWER])
         });
         mock_llm_sse_response(then, actions);
+    });
+    // A task that asked twice answers once its second call ran.
+    mocks.mock(|when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[TASK_BRIEF, SECOND_PROBE],
+                &["child_run_id"],
+            ));
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&[TASK_ANSWER]));
     });
     let capture = recorder.clone();
     mocks.mock(move |when, then| {
@@ -960,6 +972,7 @@ fn decide_limit(
                 }))
                 .collect::<Vec<_>>(),
             "shows_child_items": true,
+            "shows_limit_and_builtin_child_items": true,
         }))
 }
 
@@ -1132,4 +1145,252 @@ async fn stop_at_the_tool_call_limit_sends_the_tasks_question_back_to_its_own_ch
         "the child's own card answers it: {}",
         answered.text()
     );
+}
+
+/// A client that predates the limit's tasks still sends `shows_child_items`,
+/// but shows the budget choice alone and answers every open item with it: its
+/// Continue would approve the task's call unseen, so it is asked to reload.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_client_that_shows_the_limits_choice_alone_is_asked_to_reload(pool: Pool<Postgres>) {
+    let mut setup = setup_search_and_task(pool, TIMEOUT_MS, false).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+    let child = delegate_child(&parts(&setup).await);
+
+    let stale = app_server(setup.state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", SEARCH)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [
+                {"approval_id": budget["approval_id"], "decision": "approve"},
+                {"approval_id": task["approval_id"], "decision": "approve"},
+            ],
+            "shows_child_items": true,
+        }))
+        .await;
+    assert_eq!(
+        stale.status_code(),
+        http::StatusCode::CONFLICT,
+        "{}",
+        stale.text()
+    );
+    assert!(stale.text().contains("Reload the page"), "{}", stale.text());
+
+    let content = parts(&setup).await;
+    assert_eq!(
+        slot(&content, TASK_CALL)["output"]["status"],
+        "input_required",
+        "the task's call was not approved"
+    );
+    assert_eq!(
+        generation_state(&setup).await.as_deref(),
+        Some("awaiting_approval")
+    );
+    assert_covered_by_the_parent(&setup, child).await;
+    assert_eq!(turn_requests(&setup.recorder).len(), 1);
+}
+
+/// Leaves the parked turn as one whose client submission still waits for its
+/// correction, as a submission the host refused before the limit leaves it.
+async fn with_a_pending_correction(setup: &Setup, message_id: Uuid) {
+    use sea_orm::ConnectionTrait;
+    let row = Messages::find_by_id(message_id)
+        .one(&setup.state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut parameters = row.generation_parameters.expect("generation parameters");
+    assert!(
+        parameters["turn_consumption"].is_object(),
+        "the parked turn counted its calls: {parameters}"
+    );
+    parameters["turn_consumption"]["submission_correction"] = json!({
+        "tool": "desktop/search_sidecar_index",
+        "outcome": {
+            "status": "correcting",
+            "reason": "validation_failed",
+            "attempts_used": 1,
+            "max_attempts": 5,
+        },
+        "recovery": "repair_arguments",
+        "recovery_read_tools": [],
+        "recovery_reads_used": 0,
+        "max_recovery_reads": 0,
+    });
+    let parameters = serde_json::to_string(&parameters)
+        .unwrap()
+        .replace('\'', "''");
+    setup
+        .state
+        .db
+        .execute_unprepared(&format!(
+            "UPDATE messages SET generation_parameters = '{parameters}'::jsonb WHERE id = '{message_id}'"
+        ))
+        .await
+        .unwrap();
+}
+
+/// How many requests asked the turn's model with the task's answer.
+fn turn_answers_asked(setup: &Setup) -> usize {
+    setup
+        .recorder
+        .bodies()
+        .iter()
+        .filter(|body| body.contains(TURN) && body.contains(TASK_ANSWER))
+        .count()
+}
+
+/// The response ended on Generate answer now: the submission is unresolved,
+/// the model was not asked again, and nothing is left open.
+async fn assert_answered_now_without_the_model(setup: &Setup) {
+    let row = child_row(setup, setup.chat_id).await;
+    assert_eq!(
+        row.generation_metadata.as_ref().unwrap()["submission_outcome"],
+        json!({
+            "status": "unresolved",
+            "reason": "user_requested_answer",
+            "attempts_used": 1,
+            "max_attempts": 5,
+        }),
+        "{:?}",
+        row.generation_metadata
+    );
+    assert_eq!(
+        row.generation_parameters.as_ref().unwrap()["turn_consumption"]["submission_correction"]["outcome"]
+            ["status"],
+        "unresolved"
+    );
+    let content = parts(setup).await;
+    assert!(
+        !content
+            .iter()
+            .any(|part| part.to_string().contains(LIMIT_ANSWER)),
+        "{content:?}"
+    );
+    assert_eq!(
+        turn_answers_asked(setup),
+        0,
+        "the model was not asked again"
+    );
+    let task_slot = slot(&content, TASK_CALL);
+    assert_eq!(task_slot["status"], "success", "{task_slot}");
+    assert!(
+        task_slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains(TASK_ANSWER),
+        "the approved task ran: {task_slot}"
+    );
+    assert_ne!(
+        generation_state(setup).await.as_deref(),
+        Some("awaiting_approval"),
+        "nothing is left open"
+    );
+}
+
+/// Generate answer now while a client submission waits for its correction
+/// asks the model nothing, but the task the user approved on the same stop
+/// still runs: the answer is not dropped and the question not sent back to the
+/// task's own chat.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn answer_now_with_a_pending_correction_still_runs_the_approved_task(pool: Pool<Postgres>) {
+    let mut setup = setup_search_and_task(pool, TIMEOUT_MS, false).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+    with_a_pending_correction(&setup, message_id).await;
+
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        decide_limit(
+            &setup.state,
+            message_id,
+            &[(&budget, "reject"), (&task, "approve")],
+        ),
+    )
+    .await
+    .expect("the task should answer and the turn end")
+    .assert_status_ok();
+
+    assert_answered_now_without_the_model(&setup).await;
+    let content = parts(&setup).await;
+    let stop = content
+        .iter()
+        .find(|part| part["kind"] == "tool_call_limit")
+        .unwrap();
+    assert!(
+        stop["approvals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["approval_id"] == task["approval_id"]),
+        "the task's question stays on the stop it was answered on: {stop}"
+    );
+    assert!(
+        content
+            .iter()
+            .any(|part| part["content_type"] == "tool_approval"
+                && part["approval_id"] == task["approval_id"]),
+        "the task's approval is recorded: {content:?}"
+    );
+}
+
+/// A task that asks again after Generate answer now with a pending correction
+/// re-parks the turn as on any stop; the turn ends without the model once that
+/// question is answered too.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn answer_now_with_a_pending_correction_waits_for_a_task_that_asks_again(
+    pool: Pool<Postgres>,
+) {
+    let mut setup = setup_search_and_task(pool, TIMEOUT_MS, true).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+    with_a_pending_correction(&setup, message_id).await;
+    // The limit of one call that stopped the turn binds the task's own run
+    // too: room for its second call, so it asks instead of reaching its limit.
+    setup.state.config.generation.max_tool_calls_per_message = 4;
+
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        decide_limit(
+            &setup.state,
+            message_id,
+            &[(&budget, "reject"), (&task, "approve")],
+        ),
+    )
+    .await
+    .expect("the task should ask again")
+    .assert_status_ok();
+
+    let content = parts(&setup).await;
+    let stop = content.last().unwrap();
+    assert_eq!(stop["content_type"], "tool_approval_request", "{content:?}");
+    assert_eq!(stop["kind"], "delegated_task", "{stop}");
+    let [second] = stop["approvals"].as_array().unwrap().as_slice() else {
+        panic!("the task's second question: {stop}");
+    };
+    assert!(
+        second["child"]["child_tool_call_id"]
+            .as_str()
+            .unwrap()
+            .ends_with(SECOND_PROBE),
+        "{second}"
+    );
+    assert_eq!(
+        generation_state(&setup).await.as_deref(),
+        Some("awaiting_approval")
+    );
+    let row = child_row(&setup, setup.chat_id).await;
+    assert!(
+        row.generation_metadata.as_ref().unwrap()["submission_outcome"].is_null(),
+        "the correction is not ended while the task asks: {:?}",
+        row.generation_metadata
+    );
+    assert_eq!(turn_answers_asked(&setup), 0);
+
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        decide(&setup.state, message_id, &second["approval_id"]),
+    )
+    .await
+    .expect("the task should answer and the turn end");
+    assert_answered_now_without_the_model(&setup).await;
 }

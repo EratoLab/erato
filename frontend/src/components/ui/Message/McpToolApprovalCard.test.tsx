@@ -521,6 +521,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "reject_always",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -977,6 +978,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "tool-call-2", decision: "approve" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1020,6 +1022,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "approve",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1217,6 +1220,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "reject" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1310,6 +1314,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "withdraw" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -4762,6 +4767,14 @@ describe("tool-call limit with a task's question", () => {
       { approval_id: "tool-budget:1", decision: "reject" },
       { approval_id: "task-a", decision: "approve" },
     ]);
+    // Without saying it shows the task's question here, the server refuses
+    // the decision as one from a client that shows the limit's choice alone.
+    expect(
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body),
+    ).toMatchObject({
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
   });
 
   it("sends Stop at once and withdraws the task's question with it", async () => {
