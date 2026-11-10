@@ -2660,8 +2660,8 @@ fn forgetting_earlier_results_drops_a_meaning_that_came_from_one() {
 #[test]
 fn glued_lower_case_names_read_as_words() {
     for (member, expected) in [
-        ("estimatedclosedate", "Estimated close date"),
-        ("customertypecode", "Customer type code"),
+        ("expectedenddate", "Expected end date"),
+        ("itemtypecode", "Item type code"),
         ("parentaccountid", "Parent account ID"),
         ("websiteurl", "Website URL"),
         ("telephone1", "Telephone 1"),

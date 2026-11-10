@@ -1,4 +1,4 @@
-//! A field name written as one lower-case word, such as `estimatedclosedate`,
+//! A field name written as one lower-case word, such as `duedate`,
 //! read as the words it is made of. Only a name the word list covers from end
 //! to end is split; anything else stays as written, so nothing is guessed.
 
@@ -483,12 +483,12 @@ mod tests {
     #[test]
     fn glued_names_read_as_their_words() {
         for (glued, expected) in [
-            ("estimatedclosedate", vec!["estimated", "close", "date"]),
-            ("customertypecode", vec!["customer", "type", "code"]),
+            ("expectedenddate", vec!["expected", "end", "date"]),
+            ("itemtypecode", vec!["item", "type", "code"]),
             ("numberofemployees", vec!["number", "of", "employees"]),
             ("parentaccountid", vec!["parent", "account", "id"]),
             ("websiteurl", vec!["website", "url"]),
-            ("creditonhold", vec!["credit", "on", "hold"]),
+            ("isonhold", vec!["is", "on", "hold"]),
             ("firstname", vec!["first", "name"]),
             ("ownerid", vec!["owner", "id"]),
         ] {
