@@ -342,6 +342,9 @@ pub enum CrossCheckFlag {
     NameVerb,
     /// A verb field in the arguments names another verb than the label's.
     FieldVerb,
+    /// The tool's name or a verb field's words delete or archive, and the
+    /// label's verb does neither.
+    LossLeftOut,
 }
 
 impl CrossCheckFlag {
@@ -351,6 +354,7 @@ impl CrossCheckFlag {
             Self::ReadName => "read_name",
             Self::NameVerb => "name_verb",
             Self::FieldVerb => "field_verb",
+            Self::LossLeftOut => "loss_left_out",
         }
     }
 }
@@ -517,6 +521,25 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other && !name_loses {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
     }
+    // A delete or archive that the name or a verb field's words state is
+    // never hidden behind another verb.
+    let fields = verb_fields(arguments);
+    let field_loses = fields.iter().any(|(member, value)| {
+        matches!(
+            field_action(member, value),
+            Some(ToolCallAction::Delete | ToolCallAction::Archive)
+        )
+    });
+    let loss_left_out = !matches!(
+        action,
+        ToolCallAction::Delete | ToolCallAction::Archive | ToolCallAction::Other
+    ) && (fields
+        .iter()
+        .any(|(member, value)| hides_a_loss(member, value))
+        || (verb.source == VerbSource::Field && name_sounds_like_a_loss(&name) && !field_loses));
+    if loss_left_out {
+        flags.push(CrossCheckFlag::LossLeftOut);
+    }
     let upsert_agrees = verb.action == ToolCallAction::Upsert
         && matches!(action, ToolCallAction::Create | ToolCallAction::Update);
     if verb.source == VerbSource::Field && verb.action != action && !upsert_agrees {
@@ -524,8 +547,8 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     }
     // A member the schema does not declare may be one the model made up.
     let declared = verb.source == VerbSource::Field
-        && verb_fields(arguments)
-            .into_iter()
+        && fields
+            .iter()
             .all(|(member, _)| declares(&tool.input_schema, member));
     // "query" also names what a run runs.
     let names_a_run = action == ToolCallAction::Run
@@ -661,10 +684,11 @@ struct Verb {
 
 fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     let fields: Vec<String> = arguments
-        .map(verb_field_values)
+        .map(verb_fields)
         .unwrap_or_default()
         .into_iter()
-        .flat_map(field_value_words)
+        .filter(|(member, _)| !names_a_kind(member))
+        .flat_map(|(_, value)| name_words(value))
         .collect();
     let found = |action, source| Verb { action, source };
     let field_actions = actions_of(&fields);
@@ -799,38 +823,39 @@ fn name_verbs(name: &[String]) -> Vec<ToolCallAction> {
     named
 }
 
-/// What a verb field's value says a row does, if it names one verb.
+/// What an operation's value says it does, if it names one verb, by any of
+/// its words: `delete_remote`, `mail.reply`, `deleteRow`, `bulkDelete` and
+/// `HardDelete` each name one.
 pub(super) fn action_of(value: &str) -> Option<ToolCallAction> {
-    match actions_of(&field_value_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
+    match actions_of(&name_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
         [action] => Some(*action),
         _ => None,
     }
 }
 
-/// A verb field's value in words: `delete_remote` and `outlook.reply` split
-/// where a separator stands, and `deleteRow` or `bulkDelete` where a capital
-/// does. A part written with a capital first, as a type's name is, names a
-/// verb only by its first word: `DeleteRow` deletes, while `StatefulSet` is
-/// one word, a kind's name, and never the verb its last word spells.
-fn field_value_words(value: &str) -> Vec<String> {
-    value
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .flat_map(|part| {
-            let words = name_words(part);
-            let capitalised = part.chars().next().is_some_and(char::is_uppercase);
-            match words.first() {
-                Some(first) if capitalised && words.len() > 1 => {
-                    if actions_of(std::slice::from_ref(first)).is_empty() {
-                        vec![part.to_lowercase()]
-                    } else {
-                        vec![first.clone()]
-                    }
-                }
-                _ => words,
-            }
-        })
-        .collect()
+/// What a verb field says a row does, if it names one verb. A `kind` says
+/// what something is, as `StatefulSet` or `PullRequest` does, never what the
+/// call does to it.
+pub(super) fn field_action(member: &str, value: &str) -> Option<ToolCallAction> {
+    if names_a_kind(member) {
+        return None;
+    }
+    action_of(value)
+}
+
+/// Whether a verb field's value has a word that deletes or archives while
+/// the verb its field gives does neither: `kind: "HardDelete"` gives none,
+/// `op: "createOrDelete"` names two.
+pub(super) fn hides_a_loss(member: &str, value: &str) -> bool {
+    name_sounds_like_a_loss(&name_words(text_prefix(value, MAX_NAME_BYTES)))
+        && !matches!(
+            field_action(member, value),
+            Some(ToolCallAction::Delete | ToolCallAction::Archive)
+        )
+}
+
+fn names_a_kind(member: &str) -> bool {
+    member.eq_ignore_ascii_case("kind")
 }
 
 /// The actions the words name, in the order of `VERBS`.

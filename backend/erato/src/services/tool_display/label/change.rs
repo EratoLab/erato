@@ -1327,6 +1327,27 @@ impl<'a> Walk<'a> {
     /// that is a verb that removes or adds, as in `removeLabels`, then the
     /// tool's description.
     fn list_claim(&mut self, member: &str, path: &str) -> ListClaim {
+        let claim = self.list_claim_of(member, path);
+        match claim {
+            ListClaim::Replaces => self.lists.replaces = true,
+            ListClaim::Adds => self.lists.adds = true,
+            ListClaim::Unknown => self.lists.unknown = true,
+            // The card says on the list's own row whose word this is.
+            ListClaim::Removes | ListClaim::OwnAdds => {}
+        }
+        claim
+    }
+
+    /// An empty list in a member that holds what the call removes or adds.
+    fn adds_or_removes_nothing(&self, member: &str, value: &Value, path: &str) -> bool {
+        value.as_array().is_some_and(Vec::is_empty)
+            && matches!(
+                self.list_claim_of(member, path),
+                ListClaim::Removes | ListClaim::OwnAdds
+            )
+    }
+
+    fn list_claim_of(&self, member: &str, path: &str) -> ListClaim {
         let description = property_at(&self.facts.tool.input_schema, path)
             .and_then(|property| property.get("description")?.as_str());
         let own = description
@@ -1338,7 +1359,7 @@ impl<'a> Walk<'a> {
             .then(|| member_list_verb(member))
             .flatten();
         let adds = own.adds_to_list || holds == Holds::Added;
-        let claim = match (own.replaces_list, adds, holds == Holds::Removed) {
+        match (own.replaces_list, adds, holds == Holds::Removed) {
             (true, false, false) => ListClaim::Replaces,
             (false, true, false) => ListClaim::OwnAdds,
             (false, false, true) => ListClaim::Removes,
@@ -1347,15 +1368,7 @@ impl<'a> Walk<'a> {
             _ if self.says.adds_to_list => ListClaim::Adds,
             _ if self.says.replaces_list => ListClaim::Replaces,
             _ => ListClaim::Unknown,
-        };
-        match claim {
-            ListClaim::Replaces => self.lists.replaces = true,
-            ListClaim::Adds => self.lists.adds = true,
-            ListClaim::Unknown => self.lists.unknown = true,
-            // The card says on the list's own row whose word this is.
-            ListClaim::Removes | ListClaim::OwnAdds => {}
         }
-        claim
     }
 
     /// "Labels" for `removeLabels` once the row says the labels are removed:
@@ -1596,6 +1609,10 @@ impl<'a> Walk<'a> {
                 continue;
             };
             let action = row_action(members);
+            // A row whose own verb may delete says nothing a card can rule out.
+            if row_hides_a_loss(members) {
+                read_all = false;
+            }
             let is_delete = action == Some(ToolCallAction::Delete)
                 || (self.action == ToolCallAction::Delete && action.is_none());
             if is_delete {
@@ -1628,6 +1645,14 @@ impl<'a> Walk<'a> {
                 {
                     continue;
                 }
+                let update_like =
+                    is_update_like(self.action) || action == Some(ToolCallAction::Update);
+                // `removeLabels: []` removes nothing, by the tool's word, and
+                // empties nothing; only that word says so.
+                if update_like && self.adds_or_removes_nothing(member, value, &value_path) {
+                    read_all = false;
+                    continue;
+                }
                 let hash = value_hash(value);
                 shape.push((member.as_str(), hash));
                 let at = *order.entry(member.as_str()).or_insert_with(|| {
@@ -1635,8 +1660,6 @@ impl<'a> Walk<'a> {
                     tallies.push(FieldTally::new(member, name));
                     tallies.len() - 1
                 });
-                let update_like =
-                    is_update_like(self.action) || action == Some(ToolCallAction::Update);
                 match unwrap(value, is_plural(member)) {
                     Unwrapped::Empty if update_like => {
                         empties = true;
@@ -1766,6 +1789,7 @@ impl<'a> Walk<'a> {
             if is_verb_field(member, value)
                 || self.row_member_left_out(&value_path, value)
                 || edit.is_some_and(|(before, _)| before == member.as_str())
+                || self.adds_or_removes_nothing(member, value, &value_path)
             {
                 continue;
             }
@@ -2004,13 +2028,15 @@ enum ListClaim {
     Unknown,
 }
 
-/// A `kind` that names what the record is, as `Namespace` does, rather than
-/// what the call does: it qualifies the record's kind as a table does.
+/// A `kind` that names what the record is, as `Namespace` or `StatefulSet`
+/// does: it qualifies the record's kind as a table does. One written in
+/// lower case that spells a verb, as `delete`, may say what the call does.
 fn is_type_member(member: &str, value: &Value) -> bool {
     member.eq_ignore_ascii_case("kind")
-        && value
-            .as_str()
-            .is_some_and(|text| is_table_name(text) && rules::action_of(text).is_none())
+        && value.as_str().is_some_and(|text| {
+            is_table_name(text)
+                && (text.starts_with(char::is_uppercase) || rules::action_of(text).is_none())
+        })
 }
 
 /// Words that, after `new`, name the content a call writes: `new_content`,
@@ -2052,6 +2078,7 @@ const PART_WORDS: [&str; 12] = [
 /// Words after a part's name that say the call writes that part, as in
 /// "the section to replace".
 const PART_WRITES: [&str; 6] = ["replace", "update", "edit", "change", "modify", "rewrite"];
+const ARTICLES: [&str; 3] = ["the", "a", "an"];
 /// Words that say a value picks something.
 const PICKS: [&str; 8] = [
     "which",
@@ -2067,9 +2094,11 @@ const PICKS: [&str; 8] = [
 /// Whether a member's own description says it picks a part of what the call
 /// replaces: the member is named for a part (`section`, `heading_key`) and
 /// its description speaks of one ("The setting key"), or its description
-/// says it picks one ("The heading text of the section to replace", "Which
-/// section to update", "Identifies the anchor"). A description that only
-/// mentions a part, as "Seconds until the key expires", says no such thing.
+/// says it picks one right beside the part ("The heading text of the section
+/// to replace", "Which section to update", "Identifies the anchor"). A
+/// description that only mentions a part, as "Seconds until the key
+/// expires", "after which the key expires" or "the section, which is shown",
+/// says no such thing.
 fn names_a_part(member: &str, description: &str) -> bool {
     let words = name_words(text_prefix(description, MAX_DESCRIPTION_BYTES));
     let part_at: Vec<usize> = (0..words.len())
@@ -2087,7 +2116,15 @@ fn names_a_part(member: &str, description: &str) -> bool {
                 .get(at + 2)
                 .is_some_and(|word| PART_WRITES.contains(&word.as_str()))
     });
-    let picks = words.iter().any(|word| PICKS.contains(&word.as_str()));
+    let picks = part_at.iter().any(|&at| {
+        let before = |back: usize| at.checked_sub(back).map(|index| words[index].as_str());
+        let picks_it = |word: Option<&str>| word.is_some_and(|word| PICKS.contains(&word));
+        // "which section" picks; "which the key" opens a clause about it.
+        picks_it(before(1))
+            || (before(1).is_some_and(|word| ARTICLES.contains(&word))
+                && picks_it(before(2))
+                && before(2) != Some("which"))
+    });
     named_for_a_part || written_part || picks
 }
 
@@ -2265,12 +2302,20 @@ fn value_hash(value: &Value) -> u64 {
 /// What a list member's own name says it does with the items it holds:
 /// `removeLabels` removes and `addLabels` adds, when its first word is a
 /// verb that only ever removes or adds. Words that are nouns as often, as in
-/// `post_ids`, `duplicate_ids` or `cancel_reasons`, say nothing, and
+/// `post_ids`, `duplicate_ids` or `cancel_reasons`, say nothing, nor does a
+/// verb that a particle turns into a noun, as `add_ons` or `add_ins`, and
 /// `new_labels` holds the new list.
 fn member_list_verb(member: &str) -> Option<ToolCallAction> {
     const ADDS: [&str; 2] = ["add", "append"];
     const REMOVES: [&str; 3] = ["remove", "delete", "unassign"];
+    const PARTICLES: [&str; 8] = ["on", "ons", "in", "ins", "out", "outs", "up", "ups"];
     let words = name_words(member);
+    if words
+        .get(1)
+        .is_some_and(|second| PARTICLES.contains(&second.as_str()))
+    {
+        return None;
+    }
     let first = words.first().filter(|_| words.len() > 1)?;
     if ADDS.contains(&first.as_str()) {
         Some(ToolCallAction::Create)
@@ -2647,12 +2692,23 @@ fn is_row_identifier(member: &str, value: &Value) -> bool {
 
 /// What a row's own verb field says it does, if it names one.
 fn row_action(members: &Map<String, Value>) -> Option<ToolCallAction> {
-    let found = members.iter().find_map(|(member, value)| {
+    let (member, found) = members.iter().find_map(|(member, value)| {
         is_verb_field(member, value)
-            .then(|| value.as_str())
+            .then(|| value.as_str().map(|text| (member, text)))
             .flatten()
     })?;
-    rules::action_of(found)
+    rules::field_action(member, found)
+}
+
+/// Whether a row's verb field has a word that deletes or archives while its
+/// verb, if any, does neither.
+fn row_hides_a_loss(members: &Map<String, Value>) -> bool {
+    members.iter().any(|(member, value)| {
+        is_verb_field(member, value)
+            && value
+                .as_str()
+                .is_some_and(|text| rules::hides_a_loss(member, text))
+    })
 }
 
 fn action_rank(action: ToolCallAction) -> u8 {
@@ -2891,7 +2947,7 @@ const REMOVES_PHRASES: [&[&str]; 6] = [
 /// A sentence with one of these sets a condition, negates, or speaks of the
 /// whole list, as "Pass an empty array to remove all labels" or "Labels not
 /// in this list will be removed" do: it says nothing of what the member holds.
-const NOT_WHAT_IT_HOLDS: [&str; 26] = [
+const NOT_WHAT_IT_HOLDS: [&str; 31] = [
     "if",
     "when",
     "unless",
@@ -2917,10 +2973,15 @@ const NOT_WHAT_IT_HOLDS: [&str; 26] = [
     "replace",
     "replaces",
     "replaced",
+    "replacing",
+    "overwrite",
     "overwrites",
+    "overwritten",
+    "overwriting",
+    "instead",
 ];
 const ADD_WORDS: [&str; 6] = ["add", "adds", "added", "adding", "append", "appended"];
-const REMOVE_WORDS: [&str; 9] = [
+const REMOVE_WORDS: [&str; 13] = [
     "remove",
     "removes",
     "removed",
@@ -2930,6 +2991,10 @@ const REMOVE_WORDS: [&str; 9] = [
     "unassign",
     "unassigned",
     "unassigns",
+    "drop",
+    "drops",
+    "dropped",
+    "dropping",
 ];
 /// Nouns that name the entries of a list by what identifies them, as in
 /// "Label IDs to add": the noun before them names what the list holds.
@@ -2950,26 +3015,42 @@ enum Holds {
 /// noun, as in "The identifiers of the issue labels to remove" for
 /// `removeLabels` or "Label IDs to add to the issue" for `labelIds`, or one
 /// that ends a sentence that is only a noun phrase, as "The labels to
-/// remove". A sentence that sets a condition, negates, speaks of the whole
-/// list or both adds and removes never says it.
+/// remove". A description that anywhere sets a condition, negates, speaks of
+/// the whole list, both adds and removes, or adds or removes in more than
+/// one sentence never says it, as "Labels to add. This replaces existing
+/// labels." does not.
 fn holds_of(description: &str, member: &str) -> Holds {
     let lower = text_prefix(description, MAX_DESCRIPTION_BYTES).to_lowercase();
     let nouns = member_nouns(member);
+    let sentences: Vec<Vec<&str>> = lower
+        .split(['.', ';', '\n'])
+        .map(|sentence| {
+            sentence
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|word| !word.is_empty())
+                .collect()
+        })
+        .collect();
+    let any = |list: &[&str]| sentences.iter().flatten().any(|word| list.contains(word));
+    let changing = sentences
+        .iter()
+        .filter(|words| {
+            words
+                .iter()
+                .any(|word| ADD_WORDS.contains(word) || REMOVE_WORDS.contains(word))
+        })
+        .count();
+    let unclear =
+        any(&NOT_WHAT_IT_HOLDS) || (any(&ADD_WORDS) && any(&REMOVE_WORDS)) || changing > 1;
     let (mut added, mut removed, mut mentioned) = (false, false, false);
-    for sentence in lower.split(['.', ';', '\n']) {
-        let words: Vec<&str> = sentence
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|word| !word.is_empty())
-            .collect();
-        let adds = phrase_starts(&words, &ADDS_PHRASES);
-        let removes = phrase_starts(&words, &REMOVES_PHRASES);
+    for words in &sentences {
+        let adds = phrase_starts(words, &ADDS_PHRASES);
+        let removes = phrase_starts(words, &REMOVES_PHRASES);
         if adds.is_empty() && removes.is_empty() {
             continue;
         }
         mentioned = true;
-        let both = words.iter().any(|word| ADD_WORDS.contains(word))
-            && words.iter().any(|word| REMOVE_WORDS.contains(word));
-        if both || words.iter().any(|word| NOT_WHAT_IT_HOLDS.contains(word)) {
+        if unclear {
             continue;
         }
         let holds = |starts: &[(usize, usize)]| {

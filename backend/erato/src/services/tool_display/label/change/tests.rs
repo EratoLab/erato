@@ -2064,11 +2064,8 @@ fn a_kind_whose_last_part_is_a_verb_word_is_still_the_kind_of_what_a_delete_remo
         rules::action_of("delete_remote"),
         Some(ToolCallAction::Delete)
     );
-    assert_eq!(
-        rules::action_of("outlook.reply"),
-        Some(ToolCallAction::Send)
-    );
-    assert_eq!(rules::action_of("StatefulSet"), None);
+    assert_eq!(rules::action_of("mail.reply"), Some(ToolCallAction::Send));
+    assert_eq!(rules::field_action("kind", "StatefulSet"), None);
 }
 
 #[test]
@@ -2134,7 +2131,7 @@ fn a_call_that_names_nothing_inside_the_place_its_name_ends_in_acts_on_that_plac
 
     for name in [
         "archive_repository",
-        "github_delete_repository",
+        "server_delete_repository",
         "delete_repos",
     ] {
         let label = labelled(
@@ -2565,7 +2562,7 @@ fn batch_rows_that_remove_items_say_so_and_never_that_they_replace_a_list() {
 }
 
 #[test]
-fn a_camel_case_operation_names_its_verb_by_its_first_word() {
+fn a_camel_case_operation_names_its_verb() {
     assert_eq!(rules::action_of("deleteRow"), Some(ToolCallAction::Delete));
     assert_eq!(rules::action_of("DeleteRow"), Some(ToolCallAction::Delete));
     assert_eq!(
@@ -2575,7 +2572,7 @@ fn a_camel_case_operation_names_its_verb_by_its_first_word() {
     assert_eq!(rules::action_of("addLabel"), Some(ToolCallAction::Create));
     assert_eq!(rules::action_of("bulkDelete"), Some(ToolCallAction::Delete));
     for kind in ["StatefulSet", "DaemonSet", "ReplicaSet", "ApplicationSet"] {
-        assert_eq!(rules::action_of(kind), None, "{kind}");
+        assert_eq!(rules::field_action("kind", kind), None, "{kind}");
     }
 
     let batch = tool_with_schema(
@@ -4158,4 +4155,275 @@ fn a_label_from_a_schema_written_label_first_counts_as_the_tools() {
     let mut forgotten = change.clone();
     forget_earlier(&mut forgotten);
     assert_eq!(meaning_of_value(&forgotten, "priority").unwrap().0, "High");
+}
+
+fn rows_tool(name: &str) -> Tool {
+    tool_with_schema(
+        name,
+        "",
+        json!({"type": "object", "properties": {
+            "operations": {"type": "array", "items": {"type": "object", "properties": {
+                "op": {"type": "string"},
+                "kind": {"type": "string"},
+                "rowId": {"type": "string"},
+            }}},
+        }}),
+    )
+}
+
+#[test]
+fn an_operation_names_its_verb_by_any_of_its_words() {
+    for op in [
+        "HardDelete",
+        "SoftDelete",
+        "BulkDelete",
+        "ForceDelete",
+        "hard_delete",
+        "DeleteRow",
+    ] {
+        assert_eq!(rules::action_of(op), Some(ToolCallAction::Delete), "{op}");
+    }
+    let batch = rows_tool("batch_update_rows");
+    let arguments = json!({"operations": [
+        {"op": "HardDelete", "rowId": "r1"},
+        {"op": "HardDelete", "rowId": "r2"},
+    ]});
+    let label = labelled(&batch, &arguments, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Delete);
+    let change = change_with(&batch, arguments, &ToolResultContext::default()).0;
+    assert_eq!(change.batch.as_ref().unwrap().deletions, 2);
+}
+
+#[test]
+fn a_kind_says_what_a_record_is_and_never_what_the_call_does() {
+    let item = |name: &str| {
+        tool_with_schema(
+            name,
+            "",
+            json!({"type": "object", "properties": {
+                "kind": {"type": "string"},
+                "id": {"type": "number"},
+                "title": {"type": "string"},
+            }}),
+        )
+    };
+    let deleted = labelled(
+        &item("delete_item"),
+        &json!({"kind": "PullRequest", "id": 12}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(deleted.action, ToolCallAction::Delete);
+    let created = labelled(
+        &item("create_item"),
+        &json!({"kind": "pull_request", "title": "Fix upload"}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(created.action, ToolCallAction::Create);
+}
+
+#[test]
+fn a_delete_a_verb_field_or_the_name_states_and_the_verb_leaves_out_gets_the_generic_label() {
+    for (tool, arguments) in [
+        (
+            rows_tool("batch_update_rows"),
+            json!({"operations": [
+                {"op": "createOrDelete", "rowId": "r1"},
+                {"op": "createOrDelete", "rowId": "r2"},
+            ]}),
+        ),
+        (
+            rows_tool("batch_update_rows"),
+            json!({"operations": [
+                {"kind": "HardDelete", "rowId": "r1"},
+                {"kind": "HardDelete", "rowId": "r2"},
+            ]}),
+        ),
+        (
+            tool_with_schema(
+                "delete_branch",
+                "",
+                json!({"type": "object", "properties": {
+                    "method": {"type": "string"},
+                    "branch": {"type": "string"},
+                }}),
+            ),
+            json!({"method": "force_push", "branch": "release"}),
+        ),
+    ] {
+        let label = labelled(&tool, &arguments, &ToolResultContext::default());
+        assert_eq!(label.source, ToolCallLabelSource::Generic, "{arguments}");
+    }
+
+    // A batch that deletes some rows and changes others still says which.
+    let mixed = json!({"operations": [
+        {"op": "deleteRow", "rowId": "r1"},
+        {"op": "updateRow", "rowId": "r2"},
+    ]});
+    let tool = rows_tool("batch_delete_rows");
+    let label = labelled(&tool, &mixed, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Update);
+    let change = change_with(&tool, mixed, &ToolResultContext::default()).0;
+    assert_eq!(change.batch.as_ref().unwrap().deletions, 1);
+}
+
+#[test]
+fn a_batch_never_rules_out_a_delete_a_row_value_may_name() {
+    let tool = rows_tool("batch_update_rows");
+    let arguments = json!({"operations": [
+        {"op": "createOrDelete", "rowId": "r1"},
+        {"op": "createOrDelete", "rowId": "r2"},
+    ]});
+    // Whatever label a call is shown with, its batch never says no row deletes.
+    let mapping = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: Vec::new(),
+        source: ToolCallLabelSource::Rules,
+    };
+    let label = crate::services::tool_display::label::filtered_label(
+        SERVER, &tool.name, &arguments, &mapping, None,
+    );
+    let (change, _) = describe(
+        &label,
+        ChangeFacts {
+            tool: &tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context: &ToolResultContext::default(),
+            server: Some(SERVER),
+            rules_action: ToolCallAction::Update,
+            glossary: None,
+            destructive_hint_source: Default::default(),
+        },
+    )
+    .unwrap();
+    let batch = change.batch.as_ref().unwrap();
+    assert_eq!(batch.deletions, 0);
+    assert!(!batch.read_all, "{batch:#?}");
+}
+
+#[test]
+fn a_list_whose_description_says_more_elsewhere_never_reads_as_only_added_or_removed() {
+    for (member, description) in [
+        ("labels", "Label IDs to add. This replaces existing labels."),
+        (
+            "labels",
+            "Labels to add to the issue; labels not listed are removed.",
+        ),
+        (
+            "labels",
+            "The labels to remove. Labels you leave out are dropped.",
+        ),
+    ] {
+        let mut properties = serde_json::Map::new();
+        properties.insert("id".into(), json!({"type": "string"}));
+        properties.insert(
+            member.into(),
+            json!({"type": "array", "items": {"type": "string"}, "description": description}),
+        );
+        let update = tool_with_schema(
+            "update_issue",
+            "",
+            json!({"type": "object", "properties": properties}),
+        );
+        let mut arguments = json!({"id": "ENG-1"});
+        arguments[member] = json!(["urgent"]);
+        let change = change_with(&update, arguments, &ToolResultContext::default()).0;
+        assert_eq!(
+            effect(&change, member).effect,
+            ToolCallEffectKind::ListReplaced,
+            "{description}"
+        );
+        assert_eq!(
+            change.notes,
+            [ToolCallChangeNote::ListReplaceUnknown],
+            "{description}"
+        );
+    }
+}
+
+#[test]
+fn a_pick_word_counts_only_right_beside_the_part_it_picks() {
+    let setting = tool_with_schema(
+        "update_setting",
+        "",
+        json!({"type": "object", "properties": {
+            "key": {"type": "string", "description": "The setting key"},
+            "new_value": {"type": "string", "description": "The new value"},
+            "ttl": {"type": "number", "description": "TTL in seconds, after which the key expires"},
+        }}),
+    );
+    let change = change_with(
+        &setting,
+        json!({"key": "timeout", "new_value": "30", "ttl": 3600}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    let filter = change.filter.as_ref().expect("the key picks the setting");
+    assert_eq!(filter.parts.len(), 1, "{filter:#?}");
+    assert_eq!(effect(&change, "ttl").effect, ToolCallEffectKind::Set);
+
+    let document = |description: &str| {
+        tool_with_schema(
+            "update_document",
+            "",
+            json!({"type": "object", "properties": {
+                "document_id": {"type": "string", "description": "The document to update"},
+                "new_content": {"type": "string", "description": "The new text"},
+                "status": {"type": "string", "description": description},
+            }}),
+        )
+    };
+    let arguments = json!({"document_id": "d1", "new_content": "Final text", "status": "final"});
+    let change = change_with(
+        &document("Status of the section, which is shown in the outline"),
+        arguments.clone(),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(change.filter.is_none(), "{:#?}", change.filter);
+    assert_eq!(effect(&change, "status").effect, ToolCallEffectKind::Set);
+    for description in ["Which section to update", "Identifies the anchor"] {
+        let change = change_with(
+            &document(description),
+            arguments.clone(),
+            &ToolResultContext::default(),
+        )
+        .0;
+        let filter = change.filter.as_ref().expect(description);
+        assert_eq!(filter.parts[0].value.text, "final", "{description}");
+    }
+}
+
+#[test]
+fn a_list_named_for_an_add_on_or_add_in_is_no_addition() {
+    for member in ["add_ons", "addOns", "add_ins"] {
+        let mut arguments = json!({"id": "sub_1"});
+        arguments[member] = json!(["backup", "support"]);
+        let change = change_of("update_subscription", arguments);
+        assert_eq!(
+            effect(&change, member).effect,
+            ToolCallEffectKind::ListReplaced,
+            "{member}"
+        );
+    }
+}
+
+#[test]
+fn an_empty_removal_list_in_a_batch_row_empties_nothing() {
+    let (change, _) = change_with(
+        &tool("update_issues", "", None),
+        json!({"issues": [
+            {"id": "ENG-1", "removeLabels": []},
+            {"id": "ENG-2", "removeLabels": ["Bug"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    let batch = change.batch.as_ref().unwrap();
+    assert_eq!(batch.rows_emptying, 0, "{batch:#?}");
+    let field = &batch.fields[0];
+    assert_eq!(field.emptied, 0, "{field:#?}");
+    assert_eq!(field.lists_removed, 1);
+    assert_eq!(field.rows, 1);
+    assert!(!batch.read_all);
 }
