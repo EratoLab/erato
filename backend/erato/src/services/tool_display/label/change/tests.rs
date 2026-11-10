@@ -2588,6 +2588,58 @@ fn read_issue(priority: Value) -> ToolResultContext {
 }
 
 #[test]
+fn an_old_and_a_new_date_read_in_one_form() {
+    let context = read_of(
+        "get_task",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "subject": "Call back", "scheduledend": "2026-11-20T00:00:00",
+               "scheduledstart": "2026-11-18", "duedate": "2026-11-20T09:30:00"}),
+    );
+    let (change, _) = change_with(
+        &tool("update_task", "", None),
+        json!({"id": RECORD, "scheduledend": "2026-11-27", "scheduledstart": "2026-11-18T00:00:00Z",
+               "duedate": "2026-11-21"}),
+        &context,
+    );
+    let end = effect(&change, "scheduledend");
+    assert_eq!(end.effect, ToolCallEffectKind::Changed);
+    assert_eq!(end.old.as_ref().unwrap().text, "2026-11-20");
+    assert_eq!(texts(&end.values), ["2026-11-27"]);
+    // The same day written in another form is no change.
+    let start = effect(&change, "scheduledstart");
+    assert_eq!(start.effect, ToolCallEffectKind::Unchanged);
+    assert_eq!(texts(&start.values), ["2026-11-18"]);
+    // A time of day would be lost in the shorter form, so both stay as written.
+    let due = effect(&change, "duedate");
+    assert_eq!(due.old.as_ref().unwrap().text, "2026-11-20T09:30:00");
+    assert_eq!(texts(&due.values), ["2026-11-21"]);
+}
+
+#[test]
+fn a_list_member_named_for_setting_it_is_named_for_the_list() {
+    let save = tool_with_schema(
+        "save_project",
+        "",
+        json!({"type": "object", "properties": {
+            "id": {"type": "string"},
+            "setTeams": {"type": "array", "items": {"type": "string"},
+                "description": "Replace all teams with these."},
+        }}),
+    );
+    let change = change_with(
+        &save,
+        json!({"id": "P-ENG-9", "setTeams": ["Platform"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    let teams = effect(&change, "setTeams");
+    assert_eq!(teams.effect, ToolCallEffectKind::ListReplaced);
+    assert_eq!(teams.name, "Teams");
+    let settings = change_of("update_app", json!({"id": "a1", "settings": ["x"]}));
+    assert_eq!(effect(&settings, "settings").name, "Settings");
+}
+
+#[test]
 fn a_coded_old_value_compares_in_the_same_form_as_the_new_one() {
     let context = read_issue(json!({"name": "Low", "value": 4}));
     let update = tool("update_issue", "", None);

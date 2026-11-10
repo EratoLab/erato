@@ -797,23 +797,22 @@ impl<'a> Walk<'a> {
                     match self.list_claim(member, path) {
                         ListClaim::Removes => {
                             effect.effect = ToolCallEffectKind::ListRemoved;
-                            self.drop_leading_verb(
-                                member,
-                                &mut effect.name,
-                                ToolCallAction::Delete,
-                            );
+                            let removes = member_list_verb(member) == Some(ToolCallAction::Delete);
+                            self.drop_first_word(member, &mut effect.name, removes);
                         }
                         ListClaim::OwnAdds => {
                             effect.effect = ToolCallEffectKind::ListAdded;
-                            self.drop_leading_verb(
-                                member,
-                                &mut effect.name,
-                                ToolCallAction::Create,
-                            );
+                            let adds = member_list_verb(member) == Some(ToolCallAction::Create);
+                            self.drop_first_word(member, &mut effect.name, adds);
                         }
                         ListClaim::Adds => {}
                         ListClaim::Replaces | ListClaim::Unknown => {
                             effect.effect = ToolCallEffectKind::ListReplaced;
+                            // `setTeams` reads "Teams set to", never "Set teams set to".
+                            let words = name_words(member);
+                            let sets =
+                                words.len() > 1 && matches!(words[0].as_str(), "set" | "replace");
+                            self.drop_first_word(member, &mut effect.name, sets);
                             self.diff_list(member, path, &entries, &mut effect);
                         }
                     }
@@ -929,7 +928,20 @@ impl<'a> Walk<'a> {
         let Some(earlier) = self.earlier_field(member) else {
             return;
         };
-        let new = scalar_text(scalar).unwrap_or_default();
+        let mut new = scalar_text(scalar).unwrap_or_default();
+        let mut earlier = earlier;
+        // A day read as `2026-11-20T00:00:00` and written as `2026-11-27`
+        // reads in one form, and the same day in another form is no change.
+        if let Some((old_day, new_day)) = same_date_form(&earlier.text, &new) {
+            if let [value] = effect.values.as_mut_slice()
+                && !value.machine_id
+                && value.text == new
+            {
+                value.text.clone_from(&new_day);
+            }
+            earlier.text = old_day;
+            new = new_day;
+        }
         let coded = earlier.coded.as_ref();
         let same_code = coded.is_some_and(|coded| {
             coded.code == new || (coded.numeric && same_number(&coded.code, scalar))
@@ -1342,9 +1354,10 @@ impl<'a> Walk<'a> {
     }
 
     /// "Labels" for `removeLabels` once the row says the labels are removed:
-    /// the verb would only repeat what the row says. A glossary's name stays.
-    fn drop_leading_verb(&self, member: &str, name: &mut String, action: ToolCallAction) {
-        if self.glossary_name(member).is_some() || member_list_verb(member) != Some(action) {
+    /// the verb, when `applies`, would only repeat what the row says. A
+    /// glossary's name stays.
+    fn drop_first_word(&self, member: &str, name: &mut String, applies: bool) {
+        if !applies || self.glossary_name(member).is_some() {
             return;
         }
         let Some((_, rest)) = name.split_once(' ') else {
@@ -2063,6 +2076,39 @@ fn without_mark(text: &str) -> String {
 
 fn is_update_like(action: ToolCallAction) -> bool {
     matches!(action, ToolCallAction::Update | ToolCallAction::Upsert)
+}
+
+/// Two values that are a day each, one written as a bare date and the other
+/// as midnight of a date, as (old, new) bare dates; `None` when either holds
+/// a time of day or is no date at all.
+fn same_date_form(old: &str, new: &str) -> Option<(String, String)> {
+    fn bare_date(text: &str) -> bool {
+        let bytes = text.as_bytes();
+        bytes.len() == 10
+            && bytes.iter().enumerate().all(|(index, byte)| match index {
+                4 | 7 => *byte == b'-',
+                _ => byte.is_ascii_digit(),
+            })
+    }
+    fn midnight_of(text: &str) -> Option<&str> {
+        let date = text.get(..10).filter(|date| bare_date(date))?;
+        let time = text.get(10..)?.strip_prefix(['T', ' '])?;
+        let time = time
+            .strip_suffix('Z')
+            .or_else(|| time.strip_suffix("+00:00"))
+            .unwrap_or(time);
+        let zero = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte == b'0');
+        let mut parts = time.split([':', '.']);
+        let (hours, minutes) = (parts.next()?, parts.next()?);
+        (hours.len() == 2 && minutes.len() == 2 && zero(hours) && zero(minutes) && parts.all(zero))
+            .then_some(date)
+    }
+    let (old, new) = (old.trim(), new.trim());
+    match (bare_date(old), bare_date(new)) {
+        (true, true) | (false, false) => None,
+        (false, true) => midnight_of(old).map(|day| (day.to_string(), new.to_string())),
+        (true, false) => midnight_of(new).map(|day| (old.to_string(), day.to_string())),
+    }
 }
 
 fn scalar_is_number(scalar: &Value, text: &str) -> bool {
