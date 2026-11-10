@@ -2550,14 +2550,17 @@ describe("tasks waiting on the device", () => {
   describe("stopping a task's wait (ERMAIN-1165)", () => {
     const waitingCard = (
       overrides: Partial<ChatContextValue> = {},
-      props: { openItems?: (typeof asking)[] } = {},
+      props: {
+        openItems?: (typeof asking)[];
+        waitingItems?: (typeof waits)[];
+      } = {},
     ) =>
       withChatContext(
         <McpToolApprovalCard
           messageId="message-1"
           request={props.openItems ? mixedStop : waitingStop}
           openItems={props.openItems ?? []}
-          waitingItems={[waits]}
+          waitingItems={props.waitingItems ?? [waits]}
           resolution={null}
         />,
         "chat-1",
@@ -2568,28 +2571,32 @@ describe("tasks waiting on the device", () => {
         String(url),
         (init as RequestInit | undefined)?.method,
       ]);
-
-    it("ends the call's wait and continues the task at once", async () => {
-      const fetchMock = vi.fn().mockImplementation(async (url: string) =>
+    const stopsAndContinues = () =>
+      vi.fn().mockImplementation(async (url: string) =>
         url.endsWith("/cancel")
           ? new Response(JSON.stringify({ state: "ready" }), { status: 200 })
           : new Response(JSON.stringify({ state: "continuing" }), {
               status: 200,
             }),
       );
+    const stoppedLine =
+      "You stopped waiting. The task answers without this result.";
+
+    it("ends the call's wait and continues the task at once", async () => {
+      const fetchMock = stopsAndContinues();
       vi.stubGlobal("fetch", fetchMock);
       renderCard(waitingCard());
 
       const item = screen.getByTestId("waiting-task-item");
-      fireEvent.click(
-        within(item).getByRole("button", { name: "Stop waiting" }),
-      );
+      // The live region is on the page before it has anything to say, so the
+      // line is announced as a change.
+      const status = within(item).getByRole("status");
+      expect(status).toBeEmptyDOMElement();
+      const button = within(item).getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
 
-      expect(
-        await within(item).findByText(
-          "You stopped waiting. The task answers without this result.",
-        ),
-      ).toBeInTheDocument();
+      expect(await within(item).findByText(stoppedLine)).toBe(status);
       expect(posted(fetchMock)).toEqual([
         ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
         ["/api/v1beta/me/client-operations/attempt/continue", "POST"],
@@ -2597,6 +2604,128 @@ describe("tasks waiting on the device", () => {
       expect(
         within(item).queryByRole("button", { name: "Stop waiting" }),
       ).toBeNull();
+      // The button that had focus is gone: the item, named by its task, has it.
+      expect(item).toHaveFocus();
+      expect(screen.getByRole("group", { name: "Check the calendar" })).toBe(
+        item,
+      );
+    });
+
+    it("keeps the button focused and inert while the stop runs", async () => {
+      let answerCancel: (response: Response) => void = () => undefined;
+      const fetchMock = vi.fn().mockImplementation((url: string) =>
+        url.endsWith("/cancel")
+          ? new Promise<Response>((resolve) => {
+              answerCancel = resolve;
+            })
+          : Promise.resolve(new Response("{}", { status: 200 })),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(waitingCard());
+
+      const button = screen.getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+      expect(button).toHaveAttribute("aria-busy", "true");
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+
+      await act(async () => {
+        answerCancel(
+          new Response(JSON.stringify({ state: "ready" }), { status: 200 }),
+        );
+      });
+      expect(await screen.findByText(stoppedLine)).toBeInTheDocument();
+      expect(
+        posted(fetchMock).filter(([url]) => url?.endsWith("/cancel")),
+      ).toHaveLength(1);
+    });
+
+    it("moves focus the stopped item held to the card when the row read again drops it", async () => {
+      vi.stubGlobal("fetch", stopsAndContinues());
+      const { rerender, queryClient } = renderCard(
+        waitingCard({}, { openItems: [asking] }),
+      );
+
+      const item = screen.getByTestId("waiting-task-item");
+      const button = within(item).getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+      await within(item).findByText(stoppedLine);
+      expect(item).toHaveFocus();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { openItems: [asking], waitingItems: [] })}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      const card = screen.getByTestId("approval-queue");
+      expect(card).toHaveFocus();
+      expect(
+        screen.getByRole("group", {
+          name: "This response is waiting on your decision",
+        }),
+      ).toBe(card);
+    });
+
+    it("moves focus to the card when the row read after a settled wait drops the item", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response("Operation already settled", { status: 409 }),
+          ),
+      );
+      let rerenderCard: (ui: ReactNode) => void = () => undefined;
+      const refetchMessages = vi.fn(async () => {
+        rerenderCard(
+          waitingCard(
+            { refetchMessages },
+            { openItems: [asking], waitingItems: [] },
+          ),
+        );
+      });
+      const { rerender, queryClient } = renderCard(
+        waitingCard({ refetchMessages }, { openItems: [asking] }),
+      );
+      rerenderCard = (ui) =>
+        rerender(
+          <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+        );
+
+      const button = screen.getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(screen.queryByTestId("waiting-task-item")).toBeNull(),
+      );
+      expect(screen.getByTestId("approval-queue")).toHaveFocus();
+    });
+
+    it("leaves focus elsewhere alone when the row read again drops an item", () => {
+      const { rerender, queryClient } = renderCard(
+        waitingCard({}, { openItems: [asking] }),
+      );
+      const elsewhere = screen.getByRole("button", { name: "Allow once" });
+      elsewhere.focus();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { openItems: [asking], waitingItems: [] })}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      expect(elsewhere).toHaveFocus();
     });
 
     it("reads the row again when the wait had already ended", async () => {

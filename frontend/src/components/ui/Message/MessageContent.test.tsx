@@ -2731,13 +2731,25 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderInChat({ provenance_kind: "delegation" });
 
-    expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+    const notice = screen.getByText(/waiting for a connected app/);
+    const button = screen.getByRole("button", { name: "Stop waiting" });
+    button.focus();
+    fireEvent.click(button);
 
-    expect(await screen.findByTestId("stop-waiting-done")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "You stopped waiting. The task answers without this result.",
+      ),
+    ).toBe(screen.getByTestId("stop-waiting-status"));
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       "/api/v1beta/me/client-operations/task-attempt/cancel",
     );
+    // The button that had focus is gone: the notice it stood beside has it.
+    expect(
+      screen.queryByRole("button", { name: "Stop waiting" }),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toContainElement(notice);
   });
 
   it.each([

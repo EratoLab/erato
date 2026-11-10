@@ -1,4 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
+import { useCallback, useId, useRef } from "react";
 
 import {
   APPROVAL_CARD_SHELL_CLASS,
@@ -36,6 +37,9 @@ import type {
  * are listed below without decisions: the response goes on once they finish.
  * A stop behind the response's own waiting client tool call says the tasks go
  * on, but the response only continues once that call has finished too.
+ *
+ * The card is a group named by its title, and takes the focus a waiting task's
+ * item held when the item goes.
  */
 export const ApprovalQueueCard = ({
   request,
@@ -87,19 +91,31 @@ export const ApprovalQueueCard = ({
   const ordinal = position + 1;
   const remaining = itemCount - ordinal;
   const waitingCount = waiting.length;
+  const titleId = useId();
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const focusCard = useCallback(() => {
+    cardRef.current?.focus({ preventScroll: true });
+  }, []);
 
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
+      role="group"
+      aria-labelledby={titleId}
       data-testid="approval-queue"
       data-approval-kind={kind}
       data-item-count={itemCount}
       data-position={ordinal}
-      className={`${APPROVAL_CARD_SHELL_CLASS} space-y-2`}
+      className={`${APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
     >
       <div>
         {itemCount > 0 ? (
           <>
-            <p className="text-sm font-medium text-theme-fg-primary">
+            <p
+              id={titleId}
+              className="text-sm font-medium text-theme-fg-primary"
+            >
               {t({
                 id: "approvalQueue.title",
                 message: plural(itemCount, {
@@ -130,7 +146,10 @@ export const ApprovalQueueCard = ({
           </>
         ) : (
           <>
-            <p className="text-sm font-medium text-theme-fg-primary">
+            <p
+              id={titleId}
+              className="text-sm font-medium text-theme-fg-primary"
+            >
               {t({
                 id: "approvalQueue.waitingTitle",
                 message: plural(waitingCount, {
@@ -270,6 +289,7 @@ export const ApprovalQueueCard = ({
               key={item.approval_id}
               item={item}
               isArchived={isArchived}
+              onRemovedWithFocus={focusCard}
             />
           ))}
         </div>

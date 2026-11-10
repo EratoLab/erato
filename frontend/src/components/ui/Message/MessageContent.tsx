@@ -724,16 +724,20 @@ const rewriteFootnoteValue = (
 function TaskCallStopWaiting({
   chatId,
   attemptId,
+  focusNotice,
 }: {
   chatId: string;
   attemptId: string;
+  focusNotice: () => void;
 }) {
   const { data: chat } = useChatDetail({ pathParams: { chatId } });
   const isTaskCall =
     chat?.provenance_kind === DELEGATION_PROVENANCE_KIND &&
     !chat.adopted_at &&
     !chat.archived_at;
-  return isTaskCall ? <StopWaitingAction attemptId={attemptId} /> : null;
+  return isTaskCall ? (
+    <StopWaitingAction attemptId={attemptId} focusItem={focusNotice} />
+  ) : null;
 }
 
 /**
@@ -764,6 +768,11 @@ function ClientToolPendingNotice({
   const chatInReview = useSidecarReviewStore(
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );
+  // Takes the focus of the stop button once a stopped wait takes it away.
+  const noticeRef = React.useRef<HTMLDivElement | null>(null);
+  const focusNotice = React.useCallback(() => {
+    noticeRef.current?.focus({ preventScroll: true });
+  }, []);
   const notice =
     key && link ? (
       <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
@@ -778,9 +787,13 @@ function ClientToolPendingNotice({
     return notice;
   }
   return (
-    <div className="space-y-2">
+    <div ref={noticeRef} tabIndex={-1} className="focus-ring space-y-2">
       {notice}
-      <TaskCallStopWaiting chatId={chatId} attemptId={attemptId} />
+      <TaskCallStopWaiting
+        chatId={chatId}
+        attemptId={attemptId}
+        focusNotice={focusNotice}
+      />
     </div>
   );
 }
