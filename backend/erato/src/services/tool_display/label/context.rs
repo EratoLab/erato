@@ -163,10 +163,9 @@ pub(super) struct Record {
 pub(super) struct CodedValue {
     pub code: String,
     pub label: String,
+    /// The result wrote the code as a JSON number.
+    pub numeric: bool,
 }
-
-/// Field names that mean the same thing, compared without case.
-const SAME_FIELD_NAMES: [(&str, &str); 1] = [("state", "status")];
 
 impl Record {
     pub(super) fn list(&self, member: &str) -> Option<&RecordList> {
@@ -177,45 +176,11 @@ impl Record {
         self.coded.get(member)
     }
 
-    /// The field an earlier result kept under `member`, or, when it has none
-    /// and the name is one of [`SAME_FIELD_NAMES`], under its one synonym.
-    /// `sibling_members` are the other members the call writes next to it: a
-    /// call that writes both names means two fields. Returns the name found.
-    pub(super) fn field_or_synonym(
-        &self,
-        member: &str,
-        sibling_members: impl Fn(&str) -> bool,
-    ) -> Option<(String, String)> {
-        if let Some(value) = self.fields.get(member) {
-            return Some((member.to_string(), value.clone()));
-        }
-        let synonym = SAME_FIELD_NAMES.iter().find_map(|(a, b)| {
-            if member.eq_ignore_ascii_case(a) {
-                Some(*b)
-            } else if member.eq_ignore_ascii_case(b) {
-                Some(*a)
-            } else {
-                None
-            }
-        })?;
-        if sibling_members(synonym) {
-            return None;
-        }
-        let mut same: Vec<&String> = self
-            .fields
-            .keys()
-            .filter(|key| key.eq_ignore_ascii_case(synonym))
-            .collect();
-        let found = same.pop()?;
-        if !same.is_empty()
-            || self
-                .fields
-                .keys()
-                .any(|key| key.eq_ignore_ascii_case(member))
-        {
-            return None;
-        }
-        Some((found.clone(), self.fields.get(found)?.clone()))
+    /// The field an earlier result kept under exactly `member`. Another
+    /// field is never taken for it: a call's `state` may be an address's
+    /// state as well as a record's `status`.
+    pub(super) fn field(&self, member: &str) -> Option<&String> {
+        self.fields.get(member)
     }
 }
 
@@ -813,6 +778,13 @@ impl ToolResultContext {
                     if name.is_some() {
                         record.name = name;
                     }
+                    // A code an older read gave a field would stand beside
+                    // the value this read gives it.
+                    for member in fields.keys().chain(lists.keys()) {
+                        if !coded.contains_key(member) {
+                            record.coded.remove(member);
+                        }
+                    }
                     for (member, value) in fields {
                         if record.fields.len() < MAX_FIELDS_PER_RECORD
                             || record.fields.contains_key(&member)
@@ -1276,19 +1248,33 @@ impl ReadValues {
         self.fields.is_empty() && self.lists.is_empty()
     }
 
-    /// Keeps a label with its code, as a field that reads as the label.
+    /// Keeps a label with its code, as a field that reads as the label, or a
+    /// name with a text value as a field that reads as the value.
     fn keep_coded(&mut self, member: &str, value: &Map<String, Value>) -> bool {
-        let Some(pair) = coded_pair(value) else {
-            return false;
-        };
-        self.fields.insert(member.to_string(), pair.label.clone());
-        self.coded.insert(member.to_string(), pair);
-        true
+        if let Some(pair) = coded_pair(value) {
+            self.fields.insert(member.to_string(), pair.label.clone());
+            self.coded.insert(member.to_string(), pair);
+            return true;
+        }
+        if let Some(text) = named_text(value) {
+            self.fields.insert(member.to_string(), text);
+            return true;
+        }
+        false
     }
 }
 
 const LABEL_KEYS: [&str; 4] = ["name", "label", "title", "displayname"];
-const CODE_KEYS: [&str; 3] = ["value", "code", "key"];
+/// Under `value` only a number is a code: `{"name": "Region", "value": "EMEA"}`
+/// names an attribute as often as it labels a choice.
+const STRING_CODE_KEYS: [&str; 2] = ["code", "key"];
+
+fn member_in<'a>(object: &'a Map<String, Value>, names: &[&str]) -> Option<&'a Value> {
+    object
+        .iter()
+        .find(|(member, _)| is_any_of(member, names))
+        .map(|(_, value)| value)
+}
 
 /// A label with the short code it stands for: `{"name": "Low", "value": 4}`
 /// or `{"label": "Low", "code": "4"}`. Exactly those two members, so a link's
@@ -1297,20 +1283,39 @@ fn coded_pair(object: &Map<String, Value>) -> Option<CodedValue> {
     if object.len() != 2 {
         return None;
     }
-    let member_in = |names: &[&str]| {
-        object
-            .iter()
-            .find(|(member, _)| is_any_of(member, names))
-            .map(|(_, value)| value)
-    };
-    let label = clean(member_in(&LABEL_KEYS)?.as_str()?);
-    let code = match member_in(&CODE_KEYS)? {
-        Value::Number(number) => number.to_string(),
-        Value::String(text) if super::choices::is_choice_code(text) => text.clone(),
+    let label = clean(member_in(object, &LABEL_KEYS)?.as_str()?);
+    let (code, numeric) = match (
+        member_in(object, &["value"]),
+        member_in(object, &STRING_CODE_KEYS),
+    ) {
+        (Some(Value::Number(number)), None) | (None, Some(Value::Number(number))) => {
+            (number.to_string(), true)
+        }
+        (None, Some(Value::String(text))) => (text.clone(), false),
         _ => return None,
     };
-    (!label.is_empty() && label.chars().count() <= super::choices::MAX_CHOICE_LABEL_CHARS)
-        .then_some(CodedValue { code, label })
+    let usable = super::choices::is_choice_code(&code)
+        && !label.is_empty()
+        && label.chars().count() <= super::choices::MAX_CHOICE_LABEL_CHARS
+        && !super::machine_id::is_machine_id(&label);
+    usable.then_some(CodedValue {
+        code,
+        label,
+        numeric,
+    })
+}
+
+/// The text value of `{"name": "Region", "value": "EMEA"}`: what a call
+/// writing the field compares with, whether the name is the value's label or
+/// the attribute's.
+fn named_text(object: &Map<String, Value>) -> Option<String> {
+    if object.len() != 2 || !member_in(object, &LABEL_KEYS)?.is_string() {
+        return None;
+    }
+    match member_in(object, &["value"])? {
+        Value::String(text) => Some(clean(text)).filter(|text| !text.is_empty()),
+        _ => None,
+    }
 }
 
 /// One value of a record, past its wrappers.

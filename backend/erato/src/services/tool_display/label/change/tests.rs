@@ -2201,30 +2201,103 @@ fn a_label_with_a_string_code_works_the_same_and_a_link_is_no_pair() {
 }
 
 #[test]
-fn state_and_status_are_the_same_field_when_only_one_was_read() {
+fn a_field_only_compares_with_the_field_of_the_same_name() {
     let context = read_of(
-        "get_issue",
+        "get_contact",
         json!({"id": RECORD}),
-        json!({"id": RECORD, "title": "Upload fails", "status": "In Progress"}),
+        json!({"id": RECORD, "name": "Ada", "status": "active"}),
     );
-    let update = tool("update_issue", "", None);
-    let (change, _) = change_with(&update, json!({"id": RECORD, "state": "Done"}), &context);
-    let row = effect(&change, "state");
-    assert_eq!(row.effect, ToolCallEffectKind::Changed);
-    assert_eq!(row.old.as_ref().unwrap().text, "In Progress");
-
-    // A call that writes both means two fields.
-    let (both, _) = change_with(
-        &update,
-        json!({"id": RECORD, "state": "Done", "status": "Won"}),
+    let (change, _) = change_with(
+        &tool("update_contact", "", None),
+        json!({"id": RECORD, "state": "CA"}),
         &context,
     );
-    assert_eq!(effect(&both, "state").effect, ToolCallEffectKind::Set);
-    assert_eq!(effect(&both, "status").effect, ToolCallEffectKind::Changed);
+    let row = effect(&change, "state");
+    assert_eq!(row.effect, ToolCallEffectKind::Set);
+    assert_eq!(row.old, None);
+}
 
-    // Only the agreed pair counts.
-    let (other, _) = change_with(&update, json!({"id": RECORD, "stage": "Done"}), &context);
-    assert_eq!(effect(&other, "stage").effect, ToolCallEffectKind::Set);
+#[test]
+fn a_newer_read_without_the_code_retires_the_code_an_older_read_gave() {
+    let context = earlier(vec![
+        (
+            "get_issue",
+            json!({"id": RECORD}),
+            json!({"id": RECORD, "title": "Upload fails", "priority": {"name": "Low", "value": 4}}),
+        ),
+        (
+            "list_issues",
+            json!({}),
+            json!([{"id": RECORD, "title": "Upload fails", "priority": 2}]),
+        ),
+    ]);
+    let update = tool("update_issue", "", None);
+    let (back, _) = change_with(&update, json!({"id": RECORD, "priority": 4}), &context);
+    let row = effect(&back, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Changed);
+    assert_eq!(row.old.as_ref().unwrap().text, "2");
+    assert_eq!(row.old.as_ref().unwrap().meaning, None);
+    assert!(!back.notes.contains(&ToolCallChangeNote::NothingChanges));
+
+    let (other, _) = change_with(&update, json!({"id": RECORD, "priority": 3}), &context);
+    assert_eq!(effect(&other, "priority").old.as_ref().unwrap().text, "2");
+}
+
+#[test]
+fn a_coded_earlier_value_never_shows_a_contact_number_or_an_id_as_its_label() {
+    let context = read_of(
+        "get_contact",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "name": "Ada", "phone": {"label": "Mobile", "value": 4915112345678u64}}),
+    );
+    let (change, _) = change_with(
+        &tool("update_contact", "", None),
+        json!({"id": RECORD, "phone": 4915112345679u64}),
+        &context,
+    );
+    assert_eq!(effect(&change, "phone").old, None);
+
+    let context = read_issue(json!({"name": "5f0c2a10-0000-4000-8000-00000000d001", "value": 4}));
+    let (change, _) = change_with(
+        &tool("update_issue", "", None),
+        json!({"id": RECORD, "priority": 3}),
+        &context,
+    );
+    let old = effect(&change, "priority").old.as_ref().unwrap();
+    assert_eq!(old.meaning, None);
+    assert!(old.machine_id && old.text.is_empty(), "{old:?}");
+}
+
+#[test]
+fn the_same_number_as_an_integer_or_a_float_is_the_same_code() {
+    let context = read_issue(json!({"name": "Low", "value": 4.0}));
+    let update = tool("update_issue", "", None);
+    let (same, _) = change_with(&update, json!({"id": RECORD, "priority": 4}), &context);
+    assert_eq!(
+        effect(&same, "priority").effect,
+        ToolCallEffectKind::Unchanged
+    );
+    let (other, _) = change_with(&update, json!({"id": RECORD, "priority": 4.5}), &context);
+    assert_eq!(
+        effect(&other, "priority").effect,
+        ToolCallEffectKind::Changed
+    );
+}
+
+#[test]
+fn a_name_beside_a_text_value_is_no_label_and_the_value_is_compared() {
+    let context = read_issue(json!({"name": "Region", "value": "EMEA"}));
+    let update = tool("update_issue", "", None);
+    let (same, _) = change_with(&update, json!({"id": RECORD, "priority": "EMEA"}), &context);
+    let row = effect(&same, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Unchanged);
+    let old = row.old.as_ref().unwrap();
+    assert_eq!((old.text.as_str(), &old.meaning), ("EMEA", &None));
+
+    let (other, _) = change_with(&update, json!({"id": RECORD, "priority": "APAC"}), &context);
+    let row = effect(&other, "priority");
+    assert_eq!(row.effect, ToolCallEffectKind::Changed);
+    assert_eq!(row.old.as_ref().unwrap().text, "EMEA");
 }
 
 #[test]

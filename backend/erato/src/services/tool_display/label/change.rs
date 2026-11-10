@@ -837,19 +837,21 @@ impl<'a> Walk<'a> {
         if !is_update_like(self.action) {
             return;
         }
-        let Some(earlier) = self.earlier_field(member, path) else {
+        let Some(earlier) = self.earlier_field(member) else {
             return;
         };
         let new = scalar_text(scalar).unwrap_or_default();
         let coded = earlier.coded.as_ref();
-        let same_code = coded.is_some_and(|coded| coded.code == new);
+        let same_code = coded.is_some_and(|coded| {
+            coded.code == new || (coded.numeric && same_number(&coded.code, scalar))
+        });
         effect.effect = if earlier.text == new || same_code {
             ToolCallEffectKind::Unchanged
         } else {
             ToolCallEffectKind::Changed
         };
         let compared_as_code = same_code || (coded.is_some() && scalar_is_number(scalar, &new));
-        effect.old = match coded.filter(|_| compared_as_code) {
+        effect.old = match coded.filter(|_| compared_as_code && !below_a_recipient(path)) {
             Some(coded) => Some(self.old_code_shown(coded)),
             None => self.old_shown(member, &earlier.text, path).map(|mut old| {
                 if old.meaning.is_none()
@@ -867,29 +869,17 @@ impl<'a> Walk<'a> {
     }
 
     fn fill_old(&mut self, member: &str, path: &str, effect: &mut ToolCallEffect) {
-        if let Some(earlier) = self.earlier_field(member, path) {
+        if let Some(earlier) = self.earlier_field(member) {
             effect.old = self.old_shown(member, &earlier.text, path);
             self.used_earlier = true;
         }
     }
 
-    /// What an earlier read said about `member`, under its name or its one
-    /// synonym, when the call does not write the synonym as well.
-    fn earlier_field(&self, member: &str, path: &str) -> Option<EarlierField> {
-        let earlier = self.earlier.as_ref()?;
-        let siblings = self
-            .facts
-            .arguments
-            .pointer(parent_of(path))
-            .and_then(Value::as_object);
-        let writes_too = |synonym: &str| {
-            siblings
-                .is_some_and(|members| members.keys().any(|key| key.eq_ignore_ascii_case(synonym)))
-        };
-        let (found, text) = earlier.record.field_or_synonym(member, writes_too)?;
+    fn earlier_field(&self, member: &str) -> Option<EarlierField> {
+        let record = self.earlier.as_ref()?.record;
         Some(EarlierField {
-            coded: earlier.record.coded(&found).cloned(),
-            text,
+            text: record.field(member)?.clone(),
+            coded: record.coded(member).cloned(),
         })
     }
 
@@ -1772,13 +1762,16 @@ fn destructive_mark_adds_something(action: ToolCallAction, tool_name: &str) -> b
     !is_update_like(action) && !upsert_style
 }
 
-/// The pointer of the object holding the member at `path`.
-fn parent_of(path: &str) -> &str {
-    path.rsplit_once('/').map_or("", |(parent, _)| parent)
-}
-
 fn scalar_is_number(scalar: &Value, text: &str) -> bool {
     scalar.is_number() || text.parse::<f64>().is_ok()
+}
+
+/// `4` and `4.0` written as JSON numbers are one value.
+fn same_number(code: &str, scalar: &Value) -> bool {
+    scalar
+        .as_f64()
+        .zip(code.parse::<f64>().ok())
+        .is_some_and(|(new, old)| new == old)
 }
 
 fn is_one_of(member: &str, names: &[&str]) -> bool {
