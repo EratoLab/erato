@@ -1604,11 +1604,6 @@ export type ContentPartToolApprovalRequest = {
   display?: null | ToolDisplayMetadata;
   input: Value;
   kind?: ToolApprovalKind;
-  /**
-   * When a model's label last replaced the one this stop was stored with,
-   * so a client showing the parked card knows to load it again.
-   */
-  labels_updated_at?: string;
   mcp_server_id: string;
   pending_tool_calls?: PendingToolCall[];
   preset: string;
@@ -2165,6 +2160,11 @@ export type FacetInfo = {
   display_name: string;
   icon?: string;
   id: string;
+  /**
+   * Whether this facet's indicator shows its display name. Absent: follow
+   * `show_facet_indicator_with_display_name` of the global settings.
+   */
+  show_indicator_with_display_name?: boolean;
 };
 
 export type FacetsResponse = {
@@ -2320,14 +2320,6 @@ export type GeneratingChat = {
    */
   ended_at?: string;
   initiator?: GenerationInitiator;
-  /**
-   * Set on an `action_required` chat once a model's label replaced the one
-   * its approval card was stored with; a client showing that card reloads
-   * the chat's messages when this changes.
-   *
-   * @format date-time
-   */
-  labels_updated_at?: string;
   /**
    * When the generation started
    *
@@ -4455,7 +4447,13 @@ export type ToolApprovalKind =
 /**
  * How the readable view shows one argument.
  */
-export type ToolArgumentKind = "group" | "list" | "id" | "text" | "value";
+export type ToolArgumentKind =
+  | "group"
+  | "list"
+  | "id"
+  | "machine_id"
+  | "text"
+  | "value";
 
 /**
  * One argument in the readable view. A member's name is the last segment of
@@ -4468,6 +4466,10 @@ export type ToolArgumentNode = {
    */
   children?: ToolArgumentNode[];
   kind: ToolArgumentKind;
+  /**
+   * The member's own name is a machine identifier, which a card does not show.
+   */
+  machine_name?: boolean;
   /**
    * Members or entries left out of `children`.
    *
@@ -4491,7 +4493,376 @@ export type ToolCallAction =
   | "move"
   | "send"
   | "comment"
+  | "share"
+  | "run"
+  | "upsert"
+  | "archive"
+  | "upload"
   | "other";
+
+/**
+ * Several rows in one call.
+ */
+export type ToolCallBatch = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  deletions?: number;
+  /**
+   * What each field does across the rows, the first ones the batch writes.
+   */
+  fields?: ToolCallBatchField[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  fields_omitted?: number;
+  name: string;
+  /**
+   * Rows per operation, when rows name their own.
+   */
+  operations?: ToolCallBatchOperation[];
+  path: string;
+  /**
+   * Every row was read. Only then may a card say what no row does.
+   */
+  read_all?: boolean;
+  /**
+   * The first rows, deletions first, each with its number in the call.
+   */
+  rows?: ToolCallBatchRow[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  rows_emptying?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  rows_replacing_lists?: number;
+  /**
+   * Every row writes the same values, ignoring what identifies a row.
+   */
+  same_change?: boolean;
+  /**
+   * The one change every row makes, when `same_change`.
+   */
+  shared?: ToolCallEffect[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  total: number;
+};
+
+/**
+ * What one field does across all of a batch's rows.
+ */
+export type ToolCallBatchField = {
+  /**
+   * How many different values the rows write.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  distinct: number;
+  /**
+   * `distinct` stopped counting at its cap.
+   */
+  distinct_capped?: boolean;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  emptied?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  lists_replaced?: number;
+  name: string;
+  raw_name: string;
+  /**
+   * Rows that write the field.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  rows: number;
+  /**
+   * The first different values, as examples.
+   */
+  samples?: ToolCallEffectValue[];
+};
+
+export type ToolCallBatchOperation = {
+  action: ToolCallAction;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  count: number;
+};
+
+export type ToolCallBatchRow = {
+  action?: ToolCallAction;
+  effects?: ToolCallEffect[];
+  /**
+   * Fields of the row past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  effects_omitted?: number;
+  /**
+   * What it is called; absent when only a machine ID identifies it.
+   */
+  name?: string;
+  /**
+   * `name` came from an earlier result naming a machine ID, not the call.
+   */
+  name_from_earlier?: boolean;
+  /**
+   * The row's position in the call, from 1.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  number: number;
+};
+
+/**
+ * What a call changes, described the same way for every server and computed
+ * by code from the call's real arguments next to its label: what each value
+ * does, how far it reaches, what is lost, and what the card cannot know.
+ * Shown only: it never decides whether a call needs approval.
+ */
+export type ToolCallChange = {
+  batch?: ToolCallBatch;
+  /**
+   * Every value was read and classified. Only then may a card state what
+   * the part it does not show cannot hold.
+   */
+  complete?: boolean;
+  /**
+   * The call set an approval value of its own, which is left out.
+   */
+  consent_left_out?: boolean;
+  counts?: ToolCallEffectCounts;
+  /**
+   * Every value the call writes, in the call's order. Capped; `counts`
+   * counts them all, and `complete` says whether everything was read.
+   */
+  effects?: ToolCallEffect[];
+  filter?: ToolCallFilter;
+  /**
+   * Boolean arguments that change what the call does; only those set.
+   */
+  flags?: ToolCallFlag[];
+  notes?: ToolCallChangeNote[];
+  /**
+   * Content the card cannot read: SQL, shell, code or an instruction.
+   */
+  opaque?: ToolCallOpaque[];
+  /**
+   * Statements past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  opaque_omitted?: number;
+  /**
+   * Where the record lives when no target says so: the table, the project,
+   * joined when the call names several.
+   */
+  place?: string;
+  recipients?: ToolCallRecipients;
+  /**
+   * Long text the call writes, shown as a block.
+   */
+  texts?: ToolCallTextChange[];
+  /**
+   * Long texts past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  texts_omitted?: number;
+};
+
+/**
+ * What a card says in a closed sentence: what the tool claims, always as the
+ * tool's claim, and what nobody can know.
+ */
+export type ToolCallChangeNote =
+  | "marked_destructive"
+  | "delete_outcome_unknown"
+  | "tool_says_permanent"
+  | "tool_says_restorable"
+  | "tool_says_replaces_list"
+  | "tool_says_adds_to_list"
+  | "list_replace_unknown"
+  | "tool_says_ignored_if_missing"
+  | "row_count_unknown"
+  | "instruction_outcome_unknown"
+  | "old_values_from_earlier"
+  | "nothing_changes"
+  | "other";
+
+/**
+ * One value a call writes and what happens to what is there.
+ */
+export type ToolCallEffect = {
+  /**
+   * What a replaced list gains, where an earlier result showed the list.
+   */
+  added?: ToolCallEffectValue[];
+  effect: ToolCallEffectKind;
+  /**
+   * What a replaced list keeps, where an earlier result showed the list.
+   */
+  kept?: ToolCallEffectValue[];
+  /**
+   * The value only links to another record.
+   */
+  link?: boolean;
+  /**
+   * The value is a list, whichever effect it has.
+   */
+  list?: boolean;
+  /**
+   * A readable name, display-cleaned.
+   */
+  name: string;
+  old?: ToolCallEffectValue;
+  /**
+   * List values past the cap.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
+  /**
+   * Where the value sits in `input`.
+   */
+  path: string;
+  /**
+   * The member as written, display-cleaned; the card shows it under see more.
+   */
+  raw_name: string;
+  /**
+   * What a replaced list loses, where an earlier result showed the list.
+   */
+  removed?: ToolCallEffectValue[];
+  /**
+   * The new value, or a list's new values; empty when the value is emptied.
+   */
+  values?: ToolCallEffectValue[];
+};
+
+/**
+ * How many values a call writes, by effect, including those past the caps.
+ */
+export type ToolCallEffectCounts = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  changed?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  emptied?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  list_replaced?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  set?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  unchanged?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  unreadable?: number;
+};
+
+/**
+ * What happens to a value, ranked from most to least to lose.
+ */
+export type ToolCallEffectKind =
+  | "emptied"
+  | "list_replaced"
+  | "changed"
+  | "set"
+  | "unchanged"
+  | "unreadable";
+
+/**
+ * One value as a card shows it.
+ */
+export type ToolCallEffectValue = {
+  /**
+   * A machine identifier: the card shows `text`, or a phrase when it is empty.
+   */
+  machine_id?: boolean;
+  /**
+   * Display-cleaned and capped. For a machine identifier: the name of the
+   * record it stands for, or empty when no result names it.
+   */
+  text?: string;
+  truncated?: boolean;
+};
+
+/**
+ * What a filter selects, in words.
+ */
+export type ToolCallFilter = {
+  /**
+   * The filter is empty: every record.
+   */
+  every_record?: boolean;
+  /**
+   * Conditions past the cap, which the card counts.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
+  parts?: ToolCallFilterPart[];
+  path: string;
+  text?: ToolCallEffectValue;
+};
+
+export type ToolCallFilterPart = {
+  /**
+   * The condition asks for an empty value.
+   */
+  is_empty?: boolean;
+  name: string;
+  value: ToolCallEffectValue;
+};
+
+export type ToolCallFlag = {
+  /**
+   * It asks for a dry run: the call says what it would do without doing it.
+   */
+  dry_run?: boolean;
+  name: string;
+  path: string;
+  raw_name: string;
+};
 
 /**
  * What a tool call does to what, and where, read from its arguments by code.
@@ -4502,6 +4873,7 @@ export type ToolCallAction =
 export type ToolCallLabel = {
   action: ToolCallAction;
   arguments?: ToolArgumentNode;
+  change?: ToolCallChange;
   /**
    * What the call acts on; empty on a `generic` label.
    */
@@ -4559,6 +4931,12 @@ export type ToolCallLabelSource = "own_mapping" | "rules" | "model" | "generic";
  */
 export type ToolCallLabelValue = {
   /**
+   * A machine identifier (see `tool_display::label::machine_id`): a card
+   * never shows `text`, only `resolved` if a name is known, and Technical
+   * details keeps it.
+   */
+  machine_id?: boolean;
+  /**
    * Where the value sits in `input`, with indices in place of `*`.
    */
   path: string;
@@ -4604,7 +4982,123 @@ export type ToolCallObjectKind =
   | "task"
   | "other";
 
+/**
+ * Content whose effect only reading it could tell.
+ */
+export type ToolCallOpaque = {
+  /**
+   * Risky words found in it, as written in the closed lists. Findings
+   * only: never the verb.
+   */
+  found?: string[];
+  kind: ToolCallOpaqueKind;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  lines: number;
+  name: string;
+  path: string;
+  raw_name: string;
+  /**
+   * Its start, display-cleaned; the card reads the rest from `input`.
+   */
+  text: string;
+  truncated?: boolean;
+  /**
+   * A write found in a statement that opens like a read.
+   */
+  write_inside_read?: boolean;
+};
+
+export type ToolCallOpaqueKind = "sql" | "shell" | "instruction" | "code";
+
+export type ToolCallRecipientGroup = {
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  count: number;
+  kind?: ToolCallRecipientKind;
+  name: string;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  omitted?: number;
+  raw_name: string;
+  /**
+   * Every address as written, capped; machine IDs are counted, not listed.
+   */
+  values?: string[];
+};
+
+/**
+ * How a group of recipients is addressed.
+ */
+export type ToolCallRecipientKind = "to" | "cc" | "bcc";
+
+/**
+ * Who a call reaches. Group addresses count as one and are never expanded.
+ */
+export type ToolCallRecipients = {
+  /**
+   * One group per recipient member: to, cc, bcc and the like.
+   */
+  groups: ToolCallRecipientGroup[];
+  /**
+   * Addresses outside the organisation, as written.
+   */
+  outside?: string[];
+  /**
+   * Whether `outside` was computed: the signed-in user's domain is known.
+   */
+  outside_known?: boolean;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  outside_omitted?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  total: number;
+  /**
+   * Recipients with no address to check, such as a number or an ID.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  unchecked?: number;
+};
+
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
+
+/**
+ * Long text a call writes.
+ */
+export type ToolCallTextChange = {
+  before?: ToolCallEffectValue;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  chars: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  lines: number;
+  name: string;
+  path: string;
+  raw_name: string;
+  /**
+   * Its start, display-cleaned; the card reads the rest from `input`.
+   */
+  text: string;
+  truncated?: boolean;
+};
 
 /**
  * Inert display text for a tool call, captured with the call: the tool

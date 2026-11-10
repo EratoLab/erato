@@ -22,6 +22,7 @@ import {
   scheduledFailureAlertItems,
   scheduledItemTab,
 } from "@/components/ui/Scheduled/scheduledItems";
+import { useCreateWithChat } from "@/hooks/scheduled/useCreateWithChat";
 import {
   useScheduledItems,
   useScheduledTemplates,
@@ -307,7 +308,8 @@ export function ScheduledPageView({
 }
 
 /**
- * Route page. The facet-preselected chat comes with ERMAIN-1143.
+ * Route page. "Create with chat" opens a new chat with the schedule facet
+ * selected, offered only while the user has that facet.
  */
 export default function ScheduledPage() {
   const navigate = useNavigate();
@@ -325,6 +327,7 @@ export default function ScheduledPage() {
   } = useScheduledItems();
   const { templates } = useScheduledTemplates();
   const { teamsAppName } = useScheduledFeature();
+  const createWithChat = useCreateWithChat();
 
   return (
     <ScheduledPageView
@@ -338,6 +341,7 @@ export default function ScheduledPage() {
       isLoading={isLoading}
       error={error}
       onNewReminder={() => navigate("/scheduled/new")}
+      onCreateWithChat={createWithChat}
       onTemplateSelect={(template) =>
         navigate(
           `/scheduled/new?${new URLSearchParams({ template: template.id }).toString()}`,

@@ -14,6 +14,7 @@ use super::connector::ActivityError;
 use super::host::Host;
 use super::render;
 use super::texts::Msg;
+use crate::db::entity::chats;
 use crate::db::entity::prelude::MsTeamsConversations;
 use crate::db::entity::scheduled_deliveries::{CreatedBy, Model};
 use crate::db::entity::scheduled_items::Model as ScheduledItem;
@@ -27,7 +28,7 @@ use crate::services::scheduled_deliveries::{
     find, schedule_once, store_action_token,
 };
 use crate::services::scheduled_items::{
-    self, Change, DONE_COMMAND, SNOOZE_COMMAND, SnoozeChoice, TOMORROW_COMMAND,
+    self, CONTINUE_COMMAND, Change, DONE_COMMAND, SNOOZE_COMMAND, SnoozeChoice, TOMORROW_COMMAND,
 };
 use crate::services::text_language;
 use chrono::{
@@ -520,12 +521,14 @@ impl DeliveryProducer for InactivityNudgeProducer {
             content: DeliveryContent {
                 title: None,
                 text: tip,
+                context: None,
                 summary: Some(Msg::TipFrom.fill(lang, &app)),
                 links,
                 actions: vec![DeliveryAction {
                     title: Msg::DontRemindMe.text(lang).to_string(),
                     command: OPT_OUT_COMMAND.to_string(),
                     token: Some(token),
+                    target: None,
                 }],
             },
         })
@@ -538,7 +541,11 @@ pub struct DeliverySubmit {
     action: String,
     pub delivery_id: Uuid,
     pub command: String,
-    pub token: Uuid,
+    /// Absent on buttons that need no single-use guard.
+    #[serde(default)]
+    pub token: Option<Uuid>,
+    #[serde(default)]
+    pub target: Option<Uuid>,
 }
 
 /// What a card button asks for. Parsed before the token is claimed, so an
@@ -551,6 +558,9 @@ pub enum DeliveryCommand {
     Done,
     /// A reminder's Snooze 30 min or Tomorrow 9:00.
     Snooze(SnoozeChoice),
+    /// A reminder's Continue here: its linked chat becomes the conversation's
+    /// current chat. It guards nothing, so it has no token.
+    ContinueChat,
 }
 
 impl DeliverySubmit {
@@ -565,24 +575,40 @@ impl DeliverySubmit {
             DONE_COMMAND => Some(DeliveryCommand::Done),
             SNOOZE_COMMAND => Some(DeliveryCommand::Snooze(SnoozeChoice::HalfAnHour)),
             TOMORROW_COMMAND => Some(DeliveryCommand::Snooze(SnoozeChoice::TomorrowMorning)),
+            CONTINUE_COMMAND => Some(DeliveryCommand::ContinueChat),
             _ => None,
         }
     }
 }
 
-/// `/reminders on|off` (and the German `/erinnerungen an|aus`): `Some(true)`
-/// turns tips on, `Some(false)` off.
-pub fn reminders_command(text: &str) -> Option<bool> {
+/// What a `/reminders` command (German `/erinnerungen`) asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemindersCommand {
+    /// `on|off` (`an|aus`): tips on or off.
+    Tips(bool),
+    /// No argument: the list of upcoming reminders.
+    List,
+}
+
+pub fn reminders_command(text: &str) -> Option<RemindersCommand> {
     let normalized = text.trim().to_lowercase();
     let mut words = normalized.split_whitespace();
     let command = words.next()?;
-    let argument = words.next()?;
+    if !matches!(command, "/reminders" | "/erinnerungen") {
+        return None;
+    }
+    let argument = words.next();
     if words.next().is_some() {
         return None;
     }
     match (command, argument) {
-        ("/reminders", "on") | ("/erinnerungen", "an") => Some(true),
-        ("/reminders", "off") | ("/erinnerungen", "aus") => Some(false),
+        (_, None) => Some(RemindersCommand::List),
+        ("/reminders", Some("on")) | ("/erinnerungen", Some("an")) => {
+            Some(RemindersCommand::Tips(true))
+        }
+        ("/reminders", Some("off")) | ("/erinnerungen", Some("aus")) => {
+            Some(RemindersCommand::Tips(false))
+        }
         _ => None,
     }
 }
@@ -593,14 +619,22 @@ pub fn delivery_card(content: &DeliveryContent, delivery_id: Uuid) -> Value {
     card_with_note(content, delivery_id, None)
 }
 
-/// The card once one of its buttons was used: the same text and links, no
-/// action buttons, and a line saying what happened.
+/// The card once one of its buttons was used: the same text and links, only
+/// the buttons without a token, and a line saying what happened.
 pub fn settled_delivery_card(content: &DeliveryContent, delivery_id: Uuid, note: &str) -> Value {
-    let content = DeliveryContent {
-        actions: Vec::new(),
+    card_with_note(&without_token_buttons(content), delivery_id, Some(note))
+}
+
+fn without_token_buttons(content: &DeliveryContent) -> DeliveryContent {
+    DeliveryContent {
+        actions: content
+            .actions
+            .iter()
+            .filter(|action| action.token.is_none())
+            .cloned()
+            .collect(),
         ..content.clone()
-    };
-    card_with_note(&content, delivery_id, Some(note))
+    }
 }
 
 fn card_with_note(content: &DeliveryContent, delivery_id: Uuid, note: Option<&str>) -> Value {
@@ -614,6 +648,12 @@ fn card_with_note(content: &DeliveryContent, delivery_id: Uuid, note: Option<&st
     if !content.text.is_empty() {
         body.push(json!({"type": "TextBlock", "text": content.text, "wrap": true}));
     }
+    if let Some(context) = content.context.as_deref() {
+        body.push(json!({
+            "type": "TextBlock", "text": context, "wrap": true,
+            "isSubtle": true, "size": "Small", "spacing": "Small",
+        }));
+    }
     if let Some(note) = note {
         body.push(json!({
             "type": "TextBlock", "text": note, "wrap": true,
@@ -626,10 +666,16 @@ fn card_with_note(content: &DeliveryContent, delivery_id: Uuid, note: Option<&st
         .map(|link| json!({"type": "Action.OpenUrl", "title": link.title, "url": link.url}))
         .collect();
     actions.extend(content.actions.iter().map(|action| {
-        json!({"type": "Action.Submit", "title": action.title, "data": {
-            "action": ACTION, "delivery_id": delivery_id,
-            "command": action.command, "token": action.token,
-        }})
+        let mut data = json!({
+            "action": ACTION, "delivery_id": delivery_id, "command": action.command,
+        });
+        if let Some(token) = action.token {
+            data["token"] = json!(token);
+        }
+        if let Some(target) = action.target {
+            data["target"] = json!(target);
+        }
+        json!({"type": "Action.Submit", "title": action.title, "data": data})
     }));
     render::card_message(
         cards::adaptive_card(body, actions),
@@ -692,16 +738,13 @@ impl DeliveryChannel for TeamsPersonalChannel {
             )
             .await
         {
-            // The posted content, without its tokens, lets a button press
-            // replace the card in place later.
+            // The posted content, without its token buttons, lets a button
+            // press replace the card in place later.
             Ok(activity_id) => DeliveryOutcome::Delivered {
                 details: json!({
                     "activity_id": activity_id,
                     "conversation_id": conversation.conversation_id,
-                    "content": DeliveryContent {
-                        actions: Vec::new(),
-                        ..content.clone()
-                    },
+                    "content": without_token_buttons(content),
                 }),
             },
             Err(error) => outcome_for_error(&error),
@@ -743,6 +786,9 @@ impl Host {
         conversation_id: &str,
         submit: &DeliverySubmit,
     ) -> Result<bool, Report> {
+        let Some(token) = submit.token else {
+            return Ok(false);
+        };
         let result = self
             .app_state
             .db
@@ -759,7 +805,7 @@ impl Host {
                 vec![
                     submit.delivery_id.into(),
                     user_id.into(),
-                    submit.token.to_string().into(),
+                    token.to_string().into(),
                     submit.command.clone().into(),
                     conversation_id.into(),
                 ],
@@ -771,6 +817,9 @@ impl Host {
     /// Give back a claimed token whose press changed nothing, so the card's
     /// buttons work again.
     pub async fn release_delivery_action(&self, submit: &DeliverySubmit) -> Result<(), Report> {
+        let Some(token) = submit.token else {
+            return Ok(());
+        };
         self.app_state
             .db
             .execute_raw(statement(
@@ -780,7 +829,7 @@ impl Host {
                  WHERE id = $1 AND state = 'delivered'
                    AND outcome->>'action_token' = $2
                    AND outcome->>'action_claimed_at' IS NOT NULL",
-                vec![submit.delivery_id.into(), submit.token.to_string().into()],
+                vec![submit.delivery_id.into(), token.to_string().into()],
             ))
             .await?;
         Ok(())
@@ -809,6 +858,17 @@ impl Host {
         choice: SnoozeChoice,
     ) -> Change<(ScheduledItem, DateTime<Utc>)> {
         scheduled_items::snooze_delivered(&self.app_state.db, user_id, delivery_id, choice).await
+    }
+
+    /// The chat a delivered reminder links to, while the user can still
+    /// continue it.
+    pub async fn reminder_chat_to_continue(
+        &self,
+        user_id: Uuid,
+        delivery_id: Uuid,
+        target: Option<Uuid>,
+    ) -> Result<Option<chats::Model>, Report> {
+        scheduled_items::chat_to_continue(&self.app_state.db, user_id, delivery_id, target).await
     }
 
     pub async fn stored_time_zone(&self, user_id: Uuid) -> Result<Option<Tz>, Report> {
@@ -931,13 +991,17 @@ mod tests {
 
     #[test]
     fn reminders_commands_in_both_languages() {
-        assert_eq!(reminders_command(" /reminders off "), Some(false));
-        assert_eq!(reminders_command("/Reminders ON"), Some(true));
-        assert_eq!(reminders_command("/erinnerungen aus"), Some(false));
-        assert_eq!(reminders_command("/erinnerungen an"), Some(true));
-        assert_eq!(reminders_command("/reminders"), None);
+        use RemindersCommand::{List, Tips};
+        assert_eq!(reminders_command(" /reminders off "), Some(Tips(false)));
+        assert_eq!(reminders_command("/Reminders ON"), Some(Tips(true)));
+        assert_eq!(reminders_command("/erinnerungen aus"), Some(Tips(false)));
+        assert_eq!(reminders_command("/erinnerungen an"), Some(Tips(true)));
+        assert_eq!(reminders_command("/reminders"), Some(List));
+        assert_eq!(reminders_command(" /Erinnerungen "), Some(List));
+        assert_eq!(reminders_command("/reminders an"), None);
         assert_eq!(reminders_command("/reminders off please"), None);
         assert_eq!(reminders_command("reminders off"), None);
+        assert_eq!(reminders_command("/remindersx"), None);
     }
 
     #[test]
@@ -947,6 +1011,7 @@ mod tests {
         let content = DeliveryContent {
             title: None,
             text: "Did you know?".into(),
+            context: None,
             summary: Some("A tip from Hugo".into()),
             links: vec![DeliveryLink {
                 title: "Open Hugo".into(),
@@ -956,6 +1021,7 @@ mod tests {
                 title: "Don't remind me".into(),
                 command: OPT_OUT_COMMAND.into(),
                 token: Some(token),
+                target: None,
             }],
         };
         let activity = delivery_card(&content, delivery_id);
@@ -966,7 +1032,7 @@ mod tests {
         assert_eq!(card["actions"][0]["url"], "https://hugo.example.com");
         let submit = DeliverySubmit::from_value(&card["actions"][1]["data"]).unwrap();
         assert_eq!(submit.delivery_id, delivery_id);
-        assert_eq!(submit.token, token);
+        assert_eq!(submit.token, Some(token));
         assert_eq!(submit.command, OPT_OUT_COMMAND);
         assert!(
             DeliverySubmit::from_value(&json!({"action": "other", "delivery_id": delivery_id, "command": "x", "token": token}))
@@ -1002,6 +1068,7 @@ mod tests {
         let content = DeliveryContent {
             title: Some("Call Ms Schulz".into()),
             text: "About the delivery date.".into(),
+            context: None,
             summary: Some("Call Ms Schulz".into()),
             links: vec![DeliveryLink {
                 title: "Q4 rate comparison".into(),
@@ -1011,6 +1078,7 @@ mod tests {
                 title: "Done".into(),
                 command: DONE_COMMAND.into(),
                 token: Some(Uuid::new_v4()),
+                target: None,
             }],
         };
         let activity = settled_delivery_card(&content, Uuid::new_v4(), "Marked as done.");

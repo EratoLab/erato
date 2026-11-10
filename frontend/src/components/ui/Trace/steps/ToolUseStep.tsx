@@ -3,6 +3,8 @@ import { useMemo } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import {
+  changeRowHasDetails,
+  ToolCallChangeRowDetails,
   ToolCallGistLine,
   ToolCallGistValues,
   ToolCallIdentity,
@@ -14,6 +16,7 @@ import {
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
+import { changeRowCounts } from "@/lib/toolCallGist/changeLabels";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
@@ -95,16 +98,20 @@ const GistRowDetails = ({
   failure: CleanText | undefined;
 }) => (
   <div className="space-y-1">
-    {gist.items.map((item, index) => (
-      <div key={index} className="space-y-1">
-        {index > 0 && (
-          <p className="text-xs text-theme-fg-secondary">
-            <ToolCallGistLine gist={gist} item={item} phase={phase} />
-          </p>
-        )}
-        {hasRowValues(item) && <ToolCallGistValues item={item} variant="row" />}
-      </div>
-    ))}
+    {gist.change
+      ? phase === "done" && <ToolCallChangeRowDetails change={gist.change} />
+      : gist.items.map((item, index) => (
+          <div key={index} className="space-y-1">
+            {index > 0 && (
+              <p className="text-xs text-theme-fg-secondary">
+                <ToolCallGistLine gist={gist} item={item} phase={phase} />
+              </p>
+            )}
+            {hasRowValues(item) && (
+              <ToolCallGistValues item={item} variant="row" />
+            )}
+          </div>
+        ))}
     {failure && (
       <p
         dir="auto"
@@ -200,8 +207,12 @@ const PlainToolUseStep = ({
   const showsDetails =
     gist !== undefined &&
     (failure !== undefined ||
-      gist.items.length > 1 ||
-      gist.items.some(hasRowValues));
+      (gist.change
+        ? phase === "done" && changeRowHasDetails(gist.change)
+        : gist.items.length > 1 || gist.items.some(hasRowValues)));
+  // Effects are facts only once the call has run.
+  const counts =
+    gist?.change && phase === "done" ? changeRowCounts(gist.change) : undefined;
   const link = useMemo(
     () =>
       part.status === "success" ? resultLinkOf(part.result_details) : undefined,
@@ -278,6 +289,11 @@ const PlainToolUseStep = ({
                 data-testid="tool-call-gist-line"
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={phase} />
+                {counts !== undefined && (
+                  <span className="font-normal text-theme-fg-muted">
+                    : {counts}
+                  </span>
+                )}
               </span>
             ) : (
               toolName

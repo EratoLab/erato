@@ -28,6 +28,7 @@ import {
   outlookMessageReference,
 } from "./outlookProvenance";
 import {
+  reviewedUnderStrict,
   runSidecarJob,
   runsAsSidecarJob,
   SidecarReviewEndedError,
@@ -152,6 +153,8 @@ export interface SidecarChatToolOptions {
     files: File[],
     context: ClientToolCallContext,
     outlookProvenance?: ReadonlyMap<File, OutlookFileProvenance>,
+    /** The person already approved these files in the native review. */
+    reviewed?: boolean,
   ) => Promise<ReadonlySet<File>>;
   uploadsEnabled: boolean;
   maxUploadBytes: number;
@@ -200,6 +203,12 @@ type ComposedMethod = keyof ComposedMethods;
  * its result is the same on either path.
  */
 interface SidecarReads {
+  /**
+   * Whether the person approved what these reads return in the native review:
+   * a strict sidecar delivers nothing else (DELEGATION.md). Their files are
+   * then not asked about again.
+   */
+  reviewed: boolean;
   /** Whether `method` answers: enabled on the sidecar, or run by the job. */
   has: (method: ComposedMethod) => boolean;
   /** `method`'s result; throws the error its direct request throws. */
@@ -281,7 +290,10 @@ function composedOutcomes(result: CallToolResult): SidecarStructuredContent {
 }
 
 /** What a job's call composed, read as the direct RPCs answer. */
-function jobReads(outcomes: SidecarStructuredContent): SidecarReads {
+function jobReads(
+  outcomes: SidecarStructuredContent,
+  reviewed: boolean,
+): SidecarReads {
   const has = (method: ComposedMethod) => Object.hasOwn(outcomes, method);
   const invoke = <M extends ComposedMethod>(
     method: M,
@@ -311,6 +323,7 @@ function jobReads(outcomes: SidecarStructuredContent): SidecarReads {
   ): Promise<T | null> =>
     has(method) ? invoke(method).then(pick, () => null) : Promise.resolve(null);
   return {
+    reviewed,
     has,
     invoke,
     sources: () =>
@@ -354,6 +367,10 @@ const REVIEW_ENDED: Record<SidecarReviewEndedError["state"], string> = {
   expired:
     "The review of this result in the Erato desktop app ended without a decision, so nothing was shared. Do not retry without the user's permission.",
 };
+
+/** Why a file approved in the review did not reach the turn. */
+const FILE_BLOCKED_AFTER_REVIEW =
+  'The user approved this file in the Erato desktop app, but their file upload setting is "Never allow", so it was not uploaded. Tell the user why, and do not retry unless they change that setting.';
 
 const GRANT_MISMATCH =
   "This call's grant does not belong to the task that made it, so nothing was read on this device.";
@@ -953,6 +970,7 @@ export function createSidecarChatTools(
       options: InvokeOptions,
     ) => Promise<unknown>;
     return {
+      reviewed: false,
       has: (method) => client.supports(method),
       invoke: <M extends ComposedMethod>(
         method: M,
@@ -989,7 +1007,15 @@ export function createSidecarChatTools(
       });
       context?.signal?.throwIfAborted();
       if (result.isError) return { ok: false, error: callErrorText(result) };
-      return shape(input, context, readAt, jobReads(composedOutcomes(result)));
+      return shape(
+        input,
+        context,
+        readAt,
+        jobReads(
+          composedOutcomes(result),
+          client.getSnapshot().strict === true && reviewedUnderStrict(name),
+        ),
+      );
     };
     const executeTool: ClientToolExecutor = async (input, context) => {
       const grant = context?.hostGrant;
@@ -1282,6 +1308,7 @@ export function createSidecarChatTools(
                 [...localFiles.values()],
                 context,
                 fileProvenance,
+                reads.reviewed,
               )
             : new Set<File>();
         context?.signal?.throwIfAborted();
@@ -1346,6 +1373,7 @@ export function createSidecarChatTools(
               } else if (!localFile || !approvedFiles.has(localFile)) {
                 fileId = undefined;
                 status = "rejected";
+                if (reads.reviewed) error = FILE_BLOCKED_AFTER_REVIEW;
               } else if (fileId) {
                 status = "uploaded";
               } else if (
@@ -1641,9 +1669,14 @@ export function createSidecarChatTools(
           [file],
           context,
           new Map(provenance ? [[file, provenance]] : []),
+          reads.reviewed,
         );
         context.signal?.throwIfAborted();
         if (!approved.has(file)) {
+          // The person shared it in the review, so a task's call reports the
+          // setting's block as a failure with its reason, not as a decline.
+          if (reads.reviewed)
+            return { ok: false, error: FILE_BLOCKED_AFTER_REVIEW };
           return declined(
             "The user rejected uploading this file. Do not retry without their permission.",
             context,

@@ -12,6 +12,7 @@ import type {
   GistValue,
   GistWarning,
 } from "./gist";
+import type { ToolCallOpaqueKind } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
  * The words of a tool-call gist: one whole sentence per verb and phase, so a
@@ -303,6 +304,268 @@ export const gistSentence = ({
           other: `Could not comment on ${kind}`,
         }),
       });
+    case "share.ask":
+      return t({
+        id: "toolGist.share.ask",
+        message: select(shape, {
+          full: `Share ${kind} ${title} in ${where}`,
+          titled: `Share ${kind} ${title}`,
+          placed: `Share ${kind} in ${where}`,
+          other: `Share ${kind}`,
+        }),
+      });
+    case "share.done":
+      return t({
+        id: "toolGist.share.done",
+        message: select(shape, {
+          full: `Shared ${kind} ${title} in ${where}`,
+          titled: `Shared ${kind} ${title}`,
+          placed: `Shared ${kind} in ${where}`,
+          other: `Shared ${kind}`,
+        }),
+      });
+    case "share.failed":
+      return t({
+        id: "toolGist.share.failed",
+        message: select(shape, {
+          full: `Could not share ${kind} ${title} in ${where}`,
+          titled: `Could not share ${kind} ${title}`,
+          placed: `Could not share ${kind} in ${where}`,
+          other: `Could not share ${kind}`,
+        }),
+      });
+    case "run.ask":
+      return t({
+        id: "toolGist.run.ask",
+        message: select(shape, {
+          full: `Run ${kind} ${title} in ${where}`,
+          titled: `Run ${kind} ${title}`,
+          placed: `Run ${kind} in ${where}`,
+          other: `Run ${kind}`,
+        }),
+      });
+    case "run.done":
+      return t({
+        id: "toolGist.run.done",
+        message: select(shape, {
+          full: `Ran ${kind} ${title} in ${where}`,
+          titled: `Ran ${kind} ${title}`,
+          placed: `Ran ${kind} in ${where}`,
+          other: `Ran ${kind}`,
+        }),
+      });
+    case "run.failed":
+      return t({
+        id: "toolGist.run.failed",
+        message: select(shape, {
+          full: `Could not run ${kind} ${title} in ${where}`,
+          titled: `Could not run ${kind} ${title}`,
+          placed: `Could not run ${kind} in ${where}`,
+          other: `Could not run ${kind}`,
+        }),
+      });
+    case "upsert.ask":
+      return t({
+        id: "toolGist.upsert.ask",
+        message: select(shape, {
+          full: `Create or update ${kind} ${title} in ${where}`,
+          titled: `Create or update ${kind} ${title}`,
+          placed: `Create or update ${kind} in ${where}`,
+          other: `Create or update ${kind}`,
+        }),
+      });
+    case "upsert.done":
+      return t({
+        id: "toolGist.upsert.done",
+        message: select(shape, {
+          full: `Created or updated ${kind} ${title} in ${where}`,
+          titled: `Created or updated ${kind} ${title}`,
+          placed: `Created or updated ${kind} in ${where}`,
+          other: `Created or updated ${kind}`,
+        }),
+      });
+    case "upsert.failed":
+      return t({
+        id: "toolGist.upsert.failed",
+        message: select(shape, {
+          full: `Could not create or update ${kind} ${title} in ${where}`,
+          titled: `Could not create or update ${kind} ${title}`,
+          placed: `Could not create or update ${kind} in ${where}`,
+          other: `Could not create or update ${kind}`,
+        }),
+      });
+    case "archive.ask":
+      return t({
+        id: "toolGist.archive.ask",
+        message: select(shape, {
+          full: `Archive ${kind} ${title} in ${where}`,
+          titled: `Archive ${kind} ${title}`,
+          placed: `Archive ${kind} in ${where}`,
+          other: `Archive ${kind}`,
+        }),
+      });
+    case "archive.done":
+      return t({
+        id: "toolGist.archive.done",
+        message: select(shape, {
+          full: `Archived ${kind} ${title} in ${where}`,
+          titled: `Archived ${kind} ${title}`,
+          placed: `Archived ${kind} in ${where}`,
+          other: `Archived ${kind}`,
+        }),
+      });
+    case "archive.failed":
+      return t({
+        id: "toolGist.archive.failed",
+        message: select(shape, {
+          full: `Could not archive ${kind} ${title} in ${where}`,
+          titled: `Could not archive ${kind} ${title}`,
+          placed: `Could not archive ${kind} in ${where}`,
+          other: `Could not archive ${kind}`,
+        }),
+      });
+    case "upload.ask":
+      return t({
+        id: "toolGist.upload.ask",
+        message: select(shape, {
+          full: `Upload ${kind} ${title} to ${where}`,
+          titled: `Upload ${kind} ${title}`,
+          placed: `Upload ${kind} to ${where}`,
+          other: `Upload ${kind}`,
+        }),
+      });
+    case "upload.done":
+      return t({
+        id: "toolGist.upload.done",
+        message: select(shape, {
+          full: `Uploaded ${kind} ${title} to ${where}`,
+          titled: `Uploaded ${kind} ${title}`,
+          placed: `Uploaded ${kind} to ${where}`,
+          other: `Uploaded ${kind}`,
+        }),
+      });
+    case "upload.failed":
+      return t({
+        id: "toolGist.upload.failed",
+        message: select(shape, {
+          full: `Could not upload ${kind} ${title} to ${where}`,
+          titled: `Could not upload ${kind} ${title}`,
+          placed: `Could not upload ${kind} to ${where}`,
+          other: `Could not upload ${kind}`,
+        }),
+      });
+  }
+};
+
+/**
+ * The line of a call that runs something the card cannot read: the kind of
+ * content takes the place of the kind of thing.
+ */
+export const gistRunSentence = (
+  opaque: ToolCallOpaqueKind,
+  phase: GistPhase,
+  where: string | undefined,
+): string => {
+  const place = where ?? "";
+  const placed = where === undefined ? "other" : "placed";
+  const key: `${ToolCallOpaqueKind}.${GistPhase}` = `${opaque}.${phase}`;
+  switch (key) {
+    case "sql.ask":
+      return t({
+        id: "toolGist.runSql.ask",
+        message: select(placed, {
+          placed: `Run this SQL in ${place}`,
+          other: "Run this SQL",
+        }),
+      });
+    case "sql.done":
+      return t({
+        id: "toolGist.runSql.done",
+        message: select(placed, {
+          placed: `Ran this SQL in ${place}`,
+          other: "Ran this SQL",
+        }),
+      });
+    case "sql.failed":
+      return t({
+        id: "toolGist.runSql.failed",
+        message: select(placed, {
+          placed: `Could not run this SQL in ${place}`,
+          other: "Could not run this SQL",
+        }),
+      });
+    case "shell.ask":
+      return t({
+        id: "toolGist.runShell.ask",
+        message: select(placed, {
+          placed: `Run this command in ${place}`,
+          other: "Run this command",
+        }),
+      });
+    case "shell.done":
+      return t({
+        id: "toolGist.runShell.done",
+        message: select(placed, {
+          placed: `Ran this command in ${place}`,
+          other: "Ran this command",
+        }),
+      });
+    case "shell.failed":
+      return t({
+        id: "toolGist.runShell.failed",
+        message: select(placed, {
+          placed: `Could not run this command in ${place}`,
+          other: "Could not run this command",
+        }),
+      });
+    case "code.ask":
+      return t({
+        id: "toolGist.runCode.ask",
+        message: select(placed, {
+          placed: `Run this code in ${place}`,
+          other: "Run this code",
+        }),
+      });
+    case "code.done":
+      return t({
+        id: "toolGist.runCode.done",
+        message: select(placed, {
+          placed: `Ran this code in ${place}`,
+          other: "Ran this code",
+        }),
+      });
+    case "code.failed":
+      return t({
+        id: "toolGist.runCode.failed",
+        message: select(placed, {
+          placed: `Could not run this code in ${place}`,
+          other: "Could not run this code",
+        }),
+      });
+    case "instruction.ask":
+      return t({
+        id: "toolGist.runInstruction.ask",
+        message: select(placed, {
+          placed: `Hand this instruction to another assistant in ${place}`,
+          other: "Hand this instruction to another assistant",
+        }),
+      });
+    case "instruction.done":
+      return t({
+        id: "toolGist.runInstruction.done",
+        message: select(placed, {
+          placed: `Handed this instruction to another assistant in ${place}`,
+          other: "Handed this instruction to another assistant",
+        }),
+      });
+    case "instruction.failed":
+      return t({
+        id: "toolGist.runInstruction.failed",
+        message: select(placed, {
+          placed: `Could not hand this instruction to another assistant in ${place}`,
+          other: "Could not hand this instruction to another assistant",
+        }),
+      });
   }
 };
 
@@ -332,8 +595,16 @@ export const gistLineSentence = (
   gist: Gist,
   item: GistItem,
   phase: GistPhase,
-): string =>
-  gistSentence({
+): string => {
+  const opaque = gist.change?.opaque[0];
+  if (gist.action === "run" && opaque) {
+    return gistRunSentence(
+      opaque.kind,
+      phase,
+      item.where.length > 0 ? GIST_WHERE_SLOT : undefined,
+    );
+  }
+  return gistSentence({
     action: gist.action,
     phase,
     // A batch is counted in the line and named in its rows.
@@ -342,6 +613,7 @@ export const gistLineSentence = (
     title: GIST_TITLE_SLOT,
     where: GIST_WHERE_SLOT,
   });
+};
 
 const plainValues = (values: GistValue[]) =>
   listedValues(values)

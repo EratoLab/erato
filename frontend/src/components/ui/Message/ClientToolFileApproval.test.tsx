@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
@@ -16,6 +17,9 @@ import type {
 
 vi.mock("@/lib/generated/v1betaApi/v1betaApiComponents", () => ({
   fetchProfile: vi.fn(),
+}));
+vi.mock("@/hooks/ui/useThemedIcon", () => ({
+  useThemedIcon: () => "icon-id",
 }));
 vi.mock("@/providers/DesktopSidecarProvider", () => ({
   useDesktopSidecar: () => ({
@@ -83,6 +87,7 @@ const files = [
   new File(["second"], "second.txt"),
 ];
 beforeEach(() => {
+  useClientToolFileApprovalStore.setState({ blockedAfterReview: [] });
   vi.mocked(fetchProfile).mockReset();
   vi.mocked(fetchProfile).mockResolvedValue({
     client_tool_file_approval: "ask",
@@ -196,6 +201,92 @@ it.each(["never_allow", "always_allow"] as const)(
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   },
 );
+it.each(["ask", "always_allow"] as const)(
+  "does not ask again about files approved in the native review under %s",
+  async (policy) => {
+    vi.mocked(fetchProfile).mockResolvedValue({
+      client_tool_file_approval: policy,
+    } as UserProfile);
+    render(<Harness />);
+    let approved!: ReadonlySet<File>;
+    await act(async () => {
+      approved = await approveFiles(files, context, undefined, true);
+    });
+    expect(approved).toEqual(new Set(files));
+    expect(
+      screen.queryByTestId("client-tool-file-approval"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("client-tool-file-blocked-after-review"),
+    ).not.toBeInTheDocument();
+    expect(useConfirmationRegistryStore.getState().hasPending("chat")).toBe(
+      false,
+    );
+  },
+);
+it("keeps files approved in the native review blocked under never allow and says why", async () => {
+  vi.mocked(fetchProfile).mockResolvedValue({
+    client_tool_file_approval: "never_allow",
+  } as UserProfile);
+  const { unmount } = render(<Harness />);
+  let approved!: ReadonlySet<File>;
+  await act(async () => {
+    approved = await approveFiles(files, context, undefined, true);
+  });
+  expect(approved).toEqual(new Set());
+  expect(
+    screen.queryByTestId("client-tool-file-approval"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByTestId("client-tool-file-blocked-after-review"),
+  ).toHaveTextContent(
+    "Shared in the Erato desktop app but not uploaded: first.txt, second.txt. File uploads from this device are set to “Never allow”.",
+  );
+  unmount();
+  render(<Harness messageId="another-message" />);
+  expect(
+    screen.queryByTestId("client-tool-file-blocked-after-review"),
+  ).not.toBeInTheDocument();
+});
+it("shows a task's blocked files on the message that started the task", async () => {
+  vi.mocked(fetchProfile).mockResolvedValue({
+    client_tool_file_approval: "never_allow",
+  } as UserProfile);
+  render(<Harness messageId="owner-message" />);
+  await act(async () => {
+    await approveFiles(
+      files,
+      {
+        ...context,
+        hostGrant: {
+          ownerChatId: "owner-chat",
+          ownerMessageId: "owner-message",
+          requestingChatId: "chat",
+          requestingMessageId: "message",
+        },
+      },
+      undefined,
+      true,
+    );
+  });
+  expect(
+    screen.getByTestId("client-tool-file-blocked-after-review"),
+  ).toBeInTheDocument();
+});
+it("adds no notice when never allow blocks files nobody reviewed", async () => {
+  vi.mocked(fetchProfile).mockResolvedValue({
+    client_tool_file_approval: "never_allow",
+  } as UserProfile);
+  render(<Harness />);
+  let approved!: ReadonlySet<File>;
+  await act(async () => {
+    approved = await approveFiles(files, context);
+  });
+  expect(approved).toEqual(new Set());
+  expect(
+    screen.queryByTestId("client-tool-file-blocked-after-review"),
+  ).not.toBeInTheDocument();
+});
 it.each(["abort", "unmount", "reject"])(
   "rejects pending files on %s",
   async (mode) => {

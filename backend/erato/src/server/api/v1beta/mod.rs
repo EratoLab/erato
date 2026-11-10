@@ -1178,6 +1178,11 @@ pub struct FacetInfo {
     #[schema(nullable = false)]
     icon: Option<String>,
     default_enabled: bool,
+    /// Whether this facet's indicator shows its display name. Absent: follow
+    /// `show_facet_indicator_with_display_name` of the global settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    show_indicator_with_display_name: Option<bool>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -1298,6 +1303,7 @@ pub async fn facets(
                 display_name: facet.display_name.clone(),
                 icon: facet.icon.clone(),
                 default_enabled,
+                show_indicator_with_display_name: facet.show_indicator_with_display_name,
             });
             seen.insert(facet_id.clone());
         }
@@ -1320,6 +1326,7 @@ pub async fn facets(
                 display_name: facet.display_name.clone(),
                 icon: facet.icon.clone(),
                 default_enabled,
+                show_indicator_with_display_name: facet.show_indicator_with_display_name,
             });
         }
     }
@@ -2013,12 +2020,6 @@ pub struct GeneratingChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     initiator: Option<crate::models::message::GenerationInitiator>,
-    /// Set on an `action_required` chat once a model's label replaced the one
-    /// its approval card was stored with; a client showing that card reloads
-    /// the chat's messages when this changes.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(nullable = false)]
-    labels_updated_at: Option<DateTime<FixedOffset>>,
     /// Set on an `action_required` chat that has nothing for the user to
     /// decide: it waits for a connected app or for its tasks. A wait for a
     /// review in the Erato desktop app also reads this way, because only the
@@ -3653,14 +3654,6 @@ pub async fn generating_chats(
             _ => None,
         };
 
-        let labels_updated_at = (state == GenerationChatState::ActionRequired)
-            .then(|| {
-                row.labels_updated_at
-                    .as_deref()
-                    .and_then(|at| DateTime::parse_from_rfc3339(at).ok())
-            })
-            .flatten();
-
         chats.push(GeneratingChat {
             chat_id: row.id.to_string(),
             state,
@@ -3668,7 +3661,6 @@ pub async fn generating_chats(
             ended_at,
             title,
             initiator,
-            labels_updated_at,
             waiting_only: state == GenerationChatState::ActionRequired
                 && row
                     .pending_approval_parts

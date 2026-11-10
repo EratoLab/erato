@@ -39,6 +39,7 @@ export function useClientToolFileApproval() {
       files: File[],
       context: ClientToolCallContext,
       outlookProvenance?: ClientToolFileApprovalRequest["outlookProvenance"],
+      reviewed = false,
     ): Promise<ReadonlySet<File>> => {
       const { signal, chatId, hostGrant } = context;
       signal?.throwIfAborted();
@@ -50,9 +51,27 @@ export function useClientToolFileApproval() {
       const profile = await fetchProfile({}, signal);
       signal?.throwIfAborted();
       if (!mounted.current) return new Set();
-      if (profile.client_tool_file_approval === "always_allow")
+      if (profile.client_tool_file_approval === "never_allow") {
+        // The file stays blocked, but the person who just shared it must not
+        // be left to find it missing.
+        if (reviewed)
+          useClientToolFileApprovalStore.setState((state) => ({
+            blockedAfterReview: [
+              ...state.blockedAfterReview.filter(
+                (notice) => notice.toolCallId !== context.toolCallId,
+              ),
+              {
+                toolCallId: context.toolCallId,
+                messageId: hostGrant?.ownerMessageId ?? context.messageId,
+                fileNames: files.map((file) => file.name),
+              },
+            ],
+          }));
+        return new Set();
+      }
+      // Share in the native review was this question for these files.
+      if (reviewed || profile.client_tool_file_approval === "always_allow")
         return new Set(files);
-      if (profile.client_tool_file_approval === "never_allow") return new Set();
       return new Promise((resolve) => {
         const abort = () => request.finish(new Set());
         const request: ClientToolFileApprovalRequest = {

@@ -1774,8 +1774,6 @@ pub struct GeneratingChatRow {
     /// field, and for every ordinary user turn — which writes nothing, because
     /// the field is `skip_serializing_if = "Option::is_none"`.
     pub initiator: Option<String>,
-    /// `labels_updated_at` of the approval stop that ends that generation.
-    pub labels_updated_at: Option<String>,
     /// [`PARKED_DECISION_PARTS`] of the row the chat is parked on.
     pub pending_approval_parts: Option<serde_json::Value>,
 }
@@ -1806,14 +1804,10 @@ pub async fn get_generating_chats(
             "chats"."title_by_user_provided",
             "chats"."title_by_summary"
             ,"latest_gen"."initiator"
-            ,"latest_gen"."labels_updated_at"
             ,"latest_gen"."pending_approval_parts"
         FROM "chats"
         LEFT JOIN LATERAL (
             SELECT m.generation_parameters ->> 'initiator' AS "initiator",
-                CASE WHEN m.raw_message #>> '{{content,-1,content_type}}' = 'tool_approval_request'
-                    THEN m.raw_message #>> '{{content,-1,labels_updated_at}}'
-                END AS "labels_updated_at",
                 CASE WHEN "chats"."generation_state" = 'awaiting_approval'
                     THEN {parked_decision_parts}
                 END AS "pending_approval_parts"
