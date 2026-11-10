@@ -1162,49 +1162,66 @@ impl ToolResultContext {
     }
 
     /// A write that ran and set the member a record's name came from, as
-    /// `subject` on a task an earlier read named by its subject: when the
-    /// write names that one record and sets the member once to a plain name,
+    /// `subject` on a task an earlier read named by its subject: when an
+    /// update names that one record and sets the member once to a plain name,
     /// later cards name the record by it; when it is not certain which record
-    /// got which name, or the name is no longer plain, by no name. Its old
-    /// name is never shown again.
+    /// got which name, the name is no longer plain, or the write is no update
+    /// but sets a name, by no name. Its old name is never shown again.
     fn note_renames(&mut self, tool: &ToolUse, arguments: &Value, server: &str) {
-        let updates = tool
+        let action = tool
             .display
             .as_ref()
             .and_then(|display| display.label.as_ref())
-            .is_some_and(|label| {
-                matches!(
-                    label.action,
-                    ToolCallAction::Update | ToolCallAction::Upsert
-                )
-            });
-        if !updates {
+            .map(|label| label.action);
+        // A create names the record it makes. What a server says of its
+        // tool, such as that it only reads, never keeps an old name.
+        let creates = action.map_or_else(
+            || {
+                name_words(&tool.tool_name)
+                    .iter()
+                    .any(|word| word == "create")
+            },
+            |action| action == ToolCallAction::Create,
+        );
+        if creates {
             return;
         }
-        let Some(written) = written_names(arguments) else {
-            // Some members went unread: any record the call names may have
-            // been renamed.
-            self.forget_names(server, argument_ids(arguments, true));
-            return;
+        let updates = matches!(
+            action,
+            Some(ToolCallAction::Update | ToolCallAction::Upsert)
+        );
+        let written = written_names(arguments);
+        let sure = match &written {
+            Some(written) if written.names.is_empty() && !written.unattributed => return,
+            Some(written) => updates && !written.unattributed,
+            None => false,
         };
-        if written.is_empty() {
+        if !sure {
+            // Some members went unread, the write is no update, or it sets a
+            // name somewhere that may be another record's: any record it
+            // names may have been renamed.
+            let ids = argument_ids(arguments, true);
+            let hits = self
+                .records
+                .keys()
+                .filter(|key| key.server == server && names_key(ids.as_deref(), key))
+                .map(|key| (key.clone(), None))
+                .collect();
+            self.rename(server, hits);
             return;
         }
+        let written = written.map(|written| written.names).unwrap_or_default();
         let one = one_named_id(arguments);
         let ids = match &one {
             Some((id, _)) => Some(vec![id.clone()]),
             None => argument_ids(arguments, true),
         };
-        let mut changed = false;
-        for (key, record) in &mut self.records {
+        let mut hits = Vec::new();
+        for (key, record) in &self.records {
             let Some(member) = record.name_member.as_deref() else {
                 continue;
             };
-            let named = key.server == server
-                && ids.as_ref().is_none_or(|ids| {
-                    ids.contains(&key.id)
-                        || qualified_value(&key.id).is_some_and(|id| ids.iter().any(|i| i == id))
-                });
+            let named = key.server == server && names_key(ids.as_deref(), key);
             let set: Vec<&Option<String>> = written
                 .iter()
                 .filter(|(written, _)| written == member)
@@ -1216,36 +1233,84 @@ impl ToolResultContext {
             let exact = one
                 .as_ref()
                 .is_some_and(|(id, qualified)| key.id == *id || key.id == *qualified);
-            record.name = match set.as_slice() {
+            let name = match set.as_slice() {
                 [Some(text)] if exact => Some(text.clone()),
                 _ => None,
             };
-            if record.name.is_none() {
-                record.name_member = None;
-            }
-            changed = true;
+            hits.push((key.clone(), name));
         }
-        if changed {
-            self.bytes = self
-                .records
-                .iter()
-                .map(|(key, record)| record_bytes(key, record))
-                .sum();
-        }
+        self.rename(server, hits);
     }
 
-    /// Drops the names of the records of `server` that `ids` name, every
-    /// one of them when the IDs could not all be read.
-    fn forget_names(&mut self, server: &str, ids: Option<Vec<String>>) {
-        for (key, record) in &mut self.records {
-            let named = key.server == server
-                && ids.as_ref().is_none_or(|ids| {
-                    ids.contains(&key.id)
-                        || qualified_value(&key.id).is_some_and(|id| ids.iter().any(|i| i == id))
-                });
-            if named {
-                record.name = None;
-                record.name_member = None;
+    /// Gives each record in `hits` its new name, or none, and does the same
+    /// to the records of `server` that may be the same record under another
+    /// key: a read can keep one record under its own ID and under the ID the
+    /// read named it by. The one other record of the same read with the same
+    /// old name, when one of the two keys is such a named ID, is that record
+    /// and gets the same name; any other record still called by an old name
+    /// loses it, so the old name is never shown again.
+    fn rename(&mut self, server: &str, hits: Vec<(RecordKey, Option<String>)>) {
+        if hits.is_empty() {
+            return;
+        }
+        let mut renamed: Vec<(RecordKey, Option<String>)> = Vec::new();
+        let mut olds: Vec<(RecordKey, String, u32, Option<String>)> = Vec::new();
+        for (key, name) in hits {
+            let Some(record) = self.records.get(&key) else {
+                continue;
+            };
+            if let Some(old) = record.name.clone()
+                && record.name != name
+            {
+                olds.push((key.clone(), old, record.read, name.clone()));
+            }
+            renamed.push((key, name));
+        }
+        for (key, old, read, name) in &olds {
+            let aliases: Vec<&RecordKey> = self
+                .records
+                .iter()
+                .filter(|(other, record)| {
+                    other.server == server
+                        && *other != key
+                        && record.name.as_ref() == Some(old)
+                        && !renamed.iter().any(|(hit, _)| hit == *other)
+                })
+                .map(|(other, _)| other)
+                .collect();
+            let same_read: Vec<&RecordKey> = aliases
+                .iter()
+                .copied()
+                .filter(|other| self.records.get(*other).is_some_and(|r| r.read == *read))
+                .collect();
+            let one_alias = match same_read.as_slice() {
+                [alias]
+                    if qualified_value(&key.id).is_some()
+                        != qualified_value(&alias.id).is_some() =>
+                {
+                    Some(*alias)
+                }
+                _ => None,
+            };
+            let mut more: Vec<(RecordKey, Option<String>)> = aliases
+                .into_iter()
+                .map(|other| {
+                    let name = if Some(other) == one_alias {
+                        name.clone()
+                    } else {
+                        None
+                    };
+                    (other.clone(), name)
+                })
+                .collect();
+            renamed.append(&mut more);
+        }
+        for (key, name) in renamed {
+            if let Some(record) = self.records.get_mut(&key) {
+                if name.is_none() {
+                    record.name_member = None;
+                }
+                record.name = name;
             }
         }
         self.bytes = self
@@ -1449,6 +1514,16 @@ fn qualified_key(arguments: &Value, member: &str, id: &Value) -> Option<String> 
         scope.join("&"),
         sep = QUALIFIED_SEPARATOR
     ))
+}
+
+/// Whether `ids` name the record kept under `key`, by its own ID or the ID
+/// inside a member-qualified key; every record when the IDs could not all be
+/// read.
+fn names_key(ids: Option<&[String]>, key: &RecordKey) -> bool {
+    ids.is_none_or(|ids| {
+        ids.contains(&key.id)
+            || qualified_value(&key.id).is_some_and(|id| ids.iter().any(|i| i == id))
+    })
 }
 
 /// The ID inside a member-qualified key.
@@ -2472,14 +2547,17 @@ fn created_name(arguments: &Value) -> Option<RecordName> {
 /// `properties`, and in the entries of a list. A name it empties, one that is
 /// no plain name, and one in a list, which may be any entry's, are `None`.
 /// Objects about something else, such as an `author` or a link, are left
-/// out. `None` when the members read pass the cap.
-fn written_names(arguments: &Value) -> Option<Vec<(String, Option<String>)>> {
+/// out of `names`; a name set right inside one, as `issue.subject`, may
+/// still be the record's, so it makes the names `unattributed`. `None` when
+/// the members read pass the cap.
+fn written_names(arguments: &Value) -> Option<WrittenNames> {
     fn collect(
         value: &Value,
-        names: &mut Vec<(String, Option<String>)>,
+        written: &mut WrittenNames,
         nodes: &mut usize,
         depth: usize,
         in_list: bool,
+        own: bool,
     ) -> bool {
         if depth > 3 {
             return true;
@@ -2492,7 +2570,7 @@ fn written_names(arguments: &Value) -> Option<Vec<(String, Option<String>)>> {
                 *nodes = left;
                 entries
                     .iter()
-                    .all(|entry| collect(entry, names, nodes, depth + 1, true))
+                    .all(|entry| collect(entry, written, nodes, depth + 1, true, own))
             }
             Value::Object(object) if depth > 0 && is_link(object) => true,
             Value::Object(object) => {
@@ -2500,6 +2578,7 @@ fn written_names(arguments: &Value) -> Option<Vec<(String, Option<String>)>> {
                     return false;
                 };
                 *nodes = left;
+                let mut children = Vec::new();
                 for (member, value) in object {
                     let mut words = name_words(member);
                     if words.len() > 1 && words[0] == "new" {
@@ -2507,25 +2586,41 @@ fn written_names(arguments: &Value) -> Option<Vec<(String, Option<String>)>> {
                     }
                     let key = words.concat();
                     if NAME_KEYS.contains(&key.as_str()) {
-                        let text = name_text(value)
-                            .flatten()
-                            .filter(|text| !in_list && is_plain_name(text));
-                        names.push((key, text));
+                        if own {
+                            let text = name_text(value)
+                                .flatten()
+                                .filter(|text| !in_list && is_plain_name(text));
+                            written.names.push((key, text));
+                        } else {
+                            written.unattributed = true;
+                        }
+                    } else if !own {
+                        // Deeper down an object's values are its fields' own,
+                        // as `status.name` is.
+                    } else if value.is_array() || is_any_of(member, &rules::WRAPPER_MEMBERS) {
+                        children.push((value, true));
+                    } else if value.is_object() {
+                        children.push((value, false));
                     }
                 }
-                object
-                    .iter()
-                    .filter(|(member, child)| {
-                        child.is_array() || is_any_of(member, &rules::WRAPPER_MEMBERS)
-                    })
-                    .all(|(_, child)| collect(child, names, nodes, depth + 1, in_list))
+                children
+                    .into_iter()
+                    .all(|(child, own)| collect(child, written, nodes, depth + 1, in_list, own))
             }
             _ => true,
         }
     }
-    let mut names = Vec::new();
+    let mut written = WrittenNames::default();
     let mut nodes = MAX_NODES_PER_VALUE;
-    collect(arguments, &mut names, &mut nodes, 0, false).then_some(names)
+    collect(arguments, &mut written, &mut nodes, 0, false, true).then_some(written)
+}
+
+#[derive(Default)]
+struct WrittenNames {
+    names: Vec<(String, Option<String>)>,
+    /// A name is set inside an object about something the write does not
+    /// say is the record.
+    unattributed: bool,
 }
 
 /// The table a call names, lower case: a short word at its top level under a
