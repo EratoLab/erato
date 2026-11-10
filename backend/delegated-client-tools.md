@@ -110,8 +110,8 @@ is its active-thread tip, and either the last stop has an open item for the chil
 or the child's slot still waits for a client outside any stop. Decision parts
 after the stop do not end it, so a decision continuation that runs on another
 replica, or crashed, keeps the calls it waits for. The slot clause covers a turn
-that ended on a stop no child item can share (the tool-call limit) or on an
-error, or the user stopped the turn. The same owner clause authorizes a claimed
+that ended on an error, or that the user stopped, while it ran or with Stop at
+the tool-call limit. The same owner clause authorizes a claimed
 grant operation (Slow path), and `origin_approval_covering_child` uses the tip
 check too, so once the parent moved on a child's own card is answerable. An
 owner check that cannot read the shared lease is an error, never "not running":
@@ -191,8 +191,9 @@ first try and no 15 s grace.
   is open while the parent's slot (the last `tool_use` with its id) is
   `in_progress`, and only on the last stop. The slot holds the suspended envelope
   (`input_required`, reason `client_pending`), so the interrupted-parts sweep
-  leaves it alone. A turn that ends on a stop no child item can share (the
-  tool-call limit) leaves the child out; its slot still waits,
+  leaves it alone. The tool-call limit's stop carries the item too, after the
+  limit's own choice. A turn the user stopped leaves the child out, and so
+  does Stop at the limit, which takes the item off; its slot still waits,
   `parked_on_child` still holds, and the child's own tail settles the slot
   (`reconcile_orphaned_parent_slot`). A turn whose own durable client call
   waits does not leave them out: see "Approvals".
@@ -279,7 +280,8 @@ A child's client-tool Ask follows the MCP rule, `child_may_park_on_approval`: an
 awaited task child with `delegation.tasks.propagate_child_mcp_approvals` on parks,
 and anything else has the call refused. The parked child is one item on the
 parent's approval part, or joins the parent's own `mcp_tool` or `client_tool`
-part when the coordinator asked in the same batch (ERMAIN-1050 queue). When the
+part when the coordinator asked in the same batch (ERMAIN-1050 queue), or its
+`tool_call_limit` part when the batch reached the tool-call limit. When the
 coordinator's own durable client call waits instead (a review in the Erato desktop
 app, or a call that outlives its live window), the turn ends on that call's
 `client_tool_pending` part with the `delegated_task` part right behind it: the
@@ -292,9 +294,23 @@ stopped, which withdraws the part with the call so the task is answered in its
 own chat. A Stop that lands while an answered task runs ends the call the same
 way: the continuation holds an earlier copy of the row, so it finds the attempt
 ended, takes the call's part off that copy and settles the tool row as cancelled
-before it writes. A turn that ends on the tool-call limit also leaves the task
-to its own chat today. CT-10 allows no exception besides the stopped turn, so
-this is an open question for the owner, not settled design.
+before it writes.
+
+On the tool-call limit's stop the limit's choice is the first item and each
+task's question follows as an item of its own (ERMAIN-1164). Continue and
+Generate answer now settle the tasks' items as on any stop, so an approved task
+runs at once. The response then continues with twice the budget, or answers
+without tools, once nothing is left open; a task that asks again or still waits
+re-parks the turn on a `delegated_task` part that keeps the limit's pending
+calls, and the later resume reads the same choice. Stop ends the response as the
+user's own Stop does, the one exception CT-10 allows: the decision must withdraw
+every task item too (400 otherwise), the items are taken off the stop, and each
+task is answered in its own chat. Generate answer now while a client submission
+still waits for its correction ends the response without asking the model as
+well, and takes the tasks' items off the same way. The Teams bot asks each
+task's question on the limit's card; Continue and Generate answer now send the
+budget's choice beside them, and Stop withdraws all of them.
+
 `ChildApprovalRef.kind` says the child asked about a client tool, so the queue
 names this device and shows no MCP open-world warning. Always allow and Never
 allow on such an item are saved as the user's client-tool preference. The MCP

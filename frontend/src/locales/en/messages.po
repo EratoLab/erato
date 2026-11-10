@@ -8694,27 +8694,32 @@ msgid "toolCall.technicalDetails.tool"
 msgstr "Tool"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.answer"
 msgstr "Generate answer now"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.continue"
 msgstr "Continue tool calls"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.description"
 msgstr "Continue with twice the tool-call budget, generate an answer using the information collected so far, or stop this response."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.stop"
 msgstr "Stop"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
+msgid "toolCallLimit.tasksAsk"
+msgstr "Your tasks' questions come next. If you stop, each task waits for your decision in its own chat."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.title"
 msgstr "Tool-call limit reached"
 

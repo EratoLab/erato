@@ -185,7 +185,9 @@ const subMillisecondOf = (time: string): number => {
  *
  * A built-in call, such as cancelling a reminder, comes first whatever its
  * time: "Allow all" is offered from the first item on, and must not approve
- * a call whose question was never shown.
+ * a call whose question was never shown. So does the tool-call limit's choice:
+ * its Stop ends the response, and the tasks' questions after it no longer
+ * need an answer here.
  */
 export const approvalQueueOf = (
   request: { requested_at: string; kind?: ToolApprovalKind | null },
@@ -199,7 +201,10 @@ export const approvalQueueOf = (
       : { at, below: subMillisecondOf(time) };
   };
   const later = (item: ApprovalItemPart) =>
-    request.kind === "builtin_tool" && item.child != null ? 1 : 0;
+    (request.kind === "builtin_tool" || request.kind === "tool_call_limit") &&
+    item.child != null
+      ? 1
+      : 0;
   return open
     .map((item, index) => ({
       item,

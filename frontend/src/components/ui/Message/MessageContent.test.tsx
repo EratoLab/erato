@@ -2242,6 +2242,69 @@ describe("tasks waiting in their own chat", () => {
     expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
   });
 
+  // The tool-call limit's stop carries the task's question after its own
+  // choice; Stop at the limit takes the question back off.
+  const limitStop = (withTask: boolean): ContentPart => {
+    const task = childApprovalRequest() as unknown as {
+      approvals: unknown[];
+    };
+    const budget = {
+      approval_id: "tool-budget:1",
+      tool_call_id: "tool-budget:1",
+      tool_name: "Tool-call budget",
+      input: { budget: 15 },
+      child: null,
+    };
+    return {
+      ...(childApprovalRequest() as unknown as Record<string, unknown>),
+      tool_call_id: "tool-budget:1",
+      tool_name: "Tool-call budget",
+      input: { budget: 15 },
+      kind: "tool_call_limit",
+      approvals: withTask ? [budget, ...task.approvals] : [budget],
+    } as unknown as ContentPart;
+  };
+
+  it("asks the task's question on the tool-call limit's stop", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[taskSlot("input_required"), limitStop(true)]}
+      />,
+    );
+
+    expect(screen.queryByTestId("parked-task-notice")).not.toBeInTheDocument();
+    expect(screen.getByTestId("approval-queue")).toHaveAttribute(
+      "data-approval-kind",
+      "tool_call_limit",
+    );
+  });
+
+  it("points at the task once Stop at the tool-call limit sent it back", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          taskSlot("input_required"),
+          limitStop(false),
+          {
+            content_type: "tool_rejection",
+            tool_call_id: "tool-budget:1",
+            approval_id: "tool-budget:1",
+            never_allow: false,
+            rejected_at: "2026-08-06T00:01:00Z",
+            reason: "withdrawn",
+          } as unknown as ContentPart,
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId("parked-task-notice")).toHaveTextContent(
+      "Publish the notes",
+    );
+    expect(screen.queryByTestId("approval-queue")).not.toBeInTheDocument();
+  });
+
   it("says nothing while the turn is streaming", () => {
     renderWithQueryClient(
       <MessageContent

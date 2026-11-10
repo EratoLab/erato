@@ -8694,27 +8694,32 @@ msgid "toolCall.technicalDetails.tool"
 msgstr "Narzędzie"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.answer"
 msgstr "Wygeneruj odpowiedź teraz"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.continue"
 msgstr "Kontynuuj wywołania narzędzi"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.description"
 msgstr "Kontynuuj z dwukrotnie większym limitem wywołań narzędzi, wygeneruj odpowiedź na podstawie zebranych informacji lub zatrzymaj tę odpowiedź."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.stop"
 msgstr "Zatrzymaj"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
+msgid "toolCallLimit.tasksAsk"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.title"
 msgstr "Osiągnięto limit wywołań narzędzi"
 

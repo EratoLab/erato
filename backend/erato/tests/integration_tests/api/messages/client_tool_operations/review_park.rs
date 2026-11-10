@@ -290,6 +290,9 @@ const PROBE: &str = "publish_approval_probe";
 const PROBE_RESULT: &str = "approval probe published";
 const TASK_ANSWER: &str = "TASK-ANSWER-AFTER-THE-PROBE";
 const TURN_ANSWER: &str = "TURN-ANSWER-AFTER-BOTH";
+/// The answer of a turn that stopped at the tool-call limit before the search
+/// ran, once its task has answered.
+const LIMIT_ANSWER: &str = "LIMIT-ANSWER-WITH-THE-TASK";
 /// Long enough that the own call is popped and parks before the task asks: a
 /// task that asked first holds that call back, which is not the case here.
 const TASK_ASKS_AFTER: Duration = Duration::from_millis(1_500);
@@ -365,6 +368,17 @@ async fn setup_search_and_paced_task(
             .matcher(BodyContainsMatcher::new(&[TURN, "child_run_id", HIT], &[]))
             .matcher(capture);
         mock_llm_sse_response(then, build_openai_text_streaming_response(&[TURN_ANSWER]));
+    });
+    let capture = recorder.clone();
+    mocks.mock(move |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(
+                &[TURN, "child_run_id", TASK_ANSWER],
+                &[HIT],
+            ))
+            .matcher(capture);
+        mock_llm_sse_response(then, build_openai_text_streaming_response(&[LIMIT_ANSWER]));
     });
     let (mut config, mock) = setup_mock_llm_server_with_mocks(mocks).await;
     config.client_tools.durable_operations_enabled = true;
@@ -876,5 +890,246 @@ async fn a_second_question_from_the_task_stays_on_the_waiting_call(pool: Pool<Po
         turn_requests(&setup.recorder).len(),
         1,
         "the call and the task still wait"
+    );
+}
+
+// The tool-call limit's stop carries the task's question as any stop does
+// (ERMAIN-1164): the search reaches the limit, the task launched before it
+// asks, and the turn ends on one stop holding both.
+
+/// Submits the search and the task with room for one tool call, and returns
+/// the parent's message id with the limit's item and the task's.
+async fn park_on_the_limit(setup: &mut Setup) -> (Uuid, Value, Value) {
+    setup.state.config.generation.max_tool_calls_per_message = 1;
+    let response = tokio::time::timeout(
+        Duration::from_secs(30),
+        submit_search_and_task(&setup.state, setup.chat_id),
+    )
+    .await
+    .expect("the limit and the task's question should park the turn");
+    response.assert_status_ok();
+    let content = parts(setup).await;
+    let stop = content.last().unwrap();
+    assert_eq!(stop["content_type"], "tool_approval_request", "{content:?}");
+    assert_eq!(stop["kind"], "tool_call_limit", "{stop}");
+    assert_eq!(stop["input"]["budget"], 1, "{stop}");
+    assert!(
+        stop["pending_tool_calls"].to_string().contains(SEARCH_CALL),
+        "the search waits for the limit's choice: {stop}"
+    );
+    let [budget, task] = stop["approvals"].as_array().unwrap().as_slice() else {
+        panic!("the limit's choice and the task's question: {stop}");
+    };
+    assert_eq!(budget["approval_id"], stop["tool_call_id"], "{stop}");
+    assert!(budget["child"].is_null(), "{budget}");
+    assert_eq!(task["child"]["tool_name"], PROBE, "{task}");
+    assert!(task["child"]["waiting_for"].is_null(), "a question: {task}");
+    assert_eq!(
+        slot(&content, TASK_CALL)["output"]["status"],
+        "input_required"
+    );
+    assert_eq!(
+        generation_state(setup).await.as_deref(),
+        Some("awaiting_approval")
+    );
+    assert_eq!(turn_requests(&setup.recorder).len(), 1);
+    let message_id = child_row(setup, setup.chat_id).await.id;
+    (message_id, budget.clone(), task.clone())
+}
+
+fn decide_limit(
+    state: &erato::state::AppState,
+    message_id: Uuid,
+    decisions: &[(&Value, &str)],
+) -> axum_test::TestRequest {
+    app_server(state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Client-Tools", SEARCH)
+        .add_header(
+            "X-Erato-Additional-Executors",
+            serde_json::to_string(&[sidecar()]).unwrap(),
+        )
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": decisions
+                .iter()
+                .map(|(item, decision)| json!({
+                    "approval_id": item["approval_id"],
+                    "decision": decision,
+                }))
+                .collect::<Vec<_>>(),
+            "shows_child_items": true,
+        }))
+}
+
+/// While the task's question is on the limit's stop, only that stop answers it.
+async fn assert_covered_by_the_parent(setup: &Setup, child: Uuid) {
+    let covered = app_server(setup.state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"message_id": child_row(setup, child).await.id, "decision": "approve"}))
+        .await;
+    assert_eq!(
+        covered.status_code(),
+        http::StatusCode::CONFLICT,
+        "{}",
+        covered.text()
+    );
+    assert_eq!(covered.json::<Value>()["code"], "covered_by_parent");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn answer_now_at_the_tool_call_limit_resumes_the_task_its_question_rides_on(
+    pool: Pool<Postgres>,
+) {
+    let mut setup = setup_search_and_task(pool, TIMEOUT_MS, false).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+    assert_covered_by_the_parent(&setup, delegate_child(&parts(&setup).await)).await;
+
+    let answered = tokio::time::timeout(
+        Duration::from_secs(30),
+        decide_limit(
+            &setup.state,
+            message_id,
+            &[(&budget, "reject"), (&task, "approve")],
+        ),
+    )
+    .await
+    .expect("the task and then the turn should answer");
+    answered.assert_status_ok();
+
+    let content = parts(&setup).await;
+    let task_slot = slot(&content, TASK_CALL);
+    assert_eq!(task_slot["status"], "success", "{task_slot}");
+    assert!(
+        task_slot["output"]["result"]
+            .as_str()
+            .unwrap()
+            .contains(TASK_ANSWER),
+        "the approved task ran: {task_slot}"
+    );
+    let search = slot(&content, SEARCH_CALL);
+    assert_eq!(
+        search["output"]["status"], "rejected",
+        "answer now runs no held call: {search}"
+    );
+    assert!(
+        content.last().unwrap().to_string().contains(LIMIT_ANSWER),
+        "{content:?}"
+    );
+    assert!(
+        content
+            .iter()
+            .all(|part| part["content_type"] != "tool_approval_request"
+                || part["kind"] == "tool_call_limit"),
+        "nothing asks again: {content:?}"
+    );
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn continuing_at_the_tool_call_limit_resumes_the_task_and_then_the_held_call(
+    pool: Pool<Postgres>,
+) {
+    // A search that outlives its live window parks as a durable call, so the
+    // continuation ends on it once it ran.
+    let mut setup = setup_search_and_task(pool, 200, false).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+
+    let continued = tokio::time::timeout(
+        Duration::from_secs(30),
+        decide_limit(
+            &setup.state,
+            message_id,
+            &[(&budget, "approve"), (&task, "approve")],
+        ),
+    )
+    .await
+    .expect("the task should answer and the held search should run");
+    continued.assert_status_ok();
+
+    let content = parts(&setup).await;
+    assert_eq!(slot(&content, TASK_CALL)["status"], "success");
+    let request = parked(&setup).await;
+    assert!(
+        request.tool_call_id.ends_with(SEARCH_CALL),
+        "the held search ran with the doubled budget: {request:?}"
+    );
+    let pending = content.last().unwrap();
+    assert_eq!(
+        pending["content_type"], "client_tool_pending",
+        "{content:?}"
+    );
+    assert_eq!(pending["attempt_id"], json!(request.attempt_id));
+}
+
+/// Stop at the limit stops the turn as the user's own Stop does: the task's
+/// question leaves the stop and is answered in the task's own chat.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn stop_at_the_tool_call_limit_sends_the_tasks_question_back_to_its_own_chat(
+    pool: Pool<Postgres>,
+) {
+    let mut setup = setup_search_and_task(pool, TIMEOUT_MS, false).await;
+    let (message_id, budget, task) = park_on_the_limit(&mut setup).await;
+    let child = delegate_child(&parts(&setup).await);
+
+    // Stop cannot carry an answer to the task: it would be dropped unseen.
+    decide_limit(
+        &setup.state,
+        message_id,
+        &[(&budget, "withdraw"), (&task, "approve")],
+    )
+    .await
+    .assert_status(http::StatusCode::BAD_REQUEST);
+    assert_covered_by_the_parent(&setup, child).await;
+
+    decide_limit(
+        &setup.state,
+        message_id,
+        &[(&budget, "withdraw"), (&task, "withdraw")],
+    )
+    .await
+    .assert_status_ok();
+    let content = parts(&setup).await;
+    let stop = content
+        .iter()
+        .rfind(|part| part["content_type"] == "tool_approval_request")
+        .unwrap();
+    assert!(
+        stop["approvals"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["child"].is_null()),
+        "the task's question left the stop: {stop}"
+    );
+    assert_eq!(content.last().unwrap()["reason"], "withdrawn");
+    assert_eq!(
+        slot(&content, TASK_CALL)["output"]["status"],
+        "input_required"
+    );
+    assert_eq!(
+        child_row(&setup, setup.chat_id)
+            .await
+            .generation_metadata
+            .unwrap()["was_aborted"],
+        true
+    );
+    assert_eq!(
+        turn_requests(&setup.recorder).len(),
+        1,
+        "the stopped turn asks the model nothing"
+    );
+
+    let answered = app_server(setup.state.clone())
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({"message_id": child_row(&setup, child).await.id, "decision": "approve"}))
+        .await;
+    answered.assert_status_ok();
+    assert!(
+        answered.text().contains(TASK_ANSWER),
+        "the child's own card answers it: {}",
+        answered.text()
     );
 }
