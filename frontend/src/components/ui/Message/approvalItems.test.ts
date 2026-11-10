@@ -4,11 +4,57 @@ import {
   approvalQueueOf,
   approvalStopState,
   itemAllowsAlways,
+  parkedWaitsOnly,
   scopeGroup,
   scopeOf,
 } from "./approvalItems";
 
 import type { ApprovalItemPart } from "./approvalItems";
+import type { ContentPart } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
+describe("parkedWaitsOnly", () => {
+  const pending = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt-1",
+    tool_call_id: "call-1",
+    pending_tool_calls: [],
+  } as ContentPart;
+  const stop = (...approvals: ApprovalItemPart[]) =>
+    ({
+      content_type: "tool_approval_request",
+      tool_call_id: "stop",
+      tool_name: "delegate_task",
+      input: {},
+      approvals,
+    }) as unknown as ContentPart;
+  const waitingItem = (id: string): ApprovalItemPart =>
+    ({
+      ...ownItem(id),
+      child: { waiting_for: { host_context: "h", attempt_id: "a" } },
+    }) as unknown as ApprovalItemPart;
+
+  it("is true for a call that waits with no approval on the row", () => {
+    expect(parkedWaitsOnly([pending])).toBe(true);
+  });
+
+  it("is true for a stop of waiting tasks alone", () => {
+    expect(parkedWaitsOnly([stop(waitingItem("a"))])).toBe(true);
+  });
+
+  it("is false while the last stop has an open item, also behind a call", () => {
+    expect(parkedWaitsOnly([pending, stop(ownItem("a"))])).toBe(false);
+    expect(parkedWaitsOnly([stop(ownItem("a"), waitingItem("b"))])).toBe(false);
+  });
+
+  it("is true once every open item of the last stop was answered", () => {
+    const answered = {
+      content_type: "tool_approval",
+      approval_id: "a",
+      tool_call_id: "a",
+    } as unknown as ContentPart;
+    expect(parkedWaitsOnly([stop(ownItem("a")), answered, pending])).toBe(true);
+  });
+});
 
 const ownItem = (approvalId: string): ApprovalItemPart => ({
   approval_id: approvalId,

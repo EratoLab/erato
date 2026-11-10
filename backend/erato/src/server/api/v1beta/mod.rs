@@ -1629,6 +1629,10 @@ pub struct RecentChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pending_tool_approval_at: Option<DateTime<FixedOffset>>,
+    /// Set with `pending_tool_approval_at` when the stop has nothing for the
+    /// user to decide: it waits for a connected app or for its tasks.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pending_approval_waiting_only: bool,
     /// Provenance kind when the chat was spawned from another chat (e.g.
     /// `delegation` for a delegated run). Clients derive "is delegated run"
     /// from this value.
@@ -1986,8 +1990,9 @@ pub enum GenerationChatState {
     Running,
     Completed,
     Errored,
-    /// The generation is stopped on an MCP tool approval awaiting the user's
-    /// decision. Unlike the terminal states this does not age out.
+    /// The generation is parked. Usually on an approval awaiting the user's
+    /// decision; `waiting_only` says when nothing is asked of them. Unlike the
+    /// terminal states this does not age out.
     #[serde(rename = "action_required")]
     ActionRequired,
 }
@@ -2015,6 +2020,12 @@ pub struct GeneratingChat {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     initiator: Option<crate::models::message::GenerationInitiator>,
+    /// Set on an `action_required` chat that has nothing for the user to
+    /// decide: it waits for a connected app or for its tasks. A wait for a
+    /// review in the Erato desktop app also reads this way, because only the
+    /// browser that opened the review knows about it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    waiting_only: bool,
 }
 
 /// Response for the generating_chats endpoint
@@ -3650,6 +3661,11 @@ pub async fn generating_chats(
             ended_at,
             title,
             initiator,
+            waiting_only: state == GenerationChatState::ActionRequired
+                && row
+                    .pending_approval_parts
+                    .as_ref()
+                    .is_some_and(message_streaming::parked_waits_only),
         });
     }
 
@@ -3744,6 +3760,10 @@ async fn extend_recent_chats_to_api_model(
             assistant_name: chat.assistant_name,
             active_generation_started_at: chat.active_generation_started_at,
             pending_tool_approval_at: chat.pending_tool_approval_at,
+            pending_approval_waiting_only: chat
+                .pending_approval_parts
+                .as_ref()
+                .is_some_and(message_streaming::parked_waits_only),
             provenance_kind: chat.provenance_kind,
             provenance_run_mode: chat.provenance_run_mode,
             origin_chat_id: chat.origin_chat_id.map(|id| id.to_string()),
@@ -4605,6 +4625,7 @@ pub async fn archive_chat_endpoint(
     )
     .await
     .map_err(chat_write_error_status)?;
+    settle_archived_task(&app_state.db, &updated_chat).await;
 
     // Check if archived_at is set (it should be)
     let archived_at = updated_chat.archived_at.ok_or_else(|| {
@@ -4617,6 +4638,19 @@ pub async fn archive_chat_endpoint(
         chat_id: updated_chat.id.to_string(),
         archived_at,
     }))
+}
+
+/// Tells the turn that started `chat` that it was archived, if it still shows
+/// the task as waiting. A failure leaves the notice; the archive itself stands.
+async fn settle_archived_task(
+    db: &sea_orm::DatabaseConnection,
+    chat: &crate::db::entity_ext::chats::Model,
+) {
+    if let Err(error) =
+        crate::services::delegated_client_tools::settle_archived_task_slot(db, chat).await
+    {
+        tracing::warn!(chat_id = %chat.id, %error, "Could not settle an archived task's slot");
+    }
 }
 
 /// Unarchive a chat
@@ -4688,9 +4722,15 @@ pub async fn archive_all_chats_endpoint(
     State(app_state): State<AppState>,
     Extension(me_user): Extension<MeProfile>,
 ) -> Result<Json<ArchiveAllChatsResponse>, StatusCode> {
+    let parked_tasks = models::chat::parked_delegated_chats_for_owner(&app_state.db, &me_user.id)
+        .await
+        .map_err(log_internal_server_error)?;
     let archived_count = archive_all_unarchived_chats_for_owner(&app_state.db, &me_user.id)
         .await
         .map_err(log_internal_server_error)?;
+    for task in &parked_tasks {
+        settle_archived_task(&app_state.db, task).await;
+    }
 
     Ok(Json(ArchiveAllChatsResponse {
         archived_count: models::pagination::u64_to_i64_count(archived_count),

@@ -1,13 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
@@ -16,8 +10,15 @@ import {
 } from "@/components/providers/ThemeProvider";
 import { componentRegistry } from "@/config/componentRegistry";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
+import {
+  markReviewEnded,
+  rememberReview,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { ChatContext } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
@@ -2363,6 +2364,32 @@ describe("tasks waiting on the device", () => {
       "This task is waiting for one of its calls to run on this device.",
     );
   });
+
+  it("names the response's own waiting call beside a task that waits on the device", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          waitingSlot(),
+          {
+            content_type: "client_tool_pending",
+            attempt_id: "attempt-own",
+            tool_call_id: "call-own",
+            pending_tool_calls: [],
+          },
+          stopWith([waitingItem]),
+        ]}
+      />,
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveTextContent(
+      "It continues on its own once the task and the connected app have finished.",
+    );
+    expect(queue).not.toHaveTextContent(
+      "It continues on its own once the task finishes.",
+    );
+  });
 });
 
 it("renders local file consent alongside a submitted host card in the originating message", () => {
@@ -2498,30 +2525,162 @@ it("shows a durable app wait in persisted history and hides a consumed marker", 
   expect(screen.queryByRole("status")).toBeNull();
 });
 
-it("points a turn parked on a sidecar review to the Erato desktop app while the review is open", () => {
+it("keeps a waiting call's notice beside the question its task asked", () => {
   const pending: ContentPart = {
     content_type: "client_tool_pending",
     attempt_id: "attempt",
     tool_call_id: "call",
     pending_tool_calls: [],
   };
-  renderWithTheme(<MessageContent content={[pending]} />);
-  const notice = screen.getByRole("status");
-  expect(notice).toHaveTextContent("waiting for a connected app");
-  let reviewEnded = () => {};
-  act(() => {
-    reviewEnded = markAwaitingReview("chat", "call");
-  });
-  try {
-    expect(notice).toHaveTextContent(
-      "Ready for review in the Erato desktop app",
-    );
-  } finally {
-    act(() => reviewEnded());
-  }
-  expect(screen.getByRole("status")).toHaveTextContent(
-    "waiting for a connected app",
+  const view = renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[pending, childApprovalRequest()]}
+    />,
   );
+  expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+  expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+  view.unmount();
+  // An earlier call's marker, further up the row, is not a wait any more.
+  renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[
+        pending,
+        { content_type: "text", text: "Next step." },
+        childApprovalRequest(),
+      ]}
+    />,
+  );
+  expect(screen.queryByText(/waiting for a connected app/)).toBeNull();
+});
+
+it("says a decision behind the response's own waiting call lets only the task go on", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const view = renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[pending, childApprovalRequest()]}
+    />,
+  );
+  const queue = screen.getByTestId("approval-queue");
+  expect(queue).toHaveTextContent(
+    "The task goes on once you decide. The response continues when the connected app has finished.",
+  );
+  expect(queue).not.toHaveTextContent(
+    "The response continues once you decide.",
+  );
+  view.unmount();
+  // Without the waiting call in front, the decision lets the response go on.
+  renderWithQueryClient(
+    <MessageContent messageId="message-1" content={[childApprovalRequest()]} />,
+  );
+  expect(screen.getByTestId("approval-queue")).toHaveTextContent(
+    "The response continues once you decide.",
+  );
+});
+
+describe("a turn parked on a review in the Erato desktop app", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const search: ContentPart = {
+    content_type: "tool_use",
+    tool_call_id: "call",
+    tool_name: "search_sidecar_index",
+    status: "in_progress",
+    input: { query: "report" } as unknown as undefined,
+  };
+  const key = reviewLinkKey("message-1", "call");
+
+  afterEach(() => {
+    localStorage.clear();
+    useSidecarReviewLinks.setState({ links: {} });
+  });
+
+  it("shows one item in the slot, in place of the plain line", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const item = screen.getByTestId("sidecar-review-item");
+    expect(item).toHaveTextContent("Waiting for your review");
+    expect(item).toHaveTextContent("Search local emails and files");
+    expect(item).toHaveTextContent("one hour");
+    expect(screen.getByTestId("sidecar-review-open")).toBeInTheDocument();
+    // The item announces itself in place of the plain line's status.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting for your review in the Erato desktop app",
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "waiting for a connected app",
+    );
+  });
+
+  it("says a review ended and offers to ask again", () => {
+    markReviewEnded(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    expect(screen.getByTestId("sidecar-review-item")).toHaveTextContent(
+      "This review has ended",
+    );
+    expect(screen.getByTestId("sidecar-review-ask-again")).toBeInTheDocument();
+  });
+
+  it("takes the call from the message's own last marker, never an earlier one", () => {
+    rememberReview(key, "handle-1");
+    rememberReview(reviewLinkKey("message-1", "next"), "handle-2");
+    const next: ContentPart = {
+      ...pending,
+      attempt_id: "next-attempt",
+      tool_call_id: "next",
+    };
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[pending, next]} />,
+    );
+    // One item, and the earlier marker's link is not offered.
+    expect(screen.getAllByTestId("sidecar-review-item")).toHaveLength(1);
+  });
+
+  it("says one of the chat's calls is in review when the row still names a finished call", () => {
+    const reviewEnded = markAwaitingReview("chat");
+    try {
+      renderWithTheme(
+        <ChatContext.Provider
+          value={
+            { currentChatId: "chat" } as React.ContextType<typeof ChatContext>
+          }
+        >
+          <MessageContent messageId="message-1" content={[pending]} />
+        </ChatContext.Provider>,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Ready for review in the Erato desktop app",
+      );
+      expect(screen.queryByTestId("sidecar-review-open")).toBeNull();
+    } finally {
+      reviewEnded();
+    }
+  });
+
+  it("keeps the generic text for any other parked call, without saying task", () => {
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[pending]} />,
+    );
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("waiting for a connected app");
+    expect(notice).not.toHaveTextContent("task");
+    expect(screen.queryByTestId("sidecar-review-item")).toBeNull();
+  });
 });
 
 it("renders persisted speech for explicit replay without autoplay", () => {

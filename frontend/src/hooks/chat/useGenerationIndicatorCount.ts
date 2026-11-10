@@ -1,15 +1,17 @@
 import { useMemo } from "react";
 
-import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 
+import { useChatsAskingForDecision } from "./useChatAsksForDecision";
+
 /**
  * How many chats away from the user's eye want it: running, finished/error
- * the session observed, and chats awaiting a tool decision. The last come
- * from two channels — the mount-driven confirmation registry (the open chat)
- * and the server-seeded status store (everything else) — deduplicated by
- * chat id.
+ * the session observed, and chats awaiting a decision. The last come from
+ * three channels — the mount-driven confirmation registry (the open chat),
+ * the server-seeded status store (everything else) and the reviews open in
+ * this browser — deduplicated by chat id. A chat that only waits, for an app
+ * or for its tasks, asks for nothing and is not counted.
  *
  * Shared so every surface that aggregates the same signal counts it the same
  * way: the web sidebar's rail badge and the add-in pane's drawer trigger,
@@ -36,9 +38,7 @@ export const useGenerationIndicatorCount = (): number => {
   const newlyCreatedChatId = useMessagingStore(
     (state) => state.newlyCreatedChatId,
   );
-  const pendingIdsByChatId = useConfirmationRegistryStore(
-    (state) => state.pendingIdsByChatId,
-  );
+  const asking = useChatsAskingForDecision();
 
   return useMemo(() => {
     const inView = new Set(
@@ -46,11 +46,11 @@ export const useGenerationIndicatorCount = (): number => {
         (chatId): chatId is string => chatId !== null,
       ),
     );
-    const actionRequiredChatIds = new Set(Object.keys(pendingIdsByChatId));
+    const actionRequiredChatIds = new Set(asking);
     let count = 0;
     for (const [chatId, status] of Object.entries(statusByChatId)) {
       if (status?.kind === "action_required") {
-        actionRequiredChatIds.add(chatId);
+        if (status.waitingOnly !== true) actionRequiredChatIds.add(chatId);
         continue;
       }
       if (inView.has(chatId)) {
@@ -65,5 +65,5 @@ export const useGenerationIndicatorCount = (): number => {
       }
     }
     return count + actionRequiredChatIds.size;
-  }, [currentChatId, newlyCreatedChatId, pendingIdsByChatId, statusByChatId]);
+  }, [asking, currentChatId, newlyCreatedChatId, statusByChatId]);
 };

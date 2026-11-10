@@ -5744,6 +5744,10 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
         .find(|chat| chat["chat_id"] == child.id.to_string())
         .expect("parked delegated chat must appear in /me/generating");
     assert_eq!(entry["state"], "action_required");
+    assert!(
+        entry.get("waiting_only").is_none(),
+        "an open approval asks the user: {entry}"
+    );
 
     // Hidden from the default listing, but the opted-in listing carries the
     // pending approval timestamp.
@@ -5757,6 +5761,10 @@ async fn test_parked_delegated_chat_stays_reachable(pool: Pool<Postgres>) {
         .find(|chat| chat["id"] == child.id.to_string())
         .expect("delegated chat listed with include_delegated");
     assert!(entry["pending_tool_approval_at"].is_string());
+    assert!(
+        entry.get("pending_approval_waiting_only").is_none(),
+        "an open approval asks the user: {entry}"
+    );
 }
 
 /// A child answer longer than `result_max_chars` is truncated and flagged.

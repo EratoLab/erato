@@ -1,7 +1,7 @@
 import { resolveSessionRowStatus } from "@/utils/chatHistoryGrouping";
 
-import { useHasPendingConfirmation } from "./store/confirmationRegistryStore";
 import { useGenerationStatusFor } from "./store/generationStatusStore";
+import { useChatAsksForDecision } from "./useChatAsksForDecision";
 
 import type {
   ChatAttentionStatus,
@@ -17,10 +17,6 @@ export const useChatRowStatus = (
   provenance: SessionRowStatusInput = {},
 ): ChatAttentionStatus | null => {
   const storeStatus = useGenerationStatusFor(chatId);
-  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
-  return resolveSessionRowStatus(
-    provenance,
-    storeStatus,
-    hasPendingConfirmation,
-  );
+  const asksForDecision = useChatAsksForDecision(chatId);
+  return resolveSessionRowStatus(provenance, storeStatus, asksForDecision);
 };

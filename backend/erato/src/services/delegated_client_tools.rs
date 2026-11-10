@@ -405,9 +405,8 @@ pub(crate) async fn parked_on_child<C: sea_orm::ConnectionTrait>(
 }
 
 /// A child the turn could not carry on its stop (it ended on the tool-call
-/// limit, on its own durable operation, or on an error, or the user stopped
-/// the turn) still waits for its client: the slot says so until the child's
-/// own tail settles it.
+/// limit or on an error, or the user stopped the turn) still waits for its
+/// client: the slot says so until the child's own tail settles it.
 fn slot_waits_for_client(content: &[ContentPart], child_chat_id: Uuid) -> bool {
     use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
     content
@@ -802,6 +801,142 @@ pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
     states
 }
 
+/// The output of a task's slot once its chat was archived: the park's envelope
+/// is kept for its ids, so the slot still links to the run.
+fn archived_task_output(parked_output: Option<&Value>) -> Value {
+    use crate::services::delegation::DelegationRunStatus;
+
+    let mut output = parked_output
+        .filter(|output| output.is_object())
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    if let Some(object) = output.as_object_mut() {
+        object.insert(
+            "status".to_string(),
+            json!(DelegationRunStatus::Failed.as_str()),
+        );
+        object.remove("reason");
+        object.insert(
+            "error".to_string(),
+            json!("The delegated run was archived."),
+        );
+    }
+    output
+}
+
+/// Settles the slot a parked task chat keeps in its parent's row once that
+/// chat is archived. Nothing can answer an archived chat, so the parent would
+/// go on saying the task waits, and link to a chat that can no longer say
+/// anything.
+///
+/// Only a slot that no stop carries: an item on the row's last stop is settled
+/// by [`read_waiting_children`] or answered there, and a turn still running on
+/// the row may yet write the slot itself. Returns whether a slot was settled.
+pub(crate) async fn settle_archived_task_slot(
+    db: &sea_orm::DatabaseConnection,
+    child: &chats::Model,
+) -> Result<bool, Report> {
+    use crate::models::chat::ChatProvenanceKind;
+    use crate::models::message::{MessageSchema, ProvenanceRunMode};
+    use crate::query_metrics::named_statement_from_sql_and_values;
+    use sea_orm::{ConnectionTrait, EntityTrait, TransactionTrait};
+
+    if child.generation_state.as_deref() != Some("awaiting_approval") {
+        return Ok(false);
+    }
+    let Some(configuration) = crate::models::chat::parse_chat_configuration(child)? else {
+        return Ok(false);
+    };
+    let Some(provenance) = configuration.provenance.as_ref() else {
+        return Ok(false);
+    };
+    // An `async` run answers through its delivery row, not a slot.
+    if provenance.kind != ChatProvenanceKind::Delegation
+        || provenance.run_mode == Some(ProvenanceRunMode::Async)
+    {
+        return Ok(false);
+    }
+    let (Some(parent_message_id), Some(parent_tool_call_id)) = (
+        provenance.parent_message_id,
+        configuration
+            .task
+            .as_ref()
+            .and_then(|task| task.parent_tool_call_id.clone()),
+    ) else {
+        return Ok(false);
+    };
+    let Some(parent) = messages::Entity::find_by_id(parent_message_id)
+        .one(db)
+        .await?
+    else {
+        return Ok(false);
+    };
+
+    let tx = db.begin().await?;
+    tx.query_one_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+        "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+        [parent.chat_id.to_string().into()],
+    ))
+    .await?;
+    let Some(origin) = chats::Entity::find_by_id(parent.chat_id).one(&tx).await? else {
+        return Ok(false);
+    };
+    if origin.generation_state.as_deref() == Some("running") {
+        let tip = crate::models::message::get_active_thread_tip(&tx, &parent.chat_id).await?;
+        if tip.is_some_and(|tip| tip.id == parent_message_id) {
+            return Ok(false);
+        }
+    }
+    let Some(message) = messages::Entity::find_by_id(parent_message_id)
+        .one(&tx)
+        .await?
+    else {
+        return Ok(false);
+    };
+    let mut parsed = MessageSchema::validate(&message.raw_message)?;
+    let on_a_stop =
+        crate::server::api::v1beta::message_streaming::parked_approval_state(&parsed.content)
+            .is_some_and(|state| {
+                state.open.iter().any(|item| {
+                    item.child
+                        .as_ref()
+                        .is_some_and(|parked| parked.child_chat_id == child.id)
+                })
+            });
+    if on_a_stop {
+        return Ok(false);
+    }
+    let Some(slot) = slot_mut(&mut parsed.content, &parent_tool_call_id) else {
+        return Ok(false);
+    };
+    let waits = slot.status == MessageToolCallStatus::InProgress
+        && slot
+            .output
+            .as_ref()
+            .and_then(|output| output.get("status"))
+            .and_then(Value::as_str)
+            == Some(crate::services::delegation::DelegationRunStatus::InputRequired.as_str());
+    if !waits {
+        return Ok(false);
+    }
+    slot.output = Some(archived_task_output(slot.output.as_ref()));
+    slot.status = MessageToolCallStatus::Error;
+    slot.ended_at = Some(chrono::Utc::now().to_rfc3339());
+    let raw_message = parsed.to_json()?;
+    MessageSchema::validate(&raw_message)?;
+    tx.execute_raw(named_statement_from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        crate::metrics_constants::POSTGRES_QUERY_WAITING_PARENT_SYNC,
+        r#"UPDATE messages SET raw_message = $1::jsonb, updated_at = now() WHERE id = $2"#,
+        [raw_message.to_string().into(), parent_message_id.into()],
+    ))
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
 async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
     conn: &C,
     config: &AppConfig,
@@ -833,23 +968,8 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
     // item would wait for ever. The run still exists, so the park's envelope
     // is kept for its ids and the slot still links to it.
     if child_chat.archived_at.is_some() {
-        let mut output = parked_output
-            .filter(|output| output.is_object())
-            .cloned()
-            .unwrap_or_else(|| json!({}));
-        if let Some(object) = output.as_object_mut() {
-            object.insert(
-                "status".to_string(),
-                json!(DelegationRunStatus::Failed.as_str()),
-            );
-            object.remove("reason");
-            object.insert(
-                "error".to_string(),
-                json!("The delegated run was archived."),
-            );
-        }
         return ChildWaitState::Settle {
-            output,
+            output: archived_task_output(parked_output),
             failed: true,
         };
     }

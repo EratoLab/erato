@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/Input/Input";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 import { useChatHistoryListFilters } from "@/hooks/chat/store/chatHistoryFilterStore";
+import { useChatWaitsOnly } from "@/hooks/chat/store/generationStatusStore";
 import { useChatRowStatus } from "@/hooks/chat/useChatRowStatus";
 import { buildRecentChatsFilterParams } from "@/hooks/chat/useInfiniteRecentChats";
 import { usePageAlignment } from "@/hooks/ui";
@@ -89,6 +90,7 @@ const SearchResultRow = ({
   // The search payload carries no generation state, but the stores are keyed
   // by chat id, so the row reads the same status the sidebar does.
   const status = useChatRowStatus(result.chatId);
+  const waitingOnly = useChatWaitsOnly(result.chatId);
   const archivedLabel = result.isArchived ? archivedChatLabel() : null;
 
   return (
@@ -139,6 +141,7 @@ const SearchResultRow = ({
               // the archive actions the sidebar withholds from it.
               isRun: false,
               status,
+              waitingOnly,
             },
             {
               pinnedChatsCount,

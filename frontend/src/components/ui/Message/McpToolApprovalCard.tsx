@@ -140,6 +140,7 @@ export const McpToolApprovalCard = ({
   request,
   openItems,
   waitingItems,
+  awaitsOwnCall = false,
   resolution,
 }: {
   messageId: string;
@@ -157,6 +158,12 @@ export const McpToolApprovalCard = ({
    * are shown, never decided, and keep the stop open until they finish.
    */
   waitingItems?: ApprovalItemPart[];
+  /**
+   * The stop sits right behind the response's own client tool call, which
+   * still waits: a decision lets the tasks go on, and the response continues
+   * once that call has finished.
+   */
+  awaitsOwnCall?: boolean;
   resolution: ToolApprovalStatus | null;
 }) => {
   // Read before anything else on the part: for every kind but `mcp_tool` the
@@ -628,6 +635,7 @@ export const McpToolApprovalCard = ({
           request={request}
           items={approvalItems}
           waiting={waiting}
+          awaitsOwnCall={awaitsOwnCall}
           staged={staged}
           isArchived={isArchived === true}
           isBusy={cardIsBusy}

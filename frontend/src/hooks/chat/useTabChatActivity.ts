@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
+import {
+  hasDecisionIn,
+  useConfirmationRegistryStore,
+} from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
+import { useChatsInReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 export type TabChatActivity = "idle" | "working" | "ready" | "attention";
 
@@ -36,11 +41,20 @@ export const useTabChatActivity = (): TabChatActivity => {
   const working = useMessagingStore(
     (state) => state.streaming.isStreaming || state.streaming.isFinalizing,
   );
+  const chatId = useGenerationStatusStore((state) => state.currentChatId);
+  const hasDecision = useConfirmationRegistryStore((state) =>
+    hasDecisionIn(state, chatId),
+  );
+  const inReview = useChatsInReview();
+  // A chat that only waits for an app or for its tasks asks for nothing, unless
+  // this browser holds an open prompt for it or a review, open or ended. The
+  // server sees neither, so the status it reports cannot rule them out.
   const awaitingApproval = useGenerationStatusStore((state) => {
-    const chatId = state.currentChatId;
+    if (chatId === null) return false;
+    const status = state.statusByChatId[chatId];
     return (
-      chatId !== null &&
-      state.statusByChatId[chatId]?.kind === "action_required"
+      status?.kind === "action_required" &&
+      (status.waitingOnly !== true || hasDecision || inReview.has(chatId))
     );
   });
 

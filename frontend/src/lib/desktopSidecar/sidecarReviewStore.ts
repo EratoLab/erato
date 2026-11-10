@@ -3,53 +3,33 @@ import { create } from "zustand";
 /**
  * The chats whose desktop sidecar calls wait for their review in the Erato
  * desktop app on this device, each with how many of its calls wait, so a
- * parent's task card can say where its task waits; and the waiting calls by
- * tool call id, so a turn parked on one can say the same. Ids only.
+ * parent's task card can say where its task waits, and a chat whose row still
+ * names a call that has ended can say one of its calls is in review. Which
+ * call that is comes from the row and `sidecarReviewLinks`. Ids only.
  */
 export const useSidecarReviewStore = create<{
   waitingByChatId: ReadonlyMap<string, number>;
-  waitingByToolCallId: ReadonlyMap<string, number>;
-}>(() => ({ waitingByChatId: new Map(), waitingByToolCallId: new Map() }));
+}>(() => ({ waitingByChatId: new Map() }));
 
-const counted = (
-  counts: ReadonlyMap<string, number>,
-  id: string | undefined,
-  delta: number,
-): ReadonlyMap<string, number> => {
-  if (id === undefined) return counts;
-  const next = new Map(counts);
-  const count = (next.get(id) ?? 0) + delta;
-  if (count > 0) next.set(id, count);
-  else next.delete(id);
-  return next;
-};
-
-const adjust = (
-  chatId: string,
-  toolCallId: string | undefined,
-  delta: number,
-) =>
-  useSidecarReviewStore.setState(
-    ({ waitingByChatId, waitingByToolCallId }) => ({
-      waitingByChatId: counted(waitingByChatId, chatId, delta),
-      waitingByToolCallId: counted(waitingByToolCallId, toolCallId, delta),
-    }),
-  );
+const adjust = (chatId: string, delta: number) =>
+  useSidecarReviewStore.setState(({ waitingByChatId }) => {
+    const next = new Map(waitingByChatId);
+    const count = (next.get(chatId) ?? 0) + delta;
+    if (count > 0) next.set(chatId, count);
+    else next.delete(chatId);
+    return { waitingByChatId: next };
+  });
 
 /**
- * Records that one of `chatId`'s calls, `toolCallId` when known, waits for
- * its review; the returned function, safe to call more than once, records
- * that it no longer waits.
+ * Records that one of `chatId`'s calls waits for its review; the returned
+ * function, safe to call more than once, records that it no longer waits.
  */
-export function markAwaitingReview(
-  chatId: string,
-  toolCallId?: string,
-): () => void {
-  adjust(chatId, toolCallId, 1);
+export function markAwaitingReview(chatId: string): () => void {
+  adjust(chatId, 1);
   let done = false;
   return () => {
     if (done) return;
     done = true;
-    adjust(chatId, toolCallId, -1);
+    adjust(chatId, -1);
   };
 }

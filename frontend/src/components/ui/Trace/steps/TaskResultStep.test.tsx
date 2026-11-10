@@ -1,14 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { ConversationMessagesProvider } from "@/components/ui/Message/ConversationMessages";
 import { TaskResultStep } from "@/components/ui/Trace/steps/TaskResultStep";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
-import {
-  useSidecarReviewStore,
-  markAwaitingReview,
-} from "@/lib/desktopSidecar/sidecarReviewStore";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 
 import type { ContentPartTaskResult } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -269,25 +265,8 @@ describe("TaskResultStep", () => {
       reason: "client_pending",
       summary: "",
     });
-    afterEach(() =>
-      useSidecarReviewStore.setState({ waitingByChatId: new Map() }),
-    );
 
-    it("says that a call of the task waits for its review on this device", () => {
-      markAwaitingReview(waiting.child_chat_id);
-      render(<TaskResultStep part={waiting} />);
-      const pill = screen.getByTestId("task-result-status");
-      expect(pill).toHaveTextContent(
-        "Ready for review in the Erato desktop app",
-      );
-      expect(pill.firstElementChild).toHaveClass("bg-theme-warning-bg");
-      expect(
-        screen.getByTestId("task-result-input-required"),
-      ).toHaveTextContent("Follow it in the task's own chat:");
-    });
-
-    it("says only where the review happens on a device where no call of the task waits", () => {
-      markAwaitingReview("another-task");
+    it("says only where the review happens and claims no wait", () => {
       render(<TaskResultStep part={waiting} />);
       const card = screen.getByTestId("task-result-step");
       expect(screen.getByTestId("task-result-status")).toHaveTextContent(
@@ -350,15 +329,6 @@ describe("TaskResultStep", () => {
         ).toBe("false");
       });
 
-      it("still says so while another call of the task waits for its review", () => {
-        markAwaitingReview(waiting.child_chat_id);
-        renderBeside([finished]);
-
-        expect(screen.getByTestId("task-result-status")).toHaveTextContent(
-          "Ready for review in the Erato desktop app",
-        );
-      });
-
       it("counts only a later delivery of the same task", () => {
         renderBeside([
           row(
@@ -375,7 +345,6 @@ describe("TaskResultStep", () => {
     });
 
     it("keeps the decision wording for a task that waits on a question", () => {
-      markAwaitingReview(waiting.child_chat_id);
       render(
         <TaskResultStep
           part={part({ status: "input_required", reason: "approval_pending" })}

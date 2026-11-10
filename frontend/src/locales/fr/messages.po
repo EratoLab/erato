@@ -63,6 +63,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.descriptionAwaitingCall"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.position"
 msgstr ""
 
@@ -79,6 +84,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingDescription"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescriptionAwaitingCall"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -2028,6 +2038,11 @@ msgstr "Importer les fichiers sélectionnés"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Les fichiers sélectionnés seront importés dans Erato et leur contenu sera partagé avec le fournisseur d’IA. Prévisualisez les fichiers avant de décider."
 
@@ -2356,6 +2371,11 @@ msgstr "Ce chat attend l'autorisation d'un outil. L'archiver abandonne cette dem
 #: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_archive.running"
 msgstr "Ce chat est encore en cours de génération. L'archiver n'interrompt pas la réponse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "Ce chat attend une application connectée ou ses tâches. L'archiver abandonne cette attente, et le désarchiver ne reprendra pas la réponse."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
@@ -6139,6 +6159,7 @@ msgstr "{groupLabel} : {stateLabel}"
 #~ msgstr "Tient cet outil à l'écart de l'assistant et le bloque même lorsqu'une confirmation est déjà en attente."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Ne jamais autoriser"
@@ -8302,6 +8323,51 @@ msgstr "accès refusé"
 #: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
 msgid "sidecar.uiPackage.reason.verification"
 msgstr "le paquet n'a pas pu être vérifié"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.asking.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.failed"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.title"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
@@ -11687,7 +11753,6 @@ msgstr "Lire la boîte aux lettres locale"
 #~ msgstr "Prêt pour vérification dans l’application de bureau"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr ""
 
@@ -12142,8 +12207,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "Ce message utilise {percentUsed}% de la limite de tokens disponible ({totalTokensFormatted} sur {maxTokensFormatted})."
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "This task is waiting for a connected app. You can leave this chat and return later."
-msgstr "Cette tâche attend une application connectée. Vous pouvez quitter cette conversation et revenir plus tard."
+msgid "This response is waiting for a connected app. You can leave this chat and return later."
+msgstr "Cette réponse attend une application connectée. Vous pouvez quitter cette conversation et revenir plus tard."
+
+#: src/components/ui/Message/MessageContent.tsx
+#~ msgid "This task is waiting for a connected app. You can leave this chat and return later."
+#~ msgstr "Cette tâche attend une application connectée. Vous pouvez quitter cette conversation et revenir plus tard."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 #~ msgid "Thought"

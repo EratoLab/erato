@@ -63,6 +63,11 @@ msgstr "{itemCount, plural, one {The response continues once you decide.} other 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.descriptionAwaitingCall"
+msgstr "{itemCount, plural, one {The task goes on once you decide. The response continues when the connected app has finished.} other {They are shown one at a time. The tasks go on once all of them are decided. The response continues when the connected app has finished.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.position"
 msgstr "Decision {ordinal} of {itemCount}"
 
@@ -80,6 +85,11 @@ msgstr "{itemCount, plural, one {This response is waiting on your decision} othe
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingDescription"
 msgstr "{waitingCount, plural, one {It continues on its own once the task finishes.} other {It continues on its own once they finish.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescriptionAwaitingCall"
+msgstr "{waitingCount, plural, one {It continues on its own once the task and the connected app have finished.} other {It continues on its own once the tasks and the connected app have finished.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
@@ -2028,6 +2038,11 @@ msgstr "Upload selected files"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr "Shared in the Erato desktop app but not uploaded: {names}. File uploads from this device are set to “{neverAllow}”."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Selected files will be uploaded to Erato and their contents shared with the AI provider. Preview files before deciding."
 
@@ -2356,6 +2371,11 @@ msgstr "This chat is waiting for a tool approval. Archiving abandons it, and una
 #: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_archive.running"
 msgstr "This chat is still generating. Archiving will not stop the response."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "This chat is waiting for a connected app or for its tasks. Archiving abandons the wait, and unarchiving will not resume the response."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
@@ -6139,6 +6159,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Never allow"
@@ -8302,6 +8323,51 @@ msgstr "access was refused"
 #: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
 msgid "sidecar.uiPackage.reason.verification"
 msgstr "the package did not verify"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.asking.title"
+msgstr "Asking again in the Erato desktop app"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.action"
+msgstr "Ask again"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.description"
+msgstr "Nothing was shared. A review ends one hour after it starts."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.title"
+msgstr "This review has ended"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.action"
+msgstr "Open"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.description"
+msgstr "A review ends one hour after it starts."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.failed"
+msgstr "The Erato desktop app could not show this review. Check that it is running, then try again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.title"
+msgstr "Waiting for your review in the Erato desktop app"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr "Start the Erato desktop app to continue this review."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
@@ -11687,7 +11753,6 @@ msgstr "Read local mailbox"
 #~ msgstr "Ready for review in the desktop app"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr "Ready for review in the Erato desktop app"
 
@@ -12142,8 +12207,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "This message is using {percentUsed}% of the available token limit ({totalTokensFormatted} of {maxTokensFormatted})."
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "This task is waiting for a connected app. You can leave this chat and return later."
-msgstr "This task is waiting for a connected app. You can leave this chat and return later."
+msgid "This response is waiting for a connected app. You can leave this chat and return later."
+msgstr "This response is waiting for a connected app. You can leave this chat and return later."
+
+#: src/components/ui/Message/MessageContent.tsx
+#~ msgid "This task is waiting for a connected app. You can leave this chat and return later."
+#~ msgstr "This task is waiting for a connected app. You can leave this chat and return later."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 #~ msgid "Thought"

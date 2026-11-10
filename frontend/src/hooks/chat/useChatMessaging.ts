@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 import {
   CANCEL_REMINDER_TOOL_NAME,
   CREATE_REMINDER_TOOL_NAME,
@@ -1241,8 +1242,13 @@ export function useChatMessaging(
                 lastPart?.content_type === "tool_approval_request" ||
                 lastPart?.content_type === "client_tool_pending"
               ) {
-                // A parked call may be this pane's to finish; skip the poll wait.
-                if (lastPart.content_type === "client_tool_pending")
+                // A parked call may be this pane's to finish, also when its
+                // tasks' questions follow it; skip the poll wait.
+                if (
+                  finalParts?.some(
+                    (part) => part.content_type === "client_tool_pending",
+                  )
+                )
                   requestClientOperationSweep();
                 useGenerationStatusStore
                   .getState()
@@ -1251,6 +1257,7 @@ export function useChatMessaging(
                     lastPart.content_type === "tool_approval_request"
                       ? lastPart.requested_at
                       : new Date().toISOString(),
+                    parkedWaitsOnly(finalParts ?? []),
                   );
               } else {
                 useGenerationStatusStore

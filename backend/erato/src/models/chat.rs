@@ -851,6 +851,8 @@ pub struct RecentChat {
     /// Present while the chat's generation is stopped on an MCP tool approval
     /// awaiting the user's decision.
     pub pending_tool_approval_at: Option<DateTimeWithTimeZone>,
+    /// [`PARKED_DECISION_PARTS`] of the row the chat is parked on.
+    pub pending_approval_parts: Option<serde_json::Value>,
     /// Provenance kind when the chat was spawned from another chat
     /// (`delegation`, handoff kinds).
     pub provenance_kind: Option<String>,
@@ -925,6 +927,7 @@ struct ChatWithLatestMessage {
     assistant_id: Option<Uuid>,
     active_generation_started_at: Option<DateTimeWithTimeZone>,
     pending_tool_approval_at: Option<DateTimeWithTimeZone>,
+    pending_approval_parts: Option<serde_json::Value>,
     provenance_kind: Option<String>,
     provenance_run_mode: Option<String>,
     origin_chat_id: Option<Uuid>,
@@ -1271,6 +1274,19 @@ pub async fn get_recent_chats(
                     AND "chats"."generation_state" = 'awaiting_approval'
                 THEN "chats"."generation_ended_at"
             END AS "pending_tool_approval_at",
+            CASE
+                WHEN "chats"."archived_at" IS NULL
+                    AND "chats"."generation_state" = 'awaiting_approval'
+                THEN (
+                    SELECT {parked_decision_parts}
+                    FROM messages m
+                    WHERE m.chat_id = "chats"."id"
+                        AND m.is_message_in_active_thread
+                        AND m.generation_parameters IS NOT NULL
+                    ORDER BY m.created_at DESC
+                    LIMIT 1
+                )
+            END AS "pending_approval_parts",
             ("chats"."assistant_configuration" #>> '{{provenance,kind}}') AS "provenance_kind",
             ("chats"."assistant_configuration" #>> '{{provenance,run_mode}}') AS "provenance_run_mode",
             "chats"."origin_chat_id",
@@ -1329,6 +1345,7 @@ pub async fn get_recent_chats(
         claimed = ResultDeliveryState::Claimed.as_str(),
         outcome_expression = delegated_run_outcome_expression(generation_stale_after_secs),
         latest_message_lateral = latest_message_lateral(),
+        parked_decision_parts = PARKED_DECISION_PARTS,
     );
 
     let mut query_values = vec![
@@ -1569,6 +1586,7 @@ pub async fn get_recent_chats(
                 assistant_name,
                 active_generation_started_at: chat_with_msg.active_generation_started_at,
                 pending_tool_approval_at: chat_with_msg.pending_tool_approval_at,
+                pending_approval_parts: chat_with_msg.pending_approval_parts.clone(),
                 provenance_kind: chat_with_msg.provenance_kind.clone(),
                 provenance_run_mode: chat_with_msg.provenance_run_mode.clone(),
                 origin_chat_id: chat_with_msg.origin_chat_id,
@@ -1756,7 +1774,14 @@ pub struct GeneratingChatRow {
     /// field, and for every ordinary user turn — which writes nothing, because
     /// the field is `skip_serializing_if = "Option::is_none"`.
     pub initiator: Option<String>,
+    /// [`PARKED_DECISION_PARTS`] of the row the chat is parked on.
+    pub pending_approval_parts: Option<serde_json::Value>,
 }
+
+/// SQL selecting the parts of `m`, a parked row, that say whether it still asks
+/// the user anything: its approval requests and the decisions after them, in
+/// their order. Tool output, the bulk of a row, stays in the database.
+pub(crate) const PARKED_DECISION_PARTS: &str = r#"jsonb_path_query_array(m.raw_message -> 'content', '$[*] ? (@.content_type == "tool_approval_request" || @.content_type == "tool_approval" || @.content_type == "tool_rejection")')"#;
 
 /// Get the chats of a user whose generation is currently running (with a
 /// fresh heartbeat), reached a terminal state within the retention window, or
@@ -1769,7 +1794,8 @@ pub async fn get_generating_chats(
     stale_after_secs: u64,
     terminal_retention_secs: u64,
 ) -> Result<Vec<GeneratingChatRow>, Report> {
-    let sql = r#"
+    let sql = format!(
+        r#"
         SELECT
             "chats"."id",
             "chats"."generation_state",
@@ -1778,9 +1804,13 @@ pub async fn get_generating_chats(
             "chats"."title_by_user_provided",
             "chats"."title_by_summary"
             ,"latest_gen"."initiator"
+            ,"latest_gen"."pending_approval_parts"
         FROM "chats"
         LEFT JOIN LATERAL (
-            SELECT m.generation_parameters ->> 'initiator' AS "initiator"
+            SELECT m.generation_parameters ->> 'initiator' AS "initiator",
+                CASE WHEN "chats"."generation_state" = 'awaiting_approval'
+                    THEN {parked_decision_parts}
+                END AS "pending_approval_parts"
             FROM messages m
             WHERE m.chat_id = "chats"."id"
                 AND m.is_message_in_active_thread
@@ -1802,7 +1832,9 @@ pub async fn get_generating_chats(
                     AND "chats"."generation_ended_at" > now() - make_interval(secs => $3::double precision)
                 )
             )
-        "#;
+        "#,
+        parked_decision_parts = PARKED_DECISION_PARTS,
+    );
 
     let rows = GeneratingChatRow::find_by_statement(named_statement_from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
@@ -2786,6 +2818,21 @@ pub async fn unarchive_chat(
     chat_active.archived_at = ActiveValue::Set(None);
 
     Ok(chat_active.update(conn).await?)
+}
+
+/// The owner's task chats that are parked and not archived, the ones an
+/// archive of everything leaves unable to answer the turn that started them.
+pub async fn parked_delegated_chats_for_owner(
+    conn: &DatabaseConnection,
+    owner_user_id: &str,
+) -> Result<Vec<chats::Model>, Report> {
+    Ok(Chats::find()
+        .filter(chats::Column::OwnerUserId.eq(owner_user_id))
+        .filter(chats::Column::ArchivedAt.is_null())
+        .filter(chats::Column::GenerationState.eq("awaiting_approval"))
+        .filter(chats::Column::OriginChatId.is_not_null())
+        .all(conn)
+        .await?)
 }
 
 /// Archive all non-archived chats for a specific owner user.

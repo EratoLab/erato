@@ -41,11 +41,14 @@ export const ArchivedChatPill = ({ label }: { label: string }) => (
 export const buildArchiveMenuItems = ({
   archived,
   status,
+  waitingOnly = false,
   onArchive,
   onUnarchive,
 }: {
   archived: boolean;
   status: ChatAttentionStatus | null;
+  /** The chat is parked, waiting for an app or its tasks, which shows no status. */
+  waitingOnly?: boolean;
   onArchive?: () => void;
   onUnarchive?: () => void;
 }): DropdownMenuItem[] => {
@@ -80,7 +83,13 @@ export const buildArchiveMenuItems = ({
             message:
               "This chat is waiting for a tool approval. Archiving abandons it, and unarchiving will not resume the response.",
           })
-        : null;
+        : waitingOnly
+          ? t({
+              id: "chat.history.menu.confirm_archive.waiting",
+              message:
+                "This chat is waiting for a connected app or for its tasks. Archiving abandons the wait, and unarchiving will not resume the response.",
+            })
+          : null;
 
   return onArchive
     ? [

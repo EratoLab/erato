@@ -63,6 +63,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.descriptionAwaitingCall"
+msgstr "{itemCount, plural, one {Die Aufgabe geht nach der Entscheidung weiter. Die Antwort geht weiter, wenn die verbundene App fertig ist.} other {Sie werden einzeln angezeigt. Die Aufgaben gehen weiter, sobald alle entschieden sind. Die Antwort geht weiter, wenn die verbundene App fertig ist.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.position"
 msgstr ""
 
@@ -80,6 +85,11 @@ msgstr ""
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingDescription"
 msgstr "{waitingCount, plural, one {Sie geht von selbst weiter, sobald die Aufgabe fertig ist.} other {Sie geht von selbst weiter, sobald sie fertig sind.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescriptionAwaitingCall"
+msgstr "{waitingCount, plural, one {Sie geht von selbst weiter, sobald die Aufgabe und die verbundene App fertig sind.} other {Sie geht von selbst weiter, sobald die Aufgaben und die verbundene App fertig sind.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
@@ -2028,6 +2038,11 @@ msgstr "Ausgewählte Dateien hochladen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr "In der Erato-Desktop-App geteilt, aber nicht hochgeladen: {names}. Uploads von Dateien von diesem Gerät stehen auf „{neverAllow}“."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Ausgewählte Dateien werden zu Erato hochgeladen und ihre Inhalte mit dem KI-Anbieter geteilt. Sehen Sie sich die Dateien an, bevor Sie entscheiden."
 
@@ -2356,6 +2371,11 @@ msgstr "Dieser Chat wartet auf eine Tool-Genehmigung. Durch das Archivieren geht
 #: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_archive.running"
 msgstr "Dieser Chat generiert noch. Das Archivieren stoppt die Antwort nicht."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "Dieser Chat wartet auf eine verbundene App oder seine Aufgaben. Durch das Archivieren wird das Warten abgebrochen, und das Aufheben der Archivierung setzt die Antwort nicht fort."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
@@ -6139,6 +6159,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Hält dieses Tool vom Assistenten fern und blockiert es auch dann, wenn bereits eine Bestätigung wartet."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Nie erlauben"
@@ -8302,6 +8323,51 @@ msgstr "Zugriff verweigert"
 #: src/components/ui/DesktopSidecar/SidecarUiPackageStatus.tsx
 msgid "sidecar.uiPackage.reason.verification"
 msgstr "das Paket konnte nicht verifiziert werden"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.asking.title"
+msgstr "Erneute Anfrage in der Erato-Desktop-App"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.action"
+msgstr "Erneut fragen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.description"
+msgstr "Es wurde nichts geteilt. Eine Prüfung endet eine Stunde nach dem Start."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.title"
+msgstr "Diese Prüfung ist beendet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.action"
+msgstr "Öffnen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.description"
+msgstr "Eine Prüfung endet eine Stunde nach dem Start."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.failed"
+msgstr "Die Erato-Desktop-App konnte diese Prüfung nicht anzeigen. Prüfe, ob sie läuft, und versuche es erneut."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.open.title"
+msgstr "Wartet auf deine Prüfung in der Erato-Desktop-App"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr "Starte die Erato-Desktop-App, um diese Prüfung fortzusetzen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
@@ -11687,7 +11753,6 @@ msgstr "Lokales Postfach lesen"
 #~ msgstr "Bereit zur Prüfung in der Desktop-App"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr "Bereit zur Prüfung in der Erato-Desktop-App"
 
@@ -12142,8 +12207,12 @@ msgid "This message is using {percentUsed}% of the available token limit ({total
 msgstr "Diese Nachricht verwendet {percentUsed}% des verfügbaren Token-Limits ({totalTokensFormatted} von {maxTokensFormatted})."
 
 #: src/components/ui/Message/MessageContent.tsx
-msgid "This task is waiting for a connected app. You can leave this chat and return later."
-msgstr "Diese Aufgabe wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
+msgid "This response is waiting for a connected app. You can leave this chat and return later."
+msgstr "Diese Antwort wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
+
+#: src/components/ui/Message/MessageContent.tsx
+#~ msgid "This task is waiting for a connected app. You can leave this chat and return later."
+#~ msgstr "Diese Aufgabe wartet auf eine verbundene App. Du kannst diesen Chat verlassen und später zurückkehren."
 
 #: src/components/ui/Trace/TraceClusterHeader.tsx
 #~ msgid "Thought"

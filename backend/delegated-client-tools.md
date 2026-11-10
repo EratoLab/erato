@@ -110,13 +110,13 @@ is its active-thread tip, and either the last stop has an open item for the chil
 or the child's slot still waits for a client outside any stop. Decision parts
 after the stop do not end it, so a decision continuation that runs on another
 replica, or crashed, keeps the calls it waits for. The slot clause covers a turn
-that ended on a stop no child item can share (the tool-call limit, its own durable
-operation) or on an error, or the user stopped the turn. The same owner clause
-authorizes a claimed grant operation (Slow path), and
-`origin_approval_covering_child` uses the tip check too, so once the parent moved
-on a child's own card is answerable. An owner check that cannot read the shared
-lease is an error, never "not running": the offer logs it and offers nothing, the
-authorization answers without withdrawing.
+that ended on a stop no child item can share (the tool-call limit) or on an
+error, or the user stopped the turn. The same owner clause authorizes a claimed
+grant operation (Slow path), and `origin_approval_covering_child` uses the tip
+check too, so once the parent moved on a child's own card is answerable. An
+owner check that cannot read the shared lease is an error, never "not running":
+the offer logs it and offers nothing, the authorization answers without
+withdrawing.
 
 Grant offers skip the facet allowlists and `requires_client_registration`, which
 the grant implies, and give way to an MCP tool of the same name. Every other
@@ -191,9 +191,11 @@ first try and no 15 s grace.
   is open while the parent's slot (the last `tool_use` with its id) is
   `in_progress`, and only on the last stop. The slot holds the suspended envelope
   (`input_required`, reason `client_pending`), so the interrupted-parts sweep
-  leaves it alone. A turn that ends on a stop no child item can share leaves the
-  child out; its slot still waits, `parked_on_child` still holds, and the child's
-  own tail settles the slot (`reconcile_orphaned_parent_slot`).
+  leaves it alone. A turn that ends on a stop no child item can share (the
+  tool-call limit) leaves the child out; its slot still waits,
+  `parked_on_child` still holds, and the child's own tail settles the slot
+  (`reconcile_orphaned_parent_slot`). A turn whose own durable client call
+  waits does not leave them out: see "Approvals".
 - **Sync.** `sync_waiting_parent` brings the parent's last stop up to date under
   the parent chat's advisory lock, only while the message is the active-thread
   tip, its last stop has waiting items, and the chat is not archived and runs no
@@ -220,6 +222,10 @@ first try and no 15 s grace.
   still leave one as it was (a row it cannot read, a read that fails), so the
   sweep visits them in chat order, 100 a tick, and carries a cursor to the next
   tick.
+- **Archived task no stop carries.** Archiving a parked task chat, on its own or
+  through "Archive all", settles its slot in the parent's row as failed when no
+  open item of the parent's last stop names it, so `ParkedTaskNotice` does not
+  stay for good. A turn still running on that row writes the slot itself.
 - **Resume.** Once nothing is left to decide and every waiting item settled, the
   tail starts the parent's continuation in process (`WaitingSettled`) under
   `Takeover::ResumeParked {expected_generation}`, which takes only the generation
@@ -273,7 +279,22 @@ A child's client-tool Ask follows the MCP rule, `child_may_park_on_approval`: an
 awaited task child with `delegation.tasks.propagate_child_mcp_approvals` on parks,
 and anything else has the call refused. The parked child is one item on the
 parent's approval part, or joins the parent's own `mcp_tool` or `client_tool`
-part when the coordinator asked in the same batch (ERMAIN-1050 queue).
+part when the coordinator asked in the same batch (ERMAIN-1050 queue). When the
+coordinator's own durable client call waits instead (a review in the Erato desktop
+app, or a call that outlives its live window), the turn ends on that call's
+`client_tool_pending` part with the `delegated_task` part right behind it: the
+person answers the task there while the call still waits. The answered task runs,
+and the call stays open; the row ends on `client_tool_pending` again, or on a new
+part for a question the task asked next. A result that arrives first settles the
+call, moves its other pending calls onto the open part and leaves the turn on it
+until it is answered. The link to the task's chat remains for a turn the user
+stopped, which withdraws the part with the call so the task is answered in its
+own chat. A Stop that lands while an answered task runs ends the call the same
+way: the continuation holds an earlier copy of the row, so it finds the attempt
+ended, takes the call's part off that copy and settles the tool row as cancelled
+before it writes. A turn that ends on the tool-call limit also leaves the task
+to its own chat today. CT-10 allows no exception besides the stopped turn, so
+this is an open question for the owner, not settled design.
 `ChildApprovalRef.kind` says the child asked about a client tool, so the queue
 names this device and shows no MCP open-world warning. Always allow and Never
 allow on such an item are saved as the user's client-tool preference. The MCP

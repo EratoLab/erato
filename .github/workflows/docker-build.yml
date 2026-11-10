@@ -579,16 +579,14 @@ jobs:
         with:
           cache-all-crates: "true"
           workspaces: "./backend -> target"
-      - name: "Refresh APT package lists"
-        # The cache action resolves versions with apt-cache, which finds
-        # nothing on a runner without fresh package lists.
-        run: sudo apt-get update
-      - name: "Cache APT packages"
-        uses: awalsh128/cache-apt-pkgs-action@v1.6.0
-        with:
-          packages: libtesseract-dev libleptonica-dev libclang-dev
-          add-repository: ppa:alex-p/tesseract-ocr5
-          version: 1.0
+      # Installed directly: the cache action resolves this list to nothing on
+      # the current runner image (awalsh128/cache-apt-pkgs-action#181).
+      - name: "Install APT packages"
+        run: |
+          sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libtesseract-dev libleptonica-dev libclang-dev
       - name: "Setup test environment"
         working-directory: backend
         run: |
