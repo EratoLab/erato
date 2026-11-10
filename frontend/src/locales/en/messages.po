@@ -2028,6 +2028,11 @@ msgstr "Upload selected files"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr "Shared in the Erato desktop app but not uploaded: {names}. File uploads from this device are set to “{neverAllow}”."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Selected files will be uploaded to Erato and their contents shared with the AI provider. Preview files before deciding."
 
@@ -6139,6 +6144,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Keeps this tool away from the assistant and blocks it even when a confirmation is already waiting."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Never allow"

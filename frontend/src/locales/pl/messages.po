@@ -2028,6 +2028,11 @@ msgstr "Prześlij wybrane pliki"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Wybrane pliki zostaną przesłane do Erato, a ich zawartość udostępniona dostawcy AI. Przejrzyj pliki przed podjęciem decyzji."
 
@@ -6139,6 +6144,7 @@ msgstr "{groupLabel}: {stateLabel}"
 #~ msgstr "Trzyma to narzędzie z dala od asystenta i blokuje je nawet wtedy, gdy potwierdzenie już czeka."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Nigdy nie zezwalaj"

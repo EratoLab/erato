@@ -2028,6 +2028,11 @@ msgstr "Importer les fichiers sélectionnés"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ClientToolFileApproval.tsx
+msgid "chat.fileApproval.blockedAfterReview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 msgid "chat.fileApproval.description"
 msgstr "Les fichiers sélectionnés seront importés dans Erato et leur contenu sera partagé avec le fournisseur d’IA. Prévisualisez les fichiers avant de décider."
 
@@ -6139,6 +6144,7 @@ msgstr "{groupLabel} : {stateLabel}"
 #~ msgstr "Tient cet outil à l'écart de l'assistant et le bloque même lorsqu'une confirmation est déjà en attente."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ClientToolFileApproval.tsx
 #: src/components/ui/Settings/McpToolDecisionControl.tsx
 msgid "preferences.dialog.mcpServers.approvals.never.label"
 msgstr "Ne jamais autoriser"

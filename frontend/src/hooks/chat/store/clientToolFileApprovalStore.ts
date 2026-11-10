@@ -13,7 +13,16 @@ export interface ClientToolFileApprovalRequest {
   finish: (approved: ReadonlySet<File>) => void;
 }
 
+/** Files approved in the native review that a "never allow" setting blocked. */
+export interface ClientToolBlockedFilesNotice {
+  toolCallId: string;
+  /** The message that shows it: for a task's call, the one that started the task. */
+  messageId: string;
+  fileNames: string[];
+}
+
 // Local File objects must never be persisted or sent to the server before approval.
 export const useClientToolFileApprovalStore = create<{
   requests: ClientToolFileApprovalRequest[];
-}>(() => ({ requests: [] }));
+  blockedAfterReview: ClientToolBlockedFilesNotice[];
+}>(() => ({ requests: [], blockedAfterReview: [] }));
