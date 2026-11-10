@@ -75,12 +75,13 @@ impl RequestError {
         }
     }
 
-    /// What became of the call this error ended: an error code or HTTP
-    /// status is the server's answer, a message that is no result one Erato
-    /// cannot read, and anything else, a failed or broken connection or a
-    /// timeout, no answer.
+    /// What became of the call this error ended: an error code or a status
+    /// that refuses the call is the server's answer, a message that is no
+    /// result one Erato cannot read, and anything else, a failed or broken
+    /// connection, a timeout or a status that may follow a call that ran, no
+    /// answer.
     fn failure(&self) -> McpCallFailure {
-        if self.code.is_some() || self.status.is_some() {
+        if self.code.is_some() || self.status.is_some_and(refuses_the_call) {
             McpCallFailure::Returned(self.said.clone())
         } else if self.answered {
             McpCallFailure::Unreadable
@@ -673,8 +674,16 @@ fn http_answer(error: &StreamableHttpError<reqwest::Error>) -> (Option<u16>, Opt
     (status, said)
 }
 
-/// What became of a call a transport failed to send or answer: an HTTP
-/// status is the server's answer; anything else may have run.
+/// Whether an HTTP status says the server refused the call, which then did
+/// not run: a client error such as 400, 401, 403, 404, 409, 422 or 429. A
+/// timeout (408), a server error or a gateway's status (502, 504) may come
+/// after the call ran, and a gateway's page is no word of the tool's.
+fn refuses_the_call(status: u16) -> bool {
+    (400..500).contains(&status) && status != 408
+}
+
+/// What became of a call a transport failed to send or answer: a status
+/// that refuses the call is the server's answer; anything else may have run.
 pub(super) fn transport_failure(
     error: &(dyn std::error::Error + Send + Sync + 'static),
 ) -> McpCallFailure {
@@ -682,7 +691,7 @@ pub(super) fn transport_failure(
         .downcast_ref::<StreamableHttpError<reqwest::Error>>()
         .map(http_answer)
     {
-        Some((Some(_), said)) => McpCallFailure::Returned(said),
+        Some((Some(status), said)) if refuses_the_call(status) => McpCallFailure::Returned(said),
         _ => McpCallFailure::NoAnswer,
     }
 }

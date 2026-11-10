@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum McpCallFailure {
     /// The server answered the call with an error, a JSON-RPC error or an
-    /// HTTP status, and with its own text when it sent one.
+    /// HTTP status that refuses the call, and with its own text when it sent
+    /// one.
     Returned(Option<String>),
     /// Erato never sent the call.
     NotSent,

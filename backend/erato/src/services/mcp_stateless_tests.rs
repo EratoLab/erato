@@ -96,8 +96,11 @@ async fn wire(
                 ]))
                 .into_response();
             }
-            if marker == "unavailable" {
-                return (StatusCode::SERVICE_UNAVAILABLE, "maintenance window").into_response();
+            if let Some(status) = marker
+                .strip_prefix("status_")
+                .and_then(|code| StatusCode::from_bytes(code.as_bytes()).ok())
+            {
+                return (status, "maintenance window").into_response();
             }
             if marker == "broken" {
                 return Sse::new(futures::stream::iter(vec![
@@ -930,13 +933,19 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
         );
     }
 
-    // A status a legacy session's server answers the call with is its answer.
-    let unavailable = serve(mock_mcp_server::app().layer(axum::middleware::from_fn(
+    // A status that refuses a legacy session's call is the server's answer;
+    // one a gateway or failing server sends may follow a call that ran.
+    let refusing = serve(mock_mcp_server::app().layer(axum::middleware::from_fn(
         |request: axum::extract::Request, next: axum::middleware::Next| async move {
             let (parts, body) = request.into_parts();
             let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
             if bytes.windows(10).any(|window| window == b"tools/call") {
-                return (StatusCode::SERVICE_UNAVAILABLE, "maintenance window").into_response();
+                let status = if bytes.windows(7).any(|window| window == b"refused") {
+                    StatusCode::CONFLICT
+                } else {
+                    StatusCode::BAD_GATEWAY
+                };
+                return (status, "maintenance window").into_response();
             }
             next.run(axum::extract::Request::from_parts(
                 parts,
@@ -946,32 +955,54 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
         },
     )))
     .await;
-    let mut params = call_params("");
-    params.arguments = json!({"path": "docs/readme.txt"}).as_object().cloned();
-    let error = manager(config(&format!("{}/mcp/legacy/file", unavailable.url)))
-        .call_tool(Uuid::new_v4(), "files", params, &Default::default())
-        .await
-        .unwrap_err();
-    let (output, details) = failed_call_row(&error);
-    assert_eq!(details.failure, None, "{error}");
-    assert!(
-        output["error"]
-            .as_str()
-            .is_some_and(|said| said.starts_with("HTTP 503")),
-        "{output}"
-    );
+    for (path, failure) in [
+        ("docs/refused.txt", None),
+        ("docs/readme.txt", Some(ToolCallFailure::NoAnswer)),
+    ] {
+        let mut params = call_params("");
+        params.arguments = json!({"path": path}).as_object().cloned();
+        let error = manager(config(&format!("{}/mcp/legacy/file", refusing.url)))
+            .call_tool(Uuid::new_v4(), "files", params, &Default::default())
+            .await
+            .unwrap_err();
+        let (output, details) = failed_call_row(&error);
+        assert_eq!(details.failure, failure, "{path}: {error}");
+        if failure.is_none() {
+            assert!(
+                output["error"]
+                    .as_str()
+                    .is_some_and(|said| said.starts_with("HTTP 409")),
+                "{output}"
+            );
+        }
+    }
 
     let (_wire, fixture_server, runtime) = fixture().await;
-    let error = context(&runtime, "")
-        .await
-        .call_tool(call_params("unavailable"), None)
-        .await
-        .unwrap_err();
-    let (output, details) = failed_call_row(&error);
-    assert_eq!(details.failure, None, "{error}");
-    let said = output["error"].as_str().unwrap();
-    assert!(said.starts_with("HTTP 503"), "{said}");
-    assert!(said.contains("maintenance window"), "{said}");
+    for status in [400, 404, 409, 422, 429] {
+        let error = context(&runtime, "")
+            .await
+            .call_tool(call_params(&format!("status_{status}")), None)
+            .await
+            .unwrap_err();
+        let (output, details) = failed_call_row(&error);
+        assert_eq!(details.failure, None, "{status}: {error}");
+        let said = output["error"].as_str().unwrap();
+        assert!(said.starts_with(&format!("HTTP {status}")), "{said}");
+        assert!(said.contains("maintenance window"), "{said}");
+    }
+    // A gateway's page or a server error never reads as the tool's answer.
+    for status in [500, 502, 503, 504, 524] {
+        let error = context(&runtime, "")
+            .await
+            .call_tool(call_params(&format!("status_{status}")), None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            failed_call_row(&error).1.failure,
+            Some(ToolCallFailure::NoAnswer),
+            "{status}: {error}"
+        );
+    }
 
     // An error the server sends in its event stream is its answer too.
     let error = context(&runtime, "")

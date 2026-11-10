@@ -197,8 +197,9 @@ fn filter_tools_by_server_config(tools: Vec<Tool>, config: &McpServerConfig) -> 
 }
 
 /// A legacy session's failed call, by what became of it: the server's
-/// JSON-RPC error or HTTP status is its answer, an answer of another kind one
-/// Erato cannot read, and a closed, cancelled or timed-out call may have run.
+/// JSON-RPC error or a status that refuses the call is its answer, an answer
+/// of another kind one Erato cannot read, and a closed, cancelled or
+/// timed-out call, or one a server or gateway failed, may have run.
 fn call_error(error: rmcp::service::ServiceError) -> Report {
     use rmcp::service::ServiceError;
     let failure = match &error {
