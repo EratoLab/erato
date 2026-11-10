@@ -2565,6 +2565,97 @@ fn batch_rows_that_remove_items_say_so_and_never_that_they_replace_a_list() {
 }
 
 #[test]
+fn a_camel_case_operation_names_its_verb_by_its_first_word() {
+    assert_eq!(rules::action_of("deleteRow"), Some(ToolCallAction::Delete));
+    assert_eq!(rules::action_of("DeleteRow"), Some(ToolCallAction::Delete));
+    assert_eq!(
+        rules::action_of("removeMember"),
+        Some(ToolCallAction::Delete)
+    );
+    assert_eq!(rules::action_of("addLabel"), Some(ToolCallAction::Create));
+    assert_eq!(rules::action_of("bulkDelete"), Some(ToolCallAction::Delete));
+    for kind in ["StatefulSet", "DaemonSet", "ReplicaSet", "ApplicationSet"] {
+        assert_eq!(rules::action_of(kind), None, "{kind}");
+    }
+
+    let batch = tool_with_schema(
+        "batch_update_rows",
+        "",
+        json!({"type": "object", "properties": {
+            "operations": {"type": "array", "items": {"type": "object", "properties": {
+                "op": {"type": "string"},
+                "rowId": {"type": "string"},
+            }}},
+        }}),
+    );
+    let arguments = json!({"operations": [
+        {"op": "deleteRow", "rowId": "r1"},
+        {"op": "deleteRow", "rowId": "r2"},
+    ]});
+    let label = labelled(&batch, &arguments, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Delete);
+    let change = change_with(&batch, arguments, &ToolResultContext::default()).0;
+    assert_eq!(change.batch.as_ref().unwrap().deletions, 2);
+
+    let members = tool_with_schema(
+        "team_members",
+        "",
+        json!({"type": "object", "properties": {
+            "method": {"type": "string"},
+            "user": {"type": "string"},
+        }}),
+    );
+    let arguments = json!({"method": "removeMember", "user": "u1"});
+    let label = labelled(&members, &arguments, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Delete);
+}
+
+#[test]
+fn a_purge_or_clear_of_a_place_never_reads_as_the_place_deleted() {
+    let place_paths = ["/repo", "/namespace", "/branch"];
+    for (name, arguments) in [
+        ("purge_repository", json!({"repo": "libs-snapshot"})),
+        ("clear_namespace", json!({"namespace": "shop"})),
+        ("wipe_branch", json!({"repo": "uploader", "branch": "x"})),
+        ("cancel_branch", json!({"repo": "uploader", "branch": "x"})),
+    ] {
+        let label = labelled(
+            &tool(name, "", None),
+            &arguments,
+            &ToolResultContext::default(),
+        );
+        let named_place = label
+            .items
+            .iter()
+            .filter_map(|item| item.title.as_ref())
+            .flat_map(|title| &title.values)
+            .any(|value| place_paths.contains(&value.path.as_str()));
+        assert!(!named_place, "{name}: {label:#?}");
+    }
+    for (name, arguments, path) in [
+        (
+            "remove_branch",
+            json!({"repo": "uploader", "branch": "x"}),
+            "/branch",
+        ),
+        (
+            "destroy_namespace",
+            json!({"namespace": "shop"}),
+            "/namespace",
+        ),
+        ("drop_namespace", json!({"namespace": "shop"}), "/namespace"),
+    ] {
+        let label = labelled(
+            &tool(name, "", None),
+            &arguments,
+            &ToolResultContext::default(),
+        );
+        let title = label.items[0].title.as_ref();
+        assert_eq!(title.unwrap().values[0].path, path, "{name}");
+    }
+}
+
+#[test]
 fn a_list_reads_what_its_own_description_says_before_the_tools() {
     let save = tool_with_schema(
         "save_issue",

@@ -808,13 +808,28 @@ pub(super) fn action_of(value: &str) -> Option<ToolCallAction> {
 }
 
 /// A verb field's value in words: `delete_remote` and `outlook.reply` split
-/// where a separator stands, while `StatefulSet` is one word, a kind's name,
-/// and never the verb its last part spells.
+/// where a separator stands, and `deleteRow` or `bulkDelete` where a capital
+/// does. A part written with a capital first, as a type's name is, names a
+/// verb only by its first word: `DeleteRow` deletes, while `StatefulSet` is
+/// one word, a kind's name, and never the verb its last word spells.
 fn field_value_words(value: &str) -> Vec<String> {
     value
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty())
-        .map(str::to_lowercase)
+        .filter(|part| !part.is_empty())
+        .flat_map(|part| {
+            let words = name_words(part);
+            let capitalised = part.chars().next().is_some_and(char::is_uppercase);
+            match words.first() {
+                Some(first) if capitalised && words.len() > 1 => {
+                    if actions_of(std::slice::from_ref(first)).is_empty() {
+                        vec![part.to_lowercase()]
+                    } else {
+                        vec![first.clone()]
+                    }
+                }
+                _ => words,
+            }
+        })
         .collect()
 }
 
@@ -1108,11 +1123,14 @@ const CONNECTING_WORDS: [&str; 15] = [
     "by", "with", "at", "within", "under", "across", "via", "per", "to", "from", "in", "into",
     "for", "on", "of",
 ];
+/// Verbs that remove or archive a place itself, rather than empty it.
+const PLACE_REMOVING_VERBS: [&str; 5] = ["delete", "remove", "destroy", "drop", "archive"];
 /// Place members that name the same place.
 const SAME_PLACE: [(&str, &str); 1] = [("repo", "repository")];
 
 /// The place member a delete or archive acts on itself, when it names
-/// nothing inside it: the tool's name is a delete or archive verb followed
+/// nothing inside it: the tool's name is a verb that removes or archives a
+/// place, as `delete` or `archive` but not `purge` or `clear`, followed
 /// only by what that member names, as `delete_repository` with `repo` or
 /// `delete_branch` with `branch`. A name that goes on past the place, as
 /// `delete_repository_upload`, names another noun before it, as
@@ -1128,10 +1146,9 @@ fn place_the_name_ends_in(name: &[String], arguments: &Value) -> Option<String> 
     let [.., verb, head] = name else {
         return None;
     };
-    let removes = actions_of(std::slice::from_ref(verb))
-        .iter()
-        .any(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Archive));
-    if !removes {
+    // `purge_repository` or `clear_namespace` empties the place; only these
+    // remove it.
+    if !PLACE_REMOVING_VERBS.contains(&verb.as_str()) {
         return None;
     }
     let top = arguments.as_object()?;
