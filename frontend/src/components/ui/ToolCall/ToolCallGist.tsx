@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { Fragment } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { machineIdPhrase } from "@/lib/toolCallGist/changeLabels";
 import { gistItemLayout, listedValues, shortId } from "@/lib/toolCallGist/gist";
 import {
   GIST_SLOTS,
@@ -117,6 +118,18 @@ export const GistValueText = ({
             <WrittenBeside value={value} wholeId={wholeId} />
           )}
         </>
+      );
+    case "hidden_id":
+      return (
+        <span className="text-theme-fg-muted" data-origin="hidden-id">
+          {machineIdPhrase()}
+        </span>
+      );
+    case "place":
+      return (
+        <span dir="auto" data-origin="place" className={ISOLATED}>
+          {text}
+        </span>
       );
     case "id": {
       const whole = wholeId ? value.written : undefined;

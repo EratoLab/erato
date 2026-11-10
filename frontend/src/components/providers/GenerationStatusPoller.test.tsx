@@ -568,53 +568,6 @@ describe("GenerationStatusPoller effects", () => {
     expect(invalidationsFor(messagesKey)).toBe(1);
   });
 
-  it("refetches the open parked chat once per label change and leaves other chats", () => {
-    const messagesKey = chatMessagesQuery({
-      pathParams: { chatId: "origin" },
-    }).queryKey;
-    const otherKey = chatMessagesQuery({
-      pathParams: { chatId: "other" },
-    }).queryKey;
-    useGenerationStatusStore.getState().setCurrentChatId("origin");
-    const parked = (labelsUpdatedAt?: string) => ({
-      chats: [
-        generatingEntry({
-          chat_id: "origin",
-          state: "action_required",
-          labels_updated_at: labelsUpdatedAt,
-        }),
-        generatingEntry({
-          chat_id: "other",
-          state: "action_required",
-          labels_updated_at: "2026-08-19T12:00:01.000Z",
-        }),
-      ],
-    });
-
-    emit(parked());
-    const view = renderPoller();
-    const rerender = () =>
-      view.rerender(
-        <QueryClientProvider client={queryClient}>
-          <GenerationStatusPoller />
-        </QueryClientProvider>,
-      );
-    expect(invalidationsFor(messagesKey)).toBe(0);
-
-    const relabelled = parked("2026-08-19T12:00:02.000Z");
-    emit(relabelled);
-    rerender();
-    expect(invalidationsFor(messagesKey)).toBe(1);
-    emit(relabelled);
-    rerender();
-    expect(invalidationsFor(messagesKey)).toBe(1);
-
-    emit(parked("2026-08-19T12:00:03.000Z"));
-    rerender();
-    expect(invalidationsFor(messagesKey)).toBe(2);
-    expect(invalidationsFor(otherKey)).toBe(0);
-  });
-
   it("refetches the open chat once when its parked turn parks again, on the same call or a next one", () => {
     const messagesKey = chatMessagesQuery({
       pathParams: { chatId: "origin" },

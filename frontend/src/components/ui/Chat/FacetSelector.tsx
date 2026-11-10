@@ -18,6 +18,7 @@ interface FacetSelectorProps {
   selectedFacetIds: string[];
   onSelectionChange: (selectedFacetIds: string[]) => void;
   onlySingleFacet: boolean;
+  /** Default for facets that do not set `show_indicator_with_display_name`. */
   showFacetIndicatorWithDisplayName: boolean;
   /** Keep the dropdown open after toggling facets or connectors. */
   keepOpenOnSelect?: boolean;
@@ -226,6 +227,9 @@ export const FacetSelector = ({
       <div className="flex items-center gap-1">
         {selectedFacets.map((facet) => {
           const facetDisplayName = getFacetDisplayName(facet);
+          const showDisplayName =
+            facet.show_indicator_with_display_name ??
+            showFacetIndicatorWithDisplayName;
 
           return (
             <Button
@@ -247,10 +251,10 @@ export const FacetSelector = ({
               })}
               className={clsx(
                 "max-w-[180px] border border-transparent bg-theme-bg-secondary px-2 hover:bg-theme-bg-hover",
-                showFacetIndicatorWithDisplayName && "gap-1",
+                showDisplayName && "gap-1",
               )}
             >
-              {showFacetIndicatorWithDisplayName && (
+              {showDisplayName && (
                 <span className="truncate text-xs font-medium">
                   {facetDisplayName}
                 </span>

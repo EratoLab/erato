@@ -655,7 +655,6 @@ fn ask_for_tool_call(
         // queue, not by this per-call gate.
         pending_tool_calls: Vec::new(),
         approval_scope: None,
-        labels_updated_at: None,
     }))
 }
 
@@ -1049,6 +1048,7 @@ pub struct MeProfileChatRequestInput<'a> {
     pub oidc_token: &'a str,
     pub access_token: Option<&'a str>,
     pub preferred_language: &'a str,
+    pub email: Option<&'a str>,
     pub user_preference_nickname: Option<&'a str>,
     pub user_preference_job_title: Option<&'a str>,
     pub user_preference_assistant_custom_instructions: Option<&'a str>,
@@ -1069,6 +1069,7 @@ impl<'a> MeProfileChatRequestInput<'a> {
             oidc_token: &me_profile.oidc_token,
             access_token: me_profile.access_token.as_deref(),
             preferred_language: &me_profile.preferred_language,
+            email: me_profile.email.as_deref(),
             user_preference_nickname: me_profile.preference_nickname.as_deref(),
             user_preference_job_title: me_profile.preference_job_title.as_deref(),
             user_preference_assistant_custom_instructions: me_profile
@@ -4904,6 +4905,13 @@ async fn prepare_chat_request_with_adapters_memory_inner(
     let tool_result_context =
         crate::services::tool_display::label::ToolResultContext::from_messages(
             &generation_input_messages,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let mut retrieval_context = crate::services::file_retrieval::prepare(
         app_state,
@@ -6062,7 +6070,6 @@ fn delegated_task_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6132,7 +6139,6 @@ fn task_plan_approval_part(
         approvals,
         pending_tool_calls,
         approval_scope: None,
-        labels_updated_at: None,
     }
 }
 
@@ -6824,10 +6830,8 @@ async fn stream_generate_chat_completion<'a>(
     let mut label_upgrades = crate::services::tool_labeller::LabelUpgrades::new(
         &user_id,
         chat_id,
-        assistant_message_id,
         assistant_id,
         &langfuse_trace_enrichment.platform,
-        streaming_task,
         crate::services::tool_labeller::TurnLabeller::for_turn(
             app_state,
             policy,
@@ -12760,7 +12764,7 @@ async fn resolve_generation_mcp_tools(
         inputs.effective_selected_facet_ids,
         inputs.action_facet_id,
     );
-    let facets_configured = !app_state.config.facets.facets.is_empty();
+    let facets_configured = app_state.config.facets.restrict_tools();
     let server_filter_from_allowlist = match (
         derive_requested_server_ids_from_allowlist(facet_allowlist.as_deref(), facets_configured),
         derive_requested_server_ids_from_allowlist(inputs.parent_mcp_allowlist, facets_configured),
@@ -13698,6 +13702,81 @@ mod tests {
         assert_eq!(
             reserved_tool_selected("delegate_task", &[]),
             ReservedSelection::No
+        );
+    }
+
+    #[test]
+    fn builtin_schedule_facet_selects_the_reminder_tools_past_a_global_allowlist() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use crate::services::scheduled_items::chat_tools::TOOL_NAMES;
+        use erato_config::config::{BUILTIN_SCHEDULE_FACET_ID, FacetsConfig};
+
+        let mut facets = FacetsConfig {
+            tool_call_allowlist: vec!["search/*".to_string()],
+            ..Default::default()
+        };
+        facets
+            .facets
+            .insert("research".to_string(), Default::default());
+        facets.inject_builtin_schedule_facet(true);
+        let allowed = |selected: &[String], namespace: &str, name: &str| {
+            build_mcp_tool_allowlist(&facets, selected).is_none_or(|allowlist| {
+                super::is_qualified_tool_allowed(namespace, name, &allowlist)
+            })
+        };
+
+        for name in TOOL_NAMES {
+            assert!(!allowed(&[], "erato", name), "{name} offered unselected");
+        }
+        let selected = [BUILTIN_SCHEDULE_FACET_ID.to_string()];
+        for name in TOOL_NAMES {
+            assert!(allowed(&selected, "erato", name), "{name} not offered");
+        }
+        assert!(allowed(&selected, "search", "web"));
+        assert!(!allowed(&selected, "erato", "delegate_task"));
+    }
+
+    #[test]
+    fn builtin_schedule_facet_keeps_every_tool_without_a_global_allowlist() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use erato_config::config::{BUILTIN_SCHEDULE_FACET_ID, FacetsConfig};
+
+        let selected = [BUILTIN_SCHEDULE_FACET_ID.to_string()];
+        let mut alone = FacetsConfig::default();
+        alone.inject_builtin_schedule_facet(true);
+        assert!(!alone.restrict_tools());
+        assert_eq!(build_mcp_tool_allowlist(&alone, &selected), None);
+
+        let mut with_others = FacetsConfig::default();
+        with_others
+            .facets
+            .insert("research".to_string(), Default::default());
+        with_others.inject_builtin_schedule_facet(true);
+        assert_eq!(build_mcp_tool_allowlist(&with_others, &selected), None);
+    }
+
+    /// A global allowlist meant for client tools stays without effect on MCP
+    /// and Erato's own tools while no facet of the deployment's own exists.
+    #[test]
+    fn the_builtin_alone_does_not_turn_on_a_global_allowlist() {
+        use crate::services::prompt_composition::build_mcp_tool_allowlist;
+        use erato_config::config::FacetsConfig;
+
+        let mut facets = FacetsConfig {
+            tool_call_allowlist: vec!["outlook/*".to_string()],
+            ..Default::default()
+        };
+        facets.inject_builtin_schedule_facet(true);
+        assert!(!facets.restrict_tools());
+        assert_eq!(build_mcp_tool_allowlist(&facets, &[]), None);
+        facets
+            .facets
+            .get_mut(erato_config::config::BUILTIN_SCHEDULE_FACET_ID)
+            .unwrap()
+            .display_name = "Planen".to_string();
+        assert!(
+            facets.restrict_tools(),
+            "a changed built-in is the deployment's"
         );
     }
 
@@ -23717,6 +23796,13 @@ async fn resume_parked_generation(
         crate::services::tool_display::label::ToolResultContext::from_messages_and_row(
             &retrieval_source,
             &parsed.content,
+        )
+        .with_organization(
+            me_profile_input.email,
+            &app_state
+                .config
+                .mcp_servers_global
+                .organization_email_domains,
         );
     let (mut generation_input_messages, mut attachment_plans) =
         super::file_resolution::resolve_and_plan_attachments_with_retrieval(

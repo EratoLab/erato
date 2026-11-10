@@ -297,6 +297,47 @@ describe("ScheduledPageView", () => {
     ).toBeEnabled();
   });
 
+  it("disables Create with chat at the limit and says why", async () => {
+    const onCreateWithChat = vi.fn();
+    renderView({ maxUpcoming: 4, onCreateWithChat });
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const item = await screen.findByRole("menuitem", {
+      name: /Create with chat/,
+    });
+
+    expect(item).toBeDisabled();
+    expect(item).toHaveTextContent(
+      "You have the maximum of 4 upcoming items. Cancel one to schedule another.",
+    );
+    fireEvent.click(item);
+    expect(onCreateWithChat).not.toHaveBeenCalled();
+  });
+
+  it("keeps Create with chat disabled without a handler", async () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+
+    expect(
+      await screen.findByRole("menuitem", { name: /Create with chat/ }),
+    ).toBeDisabled();
+  });
+
+  it("opens a chat from Create with chat when one can be opened", async () => {
+    const onCreateWithChat = vi.fn();
+    renderView({ onCreateWithChat });
+
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    const item = await screen.findByRole("menuitem", {
+      name: /Create with chat/,
+    });
+    expect(item).toBeEnabled();
+    fireEvent.click(item);
+
+    expect(onCreateWithChat).toHaveBeenCalledTimes(1);
+  });
+
   it("disables the templates with the reason in place of their notes", () => {
     const onSelect = vi.fn();
     render(

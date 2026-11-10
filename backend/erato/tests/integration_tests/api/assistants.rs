@@ -296,6 +296,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
                     delegation: None,
                     child_chat_provider: None,
                     child_host_context: None,
+                    show_indicator_with_display_name: None,
                 },
             ),
             (
@@ -314,6 +315,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
                     delegation: None,
                     child_chat_provider: None,
                     child_host_context: None,
+                    show_indicator_with_display_name: None,
                 },
             ),
         ]),
@@ -794,6 +796,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
                 delegation: None,
                 child_chat_provider: None,
                 child_host_context: None,
+                show_indicator_with_display_name: None,
             },
         )]),
         priority_order: vec!["web_search".to_string()],

@@ -155,8 +155,6 @@ export function GenerationStatusPoller({
   const lastListingRefreshRef = useRef(0);
   /** `chatId:startedAt` of the task-result turn already reacted to. */
   const reactedRef = useRef<string | null>(null);
-  /** `chatId:labelsUpdatedAt` of the parked card already reloaded. */
-  const relabelledRef = useRef<string | null>(null);
   /** The open chat's parked turn, as `chatId:parkedAt`, from the last poll. */
   const parkedAtRef = useRef<string | null>(null);
 
@@ -273,30 +271,7 @@ export function GenerationStatusPoller({
       }
     }
 
-    // --- BRANCH D: a model's label improved the open chat's parked card.
-    // The label lands after the turn parked, so nothing streams it; refetch
-    // once per change of the marker.
-    if (currentChatId) {
-      const relabelled = data.chats.find(
-        (entry) =>
-          entry.chat_id === currentChatId &&
-          entry.state === "action_required" &&
-          entry.labels_updated_at !== undefined,
-      );
-      if (relabelled) {
-        const relabelKey = `${relabelled.chat_id}:${relabelled.labels_updated_at}`;
-        if (relabelledRef.current !== relabelKey) {
-          relabelledRef.current = relabelKey;
-          void queryClient.invalidateQueries({
-            queryKey: chatMessagesQuery({
-              pathParams: { chatId: currentChatId },
-            }).queryKey,
-          });
-        }
-      }
-    }
-
-    // --- BRANCH E: the open chat's parked turn parked again. A continuation
+    // --- BRANCH D: the open chat's parked turn parked again. A continuation
     // that fits between two ticks is never seen `running`, and the row still
     // names the call that has ended; a parked chat's `started_at` is the
     // moment it parked, so refetch once per change.

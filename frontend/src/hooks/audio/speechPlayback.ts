@@ -1,5 +1,15 @@
 import { create } from "zustand";
 
+const SPEECH_ENABLED_STORAGE_KEY = "erato.audioConversational.audioBackEnabled";
+
+function readSpeechEnabledPreference(): boolean {
+  try {
+    return localStorage.getItem(SPEECH_ENABLED_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
 interface SpeechState {
   conversational: boolean;
   enabled: boolean;
@@ -9,7 +19,7 @@ interface SpeechState {
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
-  enabled: false,
+  enabled: readSpeechEnabledPreference(),
   playing: false,
   blocked: false,
   failed: false,
@@ -23,6 +33,11 @@ let accepting = false;
 let acceptingStream: string | undefined;
 
 export async function enableSpeechPlayback(enabled: boolean) {
+  try {
+    localStorage.setItem(SPEECH_ENABLED_STORAGE_KEY, String(enabled));
+  } catch {
+    // Playback remains available when storage is unavailable.
+  }
   useSpeechPlayback.setState({ enabled, blocked: false, failed: false });
   if (!enabled) {
     stopSpeechPlayback();

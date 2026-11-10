@@ -497,7 +497,7 @@ async fn an_occurrence_in_flight_follows_the_item(pool: Pool<Postgres>) {
     ));
 }
 
-/// The card links the item's chat by its title.
+/// The card names the item's chat under the message, linked by its title.
 ///
 /// # Test Categories
 /// - `uses-db`
@@ -520,10 +520,12 @@ async fn the_reminder_links_its_chat(pool: Pool<Postgres>) {
     make_due(&db, open(&db, &item).await.unwrap().id).await;
     run_delivery_tick(&db, &settings(), &registry).await;
 
-    let links = &channel.deliveries()[0].content.links;
-    assert_eq!(links.len(), 1);
-    assert_eq!(links[0].title, "Q4 rate comparison");
-    assert_eq!(links[0].url, format!("{BASE_URL}/chat/{chat_id}"));
+    let content = &channel.deliveries()[0].content;
+    assert!(content.links.is_empty());
+    assert_eq!(
+        content.context.as_deref(),
+        Some(format!("Linked chat: [Q4 rate comparison]({BASE_URL}/chat/{chat_id})").as_str())
+    );
 }
 
 async fn deliveries(db: &DatabaseConnection, item: &Model) -> Vec<scheduled_deliveries::Model> {

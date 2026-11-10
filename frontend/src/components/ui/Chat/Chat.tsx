@@ -16,6 +16,7 @@ import {
 } from "@/hooks/chat";
 import { useCompactionStore } from "@/hooks/chat/store/compactionStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
+import { useApplyComposerPreset } from "@/hooks/chat/useComposerPreset";
 import { useMessageFeedback } from "@/hooks/chat/useMessageFeedback";
 import { useConversationDropzone } from "@/hooks/files/useConversationDropzone";
 import { useFileUploadWithTokenCheck } from "@/hooks/files/useFileUploadWithTokenCheck";
@@ -44,6 +45,7 @@ import { ChatInput } from "./ChatInput";
 import {
   ChatInputControlsProvider,
   type ChatInputControlsHandle,
+  type DraftMessageOptions,
 } from "./ChatInputControlsContext";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { ChatShareDialog } from "./ChatShareDialog";
@@ -247,7 +249,7 @@ export const Chat = ({
   const chatInputControlsRef = useRef<ChatInputControlsHandle | null>(null);
   const chatInputControls = useMemo(
     () => ({
-      setDraftMessage: (message: string, options?: { focus?: boolean }) => {
+      setDraftMessage: (message: string, options?: DraftMessageOptions) => {
         chatInputControlsRef.current?.setDraftMessage(message, options);
       },
       focusInput: () => {
@@ -274,6 +276,7 @@ export const Chat = ({
     }),
     [],
   );
+  useApplyComposerPreset(chatInputControlsRef);
 
   // Resolve message controls from registry if not explicitly provided
   const resolvedMessageControls = useMemo(

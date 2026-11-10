@@ -183,6 +183,7 @@ mod tests {
                 arguments: None,
                 warnings: Vec::new(),
                 source: ToolCallLabelSource::OwnMapping,
+                change: None,
             }
         );
     }

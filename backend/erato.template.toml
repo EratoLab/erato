@@ -95,10 +95,11 @@ chat_provider_ids = ["test-token-limit"]
 # # prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Optional fallback" }
 # # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
-# Tool-call labels from a model where the generic rules are unsure (off by default).
-# A skeleton of the call (member names, text lengths, verb fields and values the
-# tool's schema lists) goes to this provider, only on turns that run on it unless
-# allow_other_provider is set, and only for users whose model permissions allow it.
+# Tool-call labels. Generic rules label every MCP call; a configured model can name the
+# verb and kind for calls the rules have none for (off by default). A skeleton of the
+# call (member names, text lengths, verb fields and values the tool's schema lists) goes
+# to this provider, only on turns that run on it unless allow_other_provider is set, and
+# only for users whose model permissions allow it.
 # [tool_labels]
 # enabled = false
 # chat_provider_id = "test-token-limit"
@@ -117,6 +118,9 @@ chat_provider_ids = ["test-token-limit"]
 # enable_wait = false
 # # Maximum wait duration in seconds (default: 60)
 # max_wait_seconds = 60
+# # Domains counted as inside the organisation when approval cards name recipients
+# # outside it, next to the signed-in user's own domain.
+# organization_email_domains = ["example.com"]
 #
 # [mcp_servers.file_provider]
 # # Optional: the name users see (default: the id tidied up, "File provider")
