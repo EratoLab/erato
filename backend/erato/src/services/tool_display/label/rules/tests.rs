@@ -1552,6 +1552,19 @@ struct Case {
     input_schema: JsonObject,
     arguments: Value,
     expected: Expected,
+    /// Calls that ran earlier in the chat, on the call's own server.
+    #[serde(default)]
+    context: Vec<ContextCall>,
+    /// What the record the call acts on is called, by those calls.
+    #[serde(default)]
+    expected_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContextCall {
+    tool: String,
+    input: Value,
+    output: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2023,4 +2036,86 @@ fn where_a_record_lives_is_a_target_when_nothing_else_is() {
         json!({"id": "t1", "project": "Apollo", "state": "done"}),
     );
     assert_eq!(field.mapping.items[0].target, None);
+}
+
+#[test]
+fn an_odata_link_path_is_a_machine_id_wherever_a_label_shows_it() {
+    let bind = format!("/accounts({ACCOUNT})");
+    // At the call's top it is where the record goes; among its values, one of them.
+    for (arguments, pointer) in [
+        (
+            json!({"tablename": "lead", "parent@odata.bind": bind, "item": {"lastname": "Tester"}}),
+            "target",
+        ),
+        (
+            json!({"tablename": "lead", "item": {"lastname": "Tester", "parent@odata.bind": bind}}),
+            "field",
+        ),
+    ] {
+        let rules = label("create_record", arguments.clone());
+        let label = super::super::resolve_label(&rules.mapping, &arguments, None).expect("a label");
+        let item = &label.items[0];
+        let slot = match pointer {
+            "target" => item.target.as_ref().expect("a target"),
+            _ => {
+                assert_eq!(item.target, None);
+                item.fields
+                    .iter()
+                    .find(|field| field.pointer.ends_with("@odata.bind"))
+                    .expect("the link as a field")
+            }
+        };
+        let value = &slot.values[0];
+        assert!(value.machine_id, "{arguments}");
+        assert_eq!(value.text, bind);
+    }
+}
+
+/// The test set's calls whose record an earlier call read are named after
+/// what that read called it, wherever the read kept the name.
+#[test]
+fn the_test_sets_records_are_named_by_the_reads_before_them() {
+    use crate::models::message::{ContentPart, ToolCallStatus, ToolDisplayMetadata, ToolUse};
+    use crate::services::tool_display::label::{ToolResultContext, checked_label};
+    const SERVER: &str = "Server";
+    let mut named = 0;
+    for line in include_str!("fixtures/testset.jsonl").lines() {
+        let case: Case = serde_json::from_str(line).unwrap();
+        let Some(expected) = case.expected_name else {
+            continue;
+        };
+        let mut context = ToolResultContext::default();
+        for (index, call) in case.context.into_iter().enumerate() {
+            context.observe(&[ContentPart::ToolUse(ToolUse {
+                tool_call_id: format!("{}-{index}", case.id),
+                status: ToolCallStatus::Success,
+                tool_name: call.tool,
+                display: Some(ToolDisplayMetadata {
+                    title: "Read".into(),
+                    description: None,
+                    description_truncated: false,
+                    server_name: Some(SERVER.into()),
+                    label: None,
+                    read_only: true,
+                }),
+                input: Some(call.input),
+                output: Some(call.output),
+                ..Default::default()
+            })]);
+        }
+        let mut tool = Tool::new(case.tool.clone(), "", case.input_schema.clone());
+        tool.annotations = case.annotations.clone();
+        let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref(), None);
+        let mut label = checked_label(SERVER, &tool, &case.arguments, &rules.mapping, None);
+        context.resolve(&mut label, &case.arguments, SERVER);
+        let id = label.items[0].id.as_ref().expect("an ID");
+        assert_eq!(
+            id.values[0].resolved.as_deref(),
+            Some(expected.as_str()),
+            "{}",
+            case.id
+        );
+        named += 1;
+    }
+    assert_eq!(named, 4);
 }

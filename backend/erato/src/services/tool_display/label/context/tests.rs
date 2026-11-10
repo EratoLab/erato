@@ -1911,3 +1911,170 @@ fn tool_names_split_into_words() {
     );
     assert_eq!(name_words("recreate_x"), ["recreate", "x"]);
 }
+
+const PAGE: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+
+/// A read of a page that keeps its title among its properties.
+fn page_read(properties: Value) -> ToolUse {
+    call(
+        "page",
+        "retrieve_page",
+        json!({ "page_id": PAGE }),
+        json!({ "id": PAGE, "properties": properties }),
+    )
+}
+
+/// What an update of the page shows: its name and the old value of `Stage`.
+fn page_update(context: &ToolResultContext) -> (Option<String>, Option<String>) {
+    let arguments =
+        json!({ "page_id": PAGE, "properties": { "Stage": { "select": { "name": "Lost" } } } });
+    let mapping = ToolCallLabelItemMapping {
+        id: Some("/page_id".into()),
+        fields: vec!["/properties/Stage".into()],
+        ..Default::default()
+    };
+    let item = item(context, ToolCallAction::Update, mapping, &arguments);
+    (
+        item.id.unwrap().values[0].resolved.clone(),
+        item.fields[0].values[0].resolved.clone(),
+    )
+}
+
+#[test]
+fn a_records_name_inside_a_wrapper_names_it_when_it_is_the_only_one() {
+    let stage = json!({ "select": { "name": "Review" } });
+    let context = after(vec![page_read(json!({
+        "Name": { "title": [{ "plain_text": "Grant application Example Ltd" }] },
+        "Stage": stage,
+    }))]);
+    assert_eq!(
+        page_update(&context),
+        (
+            Some("Grant application Example Ltd".into()),
+            Some("Review".into())
+        )
+    );
+
+    // Two members named like a name, or a name slot holding something that is
+    // no name, name nothing; the old values still count.
+    for properties in [
+        json!({ "Name": "Plan A", "Title": "Plan B", "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "+49 30 1234567" }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": OTHER_CONTACT }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "ana@example.com" }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "https://example.com/x" }] }, "Stage": stage }),
+        json!({ "Name": { "id": OTHER_CONTACT, "name": "Linked record" }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "Part one" }, { "plain_text": "Part two" }] }, "Stage": stage }),
+        json!({ "Name": 4211, "Stage": stage }),
+        json!({ "Name": "x".repeat(MAX_WRAPPED_NAME_CHARS + 1), "Stage": stage }),
+    ] {
+        let context = after(vec![page_read(properties.clone())]);
+        assert_eq!(
+            page_update(&context),
+            (None, Some("Review".into())),
+            "{properties}"
+        );
+    }
+
+    // A name the record itself holds still wins over one below it.
+    let context = after(vec![call(
+        "page",
+        "retrieve_page",
+        json!({ "page_id": PAGE }),
+        json!({ "id": PAGE, "title": "Own title", "properties": { "Name": "Inner", "Stage": stage } }),
+    )]);
+    assert_eq!(page_update(&context).0.as_deref(), Some("Own title"));
+}
+
+#[test]
+fn a_records_members_listed_as_name_and_value_pairs_are_read_as_its_members() {
+    let describe = |path: &str| {
+        call(
+            "describe",
+            "describe",
+            json!({ "path": path }),
+            json!({
+                "id": ACCOUNT,
+                "url": format!("https://crm.example.invalid/main.aspx?id={ACCOUNT}"),
+                "text": {
+                    "Id": ACCOUNT,
+                    "Attributes": [
+                        { "Key": "name", "Value": "Example Industries" },
+                        { "Key": "category", "Value": { "Value": 1 } },
+                        { "Key": "phone", "Value": "+49 30 5550000" },
+                        { "Key": "primary_contact_id", "Value": { "Id": CONTACT, "Name": "Ana Example", "LogicalName": "contact" } },
+                    ],
+                },
+            }),
+        )
+    };
+    let context = after(vec![describe(&format!("tables/account/records/{ACCOUNT}"))]);
+    assert_eq!(
+        name(&context, json!(ACCOUNT)).as_deref(),
+        Some("Example Industries")
+    );
+    assert_eq!(
+        earlier(&context, ACCOUNT, "category", json!(4)).as_deref(),
+        Some("1")
+    );
+    // The link reads as the record it links to, by the name the server gave it.
+    assert_eq!(
+        earlier(
+            &context,
+            ACCOUNT,
+            "primary_contact_id",
+            json!(OTHER_CONTACT)
+        )
+        .as_deref(),
+        Some("Ana Example")
+    );
+    assert_eq!(
+        name(&context, json!(CONTACT)).as_deref(),
+        Some("Ana Example")
+    );
+    // A contact number is never a name, nor the old value of one.
+    assert_eq!(
+        earlier(&context, ACCOUNT, "phone", json!("+49 30 5550111")),
+        None
+    );
+    assert_eq!(name(&context, json!("+49 30 5550000")), None);
+
+    // Pairs that name a member twice, or carry more than a name and a value,
+    // are a list like any other.
+    let twice = call(
+        "row",
+        "get_row",
+        json!({ "row_id": ACCOUNT }),
+        json!({ "id": ACCOUNT, "attributes": [
+            { "name": "name", "value": "First" },
+            { "name": "name", "value": "Second" },
+        ]}),
+    );
+    assert_eq!(name(&after(vec![twice]), json!(ACCOUNT)), None);
+    let richer = call(
+        "row",
+        "get_row",
+        json!({ "row_id": ACCOUNT }),
+        json!({ "id": ACCOUNT, "attributes": [
+            { "name": "name", "value": "First", "type": "text" },
+        ]}),
+    );
+    assert_eq!(name(&after(vec![richer]), json!(ACCOUNT)), None);
+}
+
+#[test]
+fn a_path_that_points_at_a_record_by_its_id_names_that_record() {
+    let context = after(vec![read_query(
+        "accounts",
+        "SELECT name, accountid FROM account",
+        json!([{ "name": "Example Industries", "accountid": ACCOUNT }]),
+    )]);
+    assert_eq!(
+        name(&context, json!(format!("/accounts({ACCOUNT})"))).as_deref(),
+        Some("Example Industries")
+    );
+    assert_eq!(
+        name(&context, json!(format!("/accounts({OTHER_CONTACT})"))),
+        None
+    );
+}

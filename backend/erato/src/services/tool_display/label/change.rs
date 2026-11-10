@@ -12,7 +12,7 @@ use super::context::{
     CodedValue, ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match,
     list_entry, name_words, text_prefix,
 };
-use super::machine_id::is_machine_id;
+use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer::escape;
 use super::recipients::{ADDRESS_MEMBERS, bare_member, is_phone_shaped};
 use super::rules::{
@@ -746,7 +746,7 @@ impl<'a> Walk<'a> {
             Unwrapped::Scalar(scalar) => {
                 effect.link = is_link_shaped(member, value);
                 let shown = self
-                    .link_or_value(scalar, path)
+                    .shown(scalar, path)
                     .map(|value| self.with_meaning(value, member, path, scalar));
                 effect.values.extend(shown);
                 self.classify_scalar(member, path, scalar, &mut effect);
@@ -831,20 +831,6 @@ impl<'a> Walk<'a> {
             (Some(schema), None) => meaning(&schema, ToolCallValueMeaningSource::Tool),
             (None, None) => None,
         }
-    }
-
-    fn link_or_value(&mut self, scalar: &Value, path: &str) -> Option<ToolCallEffectValue> {
-        if let Value::String(text) = scalar
-            && let Some(inside) = id_inside_a_link_path(text)
-        {
-            return Some(ToolCallEffectValue {
-                text: self.name_of_id(inside, path).unwrap_or_default(),
-                truncated: false,
-                machine_id: true,
-                meaning: None,
-            });
-        }
-        self.shown(scalar, path)
     }
 
     fn classify_scalar(
@@ -974,7 +960,7 @@ impl<'a> Walk<'a> {
             }
             let entry_path = format!("{path}/{index}");
             let shown = match unwrap(entry, false) {
-                Unwrapped::Scalar(scalar) => self.link_or_value(scalar, &entry_path),
+                Unwrapped::Scalar(scalar) => self.shown(scalar, &entry_path),
                 Unwrapped::Empty => None,
                 _ => self.shown(entry, &entry_path),
             };
@@ -2103,7 +2089,7 @@ pub(super) fn unwrap(value: &Value, list_like: bool) -> Unwrapped<'_> {
 
 /// What a wrapper object holds: its one member, or its best value key when it
 /// holds only such keys.
-fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
+pub(super) fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
     if members.len() == 1 {
         return members.values().next();
     }
@@ -2119,14 +2105,6 @@ fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
             .find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value)
     })
-}
-
-/// `/accounts(aaaaaaaa-0000-4000-8000-0000000000a1)` and the like: a path that
-/// only points at a record, whose ID it holds.
-fn id_inside_a_link_path(text: &str) -> Option<&str> {
-    let open = text.rfind('(')?;
-    let inner = text[open + 1..].strip_suffix(')')?;
-    (text.starts_with('/') && !text[..open].contains(' ') && is_machine_id(inner)).then_some(inner)
 }
 
 fn is_link_shaped(member: &str, value: &Value) -> bool {

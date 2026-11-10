@@ -1223,3 +1223,40 @@ describe("labels from other writers", () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
+
+describe("a path that only points at a record by its ID", () => {
+  it("never shows on the line, even in a label that does not mark it", () => {
+    for (const machineId of [true, false]) {
+      const gist = gistOf(
+        {
+          action: "create",
+          object_kind: "row",
+          source: "rules",
+          items: [
+            {
+              title: {
+                pointer: "/name",
+                values: [{ path: "/name", text: "Tester" }],
+              },
+              target: {
+                pointer: "/parent@odata.bind",
+                values: [
+                  {
+                    path: "/parent@odata.bind",
+                    text: `/accounts(${UUID})`,
+                    machine_id: machineId,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {},
+      )!;
+      const line = gistPlainLine(gist, gist.items[0], "ask");
+      expect(line).toBe("Create row “Tester”");
+      expect(line).not.toContain(`(${UUID}`);
+      expect(gist.items[0].hiddenIdPaths).toEqual(["/parent@odata.bind"]);
+    }
+  });
+});

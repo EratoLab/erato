@@ -7,7 +7,8 @@
 //! number or a link.
 
 use super::arguments::{MAX_ID_CHARS, MAX_LIST_ENTRIES, looks_like_a_uuid, names_an_id};
-use super::change::{Unwrapped, is_plural, unwrap};
+use super::change::{Unwrapped, is_plural, unwrap, wrapped_value};
+use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer;
 use super::recipients::{is_phone_shaped, is_recipient_member};
 use super::rules;
@@ -638,8 +639,8 @@ impl ToolResultContext {
         {
             return;
         }
-        let name = name_of(object);
         let values = values_of(object, "", walk);
+        let name = name_of(object).or_else(|| values.wrapped_name());
         if name.is_some() || !values.is_empty() {
             self.merge(RecordKey::new(server, key), name, values);
         }
@@ -663,8 +664,8 @@ impl ToolResultContext {
                     return;
                 }
                 if let Some((member, key)) = own_id(object, words) {
-                    let name = name_of(object);
                     let values = values_of(object, member, walk);
+                    let name = name_of(object).or_else(|| values.wrapped_name());
                     if name.is_some() || !values.is_empty() {
                         walk.records -= 1;
                         self.merge(RecordKey::new(server, key), name, values);
@@ -755,6 +756,7 @@ impl ToolResultContext {
             fields,
             lists,
             coded,
+            ..
         } = values;
         let read = self.reads;
         let record = match self.records.remove(&key) {
@@ -1042,9 +1044,13 @@ fn id_key(value: &Value) -> Option<String> {
     }
 }
 
+/// A path such as `/accounts(<id>)` is looked up by the ID inside it.
 fn text_key(text: &str) -> Option<String> {
     if text.is_empty() || text.len() > MAX_ID_CHARS || text.chars().any(char::is_whitespace) {
         return None;
+    }
+    if let Some(inner) = id_inside_a_link_path(text) {
+        return text_key(inner);
     }
     Some(if looks_like_a_uuid(text) {
         text.chars()
@@ -1170,67 +1176,44 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
     })
 }
 
-/// A record's scalar members, the IDs of the records it links to, and the
-/// scalar members of plain objects one level down (such as `properties`).
-/// Each object member costs the walk its width, as it is read here too.
 /// A record's values, by member: scalars and lists, read through the wrappers
-/// servers put around them, and one level of nested objects such as
-/// `properties` or `fields`.
+/// servers put around them, the IDs of the records it links to, and one level
+/// of nested objects such as `properties` or `fields`. A list of name and
+/// value pairs holds members of the record it sits in. Each object member
+/// costs the walk its width, as it is read here too, and each pair one.
 fn values_of(object: &Map<String, Value>, id_member: &str, walk: &mut Walk) -> ReadValues {
     let mut read = ReadValues::default();
     let mut nested = Vec::new();
-    for (member, value) in object {
-        if read.fields.len() == MAX_FIELDS_PER_RECORD {
-            return read;
-        }
-        if member == id_member || member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some() {
+    'members: for (member, value) in object {
+        if member == id_member {
             continue;
         }
-        if let Value::Object(inner) = value {
-            if !walk.take(inner.len()) {
-                break;
-            }
-            if read.keep_coded(member, inner) {
-                continue;
-            }
-            // Only a pure link stands for its ID: `properties` holding one
-            // `*_id` among its values is the record's values, not a link.
-            match link_id_member(inner) {
-                Some(link) => {
-                    if let Some(text) = inner.get(link).and_then(scalar_text) {
-                        read.fields.insert(member.clone(), text);
-                    }
+        if let Some(pairs) = attribute_pairs(value) {
+            for (key, value) in pairs {
+                if read.is_full() || !walk.take(1) || !read.top_member(key, value, walk, None) {
+                    break 'members;
                 }
-                None => match record_value(member, value) {
-                    Some(RecordValue::Unread) | None => nested.push(inner),
-                    Some(value) => value.keep(member, &mut read.fields, &mut read.lists),
-                },
             }
             continue;
         }
-        if let Some(value) = record_value(member, value) {
-            value.keep(member, &mut read.fields, &mut read.lists);
-        }
-    }
-    for (member, value) in nested.into_iter().flatten() {
-        if read.fields.len() == MAX_FIELDS_PER_RECORD {
+        if read.is_full() || !read.top_member(member, value, walk, Some(&mut nested)) {
             break;
         }
-        if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some()
-            || read.fields.contains_key(member)
-            || read.lists.contains_key(member)
-        {
+    }
+    'nested: for (member, value) in nested.into_iter().flatten() {
+        if let Some(pairs) = attribute_pairs(value) {
+            for (key, value) in pairs {
+                if read.is_full() || !walk.take(1) {
+                    break 'nested;
+                }
+                read.nested_member(key, value);
+            }
             continue;
         }
-        if value
-            .as_object()
-            .is_some_and(|inner| read.keep_coded(member, inner))
-        {
-            continue;
+        if read.is_full() {
+            break;
         }
-        if let Some(value) = record_value(member, value) {
-            value.keep(member, &mut read.fields, &mut read.lists);
-        }
+        read.nested_member(member, value);
     }
     read
 }
@@ -1241,11 +1224,98 @@ struct ReadValues {
     fields: HashMap<String, String>,
     lists: HashMap<String, RecordList>,
     coded: HashMap<String, CodedValue>,
+    /// What each member named like a name holds, as [`name_text`] reads it.
+    names: Vec<Option<String>>,
 }
 
 impl ReadValues {
     fn is_empty(&self) -> bool {
         self.fields.is_empty() && self.lists.is_empty()
+    }
+
+    fn is_full(&self) -> bool {
+        self.fields.len() >= MAX_FIELDS_PER_RECORD
+    }
+
+    /// Reads one member of the record itself; an object none of whose shapes
+    /// this reads goes to `nested`, when given. `false` once the walk ends.
+    fn top_member<'v>(
+        &mut self,
+        member: &str,
+        value: &'v Value,
+        walk: &mut Walk,
+        nested: Option<&mut Vec<&'v Map<String, Value>>>,
+    ) -> bool {
+        if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some() {
+            return true;
+        }
+        self.note_name(member, value);
+        let Value::Object(inner) = value else {
+            if let Some(value) = record_value(member, value) {
+                value.keep(member, &mut self.fields, &mut self.lists);
+            }
+            return true;
+        };
+        if !walk.take(inner.len()) {
+            return false;
+        }
+        if self.keep_coded(member, inner) {
+            return true;
+        }
+        // Only a pure link stands for its ID: `properties` holding one
+        // `*_id` among its values is the record's values, not a link.
+        match link_id_member(inner) {
+            Some(link) => {
+                if let Some(text) = inner.get(link).and_then(scalar_text) {
+                    self.fields.insert(member.to_string(), text);
+                }
+            }
+            None => match record_value(member, value) {
+                Some(RecordValue::Unread) | None => nested.into_iter().for_each(|n| n.push(inner)),
+                Some(value) => value.keep(member, &mut self.fields, &mut self.lists),
+            },
+        }
+        true
+    }
+
+    /// Reads one member of an object nested in the record, unless the record
+    /// itself holds a member of that name.
+    fn nested_member(&mut self, member: &str, value: &Value) {
+        if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some()
+            || self.fields.contains_key(member)
+            || self.lists.contains_key(member)
+        {
+            return;
+        }
+        self.note_name(member, value);
+        if value
+            .as_object()
+            .is_some_and(|inner| self.keep_coded(member, inner))
+        {
+            return;
+        }
+        if let Some(value) = record_value(member, value) {
+            value.keep(member, &mut self.fields, &mut self.lists);
+        }
+    }
+
+    fn note_name(&mut self, member: &str, value: &Value) {
+        if is_name_member(member)
+            && let Some(name) = name_text(value)
+        {
+            self.names.push(name);
+        }
+    }
+
+    /// The record's name where it sits below a wrapper, as in
+    /// `properties.Name.title[].plain_text`: the one member named like a name,
+    /// when it holds plain, short text. Two such members, or one holding a
+    /// link, a number, a machine ID, a phone number or an address, give none.
+    fn wrapped_name(&self) -> Option<String> {
+        match self.names.as_slice() {
+            [Some(name)] if is_plain_name(name) => Some(name.clone()),
+            _ => None,
+        }
     }
 
     /// Keeps a label with its code, as a field that reads as the label, or a
@@ -1262,6 +1332,76 @@ impl ReadValues {
         }
         false
     }
+}
+
+/// Longer text in a name member is a description, not what anyone calls the record.
+const MAX_WRAPPED_NAME_CHARS: usize = 120;
+
+/// What a member named like a name holds: `None` when it holds nothing, the
+/// text it holds through wrappers that hold only it, or `Some(None)` for
+/// anything else, a link's ID and a number included.
+fn name_text(value: &Value) -> Option<Option<String>> {
+    let mut current = value;
+    for _ in 0..MAX_DEPTH {
+        match current {
+            Value::Null => return None,
+            Value::String(text) if text.trim().is_empty() => return None,
+            Value::String(text) if text.chars().nth(MAX_WRAPPED_NAME_CHARS).is_some() => {
+                return Some(None);
+            }
+            Value::String(text) => return Some(Some(clean(text)).filter(|name| !name.is_empty())),
+            Value::Array(entries) => match entries.as_slice() {
+                [] => return None,
+                [only] => current = only,
+                _ => return Some(None),
+            },
+            Value::Object(members) if members.is_empty() => return None,
+            Value::Object(members) if link_id_member(members).is_some() => return Some(None),
+            Value::Object(members) => match wrapped_value(members) {
+                Some(inner) => current = inner,
+                None => return Some(None),
+            },
+            Value::Number(_) | Value::Bool(_) => return Some(None),
+        }
+    }
+    Some(None)
+}
+
+/// A name a card may show for a record: no machine ID, phone number,
+/// address or link.
+fn is_plain_name(name: &str) -> bool {
+    !is_machine_id(name)
+        && !is_phone_shaped(name)
+        && !name.contains('@')
+        && !name.contains("://")
+        && name
+            .get(..4)
+            .is_none_or(|start| !start.eq_ignore_ascii_case("www."))
+}
+
+/// The members a record lists as name and value pairs, as
+/// `[{"Key": "name", "Value": "Example Ltd"}]` or a mail's `[{"name":
+/// "Subject", "value": "Hi"}]`: every entry exactly a short name and a value,
+/// and no name twice. Anything else is a list.
+fn attribute_pairs(value: &Value) -> Option<Vec<(&str, &Value)>> {
+    const PAIR_NAME_MEMBERS: [&str; 2] = ["key", "name"];
+    let entries = value
+        .as_array()
+        .filter(|entries| !entries.is_empty() && entries.len() <= MAX_NODES_PER_VALUE)?;
+    let mut seen = HashSet::new();
+    entries
+        .iter()
+        .map(|entry| {
+            let pair = entry.as_object().filter(|pair| pair.len() == 2)?;
+            let name = member_in(pair, &PAIR_NAME_MEMBERS)?
+                .as_str()
+                .filter(|name| {
+                    !name.trim().is_empty() && name.chars().nth(MAX_DISPLAY_NAME_CHARS).is_none()
+                })?;
+            let value = member_in(pair, &["value"])?;
+            seen.insert(name).then_some((name, value))
+        })
+        .collect()
 }
 
 const LABEL_KEYS: [&str; 4] = ["name", "label", "title", "displayname"];
@@ -1297,7 +1437,7 @@ fn coded_pair(object: &Map<String, Value>) -> Option<CodedValue> {
     let usable = super::choices::is_choice_code(&code)
         && !label.is_empty()
         && label.chars().count() <= super::choices::MAX_CHOICE_LABEL_CHARS
-        && !super::machine_id::is_machine_id(&label);
+        && !is_machine_id(&label);
     usable.then_some(CodedValue {
         code,
         label,
