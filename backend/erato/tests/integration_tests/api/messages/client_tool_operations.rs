@@ -1493,6 +1493,8 @@ mod delegated;
 
 mod review_park;
 
+mod strict_review_ask;
+
 async fn upload_file(state: &erato::state::AppState, token: &str, text: &str) -> Uuid {
     use axum_test::multipart::{MultipartForm, Part};
     let response = app_server(state.clone())

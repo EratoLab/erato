@@ -209,6 +209,8 @@ pub(crate) async fn resolve_grant(
         owner_chat_id: context.origin_chat.id,
         owner_message_id,
         context_ref,
+        // Every granted tool is routed to `binding`, so they agree.
+        strict_mode: granted.iter().all(|tool| tool.executor_strict_mode),
     })
 }
 
@@ -237,14 +239,14 @@ pub fn granted_tool_allowed(
 }
 
 /// A delegated run's granted tools as they may be offered now, with the
-/// grant's binding. `None` for a run without a grant or whose grant no longer
-/// holds; the same answer on a fresh turn and on a continuation.
+/// grant. `None` for a run without a grant or whose grant no longer holds; the
+/// same answer on a fresh turn and on a continuation.
 pub(crate) async fn granted_tools(
     app_state: &AppState,
     chat: &chats::Model,
     executor: Option<&ExecutorBinding>,
     account_id: Option<Uuid>,
-) -> Option<(ExecutorBinding, Vec<(ClientToolConfig, GrantedCall)>)> {
+) -> Option<(ClientToolGrant, Vec<(ClientToolConfig, GrantedCall)>)> {
     let configuration = crate::models::chat::parse_chat_configuration(chat)
         .ok()
         .flatten()?;
@@ -293,7 +295,7 @@ pub(crate) async fn granted_tools(
             ));
         }
     }
-    Some((grant.binding, tools))
+    Some((grant, tools))
 }
 
 /// The approval key a decision on a task's asked call of this tool is made
@@ -1462,6 +1464,7 @@ mod tests {
             owner_chat_id: Uuid::new_v4(),
             owner_message_id: Uuid::new_v4(),
             context_ref: Some("token".into()),
+            strict_mode: false,
         }
     }
 
@@ -1833,6 +1836,29 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&durable).unwrap()["durable_tools"],
             json!(["word/read_document_blocks"])
+        );
+    }
+
+    #[test]
+    fn a_grant_says_strict_mode_only_when_its_page_did() {
+        let grant = grant();
+        let stored = serde_json::to_value(&grant).unwrap();
+        assert!(stored.get("strict_mode").is_none(), "{stored}");
+        let read: ClientToolGrant = serde_json::from_value(stored).unwrap();
+        assert!(!read.strict_mode, "a grant written before the flag asks");
+        let strict = ClientToolGrant {
+            strict_mode: true,
+            ..grant
+        };
+        let stored = serde_json::to_value(&strict).unwrap();
+        assert_eq!(stored["strict_mode"], json!(true));
+        assert_eq!(
+            stored["binding"],
+            serde_json::to_value(&strict.binding).unwrap()
+        );
+        assert_eq!(
+            serde_json::from_value::<ClientToolGrant>(stored).unwrap(),
+            strict
         );
     }
 

@@ -588,7 +588,9 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   before the next claim renewal, the call fails without content; otherwise the
   renewal stops, the prompt closes and the call waits until its attempt ends,
   then expires. On the live path the device posts nothing and the call ends
-  when the run stops waiting for it.
+  when the run stops waiting for it. A reviewed tool set to Ask asks only in
+  that review when the page that launched the task said its app runs in strict
+  mode; the grant keeps that word as `strict_mode` (ERMAIN-1155).
 
 ## Not in this record
 

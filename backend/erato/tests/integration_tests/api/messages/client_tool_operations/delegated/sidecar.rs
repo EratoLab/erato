@@ -315,6 +315,28 @@ async fn approve_own_read(
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_strict_app_in_a_shell_reviews_a_tasks_call_without_a_chat_question(
+    pool: Pool<Postgres>,
+) {
+    let row = HostRow {
+        strict_mode: true,
+        ..desktop_sidecar()
+    };
+    super::slow_path::a_strict_apps_task_call_waits_for_its_review_without_asking(pool, &row).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_strict_app_in_the_web_app_reviews_a_tasks_call_without_a_chat_question(
+    pool: Pool<Postgres>,
+) {
+    let row = HostRow {
+        strict_mode: true,
+        ..desktop_sidecar_web()
+    };
+    super::slow_path::a_strict_apps_task_call_waits_for_its_review_without_asking(pool, &row).await;
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn an_approval_in_the_same_shell_keeps_a_sidecar_tool_durable(pool: Pool<Postgres>) {
     approval_in_the_same_shell_keeps_a_sidecar_tool_durable(&desktop_sidecar(), pool).await;
 }

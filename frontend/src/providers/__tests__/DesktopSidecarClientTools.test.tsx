@@ -216,6 +216,35 @@ describe("DesktopSidecarClientTools for delegated tasks", () => {
     expect(executorStreamHeaderSets()).toEqual([]);
   });
 
+  it.each<[string, Partial<SidecarSnapshot>, boolean]>([
+    [
+      "says the app runs in strict mode",
+      { state: "ready", strict: true, jobs: { maxCalls: 8, maxWaitMs: 0 } },
+      true,
+    ],
+    ["says nothing of an app in normal mode", { state: "ready" }, false],
+    [
+      "says nothing of an app that reports no mode",
+      { state: "ready", jobs: { maxCalls: 8, maxWaitMs: 0 } },
+      false,
+    ],
+  ])("%s beside its binding, on submits only", (_name, snapshot, strict) => {
+    sidecar.snapshot = snapshot;
+    const { unmount } = render(<DesktopSidecarClientTools />);
+    const headers = getClientToolHeaders();
+    if (strict)
+      expect(JSON.parse(headers["X-Erato-Strict-Mode-Executors"])).toEqual(
+        JSON.parse(headers["X-Erato-Additional-Executors"]),
+      );
+    else expect(headers).not.toHaveProperty("X-Erato-Strict-Mode-Executors");
+    expect(
+      executorStreamHeaderSets().some(
+        ({ headers }) => "X-Erato-Strict-Mode-Executors" in headers,
+      ),
+    ).toBe(false);
+    unmount();
+  });
+
   it("asks for a sweep when the app comes or goes", () => {
     const sweep = vi.spyOn(clientOperationHandlerRegistry, "nudge");
     const { rerender } = render(<DesktopSidecarClientTools />);
