@@ -559,6 +559,58 @@ fn a_rename_reaches_the_record_under_every_id_one_read_kept_it_by() {
 }
 
 #[test]
+fn a_rename_never_gives_its_new_name_to_another_record_of_the_same_read() {
+    let read = call(
+        "read",
+        "get_task",
+        json!({ "id": "T1" }),
+        json!({ "id": "T1", "subject": "Weekly sync", "parent": { "id": "T0", "subject": "Weekly sync" } }),
+    );
+    let update = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "rename",
+            "update_task",
+            json!({ "id": "T1", "subject": "Weekly sync (moved)" }),
+            json!("Task updated"),
+        ),
+    );
+    // Each context keeps its records in another order.
+    for _ in 0..32 {
+        let context = after(vec![read.clone(), update.clone()]);
+        assert_eq!(
+            name_by_id(&context, "T1").as_deref(),
+            Some("Weekly sync (moved)")
+        );
+        assert_eq!(name_by_id(&context, "T0"), None);
+    }
+}
+
+#[test]
+fn a_name_set_in_an_object_shaped_like_a_link_leaves_its_record_unnamed() {
+    let read = call(
+        "read",
+        "get_item",
+        json!({ "id": "X1" }),
+        json!({ "id": "X1", "name": "Q3 deck" }),
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), "X1").as_deref(),
+        Some("Q3 deck")
+    );
+    let write = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "write",
+            "update_item",
+            json!({ "item": { "id": "X1", "name": "Q3 deck v2" } }),
+            json!("Item updated"),
+        ),
+    );
+    assert_eq!(name_by_id(&after(vec![read, write]), "X1"), None);
+}
+
+#[test]
 fn a_write_that_sets_a_name_but_is_no_plain_update_leaves_the_record_unnamed() {
     let read = read_query(
         "read",

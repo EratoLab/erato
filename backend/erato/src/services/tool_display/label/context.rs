@@ -1191,6 +1191,7 @@ impl ToolResultContext {
             Some(ToolCallAction::Update | ToolCallAction::Upsert)
         );
         let written = written_names(arguments);
+        let named_link = written.as_ref().is_some_and(|written| written.named_link);
         let sure = match &written {
             Some(written) if written.names.is_empty() && !written.unattributed => return,
             Some(written) => updates && !written.unattributed,
@@ -1199,8 +1200,8 @@ impl ToolResultContext {
         if !sure {
             // Some members went unread, the write is no update, or it sets a
             // name somewhere that may be another record's: any record it
-            // names may have been renamed.
-            let ids = argument_ids(arguments, true);
+            // names may have been renamed, a named link's own included.
+            let ids = argument_ids(arguments, !named_link);
             let hits = self
                 .records
                 .keys()
@@ -1245,16 +1246,26 @@ impl ToolResultContext {
     /// Gives each record in `hits` its new name, or none, and does the same
     /// to the records of `server` that may be the same record under another
     /// key: a read can keep one record under its own ID and under the ID the
-    /// read named it by. The one other record of the same read with the same
-    /// old name, when one of the two keys is such a named ID, is that record
-    /// and gets the same name; any other record still called by an old name
-    /// loses it, so the old name is never shown again.
+    /// read named it by. When the hits hold only one of those two keys, the
+    /// one other record of the same read with the same old name, when one of
+    /// the two keys is such a named ID, is that record and gets the same
+    /// name; any other record still called by an old name loses it, so the
+    /// old name is never shown again.
     fn rename(&mut self, server: &str, hits: Vec<(RecordKey, Option<String>)>) {
         if hits.is_empty() {
             return;
         }
+        // Both keys of a record hit leave no other key it may be kept under.
+        let hit_ids: Vec<String> = hits
+            .iter()
+            .map(|(key, _)| qualified_value(&key.id).unwrap_or(&key.id).to_string())
+            .collect();
+        let both_keys_hit = |key: &RecordKey| {
+            let id = qualified_value(&key.id).unwrap_or(&key.id);
+            hit_ids.iter().filter(|hit| *hit == id).count() > 1
+        };
         let mut renamed: Vec<(RecordKey, Option<String>)> = Vec::new();
-        let mut olds: Vec<(RecordKey, String, u32, Option<String>)> = Vec::new();
+        let mut olds: Vec<(RecordKey, String, u32, Option<String>, bool)> = Vec::new();
         for (key, name) in hits {
             let Some(record) = self.records.get(&key) else {
                 continue;
@@ -1262,11 +1273,12 @@ impl ToolResultContext {
             if let Some(old) = record.name.clone()
                 && record.name != name
             {
-                olds.push((key.clone(), old, record.read, name.clone()));
+                let alone = !both_keys_hit(&key);
+                olds.push((key.clone(), old, record.read, name.clone(), alone));
             }
             renamed.push((key, name));
         }
-        for (key, old, read, name) in &olds {
+        for (key, old, read, name, alone) in &olds {
             let aliases: Vec<&RecordKey> = self
                 .records
                 .iter()
@@ -1285,8 +1297,9 @@ impl ToolResultContext {
                 .collect();
             let one_alias = match same_read.as_slice() {
                 [alias]
-                    if qualified_value(&key.id).is_some()
-                        != qualified_value(&alias.id).is_some() =>
+                    if *alone
+                        && qualified_value(&key.id).is_some()
+                            != qualified_value(&alias.id).is_some() =>
                 {
                     Some(*alias)
                 }
@@ -2572,7 +2585,17 @@ fn written_names(arguments: &Value) -> Option<WrittenNames> {
                     .iter()
                     .all(|entry| collect(entry, written, nodes, depth + 1, true, own))
             }
-            Value::Object(object) if depth > 0 && is_link(object) => true,
+            Value::Object(object) if depth > 0 && is_link(object) => {
+                // `{id, name}` may be the record itself, renamed.
+                if object
+                    .keys()
+                    .any(|member| NAME_KEYS.contains(&member_name_key(member).as_str()))
+                {
+                    written.unattributed = true;
+                    written.named_link = true;
+                }
+                true
+            }
             Value::Object(object) => {
                 let Some(left) = nodes.checked_sub(object.len()) else {
                     return false;
@@ -2580,11 +2603,7 @@ fn written_names(arguments: &Value) -> Option<WrittenNames> {
                 *nodes = left;
                 let mut children = Vec::new();
                 for (member, value) in object {
-                    let mut words = name_words(member);
-                    if words.len() > 1 && words[0] == "new" {
-                        words.remove(0);
-                    }
-                    let key = words.concat();
+                    let key = member_name_key(member);
                     if NAME_KEYS.contains(&key.as_str()) {
                         if own {
                             let text = name_text(value)
@@ -2615,12 +2634,25 @@ fn written_names(arguments: &Value) -> Option<WrittenNames> {
     collect(arguments, &mut written, &mut nodes, 0, false, true).then_some(written)
 }
 
+/// A member as [`written_names`] compares it with a name key: its words
+/// joined, without a leading `new`.
+fn member_name_key(member: &str) -> String {
+    let mut words = name_words(member);
+    if words.len() > 1 && words[0] == "new" {
+        words.remove(0);
+    }
+    words.concat()
+}
+
 #[derive(Default)]
 struct WrittenNames {
     names: Vec<(String, Option<String>)>,
     /// A name is set inside an object about something the write does not
     /// say is the record.
     unattributed: bool,
+    /// A name is set in an object shaped like a link, whose ID may then be
+    /// the renamed record's.
+    named_link: bool,
 }
 
 /// The table a call names, lower case: a short word at its top level under a
