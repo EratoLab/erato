@@ -48,6 +48,8 @@ MCP servers that ask for the user's consent through a tool argument (such as Dat
 
 MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
 
+A tool call that a response waits on, because a connected app such as Outlook or the Erato desktop app has not returned it yet, now shows as waiting in the trace: "Review in the Erato desktop app" when it waits for a review there, otherwise "Waiting for a connected app on this device". Before, it showed a check mark as if it had finished, or "Interrupted" although the response went on normally once the app returned it (ERMAIN-1152).
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes
