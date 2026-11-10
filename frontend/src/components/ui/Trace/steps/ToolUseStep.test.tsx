@@ -858,10 +858,29 @@ describe("ToolUseStep gist row", () => {
         },
         "Erato did not run the call.",
       ],
-      // A row stored before Erato marked its own failures.
+      // Rows stored before Erato marked its own failures.
       [
         { output: { status: "error", error: erato } },
         "Erato got no answer from the tool. The call may or may not have run.",
+      ],
+      [
+        {
+          output: {
+            status: "error",
+            error: "Client tool execution is unavailable for this request.",
+          },
+        },
+        "Erato did not run the call.",
+      ],
+      [
+        {
+          output: {
+            status: "error",
+            error:
+              "The tool 'update_page' is not available on this device; the call was not executed.",
+          },
+        },
+        "Erato did not run the call.",
       ],
     ] as const) {
       const row = labelled(overrides as unknown as Partial<ToolUse>, "error", {
@@ -874,6 +893,59 @@ describe("ToolUseStep gist row", () => {
       expect(failure.textContent).not.toContain("Failed to");
       row.unmount();
     }
+  });
+
+  it("never says a call failed or could not when it may have run", () => {
+    const unreadable = labelled(
+      {
+        output: {
+          status: "error",
+          error: "Failed to process MCP tool output: bad file",
+          mcp_output: "Page updated",
+        } as unknown as ToolUse["output"],
+        result_details: { failure: "answer_unreadable" },
+      },
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+    expect(screen.getByTestId("tool-failure")).not.toHaveTextContent(
+      "The call failed.",
+    );
+    expect(toggle()).toHaveTextContent("Update page Northwind");
+    expect(toggle()).not.toHaveTextContent("Could not");
+    unreadable.unmount();
+
+    const unanswered = labelled(
+      {
+        output: {
+          status: "error",
+          error: "Failed to call MCP tool: connection reset",
+        } as unknown as ToolUse["output"],
+        result_details: { failure: "no_answer" },
+      },
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+    expect(toggle()).toHaveTextContent("Update page Northwind");
+    expect(toggle()).not.toHaveTextContent("Could not");
+    unanswered.unmount();
+  });
+
+  it("says only that the call failed for a failure kind it does not know", () => {
+    labelled(
+      {
+        output: {
+          status: "error",
+          error: "Failed to call MCP tool: quota",
+        } as unknown as ToolUse["output"],
+        result_details: { failure: "a_kind_from_a_newer_erato" },
+      } as unknown as Partial<ToolUse>,
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+    const failure = screen.getByTestId("tool-failure");
+    expect(failure).toHaveTextContent(/^The call failed\.$/);
+    expect(toggle()).toHaveTextContent("Could not update page Northwind");
   });
 
   it("never shows part of a machine ID where a long message is cut", () => {

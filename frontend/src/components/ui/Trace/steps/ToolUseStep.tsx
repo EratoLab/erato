@@ -100,7 +100,7 @@ const FAILURE_LINE_CHARS = 90;
 const failedLine = () =>
   t({ id: "trace.tool.failure.line", message: "The call failed." });
 
-const eratoFailureLine = (failure: EratoFailure): string => {
+const eratoFailureLine = (failure: EratoFailure): string | undefined => {
   switch (failure) {
     case "answer_unreadable":
       return t({
@@ -118,19 +118,32 @@ const eratoFailureLine = (failure: EratoFailure): string => {
         message:
           "Erato got no answer from the tool. The call may or may not have run.",
       });
+    case "other":
+      return undefined;
   }
 };
 
 /**
  * A call that failed where Erato, not the tool, wrote the error: what Erato
- * knows in its own words. Its error text stays in the technical details.
+ * knows in its own words. Its error text stays in the technical details. An
+ * answer Erato could not read may say the call succeeded, so that row never
+ * says the call failed.
  */
-const EratoFailureMessage = ({ failure }: { failure: EratoFailure }) => (
-  <div className="space-y-0.5 text-xs" data-testid="tool-failure">
-    <p className="text-theme-error-fg">{failedLine()}</p>
-    <p className="text-theme-fg-secondary">{eratoFailureLine(failure)}</p>
-  </div>
-);
+const EratoFailureMessage = ({ failure }: { failure: EratoFailure }) => {
+  const line = eratoFailureLine(failure);
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="tool-failure">
+      {failure !== "answer_unreadable" && (
+        <p className="text-theme-error-fg">{failedLine()}</p>
+      )}
+      {line && <p className="text-theme-fg-secondary">{line}</p>}
+    </div>
+  );
+};
+
+/** A failure after which the call may still have done what it asked. */
+const outcomeUnknown = (failure: EratoFailure | undefined): boolean =>
+  failure === "no_answer" || failure === "answer_unreadable";
 
 /**
  * A failed call: Erato's own line that it failed, in the row's failure
@@ -313,6 +326,8 @@ const PlainToolUseStep = ({
     gist && phase === "failed" && eratoFailure === undefined
       ? serverFailureMessage(part.output)
       : undefined;
+  // A call that may have run is named as asked, never as one that could not.
+  const linePhase: GistPhase = outcomeUnknown(eratoFailure) ? "ask" : phase;
   const showsDetails =
     gist !== undefined &&
     (failure !== undefined ||
@@ -407,10 +422,10 @@ const PlainToolUseStep = ({
               </span>
             ) : gist && lead ? (
               <span
-                title={gistPlainLine(gist, lead, phase)}
+                title={gistPlainLine(gist, lead, linePhase)}
                 data-testid="tool-call-gist-line"
               >
-                <ToolCallGistLine gist={gist} item={lead} phase={phase} />
+                <ToolCallGistLine gist={gist} item={lead} phase={linePhase} />
                 {counts !== undefined && named && ":"}
               </span>
             ) : (
@@ -454,7 +469,7 @@ const PlainToolUseStep = ({
           gist && showsDetails ? (
             <GistRowDetails
               gist={gist}
-              phase={phase}
+              phase={linePhase}
               failure={failure}
               eratoFailure={eratoFailure}
             />

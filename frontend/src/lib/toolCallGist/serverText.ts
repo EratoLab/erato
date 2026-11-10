@@ -360,15 +360,27 @@ export const serverFailureMessage = (
   return undefined;
 };
 
-/** How a call failed when Erato, not the tool, wrote its error. */
-export type EratoFailure = "no_answer" | "answer_unreadable" | "not_run";
+/**
+ * How a call failed when Erato, not the tool, wrote its error. `other` is a
+ * kind a newer Erato wrote: only that the call failed is known.
+ */
+export type EratoFailure =
+  | "no_answer"
+  | "answer_unreadable"
+  | "not_run"
+  | "other";
 
 /* eslint-disable lingui/no-unlocalized-strings -- what Erato's backend writes */
 const NO_ANSWER_PREFIX = "Failed to call MCP tool: ";
 const UNREADABLE_PREFIX = "Failed to process MCP tool output: ";
+const CLIENT_TOOL_UNAVAILABLE =
+  "Client tool execution is unavailable for this request.";
+const NOT_ON_THIS_DEVICE =
+  /^The tool '.+' is not available on this device; the call was not executed\.$/;
 const NO_ANSWER: EratoFailure = "no_answer";
 const ANSWER_UNREADABLE: EratoFailure = "answer_unreadable";
 const NOT_RUN: EratoFailure = "not_run";
+const OTHER: EratoFailure = "other";
 const ERROR_STATUS = "error";
 const MCP_OUTPUT = "mcp_output";
 /* eslint-enable lingui/no-unlocalized-strings */
@@ -376,16 +388,23 @@ const MCP_OUTPUT = "mcp_output";
 /**
  * Whether Erato wrote a failed call's error itself, and how the call failed:
  * the row's `result_details` say so, or, on rows stored before they did, the
- * output is exactly what Erato writes when no answer came back or it could
- * not read one. `undefined` when the error may be the tool's own words.
+ * output is exactly what Erato writes when no answer came back, it could not
+ * read one or it did not run the call. `undefined` when the error may be the
+ * tool's own words.
  */
 export const eratoFailureOf = (
   resultDetails: unknown,
   output: unknown,
 ): EratoFailure | undefined => {
   const marked = isRecord(resultDetails) ? resultDetails.failure : undefined;
-  if (marked === ANSWER_UNREADABLE || marked === NOT_RUN) return marked;
-  if (typeof marked === "string") return NO_ANSWER;
+  if (
+    marked === NO_ANSWER ||
+    marked === ANSWER_UNREADABLE ||
+    marked === NOT_RUN
+  ) {
+    return marked;
+  }
+  if (typeof marked === "string") return OTHER;
   if (resultDetails !== undefined && resultDetails !== null) return undefined;
   if (!isRecord(output) || output.status !== ERROR_STATUS) return undefined;
   const error = output.error;
@@ -393,6 +412,12 @@ export const eratoFailureOf = (
   const keys = Object.keys(output);
   if (keys.length === 2 && error.startsWith(NO_ANSWER_PREFIX)) {
     return NO_ANSWER;
+  }
+  if (
+    keys.length === 2 &&
+    (error === CLIENT_TOOL_UNAVAILABLE || NOT_ON_THIS_DEVICE.test(error))
+  ) {
+    return NOT_RUN;
   }
   if (
     keys.length === 3 &&
