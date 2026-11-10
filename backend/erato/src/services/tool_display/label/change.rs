@@ -1291,7 +1291,7 @@ impl<'a> Walk<'a> {
             && short
             && property_at(&self.facts.tool.input_schema, path)
                 .and_then(|property| property.get("description")?.as_str())
-                .is_some_and(names_a_part)
+                .is_some_and(|description| names_a_part(member, description))
     }
 
     /// A value beside content the call marks new picks where that content
@@ -2044,17 +2044,51 @@ fn marks_new_content(arguments: &Value) -> bool {
         })
 }
 
-/// Words in a member's description that say it picks a part of what a call
-/// replaces.
+/// Words that name a part of what a call replaces.
 const PART_WORDS: [&str; 12] = [
     "section", "sections", "heading", "headings", "anchor", "anchors", "path", "paths", "key",
     "keys", "index", "indices",
 ];
+/// Words after a part's name that say the call writes that part, as in
+/// "the section to replace".
+const PART_WRITES: [&str; 6] = ["replace", "update", "edit", "change", "modify", "rewrite"];
+/// Words that say a value picks something.
+const PICKS: [&str; 8] = [
+    "which",
+    "identifies",
+    "identify",
+    "identifying",
+    "selects",
+    "select",
+    "selecting",
+    "locates",
+];
 
-fn names_a_part(description: &str) -> bool {
-    name_words(text_prefix(description, MAX_DESCRIPTION_BYTES))
-        .iter()
-        .any(|word| PART_WORDS.contains(&word.as_str()))
+/// Whether a member's own description says it picks a part of what the call
+/// replaces: the member is named for a part (`section`, `heading_key`) and
+/// its description speaks of one ("The setting key"), or its description
+/// says it picks one ("The heading text of the section to replace", "Which
+/// section to update", "Identifies the anchor"). A description that only
+/// mentions a part, as "Seconds until the key expires", says no such thing.
+fn names_a_part(member: &str, description: &str) -> bool {
+    let words = name_words(text_prefix(description, MAX_DESCRIPTION_BYTES));
+    let part_at: Vec<usize> = (0..words.len())
+        .filter(|&at| PART_WORDS.contains(&words[at].as_str()))
+        .collect();
+    if part_at.is_empty() {
+        return false;
+    }
+    let named_for_a_part = name_words(member)
+        .last()
+        .is_some_and(|last| PART_WORDS.contains(&last.as_str()));
+    let written_part = part_at.iter().any(|&at| {
+        words.get(at + 1).is_some_and(|word| word == "to")
+            && words
+                .get(at + 2)
+                .is_some_and(|word| PART_WRITES.contains(&word.as_str()))
+    });
+    let picks = words.iter().any(|word| PICKS.contains(&word.as_str()));
+    named_for_a_part || written_part || picks
 }
 
 /// A table's name a card can read as part of a kind: one word of letters,

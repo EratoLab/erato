@@ -2611,6 +2611,47 @@ fn a_camel_case_operation_names_its_verb_by_its_first_word() {
 }
 
 #[test]
+fn a_value_beside_new_content_picks_a_part_only_when_it_says_it_does() {
+    let setting = tool_with_schema(
+        "update_setting",
+        "",
+        json!({"type": "object", "properties": {
+            "key": {"type": "string", "description": "The setting key"},
+            "new_value": {"type": "string", "description": "The new value"},
+            "ttl": {"type": "number", "description": "Seconds until the key expires"},
+        }}),
+    );
+    let change = change_with(
+        &setting,
+        json!({"key": "timeout", "new_value": "30", "ttl": 3600}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    let filter = change.filter.as_ref().expect("the key picks the setting");
+    assert_eq!(filter.parts.len(), 1, "{filter:#?}");
+    assert_eq!(filter.parts[0].value.text, "timeout");
+    assert_eq!(effect(&change, "ttl").effect, ToolCallEffectKind::Set);
+
+    let document = tool_with_schema(
+        "update_document",
+        "",
+        json!({"type": "object", "properties": {
+            "document_id": {"type": "string", "description": "The document to update"},
+            "new_content": {"type": "string", "description": "The new text"},
+            "status": {"type": "string", "description": "Status of the section after the edit"},
+        }}),
+    );
+    let change = change_with(
+        &document,
+        json!({"document_id": "d1", "new_content": "Final text", "status": "final"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(change.filter.is_none(), "{:#?}", change.filter);
+    assert_eq!(effect(&change, "status").effect, ToolCallEffectKind::Set);
+}
+
+#[test]
 fn a_purge_or_clear_of_a_place_never_reads_as_the_place_deleted() {
     let place_paths = ["/repo", "/namespace", "/branch"];
     for (name, arguments) in [
