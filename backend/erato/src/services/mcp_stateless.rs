@@ -1,5 +1,6 @@
 //! Request-scoped modern MCP. Only HTTP pools and metadata survive an operation.
 //! Legacy protocol services continue to live in McpSessionManager.
+use super::mcp_call_error::{McpCallError, McpCallFailure};
 use super::mcp_manager::McpRequestAuthContext;
 use super::mcp_transports::{apply_auth_headers, oauth_default_headers};
 use crate::config::{McpProtocolMode, McpServerConfig};
@@ -7,10 +8,13 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use eyre::{Report, eyre};
 use futures::{StreamExt, TryStreamExt};
 use reqwest::header::{HeaderMap, HeaderValue};
+use rmcp::model::ServerJsonRpcMessage;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ListToolsResult, ProgressNotificationParam, Tool,
 };
-use rmcp::transport::streamable_http_client::{StreamableHttpClient, StreamableHttpError};
+use rmcp::transport::streamable_http_client::{
+    StreamableHttpClient, StreamableHttpError, StreamableHttpPostResponse,
+};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -28,9 +32,14 @@ const MAX_PARTITIONS: usize = 512;
 pub(super) struct RequestError {
     pub status: Option<u16>,
     code: Option<i64>,
-    data: Option<Value>,
+    data: Option<Box<Value>>,
     message: String,
     transport_failure: bool,
+    /// What the server itself said: a JSON-RPC error's message, or the HTTP
+    /// status it answered with and the body it sent when rmcp kept one.
+    said: Option<String>,
+    /// The server answered with a message that is no result.
+    answered: bool,
 }
 
 impl std::fmt::Display for RequestError {
@@ -53,21 +62,35 @@ impl RequestError {
             data: None,
             message: message.into(),
             transport_failure: false,
+            said: None,
+            answered: false,
+        }
+    }
+
+    /// The error of an answer that holds no result.
+    fn answered(self) -> Self {
+        Self {
+            answered: true,
+            ..self
+        }
+    }
+
+    /// What became of the call this error ended: an error code or HTTP
+    /// status is the server's answer, a message that is no result one Erato
+    /// cannot read, and anything else, a failed or broken connection or a
+    /// timeout, no answer.
+    fn failure(&self) -> McpCallFailure {
+        if self.code.is_some() || self.status.is_some() {
+            McpCallFailure::Returned(self.said.clone())
+        } else if self.answered {
+            McpCallFailure::Unreadable
+        } else {
+            McpCallFailure::NoAnswer
         }
     }
 
     fn from_transport(error: StreamableHttpError<reqwest::Error>) -> Self {
-        let status = match &error {
-            StreamableHttpError::AuthRequired(_) => Some(401),
-            StreamableHttpError::InsufficientScope(_) => Some(403),
-            StreamableHttpError::Client(error) => error.status().map(|s| s.as_u16()),
-            // rmcp currently exposes other HTTP failures as a formatted message.
-            StreamableHttpError::UnexpectedServerResponse(message) => message
-                .strip_prefix("HTTP ")
-                .and_then(|rest| rest.split_whitespace().next())
-                .and_then(|code| code.parse().ok()),
-            _ => None,
-        };
+        let (status, said) = http_answer(&error);
         let transport_failure = matches!(&error, StreamableHttpError::Client(error) if error.is_connect() || error.is_timeout());
         Self {
             status,
@@ -75,6 +98,8 @@ impl RequestError {
             data: None,
             message: error.to_string(),
             transport_failure,
+            said,
+            answered: false,
         }
     }
 
@@ -380,13 +405,19 @@ impl HttpRequest {
         params: CallToolRequestParams,
         progress: Option<UnboundedSender<ProgressNotificationParam>>,
     ) -> Result<CallToolResult, Report> {
-        let tools = self.list_tools(false).await?;
+        let not_sent =
+            |error: &dyn std::fmt::Display| McpCallError::report(McpCallFailure::NotSent, error);
+        let tools = self
+            .list_tools(false)
+            .await
+            .map_err(|error| not_sent(&error))?;
         if !tools.iter().any(|tool| tool.name == params.name) {
-            return Err(eyre!("MCP tool is absent from the current tool catalog"));
+            return Err(not_sent(
+                &"MCP tool is absent from the current tool catalog",
+            ));
         }
-        let result = self
-            .rpc("tools/call", serde_json::to_value(params)?, progress)
-            .await;
+        let params = serde_json::to_value(params).map_err(|error| not_sent(&error))?;
+        let result = self.rpc("tools/call", params, progress).await;
         if let Err(error) = &result {
             let mut state = self.partition.lock().await;
             if error.code == Some(-32022) {
@@ -398,7 +429,9 @@ impl HttpRequest {
             }
         }
         // Never replay calls: a failed stream may follow a completed write.
-        Ok(serde_json::from_value(result?)?)
+        let result = result.map_err(|error| McpCallError::report(error.failure(), &error))?;
+        serde_json::from_value(result)
+            .map_err(|error| McpCallError::report(McpCallFailure::Unreadable, error))
     }
 
     async fn rpc(
@@ -472,14 +505,42 @@ impl HttpRequest {
             )
             .await
             .map_err(RequestError::from_transport)?;
-        let (message, _) = response
-            .expect_initialized::<reqwest::Error>()
-            .await
-            .map_err(RequestError::from_transport)?;
+        let message = match response {
+            // rmcp's helper skips an error in the stream, as if no answer
+            // came: the first response or error is the answer.
+            StreamableHttpPostResponse::Sse(mut stream, _) => loop {
+                let Some(event) = stream.next().await else {
+                    return Err(RequestError::from_transport(
+                        StreamableHttpError::UnexpectedServerResponse("empty sse stream".into()),
+                    ));
+                };
+                let event = event.map_err(|error| RequestError::from_transport(error.into()))?;
+                let payload = event.data.unwrap_or_default();
+                if payload.trim().is_empty() {
+                    continue;
+                }
+                let message: ServerJsonRpcMessage = serde_json::from_str(&payload)
+                    .map_err(|error| RequestError::protocol(error.to_string()).answered())?;
+                if matches!(
+                    message,
+                    ServerJsonRpcMessage::Response(_) | ServerJsonRpcMessage::Error(_)
+                ) {
+                    break message;
+                }
+            },
+            response => {
+                response
+                    .expect_initialized::<reqwest::Error>()
+                    .await
+                    .map_err(RequestError::from_transport)?
+                    .0
+            }
+        };
         let message = serde_json::to_value(message)
-            .map_err(|error| RequestError::protocol(error.to_string()))?;
-        process_message(message, &id, progress.as_ref())?
-            .ok_or_else(|| RequestError::protocol("Expected MCP result"))
+            .map_err(|error| RequestError::protocol(error.to_string()).answered())?;
+        process_message(message, &id, progress.as_ref())
+            .map_err(RequestError::answered)?
+            .ok_or_else(|| RequestError::protocol("Expected MCP result").answered())
     }
 
     /// rmcp's POST helper discards HTTP status for JSON-RPC errors. Discovery
@@ -589,6 +650,43 @@ impl HttpRequest {
     }
 }
 
+/// The HTTP status a server answered with, and what it said: the status and
+/// the body when rmcp kept one, which it writes as "HTTP <status>: <body>".
+fn http_answer(error: &StreamableHttpError<reqwest::Error>) -> (Option<u16>, Option<String>) {
+    let status = match error {
+        StreamableHttpError::AuthRequired(_) => Some(401),
+        StreamableHttpError::InsufficientScope(_) => Some(403),
+        StreamableHttpError::Client(error) => error.status().map(|s| s.as_u16()),
+        // rmcp currently exposes other HTTP failures as a formatted message.
+        StreamableHttpError::UnexpectedServerResponse(message) => message
+            .strip_prefix("HTTP ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .and_then(|code| code.parse().ok()),
+        _ => None,
+    };
+    let said = match error {
+        StreamableHttpError::UnexpectedServerResponse(message) if status.is_some() => {
+            Some(message.to_string())
+        }
+        _ => status.map(|status| format!("HTTP {status}")),
+    };
+    (status, said)
+}
+
+/// What became of a call a transport failed to send or answer: an HTTP
+/// status is the server's answer; anything else may have run.
+pub(super) fn transport_failure(
+    error: &(dyn std::error::Error + Send + Sync + 'static),
+) -> McpCallFailure {
+    match error
+        .downcast_ref::<StreamableHttpError<reqwest::Error>>()
+        .map(http_answer)
+    {
+        Some((Some(_), said)) => McpCallFailure::Returned(said),
+        _ => McpCallFailure::NoAnswer,
+    }
+}
+
 fn process_message(
     message: Value,
     id: &str,
@@ -620,12 +718,14 @@ fn process_message(
         return Err(RequestError {
             status: None,
             code: error["code"].as_i64(),
-            data: error.get("data").cloned(),
+            data: error.get("data").cloned().map(Box::new),
             message: error["message"]
                 .as_str()
                 .unwrap_or("JSON-RPC error")
                 .to_owned(),
             transport_failure: false,
+            said: error["message"].as_str().map(str::to_owned),
+            answered: true,
         });
     }
     let result = message

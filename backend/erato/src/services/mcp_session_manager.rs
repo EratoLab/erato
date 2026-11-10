@@ -1,4 +1,5 @@
-use super::mcp_stateless::{HttpRequest, HttpServer, RequestError};
+use super::mcp_call_error::{McpCallError, McpCallFailure};
+use super::mcp_stateless::{HttpRequest, HttpServer, RequestError, transport_failure};
 use crate::config::{
     AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
     McpServerForwardedCredential, McpToolAnnotationsConfig,
@@ -193,6 +194,20 @@ fn filter_tools_by_server_config(tools: Vec<Tool>, config: &McpServerConfig) -> 
         .into_iter()
         .filter(|tool| is_tool_allowed_by_server_config(&tool.name, config))
         .collect()
+}
+
+/// A legacy session's failed call, by what became of it: the server's
+/// JSON-RPC error or HTTP status is its answer, an answer of another kind one
+/// Erato cannot read, and a closed, cancelled or timed-out call may have run.
+fn call_error(error: rmcp::service::ServiceError) -> Report {
+    use rmcp::service::ServiceError;
+    let failure = match &error {
+        ServiceError::McpError(data) => McpCallFailure::Returned(Some(data.message.to_string())),
+        ServiceError::UnexpectedResponse => McpCallFailure::Unreadable,
+        ServiceError::TransportSend(transport) => transport_failure(transport.error.as_ref()),
+        _ => McpCallFailure::NoAnswer,
+    };
+    McpCallError::report(failure, format!("Failed to call tool: {error}"))
 }
 
 fn is_tool_allowed_by_server_config(tool_name: &str, config: &McpServerConfig) -> bool {
@@ -929,7 +944,10 @@ impl McpSessionManager {
         if let Some(request) = self.stateless_request(server_id, auth_context).await? {
             let config = self.server_config(server_id).await?;
             if !is_tool_allowed_by_server_config(&params.name, &config) {
-                return Err(eyre!("MCP tool is excluded by server configuration"));
+                return Err(McpCallError::report(
+                    McpCallFailure::NotSent,
+                    "MCP tool is excluded by server configuration",
+                ));
             }
             return request.call_tool(params, progress).await;
         }
@@ -1001,13 +1019,10 @@ impl McpSessionManager {
                     rmcp::service::PeerRequestOptions::default(),
                 )
                 .await
-                .map_err(|e| eyre!("Failed to call tool: {}", e))?;
+                .map_err(call_error)?;
             let registration = handler.register(request.progress_token.clone(), progress);
             drop(gate);
-            let result = request
-                .await_response()
-                .await
-                .map_err(|e| eyre!("Failed to call tool: {}", e))?;
+            let result = request.await_response().await.map_err(call_error)?;
             drop(registration);
             Ok::<_, Report>(result)
         }
@@ -1032,7 +1047,10 @@ impl McpSessionManager {
         drop(connection);
         match result? {
             rmcp::model::ServerResult::CallToolResult(result) => Ok(result),
-            other => Err(eyre!("Unexpected MCP tool response: {:?}", other)),
+            other => Err(McpCallError::report(
+                McpCallFailure::Unreadable,
+                format!("Unexpected MCP tool response: {other:?}"),
+            )),
         }
     }
 

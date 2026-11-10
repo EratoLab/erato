@@ -88,6 +88,17 @@ async fn wire(
             let marker = request["params"]["arguments"]["marker"]
                 .as_str()
                 .unwrap_or("");
+            if marker == "sse_error" {
+                let error = json!({"jsonrpc":"2.0", "id":request["id"], "error":{"code":-32602, "message":"Unknown argument: colour"}});
+                return Sse::new(futures::stream::iter(vec![
+                    Ok::<_, std::convert::Infallible>(Event::default().data(progress.to_string())),
+                    Ok(Event::default().data(error.to_string())),
+                ]))
+                .into_response();
+            }
+            if marker == "unavailable" {
+                return (StatusCode::SERVICE_UNAVAILABLE, "maintenance window").into_response();
+            }
             if marker == "broken" {
                 return Sse::new(futures::stream::iter(vec![
                     Ok::<_, std::convert::Infallible>(Event::default().data(progress.to_string())),
@@ -895,4 +906,103 @@ async fn memory_request_inspection_tracks_detached_servers_without_retaining_the
     assert!(weak.upgrade().is_some());
     drop(request);
     assert!(weak.upgrade().is_none());
+}
+
+#[tokio::test]
+async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
+    use crate::models::message::ToolCallFailure;
+    use crate::services::mcp_call_error::failed_call_row;
+
+    let server = serve(mock_mcp_server::app()).await;
+    for path in ["legacy", "stateless"] {
+        let manager = manager(config(&format!("{}/mcp/{path}/file", server.url)));
+        let mut params = call_params("");
+        params.arguments = json!({"path": "docs/missing.txt"}).as_object().cloned();
+        let error = manager
+            .call_tool(Uuid::new_v4(), "files", params, &Default::default())
+            .await
+            .unwrap_err();
+        let (output, details) = failed_call_row(&error);
+        assert_eq!(details.failure, None, "{path}: {error}");
+        assert_eq!(
+            output["error"], "File not found: docs/missing.txt",
+            "{path}"
+        );
+    }
+
+    // A status a legacy session's server answers the call with is its answer.
+    let unavailable = serve(mock_mcp_server::app().layer(axum::middleware::from_fn(
+        |request: axum::extract::Request, next: axum::middleware::Next| async move {
+            let (parts, body) = request.into_parts();
+            let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+            if bytes.windows(10).any(|window| window == b"tools/call") {
+                return (StatusCode::SERVICE_UNAVAILABLE, "maintenance window").into_response();
+            }
+            next.run(axum::extract::Request::from_parts(
+                parts,
+                axum::body::Body::from(bytes),
+            ))
+            .await
+        },
+    )))
+    .await;
+    let mut params = call_params("");
+    params.arguments = json!({"path": "docs/readme.txt"}).as_object().cloned();
+    let error = manager(config(&format!("{}/mcp/legacy/file", unavailable.url)))
+        .call_tool(Uuid::new_v4(), "files", params, &Default::default())
+        .await
+        .unwrap_err();
+    let (output, details) = failed_call_row(&error);
+    assert_eq!(details.failure, None, "{error}");
+    assert!(
+        output["error"]
+            .as_str()
+            .is_some_and(|said| said.starts_with("HTTP 503")),
+        "{output}"
+    );
+
+    let (_wire, fixture_server, runtime) = fixture().await;
+    let error = context(&runtime, "")
+        .await
+        .call_tool(call_params("unavailable"), None)
+        .await
+        .unwrap_err();
+    let (output, details) = failed_call_row(&error);
+    assert_eq!(details.failure, None, "{error}");
+    let said = output["error"].as_str().unwrap();
+    assert!(said.starts_with("HTTP 503"), "{said}");
+    assert!(said.contains("maintenance window"), "{said}");
+
+    // An error the server sends in its event stream is its answer too.
+    let error = context(&runtime, "")
+        .await
+        .call_tool(call_params("sse_error"), None)
+        .await
+        .unwrap_err();
+    let (output, details) = failed_call_row(&error);
+    assert_eq!(details.failure, None, "{error}");
+    assert_eq!(output["error"], "Unknown argument: colour");
+
+    let mut absent = call_params("");
+    absent.name = "erase_file".into();
+    let error = manager(config(&fixture_server.url))
+        .call_tool(Uuid::new_v4(), "files", absent, &Default::default())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        failed_call_row(&error).1.failure,
+        Some(ToolCallFailure::NotRun),
+        "{error}"
+    );
+
+    let error = context(&runtime, "")
+        .await
+        .call_tool(call_params("broken"), None)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        failed_call_row(&error).1.failure,
+        Some(ToolCallFailure::NoAnswer),
+        "{error}"
+    );
 }
