@@ -2016,6 +2016,62 @@ fn a_trash_reads_as_a_delete_that_the_tool_says_can_be_restored() {
 }
 
 #[test]
+fn a_kind_whose_last_part_is_a_verb_word_is_still_the_kind_of_what_a_delete_removes() {
+    let mut delete = tool_with_schema(
+        "resources_delete",
+        "",
+        json!({"type": "object", "properties": {
+            "apiVersion": {"type": "string"},
+            "kind": {"type": "string"},
+            "namespace": {"type": "string"},
+            "name": {"type": "string"},
+        }}),
+    );
+    delete.annotations = Some(ToolAnnotations::from_raw(
+        None,
+        None,
+        Some(true),
+        None,
+        None,
+    ));
+    for kind in ["StatefulSet", "DaemonSet", "ReplicaSet", "ApplicationSet"] {
+        let arguments =
+            json!({"apiVersion": "apps/v1", "kind": kind, "namespace": "shop", "name": "db"});
+        let label = labelled(&delete, &arguments, &ToolResultContext::default());
+        assert_eq!(label.action, ToolCallAction::Delete, "{kind}");
+        assert_eq!(
+            rules::cross_check(&delete, &arguments, label.action),
+            [],
+            "{kind}"
+        );
+        let change = change_with(&delete, arguments, &ToolResultContext::default()).0;
+        assert_eq!(change.table.as_deref(), Some(kind));
+        assert!(
+            change
+                .notes
+                .contains(&ToolCallChangeNote::MarkedDestructive),
+            "{kind}"
+        );
+        assert!(
+            change
+                .notes
+                .contains(&ToolCallChangeNote::DeleteOutcomeUnknown),
+            "{kind}"
+        );
+    }
+    // A verb field's value split by its separators still names its verb.
+    assert_eq!(
+        rules::action_of("delete_remote"),
+        Some(ToolCallAction::Delete)
+    );
+    assert_eq!(
+        rules::action_of("outlook.reply"),
+        Some(ToolCallAction::Send)
+    );
+    assert_eq!(rules::action_of("StatefulSet"), None);
+}
+
+#[test]
 fn a_kind_that_names_no_verb_qualifies_what_the_call_acts_on() {
     let delete = tool("resources_delete", "", Some(true));
     let change = change_with(

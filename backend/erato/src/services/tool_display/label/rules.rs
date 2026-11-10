@@ -664,7 +664,7 @@ fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
         .map(verb_field_values)
         .unwrap_or_default()
         .into_iter()
-        .flat_map(name_words)
+        .flat_map(field_value_words)
         .collect();
     let found = |action, source| Verb { action, source };
     let field_actions = actions_of(&fields);
@@ -801,10 +801,21 @@ fn name_verbs(name: &[String]) -> Vec<ToolCallAction> {
 
 /// What a verb field's value says a row does, if it names one verb.
 pub(super) fn action_of(value: &str) -> Option<ToolCallAction> {
-    match actions_of(&name_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
+    match actions_of(&field_value_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
         [action] => Some(*action),
         _ => None,
     }
+}
+
+/// A verb field's value in words: `delete_remote` and `outlook.reply` split
+/// where a separator stands, while `StatefulSet` is one word, a kind's name,
+/// and never the verb its last part spells.
+fn field_value_words(value: &str) -> Vec<String> {
+    value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect()
 }
 
 /// The actions the words name, in the order of `VERBS`.
