@@ -1987,6 +1987,56 @@ fn a_records_name_inside_a_wrapper_names_it_when_it_is_the_only_one() {
 }
 
 #[test]
+fn a_person_or_other_object_nested_in_a_record_never_names_it() {
+    const COMMENT: &str = "c0ffee00-0000-4000-8000-000000000001";
+    const TICKET: &str = "c0ffee00-0000-4000-8000-000000000002";
+    let person = json!({ "name": "Dana Pike", "email": "dana@example.com" });
+    let context = after(vec![
+        call(
+            "comments",
+            "list_comments",
+            json!({ "issue": "OPS-7" }),
+            json!([{ "id": COMMENT, "body": "Looks good", "author": person }]),
+        ),
+        call(
+            "ticket",
+            "get_ticket",
+            json!({ "ticket_id": TICKET }),
+            json!({ "id": TICKET, "status": "open", "requester": person }),
+        ),
+        call(
+            "tasks",
+            "list_tasks",
+            json!({}),
+            json!([{ "id": TASK, "content": "Fix it",
+                     "project": { "name": "Operations", "lead": "Ana" } }]),
+        ),
+    ]);
+    assert_eq!(name(&context, json!(COMMENT)), None);
+    assert_eq!(name(&context, json!(TICKET)), None);
+    assert_eq!(name(&context, json!(TASK)), None);
+    // Nor are its values the record's.
+    assert_eq!(earlier(&context, TICKET, "name", json!("New")), None);
+    assert_eq!(earlier(&context, TASK, "lead", json!("Ben")), None);
+    // The record's own field bag still names it and holds its values.
+    let context = after(vec![call(
+        "ticket",
+        "get_ticket",
+        json!({ "ticket_id": TICKET }),
+        json!({ "id": TICKET, "requester": person,
+                "fields": { "name": "Printer jam", "priority": "high" } }),
+    )]);
+    assert_eq!(
+        name(&context, json!(TICKET)).as_deref(),
+        Some("Printer jam")
+    );
+    assert_eq!(
+        earlier(&context, TICKET, "priority", json!("low")).as_deref(),
+        Some("high")
+    );
+}
+
+#[test]
 fn a_records_members_listed_as_name_and_value_pairs_are_read_as_its_members() {
     let describe = |path: &str| {
         call(

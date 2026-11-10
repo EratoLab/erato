@@ -1570,8 +1570,10 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
 }
 
 /// A record's values, by member: scalars and lists, read through the wrappers
-/// servers put around them, the IDs of the records it links to, and one level
-/// of nested objects such as `properties` or `fields`. A list of name and
+/// servers put around them, the IDs of the records it links to, and the
+/// members of its own field bag, such as `properties` or `fields`. Any other
+/// object in it, such as an `author` or a `project`, is someone or something
+/// else, whose name and values are not the record's. A list of name and
 /// value pairs holds members of the record it sits in. Each object member
 /// costs the walk its width, as it is read here too, and each pair one.
 fn values_of(object: &Map<String, Value>, id_member: &str, walk: &mut Walk) -> ReadValues {
@@ -1721,8 +1723,9 @@ impl ReadValues {
         self.fields.len() >= MAX_FIELDS_PER_RECORD
     }
 
-    /// Reads one member of the record itself; an object none of whose shapes
-    /// this reads goes to `nested`, when given. `false` once the walk ends.
+    /// Reads one member of the record itself; the record's own field bag,
+    /// such as `properties`, goes to `nested`, when given, unless one of the
+    /// shapes this reads holds it. `false` once the walk ends.
     fn top_member<'v>(
         &mut self,
         member: &str,
@@ -1755,15 +1758,19 @@ impl ReadValues {
                 }
             }
             None => match record_value(member, value) {
-                Some(RecordValue::Unread) | None => nested.into_iter().for_each(|n| n.push(inner)),
+                Some(RecordValue::Unread) | None => {
+                    if is_any_of(member, &rules::WRAPPER_MEMBERS) {
+                        nested.into_iter().for_each(|n| n.push(inner));
+                    }
+                }
                 Some(value) => value.keep(member, &mut self.fields, &mut self.lists),
             },
         }
         true
     }
 
-    /// Reads one member of an object nested in the record, unless the record
-    /// itself holds a member of that name.
+    /// Reads one member of the record's field bag, unless the record itself
+    /// holds a member of that name.
     fn nested_member(&mut self, member: &str, value: &Value) {
         if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some()
             || self.fields.contains_key(member)
