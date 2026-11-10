@@ -112,6 +112,45 @@ pub(super) fn choice_label(text: &str) -> Option<String> {
     usable.then(|| label.to_string())
 }
 
+/// What the sources a card weighs say one code means. Two that disagree, or
+/// one that contradicts itself, say nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(super) enum Said {
+    #[default]
+    Nothing,
+    Label(String),
+    Conflict,
+}
+
+impl Said {
+    /// Both sources together; on agreement the label as `self` wrote it.
+    pub(super) fn and(self, other: Said) -> Said {
+        match (self, other) {
+            (Said::Conflict, _) | (_, Said::Conflict) => Said::Conflict,
+            (Said::Nothing, said) | (said, Said::Nothing) => said,
+            (Said::Label(label), Said::Label(other)) if label.eq_ignore_ascii_case(&other) => {
+                Said::Label(label)
+            }
+            _ => Said::Conflict,
+        }
+    }
+
+    /// Whether `label` stands, as far as this says.
+    pub(super) fn allows(&self, label: &str) -> bool {
+        match self {
+            Said::Nothing => true,
+            Said::Label(said) => said.eq_ignore_ascii_case(label),
+            Said::Conflict => false,
+        }
+    }
+}
+
+impl From<Option<String>> for Said {
+    fn from(label: Option<String>) -> Self {
+        label.map_or(Said::Nothing, Said::Label)
+    }
+}
+
 /// An enum with names beside it, or constants with titles.
 fn listed_choice(property: &Map<String, Value>, code: &str) -> Option<String> {
     if let Some(values) = property.get("enum").and_then(Value::as_array) {
@@ -562,6 +601,17 @@ mod tests {
             assert_eq!(label_of(json!({"description": description}), "1"), None);
         }
         assert_eq!(choice_label(" In Review ").as_deref(), Some("In Review"));
+    }
+
+    #[test]
+    fn sources_agree_or_say_nothing() {
+        let low = || Said::Label("Low".to_string());
+        assert_eq!(Said::Nothing.and(low()), low());
+        assert_eq!(low().and(Said::Label("low".into())), low());
+        assert_eq!(low().and(Said::Label("High".into())), Said::Conflict);
+        assert_eq!(Said::Conflict.and(Said::Nothing), Said::Conflict);
+        assert!(Said::Nothing.allows("Low") && low().allows("LOW"));
+        assert!(!Said::Conflict.allows("Low") && !low().allows("High"));
     }
 
     #[test]

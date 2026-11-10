@@ -8,6 +8,7 @@
 
 use super::arguments::{MAX_ID_CHARS, MAX_LIST_ENTRIES, looks_like_a_uuid, names_an_id};
 use super::change::{Unwrapped, is_plural, unwrap, wrapped_value};
+use super::choices::{Said, choice_label, described_list, is_choice_code};
 use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer;
 use super::recipients::{is_phone_shaped, is_recipient_member};
@@ -19,7 +20,7 @@ use crate::models::message::{
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use unicode_normalization::UnicodeNormalization;
@@ -80,7 +81,71 @@ pub struct ToolResultContext {
     /// Some result went unread or was read only in part, so an ID missing
     /// from `seen_ids` may still have been read.
     partial: bool,
+    /// Labels reads gave codes outside any record, oldest first.
+    vocabularies: VecDeque<Vocabulary>,
+    /// Estimated size of `vocabularies`, kept under [`MAX_VOCABULARY_BYTES`].
+    vocabulary_bytes: usize,
+    /// The tables this chat's calls named, lower case: a read naming one of
+    /// them besides a write's own table may be about either.
+    tables: HashSet<String>,
 }
+
+/// Labels for codes a read listed apart from any record: a table's option
+/// sets, from a description of the table or its field metadata, or a list of
+/// options such as the transitions an issue can take.
+#[derive(Debug, Clone)]
+struct Vocabulary {
+    server: String,
+    scope: VocabularyScope,
+    /// Code to label by member; a list of options keeps its labels under
+    /// the empty member. `None` where one read gave a member two lists.
+    members: HashMap<String, Option<HashMap<String, String>>>,
+    bytes: usize,
+}
+
+/// Which calls a vocabulary speaks for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum VocabularyScope {
+    /// The words of the read's arguments: a call's table must be one of them.
+    Table(BTreeSet<String>),
+    /// The read's arguments, which a call must repeat, and the words of its
+    /// name and list wrapper, one of which must name the call's member.
+    List {
+        arguments: Vec<(String, String)>,
+        nouns: Vec<String>,
+    },
+}
+
+/// Vocabularies kept for one turn and what they may hold; the oldest go first.
+const MAX_VOCABULARIES: usize = 32;
+const MAX_VOCABULARY_BYTES: usize = 512 * 1024;
+const MAX_VOCABULARY_MEMBERS: usize = 512;
+/// Options a member or a list may have; a longer list says nothing.
+const MAX_OPTIONS: usize = 256;
+/// Bytes of a text result read for option sets, and of one line of it.
+const MAX_DESCRIBED_BYTES: usize = 128 * 1024;
+const MAX_DESCRIBED_LINE_BYTES: usize = 16 * 1024;
+/// A read naming more words than this is no read of one table, and one with
+/// more arguments than this no list for one place.
+const MAX_SCOPE_WORDS: usize = 64;
+const MAX_LIST_ARGUMENTS: usize = 16;
+const MAX_TABLES: usize = 256;
+/// Members a table names its option sets by in field metadata, and holds them in.
+const OPTION_FIELD_NAME_KEYS: [&str; 4] = ["name", "logicalname", "apiname", "key"];
+const OPTION_SET_KEYS: [&str; 4] = ["options", "picklistvalues", "choices", "enum"];
+/// An entry of a list of options: one code, one label, and nothing but
+/// these besides.
+const OPTION_CODE_KEYS: [&str; 4] = ["id", "code", "value", "key"];
+const OPTION_LABEL_KEYS: [&str; 3] = ["name", "label", "title"];
+const OPTION_EXTRA_KEYS: [&str; 4] = ["color", "description", "type", "order"];
+/// What a row calls a column's label beside the column `X` itself.
+const LABEL_SIBLING_SUFFIXES: [&str; 5] = [
+    "name",
+    "_name",
+    "label",
+    "_label",
+    "@odata.community.display.v1.formattedvalue",
+];
 
 /// Mail providers anyone can sign up with: an address there says nothing about
 /// which organisation a person belongs to.
@@ -450,30 +515,99 @@ impl ToolResultContext {
         self.record(server, text_key(id)?)?.name.as_deref()
     }
 
-    /// The label `code` has for `member` in the read that reported `record`,
-    /// if no record of that read gives it another. Scoped to one read:
-    /// another table may number the same member differently.
+    /// The label `code` has for `member` in the read that reported `record`.
+    /// Scoped to one read: another table may number the same member
+    /// differently. Two labels for the code in that read are a conflict.
     pub(super) fn earlier_choice_label(
         &self,
         server: &str,
         record: &Record,
         member: &str,
         code: &str,
-    ) -> Option<String> {
-        let mut found: Option<&str> = None;
+    ) -> Said {
+        let mut said = Said::Nothing;
         for (key, other) in &self.records {
             if key.server != server || other.read != record.read {
                 continue;
             }
-            let Some(coded) = other.coded.get(member).filter(|coded| coded.code == code) else {
-                continue;
-            };
-            match found {
-                Some(label) if label != coded.label => return None,
-                _ => found = Some(coded.label.as_str()),
+            if let Some(coded) = other.coded.get(member).filter(|coded| coded.code == code) {
+                said = said.and(Said::Label(coded.label.clone()));
             }
         }
-        found.map(str::to_string)
+        said
+    }
+
+    /// What the newest read about `table` that listed `member`'s options says
+    /// `code` means: a read of `server` whose arguments hold the table as a
+    /// word and no other table this chat's calls named.
+    pub(super) fn table_choice_label(
+        &self,
+        server: &str,
+        table: &str,
+        member: &str,
+        code: &str,
+    ) -> Said {
+        let table = table.to_lowercase();
+        for vocabulary in self.vocabularies.iter().rev() {
+            let VocabularyScope::Table(words) = &vocabulary.scope else {
+                continue;
+            };
+            let about_the_table = vocabulary.server == server
+                && words.contains(&table)
+                && !words
+                    .iter()
+                    .any(|word| *word != table && self.tables.contains(word));
+            if !about_the_table {
+                continue;
+            }
+            if let Some(options) = vocabulary.members.get(member) {
+                return match options {
+                    Some(options) => Said::from(options.get(code).cloned()),
+                    None => Said::Conflict,
+                };
+            }
+        }
+        Said::Nothing
+    }
+
+    /// What the lists of options a read of `server` returned say `code` of
+    /// `member` means for a call with `arguments`: lists whose read's every
+    /// argument the call repeats with the same value, and whose read's name
+    /// or list wrapper names what the member does, `transitions` for
+    /// `transition_id`. Lists that disagree say nothing.
+    pub(super) fn listed_choice_label(
+        &self,
+        server: &str,
+        arguments: &Value,
+        member: &str,
+        code: &str,
+    ) -> Said {
+        let (Some(noun), Some(call)) = (member_noun(member), arguments.as_object()) else {
+            return Said::Nothing;
+        };
+        let mut said = Said::Nothing;
+        for vocabulary in &self.vocabularies {
+            let VocabularyScope::List {
+                arguments: read,
+                nouns,
+            } = &vocabulary.scope
+            else {
+                continue;
+            };
+            let repeated = read
+                .iter()
+                .all(|(name, value)| call.get(name).and_then(scalar_text).as_ref() == Some(value));
+            if vocabulary.server != server
+                || !repeated
+                || !nouns.iter().any(|word| same_noun(word, &noun))
+            {
+                continue;
+            }
+            if let Some(Some(options)) = vocabulary.members.get("") {
+                said = said.and(Said::from(options.get(code).cloned()));
+            }
+        }
+        said
     }
 
     fn note_decisions(&mut self, content: &[ContentPart]) {
@@ -573,6 +707,8 @@ impl ToolResultContext {
             self.records.clear();
             self.order.clear();
             self.bytes = 0;
+            self.vocabularies.clear();
+            self.vocabulary_bytes = 0;
             self.partial = true;
         }
     }
@@ -615,6 +751,7 @@ impl ToolResultContext {
     }
 
     fn read_settled(&mut self, tool: &ToolUse) {
+        self.note_table(tool.input.as_ref());
         if self.is_refused_by_erato(tool) {
             return;
         }
@@ -649,7 +786,10 @@ impl ToolResultContext {
             return;
         }
         match &tool.output {
-            Some(Value::String(text)) => self.read_created(tool, text, server),
+            Some(Value::String(text)) => {
+                self.read_created(tool, text, server);
+                self.read_described_options(tool, text, server);
+            }
             Some(output) => {
                 let words = words(tool.input.as_ref());
                 let mut walk = Walk {
@@ -658,8 +798,174 @@ impl ToolResultContext {
                 };
                 self.read_node(output, server, &words, &mut walk, 0);
                 self.read_named_record(tool.input.as_ref(), output, server, &mut walk);
+                self.read_option_list(tool, output, server);
+                self.read_field_options(tool, output, server);
             }
             None => {}
+        }
+    }
+
+    /// Notes the table a call names, as [`call_table`] reads it.
+    fn note_table(&mut self, arguments: Option<&Value>) {
+        if self.tables.len() < MAX_TABLES
+            && let Some(table) = arguments.and_then(call_table)
+        {
+            self.tables.insert(table);
+        }
+    }
+
+    /// Option sets a text result lists one per line, as a table description's
+    /// `priority CHOICE (Options: Low (0), Normal (1), High (2))`: a line
+    /// opening with the member's name, the codes and labels after it.
+    fn read_described_options(&mut self, tool: &ToolUse, text: &str, server: &str) {
+        let Some(words) = table_scope(tool.input.as_ref()) else {
+            return;
+        };
+        let mut members = HashMap::new();
+        for line in text_prefix(text, MAX_DESCRIBED_BYTES).lines() {
+            if line.len() > MAX_DESCRIBED_LINE_BYTES {
+                continue;
+            }
+            let Some((member, rest)) = leading_member(line) else {
+                continue;
+            };
+            if let Some(options) = described_list(rest, MAX_OPTIONS) {
+                add_options(&mut members, member, options);
+            }
+        }
+        self.keep_vocabulary(server, VocabularyScope::Table(words), members);
+    }
+
+    /// Option sets a JSON result holds as field metadata, an object naming
+    /// its member beside `options`, `picklistValues`, `choices` or `enum`
+    /// that list `{value, label}` entries.
+    fn read_field_options(&mut self, tool: &ToolUse, output: &Value, server: &str) {
+        fn walk(
+            value: &Value,
+            members: &mut HashMap<String, Option<HashMap<String, String>>>,
+            nodes: &mut usize,
+            depth: usize,
+        ) {
+            if *nodes == 0 || depth > MAX_DEPTH {
+                return;
+            }
+            *nodes -= 1;
+            match value {
+                Value::Object(object) => {
+                    // Every member is looked at, so an object costs its width.
+                    let Some(left) = nodes.checked_sub(object.len()) else {
+                        *nodes = 0;
+                        return;
+                    };
+                    *nodes = left;
+                    if let Some((member, options)) = field_options(object) {
+                        add_options(members, member, options);
+                        return;
+                    }
+                    for child in object.values().filter(|child| is_container(child)) {
+                        walk(child, members, nodes, depth + 1);
+                    }
+                }
+                Value::Array(entries) => {
+                    for entry in entries.iter().filter(|entry| is_container(entry)) {
+                        walk(entry, members, nodes, depth + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(words) = table_scope(tool.input.as_ref()) else {
+            return;
+        };
+        let mut members = HashMap::new();
+        let mut nodes = MAX_NODES_PER_VALUE;
+        walk(output, &mut members, &mut nodes, 0);
+        self.keep_vocabulary(server, VocabularyScope::Table(words), members);
+    }
+
+    /// A result that is a list of options, or one member holding one: two or
+    /// more small objects, each one code and one label, such as an issue's
+    /// `[{"id": "31", "name": "Done"}]` transitions.
+    fn read_option_list(&mut self, tool: &ToolUse, output: &Value, server: &str) {
+        let (wrapper, entries) = match output {
+            Value::Array(entries) => (None, entries),
+            Value::Object(object) if object.len() == 1 => match object.iter().next() {
+                Some((wrapper, Value::Array(entries))) => (Some(wrapper.as_str()), entries),
+                _ => return,
+            },
+            _ => return,
+        };
+        let Some(options) = option_list(entries) else {
+            return;
+        };
+        let arguments = match tool.input.as_ref() {
+            None => Vec::new(),
+            Some(Value::Object(input)) if input.len() <= MAX_LIST_ARGUMENTS => {
+                let read: Option<Vec<_>> = input
+                    .iter()
+                    .map(|(name, value)| {
+                        let text = match value {
+                            Value::String(_) | Value::Number(_) | Value::Bool(_) => {
+                                scalar_text(value)?
+                            }
+                            _ => return None,
+                        };
+                        (text.len() <= MAX_ID_CHARS).then(|| (name.clone(), text))
+                    })
+                    .collect();
+                let Some(read) = read else {
+                    return;
+                };
+                read
+            }
+            Some(_) => return,
+        };
+        let mut nouns: Vec<String> = name_words(&tool.tool_name);
+        nouns.extend(wrapper.map(name_words).unwrap_or_default());
+        nouns.retain(|word| word.chars().count() >= MIN_NOUN_CHARS);
+        nouns.sort_unstable();
+        nouns.dedup();
+        let members = HashMap::from([(String::new(), Some(options))]);
+        self.keep_vocabulary(server, VocabularyScope::List { arguments, nouns }, members);
+    }
+
+    /// Keeps what one read listed, in place of what an older read listed for
+    /// the same scope.
+    fn keep_vocabulary(
+        &mut self,
+        server: &str,
+        scope: VocabularyScope,
+        members: HashMap<String, Option<HashMap<String, String>>>,
+    ) {
+        if members.is_empty() {
+            return;
+        }
+        if let Some(at) = self
+            .vocabularies
+            .iter()
+            .position(|kept| kept.server == server && kept.scope == scope)
+            && let Some(old) = self.vocabularies.remove(at)
+        {
+            self.vocabulary_bytes = self.vocabulary_bytes.saturating_sub(old.bytes);
+        }
+        let bytes = vocabulary_bytes(server, &scope, &members);
+        self.vocabularies.push_back(Vocabulary {
+            server: server.to_string(),
+            scope,
+            members,
+            bytes,
+        });
+        self.vocabulary_bytes = self.vocabulary_bytes.saturating_add(bytes);
+        while self.vocabularies.len() > MAX_VOCABULARIES
+            || (self.vocabulary_bytes > MAX_VOCABULARY_BYTES && self.vocabularies.len() > 1)
+        {
+            if let Some(oldest) = self.vocabularies.pop_front() {
+                self.vocabulary_bytes = self.vocabulary_bytes.saturating_sub(oldest.bytes);
+            }
+        }
+        if self.vocabulary_bytes > MAX_VOCABULARY_BYTES {
+            self.vocabularies.clear();
+            self.vocabulary_bytes = 0;
         }
     }
 
@@ -1234,9 +1540,19 @@ fn name_of(object: &Map<String, Value>) -> Option<String> {
 /// costs the walk its width, as it is read here too, and each pair one.
 fn values_of(object: &Map<String, Value>, id_member: &str, walk: &mut Walk) -> ReadValues {
     let mut read = ReadValues::default();
+    let labelled = LabelledColumns::of(object, id_member);
     let mut nested = Vec::new();
     'members: for (member, value) in object {
-        if member == id_member {
+        if member == id_member || labelled.siblings.contains(member.as_str()) {
+            continue;
+        }
+        if let Some(coded) = labelled.coded.get(member.as_str()) {
+            if read.is_full() {
+                break;
+            }
+            // The code is the value compared; the label only stands beside it.
+            read.fields.insert(member.clone(), coded.code.clone());
+            read.coded.insert(member.clone(), coded.clone());
             continue;
         }
         if let Some(pairs) = attribute_pairs(value) {
@@ -1267,6 +1583,87 @@ fn values_of(object: &Map<String, Value>, id_member: &str, walk: &mut Walk) -> R
         read.nested_member(member, value);
     }
     read
+}
+
+/// Columns a row writes as a code with its label in a column beside it, as
+/// `statecode: 0` beside `statecodename: "Open"`, and those label columns.
+#[derive(Default)]
+struct LabelledColumns<'a> {
+    coded: HashMap<&'a str, CodedValue>,
+    siblings: HashSet<&'a str>,
+}
+
+impl<'a> LabelledColumns<'a> {
+    /// A column `X` holding a short code, and every column beside it named
+    /// `X` plus a label suffix holding the same usable label. Never for the
+    /// row's ID, a name, an ID, a recipient or a contact number.
+    fn of(object: &'a Map<String, Value>, id_member: &str) -> Self {
+        let mut labels: HashMap<String, Vec<(&'a str, &'a Value)>> = HashMap::new();
+        for (member, value) in object {
+            if member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_some() {
+                continue;
+            }
+            let lower = member.to_lowercase();
+            for suffix in LABEL_SIBLING_SUFFIXES {
+                if let Some(column) = lower
+                    .strip_suffix(suffix)
+                    .filter(|column| !column.is_empty())
+                {
+                    labels
+                        .entry(column.to_string())
+                        .or_default()
+                        .push((member.as_str(), value));
+                }
+            }
+        }
+        let mut columns = Self::default();
+        if labels.is_empty() {
+            return columns;
+        }
+        for (member, value) in object {
+            let Some(siblings) = labels.get(&member.to_lowercase()) else {
+                continue;
+            };
+            let code = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number.to_string(),
+                _ => continue,
+            };
+            if member == id_member
+                || names_an_id(member)
+                || is_name_member(member)
+                || is_recipient_member(member)
+                || !is_choice_code(&code)
+            {
+                continue;
+            }
+            let mut said = Said::Nothing;
+            for (_, label) in siblings {
+                said = said.and(match label.as_str().and_then(choice_label) {
+                    Some(label) => Said::Label(label),
+                    None => Said::Conflict,
+                });
+            }
+            let Said::Label(label) = said else {
+                continue;
+            };
+            if label.eq_ignore_ascii_case(&code) {
+                continue;
+            }
+            columns
+                .siblings
+                .extend(siblings.iter().map(|(sibling, _)| *sibling));
+            columns.coded.insert(
+                member.as_str(),
+                CodedValue {
+                    code,
+                    label,
+                    numeric: value.is_number(),
+                },
+            );
+        }
+        columns
+    }
 }
 
 /// What one result said about one record.
@@ -1827,6 +2224,241 @@ fn created_name(arguments: &Value) -> Option<String> {
         return None;
     }
     names.into_iter().next()
+}
+
+/// The table a call names, lower case: a short word at its top level under a
+/// table member such as `tablename`, or an `objectName`.
+pub(super) fn call_table(arguments: &Value) -> Option<String> {
+    const MAX_TABLE_CHARS: usize = 64;
+    arguments
+        .as_object()?
+        .iter()
+        .find(|(member, _)| {
+            is_any_of(member, &rules::TABLE_MEMBERS)
+                || is_any_of(member, &["objectname", "object_name"])
+        })
+        .and_then(|(_, value)| value.as_str())
+        .map(str::trim)
+        .filter(|table| {
+            !table.is_empty()
+                && table.chars().count() <= MAX_TABLE_CHARS
+                && table.chars().all(|c| c.is_alphanumeric() || c == '_')
+        })
+        .map(str::to_lowercase)
+}
+
+/// The words of a read's arguments that a vocabulary is scoped by: none for a
+/// read without any, and none past [`MAX_SCOPE_WORDS`].
+fn table_scope(input: Option<&Value>) -> Option<BTreeSet<String>> {
+    let words = words(input);
+    (!words.is_empty() && words.len() <= MAX_SCOPE_WORDS).then(|| words.into_iter().collect())
+}
+
+/// The member name a line opens with, as `priority` in `priority CHOICE
+/// (…)`, after a bullet and in backticks or not, and the rest of the line.
+fn leading_member(line: &str) -> Option<(&str, &str)> {
+    let line = line.trim_start();
+    let line = match line.strip_prefix(['-', '*']) {
+        Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        _ => line,
+    };
+    let (ticked, line) = match line.strip_prefix('`') {
+        Some(rest) => (true, rest),
+        None => (false, line),
+    };
+    let end = line
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(line.len());
+    let member = &line[..end];
+    if !member.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        || member.len() > MAX_DISPLAY_NAME_CHARS
+    {
+        return None;
+    }
+    let rest = &line[end..];
+    let rest = if ticked {
+        rest.strip_prefix('`')?
+    } else {
+        rest
+    };
+    rest.starts_with(char::is_whitespace)
+        .then_some((member, rest))
+}
+
+/// Adds one member's options; a member listed again with other options
+/// says nothing.
+fn add_options(
+    members: &mut HashMap<String, Option<HashMap<String, String>>>,
+    member: &str,
+    options: Vec<(String, String)>,
+) {
+    if members.len() >= MAX_VOCABULARY_MEMBERS && !members.contains_key(member) {
+        return;
+    }
+    let options: HashMap<String, String> = options.into_iter().collect();
+    match members.get_mut(member) {
+        Some(kept) => {
+            if kept.as_ref() != Some(&options) {
+                *kept = None;
+            }
+        }
+        None => {
+            members.insert(member.to_string(), Some(options));
+        }
+    }
+}
+
+/// The one member of `object` named any of `names`; `None` for none or two.
+fn one_member_in<'a>(object: &'a Map<String, Value>, names: &[&str]) -> Option<&'a Value> {
+    let mut found = object
+        .iter()
+        .filter(|(member, _)| is_any_of(member, names))
+        .map(|(_, value)| value);
+    match (found.next(), found.next()) {
+        (Some(only), None) => Some(only),
+        _ => None,
+    }
+}
+
+/// A code as an option list writes it: a short string or a number, never
+/// an ID, an address or a phone number.
+fn option_code(value: &Value) -> Option<String> {
+    let code = match value {
+        Value::String(text) => text.clone(),
+        Value::Number(number) => number.to_string(),
+        _ => return None,
+    };
+    is_choice_code(&code).then_some(code)
+}
+
+/// Field metadata naming one member and listing its options as `{value,
+/// label}`, as `{"name": "Industry", "picklistValues": [...]}`.
+fn field_options(object: &Map<String, Value>) -> Option<(&str, Vec<(String, String)>)> {
+    let member = one_member_in(object, &OPTION_FIELD_NAME_KEYS)?
+        .as_str()
+        .filter(|member| {
+            !member.trim().is_empty() && member.chars().nth(MAX_DISPLAY_NAME_CHARS).is_none()
+        })?;
+    let entries = one_member_in(object, &OPTION_SET_KEYS)?
+        .as_array()
+        .filter(|entries| (2..=MAX_OPTIONS).contains(&entries.len()))?;
+    let mut codes = HashSet::new();
+    let mut options = Vec::new();
+    for entry in entries {
+        let entry = entry.as_object()?;
+        let code = option_code(one_member_in(entry, &["value"])?)?;
+        let label = choice_label(one_member_in(entry, &["label"])?.as_str()?)?;
+        if !codes.insert(code.clone()) {
+            return None;
+        }
+        options.push((code, label));
+    }
+    Some((member, options))
+}
+
+/// Code to label of a list of options: two or more objects, each exactly one
+/// code member and one label member and at most a color, description, type
+/// or order besides. Any other entry, or a code listed twice, and the list
+/// says nothing.
+fn option_list(entries: &[Value]) -> Option<HashMap<String, String>> {
+    if !(2..=MAX_OPTIONS).contains(&entries.len()) {
+        return None;
+    }
+    let mut options = HashMap::new();
+    for entry in entries {
+        let entry = entry.as_object()?;
+        let (mut code, mut label) = (None, None);
+        for (member, value) in entry {
+            let slot = if is_any_of(member, &OPTION_CODE_KEYS) {
+                &mut code
+            } else if is_any_of(member, &OPTION_LABEL_KEYS) {
+                &mut label
+            } else if is_any_of(member, &OPTION_EXTRA_KEYS) {
+                continue;
+            } else {
+                return None;
+            };
+            if slot.replace(value).is_some() {
+                return None;
+            }
+        }
+        let code = option_code(code?)?;
+        let label = choice_label(label?.as_str()?)?;
+        if options.insert(code, label).is_some() {
+            return None;
+        }
+    }
+    Some(options)
+}
+
+/// Shorter words name too little to tie a member to a list.
+const MIN_NOUN_CHARS: usize = 3;
+
+/// What a member's code stands for, by its name: `transition_id` →
+/// `transition`, `statusCode` → `status`.
+fn member_noun(member: &str) -> Option<String> {
+    let mut words = name_words(member);
+    while words.last().is_some_and(|word| {
+        matches!(
+            word.as_str(),
+            "id" | "ids" | "code" | "codes" | "key" | "keys"
+        )
+    }) {
+        words.pop();
+    }
+    words
+        .pop()
+        .filter(|word| word.chars().count() >= MIN_NOUN_CHARS)
+}
+
+/// One noun in the singular or the plural: `transition` and `transitions`,
+/// `status` and `statuses`, `priority` and `priorities`.
+fn same_noun(a: &str, b: &str) -> bool {
+    fn plural_of(singular: &str, plural: &str) -> bool {
+        plural
+            .strip_prefix(singular)
+            .is_some_and(|ending| matches!(ending, "s" | "es"))
+            || singular
+                .strip_suffix('y')
+                .and_then(|stem| plural.strip_prefix(stem))
+                == Some("ies")
+    }
+    a == b || plural_of(a, b) || plural_of(b, a)
+}
+
+/// What a vocabulary costs, roughly: its text plus a fixed overhead per entry.
+fn vocabulary_bytes(
+    server: &str,
+    scope: &VocabularyScope,
+    members: &HashMap<String, Option<HashMap<String, String>>>,
+) -> usize {
+    const OVERHEAD: usize = 64;
+    let scope = match scope {
+        VocabularyScope::Table(words) => words.iter().map(|word| OVERHEAD + word.len()).sum(),
+        VocabularyScope::List { arguments, nouns } => {
+            arguments
+                .iter()
+                .map(|(name, value)| OVERHEAD + name.len() + value.len())
+                .sum::<usize>()
+                + nouns
+                    .iter()
+                    .map(|noun| OVERHEAD + noun.len())
+                    .sum::<usize>()
+        }
+    };
+    let members: usize = members
+        .iter()
+        .map(|(member, options)| {
+            OVERHEAD
+                + member.len()
+                + options
+                    .iter()
+                    .flatten()
+                    .map(|(code, label)| OVERHEAD + code.len() + label.len())
+                    .sum::<usize>()
+        })
+        .sum();
+    OVERHEAD + server.len() + scope + members
 }
 
 #[cfg(test)]

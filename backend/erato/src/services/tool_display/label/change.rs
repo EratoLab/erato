@@ -7,10 +7,12 @@
 
 use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::names_an_id;
-use super::choices::{MAX_CHOICE_LABEL_CHARS, is_choice_code, schema_choice_label};
+use super::choices::{
+    MAX_CHOICE_LABEL_CHARS, Said, choice_label, is_choice_code, schema_choice_label,
+};
 use super::context::{
-    CodedValue, ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match,
-    list_entry, name_words, text_prefix,
+    CodedValue, ListEntry, ToolResultContext, call_table, is_link, link_id_member,
+    list_entries_match, list_entry, name_words, text_prefix,
 };
 use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer::escape;
@@ -256,6 +258,8 @@ struct Walk<'a> {
     before: Option<&'a str>,
     after: HashSet<&'a str>,
     earlier: Option<EarlierRecord<'a>>,
+    /// The table the call names, which earlier descriptions of it speak for.
+    table: Option<String>,
     change: ToolCallChange,
     places: Vec<(usize, String)>,
     nodes: usize,
@@ -329,6 +333,7 @@ impl<'a> Walk<'a> {
             before,
             after,
             earlier,
+            table: call_table(facts.arguments),
             change: ToolCallChange::default(),
             places: Vec::new(),
             nodes: MAX_NODES,
@@ -783,8 +788,9 @@ impl<'a> Walk<'a> {
     }
 
     /// `value` with what its code means, where someone has said so. The
-    /// glossary is the operator's word; the tool's schema and an earlier read
-    /// count only when they agree, and a card marks the tool's as a claim.
+    /// glossary is the operator's word; the tool's schema and earlier reads
+    /// count only when they all agree, and a card marks theirs as the tool's
+    /// claim beside the code.
     fn with_meaning(
         &self,
         mut value: ToolCallEffectValue,
@@ -808,6 +814,11 @@ impl<'a> Walk<'a> {
 
     fn meaning_of(&self, member: &str, path: &str, code: &str) -> Option<ToolCallValueMeaning> {
         let meaning = |label: &str, source| {
+            if source != ToolCallValueMeaningSource::Glossary {
+                // A server's words are never an ID, a number to call, a
+                // link or an address, however they reached the index.
+                return choice_label(label).map(|label| ToolCallValueMeaning { label, source });
+            }
             let cleaned = sanitize_display_text(label, MAX_CHOICE_LABEL_CHARS);
             (!cleaned.text.is_empty() && !cleaned.truncated && !is_machine_id(&cleaned.text))
                 .then_some(ToolCallValueMeaning {
@@ -815,17 +826,12 @@ impl<'a> Walk<'a> {
                     source,
                 })
         };
-        let schema = schema_choice_label(&self.facts.tool.input_schema, path, code);
-        let earlier = self.earlier.as_ref().and_then(|earlier| {
-            self.facts
-                .context
-                .earlier_choice_label(earlier.server, earlier.record, member, code)
-        });
-        let disagrees = |label: &str, other: &Option<String>| {
-            other
-                .as_deref()
-                .is_some_and(|other| !other.eq_ignore_ascii_case(label))
-        };
+        let schema = Said::from(schema_choice_label(
+            &self.facts.tool.input_schema,
+            path,
+            code,
+        ));
+        let read = self.read_meaning(member, code);
         if let Some(label) = self
             .facts
             .glossary
@@ -833,16 +839,37 @@ impl<'a> Walk<'a> {
         {
             // A glossary entry holds for every table of the server; a tool
             // or a read that numbers this field otherwise is about another.
-            return (!disagrees(label, &schema) && !disagrees(label, &earlier))
+            return (schema.allows(label) && read.allows(label))
                 .then(|| meaning(label, ToolCallValueMeaningSource::Glossary))
                 .flatten();
         }
-        match (schema, earlier) {
-            (Some(schema), Some(earlier)) if !schema.eq_ignore_ascii_case(&earlier) => None,
-            (_, Some(earlier)) => meaning(&earlier, ToolCallValueMeaningSource::Earlier),
-            (Some(schema), None) => meaning(&schema, ToolCallValueMeaningSource::Tool),
-            (None, None) => None,
+        let source = if matches!(read, Said::Label(_)) {
+            ToolCallValueMeaningSource::Earlier
+        } else {
+            ToolCallValueMeaningSource::Tool
+        };
+        match read.and(schema) {
+            Said::Label(label) => meaning(&label, source),
+            Said::Nothing | Said::Conflict => None,
         }
+    }
+
+    /// What earlier reads of the call's server say `code` of `member` means:
+    /// the read that reported the record, the newest description of the
+    /// call's table, and lists of options read for the same place.
+    fn read_meaning(&self, member: &str, code: &str) -> Said {
+        let Some(server) = self.facts.server else {
+            return Said::Nothing;
+        };
+        let context = self.facts.context;
+        let record = self.earlier.as_ref().map_or(Said::Nothing, |earlier| {
+            context.earlier_choice_label(earlier.server, earlier.record, member, code)
+        });
+        let table = self.table.as_deref().map_or(Said::Nothing, |table| {
+            context.table_choice_label(server, table, member, code)
+        });
+        let listed = context.listed_choice_label(server, self.facts.arguments, member, code);
+        record.and(table).and(listed)
     }
 
     fn classify_scalar(
@@ -870,7 +897,7 @@ impl<'a> Walk<'a> {
         };
         let compared_as_code = same_code || (coded.is_some() && scalar_is_number(scalar, &new));
         effect.old = match coded.filter(|_| compared_as_code && !below_a_recipient(path)) {
-            Some(coded) => Some(self.old_code_shown(coded)),
+            Some(coded) => Some(self.old_code_shown(member, path, coded)),
             None => self.old_shown(member, &earlier.text, path).map(|mut old| {
                 if old.meaning.is_none()
                     && !old.machine_id
@@ -902,17 +929,14 @@ impl<'a> Walk<'a> {
     }
 
     /// An earlier value in the form it was compared in: its code, with what
-    /// the result said it means.
-    fn old_code_shown(&self, coded: &CodedValue) -> ToolCallEffectValue {
+    /// the result said it means unless another source says otherwise.
+    fn old_code_shown(&self, member: &str, path: &str, coded: &CodedValue) -> ToolCallEffectValue {
         let cleaned = sanitize_display_text(&coded.code, MAX_DISPLAY_NAME_CHARS);
         ToolCallEffectValue {
             text: cleaned.text,
             truncated: cleaned.truncated,
             machine_id: false,
-            meaning: Some(ToolCallValueMeaning {
-                label: coded.label.clone(),
-                source: ToolCallValueMeaningSource::Earlier,
-            }),
+            meaning: self.meaning_of(member, path, &coded.code),
         }
     }
 

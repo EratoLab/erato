@@ -2827,3 +2827,473 @@ fn a_record_named_only_by_an_id_no_result_held_says_so_and_its_name_reads_as_new
     assert!(!created.record_unread);
     assert!(created.effects.iter().all(|effect| !effect.new_name));
 }
+
+/// A table's description as a describe tool returns it, one member a line.
+const ACCOUNT_DESCRIBED: &str = "DESCRIBE TABLE account (
+  name NVARCHAR(160),
+  customertype CHOICE (Options: Competitor (1), Consultant (2), Prospect (8)),
+  industry CHOICE (Options: Accounting (1), IT services (74)),
+  telephone1 CHOICE (Options: Home (1), Work (2)),
+  parentaccountid LOOKUP (GUID) ( Related table : account),
+  lifecycle STATE (INT) (Valid Options: Active (0), Inactive (1))
+);";
+
+fn describe_call(path: &str, text: &str) -> (&'static str, Value, Value) {
+    ("describe", json!({"path": path}), json!(text))
+}
+
+fn meaning_of_value(
+    change: &ToolCallChange,
+    member: &str,
+) -> Option<(String, ToolCallValueMeaningSource)> {
+    effect(change, member).values[0]
+        .meaning
+        .as_ref()
+        .map(|meaning| (meaning.label.clone(), meaning.source))
+}
+
+fn said(label: &str) -> Option<(String, ToolCallValueMeaningSource)> {
+    Some((label.to_string(), ToolCallValueMeaningSource::Earlier))
+}
+
+#[test]
+fn a_label_column_beside_a_code_labels_the_code_the_record_held() {
+    let update = tool("update_record", "", None);
+    let arguments = json!({"tablename": "opportunity", "recordId": RECORD, "item": {
+        "risklevel": 727000002,
+        "stage": 1,
+    }});
+    for label_column in [
+        "risklevelname",
+        "risklevel_label",
+        "risklevel@OData.Community.Display.V1.FormattedValue",
+    ] {
+        let context = earlier(vec![(
+            "read_query",
+            json!({"querytext": "SELECT name, opportunityid, risklevel, stage FROM opportunity"}),
+            json!([{
+                "name": "Line 4 retrofit",
+                "opportunityid": RECORD,
+                "risklevel": 727000001,
+                label_column: "Medium",
+                "stage": 1,
+                "stagename": "Qualify",
+            }]),
+        )]);
+        let (change, hidden) = change_with(&update, arguments.clone(), &context);
+        assert!(!hidden);
+        let risk = effect(&change, "risklevel");
+        assert_eq!(risk.effect, ToolCallEffectKind::Changed, "{label_column}");
+        let old = risk.old.as_ref().unwrap();
+        assert_eq!(old.text, "727000001");
+        assert_eq!(
+            old.meaning
+                .as_ref()
+                .map(|meaning| (meaning.label.as_str(), meaning.source)),
+            Some(("Medium", ToolCallValueMeaningSource::Earlier)),
+            "{label_column}"
+        );
+        assert_eq!(risk.values[0].meaning, None);
+        // The same code is the same value, said once with its label.
+        let stage = effect(&change, "stage");
+        assert_eq!(stage.effect, ToolCallEffectKind::Unchanged);
+        assert_eq!(meaning_of_value(&change, "stage"), said("Qualify"));
+    }
+}
+
+#[test]
+fn a_list_of_options_read_for_the_same_record_labels_the_code_a_call_picks() {
+    let transitions = json!([{"id": "21", "name": "In Review"}, {"id": "31", "name": "Done"}]);
+    let transition = tool("transition_issue", "", None);
+    let arguments = json!({"issue_key": "OPS-218", "transition_id": "31", "comment": "Rotated."});
+    let read = |issue: &str, output: Value| {
+        earlier(vec![(
+            "get_transitions",
+            json!({"issue_key": issue}),
+            output,
+        )])
+    };
+
+    let context = read("OPS-218", transitions.clone());
+    let (change, _) = change_with(&transition, arguments.clone(), &context);
+    assert_eq!(meaning_of_value(&change, "transition_id"), said("Done"));
+    assert_eq!(meaning_of_value(&change, "comment"), None);
+    let wrapped = earlier(vec![(
+        "get_issue_options",
+        json!({"issue_key": "OPS-218"}),
+        json!({"transitions": transitions.clone()}),
+    )]);
+    let (change, _) = change_with(&transition, arguments.clone(), &wrapped);
+    assert_eq!(meaning_of_value(&change, "transition_id"), said("Done"));
+
+    // Another issue's list, a list of something else, or entries that are
+    // more than a code and a label, say nothing.
+    for context in [
+        read("OPS-219", transitions.clone()),
+        earlier(vec![(
+            "get_priorities",
+            json!({"issue_key": "OPS-218"}),
+            transitions.clone(),
+        )]),
+        read(
+            "OPS-218",
+            json!([
+                {"id": "21", "name": "In Review", "to": {"id": "3"}},
+                {"id": "31", "name": "Done", "to": {"id": "4"}},
+            ]),
+        ),
+        read("OPS-218", json!([{"id": "31", "name": "Done"}])),
+    ] {
+        let (change, _) = change_with(&transition, arguments.clone(), &context);
+        assert_eq!(meaning_of_value(&change, "transition_id"), None);
+    }
+}
+
+#[test]
+fn a_description_of_the_calls_table_labels_its_codes_on_a_create_and_an_update() {
+    let context = earlier(vec![describe_call("tables/account", ACCOUNT_DESCRIBED)]);
+    let (created, _) = change_with(
+        &tool("create_record", "", None),
+        json!({"tablename": "account", "item": {
+            "name": "Probe Row",
+            "customertype": 8,
+            "industry": 74,
+            "lifecycle": 5,
+        }}),
+        &context,
+    );
+    assert_eq!(meaning_of_value(&created, "customertype"), said("Prospect"));
+    assert_eq!(meaning_of_value(&created, "industry"), said("IT services"));
+    assert_eq!(meaning_of_value(&created, "lifecycle"), None);
+
+    let context = earlier(vec![
+        describe_call("tables/account", ACCOUNT_DESCRIBED),
+        (
+            "read_query",
+            json!({"querytext": "SELECT name, accountid, customertype FROM account"}),
+            json!([{"name": "Old name", "accountid": RECORD, "customertype": 8}]),
+        ),
+    ]);
+    let (updated, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"tablename": "account", "recordId": RECORD, "item": {"customertype": 1}}),
+        &context,
+    );
+    let row = effect(&updated, "customertype");
+    assert_eq!(row.effect, ToolCallEffectKind::Changed);
+    let old = row.old.as_ref().unwrap();
+    assert_eq!(
+        (
+            old.text.as_str(),
+            old.meaning.as_ref().unwrap().label.as_str()
+        ),
+        ("8", "Prospect")
+    );
+    assert_eq!(
+        meaning_of_value(&updated, "customertype"),
+        said("Competitor")
+    );
+
+    // The same list in field metadata does the same.
+    let metadata = earlier(vec![(
+        "get_table_metadata",
+        json!({"table": "task"}),
+        json!({"fields": [
+            {"name": "priority", "type": "picklist", "options": [
+                {"value": 0, "label": "Low"},
+                {"value": 2, "label": "High"},
+            ]},
+            {"name": "subject", "type": "string"},
+        ]}),
+    )]);
+    let (task, _) = change_with(
+        &tool("create_record", "", None),
+        json!({"tablename": "task", "item": {"subject": "Call back", "priority": 2}}),
+        &metadata,
+    );
+    assert_eq!(meaning_of_value(&task, "priority"), said("High"));
+}
+
+#[test]
+fn a_description_of_one_table_never_labels_a_call_on_another() {
+    let create = tool("create_record", "", None);
+    let other_table = json!({"tablename": "contact", "item": {"customertype": 8}});
+    let context = earlier(vec![describe_call("tables/account", ACCOUNT_DESCRIBED)]);
+    let (change, _) = change_with(&create, other_table, &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+
+    // A read naming two tables a chat's calls named may be about either.
+    let account = json!({"tablename": "account", "item": {"customertype": 8}});
+    let context = earlier(vec![
+        (
+            "create_record",
+            json!({"tablename": "contact", "item": {"name": "Ada"}}),
+            json!(format!("Created {ACCOUNT}")),
+        ),
+        describe_call("tables/account tables/contact", ACCOUNT_DESCRIBED),
+    ]);
+    let (change, _) = change_with(&create, account.clone(), &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+
+    // Nor does it speak for another server's calls, or for a call without a table.
+    let (change, _) = change_with(
+        &create,
+        json!({"item": {"customertype": 8}}),
+        &earlier(vec![describe_call("tables/account", ACCOUNT_DESCRIBED)]),
+    );
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+    let label = labelled(&create, &account, &ToolResultContext::default());
+    let context = earlier(vec![describe_call("tables/account", ACCOUNT_DESCRIBED)]);
+    let change = describe(
+        &label,
+        ChangeFacts {
+            tool: &create,
+            arguments: &account,
+            approval_argument: None,
+            context: &context,
+            server: Some("Other"),
+            rules_action: label.action,
+            glossary: None,
+            destructive_hint_source: Default::default(),
+        },
+    )
+    .unwrap()
+    .0;
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+}
+
+#[test]
+fn labels_that_disagree_say_nothing() {
+    let update = tool("update_record", "", None);
+    let arguments =
+        json!({"tablename": "account", "recordId": RECORD, "item": {"customertype": 2}});
+    // The row's label column against the table's description.
+    let context = earlier(vec![
+        describe_call("tables/account", ACCOUNT_DESCRIBED),
+        (
+            "read_query",
+            json!({"querytext": "SELECT name, accountid, customertype FROM account"}),
+            json!([{
+                "name": "Old name",
+                "accountid": RECORD,
+                "customertype": 8,
+                "customertypename": "Partner",
+            }]),
+        ),
+    ]);
+    let (change, _) = change_with(&update, arguments.clone(), &context);
+    let old = effect(&change, "customertype").old.as_ref().unwrap();
+    assert_eq!((old.text.as_str(), &old.meaning), ("8", &None));
+    assert_eq!(
+        meaning_of_value(&change, "customertype"),
+        said("Consultant")
+    );
+
+    // A description listing a member twice, differently.
+    let twice =
+        format!("{ACCOUNT_DESCRIBED}\n  customertype CHOICE (Options: Partner (2), Other (3))");
+    let context = earlier(vec![describe_call("tables/account", &twice)]);
+    let (change, _) = change_with(&update, arguments.clone(), &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+
+    // Two lists of options for the same issue.
+    let transition = tool("transition_issue", "", None);
+    let context = earlier(vec![
+        (
+            "get_transitions",
+            json!({"issue_key": "OPS-218"}),
+            json!([{"id": "21", "name": "In Review"}, {"id": "31", "name": "Done"}]),
+        ),
+        (
+            "list_transitions",
+            json!({"issue_key": "OPS-218"}),
+            json!([{"id": "21", "name": "In Review"}, {"id": "31", "name": "Reopened"}]),
+        ),
+    ]);
+    let (change, _) = change_with(
+        &transition,
+        json!({"issue_key": "OPS-218", "transition_id": "31"}),
+        &context,
+    );
+    assert_eq!(meaning_of_value(&change, "transition_id"), None);
+
+    // The tool's schema against a read.
+    let schema = tool_with_schema(
+        "update_record",
+        "",
+        json!({"type": "object", "properties": {"item": {"properties": {
+            "customertype": {"type": "integer", "description": "Options: Rival (1), Adviser (2)"},
+        }}}}),
+    );
+    let context = earlier(vec![describe_call("tables/account", ACCOUNT_DESCRIBED)]);
+    let (change, _) = change_with(&schema, arguments, &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+}
+
+#[test]
+fn a_hostile_label_from_a_read_says_nothing_and_never_warns() {
+    let update = tool("update_record", "", None);
+    let arguments =
+        json!({"tablename": "account", "recordId": RECORD, "item": {"customertype": 2}});
+    let long = "x".repeat(MAX_CHOICE_LABEL_CHARS + 1);
+    for hostile in [
+        "Partner",
+        long.as_str(),
+        "aaaaaaaa-0000-4000-8000-0000000000a1",
+        "Partner\u{202E}reltuo",
+        "+49 30 5550100",
+        "helpdesk@example.com",
+    ] {
+        let benign = hostile == "Partner";
+        let described = format!("customertype CHOICE (Options: Rival (1), {hostile} (2))");
+        let row = json!([{"name": "Old name", "accountid": RECORD, "customertype": 2, "customertypename": hostile}]);
+        let options = json!([{"id": "1", "name": "Rival"}, {"id": "2", "name": hostile}]);
+        for context in [
+            earlier(vec![describe_call("tables/account", &described)]),
+            earlier(vec![(
+                "read_query",
+                json!({"querytext": "SELECT name, accountid, customertype FROM account"}),
+                row,
+            )]),
+            earlier(vec![(
+                "list_customertypes",
+                json!({"tablename": "account"}),
+                options,
+            )]),
+        ] {
+            let (change, hidden) = change_with(&update, arguments.clone(), &context);
+            let row = effect(&change, "customertype");
+            let labelled = row.values[0].meaning.is_some()
+                || row.old.as_ref().is_some_and(|old| old.meaning.is_some());
+            assert_eq!(labelled, benign, "{hostile}");
+            assert!(!hidden, "{hostile}");
+        }
+    }
+}
+
+#[test]
+fn recipients_and_contact_numbers_never_get_a_label() {
+    let context = earlier(vec![
+        describe_call(
+            "tables/account",
+            &format!(
+                "{ACCOUNT_DESCRIBED}\n  to CHOICE (Options: Sales (1), Support (2))\n  line CHOICE (Options: Main (1), Side (2))"
+            ),
+        ),
+        (
+            "read_query",
+            json!({"querytext": "SELECT name, accountid, telephone1, line FROM account"}),
+            json!([{
+                "name": "Old name",
+                "accountid": RECORD,
+                "telephone1": 1,
+                "telephone1name": "Home",
+                "line": "+49 30 5550100",
+                "linename": "Office",
+            }]),
+        ),
+    ]);
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"tablename": "account", "recordId": RECORD, "item": {
+            "telephone1": 2,
+            "line": "+49 30 5550111",
+            "to": 1,
+        }}),
+        &context,
+    );
+    let phone = effect(&change, "telephone1");
+    assert_eq!(phone.values[0].meaning, None);
+    assert!(phone.old.as_ref().is_none_or(|old| old.meaning.is_none()));
+    let line = effect(&change, "line");
+    assert_eq!(line.values[0].meaning, None);
+    assert!(line.old.as_ref().is_none_or(|old| old.meaning.is_none()));
+    assert!(change.effects.iter().all(|effect| effect.raw_name != "to"
+        || effect.values.iter().all(|value| value.meaning.is_none())));
+}
+
+#[test]
+fn a_newer_read_replaces_the_labels_an_older_one_gave() {
+    let create = tool("create_record", "", None);
+    let arguments = json!({"tablename": "account", "item": {"customertype": 8}});
+    let renamed = ACCOUNT_DESCRIBED.replace("Prospect (8)", "Lead (8)");
+    let context = earlier(vec![
+        describe_call("tables/account", ACCOUNT_DESCRIBED),
+        describe_call("tables/account", &renamed),
+    ]);
+    let (change, _) = change_with(&create, arguments.clone(), &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), said("Lead"));
+    let dropped = ACCOUNT_DESCRIBED.replace(", Prospect (8)", "");
+    let context = earlier(vec![
+        describe_call("tables/account", ACCOUNT_DESCRIBED),
+        describe_call("tables/account", &dropped),
+    ]);
+    let (change, _) = change_with(&create, arguments, &context);
+    assert_eq!(meaning_of_value(&change, "customertype"), None);
+
+    let transitions =
+        |done: &str| json!([{"id": "21", "name": "In Review"}, {"id": "31", "name": done}]);
+    let context = earlier(vec![
+        (
+            "get_transitions",
+            json!({"issue_key": "OPS-218"}),
+            transitions("Done"),
+        ),
+        (
+            "get_transitions",
+            json!({"issue_key": "OPS-218"}),
+            transitions("Closed"),
+        ),
+    ]);
+    let (change, _) = change_with(
+        &tool("transition_issue", "", None),
+        json!({"issue_key": "OPS-218", "transition_id": "31"}),
+        &context,
+    );
+    assert_eq!(meaning_of_value(&change, "transition_id"), said("Closed"));
+
+    // A newer read of the row without its label column retires the label.
+    let context = earlier(vec![
+        (
+            "read_query",
+            json!({"querytext": "SELECT name, accountid, customertype FROM account"}),
+            json!([{"name": "A", "accountid": RECORD, "customertype": 8, "customertypename": "Prospect"}]),
+        ),
+        (
+            "read_query",
+            json!({"querytext": "SELECT name, accountid, customertype FROM account"}),
+            json!([{"name": "A", "accountid": RECORD, "customertype": 8}]),
+        ),
+    ]);
+    let (change, _) = change_with(
+        &tool("update_record", "", None),
+        json!({"tablename": "account", "recordId": RECORD, "item": {"customertype": 1}}),
+        &context,
+    );
+    let old = effect(&change, "customertype").old.as_ref().unwrap();
+    assert_eq!((old.text.as_str(), &old.meaning), ("8", &None));
+}
+
+#[test]
+fn a_label_from_a_schema_written_label_first_counts_as_the_tools() {
+    let schema = tool_with_schema(
+        "update_issue",
+        "",
+        json!({"type": "object", "properties": {
+            "id": {"type": "string"},
+            "priority": {"type": "integer", "description": "Priority (Options: Low (0), Normal (1), High (2))"},
+        }}),
+    );
+    let (change, _) = change_with(
+        &schema,
+        json!({"id": RECORD, "priority": 2}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(
+        meaning_of_value(&change, "priority"),
+        Some(("High".to_string(), ToolCallValueMeaningSource::Tool))
+    );
+    let mut forgotten = change.clone();
+    forget_earlier(&mut forgotten);
+    assert_eq!(meaning_of_value(&forgotten, "priority").unwrap().0, "High");
+}

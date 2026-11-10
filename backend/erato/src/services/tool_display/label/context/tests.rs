@@ -2131,3 +2131,202 @@ fn an_id_counts_as_never_read_only_when_no_result_held_it_in_any_form() {
     assert!(never(&after(vec![failed])));
     assert!(!ToolResultContext::default().never_read(&json!({ "to": ACCOUNT }), "/to"));
 }
+
+#[test]
+fn a_label_column_beside_a_code_is_that_codes_label_and_no_field_of_its_own() {
+    let context = after(vec![read_query(
+        "rows",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{
+            "name": "Line 4 retrofit",
+            "opportunityid": OPPORTUNITY,
+            "risklevel": 727000001,
+            "risklevelname": "Medium",
+            "stage": "q1",
+            "stage_label": "Qualify",
+            "owner_id": 7,
+            "owner_id_name": "Ada",
+            "telephone1": 2,
+            "telephone1name": "Work",
+            "region": 3,
+            "regionname": "3",
+        }]),
+    )]);
+    let record = context.record_by_id(SERVER, OPPORTUNITY).unwrap();
+    for (column, code, label) in [
+        ("risklevel", "727000001", "Medium"),
+        ("stage", "q1", "Qualify"),
+    ] {
+        assert_eq!(record.field(column).map(String::as_str), Some(code));
+        let coded = record.coded(column).unwrap();
+        assert_eq!((coded.code.as_str(), coded.label.as_str()), (code, label));
+    }
+    assert_eq!(
+        record.coded("risklevel").map(|coded| coded.numeric),
+        Some(true)
+    );
+    assert_eq!(record.field("risklevelname"), None);
+    assert_eq!(record.field("stage_label"), None);
+    // An ID, a contact number or a label that only repeats the code stay as read.
+    for (column, sibling) in [
+        ("owner_id", "owner_id_name"),
+        ("telephone1", "telephone1name"),
+        ("region", "regionname"),
+    ] {
+        assert_eq!(record.coded(column), None, "{column}");
+        assert!(record.field(sibling).is_some(), "{sibling}");
+    }
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(727000002)).as_deref(),
+        Some("727000001")
+    );
+
+    // Two label columns that disagree, or one with hidden characters, say nothing.
+    let context = after(vec![read_query(
+        "rows",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{
+            "name": "Line 4 retrofit",
+            "opportunityid": OPPORTUNITY,
+            "risklevel": 1,
+            "risklevelname": "Medium",
+            "risklevel_label": "High",
+            "stage": 2,
+            "stagename": "Qual\u{202E}ify",
+        }]),
+    )]);
+    let record = context.record_by_id(SERVER, OPPORTUNITY).unwrap();
+    assert_eq!(record.coded("risklevel"), None);
+    assert_eq!(record.coded("stage"), None);
+    assert!(record.field("risklevelname").is_some());
+}
+
+#[test]
+fn option_sets_are_kept_per_read_scope_and_capped() {
+    let described = |table: &str, options: &str| {
+        call(
+            &format!("describe-{table}-{options}"),
+            "describe",
+            json!({"path": format!("tables/{table}")}),
+            json!(format!("priority CHOICE (Options: {options})")),
+        )
+    };
+    let context = after(vec![
+        described("task", "Low (0), High (2)"),
+        described("account", "Cold (0), Hot (2)"),
+        described("task", "Low (0), Urgent (2)"),
+    ]);
+    assert_eq!(context.vocabularies.len(), 2);
+    let label = |table, code| context.table_choice_label(SERVER, table, "priority", code);
+    assert_eq!(label("task", "2"), Said::Label("Urgent".into()));
+    assert_eq!(label("Account", "2"), Said::Label("Hot".into()));
+    assert_eq!(label("task", "1"), Said::Nothing);
+    assert_eq!(label("contact", "2"), Said::Nothing);
+    assert_eq!(
+        context.table_choice_label("Other", "task", "priority", "2"),
+        Said::Nothing
+    );
+
+    // A read without arguments, or naming more than one table's worth of
+    // words, scopes nothing; the store keeps its newest vocabularies only.
+    let unscoped = call(
+        "unscoped",
+        "describe",
+        json!({}),
+        json!("priority CHOICE (Options: Low (0), High (2))"),
+    );
+    let wide = call(
+        "wide",
+        "describe",
+        json!({"path": (0..80).map(|n| format!("t{n}")).collect::<Vec<_>>().join("/")}),
+        json!("priority CHOICE (Options: Low (0), High (2))"),
+    );
+    let context = after(vec![unscoped, wide]);
+    assert!(context.vocabularies.is_empty());
+    let many: Vec<_> = (0..MAX_VOCABULARIES + 5)
+        .map(|n| described(&format!("table{n}"), "Low (0), High (2)"))
+        .collect();
+    let context = after(many);
+    assert_eq!(context.vocabularies.len(), MAX_VOCABULARIES);
+    assert!(context.vocabulary_bytes <= MAX_VOCABULARY_BYTES);
+    assert_eq!(
+        context.table_choice_label(SERVER, "table0", "priority", "2"),
+        Said::Nothing
+    );
+    assert_eq!(
+        context.table_choice_label(
+            SERVER,
+            &format!("table{}", MAX_VOCABULARIES + 4),
+            "priority",
+            "2"
+        ),
+        Said::Label("High".into())
+    );
+}
+
+#[test]
+fn a_list_read_is_matched_by_its_arguments_and_the_members_noun() {
+    let list = |tool: &str, input: Value| {
+        call(
+            tool,
+            tool,
+            input,
+            json!([{"id": "1", "name": "Highest", "color": "red"}, {"id": "2", "name": "High"}]),
+        )
+    };
+    let context = after(vec![
+        list("get_priorities", json!({})),
+        list("list_project_statuses", json!({"project": "OPS"})),
+    ]);
+    let label = |arguments: Value, member: &str| {
+        context.listed_choice_label(SERVER, &arguments, member, "2")
+    };
+    let high = Said::Label("High".into());
+    assert_eq!(label(json!({"issue": "OPS-1"}), "priority_id"), high);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "priorityId"), high);
+    assert_eq!(label(json!({"project": "OPS"}), "status"), high);
+    assert_eq!(label(json!({"project": "WEB"}), "status"), Said::Nothing);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "status"), Said::Nothing);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "id"), Said::Nothing);
+    assert_eq!(
+        context.listed_choice_label(SERVER, &json!({}), "priority", "3"),
+        Said::Nothing
+    );
+    for (one, other) in [
+        ("priority", "priorities"),
+        ("status", "statuses"),
+        ("label", "labels"),
+    ] {
+        assert!(same_noun(one, other) && same_noun(other, one), "{one}");
+    }
+    assert!(!same_noun("status", "statue") && !same_noun("type", "types_x"));
+}
+
+#[test]
+fn a_hostile_description_is_read_within_its_byte_caps() {
+    let digits = "1 = 1 = ".repeat(MAX_DESCRIBED_LINE_BYTES / 8);
+    let brackets = "x (1".repeat(MAX_DESCRIBED_LINE_BYTES / 4);
+    let mut text = String::new();
+    while text.len() < 2 * MAX_DESCRIBED_BYTES {
+        text.push_str("priority CHOICE ");
+        text.push_str(&digits[..digits.len() - 64]);
+        text.push('\n');
+        text.push_str("status CHOICE ");
+        text.push_str(&brackets[..brackets.len() - 64]);
+        text.push('\n');
+    }
+    text.push_str("stage CHOICE (Options: Low (0), High (1))\n");
+    let started = std::time::Instant::now();
+    let context = after(vec![call(
+        "describe",
+        "describe",
+        json!({"path": "tables/task"}),
+        json!(text),
+    )]);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // Past the bytes read, nothing more is listed.
+    assert_eq!(
+        context.table_choice_label(SERVER, "task", "stage", "1"),
+        Said::Nothing
+    );
+}
