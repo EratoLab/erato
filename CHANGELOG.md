@@ -48,6 +48,8 @@ MCP servers that ask for the user's consent through a tool argument (such as Dat
 
 MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
 
+**Approval cards no longer state what is not so (ERMAIN-1171).** A command or SQL beside new content keeps its warning, and a value beside it reads as where the change applies only when its own description says it picks a part. Only a delete or archive whose name ends in exactly the place it names acts on that place itself. A kind such as `StatefulSet` stays the kind of what a delete removes. A record renamed by an update in the chat is named by its new name, or by none when that is not certain. A list member that says it removes or adds items reads as items removed or added on the tool's word, and a trace row lists everything its count line counts. A failed call's row says it failed and shows the server's message as the tool's word, with machine IDs masked. The notes and See more stay outside a card's scroll box, `setTeams` reads "Teams set to", a trace row's colon follows only a name, the line under See more reads "These fields: …", and an old and a new date read in one form.
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes
