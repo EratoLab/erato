@@ -111,12 +111,12 @@ or the child's slot still waits for a client outside any stop. Decision parts
 after the stop do not end it, so a decision continuation that runs on another
 replica, or crashed, keeps the calls it waits for. The slot clause covers a turn
 that ended on a stop no child item can share (the tool-call limit) or on an
-error, or the user stopped the turn. The same owner clause
-authorizes a claimed grant operation (Slow path), and
-`origin_approval_covering_child` uses the tip check too, so once the parent moved
-on a child's own card is answerable. An owner check that cannot read the shared
-lease is an error, never "not running": the offer logs it and offers nothing, the
-authorization answers without withdrawing.
+error, or the user stopped the turn. The same owner clause authorizes a claimed
+grant operation (Slow path), and `origin_approval_covering_child` uses the tip
+check too, so once the parent moved on a child's own card is answerable. An
+owner check that cannot read the shared lease is an error, never "not running":
+the offer logs it and offers nothing, the authorization answers without
+withdrawing.
 
 Grant offers skip the facet allowlists and `requires_client_registration`, which
 the grant implies, and give way to an MCP tool of the same name. Every other
@@ -283,12 +283,14 @@ person answers the task there while the call still waits. The answered task runs
 and the call stays open; the row ends on `client_tool_pending` again, or on a new
 part for a question the task asked next. A result that arrives first settles the
 call, moves its other pending calls onto the open part and leaves the turn on it
-until it is answered. The link to the task's chat remains only for what the slot
-cannot hold: the tool-call limit, and a turn the user stopped, which withdraws
-the part with the call so the task is answered in its own chat. A Stop that lands
-while an answered task runs ends the call the same way: the continuation holds an
-earlier copy of the row, so it finds the attempt ended, takes the call's part off
-that copy and settles the tool row as cancelled before it writes.
+until it is answered. The link to the task's chat remains for a turn the user
+stopped, which withdraws the part with the call so the task is answered in its
+own chat. A Stop that lands while an answered task runs ends the call the same
+way: the continuation holds an earlier copy of the row, so it finds the attempt
+ended, takes the call's part off that copy and settles the tool row as cancelled
+before it writes. A turn that ends on the tool-call limit also leaves the task
+to its own chat today. CT-10 allows no exception besides the stopped turn, so
+this is an open question for the owner, not settled design.
 `ChildApprovalRef.kind` says the child asked about a client tool, so the queue
 names this device and shows no MCP open-world warning. Always allow and Never
 allow on such an item are saved as the user's client-tool preference. The MCP

@@ -10378,9 +10378,10 @@ async fn stream_generate_chat_completion<'a>(
         // without a part to join, so the children's part is written right
         // behind the call's own: the person answers them while the call waits.
         // Any other exit keeps them out. An abort means the user withdrew the
-        // question; the tool-call limit is a stop that no item of a child can
-        // share. There the child keeps its `input_required` slot and stays
-        // answerable from its own chat.
+        // question. The tool-call limit's stop takes no child items for now,
+        // and CT-10 allows no exception besides the abort, so that is an open
+        // question rather than settled design. There the child keeps its
+        // `input_required` slot and stays answerable from its own chat.
         let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
         // A Stop while the batch settled withdraws the turn's own question as
         // well: the turn ends stopped, not on a card nobody asked to see.
