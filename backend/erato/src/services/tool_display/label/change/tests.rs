@@ -3228,6 +3228,32 @@ fn recipients_and_contact_numbers_never_get_a_label() {
 }
 
 #[test]
+fn a_label_that_only_repeats_its_code_says_nothing() {
+    let context = earlier(vec![(
+        "describe_object",
+        json!({"objectName": "Account"}),
+        json!({"fields": [{"name": "Industry", "picklistValues": [
+            {"value": "Agriculture", "label": "Agriculture"},
+            {"value": "banking", "label": "Banking"},
+            {"value": "ITS", "label": "IT services"},
+        ]}]}),
+    )]);
+    let create = tool("create_record", "", None);
+    for (code, meaning) in [
+        ("Agriculture", None),
+        ("banking", None),
+        ("ITS", said("IT services")),
+    ] {
+        let (change, _) = change_with(
+            &create,
+            json!({"objectName": "Account", "fields": {"Industry": code}}),
+            &context,
+        );
+        assert_eq!(meaning_of_value(&change, "Industry"), meaning, "{code}");
+    }
+}
+
+#[test]
 fn a_newer_read_replaces_the_labels_an_older_one_gave() {
     let create = tool("create_record", "", None);
     let arguments = json!({"tablename": "account", "item": {"customertype": 8}});

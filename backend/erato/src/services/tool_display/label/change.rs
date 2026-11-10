@@ -814,6 +814,10 @@ impl<'a> Walk<'a> {
 
     fn meaning_of(&self, member: &str, path: &str, code: &str) -> Option<ToolCallValueMeaning> {
         let meaning = |label: &str, source| {
+            // A label that only repeats its code says nothing more.
+            if label.trim().eq_ignore_ascii_case(code.trim()) {
+                return None;
+            }
             if source != ToolCallValueMeaningSource::Glossary {
                 // A server's words are never an ID, a number to call, a
                 // link or an address, however they reached the index.
