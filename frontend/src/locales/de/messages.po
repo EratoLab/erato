@@ -63,6 +63,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.descriptionAwaitingCall"
+msgstr "{itemCount, plural, one {Die Aufgabe geht nach der Entscheidung weiter. Die Antwort geht weiter, wenn die verbundene App fertig ist.} other {Sie werden einzeln angezeigt. Die Aufgaben gehen weiter, sobald alle entschieden sind. Die Antwort geht weiter, wenn die verbundene App fertig ist.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.position"
 msgstr ""
 
@@ -80,6 +85,11 @@ msgstr ""
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingDescription"
 msgstr "{waitingCount, plural, one {Sie geht von selbst weiter, sobald die Aufgabe fertig ist.} other {Sie geht von selbst weiter, sobald sie fertig sind.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescriptionAwaitingCall"
+msgstr "{waitingCount, plural, one {Sie geht von selbst weiter, sobald die Aufgabe und die verbundene App fertig sind.} other {Sie geht von selbst weiter, sobald die Aufgaben und die verbundene App fertig sind.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx

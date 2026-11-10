@@ -1833,6 +1833,11 @@ export const MessageContent = memo(function MessageContent({
                   slots: slotStatuses,
                   isLastStop: false,
                 });
+          // A stop right behind the response's own waiting call: deciding lets
+          // the tasks go on, while the response still waits for that call.
+          const awaitsOwnCall =
+            content[index - 1]?.content_type === "client_tool_pending" &&
+            isWaitingCallMarker(content, index - 1);
           return (
             <McpToolApprovalCard
               key={`tool-approval-${index}`}
@@ -1840,6 +1845,7 @@ export const MessageContent = memo(function MessageContent({
               request={part}
               openItems={stop.open}
               waitingItems={stop.waiting}
+              awaitsOwnCall={awaitsOwnCall}
               resolution={stop.resolution}
             />
           );
