@@ -8741,12 +8741,12 @@ msgstr "Jede Zeile ist anders."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.added"
-msgstr "{added, plural, one {Einträge hinzugefügt in # Zeile} other {Einträge hinzugefügt in # Zeilen}}"
+msgstr "{added, plural, one {Einträge hinzugefügt in # Zeile, sagt das Tool} other {Einträge hinzugefügt in # Zeilen, sagt das Tool}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.addedValues"
-msgstr "{samples} hinzugefügt {scope}"
+msgstr "{samples} hinzugefügt {scope}, sagt das Tool"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8781,12 +8781,12 @@ msgstr "Viele verschiedene Werte {scope}: {samples}"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removed"
-msgstr "{removed, plural, one {Einträge entfernt in # Zeile} other {Einträge entfernt in # Zeilen}}"
+msgstr "{removed, plural, one {Einträge entfernt in # Zeile, sagt das Tool} other {Einträge entfernt in # Zeilen, sagt das Tool}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removedValues"
-msgstr "{samples} entfernt {scope}"
+msgstr "{samples} entfernt {scope}, sagt das Tool"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8831,7 +8831,7 @@ msgstr "Keine Zeile löscht oder leert etwas."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.removing"
-msgstr "{removing, plural, one {# Zeile entfernt Einträge aus einer Liste} other {# Zeilen entfernen Einträge aus einer Liste}}"
+msgstr "{removing, plural, one {# Zeile entfernt Einträge aus einer Liste, sagt das Tool} other {# Zeilen entfernen Einträge aus einer Liste, sagt das Tool}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

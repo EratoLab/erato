@@ -8741,12 +8741,12 @@ msgstr "Każdy wiersz jest inny."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.added"
-msgstr "{added, plural, one {elementy dodane w # wierszu} few {elementy dodane w # wierszach} many {elementy dodane w # wierszach} other {elementy dodane w # wiersza}}"
+msgstr "{added, plural, one {elementy dodane w # wierszu, według narzędzia} few {elementy dodane w # wierszach, według narzędzia} many {elementy dodane w # wierszach, według narzędzia} other {elementy dodane w # wiersza, według narzędzia}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.addedValues"
-msgstr "{samples} dodane {scope}"
+msgstr "{samples} dodane {scope}, według narzędzia"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8781,12 +8781,12 @@ msgstr "Wiele różnych wartości {scope}: {samples}"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removed"
-msgstr "{removed, plural, one {elementy usunięte w # wierszu} few {elementy usunięte w # wierszach} many {elementy usunięte w # wierszach} other {elementy usunięte w # wiersza}}"
+msgstr "{removed, plural, one {elementy usunięte w # wierszu, według narzędzia} few {elementy usunięte w # wierszach, według narzędzia} many {elementy usunięte w # wierszach, według narzędzia} other {elementy usunięte w # wiersza, według narzędzia}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removedValues"
-msgstr "{samples} usunięte {scope}"
+msgstr "{samples} usunięte {scope}, według narzędzia"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8831,7 +8831,7 @@ msgstr "Żaden wiersz niczego nie usuwa ani nie czyści."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.removing"
-msgstr "{removing, plural, one {# wiersz usuwa elementy z listy} few {# wiersze usuwają elementy z listy} many {# wierszy usuwa elementy z listy} other {# wiersza usuwa elementy z listy}}"
+msgstr "{removing, plural, one {# wiersz usuwa elementy z listy, według narzędzia} few {# wiersze usuwają elementy z listy, według narzędzia} many {# wierszy usuwa elementy z listy, według narzędzia} other {# wiersza usuwa elementy z listy, według narzędzia}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

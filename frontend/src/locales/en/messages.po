@@ -8741,12 +8741,12 @@ msgstr "Each row is different."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.added"
-msgstr "{added, plural, one {items added on # row} other {items added on # rows}}"
+msgstr "{added, plural, one {items added on # row, the tool says} other {items added on # rows, the tool says}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.addedValues"
-msgstr "{samples} added {scope}"
+msgstr "{samples} added {scope}, the tool says"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8781,12 +8781,12 @@ msgstr "Many different values {scope}: {samples}"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removed"
-msgstr "{removed, plural, one {items removed on # row} other {items removed on # rows}}"
+msgstr "{removed, plural, one {items removed on # row, the tool says} other {items removed on # rows, the tool says}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.removedValues"
-msgstr "{samples} removed {scope}"
+msgstr "{samples} removed {scope}, the tool says"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8831,7 +8831,7 @@ msgstr "No row deletes or empties anything."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.removing"
-msgstr "{removing, plural, one {# row removes items from a list} other {# rows remove items from a list}}"
+msgstr "{removing, plural, one {# row removes items from a list, the tool says} other {# rows remove items from a list, the tool says}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

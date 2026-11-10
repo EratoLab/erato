@@ -725,8 +725,8 @@ export const batchLossLines = (
       t({
         id: "toolChange.batch.losses.removing",
         message: plural(removing, {
-          one: "# row removes items from a list",
-          other: "# rows remove items from a list",
+          one: "# row removes items from a list, the tool says",
+          other: "# rows remove items from a list, the tool says",
         }),
       }),
     );
@@ -774,8 +774,14 @@ export const batchFieldLine = (
   }
   const written = field.rows - emptied - replaced - removed - added;
   const samples = field.samples.map(plainChangeValue).join(", ");
-  // The values are what is removed or added only when no row writes one.
-  const named = written === 0 && emptied === 0 && samples.length > 0;
+  // The values are what is removed or added only when no row writes one and
+  // every row holds the same ones.
+  const named =
+    written === 0 &&
+    emptied === 0 &&
+    samples.length > 0 &&
+    field.distinct === 1 &&
+    !field.distinctCapped;
   const distinct = field.distinct;
   const parts: string[] = [];
   if (written > 0) {
@@ -824,13 +830,13 @@ export const batchFieldLine = (
       named && added === 0 && replaced === 0
         ? t({
             id: "toolChange.batch.field.removedValues",
-            message: `${samples} removed ${scope}`,
+            message: `${samples} removed ${scope}, the tool says`,
           })
         : t({
             id: "toolChange.batch.field.removed",
             message: plural(removed, {
-              one: "items removed on # row",
-              other: "items removed on # rows",
+              one: "items removed on # row, the tool says",
+              other: "items removed on # rows, the tool says",
             }),
           }),
     );
@@ -841,13 +847,13 @@ export const batchFieldLine = (
       named && removed === 0 && replaced === 0
         ? t({
             id: "toolChange.batch.field.addedValues",
-            message: `${samples} added ${scope}`,
+            message: `${samples} added ${scope}, the tool says`,
           })
         : t({
             id: "toolChange.batch.field.added",
             message: plural(added, {
-              one: "items added on # row",
-              other: "items added on # rows",
+              one: "items added on # row, the tool says",
+              other: "items added on # rows, the tool says",
             }),
           }),
     );
