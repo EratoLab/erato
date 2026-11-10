@@ -946,9 +946,7 @@ export const ToolCallChangeRowDetails = ({
           change.batch,
           listReplaceIsUnknown(change),
           toolSaysOnlyAdds(change),
-        ).map(
-          (line, index) => <p key={index}>{line}</p>,
-        )}
+        ).map((line, index) => <p key={index}>{line}</p>)}
       {layout.emptied.length > 0 && (
         <p dir="auto" className={ISOLATED}>
           {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
