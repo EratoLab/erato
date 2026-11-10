@@ -141,9 +141,14 @@ const EratoFailureMessage = ({ failure }: { failure: EratoFailure }) => {
   );
 };
 
-/** A failure after which the call may still have done what it asked. */
+/**
+ * A failure after which the call may still have done what it asked. A kind
+ * from a newer Erato says no more than that the call failed.
+ */
 const outcomeUnknown = (failure: EratoFailure | undefined): boolean =>
-  failure === "no_answer" || failure === "answer_unreadable";
+  failure === "no_answer" ||
+  failure === "answer_unreadable" ||
+  failure === "other";
 
 /**
  * A failed call: Erato's own line that it failed, in the row's failure

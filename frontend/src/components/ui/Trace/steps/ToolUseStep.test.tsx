@@ -945,7 +945,9 @@ describe("ToolUseStep gist row", () => {
     );
     const failure = screen.getByTestId("tool-failure");
     expect(failure).toHaveTextContent(/^The call failed\.$/);
-    expect(toggle()).toHaveTextContent("Could not update page Northwind");
+    // Erato does not know whether such a call ran.
+    expect(toggle()).toHaveTextContent("Update page Northwind");
+    expect(toggle()).not.toHaveTextContent("Could not");
   });
 
   it("never shows part of a machine ID where a long message is cut", () => {
