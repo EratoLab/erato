@@ -2115,6 +2115,55 @@ fn text_beside_content_the_call_marks_new_picks_where_it_goes() {
 }
 
 #[test]
+fn a_list_reads_what_its_own_description_says_before_the_tools() {
+    let save = tool_with_schema(
+        "save_issue",
+        "Create or update an issue.",
+        json!({"type": "object", "properties": {
+            "id": {"type": "string"},
+            "labels": {"type": "array", "items": {"type": "string"},
+                "description": "Replaces the full label set; existing labels not included are removed."},
+            "addLabels": {"type": "array", "items": {"type": "string"},
+                "description": "Append-only; existing labels are never removed."},
+            "tags": {"type": "array", "items": {"type": "string"},
+                "description": "Only adds the given tags."},
+        }}),
+    );
+    let replaced = change_with(
+        &save,
+        json!({"id": RECORD, "labels": ["Bug"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(
+        effect(&replaced, "labels").effect,
+        ToolCallEffectKind::ListReplaced
+    );
+    assert_eq!(replaced.notes, [ToolCallChangeNote::ToolSaysReplacesList]);
+
+    let added = change_with(
+        &save,
+        json!({"id": RECORD, "tags": ["urgent"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(effect(&added, "tags").effect, ToolCallEffectKind::Set);
+    assert_eq!(added.notes, [ToolCallChangeNote::ToolSaysAddsToList]);
+
+    let unsaid = change_with(
+        &tool_with_schema(
+            "update_issue",
+            "",
+            json!({"type": "object", "properties": {"labels": {"type": "array"}}}),
+        ),
+        json!({"id": RECORD, "labels": ["Bug"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(unsaid.notes, [ToolCallChangeNote::ListReplaceUnknown]);
+}
+
+#[test]
 fn an_address_counts_as_reach_only_on_a_send_or_share() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
     let shared = change_with(

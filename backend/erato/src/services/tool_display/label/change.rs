@@ -8,7 +8,7 @@
 use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::names_an_id;
 use super::choices::{
-    MAX_CHOICE_LABEL_CHARS, Said, choice_label, is_choice_code, schema_choice_label,
+    MAX_CHOICE_LABEL_CHARS, Said, choice_label, is_choice_code, property_at, schema_choice_label,
 };
 use super::context::{
     CodedValue, ListEntry, ToolResultContext, call_table, is_link, link_id_member,
@@ -274,7 +274,7 @@ struct Walk<'a> {
     complete: bool,
     says: ToolText,
     before_stored: bool,
-    saw_list: bool,
+    lists: ListClaims,
     /// A value was compared with what an earlier result showed.
     used_earlier: bool,
 }
@@ -357,7 +357,7 @@ impl<'a> Walk<'a> {
             complete: true,
             says: ToolText::read(facts.tool.description.as_deref()),
             before_stored: false,
-            saw_list: false,
+            lists: ListClaims::default(),
             used_earlier: false,
         }
     }
@@ -793,12 +793,9 @@ impl<'a> Walk<'a> {
             Unwrapped::List(entries) => {
                 effect.list = true;
                 self.list_values(&entries, path, &mut effect);
-                if update_like && !only_adds(member) {
-                    self.saw_list = true;
-                    if !self.says.adds_to_list {
-                        effect.effect = ToolCallEffectKind::ListReplaced;
-                        self.diff_list(member, path, &entries, &mut effect);
-                    }
+                if update_like && !only_adds(member) && self.list_claim(path) != ListClaim::Adds {
+                    effect.effect = ToolCallEffectKind::ListReplaced;
+                    self.diff_list(member, path, &entries, &mut effect);
                 }
             }
             Unwrapped::Other => {
@@ -1251,6 +1248,27 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// Whether the tool says the list at `path` replaces what is there or
+    /// adds to it: the member's own description first, then the tool's.
+    fn list_claim(&mut self, path: &str) -> ListClaim {
+        let own = property_at(&self.facts.tool.input_schema, path)
+            .and_then(|property| property.get("description")?.as_str())
+            .map(|text| ToolText::read(Some(text)));
+        let claim = match own {
+            Some(own) if own.adds_to_list && !own.replaces_list => ListClaim::Adds,
+            Some(own) if own.replaces_list && !own.adds_to_list => ListClaim::Replaces,
+            _ if self.says.adds_to_list => ListClaim::Adds,
+            _ if self.says.replaces_list => ListClaim::Replaces,
+            _ => ListClaim::Unknown,
+        };
+        match claim {
+            ListClaim::Replaces => self.lists.replaces = true,
+            ListClaim::Adds => self.lists.adds = true,
+            ListClaim::Unknown => self.lists.unknown = true,
+        }
+        claim
+    }
+
     fn recipients(&mut self, member: &str, value: &'a Value, path: &str) {
         let name = readable_name(member, None, "");
         let name = self.display_name(&name);
@@ -1517,12 +1535,13 @@ impl<'a> Walk<'a> {
                         empties = true;
                         tallies[at].emptied += 1;
                     }
-                    Unwrapped::List(_) if update_like && !only_adds(member) => {
-                        self.saw_list = true;
-                        if !self.says.adds_to_list {
-                            replaces = true;
-                            tallies[at].lists += 1;
-                        }
+                    Unwrapped::List(_)
+                        if update_like
+                            && !only_adds(member)
+                            && self.list_claim(&value_path) != ListClaim::Adds =>
+                    {
+                        replaces = true;
+                        tallies[at].lists += 1;
                     }
                     // What such a value holds was not looked at.
                     Unwrapped::Other => read_all = false,
@@ -1777,14 +1796,16 @@ impl<'a> Walk<'a> {
                 _ => notes.push(ToolCallChangeNote::DeleteOutcomeUnknown),
             }
         }
-        if self.saw_list {
-            notes.push(if says.adds_to_list {
-                ToolCallChangeNote::ToolSaysAddsToList
-            } else if says.replaces_list {
-                ToolCallChangeNote::ToolSaysReplacesList
-            } else {
-                ToolCallChangeNote::ListReplaceUnknown
-            });
+        let lists = self.lists;
+        if lists.unknown {
+            notes.push(ToolCallChangeNote::ListReplaceUnknown);
+        } else {
+            if lists.replaces {
+                notes.push(ToolCallChangeNote::ToolSaysReplacesList);
+            }
+            if lists.adds {
+                notes.push(ToolCallChangeNote::ToolSaysAddsToList);
+            }
         }
         if says.ignored_if_missing && is_update_like(action) {
             notes.push(ToolCallChangeNote::ToolSaysIgnoredIfMissing);
@@ -1836,6 +1857,21 @@ impl<'a> Walk<'a> {
         self.change.notes = notes;
         (self.change, self.hidden)
     }
+}
+
+/// What the tool says about the lists a call writes, over all of them.
+#[derive(Debug, Default, Clone, Copy)]
+struct ListClaims {
+    replaces: bool,
+    adds: bool,
+    unknown: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListClaim {
+    Replaces,
+    Adds,
+    Unknown,
 }
 
 /// A `kind` that names what the record is, as `Namespace` does, rather than

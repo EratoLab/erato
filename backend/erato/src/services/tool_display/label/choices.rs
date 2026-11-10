@@ -42,7 +42,10 @@ pub(super) fn schema_choice_label(schema: &JsonObject, path: &str, code: &str) -
         .or_else(|| described_choice(property.get("description")?.as_str()?, code))
 }
 
-fn property_at<'a>(schema: &'a Map<String, Value>, path: &str) -> Option<&'a Map<String, Value>> {
+pub(super) fn property_at<'a>(
+    schema: &'a Map<String, Value>,
+    path: &str,
+) -> Option<&'a Map<String, Value>> {
     let mut current = schema;
     for (depth, segment) in path.strip_prefix('/')?.split('/').enumerate() {
         if depth >= MAX_SCHEMA_DEPTH {
