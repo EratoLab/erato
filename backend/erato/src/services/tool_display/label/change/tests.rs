@@ -3096,7 +3096,7 @@ fn labels_that_disagree_say_nothing() {
     let (change, _) = change_with(&update, arguments.clone(), &context);
     assert_eq!(meaning_of_value(&change, "customertype"), None);
 
-    // Two lists of options for the same issue.
+    // A list for the issue and one for every issue.
     let transition = tool("transition_issue", "", None);
     let context = earlier(vec![
         (
@@ -3106,7 +3106,7 @@ fn labels_that_disagree_say_nothing() {
         ),
         (
             "list_transitions",
-            json!({"issue_key": "OPS-218"}),
+            json!({}),
             json!([{"id": "21", "name": "In Review"}, {"id": "31", "name": "Reopened"}]),
         ),
     ]);

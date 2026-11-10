@@ -109,8 +109,8 @@ struct Vocabulary {
 enum VocabularyScope {
     /// The words of the read's arguments: a call's table must be one of them.
     Table(BTreeSet<String>),
-    /// The read's arguments, which a call must repeat, and the words of its
-    /// name and list wrapper, one of which must name the call's member.
+    /// The read's arguments, which a call must repeat, and the nouns its
+    /// name and list wrapper end in, one of which must name the call's member.
     List {
         arguments: Vec<(String, String)>,
         nouns: Vec<String>,
@@ -583,7 +583,7 @@ impl ToolResultContext {
     /// What the lists of options a read of `server` returned say `code` of
     /// `member` means for a call with `arguments`: lists whose read's every
     /// argument the call repeats with the same value, and whose read's name
-    /// or list wrapper names what the member does, `transitions` for
+    /// or list wrapper ends in what the member picks, `transitions` for
     /// `transition_id`. Lists that disagree say nothing.
     pub(super) fn listed_choice_label(
         &self,
@@ -933,9 +933,15 @@ impl ToolResultContext {
             }
             Some(_) => return,
         };
-        let mut nouns: Vec<String> = name_words(&tool.tool_name);
-        nouns.extend(wrapper.map(name_words).unwrap_or_default());
-        nouns.retain(|word| word.chars().count() >= MIN_NOUN_CHARS);
+        // What the list holds, never the read's verb or what qualifies it:
+        // `statuses` in `list_project_statuses`, not `list` or `project`. A
+        // wrapper such as `items` or `data` says only that it holds a list.
+        let mut nouns: Vec<String> = head_noun(&tool.tool_name).into_iter().collect();
+        nouns.extend(wrapper.and_then(head_noun).filter(|noun| {
+            !rules::WRAPPER_MEMBERS
+                .iter()
+                .any(|bag| same_noun(bag, noun))
+        }));
         nouns.sort_unstable();
         nouns.dedup();
         let members = HashMap::from([(String::new(), Some(options))]);
@@ -2448,6 +2454,21 @@ fn option_list(entries: &[Value]) -> Option<HashMap<String, String>> {
 
 /// Shorter words name too little to tie a member to a list.
 const MIN_NOUN_CHARS: usize = 3;
+
+/// The noun a name ends in, past any read verb after it: `transitions` in
+/// `get_transitions` and `labels` in `labels_list`.
+fn head_noun(name: &str) -> Option<String> {
+    let mut words = name_words(name);
+    while words
+        .last()
+        .is_some_and(|word| rules::READ_VERBS.contains(&word.as_str()))
+    {
+        words.pop();
+    }
+    words
+        .pop()
+        .filter(|word| word.chars().count() >= MIN_NOUN_CHARS)
+}
 
 /// What a member's code stands for, by its name: `transition_id` →
 /// `transition`, `statusCode` → `status`.

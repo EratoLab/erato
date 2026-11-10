@@ -138,7 +138,7 @@ const VERBS: [(ToolCallAction, &[&str]); 11] = [
     ),
     (ToolCallAction::Comment, &["comment", "annotate"]),
 ];
-const READ_VERBS: [&str; 11] = [
+pub(super) const READ_VERBS: [&str; 11] = [
     "get", "list", "search", "fetch", "read", "query", "find", "retrieve", "view", "download",
     "describe",
 ];

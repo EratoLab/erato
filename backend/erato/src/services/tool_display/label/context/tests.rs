@@ -2433,6 +2433,35 @@ fn a_list_read_is_matched_by_its_arguments_and_the_members_noun() {
         context.listed_choice_label(SERVER, &json!({}), "priority", "3"),
         Said::Nothing
     );
+    // Only what the list holds names it: never the read's verb or a word
+    // that qualifies what it lists.
+    assert_eq!(
+        label(json!({"project": "OPS"}), "target_project"),
+        Said::Nothing
+    );
+    let context = after(vec![
+        list("list_labels", json!({"board_id": "B1"})),
+        list("labels_list", json!({"board_id": "B2"})),
+        call(
+            "items",
+            "fetch",
+            json!({"board_id": "B3"}),
+            json!({"items": [{"id": "1", "name": "Highest"}, {"id": "2", "name": "High"}]}),
+        ),
+    ]);
+    let label = |arguments: Value, member: &str| {
+        context.listed_choice_label(SERVER, &arguments, member, "2")
+    };
+    assert_eq!(label(json!({"board_id": "B1"}), "label_id"), high);
+    assert_eq!(label(json!({"board_id": "B2"}), "labels"), high);
+    for board in ["B1", "B2"] {
+        assert_eq!(
+            label(json!({"board_id": board}), "list_id"),
+            Said::Nothing,
+            "{board}"
+        );
+    }
+    assert_eq!(label(json!({"board_id": "B3"}), "item_id"), Said::Nothing);
     for (one, other) in [
         ("priority", "priorities"),
         ("status", "statuses"),
