@@ -893,55 +893,75 @@ const LossesPart = ({ change }: { change: GistChange }) => {
   );
 };
 
-const ValuesPart = ({
+/** What the tool claims about a value, so the card says whose word it is. */
+const claimOf = (change: GistChange, effect: ChangeEffect) =>
+  effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list)
+    ? listAddsClaim()
+    : undefined;
+
+const ValuesPart = ({ change }: { change: GistChange }) => (
+  <>
+    {changeLayout(change).firstRows.map((effect, index) => (
+      <ValueRow key={index} effect={effect} claim={claimOf(change, effect)} />
+    ))}
+  </>
+);
+
+/**
+ * The values past the first view, behind one line that says what they hold,
+ * with their names while closed. Opened, they scroll in a box of their own.
+ */
+const SeeMorePart = ({
   change,
   action,
+  bounded = false,
 }: {
   change: GistChange;
   action: GistAction | undefined;
+  /** On a card, past its scroll box, where the opened values need one. */
+  bounded?: boolean;
 }) => {
   const layout = changeLayout(change);
   const collapsedTotal = layout.collapsed.length + layout.beyondCap;
+  if (collapsedTotal === 0) return null;
   const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
-  const addsOnly = change.notes.includes("tool_says_adds_to_list");
-  const claimOf = (effect: ChangeEffect) =>
-    effect.effect === "list_added" || (addsOnly && effect.list)
-      ? listAddsClaim()
-      : undefined;
-  return (
+  const values = (
     <>
-      {layout.firstRows.map((effect, index) => (
-        <ValueRow key={index} effect={effect} claim={claimOf(effect)} />
+      {layout.collapsed.map((effect, index) => (
+        <ValueRow
+          key={index}
+          effect={effect}
+          showRawName
+          claim={claimOf(change, effect)}
+        />
       ))}
-      {collapsedTotal > 0 && (
-        <SeeMore
-          label={changeSeeMoreLine(change, layout, action)}
-          defaultOpen={layout.opensByDefault}
-          hint={
-            shown.length > 0 ? (
-              <p className={MUTED} data-testid="tool-call-change-names">
-                <span dir="auto" className={ISOLATED}>
-                  {changeNamesOnly(shown.join(", "), more)}
-                </span>
-              </p>
-            ) : undefined
-          }
-        >
-          {layout.collapsed.map((effect, index) => (
-            <ValueRow
-              key={index}
-              effect={effect}
-              showRawName
-              claim={claimOf(effect)}
-            />
-          ))}
-          {layout.beyondCap > 0 && (
-            <p className={MUTED}>{fieldsInDetails(layout.beyondCap)}</p>
-          )}
-        </SeeMore>
+      {layout.beyondCap > 0 && (
+        <p className={MUTED}>{fieldsInDetails(layout.beyondCap)}</p>
       )}
     </>
+  );
+  return (
+    <SeeMore
+      label={changeSeeMoreLine(change, layout, action)}
+      defaultOpen={layout.opensByDefault}
+      hint={
+        shown.length > 0 ? (
+          <p className={MUTED} data-testid="tool-call-change-names">
+            <span dir="auto" className={ISOLATED}>
+              {changeNamesOnly(shown.join(", "), more)}
+            </span>
+          </p>
+        ) : undefined
+      }
+    >
+      {bounded ? (
+        <ScrollBox kind="card" className="max-h-[40vh] min-w-0 space-y-1">
+          {values}
+        </ScrollBox>
+      ) : (
+        values
+      )}
+    </SeeMore>
   );
 };
 
@@ -1105,11 +1125,17 @@ export const ToolCallChangeBody = ({
   action,
   replacesText = false,
   values = true,
+  outside = true,
 }: {
   change: GistChange;
   action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
+  /**
+   * Whether See more and the notes are part of the body; a card puts them
+   * after its scroll box instead, so they never scroll out of sight.
+   */
+  outside?: boolean;
 }) => (
   <div className="space-y-2" data-testid="tool-call-change-body">
     <IncompleteAlert change={change} />
@@ -1130,8 +1156,9 @@ export const ToolCallChangeBody = ({
     {change.texts.map((entry, index) => (
       <TextPart key={index} entry={entry} replaced={replacesText} />
     ))}
-    {values && <ValuesPart change={change} action={action} />}
-    <ChangeNotes change={change} />
+    {values && <ValuesPart change={change} />}
+    {values && outside && <SeeMorePart change={change} action={action} />}
+    {outside && <ChangeNotes change={change} />}
   </div>
 );
 
@@ -1208,8 +1235,11 @@ export const ToolCallChangeCard = ({
           change={change}
           action={gist.action}
           replacesText={gist.action === "update" || gist.action === "upsert"}
+          outside={false}
         />
       </ScrollBox>
+      <SeeMorePart change={change} action={gist.action} bounded />
+      <ChangeNotes change={change} />
     </div>
   );
 };

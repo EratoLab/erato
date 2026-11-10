@@ -1061,6 +1061,36 @@ describe("a trace row's details", () => {
   });
 });
 
+describe("what stays outside the card's scroll box", () => {
+  it("keeps the notes, the names-only line and See more after it", () => {
+    renderCard({
+      effects: Array.from({ length: 30 }, (_, index) => set(index)),
+      counts: { set: 30 },
+      notes: ["operator_marked_destructive", "old_values_from_earlier"],
+    });
+    const scroll = screen.getByTestId("tool-call-gist-scroll");
+    const seeMore = screen.getByTestId("tool-call-change-see-more");
+    const names = screen.getByTestId("tool-call-change-names");
+    const notes = screen.getByTestId("tool-call-change-notes");
+    for (const element of [seeMore, names, notes]) {
+      expect(scroll.contains(element)).toBe(false);
+      expect(
+        scroll.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+    expect(notes).toHaveTextContent(
+      "Your organisation has marked this tool as destructive.",
+    );
+    expect(notes).toHaveTextContent(
+      "Old values are from earlier in this chat and may have changed.",
+    );
+    expect(within(scroll).getAllByTestId("tool-call-change-row")).toHaveLength(
+      5,
+    );
+  });
+});
+
 describe("the scroll box", () => {
   it("becomes a named tab stop only when its content overflows", () => {
     const scrollHeight = vi
