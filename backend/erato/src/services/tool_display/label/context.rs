@@ -1321,7 +1321,7 @@ impl ToolResultContext {
                         == Some(own.id.as_str())
             };
             let one_alias = match same_read.as_slice() {
-                [alias] if *alone && (twins(key, *alias) || twins(*alias, key)) => Some(*alias),
+                [alias] if *alone && (twins(key, alias) || twins(alias, key)) => Some(*alias),
                 _ => None,
             };
             let mut more: Vec<(RecordKey, Option<String>)> = aliases
