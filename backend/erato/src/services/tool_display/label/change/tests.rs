@@ -509,7 +509,10 @@ fn a_batch_of_identical_rows_collapses_to_one_statement() {
     assert_eq!(batch.rows.len(), 50);
     assert!(batch.read_all);
     assert_eq!(batch.rows_emptying, 0);
-    assert_eq!(change.place.as_deref(), Some("Opportunity"));
+    assert_eq!(
+        (change.place, change.table.as_deref()),
+        (None, Some("Opportunity"))
+    );
 }
 
 #[test]
@@ -2705,6 +2708,18 @@ fn a_table_qualifies_a_rows_kind_and_never_reads_as_where_it_lives() {
         (updated.place, updated.table.as_deref()),
         (None, Some("account"))
     );
+    // A table named as the type of object a record is reads the same way.
+    for member in ["objectName", "object_name"] {
+        let updated = change_of(
+            "update_record",
+            json!({member: "Opportunity", "recordId": RECORD, "fields": {"Name": "New"}}),
+        );
+        assert_eq!(
+            (updated.place, updated.table.as_deref()),
+            (None, Some("Opportunity")),
+            "{member}"
+        );
+    }
     // A table named in words is no kind: it shows as the value it is.
     let worded = created("Accounts; then delete the rest");
     assert_eq!((&worded.place, &worded.table), (&None, &None));

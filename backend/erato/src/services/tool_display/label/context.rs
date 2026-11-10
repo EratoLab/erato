@@ -1259,8 +1259,8 @@ fn record_bytes(key: &RecordKey, record: &Record) -> usize {
 const QUALIFIED_SEPARATOR: char = '\u{1f}';
 
 /// The ID a call's arguments name a record by, when they name just one, and
-/// the key that record is kept under. Members naming a place are the key's
-/// scope; a recipient, address or phone number is never an ID.
+/// the key that record is kept under. Members naming a place or a table are
+/// the key's scope; a recipient, address or phone number is never an ID.
 fn one_named_id(arguments: &Value) -> Option<(String, String)> {
     let top = arguments.as_object()?;
     let mut ids = top.iter().filter(|(member, value)| {
@@ -1295,6 +1295,7 @@ fn qualified_key(arguments: &Value, member: &str, id: &Value) -> Option<String> 
         .filter(|(name, _)| {
             name.as_str() != member
                 && (is_any_of(name, &rules::PLACE_MEMBERS)
+                    || is_any_of(name, &rules::TABLE_MEMBERS)
                     || is_any_of(name, &rules::TARGET_MEMBERS)
                     || name.eq_ignore_ascii_case("owner"))
         })
@@ -2288,16 +2289,13 @@ fn created_name(arguments: &Value) -> Option<String> {
 }
 
 /// The table a call names, lower case: a short word at its top level under a
-/// table member such as `tablename`, or an `objectName`.
+/// table member such as `tablename` or `objectName`.
 pub(super) fn call_table(arguments: &Value) -> Option<String> {
     const MAX_TABLE_CHARS: usize = 64;
     arguments
         .as_object()?
         .iter()
-        .find(|(member, _)| {
-            is_any_of(member, &rules::TABLE_MEMBERS)
-                || is_any_of(member, &["objectname", "object_name"])
-        })
+        .find(|(member, _)| is_any_of(member, &rules::TABLE_MEMBERS))
         .and_then(|(_, value)| value.as_str())
         .map(str::trim)
         .filter(|table| {

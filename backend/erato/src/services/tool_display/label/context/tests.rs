@@ -1987,6 +1987,36 @@ fn a_records_name_inside_a_wrapper_names_it_when_it_is_the_only_one() {
 }
 
 #[test]
+fn a_number_read_from_one_table_never_names_a_row_of_another() {
+    for table in ["tablename", "objectName"] {
+        let context = after(vec![call(
+            "row",
+            "get_record",
+            json!({ table: "account", "recordId": 7 }),
+            json!({ "Id": 7, "Name": "Acme" }),
+        )]);
+        let named = |arguments: Value| {
+            let mapping = ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                ..Default::default()
+            };
+            let item = item(&context, ToolCallAction::Delete, mapping, &arguments);
+            item.id.unwrap().values[0].resolved.clone()
+        };
+        assert_eq!(
+            named(json!({ table: "account", "recordId": 7 })).as_deref(),
+            Some("Acme"),
+            "{table}"
+        );
+        assert_eq!(
+            named(json!({ table: "contact", "recordId": 7 })),
+            None,
+            "{table}"
+        );
+    }
+}
+
+#[test]
 fn a_person_or_other_object_nested_in_a_record_never_names_it() {
     const COMMENT: &str = "c0ffee00-0000-4000-8000-000000000001";
     const TICKET: &str = "c0ffee00-0000-4000-8000-000000000002";

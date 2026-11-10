@@ -178,15 +178,13 @@ pub(super) const TARGET_MEMBERS: [&str; 12] = [
 ];
 /// Where a record lives, most specific first, when no target names it; the
 /// same words the change description reads as the card's place.
-pub(super) const PLACE_MEMBERS: [&str; 10] = [
+pub(super) const PLACE_MEMBERS: [&str; 8] = [
     "repo",
     "repository",
     "repo_path",
     "project_id",
     "project_key",
     "namespace",
-    "objectname",
-    "object_name",
     "branch",
     "organization",
 ];
@@ -252,7 +250,7 @@ pub(super) const WRAPPER_MEMBERS: [&str; 15] = [
     "additional_fields",
 ];
 /// Members naming the table or type a record lives in: its kind.
-pub(super) const TABLE_MEMBERS: [&str; 8] = [
+pub(super) const TABLE_MEMBERS: [&str; 10] = [
     "tablename",
     "table",
     "table_name",
@@ -261,6 +259,8 @@ pub(super) const TABLE_MEMBERS: [&str; 8] = [
     "entity_name",
     "object_type",
     "objecttype",
+    "objectname",
+    "object_name",
 ];
 /// Words naming a kind, in tool names and table names. A record of any other
 /// table is a row.

@@ -1929,12 +1929,11 @@ fn only_adds(member: &str) -> bool {
 
 /// Where a place member sits in what the card says, broadest first.
 fn place_order(member: &str) -> usize {
-    const ORDER: [&str; 7] = [
+    const ORDER: [&str; 6] = [
         "owner",
         "organization",
         "repository",
         "repo",
-        "objectname",
         "namespace",
         "branch",
     ];
