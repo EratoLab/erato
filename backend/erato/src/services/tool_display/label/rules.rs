@@ -119,9 +119,10 @@ const VERBS: [(ToolCallAction, &[&str]); 11] = [
             "terminate",
             "wipe",
             "erase",
+            "trash",
         ],
     ),
-    (ToolCallAction::Archive, &["archive", "trash"]),
+    (ToolCallAction::Archive, &["archive"]),
     (ToolCallAction::Move, &["move"]),
     (
         ToolCallAction::Send,

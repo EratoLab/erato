@@ -2002,6 +2002,20 @@ fn trash_is_restorable_and_a_negated_permanently_is_no_claim() {
 }
 
 #[test]
+fn a_trash_reads_as_a_delete_that_the_tool_says_can_be_restored() {
+    let trash = tool(
+        "trash_file",
+        "Moves a file to the user's trash. It does not permanently delete the file.",
+        None,
+    );
+    let arguments = json!({"fileId": "f_1"});
+    let label = labelled(&trash, &arguments, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Delete);
+    let change = change_with(&trash, arguments, &ToolResultContext::default()).0;
+    assert_eq!(change.notes, [ToolCallChangeNote::ToolSaysRestorable]);
+}
+
+#[test]
 fn an_address_counts_as_reach_only_on_a_send_or_share() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
     let shared = change_with(

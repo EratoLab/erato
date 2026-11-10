@@ -251,7 +251,7 @@ fn some_names_read_as_one_verb() {
         ),
         (
             "trash_file",
-            ToolCallAction::Archive,
+            ToolCallAction::Delete,
             ToolCallObjectKind::File,
         ),
     ] {
@@ -1941,7 +1941,7 @@ fn more_verbs_come_from_a_tools_name_in_a_closed_list() {
         (
             "trash_file",
             json!({"fileId": "f_1"}),
-            ToolCallAction::Archive,
+            ToolCallAction::Delete,
         ),
         (
             "archive_page",

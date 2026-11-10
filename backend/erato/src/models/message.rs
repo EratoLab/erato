@@ -1078,7 +1078,7 @@ pub enum ToolCallAction {
     Run,
     /// Creates or updates, the call does not say which.
     Upsert,
-    /// Moves to an archive or trash rather than deleting.
+    /// Moves to an archive rather than deleting; a move to the trash is a delete.
     Archive,
     Upload,
     /// Also what a value from a newer version reads as.
