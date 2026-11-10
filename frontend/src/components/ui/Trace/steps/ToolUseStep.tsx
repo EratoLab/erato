@@ -1,7 +1,9 @@
 import { t } from "@lingui/core/macro";
-import { useMemo } from "react";
+import clsx from "clsx";
+import { useId, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { DisclosureButton } from "@/components/ui/Controls/Disclosure";
 import {
   changeRowHasDetails,
   ToolCallChangeRowDetails,
@@ -16,9 +18,13 @@ import {
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
-import { changeRowCounts } from "@/lib/toolCallGist/changeLabels";
+import {
+  changeRowCounts,
+  machineIdPhrase,
+} from "@/lib/toolCallGist/changeLabels";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { maskMachineIds } from "@/lib/toolCallGist/machineId";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   commentChangeRow,
@@ -84,6 +90,71 @@ const textOf = (value: unknown): string | undefined =>
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
 
+/** A failure message longer than this is one line until it is opened. */
+const FAILURE_LINE_CHARS = 90;
+
+/**
+ * A failed call: Erato's own line that it failed, in the row's failure
+ * colour, then the server's message as the tool's word, its machine IDs
+ * masked as on the card, on one line until it is opened.
+ */
+const FailureMessage = ({ failure }: { failure: CleanText }) => {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const text = maskMachineIds(failure.text, machineIdPhrase());
+  const shown = failure.truncated ? `${text}…` : text;
+  const long =
+    failure.truncated ||
+    text.includes("\n") ||
+    Array.from(text).length > FAILURE_LINE_CHARS;
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="tool-failure">
+      <p className="text-theme-error-fg">
+        {t({ id: "trace.tool.failure.line", message: "The call failed." })}
+      </p>
+      <p
+        id={id}
+        className={clsx(
+          "text-theme-fg-secondary",
+          open || !long
+            ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+            : "truncate",
+        )}
+      >
+        {t({ id: "trace.tool.failure.toolSays", message: "The tool says:" })}{" "}
+        <q
+          dir="auto"
+          className="[unicode-bidi:isolate]"
+          data-testid="tool-failure-message"
+        >
+          {shown}
+        </q>
+      </p>
+      {long && (
+        <DisclosureButton
+          open={open}
+          controls={id}
+          onToggle={() => {
+            setOpen(!open);
+          }}
+        >
+          <span className="text-xs">
+            {open
+              ? t({
+                  id: "trace.tool.failure.showLess",
+                  message: "Show less of the message",
+                })
+              : t({
+                  id: "trace.tool.failure.showAll",
+                  message: "Show the whole message",
+                })}
+          </span>
+        </DisclosureButton>
+      )}
+    </div>
+  );
+};
+
 /**
  * What stays visible under a gist row: the key values and old → new of each
  * item, further items' own lines, and a failed call's message from its server.
@@ -112,15 +183,7 @@ const GistRowDetails = ({
             )}
           </div>
         ))}
-    {failure && (
-      <p
-        dir="auto"
-        className="whitespace-pre-wrap break-words text-xs text-theme-error-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]"
-        data-testid="tool-failure-message"
-      >
-        {failure.truncated ? `${failure.text}…` : failure.text}
-      </p>
-    )}
+    {failure && <FailureMessage failure={failure} />}
   </div>
 );
 

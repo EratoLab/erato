@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -736,6 +742,35 @@ describe("ToolUseStep gist row", () => {
     expect(message.textContent).not.toContain("\u202E");
     expect(message).toHaveAttribute("dir", "auto");
     expect(isFolded(message)).toBe(false);
+  });
+
+  it("frames a failed run's server message as the tool's word, with its ids masked", () => {
+    const id = "aaaaaaaa-0000-4000-8000-0000000000a1";
+    labelled(
+      {
+        output: {
+          error: `Principal user (Id=${id}, type=8, AADObjectId='${id}', businessUnitId=${id}), is missing prvCreateAccount privilege on the record.`,
+        } as unknown as ToolUse["output"],
+      },
+      "error",
+      { status: "approved", alwaysAllow: false },
+    );
+
+    const failure = screen.getByTestId("tool-failure");
+    expect(failure).toHaveTextContent(/^The call failed\./);
+    expect(failure).toHaveTextContent("The tool says:");
+    expect(failure.textContent).not.toContain(id);
+    const message = screen.getByTestId("tool-failure-message");
+    expect(message).toHaveTextContent(
+      "Principal user (Id=an ID (see Technical details), type=8,",
+    );
+    expect(message.className).not.toContain("error");
+    const more = within(failure).getByRole("button", {
+      name: "Show the whole message",
+    });
+    expect(more).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(more);
+    expect(more).toHaveAttribute("aria-expanded", "true");
   });
 
   it("keeps the asked line on a call that never ran", () => {

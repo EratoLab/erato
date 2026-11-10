@@ -10267,6 +10267,26 @@ msgid "trace.tool.failed"
 msgstr "Falló"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.line"
+msgstr "La llamada ha fallado."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showAll"
+msgstr "Mostrar el mensaje completo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showLess"
+msgstr "Mostrar menos del mensaje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.toolSays"
+msgstr "Según la herramienta:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.interrupted"
 msgstr ""
