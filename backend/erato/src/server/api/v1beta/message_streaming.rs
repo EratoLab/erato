@@ -3502,8 +3502,8 @@ async fn reconcile_orphaned_parent_slot(
     // reaction turn, this rewrites a slot already in the row. An archived
     // origin is one route that reaches here. The others are a child the origin
     // never carried up: one that parked before the user stopped the turn, or
-    // on a turn that ended on a stop no child item can share (the tool-call
-    // limit, a durable client operation). A withdrawal or a settlement closes
+    // on a turn that ended on the tool-call limit, a stop no child item can
+    // share. A withdrawal or a settlement closes
     // the child's own copy, so those never run again.
     //
     // A running lease on this message means the dispatching turn may yet write
@@ -6074,7 +6074,9 @@ fn delegated_task_approval_part(
 }
 
 /// Carry parked children up on the stop the turn's own gated call already
-/// owns, so the user answers the turn and its tasks in one place.
+/// owns, so the user answers the turn and its tasks in one place. A turn whose
+/// own durable call waits ends on the same part of its own, right behind that
+/// call's part: see the park below the join.
 ///
 /// The part keeps its kind and flat fields: they still describe its own call,
 /// which stays the first item. Only children launched before that call can be
@@ -10376,9 +10378,13 @@ async fn stream_generate_chat_completion<'a>(
         //
         // A gated call of this turn's own already owns that part, so the
         // children join it as items with `child` set: one stop, decided per
-        // item. Any other exit keeps them out. An abort means the user withdrew
-        // the question; the tool-call limit and a durable client operation are
-        // stops that no item of a child can share. There the child keeps its
+        // item. A durable client operation of its own leaves the turn waiting
+        // without a part to join, so the children's part is written right
+        // behind the call's own: the person answers them while the call waits.
+        // Any other exit keeps them out. An abort means the user withdrew the
+        // question. The tool-call limit's stop takes no child items for now,
+        // and CT-10 allows no exception besides the abort, so that is an open
+        // question rather than settled design. There the child keeps its
         // `input_required` slot and stays answerable from its own chat.
         let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
         // A Stop while the batch settled withdraws the turn's own question as
@@ -10412,17 +10418,23 @@ async fn stream_generate_chat_completion<'a>(
                 }
             } else if pending_approval_part.is_none()
                 && exit_error.is_none()
-                && !exit_after_join
+                && (!exit_after_join || pending_client_operation.is_some())
                 && !aborted
             {
-                let pending_tool_calls = unfinished_tool_calls
-                    .drain(..)
-                    .map(|call| crate::models::message::PendingToolCall {
-                        call_id: call.call_id,
-                        fn_name: call.fn_name,
-                        fn_arguments: call.fn_arguments,
-                    })
-                    .collect();
+                // A waiting call's part keeps the batch's other calls below,
+                // so a stop that rides on it holds none of its own.
+                let pending_tool_calls = if pending_client_operation.is_some() {
+                    Vec::new()
+                } else {
+                    unfinished_tool_calls
+                        .drain(..)
+                        .map(|call| crate::models::message::PendingToolCall {
+                            call_id: call.call_id,
+                            fn_name: call.fn_name,
+                            fn_arguments: call.fn_arguments,
+                        })
+                        .collect()
+                };
                 pending_approval_part = Some(delegated_task_approval_part(
                     &parked_children,
                     pending_tool_calls,
@@ -10492,13 +10504,22 @@ async fn stream_generate_chat_completion<'a>(
                 })
                 .collect();
             current_message_content = without_preparing_tools(&current_message_content);
-            current_message_content.push(ContentPart::ClientToolPending(
-                crate::services::client_operations::ClientToolPending {
-                    attempt_id: request.attempt_id,
-                    tool_call_id: request.tool_call_id.clone(),
-                    pending_tool_calls,
-                },
-            ));
+            // Right before a stop that carries the tasks' questions, so the
+            // stop stays the row's last part for every reader of an approval.
+            let position = match current_message_content.last() {
+                Some(ContentPart::ToolApprovalRequest(_)) => current_message_content.len() - 1,
+                _ => current_message_content.len(),
+            };
+            current_message_content.insert(
+                position,
+                ContentPart::ClientToolPending(
+                    crate::services::client_operations::ClientToolPending {
+                        attempt_id: request.attempt_id,
+                        tool_call_id: request.tool_call_id.clone(),
+                        pending_tool_calls,
+                    },
+                ),
+            );
             let task = streaming_task.expect("client operation has a task");
             crate::services::client_operations::store::park(
                 &app_state.db,
@@ -19741,9 +19762,19 @@ pub async fn client_tool_result(
             Some(task) => task.client_operation(&request.tool_call_id).await,
             None => None,
         };
-        // Fast local delivery needs no new database access. Only late/remote
-        // results probe the logged inbox, before the legacy UNLOGGED transport.
-        if operation.is_some() || task.is_none() {
+        // Fast local delivery needs no new database access. Only a result no
+        // loop here waits for probes the logged inbox, before the legacy
+        // UNLOGGED transport: a late or remote one, or one for a call parked
+        // before this task started. A continuation that runs a task answered on
+        // the waiting call's stop never registered that call.
+        let unawaited_here = match &task {
+            Some(task) => {
+                task.message_id() == request.message_id
+                    && !task.awaits_client_tool_result(&request.tool_call_id).await
+            }
+            None => true,
+        };
+        if operation.is_some() || unawaited_here {
             if let (Some(operation), Some(task)) = (&operation, &task)
                 && task.message_id() == request.message_id
             {
@@ -23316,6 +23347,33 @@ pub(crate) async fn run_continuation(
         }
     }
 
+    // The response's own durable call may still wait on the stop these
+    // decisions came from. What the tasks did reaches the model once that
+    // call has its result: the turn stays parked on the call. A call that
+    // ended while this ran was ended by a Stop, which took it off the row;
+    // this run still holds its earlier copy, so every write from here on would
+    // bring back a call nothing will ever answer.
+    let waiting_attempt = crate::services::client_operations::waiting_call(&parsed.content)
+        .map(|pending| pending.attempt_id);
+    let waiting_call = match waiting_attempt {
+        Some(attempt_id) => {
+            let attempt =
+                crate::services::client_operations::store::get(&app_state.db, user_id, attempt_id)
+                    .await?;
+            if attempt.state == crate::services::client_operations::store::AttemptState::Completed {
+                crate::services::client_operations::store::remove_ended_call(
+                    &mut parsed.content,
+                    attempt_id,
+                    &attempt.tool_call_id,
+                );
+                None
+            } else {
+                Some(attempt_id)
+            }
+        }
+        None => None,
+    };
+
     if let Some(error) = mcp_content_filter_error {
         // All approval items have settled durably. A filtered result ends the
         // generation, as in the normal path, without another model request. A
@@ -23373,33 +23431,43 @@ pub(crate) async fn run_continuation(
     // A child that stopped a second time re-parks the turn waiting on it: one
     // new part of the same shape, and no model call — this turn has learnt
     // nothing yet that it could answer with.
-    if !reparked_children.is_empty() {
-        let settled_call_ids: HashSet<&str> = parsed
-            .content
-            .iter()
-            .filter_map(|part| match part {
-                ContentPart::ToolUse(tool_use) => Some(tool_use.tool_call_id.as_str()),
-                _ => None,
-            })
-            .collect();
-        // An approved own client-tool call has not run yet, and the new part is
-        // the only record the next continuation reads, so it goes first.
-        let pending_tool_calls = approved_calls
-            .iter()
-            .chain(
-                pending_from_park
-                    .iter()
-                    .filter(|call| !settled_call_ids.contains(call.call_id.as_str())),
-            )
-            .cloned()
-            .collect();
-        parsed.content.push(ContentPart::ToolApprovalRequest(
-            delegated_task_approval_part(
-                &reparked_children,
-                pending_tool_calls,
-                mcp.config.mcp_servers_global.approval.allow_always,
-            ),
-        ));
+    if !reparked_children.is_empty() || waiting_call.is_some() {
+        if let Some(attempt_id) = waiting_call {
+            // Before the new part, so that part rides on the call as the stop
+            // before it did, and the call ends the row when nothing is left.
+            crate::services::client_operations::move_waiting_call_last(
+                &mut parsed.content,
+                attempt_id,
+            );
+        }
+        if !reparked_children.is_empty() {
+            let settled_call_ids: HashSet<&str> = parsed
+                .content
+                .iter()
+                .filter_map(|part| match part {
+                    ContentPart::ToolUse(tool_use) => Some(tool_use.tool_call_id.as_str()),
+                    _ => None,
+                })
+                .collect();
+            // An approved own client-tool call has not run yet, and the new part is
+            // the only record the next continuation reads, so it goes first.
+            let pending_tool_calls = approved_calls
+                .iter()
+                .chain(
+                    pending_from_park
+                        .iter()
+                        .filter(|call| !settled_call_ids.contains(call.call_id.as_str())),
+                )
+                .cloned()
+                .collect();
+            parsed.content.push(ContentPart::ToolApprovalRequest(
+                delegated_task_approval_part(
+                    &reparked_children,
+                    pending_tool_calls,
+                    mcp.config.mcp_servers_global.approval.allow_always,
+                ),
+            ));
+        }
         // Released here too, not only on the ordinary tail: the claim is what
         // readmits a crashed continuation, and a row left carrying it would be
         // resumed by the retry path instead of answered by the card it just
@@ -24277,6 +24345,30 @@ async fn complete_client_operation_generation(
     Ok(())
 }
 
+/// When the stop right behind a waiting call still has open items, hands the
+/// call's other calls of the batch to that stop, and says so: the stop now
+/// runs them once it is answered, as a stop with pending calls does.
+fn hand_waiting_call_to_open_stop(content: &mut [ContentPart], attempt_id: Uuid) -> bool {
+    let Some(marker) = content.iter().position(|part| {
+        matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id)
+    }) else {
+        return false;
+    };
+    let Some(stop) = parked_approval_state(content)
+        .filter(|state| state.request_index == marker + 1 && !state.open.is_empty())
+    else {
+        return false;
+    };
+    let ContentPart::ClientToolPending(pending) = &content[marker] else {
+        return false;
+    };
+    let calls = pending.pending_tool_calls.clone();
+    if let ContentPart::ToolApprovalRequest(request) = &mut content[stop.request_index] {
+        request.pending_tool_calls.extend(calls);
+    }
+    true
+}
+
 /// The files a stored client tool result reported, read with this user's
 /// permissions as a live result's files are. Only a result not yet applied
 /// needs them; a crash retry keeps what the first continuation wrote.
@@ -24351,7 +24443,7 @@ pub(crate) async fn run_client_operation_continuation(
         &row.message_id,
     )
     .await?;
-    let parsed = MessageSchema::validate(&message.raw_message)?;
+    let mut parsed = MessageSchema::validate(&message.raw_message)?;
     let pending_calls = parsed
         .content
         .iter()
@@ -24381,12 +24473,29 @@ pub(crate) async fn run_client_operation_continuation(
             .is_some_and(|status| status == "accepted" || status == "failed"),
         _ => false,
     });
-    if submission_finished {
-        let metadata = message
+    let stored_metadata = || -> GenerationMetadata {
+        message
             .generation_metadata
             .as_ref()
             .and_then(|value| serde_json::from_value(value.clone()).ok())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    };
+    if submission_finished {
+        let metadata = stored_metadata();
+        return complete_client_operation_generation(
+            app_state,
+            task,
+            attempt_id,
+            parsed.content,
+            metadata,
+        )
+        .await;
+    }
+    // The tasks' questions on the stop this call carried are still open. The
+    // result is on the row and the call is over, but the turn stays on the
+    // stop, and goes on once it is answered.
+    if hand_waiting_call_to_open_stop(&mut parsed.content, attempt_id) {
+        let metadata = stored_metadata();
         return complete_client_operation_generation(
             app_state,
             task,

@@ -800,6 +800,34 @@ pub async fn end_failed_continuation(
     Ok(ended.rows_affected() == 1)
 }
 
+/// What ending a call without its own continuation does to its message: the
+/// pending part goes, and a tool row still in progress reads as cancelled. The
+/// part that carried the tasks' questions goes with the call when it ends the
+/// row: they stay answerable from their own chats, as a task that parked before
+/// the user stopped does.
+pub fn remove_ended_call(content: &mut Vec<ContentPart>, attempt_id: Uuid, tool_call_id: &str) {
+    if let Some(position) = content.iter().position(|part| {
+        matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == attempt_id)
+    }) {
+        content.remove(position);
+        if position + 1 == content.len()
+            && matches!(content.get(position), Some(ContentPart::ToolApprovalRequest(_)))
+        {
+            content.remove(position);
+        }
+    }
+    for part in content.iter_mut() {
+        if let ContentPart::ToolUse(tool) = part
+            && tool.tool_call_id == tool_call_id
+            && tool.status == MessageToolCallStatus::InProgress
+        {
+            tool.status = MessageToolCallStatus::Error;
+            tool.output = Some(serde_json::json!({"status":"cancelled","reason":"superseded"}));
+            tool.ended_at = Some(Utc::now().to_rfc3339());
+        }
+    }
+}
+
 /// A new user turn supersedes operations on the abandoned assistant message.
 /// This runs inside the generation lease transaction and uses its chat lock.
 pub async fn supersede_other_attempts<C: ConnectionTrait>(
@@ -822,17 +850,7 @@ pub async fn supersede_other_attempts<C: ConnectionTrait>(
             continue;
         };
         let mut parsed = MessageSchema::validate(&message.raw_message)?;
-        parsed.content.retain(|part| !matches!(part, ContentPart::ClientToolPending(pending) if pending.attempt_id == row.attempt_id));
-        for part in &mut parsed.content {
-            if let ContentPart::ToolUse(tool) = part
-                && tool.tool_call_id == row.tool_call_id
-                && tool.status == MessageToolCallStatus::InProgress
-            {
-                tool.status = MessageToolCallStatus::Error;
-                tool.output = Some(serde_json::json!({"status":"cancelled","reason":"superseded"}));
-                tool.ended_at = Some(Utc::now().to_rfc3339());
-            }
-        }
+        remove_ended_call(&mut parsed.content, row.attempt_id, &row.tool_call_id);
         db.execute_raw(statement(
             "client_operations.supersede",
             "UPDATE messages SET raw_message = $2 WHERE id = $1",

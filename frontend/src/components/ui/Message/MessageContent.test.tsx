@@ -2363,6 +2363,32 @@ describe("tasks waiting on the device", () => {
       "This task is waiting for one of its calls to run on this device.",
     );
   });
+
+  it("names the response's own waiting call beside a task that waits on the device", () => {
+    renderWithQueryClient(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          waitingSlot(),
+          {
+            content_type: "client_tool_pending",
+            attempt_id: "attempt-own",
+            tool_call_id: "call-own",
+            pending_tool_calls: [],
+          },
+          stopWith([waitingItem]),
+        ]}
+      />,
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveTextContent(
+      "It continues on its own once the task and the connected app have finished.",
+    );
+    expect(queue).not.toHaveTextContent(
+      "It continues on its own once the task finishes.",
+    );
+  });
 });
 
 it("renders local file consent alongside a submitted host card in the originating message", () => {
@@ -2496,6 +2522,66 @@ it("shows a durable app wait in persisted history and hides a consumed marker", 
     />,
   );
   expect(screen.queryByRole("status")).toBeNull();
+});
+
+it("keeps a waiting call's notice beside the question its task asked", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const view = renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[pending, childApprovalRequest()]}
+    />,
+  );
+  expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+  expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+  view.unmount();
+  // An earlier call's marker, further up the row, is not a wait any more.
+  renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[
+        pending,
+        { content_type: "text", text: "Next step." },
+        childApprovalRequest(),
+      ]}
+    />,
+  );
+  expect(screen.queryByText(/waiting for a connected app/)).toBeNull();
+});
+
+it("says a decision behind the response's own waiting call lets only the task go on", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const view = renderWithQueryClient(
+    <MessageContent
+      messageId="message-1"
+      content={[pending, childApprovalRequest()]}
+    />,
+  );
+  const queue = screen.getByTestId("approval-queue");
+  expect(queue).toHaveTextContent(
+    "The task goes on once you decide. The response continues when the connected app has finished.",
+  );
+  expect(queue).not.toHaveTextContent(
+    "The response continues once you decide.",
+  );
+  view.unmount();
+  // Without the waiting call in front, the decision lets the response go on.
+  renderWithQueryClient(
+    <MessageContent messageId="message-1" content={[childApprovalRequest()]} />,
+  );
+  expect(screen.getByTestId("approval-queue")).toHaveTextContent(
+    "The response continues once you decide.",
+  );
 });
 
 it("points a turn parked on a sidecar review to the Erato desktop app while the review is open", () => {
