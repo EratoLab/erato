@@ -231,6 +231,9 @@ pub(super) struct Record {
     ambiguous: bool,
     /// The read that last reported this record.
     read: u32,
+    /// For a record kept under the ID a read named it by, its own ID, when
+    /// the read's object gave one: the read kept it under that ID too.
+    twin: Option<String>,
 }
 
 /// A field's value as an earlier result wrote it with its label.
@@ -818,7 +821,7 @@ impl ToolResultContext {
                     records: MAX_RECORDS_PER_RESULT,
                 };
                 self.read_node(output, server, &words, &mut walk, 0);
-                self.read_named_record(tool.input.as_ref(), output, server, &mut walk);
+                self.read_named_record(tool.input.as_ref(), output, server, &words, &mut walk);
                 self.read_option_list(tool, output, server);
                 self.read_field_options(tool, output, server);
             }
@@ -1003,6 +1006,7 @@ impl ToolResultContext {
         input: Option<&Value>,
         output: &Value,
         server: &str,
+        words: &HashSet<String>,
         walk: &mut Walk,
     ) {
         let (Some(input), Some(mut object)) = (input, output.as_object()) else {
@@ -1026,7 +1030,16 @@ impl ToolResultContext {
         let values = values_of(object, "", walk);
         let name = name_of(object).or_else(|| values.wrapped_name());
         if name.is_some() || !values.is_empty() {
-            self.merge(RecordKey::new(server, key), name, values);
+            let key = RecordKey::new(server, key);
+            self.merge(key.clone(), name, values);
+            // The object's own ID, under which [`Self::read_node`] kept it.
+            let twin = own_id(object, words).map(|(_, id)| id);
+            if let Some(record) = self.records.get_mut(&key) {
+                let before = record_bytes(&key, record);
+                record.twin = twin;
+                let after = record_bytes(&key, record);
+                self.bytes = self.bytes.saturating_sub(before).saturating_add(after);
+            }
         }
     }
 
@@ -1247,10 +1260,11 @@ impl ToolResultContext {
     /// to the records of `server` that may be the same record under another
     /// key: a read can keep one record under its own ID and under the ID the
     /// read named it by. When the hits hold only one of those two keys, the
-    /// one other record of the same read with the same old name, when one of
-    /// the two keys is such a named ID, is that record and gets the same
-    /// name; any other record still called by an old name loses it, so the
-    /// old name is never shown again.
+    /// one other record of the same read with the same old name is that
+    /// record and gets the same name only when the read's object gave that
+    /// ID as its own; any other record still called by an old name, such as
+    /// a parent the read linked to, loses it, so the old name is never shown
+    /// again.
     fn rename(&mut self, server: &str, hits: Vec<(RecordKey, Option<String>)>) {
         if hits.is_empty() {
             return;
@@ -1295,14 +1309,19 @@ impl ToolResultContext {
                 .copied()
                 .filter(|other| self.records.get(*other).is_some_and(|r| r.read == *read))
                 .collect();
+            // `named` is kept under the ID a read named it by, and `own`
+            // under the ID that read's object gave as its own.
+            let twins = |named: &RecordKey, own: &RecordKey| {
+                qualified_value(&named.id).is_some()
+                    && qualified_value(&own.id).is_none()
+                    && self
+                        .records
+                        .get(named)
+                        .and_then(|record| record.twin.as_deref())
+                        == Some(own.id.as_str())
+            };
             let one_alias = match same_read.as_slice() {
-                [alias]
-                    if *alone
-                        && qualified_value(&key.id).is_some()
-                            != qualified_value(&alias.id).is_some() =>
-                {
-                    Some(*alias)
-                }
+                [alias] if *alone && (twins(key, *alias) || twins(*alias, key)) => Some(*alias),
                 _ => None,
             };
             let mut more: Vec<(RecordKey, Option<String>)> = aliases
@@ -1412,6 +1431,7 @@ impl ToolResultContext {
                     coded,
                     ambiguous: false,
                     read,
+                    twin: None,
                 }
             }
         };
@@ -1463,6 +1483,7 @@ fn record_bytes(key: &RecordKey, record: &Record) -> usize {
         + key.id.len()
         + record.name.as_ref().map_or(0, String::len)
         + record.name_member.as_ref().map_or(0, String::len)
+        + record.twin.as_ref().map_or(0, String::len)
         + fields
         + lists
         + coded

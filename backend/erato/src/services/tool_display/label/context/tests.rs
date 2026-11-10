@@ -587,6 +587,35 @@ fn a_rename_never_gives_its_new_name_to_another_record_of_the_same_read() {
 }
 
 #[test]
+fn a_rename_by_the_id_a_read_named_never_reaches_a_record_the_read_linked_to() {
+    // The read's object echoes the key it was named by but gives no ID of
+    // its own; only its parent has one.
+    let read = call(
+        "read",
+        "get_issue",
+        json!({ "issue_key": "ENG-12" }),
+        json!({ "key": "ENG-12", "title": "Weekly sync", "parent": { "id": "ENG-3", "title": "Weekly sync" } }),
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), "ENG-3").as_deref(),
+        Some("Weekly sync")
+    );
+    let update = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "rename",
+            "update_issue",
+            json!({ "issue_key": "ENG-12", "title": "Weekly sync (moved)" }),
+            json!("Issue updated"),
+        ),
+    );
+    for _ in 0..32 {
+        let context = after(vec![read.clone(), update.clone()]);
+        assert_eq!(name_by_id(&context, "ENG-3"), None);
+    }
+}
+
+#[test]
 fn a_name_set_in_an_object_shaped_like_a_link_leaves_its_record_unnamed() {
     let read = call(
         "read",
