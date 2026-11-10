@@ -1034,3 +1034,136 @@ describe("a card for a record no result in the chat named", () => {
     );
   });
 });
+
+describe("what the card names when it can only say item", () => {
+  const itemGist = (change: GistChange, action: Gist["action"]): Gist => ({
+    ...gistFor(change),
+    action,
+    kind: "other",
+    items: [
+      {
+        ...gistFor(change).items[0],
+        names: [
+          {
+            text: "uploader-archive",
+            origin: "written",
+            path: "/repo",
+            truncated: false,
+          },
+        ],
+        where: [
+          { text: "contoso", origin: "place", path: "", truncated: false },
+        ],
+        hiddenIdPaths: [],
+      },
+    ],
+  });
+  const renderItemCard = (
+    raw: object,
+    action: Gist["action"],
+    toolTitle?: string,
+  ) => {
+    const change = readAs(raw);
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={itemGist(change, action)}
+          change={change}
+          phase="ask"
+          toolTitle={toolTitle}
+        />
+      </I18nProvider>,
+    );
+  };
+
+  it("says the tool's own name for the call as the tool's word", () => {
+    renderItemCard(
+      { effects: [], counts: {}, place: "contoso" },
+      "delete",
+      "Delete repository",
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Delete item uploader-archive from contoso",
+    );
+    expect(screen.getByTestId("tool-call-change-tool-title")).toHaveTextContent(
+      "The tool calls this Delete repository",
+    );
+  });
+
+  it("says none where a type the call names is the noun", () => {
+    renderItemCard(
+      { effects: [], counts: {}, table: "Namespace" },
+      "delete",
+      "Resources: Delete",
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Delete Namespace uploader-archive from contoso",
+    );
+    expect(screen.queryByTestId("tool-call-change-tool-title")).toBeNull();
+  });
+
+  it("says none where the line names a statement instead", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        opaque: [{ kind: "sql", path: "/q", text: "select 1", lines: 1 }],
+      },
+      "run",
+      "execute_sql",
+    );
+    expect(screen.queryByTestId("tool-call-change-tool-title")).toBeNull();
+  });
+
+  it("counts no fields for a run, whose values are no record's fields", () => {
+    renderItemCard(
+      { effects: [set(1), set(2)], counts: { set: 2 } },
+      "run",
+      "exec_op",
+    );
+    expect(screen.queryByText(/fields are set/)).toBeNull();
+    expect(screen.getByTestId("tool-call-change-tool-title")).toHaveTextContent(
+      "The tool calls this exec_op",
+    );
+  });
+
+  it("lists the options a call turns on as turned on", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        flags: [
+          { name: "Safe preview", raw_name: "safe_preview", dry_run: true },
+          { name: "Push to production", raw_name: "push_to_production" },
+        ],
+      },
+      "send",
+    );
+    expect(screen.getByTestId("tool-call-change-flags")).toHaveTextContent(
+      /^Turned on/,
+    );
+  });
+
+  it("gives the size of a replaced text as the new text's", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        texts: [
+          {
+            path: "/body",
+            name: "Body",
+            raw_name: "body",
+            text: "x\ny\nz\nw",
+            lines: 4,
+            chars: 300,
+          },
+        ],
+      },
+      "update",
+    );
+    expect(screen.getByTestId("tool-call-change-text")).toHaveTextContent(
+      "Body replaced by 4 lines, 300 characters",
+    );
+  });
+});

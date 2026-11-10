@@ -63,12 +63,14 @@ import {
   textHeading,
   textOldLabel,
   textSeeAll,
+  toolTitleLabel,
   uncheckedLine,
   writeInsideReadLine,
 } from "@/lib/toolCallGist/changeLabels";
 import {
   gistUnreadRecordLine,
   gistWarningLabel,
+  namesOnlyAnItem,
   showsUnreadRecord,
 } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
@@ -1077,13 +1079,18 @@ export const ToolCallChangeCard = ({
   change,
   phase,
   notes,
+  toolTitle,
 }: {
   gist: Gist;
   change: GistChange;
   phase: GistPhase;
   notes?: ReactNode;
+  /** The tool's own title or name, said where the line can only say "item". */
+  toolTitle?: string;
 }) => {
   const summary = changeSummaryLine(change, gist.action);
+  const showsToolTitle =
+    toolTitle !== undefined && toolTitle.length > 0 && namesOnlyAnItem(gist);
   return (
     <div className="space-y-2" data-testid="tool-call-gist">
       {gist.warnings.map((warning) => (
@@ -1117,6 +1124,17 @@ export const ToolCallChangeCard = ({
             )}
           </Fragment>
         ))}
+        {showsToolTitle && (
+          <p
+            className={clsx(MUTED, "break-words [overflow-wrap:anywhere]")}
+            data-testid="tool-call-change-tool-title"
+          >
+            {toolTitleLabel()}{" "}
+            <q dir="auto" className={clsx(ISOLATED, "text-theme-fg-secondary")}>
+              {toolTitle}
+            </q>
+          </p>
+        )}
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody
           change={change}

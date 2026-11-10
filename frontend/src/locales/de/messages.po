@@ -8908,7 +8908,7 @@ msgstr "Probelauf ({name})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
-msgstr "Optionen"
+msgstr "Eingeschaltet"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9235,7 +9235,7 @@ msgstr "Ersetzter Text"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
-msgstr "{lines, plural, one {{name} ersetzt: # Zeile, {size} Zeichen} other {{name} ersetzt: # Zeilen, {size} Zeichen}}"
+msgstr "{lines, plural, one {{name} ersetzt durch # Zeile, {size} Zeichen} other {{name} ersetzt durch # Zeilen, {size} Zeichen}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9251,6 +9251,11 @@ msgstr "{hiddenLines, plural, one {Ganzen Text anzeigen (+# Zeile)} other {Ganze
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.size"
 msgstr "{lines, plural, one {{name}: # Zeile, {size} Zeichen} other {{name}: # Zeilen, {size} Zeichen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.toolTitle"
+msgstr "Das Tool nennt das"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

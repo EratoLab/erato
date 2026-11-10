@@ -8908,7 +8908,7 @@ msgstr "Simulación ({name})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
-msgstr "Opciones"
+msgstr "Activadas"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9235,7 +9235,7 @@ msgstr "Texto reemplazado"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
-msgstr "{lines, plural, one {{name} reemplazado: # línea, {size} caracteres} other {{name} reemplazado: # líneas, {size} caracteres}}"
+msgstr "{lines, plural, one {{name} reemplazado por # línea, {size} caracteres} other {{name} reemplazado por # líneas, {size} caracteres}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9251,6 +9251,11 @@ msgstr "{hiddenLines, plural, one {Ver el texto completo (+# línea)} other {Ver
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.size"
 msgstr "{lines, plural, one {{name}: # línea, {size} caracteres} other {{name}: # líneas, {size} caracteres}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.toolTitle"
+msgstr "La herramienta lo llama"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

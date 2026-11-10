@@ -8908,7 +8908,7 @@ msgstr "Dry run ({name})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
-msgstr "Options"
+msgstr "Turned on"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9235,7 +9235,7 @@ msgstr "Text it replaces"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
-msgstr "{lines, plural, one {{name} replaced: # line, {size} characters} other {{name} replaced: # lines, {size} characters}}"
+msgstr "{lines, plural, one {{name} replaced by # line, {size} characters} other {{name} replaced by # lines, {size} characters}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9251,6 +9251,11 @@ msgstr "{hiddenLines, plural, one {See the full text (+# line)} other {See the f
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.size"
 msgstr "{lines, plural, one {{name}: # line, {size} characters} other {{name}: # lines, {size} characters}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.toolTitle"
+msgstr "The tool calls this"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

@@ -8908,7 +8908,7 @@ msgstr "Essai à blanc ({name})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
-msgstr "Options"
+msgstr "Activées"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9235,7 +9235,7 @@ msgstr "Texte remplacé"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
-msgstr "{lines, plural, one {{name} remplacé : # ligne, {size} caractères} other {{name} remplacé : # lignes, {size} caractères}}"
+msgstr "{lines, plural, one {{name} remplacé par # ligne, {size} caractères} other {{name} remplacé par # lignes, {size} caractères}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9251,6 +9251,11 @@ msgstr "{hiddenLines, plural, one {Voir le texte complet (+# ligne)} other {Voir
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.size"
 msgstr "{lines, plural, one {{name} : # ligne, {size} caractères} other {{name} : # lignes, {size} caractères}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.toolTitle"
+msgstr "L’outil nomme cela"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

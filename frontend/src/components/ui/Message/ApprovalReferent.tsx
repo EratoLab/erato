@@ -219,6 +219,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           change={card.gist.change}
           phase="ask"
           notes={<CardNotes notes={card.notes} />}
+          toolTitle={display?.title ?? props.toolName}
         />
       </div>
     );

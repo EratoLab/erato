@@ -104,8 +104,16 @@ const changesValuesInPlace = (action: GistAction | undefined): boolean =>
   action === undefined || action === "update" || action === "upsert";
 
 /**
+ * A verb whose values are a new record's fields. A run, a send or a share
+ * passes values that are not fields of anything, so they are not counted.
+ */
+const setsNewFields = (action: GistAction | undefined): boolean =>
+  action === "create" || action === "upload";
+
+/**
  * The line that says how many values do what, such as "30 fields change: 3
- * emptied, 5 changed, 22 set". A create only sets values, so it says that.
+ * emptied, 5 changed, 22 set". A create only sets values, so it says that;
+ * the values of any other verb are no record's fields, so it gets none.
  * One value needs no such line: its row says it.
  */
 export const changeSummaryLine = (
@@ -117,6 +125,9 @@ export const changeSummaryLine = (
   const changing = changingOf(counts, texts);
   const parts = countParts(counts, texts, listReplaceIsUnknown(change));
   if (changing === 0 || (changing < 2 && counts.unchanged === 0)) {
+    return undefined;
+  }
+  if (!changesValuesInPlace(action) && !setsNewFields(action)) {
     return undefined;
   }
   const head = changesValuesInPlace(action)
@@ -512,8 +523,16 @@ export const filterLabel = (): string =>
 export const filterEmptyPart = (name: string): string =>
   t({ id: "toolChange.filter.isEmpty", message: `${name} is empty` });
 
+/** Only options the call turns on are listed, so the label says so. */
 export const flagsLabel = (): string =>
-  t({ id: "toolChange.flags", message: "Options" });
+  t({ id: "toolChange.flags", message: "Turned on" });
+
+/**
+ * Before the tool's own name for the call, where the card can only call
+ * what it acts on an "item"; the name is the tool's word, never Erato's.
+ */
+export const toolTitleLabel = (): string =>
+  t({ id: "toolChange.toolTitle", message: "The tool calls this" });
 
 export const dryRunLabel = (name: string): string =>
   t({ id: "toolChange.flag.dryRun", message: `Dry run (${name})` });
@@ -578,8 +597,8 @@ export const textHeading = (
     ? t({
         id: "toolChange.text.replaced",
         message: plural(lines, {
-          one: `${name} replaced: # line, ${size} characters`,
-          other: `${name} replaced: # lines, ${size} characters`,
+          one: `${name} replaced by # line, ${size} characters`,
+          other: `${name} replaced by # lines, ${size} characters`,
         }),
       })
     : t({

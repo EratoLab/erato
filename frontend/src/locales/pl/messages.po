@@ -8908,7 +8908,7 @@ msgstr "Próba ({name})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.flags"
-msgstr "Opcje"
+msgstr "Włączone"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9235,7 +9235,7 @@ msgstr "Zastępowany tekst"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.replaced"
-msgstr "{lines, plural, one {{name} zastąpione: # wiersz, {size} znaków} few {{name} zastąpione: # wiersze, {size} znaków} many {{name} zastąpione: # wierszy, {size} znaków} other {{name} zastąpione: # wiersza, {size} znaków}}"
+msgstr "{lines, plural, one {{name} zastąpione przez # wiersz, {size} znaków} few {{name} zastąpione przez # wiersze, {size} znaków} many {{name} zastąpione przez # wierszy, {size} znaków} other {{name} zastąpione przez # wiersza, {size} znaków}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9251,6 +9251,11 @@ msgstr "{hiddenLines, plural, one {Pokaż cały tekst (+# wiersz)} few {Pokaż c
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.text.size"
 msgstr "{lines, plural, one {{name}: # wiersz, {size} znaków} few {{name}: # wiersze, {size} znaków} many {{name}: # wierszy, {size} znaków} other {{name}: # wiersza, {size} znaków}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.toolTitle"
+msgstr "Narzędzie nazywa to"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

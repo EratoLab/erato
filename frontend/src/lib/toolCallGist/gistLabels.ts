@@ -715,6 +715,16 @@ export const gistUnreadRecordLine = (gist: Gist): string => {
 };
 
 /**
+ * Whether the card's lines call what the call acts on only an "item": no
+ * kind, no table or type and no statement the line names instead. The
+ * tool's own name for the call then says what the card cannot.
+ */
+export const namesOnlyAnItem = (gist: Gist): boolean =>
+  gist.kind === "other" &&
+  !gist.change?.table &&
+  !(gist.action === "run" && (gist.change?.opaque.length ?? 0) > 0);
+
+/**
  * Whether an item's line is followed by the line that its record was not
  * read: the backend says so for the label's first item only, and only a line
  * that names nothing needs it.
