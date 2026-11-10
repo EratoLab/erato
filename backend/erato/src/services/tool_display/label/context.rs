@@ -786,6 +786,9 @@ impl ToolResultContext {
         // every server: a call of another server, or of none, can reach the
         // same record.
         if let Some(arguments) = &tool.input {
+            if may_change_records(tool) {
+                self.retire_options(arguments);
+            }
             match argument_ids(arguments, true) {
                 Some(keys) => self.retire(&keys.into_iter().collect()),
                 // Some IDs went unread, so any record may be among them.
@@ -1097,6 +1100,35 @@ impl ToolResultContext {
             .iter()
             .map(|(key, record)| record_bytes(key, record))
             .sum();
+        self.vocabularies.clear();
+        self.vocabulary_bytes = 0;
+    }
+
+    /// Drops the options a table's vocabularies list for a member a write
+    /// names as a value, as `{tablename: "account", column: "type"}` does:
+    /// it acts on the member itself, so its options may have changed. A
+    /// record's values name their members as keys, and keep them.
+    fn retire_options(&mut self, arguments: &Value) {
+        let Some(table) = call_table(arguments) else {
+            return;
+        };
+        let named = words(Some(arguments));
+        let mut bytes = 0;
+        for vocabulary in &mut self.vocabularies {
+            if let VocabularyScope::Table(words) = &vocabulary.scope
+                && words.contains(&table)
+            {
+                vocabulary
+                    .members
+                    .retain(|member, _| !named.contains(&member.to_lowercase()));
+                vocabulary.bytes =
+                    vocabulary_bytes(&vocabulary.server, &vocabulary.scope, &vocabulary.members);
+            }
+            bytes += vocabulary.bytes;
+        }
+        self.vocabularies
+            .retain(|vocabulary| !vocabulary.members.is_empty());
+        self.vocabulary_bytes = bytes;
     }
 
     /// A create whose short text result holds exactly one ID: the record
@@ -2224,6 +2256,25 @@ fn field_member(path: &str) -> Option<String> {
         [] => return None,
     };
     Some(member.to_string())
+}
+
+/// Whether a call's label says it changes records or what they hold. A run
+/// may as well be a query, and an unlabelled call says nothing.
+fn may_change_records(tool: &ToolUse) -> bool {
+    tool.display
+        .as_ref()
+        .and_then(|display| display.label.as_ref())
+        .is_some_and(|label| {
+            matches!(
+                label.action,
+                ToolCallAction::Create
+                    | ToolCallAction::Update
+                    | ToolCallAction::Upsert
+                    | ToolCallAction::Delete
+                    | ToolCallAction::Archive
+                    | ToolCallAction::Move
+            )
+        })
 }
 
 fn is_create(tool: &ToolUse) -> bool {

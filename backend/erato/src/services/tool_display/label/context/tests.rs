@@ -2436,6 +2436,93 @@ fn option_sets_are_kept_per_read_scope_and_capped() {
 }
 
 #[test]
+fn option_sets_go_once_a_call_may_have_changed_them() {
+    let describe = call(
+        "describe",
+        "describe",
+        json!({"path": "tables/account"}),
+        json!(
+            "type CHOICE (Options: Partner (1), Prospect (8))\nsize CHOICE (Options: Small (1), Large (2))"
+        ),
+    );
+    let writing = |id: &str, tool: &str, input: Value, action: ToolCallAction| {
+        let mut write = call(id, tool, input, json!("Done."));
+        if let Some(display) = write.display.as_mut() {
+            display.label = Some(ToolCallLabel {
+                action,
+                object_kind: ToolCallObjectKind::Row,
+                items: Vec::new(),
+                arguments: None,
+                warnings: Vec::new(),
+                source: ToolCallLabelSource::Rules,
+                change: None,
+            });
+        }
+        write
+    };
+    let labels = |context: &ToolResultContext| {
+        (
+            context.table_choice_label(SERVER, "account", "type", "8"),
+            context.table_choice_label(SERVER, "account", "size", "2"),
+        )
+    };
+    let both = (Said::Label("Prospect".into()), Said::Label("Large".into()));
+
+    // Writing a record's values, or reading the member, changes no option.
+    let context = after(vec![
+        describe.clone(),
+        writing(
+            "row",
+            "update_record",
+            json!({"tablename": "account", "recordId": ACCOUNT, "item": {"type": 1}}),
+            ToolCallAction::Update,
+        ),
+        writing(
+            "query",
+            "run_query",
+            json!({"tablename": "account", "query": "SELECT type FROM account"}),
+            ToolCallAction::Run,
+        ),
+    ]);
+    assert_eq!(labels(&context), both);
+
+    // A write that acts on the member itself may have changed its options.
+    let context = after(vec![
+        describe.clone(),
+        writing(
+            "column",
+            "update_column",
+            json!({"tablename": "account", "column": "type", "options": [{"label": "Lead", "value": 8}]}),
+            ToolCallAction::Update,
+        ),
+    ]);
+    assert_eq!(
+        labels(&context),
+        (Said::Nothing, Said::Label("Large".into()))
+    );
+    let other_table = after(vec![
+        describe.clone(),
+        writing(
+            "column",
+            "update_column",
+            json!({"tablename": "contact", "column": "type"}),
+            ToolCallAction::Update,
+        ),
+    ]);
+    assert_eq!(labels(&other_table), both);
+
+    // A task's child may have changed anything.
+    let task = call(
+        "task",
+        erato_config::config::DELEGATE_TASK_TOOL_NAME,
+        json!({ "task": "Tidy the account options" }),
+        json!({ "status": "completed", "result": "Done." }),
+    );
+    let context = after(vec![describe, task]);
+    assert_eq!(labels(&context), (Said::Nothing, Said::Nothing));
+}
+
+#[test]
 fn a_list_read_is_matched_by_its_arguments_and_the_members_noun() {
     let list = |tool: &str, input: Value| {
         call(
