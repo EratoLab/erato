@@ -6,11 +6,11 @@ import { TaskChatLink } from "./TaskChatLink";
 
 /**
  * A task of this turn that stopped where this chat is not the one asking: the
- * turn was stopped, or it ended on something no task's question could join,
- * such as the tool-call limit.
- * The task either waits for a decision in its own chat or for one of its calls
- * to run on this device, so this says which and opens it — the reverse of
- * `OriginApprovalLink`.
+ * turn was stopped, or it ended on something no task's question joins today,
+ * such as the tool-call limit (an open question: CT-10 allows only the stopped
+ * turn). The task either waits for a decision in its own chat or for one of
+ * its calls to run on this device, so this says which and opens it — the
+ * reverse of `OriginApprovalLink`.
  */
 export const ParkedTaskNotice = ({
   childChatId,

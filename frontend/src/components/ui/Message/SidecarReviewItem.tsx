@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import { reopenSidecarReview } from "@/lib/desktopSidecar/sidecarJobs";
@@ -16,6 +16,11 @@ import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks"
  * A call of this turn that waits for its review in the Erato desktop app, in
  * the approval slot. The decision is made only in the app's window; this
  * shows that window again, or, once the review has ended, asks again.
+ *
+ * Like `ActionConfirmationCard`, the item is a labelled group that announces
+ * its title politely and takes keyboard focus when the button that had it
+ * goes away. While the app cannot be reached, its action stays focusable but
+ * inert, and a visible line says why.
  */
 export const SidecarReviewItem = ({
   linkKey,
@@ -29,31 +34,68 @@ export const SidecarReviewItem = ({
 }) => {
   const { client } = useDesktopSidecar();
   const [openFailed, setOpenFailed] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const unreachableReasonId = useId();
   const canReachApp = client?.supports("jobs.review.v1") === true;
   const isEnded = link.state === "ended";
+  const hasAction = link.state === "open" || isEnded;
+  const title = isEnded
+    ? t({
+        id: "sidecarReview.ended.title",
+        message: "This review has ended",
+      })
+    : link.state === "asking"
+      ? t({
+          id: "sidecarReview.asking.title",
+          message: "Asking again in the Erato desktop app",
+        })
+      : t({
+          id: "sidecarReview.open.title",
+          message: "Waiting for your review in the Erato desktop app",
+        });
+
+  // Live regions announce changes, so the region starts empty and takes the
+  // title after paint: the item's appearance and each change of state are
+  // then read out.
+  const [announcement, setAnnouncement] = useState("");
+  useEffect(() => {
+    setAnnouncement(title);
+  }, [title]);
+
+  // A change of state can remove the button that had focus: Ask again does,
+  // and so does an Open that finds the review ended. Focus left on the page
+  // then moves to the item, never away from another element.
+  const focusCard = () => cardRef.current?.focus({ preventScroll: true });
+  const shownState = useRef(link.state);
+  useLayoutEffect(() => {
+    if (shownState.current === link.state) return;
+    shownState.current = link.state;
+    const active = document.activeElement;
+    if (active === null || active === document.body) focusCard();
+  }, [link.state]);
+
+  // aria-disabled instead of disabled keeps the action in the tab order, so
+  // the reason it cannot be used is found with it.
+  const unreachable = canReachApp
+    ? {}
+    : {
+        "aria-disabled": true,
+        "aria-describedby": unreachableReasonId,
+        className: "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+      };
+
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
+      role="group"
+      aria-label={title}
       data-testid="sidecar-review-item"
       data-review-state={link.state}
-      className={`${APPROVAL_CARD_SHELL_CLASS} space-y-2`}
+      className={`${APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
     >
       <div>
-        <p className="text-sm font-medium text-theme-fg-primary">
-          {isEnded
-            ? t({
-                id: "sidecarReview.ended.title",
-                message: "This review has ended",
-              })
-            : link.state === "asking"
-              ? t({
-                  id: "sidecarReview.asking.title",
-                  message: "Asking again in the Erato desktop app",
-                })
-              : t({
-                  id: "sidecarReview.open.title",
-                  message: "Waiting for your review in the Erato desktop app",
-                })}
-        </p>
+        <p className="text-sm font-medium text-theme-fg-primary">{title}</p>
         {toolName && (
           <p className="text-sm text-theme-fg-secondary">
             {sidecarToolLabel(toolName)}
@@ -76,10 +118,10 @@ export const SidecarReviewItem = ({
         <Button
           variant="secondary"
           size="sm"
-          disabled={!canReachApp}
+          {...unreachable}
           data-testid="sidecar-review-open"
           onClick={() => {
-            if (!client) return;
+            if (!client || !canReachApp) return;
             setOpenFailed(false);
             reopenSidecarReview(client, linkKey).catch(() => {
               setOpenFailed(true);
@@ -93,9 +135,12 @@ export const SidecarReviewItem = ({
         <Button
           variant="secondary"
           size="sm"
-          disabled={!canReachApp}
+          {...unreachable}
           data-testid="sidecar-review-ask-again"
           onClick={() => {
+            if (!canReachApp) return;
+            // The button goes away with the state it belongs to.
+            focusCard();
             askForReviewAgain(linkKey);
             requestClientOperationSweep();
           }}
@@ -103,8 +148,16 @@ export const SidecarReviewItem = ({
           {t({ id: "sidecarReview.ended.action", message: "Ask again" })}
         </Button>
       )}
+      {hasAction && !canReachApp && (
+        <p id={unreachableReasonId} className="text-xs text-theme-fg-muted">
+          {t({
+            id: "sidecarReview.unreachable",
+            message: "Start the Erato desktop app to continue this review.",
+          })}
+        </p>
+      )}
       {openFailed && (
-        <p className="text-xs text-theme-fg-muted" role="alert">
+        <p className="text-sm text-theme-error-fg" role="alert">
           {t({
             id: "sidecarReview.open.failed",
             message:
@@ -112,6 +165,9 @@ export const SidecarReviewItem = ({
           })}
         </p>
       )}
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
     </div>
   );
 };

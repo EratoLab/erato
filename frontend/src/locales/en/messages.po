@@ -63,6 +63,11 @@ msgstr "{itemCount, plural, one {The response continues once you decide.} other 
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.descriptionAwaitingCall"
+msgstr "{itemCount, plural, one {The task goes on once you decide. The response continues when the connected app has finished.} other {They are shown one at a time. The tasks go on once all of them are decided. The response continues when the connected app has finished.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.position"
 msgstr "Decision {ordinal} of {itemCount}"
 
@@ -80,6 +85,11 @@ msgstr "{itemCount, plural, one {This response is waiting on your decision} othe
 #: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingDescription"
 msgstr "{waitingCount, plural, one {It continues on its own once the task finishes.} other {It continues on its own once they finish.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingDescriptionAwaitingCall"
+msgstr "{waitingCount, plural, one {It continues on its own once the task and the connected app have finished.} other {It continues on its own once the tasks and the connected app have finished.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
@@ -8342,6 +8352,11 @@ msgstr "The Erato desktop app could not show this review. Check that it is runni
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.open.title"
 msgstr "Waiting for your review in the Erato desktop app"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr "Start the Erato desktop app to continue this review."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx

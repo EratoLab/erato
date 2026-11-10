@@ -34,11 +34,14 @@ import type {
  * next. The turn's own gated call keeps its MCP or client-tool layout, and each
  * parked child is named by its task. Tasks that wait for a call on the device
  * are listed below without decisions: the response goes on once they finish.
+ * A stop behind the response's own waiting client tool call says the tasks go
+ * on, but the response only continues once that call has finished too.
  */
 export const ApprovalQueueCard = ({
   request,
   items,
   waiting = [],
+  awaitsOwnCall = false,
   staged,
   isArchived,
   isBusy,
@@ -55,6 +58,11 @@ export const ApprovalQueueCard = ({
   items: ApprovalItemPart[];
   /** The stop's task children that still wait on the device, in row order. */
   waiting?: ApprovalItemPart[];
+  /**
+   * The response also waits for its own client tool call, so a decision lets
+   * the tasks go on but not the response.
+   */
+  awaitsOwnCall?: boolean;
   staged: StagedDecisions;
   isArchived: boolean;
   isBusy: boolean;
@@ -101,14 +109,23 @@ export const ApprovalQueueCard = ({
               })}
             </p>
             <p className="text-sm text-theme-fg-secondary">
-              {t({
-                id: "approvalQueue.description",
-                message: plural(itemCount, {
-                  one: "The response continues once you decide.",
-                  other:
-                    "They are shown one at a time. The response continues once all of them are decided.",
-                }),
-              })}
+              {awaitsOwnCall
+                ? t({
+                    id: "approvalQueue.descriptionAwaitingCall",
+                    message: plural(itemCount, {
+                      one: "The task goes on once you decide. The response continues when the connected app has finished.",
+                      other:
+                        "They are shown one at a time. The tasks go on once all of them are decided. The response continues when the connected app has finished.",
+                    }),
+                  })
+                : t({
+                    id: "approvalQueue.description",
+                    message: plural(itemCount, {
+                      one: "The response continues once you decide.",
+                      other:
+                        "They are shown one at a time. The response continues once all of them are decided.",
+                    }),
+                  })}
             </p>
           </>
         ) : (
@@ -123,13 +140,22 @@ export const ApprovalQueueCard = ({
               })}
             </p>
             <p className="text-sm text-theme-fg-secondary">
-              {t({
-                id: "approvalQueue.waitingDescription",
-                message: plural(waitingCount, {
-                  one: "It continues on its own once the task finishes.",
-                  other: "It continues on its own once they finish.",
-                }),
-              })}
+              {awaitsOwnCall
+                ? t({
+                    id: "approvalQueue.waitingDescriptionAwaitingCall",
+                    message: plural(waitingCount, {
+                      one: "It continues on its own once the task and the connected app have finished.",
+                      other:
+                        "It continues on its own once the tasks and the connected app have finished.",
+                    }),
+                  })
+                : t({
+                    id: "approvalQueue.waitingDescription",
+                    message: plural(waitingCount, {
+                      one: "It continues on its own once the task finishes.",
+                      other: "It continues on its own once they finish.",
+                    }),
+                  })}
             </p>
           </>
         )}
