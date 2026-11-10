@@ -468,6 +468,39 @@ pub struct ToolUse {
 pub struct ToolResultDetails {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<ToolResultLink>,
+    /// Set by Erato when a call failed without an answer from the tool that
+    /// Erato could read: the row's error text is then Erato's, never the
+    /// tool's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub failure: Option<ToolCallFailure>,
+}
+
+impl ToolResultDetails {
+    pub fn failed(failure: ToolCallFailure) -> Self {
+        Self {
+            links: Vec::new(),
+            failure: Some(failure),
+        }
+    }
+}
+
+/// How a call failed when Erato, not the tool, wrote its error.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallFailure {
+    /// No answer came back: the tool could not be reached, the connection
+    /// broke, or the call timed out. It may or may not have run.
+    NoAnswer,
+    /// The tool answered, and Erato could not process the answer.
+    AnswerUnreadable,
+    /// Erato did not run the call.
+    NotRun,
+    /// A kind from a newer version; clients treat it as no answer.
+    #[serde(other)]
+    Other,
 }
 
 /// A resource link from the result. Only `https` links with a host, without

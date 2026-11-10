@@ -10293,8 +10293,23 @@ msgstr "Failed"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.answerUnreadable"
+msgstr "The tool answered, but Erato could not read its answer."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "trace.tool.failure.line"
 msgstr "The call failed."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.noAnswer"
+msgstr "Erato got no answer from the tool. The call may or may not have run."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.notRun"
+msgstr "Erato did not run the call."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolUseStep.tsx

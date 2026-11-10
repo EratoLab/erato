@@ -15,8 +15,8 @@ use crate::models::message::{
     ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
     DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
     GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolAllowedBy,
-    ToolApprovalKind, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    ToolApprovalKind, ToolCallFailure, ToolCallStatus as MessageToolCallStatus, ToolResultDetails,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -1532,6 +1532,7 @@ pub struct MessageSubmitRequest {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "audio_delta")]
     AudioDelta {
@@ -3044,6 +3045,7 @@ pub struct ClientToolParkResponse {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "assistant_message_started")]
     /// Sent when the assistant message entry has been created, before generation starts.
@@ -6740,6 +6742,7 @@ mod generation_event_wire_format_tests {
                                     name: Some("row-1".into()),
                                     title: None,
                                 }],
+                                failure: None,
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -8763,7 +8766,9 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(json!({ "status": status, "error": response_text })),
-                            result_details: None,
+                            result_details: Some(ToolResultDetails::failed(
+                                ToolCallFailure::NotRun,
+                            )),
                             allowed_by: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -9957,7 +9962,9 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(ToolResultDetails::failed(
+                                    ToolCallFailure::AnswerUnreadable,
+                                )),
                                 allowed_by,
                             };
                             if let Some(task) = streaming_task {
@@ -9975,7 +9982,9 @@ async fn stream_generate_chat_completion<'a>(
                                         progress: None,
                                         total: None,
                                         output: Some(output_value.clone()),
-                                        result_details: None,
+                                        result_details: Some(ToolResultDetails::failed(
+                                            ToolCallFailure::AnswerUnreadable,
+                                        )),
                                         allowed_by,
                                     },
                                     "broadcast failed MCP tool output processing",
@@ -9999,7 +10008,9 @@ async fn stream_generate_chat_completion<'a>(
                                     progress: None,
                                     total: None,
                                     output: Some(output_value),
-                                    result_details: None,
+                                    result_details: Some(ToolResultDetails::failed(
+                                        ToolCallFailure::AnswerUnreadable,
+                                    )),
                                     allowed_by,
                                     started_at: Some(tool_call_started),
                                     ended_at: Some(now_timestamp()),
@@ -10153,7 +10164,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
-                        result_details: None,
+                        result_details: Some(ToolResultDetails::failed(ToolCallFailure::NoAnswer)),
                         allowed_by,
                     };
                     if let Some(task) = streaming_task {
@@ -10171,7 +10182,9 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(ToolResultDetails::failed(
+                                    ToolCallFailure::NoAnswer,
+                                )),
                                 allowed_by,
                             },
                             "broadcast failed MCP tool call",
@@ -10195,7 +10208,9 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value),
-                            result_details: None,
+                            result_details: Some(ToolResultDetails::failed(
+                                ToolCallFailure::NoAnswer,
+                            )),
                             allowed_by,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -22988,7 +23003,7 @@ pub(crate) async fn run_continuation(
                                     &result,
                                     &format!("Failed to process MCP tool output: {error}"),
                                 )),
-                                None,
+                                Some(ToolResultDetails::failed(ToolCallFailure::AnswerUnreadable)),
                             ),
                         }
                     };
@@ -23021,7 +23036,7 @@ pub(crate) async fn run_continuation(
                         "status": "error",
                         "error": format!("Failed to call MCP tool: {error}"),
                     })),
-                    result_details: None,
+                    result_details: Some(ToolResultDetails::failed(ToolCallFailure::NoAnswer)),
                     allowed_by: None,
                     started_at: Some(now_timestamp()),
                     ended_at: Some(now_timestamp()),

@@ -13898,6 +13898,16 @@
           }
         }
       },
+      "ToolCallFailure": {
+        "type": "string",
+        "description": "How a call failed when Erato, not the tool, wrote its error.",
+        "enum": [
+          "no_answer",
+          "answer_unreadable",
+          "not_run",
+          "other"
+        ]
+      },
       "ToolCallFilter": {
         "type": "object",
         "description": "What a filter selects, in words.",
@@ -14405,6 +14415,10 @@
         "type": "object",
         "description": "What a tool row keeps of an MCP result besides `output`: at most ten of its\nlinks. Its structured content and embedded resources are not kept.",
         "properties": {
+          "failure": {
+            "$ref": "#/components/schemas/ToolCallFailure",
+            "description": "Set by Erato when a call failed without an answer from the tool that\nErato could read: the row's error text is then Erato's, never the\ntool's."
+          },
           "links": {
             "type": "array",
             "items": {

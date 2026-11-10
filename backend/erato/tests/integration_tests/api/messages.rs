@@ -7308,6 +7308,8 @@ async fn continuation_settles_every_open_item_when_a_call_fails(pool: Pool<Postg
         "{}",
         parts[2]["output"]
     );
+    // The error is Erato's, not the tool's: the row says no answer came back.
+    assert_eq!(parts[2]["result_details"]["failure"], "no_answer");
     assert_eq!(parts[4]["tool_call_id"], "call_second");
     assert_eq!(parts[4]["status"], "error");
     assert_eq!(

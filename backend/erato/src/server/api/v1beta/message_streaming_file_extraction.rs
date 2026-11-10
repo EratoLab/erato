@@ -515,7 +515,10 @@ fn mcp_result_details(
         .filter_map(|resource| https_link(resource, server_host.as_deref()))
         .take(MAX_RESULT_LINKS)
         .collect();
-    (!links.is_empty()).then_some(ToolResultDetails { links })
+    (!links.is_empty()).then_some(ToolResultDetails {
+        links,
+        failure: None,
+    })
 }
 
 fn https_link(
@@ -900,6 +903,7 @@ mod tests {
                 name: Some("row-1".into()),
                 title: Some("Synthetic row".into()),
             }],
+            failure: None,
         }
     }
 

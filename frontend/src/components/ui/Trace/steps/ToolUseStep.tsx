@@ -33,7 +33,11 @@ import {
   ownProposalLine,
 } from "@/lib/toolCallGist/ownProposalLabels";
 import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
-import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
+import {
+  eratoFailureOf,
+  isRecord,
+  serverFailureMessage,
+} from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -47,7 +51,7 @@ import type { BaseStepProps } from "../types";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
-import type { CleanText } from "@/lib/toolCallGist/serverText";
+import type { CleanText, EratoFailure } from "@/lib/toolCallGist/serverText";
 import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 interface ToolUseStepProps extends BaseStepProps {
@@ -93,6 +97,41 @@ const hasRowValues = (item: GistItem) =>
 /** A failure message longer than this is one line until it is opened. */
 const FAILURE_LINE_CHARS = 90;
 
+const failedLine = () =>
+  t({ id: "trace.tool.failure.line", message: "The call failed." });
+
+const eratoFailureLine = (failure: EratoFailure): string => {
+  switch (failure) {
+    case "answer_unreadable":
+      return t({
+        id: "trace.tool.failure.answerUnreadable",
+        message: "The tool answered, but Erato could not read its answer.",
+      });
+    case "not_run":
+      return t({
+        id: "trace.tool.failure.notRun",
+        message: "Erato did not run the call.",
+      });
+    case "no_answer":
+      return t({
+        id: "trace.tool.failure.noAnswer",
+        message:
+          "Erato got no answer from the tool. The call may or may not have run.",
+      });
+  }
+};
+
+/**
+ * A call that failed where Erato, not the tool, wrote the error: what Erato
+ * knows in its own words. Its error text stays in the technical details.
+ */
+const EratoFailureMessage = ({ failure }: { failure: EratoFailure }) => (
+  <div className="space-y-0.5 text-xs" data-testid="tool-failure">
+    <p className="text-theme-error-fg">{failedLine()}</p>
+    <p className="text-theme-fg-secondary">{eratoFailureLine(failure)}</p>
+  </div>
+);
+
 /**
  * A failed call: Erato's own line that it failed, in the row's failure
  * colour, then the server's message as the tool's word, its machine IDs
@@ -109,9 +148,7 @@ const FailureMessage = ({ failure }: { failure: CleanText }) => {
     Array.from(text).length > FAILURE_LINE_CHARS;
   return (
     <div className="space-y-0.5 text-xs" data-testid="tool-failure">
-      <p className="text-theme-error-fg">
-        {t({ id: "trace.tool.failure.line", message: "The call failed." })}
-      </p>
+      <p className="text-theme-error-fg">{failedLine()}</p>
       <p
         id={id}
         className={clsx(
@@ -163,10 +200,12 @@ const GistRowDetails = ({
   gist,
   phase,
   failure,
+  eratoFailure,
 }: {
   gist: Gist;
   phase: GistPhase;
   failure: CleanText | undefined;
+  eratoFailure: EratoFailure | undefined;
 }) => (
   <div className="space-y-1">
     {gist.change
@@ -183,6 +222,7 @@ const GistRowDetails = ({
             )}
           </div>
         ))}
+    {eratoFailure && <EratoFailureMessage failure={eratoFailure} />}
     {failure && <FailureMessage failure={failure} />}
   </div>
 );
@@ -265,11 +305,18 @@ const PlainToolUseStep = ({
       : part.status === "error"
         ? "failed"
         : "ask";
+  const eratoFailure =
+    gist && phase === "failed"
+      ? eratoFailureOf(part.result_details, part.output)
+      : undefined;
   const failure =
-    gist && phase === "failed" ? serverFailureMessage(part.output) : undefined;
+    gist && phase === "failed" && eratoFailure === undefined
+      ? serverFailureMessage(part.output)
+      : undefined;
   const showsDetails =
     gist !== undefined &&
     (failure !== undefined ||
+      eratoFailure !== undefined ||
       (gist.change
         ? phase === "done" && changeRowHasDetails(gist.change)
         : gist.items.length > 1 || gist.items.some(hasRowValues)));
@@ -405,7 +452,12 @@ const PlainToolUseStep = ({
         headerSlot={link && <ResultLink link={link} server={serverName} />}
         detailSlot={
           gist && showsDetails ? (
-            <GistRowDetails gist={gist} phase={phase} failure={failure} />
+            <GistRowDetails
+              gist={gist}
+              phase={phase}
+              failure={failure}
+              eratoFailure={eratoFailure}
+            />
           ) : undefined
         }
         defaultOpen={hasTrace}

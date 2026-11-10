@@ -4879,6 +4879,15 @@ export type ToolCallEffectValue = {
 };
 
 /**
+ * How a call failed when Erato, not the tool, wrote its error.
+ */
+export type ToolCallFailure =
+  | "no_answer"
+  | "answer_unreadable"
+  | "not_run"
+  | "other";
+
+/**
  * What a filter selects, in words.
  */
 export type ToolCallFilter = {
@@ -5202,6 +5211,12 @@ export type ToolDisplayMetadata = {
  * links. Its structured content and embedded resources are not kept.
  */
 export type ToolResultDetails = {
+  /**
+   * Set by Erato when a call failed without an answer from the tool that
+   * Erato could read: the row's error text is then Erato's, never the
+   * tool's.
+   */
+  failure?: ToolCallFailure;
   links?: ToolResultLink[];
 };
 
