@@ -8349,6 +8349,11 @@ msgid "sidecarReview.open.title"
 msgstr "Waiting for your review in the Erato desktop app"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr "Start the Erato desktop app to continue this review."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr "{itemCount, plural, one {The assistant planned this sub-task. Declining it is refused to the assistant and the response continues without it.} other {The assistant planned these sub-tasks. Decide each one; the ones you decline are refused and the response continues without them.}}"

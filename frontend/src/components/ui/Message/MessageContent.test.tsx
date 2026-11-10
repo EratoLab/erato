@@ -2616,7 +2616,13 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(item).toHaveTextContent("Search local emails and files");
     expect(item).toHaveTextContent("one hour");
     expect(screen.getByTestId("sidecar-review-open")).toBeInTheDocument();
-    expect(screen.queryByRole("status")).toBeNull();
+    // The item announces itself in place of the plain line's status.
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting for your review in the Erato desktop app",
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "waiting for a connected app",
+    );
   });
 
   it("says a review ended and offers to ask again", () => {

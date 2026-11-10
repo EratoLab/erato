@@ -113,14 +113,79 @@ describe("SidecarReviewItem", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("offers no action the app cannot take while it is not running", () => {
+  it("is a labelled group that announces its title as the review changes", async () => {
+    rememberReview(key, "handle-1");
+    invoke.mockResolvedValue({ handle: "handle-1", state: "expired" });
+    render(<ItemFor />);
+    expect(
+      screen.getByRole("group", {
+        name: "Waiting for your review in the Erato desktop app",
+      }),
+    ).toBe(screen.getByTestId("sidecar-review-item"));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Waiting for your review in the Erato desktop app",
+    );
+    fireEvent.click(screen.getByTestId("sidecar-review-open"));
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "This review has ended",
+      ),
+    );
+    expect(
+      screen.getByRole("group", { name: "This review has ended" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus on the item when Ask again goes away", () => {
+    markReviewEnded(key);
+    render(<ItemFor />);
+    const askAgain = screen.getByTestId("sidecar-review-ask-again");
+    askAgain.focus();
+    act(() => {
+      fireEvent.click(askAgain);
+    });
+    expect(screen.queryByTestId("sidecar-review-ask-again")).toBeNull();
+    expect(screen.getByTestId("sidecar-review-item")).toHaveFocus();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Asking again in the Erato desktop app",
+    );
+  });
+
+  it("says why its action cannot be used while the app is not running", () => {
     supports.mockReturnValue(false);
     rememberReview(key, "handle-1");
     const { unmount } = render(<ItemFor />);
-    expect(screen.getByTestId("sidecar-review-open")).toBeDisabled();
+    const open = screen.getByTestId("sidecar-review-open");
+    // Focusable, so the reason is found with the action.
+    expect(open).not.toBeDisabled();
+    expect(open).toHaveAttribute("aria-disabled", "true");
+    expect(open).toHaveAccessibleDescription(
+      "Start the Erato desktop app to continue this review.",
+    );
+    fireEvent.click(open);
+    expect(invoke).not.toHaveBeenCalled();
     unmount();
     markReviewEnded(key);
     render(<ItemFor />);
-    expect(screen.getByTestId("sidecar-review-ask-again")).toBeDisabled();
+    const askAgain = screen.getByTestId("sidecar-review-ask-again");
+    expect(askAgain).toHaveAttribute("aria-disabled", "true");
+    expect(askAgain).toHaveAccessibleDescription(
+      "Start the Erato desktop app to continue this review.",
+    );
+    fireEvent.click(askAgain);
+    expect(reviewLink(key)?.state).toBe("ended");
+  });
+
+  it("gives no reason while the app can be reached", () => {
+    rememberReview(key, "handle-1");
+    render(<ItemFor />);
+    const open = screen.getByTestId("sidecar-review-open");
+    expect(open).not.toHaveAttribute("aria-disabled");
+    expect(open).not.toHaveAttribute("aria-describedby");
+    expect(
+      screen.queryByText(
+        "Start the Erato desktop app to continue this review.",
+      ),
+    ).toBeNull();
   });
 });

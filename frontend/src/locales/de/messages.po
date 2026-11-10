@@ -8349,6 +8349,11 @@ msgid "sidecarReview.open.title"
 msgstr "Wartet auf deine Prüfung in der Erato-Desktop-App"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.unreachable"
+msgstr "Starte die Erato-Desktop-App, um diese Prüfung fortzusetzen."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""
