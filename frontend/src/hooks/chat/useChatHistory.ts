@@ -378,6 +378,7 @@ export function useChatHistory({
       // The placeholder exists precisely while the first turn streams.
       active_generation_started_at: pendingChat.createdAt,
       pending_tool_approval_at: undefined,
+      pending_approval_waiting_only: undefined,
       // A just-created chat is never a delegated run.
       provenance_kind: undefined,
       provenance_run_mode: undefined,

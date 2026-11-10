@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 
 /**
@@ -8,10 +9,15 @@ import { create } from "zustand";
  * this says nothing about what the review shows.
  */
 export type SidecarReviewLink = { at: number } & (
-  | { state: "open"; handle: string }
+  | {
+      state: "open";
+      handle: string;
+      /** The chats that wait for this review: the call's and the one it runs for. */
+      chatIds?: string[];
+    }
   // The job ended without a decision, so the call waits for the user to ask
-  // again.
-  | { state: "ended" }
+  // again, and the same chats wait with it.
+  | { state: "ended"; chatIds?: string[] }
   // The user asked again; the call's next run starts a new review.
   | { state: "asking" }
 );
@@ -27,14 +33,19 @@ const KEEP_MS = 25 * 60 * 60 * 1000;
 
 const isLink = (value: unknown): value is SidecarReviewLink => {
   if (typeof value !== "object" || value === null) return false;
-  const { at, state, handle } = value as Record<string, unknown>;
+  const { at, state, handle, chatIds } = value as Record<string, unknown>;
+  const ids = chatIds === undefined || Array.isArray(chatIds);
   return (
     typeof at === "number" &&
-    (state === "ended" ||
-      state === "asking" ||
-      (state === "open" && typeof handle === "string"))
+    (state === "asking" ||
+      (state === "ended" && ids) ||
+      (state === "open" && typeof handle === "string" && ids))
   );
 };
+
+/** The chats that wait while `link`'s call waits on the user. */
+const waitingChatIds = (link: SidecarReviewLink | undefined): string[] =>
+  link?.state === "open" || link?.state === "ended" ? (link.chatIds ?? []) : [];
 
 const fresh = (links: Links): Links =>
   Object.fromEntries(
@@ -94,17 +105,51 @@ export const reviewLink = (key: string): SidecarReviewLink | undefined =>
 const set = (key: string, link: SidecarReviewLink) =>
   write((links) => ({ ...links, [key]: link }));
 
-export const rememberReview = (key: string, handle: string): void =>
-  set(key, { state: "open", handle, at: Date.now() });
+export const rememberReview = (
+  key: string,
+  handle: string,
+  chatIds?: string[],
+): void =>
+  set(key, {
+    state: "open",
+    handle,
+    at: Date.now(),
+    ...(chatIds?.length ? { chatIds } : {}),
+  });
 
+/** The chats the review named keep waiting, now for the user to ask again. */
 export const markReviewEnded = (key: string): void =>
-  set(key, { state: "ended", at: Date.now() });
+  write((links) => {
+    const chatIds = waitingChatIds(links[key]);
+    return {
+      ...links,
+      [key]: {
+        state: "ended",
+        at: Date.now(),
+        ...(chatIds.length ? { chatIds } : {}),
+      },
+    };
+  });
 
 export const askForReviewAgain = (key: string): void =>
   set(key, { state: "asking", at: Date.now() });
 
 export const forgetReview = (key: string): void => {
   if (reviewLink(key)) write(({ [key]: _gone, ...links }) => links);
+};
+
+/**
+ * Every chat that waits on the user for a review, in this browser: one open
+ * in the Erato desktop app, or one that ended and waits for Ask again. A link
+ * outlives its call, so this says nothing about a chat that is not parked.
+ */
+const chatsInReview = (links: Links): ReadonlySet<string> =>
+  new Set(Object.values(links).flatMap(waitingChatIds));
+
+/** The chats a review of this browser waits on, across its tabs. */
+export const useChatsInReview = (): ReadonlySet<string> => {
+  const links = useSidecarReviewLinks((state) => state.links);
+  return useMemo(() => chatsInReview(links), [links]);
 };
 
 /** Whether this call's review ended and it waits for the user to ask again. */

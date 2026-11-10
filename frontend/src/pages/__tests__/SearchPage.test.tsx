@@ -385,6 +385,31 @@ describe("SearchPage", () => {
     ).not.toHaveAttribute("data-confirms");
   });
 
+  it("warns before archiving a result that only waits", () => {
+    mockUseInfiniteQuery.mockReturnValue(
+      pageOf([recentChat({ id: "waiting-1" })]),
+    );
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "waiting-1": {
+          kind: "action_required",
+          startedAt: new Date().toISOString(),
+          localSeenAt: Date.now(),
+          waitingOnly: true,
+        },
+      },
+      currentChatId: null,
+    });
+
+    renderPage(allFeaturesOn);
+
+    const archive = screen.getByRole("button", { name: "Archive" });
+    expect(archive).toHaveAttribute("data-confirms");
+    expect(archive.getAttribute("data-confirm-message")).toContain(
+      "waiting for a connected app",
+    );
+  });
+
   it("toasts when unarchiving fails", async () => {
     vi.mocked(useChatContext).mockReturnValue({
       archiveChat: vi.fn(),

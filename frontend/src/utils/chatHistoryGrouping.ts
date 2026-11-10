@@ -18,16 +18,21 @@ export type ChatAttentionStatus = Exclude<
   "cleared"
 >;
 
+/** A parked entry whose stop has nothing for the user to decide. */
+const waitsOnly = (status: ChatGenerationStatus | undefined): boolean =>
+  status?.kind === "action_required" && status.waitingOnly === true;
+
 /**
  * Resolves a row's status indicator; an unresolved tool confirmation outranks
- * the generation state.
+ * the generation state. A chat that only waits, for an app or for its tasks,
+ * asks for nothing and shows nothing.
  */
 export function resolveChatAttentionStatus(
   status: ChatGenerationStatus | undefined,
   hasPendingConfirmation: boolean,
 ): ChatAttentionStatus | null {
   if (hasPendingConfirmation) return "action_required";
-  if (!status || status.kind === "cleared") return null;
+  if (!status || status.kind === "cleared" || waitsOnly(status)) return null;
   return status.kind;
 }
 
@@ -72,7 +77,8 @@ const RUN_OUTCOME_FAILED = "failed";
  * the pending fallback from resurrecting a live state. A tombstone that
  * consumed no outcome (a decided approval, an entry that went unknown)
  * shows nothing. A row with no signal at all is a run between dispatch and
- * its generation lease, which is live, not broken.
+ * its generation lease, which is live, not broken, and so is a run that only
+ * waits: it asks for nothing and is working towards an outcome.
  */
 export function resolveDelegatedRunStatus(
   chat: Pick<
@@ -80,14 +86,17 @@ export function resolveDelegatedRunStatus(
     | "delegated_run_outcome"
     | "active_generation_started_at"
     | "pending_tool_approval_at"
+    | "pending_approval_waiting_only"
   >,
   storeStatus: ChatGenerationStatus | undefined,
+  hasPendingConfirmation = false,
 ): ChatAttentionStatus | null {
+  if (hasPendingConfirmation) return "action_required";
   if (
     storeStatus?.kind === "running" ||
     storeStatus?.kind === "action_required"
   ) {
-    return storeStatus.kind;
+    return waitsOnly(storeStatus) ? "running" : storeStatus.kind;
   }
   if (chat.delegated_run_outcome === RUN_OUTCOME_COMPLETED) return "finished";
   if (chat.delegated_run_outcome === RUN_OUTCOME_FAILED) return "error";
@@ -95,7 +104,9 @@ export function resolveDelegatedRunStatus(
     return storeStatus.kind;
   }
   if (storeStatus?.kind === "cleared") return storeStatus.consumed ?? null;
-  if (chat.pending_tool_approval_at) return "action_required";
+  if (chat.pending_tool_approval_at && !chat.pending_approval_waiting_only) {
+    return "action_required";
+  }
   return "running";
 }
 
@@ -121,10 +132,10 @@ export function resolveSessionRowStatus(
   hasPendingConfirmation: boolean,
 ): ChatAttentionStatus | null {
   if (session.provenanceKind === DELEGATION_PROVENANCE_KIND) {
-    if (hasPendingConfirmation) return "action_required";
     return resolveDelegatedRunStatus(
       { delegated_run_outcome: session.delegatedRunOutcome },
       storeStatus,
+      hasPendingConfirmation,
     );
   }
   return resolveChatAttentionStatus(storeStatus, hasPendingConfirmation);

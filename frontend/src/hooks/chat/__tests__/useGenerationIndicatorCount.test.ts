@@ -5,6 +5,12 @@ import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationReg
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useGenerationIndicatorCount } from "@/hooks/chat/useGenerationIndicatorCount";
+import {
+  markReviewEnded,
+  rememberReview,
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
 
 const startedAt = new Date("2024-01-01T00:00:00.000Z").toISOString();
 const running = { kind: "running", startedAt, localSeenAt: 0 } as const;
@@ -18,8 +24,74 @@ describe("useGenerationIndicatorCount", () => {
       statusByChatId: {},
       currentChatId: null,
     });
-    useConfirmationRegistryStore.setState({ pendingIdsByChatId: {} });
+    useConfirmationRegistryStore.setState({
+      pendingIdsByChatId: {},
+      waitingOnlyIds: {},
+    });
     useMessagingStore.setState({ newlyCreatedChatId: null });
+    localStorage.clear();
+    useSidecarReviewLinks.setState({ links: {} });
+  });
+
+  it("does not count a chat that only waits", () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-a": {
+          kind: "action_required",
+          startedAt,
+          localSeenAt: 0,
+          waitingOnly: true,
+        },
+      },
+    });
+    useConfirmationRegistryStore.setState({
+      pendingIdsByChatId: { "chat-a": ["card-1"] },
+      waitingOnlyIds: { "card-1": true },
+    });
+
+    expect(count()).toBe(0);
+  });
+
+  it("counts a chat that waits for a review open in this browser", () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-a": {
+          kind: "action_required",
+          startedAt,
+          localSeenAt: 0,
+          waitingOnly: true,
+        },
+      },
+    });
+    rememberReview(reviewLinkKey("message-1", "call-1"), "handle-1", [
+      "chat-a",
+    ]);
+
+    expect(count()).toBe(1);
+  });
+
+  it("counts a chat whose review has ended only while it still waits", () => {
+    useGenerationStatusStore.setState({
+      statusByChatId: {
+        "chat-a": {
+          kind: "action_required",
+          startedAt,
+          localSeenAt: 0,
+          waitingOnly: true,
+        },
+      },
+    });
+    const key = reviewLinkKey("message-1", "call-1");
+    rememberReview(key, "handle-1", ["chat-a"]);
+    markReviewEnded(key);
+
+    expect(count()).toBe(1);
+
+    useGenerationStatusStore.setState({
+      statusByChatId: { "chat-a": { kind: "cleared", startedAt } },
+    });
+
+    expect(count()).toBe(0);
   });
 
   it("counts chats the user is not looking at", () => {

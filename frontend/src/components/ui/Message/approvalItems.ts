@@ -3,6 +3,7 @@ import type { ClientToolApprovalScopeRef } from "@/hooks/chat/clientToolExecutor
 import type {
   ApprovalItem,
   ChildApprovalRef,
+  ContentPart,
   ToolApprovalDecision,
   ToolApprovalKind,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -74,6 +75,22 @@ export const isChildItem = (
  */
 export const isWaitingItem = (item: ApprovalItemPart): boolean =>
   item.child?.waiting_for != null;
+
+/**
+ * Whether a parked row has nothing for the user to decide: its last stop has
+ * no open item, as the server reports for a row it did not stream here. The
+ * row waits for a connected app or for its tasks, or for a review only the
+ * browser that opened it knows about.
+ */
+export const parkedWaitsOnly = (parts: readonly ContentPart[]): boolean => {
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part.content_type === "tool_approval_request") {
+      return approvalStopState(part, parts.slice(index + 1)).open.length === 0;
+    }
+  }
+  return true;
+};
 
 /** The scope a task's client call may be allowed for instead of per call. */
 export interface ItemApprovalScope {

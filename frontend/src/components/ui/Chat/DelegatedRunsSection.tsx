@@ -7,6 +7,10 @@ import {
   seedGenerationStatusFromListing,
   useGenerationStatusStore,
 } from "@/hooks/chat/store/generationStatusStore";
+import {
+  useChatAsksForDecision,
+  useChatsAskingForDecision,
+} from "@/hooks/chat/useChatAsksForDecision";
 import { useDelegatedRunRetry } from "@/hooks/chat/useDelegatedRunRetry";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import { useRecentChats } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -181,7 +185,11 @@ const DelegatedRunRow = memo<{
   const storeStatus = useGenerationStatusStore(
     (state) => state.statusByChatId[chat.id],
   );
-  const status = resolveDelegatedRunStatus(chat, storeStatus);
+  const status = resolveDelegatedRunStatus(
+    chat,
+    storeStatus,
+    useChatAsksForDecision(chat.id),
+  );
 
   const runTitle =
     resolveRecentChatTitle(chat.title_resolved) ??
@@ -416,13 +424,18 @@ export const DelegatedRunsSection = memo<DelegatedRunsSectionProps>(
     const statusByChatId = useGenerationStatusStore(
       (state) => state.statusByChatId,
     );
+    const asking = useChatsAskingForDecision();
     const attentionStatus = useMemo(() => {
       const statuses = runs.flatMap((chat) => {
-        const status = resolveDelegatedRunStatus(chat, statusByChatId[chat.id]);
+        const status = resolveDelegatedRunStatus(
+          chat,
+          statusByChatId[chat.id],
+          asking.has(chat.id),
+        );
         return status && status !== "running" ? [status] : [];
       });
       return mostUrgentAttentionStatus(statuses);
-    }, [runs, statusByChatId]);
+    }, [asking, runs, statusByChatId]);
 
     if (runs.length === 0) {
       return null;

@@ -20636,6 +20636,18 @@ pub(crate) fn is_waiting_item(item: &ApprovalItem) -> bool {
         .is_some_and(|child| child.waiting_for.is_some())
 }
 
+/// Whether a parked row has nothing for the user to decide: it waits for a
+/// connected app or for its tasks. `parts` is what
+/// [`crate::models::chat::PARKED_DECISION_PARTS`] selects, which keeps the
+/// relative order [`parked_approval_state`] reads. A row that cannot be read
+/// still counts as asking, as every parked row did before this existed.
+pub(crate) fn parked_waits_only(parts: &serde_json::Value) -> bool {
+    let Ok(parts) = serde_json::from_value::<Vec<ContentPart>>(parts.clone()) else {
+        return false;
+    };
+    parked_approval_state(&parts).is_none_or(|state| state.decidable().is_empty())
+}
+
 impl ParkedApprovalState {
     /// The open items a decision answers.
     pub(crate) fn decidable(&self) -> Vec<ApprovalItem> {

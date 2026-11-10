@@ -12,8 +12,8 @@ import { SpinnerIcon } from "@/components/ui/Feedback/SpinnerIcon";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 import { ModalBase } from "@/components/ui/Modal/ModalBase";
 import { EditIcon, PinIcon, PinSlashIcon } from "@/components/ui/icons";
-import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { useChatsAskingForDecision } from "@/hooks/chat/useChatAsksForDecision";
 import { usePageAlignment } from "@/hooks/ui/usePageAlignment";
 import { delegatedRunOrigin } from "@/utils/chat/delegatedRunOrigin";
 import { UNTITLED_BACKEND_SENTINEL } from "@/utils/chat/recentChatSession";
@@ -83,21 +83,19 @@ const useSessionsAttentionStatus = (
   const statusByChatId = useGenerationStatusStore(
     (state) => state.statusByChatId,
   );
-  const pendingIdsByChatId = useConfirmationRegistryStore(
-    (state) => state.pendingIdsByChatId,
-  );
+  const asking = useChatsAskingForDecision();
   return useMemo(
     () =>
       mostUrgentAttentionStatus(
         sessions.flatMap((session) => {
           const status = resolveChatAttentionStatus(
             statusByChatId[session.id],
-            (pendingIdsByChatId[session.id]?.length ?? 0) > 0,
+            asking.has(session.id),
           );
           return status ? [status] : [];
         }),
       ),
-    [sessions, statusByChatId, pendingIdsByChatId],
+    [sessions, statusByChatId, asking],
   );
 };
 

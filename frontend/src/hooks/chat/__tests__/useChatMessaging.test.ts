@@ -1468,6 +1468,42 @@ describe("useChatMessaging", () => {
     }
   });
 
+  it("marks a turn that parks on its own waiting call as nothing to decide", async () => {
+    const { startStreaming, sendSSEEvent } = setupChatMessagingTest();
+
+    await startStreaming("When am I free this week?");
+    await sendSSEEvent({
+      message_type: "assistant_message_started",
+      message_id: "assistant-parked-wait",
+    });
+    await sendSSEEvent({
+      message_type: "assistant_message_completed",
+      message_id: "assistant-parked-wait",
+      message: {
+        id: "assistant-parked-wait",
+        role: "assistant",
+        created_at: "2026-02-18T12:00:01.000Z",
+        updated_at: "2026-02-18T12:00:11.000Z",
+        content: [
+          {
+            content_type: "client_tool_pending",
+            attempt_id: "attempt-1",
+            tool_call_id: "call-1",
+            pending_tool_calls: [],
+          },
+        ],
+        input_files_ids: [],
+        is_message_in_active_thread: true,
+      },
+    });
+
+    expect(
+      Object.values(useGenerationStatusStore.getState().statusByChatId),
+    ).toContainEqual(
+      expect.objectContaining({ kind: "action_required", waitingOnly: true }),
+    );
+  });
+
   it("requests a sweep for a waiting client tool whose task asked a question behind it", async () => {
     const sweep = vi.fn<() => void>();
     const unsubscribe = clientOperationHandlerRegistry.subscribe(sweep);

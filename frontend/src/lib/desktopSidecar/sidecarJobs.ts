@@ -159,6 +159,8 @@ export interface SidecarJobOptions {
   signal?: AbortSignal;
   /** The chat that made the call, which waits while its review is open. */
   chatId?: string;
+  /** The chat a task's call runs for, which waits on that review as well. */
+  ownerChatId?: string;
   /**
    * The call itself, with its message: a review it reaches is kept under
    * them, so a later run of the same call finds its job and the chat can show
@@ -192,7 +194,14 @@ export async function runSidecarJob(
   client: DesktopSidecarClient,
   name: string,
   args: Record<string, unknown>,
-  { signal, chatId, toolCallId, messageId, onReview }: SidecarJobOptions = {},
+  {
+    signal,
+    chatId,
+    ownerChatId,
+    toolCallId,
+    messageId,
+    onReview,
+  }: SidecarJobOptions = {},
 ): Promise<CallToolResult> {
   const waitMs = client.getSnapshot().jobs?.maxWaitMs ?? 0;
   const wait = waitMs > 0 ? { wait_ms: waitMs } : {};
@@ -224,7 +233,14 @@ export async function runSidecarJob(
         reviewOpened = true;
         if (chatId) reviewEnded = markAwaitingReview(chatId);
         // Before the window opens: the decision can outlive this page.
-        if (key) rememberReview(key, handle);
+        if (key)
+          rememberReview(
+            key,
+            handle,
+            [chatId, ownerChatId].filter(
+              (id): id is string => id !== undefined,
+            ),
+          );
         // The decision is made only in the native window; this opens it.
         if (client.supports("jobs.review.v1"))
           await client.invoke(
@@ -247,6 +263,9 @@ export async function runSidecarJob(
     // A call that stops or fails must stop the device too: the job would run
     // on and keep its results until they expire. Cancelling is idempotent.
     void client.invoke("jobs.cancel.v1", { handle }).catch(() => undefined);
+    // A Stop ends the review for good. A failed poll does not: the window may
+    // still take a decision, and the next run finds it through this link.
+    if (key && signal?.aborted) forgetReview(key);
     throw error;
   } finally {
     reviewEnded?.();

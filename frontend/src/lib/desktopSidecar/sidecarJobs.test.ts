@@ -596,6 +596,68 @@ describe("runSidecarJob", () => {
         expect(reviewLink(key)).toBeUndefined();
       });
 
+      it("names the call's chat and the chat it runs for on the job it records", async () => {
+        vi.useFakeTimers();
+        const links: unknown[] = [];
+        const { client } = fakeSidecarClient((method) => {
+          if (method === "jobs.review.v1") links.push(reviewLink(key));
+          if (method === "jobs.status.v1") return approved;
+          if (method === "jobs.ack.v1")
+            return { result: { handle: JOB_HANDLE, state: "acked" } };
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const result = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          { ...callOptions, ownerChatId: "origin-chat" },
+        );
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await expect(result).resolves.toBeDefined();
+        expect(links).toEqual([
+          expect.objectContaining({
+            state: "open",
+            chatIds: ["chat", "origin-chat"],
+          }),
+        ]);
+      });
+
+      it("forgets the job when the call is stopped, and keeps it after a failed poll", async () => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        let failPoll = false;
+        const { client } = fakeSidecarClient((method) => {
+          if (method === "jobs.status.v1")
+            return failPoll
+              ? { error: { code: -32000, message: "gone" } }
+              : new Promise<SidecarReply>(() => undefined);
+          if (method === "jobs.cancel.v1") return pendingJob("cancelled");
+          return pendingJob("ready_for_review");
+        }, strictMode);
+        const stopped = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          { ...callOptions, signal: controller.signal },
+        ).catch((error: unknown) => error);
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        expect(reviewLink(key)).toMatchObject({ state: "open" });
+        controller.abort();
+        await expect(stopped).resolves.toBeDefined();
+        expect(reviewLink(key)).toBeUndefined();
+
+        failPoll = true;
+        const failed = runSidecarJob(
+          client,
+          "search_sidecar_index",
+          { query: "report" },
+          callOptions,
+        ).catch((error: unknown) => error);
+        await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+        await failed;
+        expect(reviewLink(key)).toMatchObject({ state: "open" });
+      });
+
       it("delivers a Share made while no page was open, with no new job and no window", async () => {
         rememberReview(key, JOB_HANDLE);
         const { client, requests, methods } = fakeSidecarClient(

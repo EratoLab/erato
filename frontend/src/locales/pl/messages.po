@@ -2374,6 +2374,11 @@ msgstr "Ten czat nadal generuje odpowiedź. Zarchiwizowanie go jej nie przerwie.
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/chatArchiveActions.tsx
+msgid "chat.history.menu.confirm_archive.waiting"
+msgstr "Ten czat czeka na połączoną aplikację lub swoje zadania. Zarchiwizowanie go przerywa oczekiwanie, a cofnięcie archiwizacji nie wznowi odpowiedzi."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/chatArchiveActions.tsx
 msgid "chat.history.menu.confirm_remove.title"
 msgstr "Zarchiwizować ten czat?"
 
@@ -11659,7 +11664,6 @@ msgstr "Odczyt lokalnej skrzynki pocztowej"
 #~ msgstr "Gotowe do sprawdzenia w aplikacji komputerowej"
 
 #: src/components/ui/Message/MessageContent.tsx
-#: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "Ready for review in the Erato desktop app"
 msgstr ""
 

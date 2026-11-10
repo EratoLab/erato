@@ -1,3 +1,4 @@
+import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +9,7 @@ import {
   reviewHasEnded,
   reviewLink,
   reviewLinkKey,
+  useChatsInReview,
   useSidecarReviewLinks,
 } from "./sidecarReviewLinks";
 
@@ -22,6 +24,29 @@ afterEach(() => {
 });
 
 describe("sidecar review links", () => {
+  it("names the chats a review open in this browser waits on", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"]);
+    const { result } = renderHook(() => useChatsInReview());
+    expect([...result.current].sort()).toEqual(["origin-chat", "task-chat"]);
+  });
+
+  it("keeps naming them once the review has ended, until the user asks again", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"]);
+    const { result, rerender } = renderHook(() => useChatsInReview());
+
+    markReviewEnded(key);
+    rerender();
+    expect(reviewLink(key)).toMatchObject({
+      state: "ended",
+      chatIds: ["task-chat", "origin-chat"],
+    });
+    expect([...result.current].sort()).toEqual(["origin-chat", "task-chat"]);
+
+    askForReviewAgain(key);
+    rerender();
+    expect(result.current.size).toBe(0);
+  });
+
   it("keeps a call's job beyond the page that opened it, with ids only", () => {
     rememberReview(key, "handle-1");
     expect(reviewLink(key)).toMatchObject({
@@ -66,13 +91,18 @@ describe("sidecar review links", () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        [key]: { state: "ended", at: Date.now() },
+        [key]: { state: "ended", at: Date.now(), chatIds: ["chat-1"] },
         broken: { state: "open" },
+        badChats: { state: "ended", at: Date.now(), chatIds: "chat-1" },
       }),
     );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
-    expect(reviewLink(key)).toMatchObject({ state: "ended" });
+    expect(reviewLink(key)).toMatchObject({
+      state: "ended",
+      chatIds: ["chat-1"],
+    });
     expect(reviewLink("broken")).toBeUndefined();
+    expect(reviewLink("badChats")).toBeUndefined();
   });
 
   it("keeps working for this page where storage is unavailable", () => {

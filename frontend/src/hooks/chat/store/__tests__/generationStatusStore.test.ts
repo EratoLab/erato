@@ -519,6 +519,45 @@ describe("generationStatusStore", () => {
       started_at: iso(pendingAtOffsetMs),
     });
 
+    it("records a stop with nothing to decide, from the listing and the poll", () => {
+      seedGenerationStatusFromListing([
+        {
+          id: "chat-1",
+          pending_tool_approval_at: iso(0),
+          pending_approval_waiting_only: true,
+          delegated_runs_in_flight: false,
+        },
+      ]);
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "action_required",
+        waitingOnly: true,
+      });
+      store().applyPollSnapshot([
+        { ...pendingEntry("chat-2"), waiting_only: true },
+      ]);
+      expect(statusOf("chat-2")).toMatchObject({
+        kind: "action_required",
+        waitingOnly: true,
+      });
+    });
+
+    it("follows the same park when its task starts to ask, and back", () => {
+      store().applyPollSnapshot([
+        { ...pendingEntry("chat-1"), waiting_only: true },
+      ]);
+      const seenAt = statusOf("chat-1");
+      store().applyPollSnapshot([pendingEntry("chat-1")]);
+      expect(statusOf("chat-1")).toMatchObject({
+        kind: "action_required",
+        waitingOnly: false,
+        startedAt: seenAt?.startedAt,
+      });
+      store().applyPollSnapshot([
+        { ...pendingEntry("chat-1"), waiting_only: true },
+      ]);
+      expect(statusOf("chat-1")).toMatchObject({ waitingOnly: true });
+    });
+
     it("seeds a durable action-required entry", () => {
       store().seedActionRequired("chat-1", iso(0));
       expect(statusOf("chat-1")).toEqual({

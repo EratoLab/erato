@@ -28,6 +28,7 @@ import {
 } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
+import { parkedWaitsOnly } from "@/components/ui/Message/approvalItems";
 import {
   CANCEL_REMINDER_TOOL_NAME,
   CREATE_REMINDER_TOOL_NAME,
@@ -1256,6 +1257,7 @@ export function useChatMessaging(
                     lastPart.content_type === "tool_approval_request"
                       ? lastPart.requested_at
                       : new Date().toISOString(),
+                    parkedWaitsOnly(finalParts ?? []),
                   );
               } else {
                 useGenerationStatusStore
