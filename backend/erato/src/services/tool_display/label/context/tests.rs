@@ -371,6 +371,125 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
     );
 }
 
+/// A call labelled as `action`, as every MCP call's row is once it ran.
+fn labelled_as(action: ToolCallAction, tool: ToolUse) -> ToolUse {
+    let mut label = generic_label(&json!({}));
+    label.action = action;
+    ToolUse {
+        display: Some(ToolDisplayMetadata {
+            label: Some(label),
+            ..on(Some(SERVER)).unwrap()
+        }),
+        ..tool
+    }
+}
+
+#[test]
+fn a_record_renamed_in_this_chat_is_named_by_its_new_name_and_never_its_old_one() {
+    let read = read_query(
+        "read",
+        "SELECT subject, opportunityid FROM opportunity",
+        json!([{ "subject": "Card check task", "opportunityid": OPPORTUNITY }]),
+    );
+    let update = |id: &str, status, item: Value| ToolUse {
+        status,
+        ..labelled_as(
+            ToolCallAction::Update,
+            call(
+                id,
+                "update_record",
+                json!({ "tablename": "task", "recordId": OPPORTUNITY, "item": item }),
+                json!("Record updated successfully."),
+            ),
+        )
+    };
+    let renamed = update(
+        "rename",
+        ToolCallStatus::Success,
+        json!({ "subject": "Card check task v2", "description": "Updated" }),
+    );
+    let context = after(vec![read.clone(), renamed.clone()]);
+    assert_eq!(
+        name(&context, json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v2")
+    );
+    let mut running = ToolResultContext::default();
+    running.observe(&[
+        ContentPart::ToolUse(read.clone()),
+        ContentPart::ToolUse(renamed),
+    ]);
+    assert_eq!(
+        name(&running, json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v2")
+    );
+    let new_member = update(
+        "rename",
+        ToolCallStatus::Success,
+        json!({ "newSubject": "Card check task v3" }),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), new_member]), json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v3")
+    );
+
+    // A failed or denied write changes nothing, and neither does one that
+    // leaves the name's member alone.
+    let failed = update(
+        "failed",
+        ToolCallStatus::Error,
+        json!({ "subject": "Card check task v2" }),
+    );
+    let denied = ToolUse {
+        output: Some(json!({ "status": "rejected", "error": "The user denied this tool call." })),
+        ..update(
+            "denied",
+            ToolCallStatus::Error,
+            json!({ "subject": "Card check task v2" }),
+        )
+    };
+    let other_field = update(
+        "other",
+        ToolCallStatus::Success,
+        json!({ "description": "Card check task v2" }),
+    );
+    for write in [failed, denied, other_field] {
+        assert_eq!(
+            name(&after(vec![read.clone(), write]), json!(OPPORTUNITY)).as_deref(),
+            Some("Card check task"),
+        );
+    }
+
+    // When it is not certain what the record is called now, it has no name.
+    for item in [
+        json!({ "subject": null }),
+        json!({ "subject": "ana@example.com" }),
+        json!({ "subject": "One", "newSubject": "Two" }),
+    ] {
+        let write = update("unsure", ToolCallStatus::Success, item.clone());
+        assert_eq!(
+            name(&after(vec![read.clone(), write]), json!(OPPORTUNITY)),
+            None,
+            "{item}"
+        );
+    }
+    let batch = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "batch",
+            "update_records",
+            json!({ "records": [
+                { "opportunityid": OPPORTUNITY, "subject": "One", "risklevel": 1 },
+                { "opportunityid": "5f0c2a10-0000-4000-8000-00000000a002", "subject": "Two", "risklevel": 2 },
+            ] }),
+            json!("Updated 2 records."),
+        ),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), batch]), json!(OPPORTUNITY)),
+        None
+    );
+}
+
 #[test]
 fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
     let read = read_query(
