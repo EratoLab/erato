@@ -2016,6 +2016,36 @@ fn a_trash_reads_as_a_delete_that_the_tool_says_can_be_restored() {
 }
 
 #[test]
+fn a_kind_that_names_no_verb_qualifies_what_the_call_acts_on() {
+    let delete = tool("resources_delete", "", Some(true));
+    let change = change_with(
+        &delete,
+        json!({"apiVersion": "v1", "kind": "Namespace", "name": "shop"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(change.table.as_deref(), Some("Namespace"));
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.raw_name != "kind")
+    );
+
+    // A kind that names a verb is the operation, and a kind the label
+    // already has needs no qualifier.
+    assert!(!is_type_member("kind", &json!("delete")));
+    assert!(!is_type_member("kind", &json!("drive#file")));
+    let page = change_with(
+        &tool("update_page", "", None),
+        json!({"page_id": "p1", "kind": "Database", "title": "T"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(page.table, None);
+}
+
+#[test]
 fn an_address_counts_as_reach_only_on_a_send_or_share() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
     let shared = change_with(

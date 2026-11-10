@@ -389,6 +389,10 @@ impl<'a> Walk<'a> {
             Some(Claim::LookupName) => return,
             None => {}
         }
+        if depth == 0 && self.kind == ToolCallObjectKind::Other && is_type_member(member, value) {
+            self.table(value);
+            return;
+        }
         if is_verb_field(member, value) {
             return;
         }
@@ -1786,6 +1790,15 @@ impl<'a> Walk<'a> {
         self.change.notes = notes;
         (self.change, self.hidden)
     }
+}
+
+/// A `kind` that names what the record is, as `Namespace` does, rather than
+/// what the call does: it qualifies the record's kind as a table does.
+fn is_type_member(member: &str, value: &Value) -> bool {
+    member.eq_ignore_ascii_case("kind")
+        && value
+            .as_str()
+            .is_some_and(|text| is_table_name(text) && rules::action_of(text).is_none())
 }
 
 /// A table's name a card can read as part of a kind: one word of letters,

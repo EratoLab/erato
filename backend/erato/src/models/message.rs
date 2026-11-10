@@ -617,9 +617,9 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub place: Option<String>,
-    /// The table the record is one of, as the call names it, when that says
-    /// more than the label's kind: a card reads it as part of the kind
-    /// ("account row"), never as where the record goes.
+    /// The table or type the record is one of, as the call names it, when
+    /// that says more than the label's kind: a card reads it as part of the
+    /// kind ("account row", "Namespace"), never as where the record goes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub table: Option<String>,

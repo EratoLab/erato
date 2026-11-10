@@ -105,6 +105,8 @@ export const gistKindLabel = (
   table?: string,
 ): string => {
   if (table !== undefined && table.length > 0) {
+    // A type the call names, such as "Namespace", is the noun itself.
+    if (kind === "other" && count === 1) return table;
     return tableKindLabel(kind, count, table);
   }
   switch (kind) {
