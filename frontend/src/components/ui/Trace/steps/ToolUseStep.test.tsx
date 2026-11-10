@@ -268,6 +268,63 @@ describe("ToolUseStep with a change description", () => {
     expect(details).toHaveTextContent("Stage lead → customer");
   });
 
+  it("puts the counts right after the sentence, with a colon only after a name", () => {
+    const row = (itemLabel: object) =>
+      render(
+        <ToolUseStep
+          part={
+            {
+              content_type: "tool_use",
+              tool_call_id: "call",
+              tool_name: "save_issue",
+              status: "success",
+              input: { name: "Tailspin Toys", id: "5f0c2a10-0000-4000-8000-00000000a001" },
+              output: {},
+              display: {
+                title: "Save",
+                server_name: "Tracker",
+                label: { ...label, ...itemLabel },
+              },
+            } as unknown as ToolUse & { content_type: "tool_use" }
+          }
+          status="done"
+          isStreaming={false}
+          isCollapsed={false}
+          isLastStep
+        />,
+      );
+    const named = row({});
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Updated row Tailspin Toys:",
+    );
+    expect(screen.getByTestId("trace-step-title-after")).toHaveTextContent(
+      /^1 emptied, 1 changed, 10 unchanged\s*Tracker$/,
+    );
+    named.unmount();
+
+    row({
+      items: [
+        {
+          id: {
+            pointer: "/id",
+            values: [
+              {
+                path: "/id",
+                text: "5f0c2a10-0000-4000-8000-00000000a001",
+                machine_id: true,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const line = screen.getByTestId("tool-call-gist-line");
+    expect(line.textContent).not.toMatch(/:\s*$/);
+    expect(screen.getByTestId("trace-step-title-after")).toHaveTextContent(
+      /^· 1 emptied, 1 changed, 10 unchanged\s*Tracker$/,
+    );
+  });
+
   it.each([
     ["failed", "error", "Could not update row Tailspin Toys"],
     ["still running", "in_progress", "Update row Tailspin Toys"],

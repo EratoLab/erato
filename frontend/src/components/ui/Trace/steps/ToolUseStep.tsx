@@ -276,6 +276,18 @@ const PlainToolUseStep = ({
   // Effects are facts only once the call has run.
   const counts =
     gist?.change && phase === "done" ? changeRowCounts(gist.change) : undefined;
+  // "Updated task X: 2 changed"; a line that names nothing gets no colon.
+  const named =
+    lead?.names.some((name) => !lead.hiddenIdPaths.includes(name.path)) ===
+    true;
+  const server = part.display?.server_name && (
+    <span
+      dir="auto"
+      className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
+    >
+      {part.display.server_name}
+    </span>
+  );
   const link = useMemo(
     () =>
       part.status === "success" ? resultLinkOf(part.result_details) : undefined,
@@ -352,19 +364,12 @@ const PlainToolUseStep = ({
                 data-testid="tool-call-gist-line"
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={phase} />
-                {counts !== undefined && ":"}
+                {counts !== undefined && named && ":"}
               </span>
             ) : (
               toolName
             )}
-            {part.display?.server_name && (
-              <span
-                dir="auto"
-                className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
-              >
-                {part.display.server_name}
-              </span>
-            )}
+            {counts === undefined && server}
             {progress && (
               <span
                 dir="auto"
@@ -376,7 +381,15 @@ const PlainToolUseStep = ({
             )}
           </>
         }
-        titleAfter={counts}
+        titleAfter={
+          counts === undefined ? undefined : (
+            <>
+              {!named && "· "}
+              {counts}
+              {server}
+            </>
+          )
+        }
         titleSlot={
           notRun ? undefined : (
             <ToolStatusPill
