@@ -11,6 +11,7 @@ import { FilePreviewContent } from "../FilePreview/FilePreviewContent";
 import { OutlookSourceAction } from "../FilePreview/OutlookSourceAction";
 import { AttachmentTile } from "../FileUpload/AttachmentTile";
 import { ModalBase } from "../Modal/ModalBase";
+import { mcpToolDecisionLabel } from "../Settings/McpToolDecisionControl";
 
 import type { ClientToolFileApprovalRequest } from "@/hooks/chat/store/clientToolFileApprovalStore";
 
@@ -61,9 +62,11 @@ export function ClientToolFileApprovals({
   );
 }
 
-/** A deployment default of never allow reads the same as a saved one. */
+/** A deployment default of never allow reads the same as a saved one. Names
+ * the setting with the label the file setting shows. */
 function BlockedAfterReviewNotice({ fileNames }: { fileNames: string[] }) {
   const names = fileNames.join(", ");
+  const neverAllow = mcpToolDecisionLabel("never");
   return (
     <Alert
       type="warning"
@@ -73,7 +76,7 @@ function BlockedAfterReviewNotice({ fileNames }: { fileNames: string[] }) {
     >
       {t({
         id: "chat.fileApproval.blockedAfterReview",
-        message: `Shared in the Erato desktop app but not uploaded: ${names}. File uploads from this device are set to “Never allow”.`,
+        message: `Shared in the Erato desktop app but not uploaded: ${names}. File uploads from this device are set to “${neverAllow}”.`,
       })}
     </Alert>
   );

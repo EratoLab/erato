@@ -1653,10 +1653,12 @@ export function createSidecarChatTools(
         );
         context.signal?.throwIfAborted();
         if (!approved.has(file)) {
+          // The person shared it in the review, so a task's call reports the
+          // setting's block as a failure with its reason, not as a decline.
+          if (reads.reviewed)
+            return { ok: false, error: FILE_BLOCKED_AFTER_REVIEW };
           return declined(
-            reads.reviewed
-              ? FILE_BLOCKED_AFTER_REVIEW
-              : "The user rejected uploading this file. Do not retry without their permission.",
+            "The user rejected uploading this file. Do not retry without their permission.",
             context,
           );
         }

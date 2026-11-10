@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
-import { ClientToolOperationHandler } from "@/lib/clientOperations/clientToolHandler";
+import {
+  ClientToolOperationHandler,
+  toOperationResult,
+} from "@/lib/clientOperations/clientToolHandler";
 import { ClientOperationCoordinator } from "@/lib/clientOperations/coordinator";
 import { createClientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { fetchProfile } from "@/lib/generated/v1betaApi/v1betaApiComponents";
@@ -1023,17 +1026,8 @@ describe("desktop sidecar tools in strict mode", () => {
             .tool(GET_SIDECAR_DOCUMENT_TOOL)
             .execute(INPUTS[GET_SIDECAR_DOCUMENT_TOOL], callContext),
         );
-        expect(outcome).toEqual(
-          callContext === grantContext
-            ? {
-                ok: false,
-                error: BLOCKED,
-                validationErrors: [
-                  { path: "", code: "declined", message: BLOCKED },
-                ],
-              }
-            : { ok: false, error: BLOCKED },
-        );
+        // Not a decline, even for a task's call: the person shared the file.
+        expect(outcome).toEqual({ ok: false, error: BLOCKED });
         expect(job.options.uploadAttachment).not.toHaveBeenCalled();
         expect(fileStore().requests).toEqual([]);
       }
@@ -1044,6 +1038,48 @@ describe("desktop sidecar tools in strict mode", () => {
           fileNames: ["mock.eml"],
         },
       ]);
+    });
+
+    it("with never allow, gives a task's durable call the reason, not a decline", async () => {
+      const job = withPolicy("never_allow");
+      const outcome = await settled(
+        job
+          .tool(GET_SIDECAR_DOCUMENT_TOOL)
+          .execute(INPUTS[GET_SIDECAR_DOCUMENT_TOOL], grantContext),
+      );
+      const binding: ExecutorBinding = {
+        device_id: "installation-one",
+        realm: "desktop-sidecar",
+        host_context: { kind: "desktop_sidecar", identity: "local" },
+      };
+      const request: OperationRequest = {
+        attempt_id: "00000000-0000-4000-8000-0000000000a1",
+        operation_id: "desktop/get_sidecar_document",
+        kind: "client_tool.v1",
+        account_id: "00000000-0000-4000-8000-000000000001",
+        chat_id: "00000000-0000-4000-8000-0000000000c2",
+        message_id: "00000000-0000-4000-8000-0000000000e2",
+        tool_call_id: "task-call",
+        realm: "desktop-sidecar",
+        consent: "none",
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        input: INPUTS[GET_SIDECAR_DOCUMENT_TOOL] as OperationPayload,
+        binding,
+        lineage: {
+          owner_chat_id: "00000000-0000-4000-8000-0000000000c1",
+          owner_message_id: "00000000-0000-4000-8000-0000000000e1",
+          requesting_chat_id: "00000000-0000-4000-8000-0000000000c2",
+          requesting_message_id: "00000000-0000-4000-8000-0000000000e2",
+        },
+      };
+      // A declined code would make the server replace the reason with its own.
+      expect(toOperationResult(request, outcome)).toEqual({
+        attempt_id: request.attempt_id,
+        operation_id: request.operation_id,
+        executor: binding,
+        outcome: "failed",
+        error: { code: "execution_failed", message: BLOCKED },
+      });
     });
 
     it("with never allow, keeps a conversation's text, blocks its attachments and says why", async () => {
