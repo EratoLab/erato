@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::message::{
-    ToolAllowedBy, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource, ToolCallObjectKind,
-    ToolDisplayMetadata,
+    ContentPartText, InputMessage, ToolAllowedBy, ToolCallLabelItem, ToolCallLabelSlot,
+    ToolCallLabelSource, ToolCallObjectKind, ToolDisplayMetadata,
 };
 use crate::services::prompt_composition::transforms::replay_assistant_content;
 use crate::services::tool_display::label::{
@@ -2199,6 +2199,97 @@ fn a_label_column_beside_a_code_is_that_codes_label_and_no_field_of_its_own() {
     assert_eq!(record.coded("risklevel"), None);
     assert_eq!(record.coded("stage"), None);
     assert!(record.field("risklevelname").is_some());
+}
+
+#[test]
+fn no_id_counts_as_never_read_where_the_replay_misses_earlier_results() {
+    use crate::services::chat_history_compaction::{SummaryResult, replacement};
+    let arguments = json!({ "recordId": ACCOUNT });
+    let never = |context: &ToolResultContext| context.never_read(&arguments, "/recordId");
+    let text = |role: MessageRole, text: &str| InputMessage {
+        role,
+        content: ContentPart::Text(ContentPartText { text: text.into() }),
+    };
+    let read = call(
+        "read",
+        "get_record",
+        json!({ "tablename": "account", "recordId": ACCOUNT }),
+        json!({ "name": "Contoso", "accountid": ACCOUNT }),
+    );
+    let mut chat = vec![
+        text(MessageRole::System, "You help with the CRM."),
+        text(MessageRole::User, "Look up the account."),
+    ];
+    chat.extend(replay_assistant_content(
+        &MessageRole::Assistant,
+        vec![ContentPart::ToolUse(read)],
+    ));
+    chat.push(text(MessageRole::Assistant, "It is Contoso."));
+    let next_turn = text(MessageRole::User, "Rename it.");
+    let turn = |mut messages: Vec<InputMessage>| {
+        messages.push(next_turn.clone());
+        ToolResultContext::from_messages(&GenerationInputMessages { messages })
+    };
+    assert!(!never(&turn(chat.clone())));
+    assert!(never(&turn(chat[..2].to_vec())));
+
+    // A compaction replaces the turns that read it with their summary.
+    let summary = SummaryResult {
+        summary: "The user looked up the account Contoso.".into(),
+        files: Vec::new(),
+    };
+    let compacted = replacement(&GenerationInputMessages { messages: chat }, &summary);
+    assert!(!never(&turn(compacted.messages)));
+
+    // An earlier turn's call replayed as a receipt kept only some fields.
+    let receipt = call(
+        "receipt",
+        "read_comments",
+        json!({ replay_policy::RECEIPT_MARKER_KEY: "omitted", "kept": {} }),
+        json!({ replay_policy::RECEIPT_MARKER_KEY: "omitted", "kept": { "count": 2 } }),
+    );
+    assert!(!never(&after(vec![receipt])));
+
+    // A chat spawned from another one may act on what that one read.
+    assert!(!never(&after(Vec::new()).spawned_from_another_chat(true)));
+    assert!(never(&after(Vec::new()).spawned_from_another_chat(false)));
+}
+
+#[test]
+fn a_machine_id_written_in_brackets_a_link_or_with_its_padding_counts_as_read() {
+    let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N";
+    let session = format!("Session {jwt}.");
+    for (id, text) in [
+        (
+            "0015g00000XyZabAAB",
+            "Found 1 account: Acme Corp (0015g00000XyZabAAB)",
+        ),
+        (
+            "0015g00000XyZabAAB",
+            "Open https://crm.example.com/r/Account/0015g00000XyZabAAB/view",
+        ),
+        ("0015g00000XyZabAAB", "Saved {0015g00000XyZabAAB}."),
+        (
+            "0015g00000XyZabAAB",
+            "Linked to /accounts(0015g00000XyZabAAB).",
+        ),
+        (
+            "/accounts(0015g00000XyZabAAB)",
+            "Acme Corp (0015g00000XyZabAAB)",
+        ),
+        (
+            "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=",
+            "Token aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=, kept.",
+        ),
+        (jwt, session.as_str()),
+    ] {
+        assert!(is_machine_id(id), "{id}");
+        let context = after(vec![call("read", "search", json!({}), json!(text))]);
+        assert!(
+            !context.never_read(&json!({ "recordId": id }), "/recordId"),
+            "{text}"
+        );
+    }
 }
 
 #[test]

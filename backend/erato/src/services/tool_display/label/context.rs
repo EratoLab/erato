@@ -19,6 +19,7 @@ use crate::models::message::{
     ToolCallLabelItem, ToolCallStatus, ToolUse,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
+use crate::services::prompt_composition::replay_policy;
 use serde_json::{Map, Value};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::ops::ControlFlow;
@@ -355,7 +356,8 @@ impl ToolResultContext {
 
     /// The tool results a turn's generation input replays, the most recent
     /// [`MAX_CALLS_READ`] calls only. After a chat-history compaction none are
-    /// left, so names read before it are misses.
+    /// left, so names read before it are misses, and no ID counts as never
+    /// read.
     pub fn from_messages(source: &GenerationInputMessages) -> Self {
         Self::from_messages_and_row(source, &[])
     }
@@ -375,7 +377,7 @@ impl ToolResultContext {
             })
             .collect();
         let first_read = calls.len().saturating_sub(MAX_CALLS_READ);
-        context.partial |= first_read > 0;
+        context.partial |= first_read > 0 || opens_after_the_first_turn(source);
         for (index, tool) in calls.into_iter().enumerate() {
             if index >= first_read {
                 context.read(tool);
@@ -386,6 +388,14 @@ impl ToolResultContext {
             }
         }
         context
+    }
+
+    /// Marks a chat spawned from another one, such as a task's run, whose
+    /// cards the other chat may show: what that chat read is not in this
+    /// one's replay, so no ID counts as never read.
+    pub fn spawned_from_another_chat(mut self, spawned: bool) -> Self {
+        self.partial |= spawned;
+        self
     }
 
     /// As [`Self::observe`] on an index label jobs may share: copied only
@@ -752,6 +762,9 @@ impl ToolResultContext {
 
     fn read_settled(&mut self, tool: &ToolUse) {
         self.note_table(tool.input.as_ref());
+        // A receipt keeps a few fields of what the result held; an ID it
+        // dropped may have been read.
+        self.partial |= tool.output.as_ref().is_some_and(is_a_receipt);
         if self.is_refused_by_erato(tool) {
             return;
         }
@@ -1364,6 +1377,29 @@ fn below_a_recipient(path: &str) -> bool {
 
 fn is_settled(tool: &ToolUse) -> bool {
     matches!(tool.status, ToolCallStatus::Success | ToolCallStatus::Error)
+}
+
+/// What an earlier turn's call replays as when only a few of its fields are
+/// kept; see [`replay_policy`].
+fn is_a_receipt(output: &Value) -> bool {
+    output
+        .as_object()
+        .is_some_and(|output| output.contains_key(replay_policy::RECEIPT_MARKER_KEY))
+}
+
+/// Whether the replay starts after the chat's first turn. A compaction puts
+/// the summary of the turns it replaced, an assistant's text, ahead of every
+/// user message, and their results are gone.
+fn opens_after_the_first_turn(source: &GenerationInputMessages) -> bool {
+    source
+        .messages
+        .iter()
+        .find(|message| match message.role {
+            MessageRole::User => true,
+            MessageRole::Assistant => matches!(message.content, ContentPart::Text(_)),
+            _ => false,
+        })
+        .is_some_and(|first| first.role == MessageRole::Assistant)
 }
 
 fn is_container(value: &Value) -> bool {
@@ -2126,22 +2162,34 @@ fn result_ids(value: &Value, keys: &mut Vec<String>, scan: &mut IdScan, depth: u
     }
 }
 
+/// What a machine ID may hold besides letters and digits, by how it is
+/// written: plainly, as base64 with its padding, or as dotted segments. Each
+/// is read apart, so an ID in brackets, in a link's path or at a sentence's
+/// end is still found; a path such as `/accounts(<id>)` is looked up by the
+/// ID inside it anyway.
+const ID_TOKEN_CHARS: [&[char]; 3] = [
+    &['_', '-'],
+    &['_', '-', '+', '/', '='],
+    &['_', '-', '+', '/', '=', '.'],
+];
+
 /// The IDs a text is or holds: itself, the UUIDs in it, and its words that
-/// are machine IDs.
+/// are machine IDs, written in any of [`ID_TOKEN_CHARS`].
 fn text_ids(text: &str, keys: &mut Vec<String>, scan: &mut IdScan) -> bool {
     let Some(left) = scan.bytes.checked_sub(text.len()) else {
         return false;
     };
     scan.bytes = left;
-    keys.extend(text_key(text));
-    keys.extend(uuid_keys(text));
-    keys.extend(
-        text.split(|c: char| {
-            !(c.is_alphanumeric() || matches!(c, '_' | '-' | '(' | ')' | '/' | '{' | '}'))
-        })
-        .filter(|token| token.len() <= MAX_ID_CHARS && is_machine_id(token))
-        .filter_map(text_key),
-    );
+    let mut found: HashSet<String> = text_key(text).into_iter().chain(uuid_keys(text)).collect();
+    for extra in ID_TOKEN_CHARS {
+        found.extend(
+            text.split(|c: char| !(c.is_alphanumeric() || extra.contains(&c)))
+                .map(|token| token.trim_end_matches('.'))
+                .filter(|token| token.len() <= MAX_ID_CHARS && is_machine_id(token))
+                .filter_map(text_key),
+        );
+    }
+    keys.extend(found);
     true
 }
 
