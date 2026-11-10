@@ -9285,7 +9285,7 @@ msgstr "{label} ({text})"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.value.newName"
-msgstr "ustawione na"
+msgstr "ustawiono na"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

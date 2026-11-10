@@ -3,7 +3,9 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
+import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
+import { messages as plMessages } from "@/locales/pl/messages.json";
 
 import {
   MAX_COLLAPSED_NAMES,
@@ -21,6 +23,7 @@ import {
   changeRowCounts,
   changeSeeMoreLine,
   changeSummaryLine,
+  newNamePhrase,
 } from "./changeLabels";
 import { gistOf, gistShownPaths, unshownArguments } from "./gist";
 import {
@@ -648,20 +651,28 @@ describe("a record no result in the chat named", () => {
     i18n.load("de", deMessages as unknown as Messages);
     i18n.activate("de");
     expect(gistUnreadRecordLine(gist)).toBe(
-      "Welche account-Zeile: in diesem Chat nicht gelesen (ID unter Technische Details)",
+      "Welche account-Zeile: in diesem Chat nicht gelesen (ID unter „Technische Details“)",
     );
     const page = gistOf(
       byHiddenId({ record_unread: true }, { object_kind: "document" }),
       {},
     )!;
     expect(gistUnreadRecordLine(page)).toBe(
-      "Welches Dokument: in diesem Chat nicht gelesen (ID unter Technische Details)",
+      "Welches Dokument: in diesem Chat nicht gelesen (ID unter „Technische Details“)",
     );
     i18n.load("fr", frMessages as unknown as Messages);
     i18n.activate("fr");
     expect(gistUnreadRecordLine(gist)).toBe(
       "Quelle ligne account : non lue dans ce chat (son identifiant est dans Détails techniques)",
     );
+    i18n.load("es", esMessages as unknown as Messages);
+    i18n.activate("es");
+    expect(gistUnreadRecordLine(gist)).toBe(
+      "¿Qué fila account? No se leyó en este chat (su identificador está en «Detalles técnicos»)",
+    );
+    i18n.load("pl", plMessages as unknown as Messages);
+    i18n.activate("pl");
+    expect(newNamePhrase()).toBe("ustawiono na");
   });
 
   it("says nothing when a name is known or the backend does not say so", () => {

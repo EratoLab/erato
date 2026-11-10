@@ -9762,7 +9762,7 @@ msgstr "{changes, plural, one {# cambio de texto} other {# cambios de texto}}"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.unreadRecord"
-msgstr "{kind, select, other {Qué {noun}: no se leyó en este chat (su identificador está en {details})}}"
+msgstr "{kind, select, other {¿Qué {noun}? No se leyó en este chat (su identificador está en «{details}»)}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
