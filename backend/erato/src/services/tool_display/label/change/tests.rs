@@ -4,6 +4,7 @@ use crate::models::message::{
     ToolCallStatus, ToolDisplayMetadata, ToolUse,
 };
 use crate::models::message::{ToolCallValueMeaning, ToolCallValueMeaningSource};
+use crate::services::mcp_tool_annotations::McpToolAnnotationSource;
 use crate::services::prompt_composition::transforms::replay_assistant_content;
 use crate::services::tool_display::label::arguments::MAX_LIST_ENTRIES;
 use crate::services::tool_display::label::rules::rules_label;
@@ -74,7 +75,7 @@ fn change_with(
             server: Some(SERVER),
             rules_action: label.action,
             glossary: None,
-            destructive_by_operator: false,
+            destructive_hint_source: Default::default(),
         },
     )
     .expect("a labelled call has a change description")
@@ -125,7 +126,7 @@ fn a_call_with_no_verb_has_no_change_description() {
                 server: None,
                 rules_action: label.action,
                 glossary: None,
-                destructive_by_operator: false,
+                destructive_hint_source: Default::default(),
             },
         )
         .is_none()
@@ -803,7 +804,7 @@ fn nothing_panics_on_odd_arguments() {
                 server: Some(SERVER),
                 rules_action: label.action,
                 glossary: None,
-                destructive_by_operator: false,
+                destructive_hint_source: Default::default(),
             },
         );
     }
@@ -861,7 +862,7 @@ fn a_mapping_from_any_source_is_described_the_same_way() {
             server: None,
             rules_action: label.action,
             glossary: None,
-            destructive_by_operator: false,
+            destructive_hint_source: Default::default(),
         },
     )
     .unwrap();
@@ -1789,7 +1790,7 @@ fn the_models_verb_only_words_the_headline_and_never_decides_what_is_lost() {
             server: None,
             rules_action,
             glossary: None,
-            destructive_by_operator: false,
+            destructive_hint_source: Default::default(),
         },
     );
     assert!(described.is_none(), "{described:?}");
@@ -2080,7 +2081,7 @@ fn with_change(
     tool: &Tool,
     arguments: Value,
     context: &ToolResultContext,
-    destructive_by_operator: bool,
+    destructive_hint_source: McpToolAnnotationSource,
 ) -> ToolCallChange {
     let label = labelled(tool, &arguments, context);
     describe(
@@ -2093,7 +2094,7 @@ fn with_change(
             server: Some(SERVER),
             rules_action: label.action,
             glossary: None,
-            destructive_by_operator,
+            destructive_hint_source,
         },
     )
     .expect("a labelled call has a change description")
@@ -2117,7 +2118,7 @@ fn with_glossary(
             server: Some(SERVER),
             rules_action: label.action,
             glossary: Some(glossary),
-            destructive_by_operator: false,
+            destructive_hint_source: Default::default(),
         },
     )
     .expect("a labelled call has a change description")
@@ -2459,49 +2460,64 @@ fn a_glossary_never_names_a_machine_id_field_or_a_recipient() {
 }
 
 #[test]
-fn the_destructive_note_only_appears_where_it_says_something_new() {
+fn the_destructive_note_follows_the_verb_and_who_set_the_hint_never_the_name() {
     let context = ToolResultContext::default();
-    let notes = |name: &str, arguments: Value, by_operator: bool| {
-        with_change(
-            &tool(name, "", Some(true)),
-            arguments,
-            &context,
-            by_operator,
-        )
-        .notes
+    let notes = |name: &str, arguments: Value, source: McpToolAnnotationSource| {
+        with_change(&tool(name, "", Some(true)), arguments, &context, source).notes
     };
+    let tool_said = McpToolAnnotationSource::ServerSupplied;
     let marked = ToolCallChangeNote::MarkedDestructive;
-    assert!(notes("create_record", json!({"name": "x"}), false).contains(&marked));
-    assert!(
-        notes(
-            "send_email",
-            json!({"subject": "x", "to": "a@b.example"}),
-            false
-        )
-        .contains(&marked)
-    );
-    assert!(notes("delete_page", json!({"page_id": "p1"}), false).contains(&marked));
+    let operator = ToolCallChangeNote::OperatorMarkedDestructive;
+    for (name, arguments) in [
+        ("create_record", json!({"name": "x"})),
+        ("send_email", json!({"subject": "x", "to": "a@b.example"})),
+        ("delete_page", json!({"page_id": "p1"})),
+        ("delete_sync_job", json!({"job_id": "j1"})),
+        ("run_sync", json!({"source": "s1"})),
+        ("save_record", json!({"name": "x"})),
+    ] {
+        let found = notes(name, arguments, tool_said);
+        assert!(found.contains(&marked), "{name}: {found:?}");
+    }
     for (name, arguments) in [
         ("update_record", json!({"id": "r1", "name": "x"})),
         ("patch_record", json!({"id": "r1", "name": "x"})),
         ("upsert_contact", json!({"name": "x"})),
-        ("save_record", json!({"name": "x"})),
         ("save_record", json!({"id": "r1", "name": "x"})),
-        ("put_record", json!({"name": "x"})),
         ("set_labels", json!({"id": "r1", "labels": ["x"]})),
     ] {
-        let found = notes(name, arguments, false);
+        let found = notes(name, arguments.clone(), tool_said);
         assert!(
-            !found.iter().any(|note| matches!(
-                note,
-                ToolCallChangeNote::MarkedDestructive
-                    | ToolCallChangeNote::OperatorMarkedDestructive
-            )),
+            !found
+                .iter()
+                .any(|note| *note == marked || *note == operator),
             "{name}: {found:?}"
         );
+        let defaulted = notes(
+            name,
+            arguments.clone(),
+            McpToolAnnotationSource::ServerDefault,
+        );
+        assert!(!defaulted.contains(&operator), "{name}: {defaulted:?}");
+        let overridden = notes(name, arguments, McpToolAnnotationSource::ToolOverride);
+        assert!(overridden.contains(&operator), "{name}: {overridden:?}");
     }
-    let operator = notes("create_record", json!({"name": "x"}), true);
-    assert_eq!(operator, [ToolCallChangeNote::OperatorMarkedDestructive]);
+    assert_eq!(
+        notes(
+            "sync_contacts",
+            json!({"id": "r1", "name": "x"}),
+            McpToolAnnotationSource::GlobalOverride
+        ),
+        [operator]
+    );
+    assert_eq!(
+        notes(
+            "create_record",
+            json!({"name": "x"}),
+            McpToolAnnotationSource::GlobalDefault
+        ),
+        [operator]
+    );
 }
 
 #[test]

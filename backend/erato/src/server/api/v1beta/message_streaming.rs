@@ -7694,6 +7694,7 @@ async fn stream_generate_chat_completion<'a>(
                             &mcp.config,
                             &managed.server_id,
                             &managed.tool,
+                            managed.destructive_hint_source,
                             &unfinished_tool_call.fn_arguments,
                             managed.approval_argument.as_deref(),
                             &label_mapping.mapping,
@@ -9616,6 +9617,7 @@ async fn stream_generate_chat_completion<'a>(
                         key,
                         server_id: managed_tool_call.server_id.clone(),
                         tool: managed_tool_call.tool.clone(),
+                        destructive_hint_source: managed_tool.destructive_hint_source,
                         arguments: crate::services::tool_display::labelled_arguments(
                             &managed_tool_call.tool_call.fn_arguments,
                             managed_tool.approval_argument.as_deref(),
@@ -13485,6 +13487,7 @@ mod tests {
             approval_argument: None,
             server_id: server_id.to_string(),
             tool,
+            destructive_hint_source: Default::default(),
         }
     }
 

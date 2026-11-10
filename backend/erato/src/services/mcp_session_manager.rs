@@ -845,6 +845,7 @@ impl McpSessionManager {
                     server_id: server_id.clone(),
                     tool: tool.tool,
                     approval_argument: tool.approval_argument,
+                    destructive_hint_source: tool.sources.destructive_hint,
                 });
             }
         }
@@ -1169,6 +1170,8 @@ pub struct ManagedTool {
     /// The server's consent argument when this tool declares it; hidden from
     /// the model and written by Erato at dispatch.
     pub approval_argument: Option<String>,
+    /// Who set the tool's destructive hint, which a card names.
+    pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
 }
 
 #[cfg(test)]

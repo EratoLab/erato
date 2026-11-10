@@ -203,9 +203,9 @@ pub struct ChangeFacts<'a> {
     pub server: Option<&'a str>,
     /// The operator's words for this server's field names and choice values.
     pub glossary: Option<&'a erato_config::config::McpGlossaryConfig>,
-    /// The operator's configuration, not the server, sets the tool's
-    /// destructive hint.
-    pub destructive_by_operator: bool,
+    /// Who set the tool's destructive hint: its server, or the operator's
+    /// configuration.
+    pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
 }
 
 /// The call's change description, and whether cleaning a value or name it
@@ -1659,8 +1659,11 @@ impl<'a> Walk<'a> {
             .as_ref()
             .and_then(|hints| hints.destructive_hint)
             == Some(true);
-        if marked_destructive && destructive_mark_adds_something(action, &facts.tool.name) {
-            notes.push(if facts.destructive_by_operator {
+        let source = facts.destructive_hint_source;
+        // An update lists what it changes, which says more than the mark;
+        // an operator's override is said wherever it applies.
+        if marked_destructive && (source.is_override() || !is_update_like(action)) {
+            notes.push(if source.is_operators() {
                 ToolCallChangeNote::OperatorMarkedDestructive
             } else {
                 ToolCallChangeNote::MarkedDestructive
@@ -1744,22 +1747,6 @@ fn without_mark(text: &str) -> String {
 
 fn is_update_like(action: ToolCallAction) -> bool {
     matches!(action, ToolCallAction::Update | ToolCallAction::Upsert)
-}
-
-/// Tool names that say the call writes whatever it is given: on these the
-/// destructive mark is on every call, so it says nothing about this one.
-const UPSERT_STYLE_WORDS: [&str; 5] = ["save", "upsert", "put", "set", "sync"];
-
-/// Whether a destructive mark tells someone reading the card something new. A
-/// create or send does not read as if it destroys anything; an update already
-/// lists what it changes, and so says the rest on its own.
-fn destructive_mark_adds_something(action: ToolCallAction, tool_name: &str) -> bool {
-    let words = name_words(text_prefix(tool_name, super::rules::MAX_NAME_BYTES));
-    let upsert_style = words
-        .iter()
-        .any(|word| UPSERT_STYLE_WORDS.contains(&word.as_str()))
-        || (words.iter().any(|word| word == "create") && words.iter().any(|word| word == "update"));
-    !is_update_like(action) && !upsert_style
 }
 
 fn scalar_is_number(scalar: &Value, text: &str) -> bool {

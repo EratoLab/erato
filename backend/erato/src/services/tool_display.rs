@@ -8,6 +8,7 @@ use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
 };
+use crate::services::mcp_tool_annotations::McpToolAnnotationSource;
 
 pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
     let title = [
@@ -37,7 +38,8 @@ pub fn tool_display_metadata(tool: &rmcp::model::Tool) -> ToolDisplayMetadata {
 }
 
 /// What a call of an MCP tool shows wherever it appears, labelled by the rules
-/// alone; see [`mcp_tool_call_display_from`].
+/// alone, for a tool whose hints are its server's own; see
+/// [`mcp_tool_call_display_from`], which takes who set them.
 pub fn mcp_tool_call_display(
     config: &McpRuntimeConfig,
     server_id: &str,
@@ -48,7 +50,15 @@ pub fn mcp_tool_call_display(
 ) -> ToolDisplayMetadata {
     let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
     let rules = label::guarded_rules(tool, &labelled.arguments, labelled.consent);
-    labelled_display(config, server_id, tool, &labelled, &rules.mapping, context)
+    labelled_display(
+        config,
+        server_id,
+        tool,
+        McpToolAnnotationSource::ServerSupplied,
+        &labelled,
+        &rules.mapping,
+        context,
+    )
 }
 
 /// The mapping a call of an MCP tool is labelled from: the rules', or a
@@ -80,18 +90,29 @@ pub async fn mcp_tool_call_mapping(
 /// the cross-check agrees with it, with the IDs it names resolved from earlier
 /// results in the chat, stored with the call's parts. `approval_argument` is
 /// the tool's consent argument, which the label leaves out; the server's
-/// configured one is a consent flag on any tool.
+/// configured one is a consent flag on any tool. `destructive_hint_source`
+/// says who set the tool's destructive hint.
+#[allow(clippy::too_many_arguments)]
 pub fn mcp_tool_call_display_from(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
+    destructive_hint_source: McpToolAnnotationSource,
     arguments: &serde_json::Value,
     approval_argument: Option<&str>,
     mapping: &label::ToolCallLabelMapping,
     context: &label::ToolResultContext,
 ) -> ToolDisplayMetadata {
     let labelled = LabelledArguments::new(config, server_id, arguments, approval_argument);
-    labelled_display(config, server_id, tool, &labelled, mapping, context)
+    labelled_display(
+        config,
+        server_id,
+        tool,
+        destructive_hint_source,
+        &labelled,
+        mapping,
+        context,
+    )
 }
 
 /// A call's arguments as its label reads them, and the consent argument the
@@ -165,6 +186,7 @@ fn labelled_display(
     config: &McpRuntimeConfig,
     server_id: &str,
     tool: &rmcp::model::Tool,
+    destructive_hint_source: McpToolAnnotationSource,
     labelled: &LabelledArguments<'_>,
     mapping: &label::ToolCallLabelMapping,
     context: &label::ToolResultContext,
@@ -195,10 +217,7 @@ fn labelled_display(
                 .mcp_servers
                 .get(server_id)
                 .map(|server| &server.glossary),
-            destructive_by_operator:
-                crate::services::mcp_tool_annotations::destructive_hint_set_by_operator(
-                    config, server_id, &tool.name,
-                ),
+            destructive_hint_source,
         };
         if let Some((change, hidden)) =
             label::change::guarded_describe(|| label::change::describe(&label, facts))
@@ -432,18 +451,23 @@ mod tests {
     fn a_server_glossary_and_who_marked_the_tool_destructive_reach_the_card() {
         let config: McpRuntimeConfig = serde_json::from_value(serde_json::json!({
             "mcp_servers": {
-                "crm": {
+                "records": {
                     "transport_type": "streamable_http",
                     "url": "http://localhost/mcp",
                     "glossary": {
-                        "field_names": {"prioritycode": "Priority"},
-                        "choice_labels": {"prioritycode": {"2": "High"}},
+                        "field_names": {"prio": "Priority"},
+                        "choice_labels": {"prio": {"2": "High"}},
                     },
                     "tools": {
                         "create_record": {
                             "override_tool_annotations": {"destructive_hint": true},
                         },
                     },
+                },
+                "plain": {
+                    "transport_type": "streamable_http",
+                    "url": "http://localhost/mcp",
+                    "default_tool_annotations": {"destructive_hint": true},
                 },
             }
         }))
@@ -456,19 +480,36 @@ mod tests {
             None,
             None,
         ));
-        let arguments =
-            serde_json::json!({"tablename": "t", "item": {"name": "n", "prioritycode": 2}});
-        let change =
-            mcp_tool_call_display(&config, "crm", &tool, &arguments, None, &Default::default())
-                .label
-                .and_then(|label| label.change)
-                .expect("a create has a change description");
+        let arguments = serde_json::json!({"tablename": "t", "item": {"name": "n", "prio": 2}});
+        let change_on = |server_id: &str| {
+            let resolved = crate::services::mcp_tool_annotations::resolve_tool_annotations(
+                tool.clone(),
+                &config.mcp_servers[server_id],
+                &config.mcp_servers_global.default_tool_annotations,
+                &config.mcp_servers_global.override_tool_annotations,
+            );
+            let mapping = label::guarded_rules(&resolved.tool, &arguments, None).mapping;
+            mcp_tool_call_display_from(
+                &config,
+                server_id,
+                &resolved.tool,
+                resolved.sources.destructive_hint,
+                &arguments,
+                None,
+                &mapping,
+                &Default::default(),
+            )
+            .label
+            .and_then(|label| label.change)
+            .expect("a create has a change description")
+        };
+        let change = change_on("records");
         let priority = change
             .effects
             .iter()
-            .find(|effect| effect.raw_name == "prioritycode")
+            .find(|effect| effect.raw_name == "prio")
             .expect("the field is on the card");
-        assert_eq!(priority.name, "Priority (prioritycode)");
+        assert_eq!(priority.name, "Priority (prio)");
         assert_eq!(
             priority.values[0]
                 .meaning
@@ -479,6 +520,11 @@ mod tests {
         assert_eq!(
             change.notes,
             [crate::models::message::ToolCallChangeNote::OperatorMarkedDestructive]
+        );
+        // The tool declared the hint, so the operator's default never applied.
+        assert_eq!(
+            change_on("plain").notes,
+            [crate::models::message::ToolCallChangeNote::MarkedDestructive]
         );
     }
 
@@ -910,6 +956,7 @@ mod tests {
             &config,
             "dv",
             &tool,
+            McpToolAnnotationSource::ServerSupplied,
             &call,
             approval_argument,
             &mapping,

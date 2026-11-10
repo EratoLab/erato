@@ -1,6 +1,6 @@
 //! Resolve operator hints before approval, write filtering, or enumeration.
 
-use crate::config::{McpRuntimeConfig, McpServerConfig, McpToolAnnotationsConfig};
+use crate::config::{McpServerConfig, McpToolAnnotationsConfig};
 use rmcp::model::{Tool, ToolAnnotations};
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -18,6 +18,25 @@ pub enum McpToolAnnotationSource {
     GlobalDefault,
     #[default]
     ProtocolDefault,
+}
+
+impl McpToolAnnotationSource {
+    /// The operator's override, which wins over what the tool declares.
+    pub fn is_override(self) -> bool {
+        matches!(
+            self,
+            Self::ToolOverride | Self::ServerOverride | Self::GlobalOverride
+        )
+    }
+
+    /// Set by the operator's configuration rather than by the tool's server.
+    pub fn is_operators(self) -> bool {
+        self.is_override()
+            || matches!(
+                self,
+                Self::ToolDefault | Self::ServerDefault | Self::GlobalDefault
+            )
+    }
 }
 
 /// Sources are independent: a tool can inherit each hint from a different scope.
@@ -128,32 +147,6 @@ pub fn resolve_tool_annotations(
     }
 }
 
-/// Whether a destructive hint on this tool is the operator's rather than the
-/// tool's server's: any override that sets one, or a default that says true.
-pub fn destructive_hint_set_by_operator(
-    config: &McpRuntimeConfig,
-    server_id: &str,
-    tool_name: &str,
-) -> bool {
-    let Some(server) = config.mcp_servers.get(server_id) else {
-        return false;
-    };
-    let tool = server.tools.get(tool_name);
-    let global = &config.mcp_servers_global;
-    let overrides = [
-        tool.map(|tool| tool.override_tool_annotations.destructive_hint),
-        Some(server.override_tool_annotations.destructive_hint),
-        Some(global.override_tool_annotations.destructive_hint),
-    ];
-    let defaults = [
-        tool.map(|tool| tool.default_tool_annotations.destructive_hint),
-        Some(server.default_tool_annotations.destructive_hint),
-        Some(global.default_tool_annotations.destructive_hint),
-    ];
-    overrides.iter().flatten().any(Option::is_some)
-        || defaults.iter().flatten().any(|hint| *hint == Some(true))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,30 +191,42 @@ mod tests {
     }
 
     #[test]
-    fn only_a_configured_hint_counts_as_the_operators() {
-        let config: McpRuntimeConfig = serde_json::from_value(json!({
-            "mcp_servers": {
-                "marked": {
-                    "transport_type": "streamable_http",
-                    "url": "https://example.com/mcp",
-                    "override_tool_annotations": {"destructive_hint": true},
-                },
-                "untouched": {
-                    "transport_type": "streamable_http",
-                    "url": "https://example.com/mcp",
-                },
-            }
-        }))
-        .unwrap();
-        assert!(destructive_hint_set_by_operator(
-            &config, "marked", "create"
-        ));
-        assert!(!destructive_hint_set_by_operator(
-            &config,
-            "untouched",
-            "create"
-        ));
-        assert!(!destructive_hint_set_by_operator(&config, "gone", "create"));
+    fn a_hint_counts_as_the_operators_only_when_an_operator_layer_won() {
+        let declared = |destructive| {
+            tool(Some(ToolAnnotations::from_raw(
+                None,
+                None,
+                destructive,
+                None,
+                None,
+            )))
+        };
+        let source = |tool, config: &McpServerConfig, global_default: Option<bool>| {
+            let defaults = McpToolAnnotationsConfig {
+                destructive_hint: global_default,
+                ..Default::default()
+            };
+            resolve_tool_annotations(tool, config, &defaults, &Default::default())
+                .sources
+                .destructive_hint
+        };
+        let mut defaults_true = server();
+        defaults_true.default_tool_annotations.destructive_hint = Some(true);
+        let declared_by_tool = source(declared(Some(true)), &defaults_true, Some(true));
+        assert_eq!(declared_by_tool, McpToolAnnotationSource::ServerSupplied);
+        assert!(!declared_by_tool.is_operators());
+
+        let mut server_false = server();
+        server_false.default_tool_annotations.destructive_hint = Some(false);
+        let shadowed = source(declared(None), &server_false, Some(true));
+        assert_eq!(shadowed, McpToolAnnotationSource::ServerDefault);
+        assert!(shadowed.is_operators() && !shadowed.is_override());
+
+        let mut overridden = server();
+        overridden.override_tool_annotations.destructive_hint = Some(true);
+        let forced = source(declared(Some(false)), &overridden, None);
+        assert!(forced.is_operators() && forced.is_override());
+        assert!(!McpToolAnnotationSource::ProtocolDefault.is_operators());
     }
 
     #[test]
