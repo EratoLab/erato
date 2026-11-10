@@ -2075,6 +2075,69 @@ fn a_call_that_names_nothing_inside_the_place_its_name_ends_in_acts_on_that_plac
         let titled = label.items.iter().any(|item| item.title.is_some());
         assert!(!titled, "{name}");
     }
+
+    for name in [
+        "archive_repository",
+        "github_delete_repository",
+        "delete_repos",
+    ] {
+        let label = labelled(
+            &tool(name, "", None),
+            &json!({"owner": "contoso", "repo": "uploader"}),
+            &ToolResultContext::default(),
+        );
+        let title = label.items[0].title.as_ref();
+        assert_eq!(title.unwrap().values[0].path, "/repo", "{name}");
+    }
+}
+
+#[test]
+fn a_name_that_only_starts_like_a_place_or_goes_past_it_never_acts_on_the_place() {
+    let place_paths = ["/repo", "/branch", "/namespace"];
+    for (name, arguments) in [
+        (
+            "clear_reports",
+            json!({"owner": "contoso", "repo": "uploader"}),
+        ),
+        (
+            "delete_report",
+            json!({"owner": "contoso", "repo": "uploader", "report": "weekly-2026-44"}),
+        ),
+        (
+            "update_name",
+            json!({"namespace": "shop", "new_name": "shop-eu"}),
+        ),
+        (
+            "delete_artifacts_by_branch",
+            json!({"owner": "contoso", "repo": "uploader", "branch": "feature-x"}),
+        ),
+        ("delete_pods_by_namespace", json!({"namespace": "shop"})),
+        (
+            "delete_repository_upload",
+            json!({"owner": "contoso", "repo": "uploader", "asset": "build.zip"}),
+        ),
+        (
+            "delete_feature_branch",
+            json!({"repo": "uploader", "branch": "x"}),
+        ),
+        (
+            "set_default_branch",
+            json!({"owner": "contoso", "repo": "uploader", "branch": "main"}),
+        ),
+    ] {
+        let label = labelled(
+            &tool(name, "", None),
+            &arguments,
+            &ToolResultContext::default(),
+        );
+        let named_place = label
+            .items
+            .iter()
+            .filter_map(|item| item.title.as_ref())
+            .flat_map(|title| &title.values)
+            .any(|value| place_paths.contains(&value.path.as_str()));
+        assert!(!named_place, "{name}: {label:#?}");
+    }
 }
 
 #[test]
