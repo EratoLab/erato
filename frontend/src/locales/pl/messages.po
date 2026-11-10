@@ -8740,6 +8740,16 @@ msgstr "Każdy wiersz jest inny."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.added"
+msgstr "{added, plural, one {elementy dodane w # wierszu} few {elementy dodane w # wierszach} many {elementy dodane w # wierszach} other {elementy dodane w # wiersza}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.addedValues"
+msgstr "{samples} dodane {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.allEmptied"
 msgstr "Wyczyszczone {scope}"
 
@@ -8767,6 +8777,16 @@ msgstr "{replaced, plural, one {lista może zostać zastąpiona w # wierszu} few
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "Wiele różnych wartości {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removed"
+msgstr "{removed, plural, one {elementy usunięte w # wierszu} few {elementy usunięte w # wierszach} many {elementy usunięte w # wierszach} other {elementy usunięte w # wiersza}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removedValues"
+msgstr "{samples} usunięte {scope}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8807,6 +8827,11 @@ msgstr "{replacing, plural, one {# wiersz może zastąpić listę} few {# wiersz
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.none"
 msgstr "Żaden wiersz niczego nie usuwa ani nie czyści."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.removing"
+msgstr "{removing, plural, one {# wiersz usuwa elementy z listy} few {# wiersze usuwają elementy z listy} many {# wierszy usuwa elementy z listy} other {# wiersza usuwa elementy z listy}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

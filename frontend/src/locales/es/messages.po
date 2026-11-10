@@ -8740,6 +8740,16 @@ msgstr "Cada fila es diferente."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.added"
+msgstr "{added, plural, one {elementos añadidos en # fila} other {elementos añadidos en # filas}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.addedValues"
+msgstr "{samples} añadido {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.allEmptied"
 msgstr "Vaciado {scope}"
 
@@ -8767,6 +8777,16 @@ msgstr "{replaced, plural, one {lista quizá reemplazada en # fila} other {lista
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "Muchos valores distintos {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removed"
+msgstr "{removed, plural, one {elementos quitados en # fila} other {elementos quitados en # filas}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removedValues"
+msgstr "{samples} quitado {scope}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8807,6 +8827,11 @@ msgstr "{replacing, plural, one {# fila puede reemplazar una lista} other {# fil
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.none"
 msgstr "Ninguna fila elimina ni vacía nada."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.removing"
+msgstr "{removing, plural, one {# fila quita elementos de una lista} other {# filas quitan elementos de una lista}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

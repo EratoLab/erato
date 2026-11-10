@@ -1020,7 +1020,8 @@ export const ToolCallChangeRowDetails = ({
       )}
       {change.batch &&
         (change.batch.rowsEmptying > 0 ||
-          change.batch.rowsReplacingLists > 0) &&
+          change.batch.rowsReplacingLists > 0 ||
+          change.batch.rowsRemovingFromLists > 0) &&
         batchLossLines(
           change.batch,
           listReplaceIsUnknown(change),
@@ -1095,6 +1096,7 @@ export const changeRowHasDetails = (change: GistChange): boolean => {
     (change.batch?.deletions ?? 0) > 0 ||
     (change.batch?.rowsEmptying ?? 0) > 0 ||
     (change.batch?.rowsReplacingLists ?? 0) > 0 ||
+    (change.batch?.rowsRemovingFromLists ?? 0) > 0 ||
     layout.emptied.length > 0 ||
     layout.firstRows.length > 0 ||
     layout.lists.length > 0 ||

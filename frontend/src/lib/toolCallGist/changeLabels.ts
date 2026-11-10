@@ -719,6 +719,18 @@ export const batchLossLines = (
           }),
     );
   }
+  if (batch.rowsRemovingFromLists > 0) {
+    const removing = batch.rowsRemovingFromLists;
+    lines.push(
+      t({
+        id: "toolChange.batch.losses.removing",
+        message: plural(removing, {
+          one: "# row removes items from a list",
+          other: "# rows remove items from a list",
+        }),
+      }),
+    );
+  }
   if (
     lines.length === 0 &&
     batch.deletions === 0 &&
@@ -741,7 +753,7 @@ export const batchFieldLine = (
   total: number,
   listsMaybeReplaced = false,
 ): string => {
-  const { emptied } = field;
+  const { emptied, listsRemoved: removed, listsAdded: added } = field;
   const replaced = field.listsReplaced;
   const scopeOf = (rows: number) =>
     rows === total
@@ -760,8 +772,10 @@ export const batchFieldLine = (
       message: `Emptied ${scope}`,
     });
   }
-  const written = field.rows - emptied - replaced;
+  const written = field.rows - emptied - replaced - removed - added;
   const samples = field.samples.map(plainChangeValue).join(", ");
+  // The values are what is removed or added only when no row writes one.
+  const named = written === 0 && emptied === 0 && samples.length > 0;
   const distinct = field.distinct;
   const parts: string[] = [];
   if (written > 0) {
@@ -802,6 +816,40 @@ export const batchFieldLine = (
           other: "emptied on # rows",
         }),
       }),
+    );
+  }
+  if (removed > 0) {
+    const scope = scopeOf(removed);
+    parts.push(
+      named && added === 0 && replaced === 0
+        ? t({
+            id: "toolChange.batch.field.removedValues",
+            message: `${samples} removed ${scope}`,
+          })
+        : t({
+            id: "toolChange.batch.field.removed",
+            message: plural(removed, {
+              one: "items removed on # row",
+              other: "items removed on # rows",
+            }),
+          }),
+    );
+  }
+  if (added > 0) {
+    const scope = scopeOf(added);
+    parts.push(
+      named && removed === 0 && replaced === 0
+        ? t({
+            id: "toolChange.batch.field.addedValues",
+            message: `${samples} added ${scope}`,
+          })
+        : t({
+            id: "toolChange.batch.field.added",
+            message: plural(added, {
+              one: "items added on # row",
+              other: "items added on # rows",
+            }),
+          }),
     );
   }
   if (replaced > 0) {

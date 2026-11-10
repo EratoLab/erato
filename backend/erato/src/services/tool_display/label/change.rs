@@ -1327,13 +1327,18 @@ impl<'a> Walk<'a> {
     /// that is a verb that removes or adds, as in `removeLabels`, then the
     /// tool's description.
     fn list_claim(&mut self, member: &str, path: &str) -> ListClaim {
-        let own = property_at(&self.facts.tool.input_schema, path)
-            .and_then(|property| property.get("description")?.as_str())
+        let description = property_at(&self.facts.tool.input_schema, path)
+            .and_then(|property| property.get("description")?.as_str());
+        let own = description
             .map(|text| ToolText::read(Some(text)))
             .unwrap_or_default();
-        let named = member_list_verb(member);
-        let adds = own.adds_to_list || own.holds_added;
-        let claim = match (own.replaces_list, adds, own.holds_removed) {
+        let holds = description.map_or(Holds::Unsaid, |text| holds_of(text, member));
+        // The name only speaks where the description says nothing of it.
+        let named = (holds == Holds::Unsaid)
+            .then(|| member_list_verb(member))
+            .flatten();
+        let adds = own.adds_to_list || holds == Holds::Added;
+        let claim = match (own.replaces_list, adds, holds == Holds::Removed) {
             (true, false, false) => ListClaim::Replaces,
             (false, true, false) => ListClaim::OwnAdds,
             (false, false, true) => ListClaim::Removes,
@@ -1583,6 +1588,7 @@ impl<'a> Walk<'a> {
         let mut order: HashMap<&'a str, usize> = HashMap::new();
         let mut rows_emptying = 0u32;
         let mut rows_replacing_lists = 0u32;
+        let mut rows_removing_from_lists = 0u32;
         let mut deletions = 0u32;
         let mut deleted: Vec<usize> = Vec::new();
         for (index, row) in entries.iter().take(read).enumerate() {
@@ -1606,6 +1612,7 @@ impl<'a> Walk<'a> {
             let shared = shared_prefix(members);
             let mut empties = false;
             let mut replaces = false;
+            let mut removes = false;
             let mut shape: Vec<(&str, u64)> = Vec::new();
             for (member, value) in members {
                 if self.nodes == 0 {
@@ -1635,15 +1642,19 @@ impl<'a> Walk<'a> {
                         empties = true;
                         tallies[at].emptied += 1;
                     }
-                    Unwrapped::List(_)
-                        if update_like
-                            && !matches!(
-                                self.list_claim(member, &value_path),
-                                ListClaim::Adds | ListClaim::OwnAdds
-                            ) =>
-                    {
-                        replaces = true;
-                        tallies[at].lists += 1;
+                    Unwrapped::List(_) if update_like => {
+                        match self.list_claim(member, &value_path) {
+                            ListClaim::Replaces | ListClaim::Unknown => {
+                                replaces = true;
+                                tallies[at].lists += 1;
+                            }
+                            ListClaim::Removes => {
+                                removes = true;
+                                tallies[at].removed += 1;
+                            }
+                            ListClaim::OwnAdds => tallies[at].added += 1,
+                            ListClaim::Adds => {}
+                        }
                     }
                     // What such a value holds was not looked at.
                     Unwrapped::Other => read_all = false,
@@ -1663,6 +1674,7 @@ impl<'a> Walk<'a> {
             }
             rows_emptying += u32::from(empties);
             rows_replacing_lists += u32::from(replaces);
+            rows_removing_from_lists += u32::from(removes);
             // A row's own operation is part of what it does.
             let operation = action.map_or(u8::MAX, action_rank);
             shape.push(("", u64::from(operation)));
@@ -1721,6 +1733,7 @@ impl<'a> Walk<'a> {
             deletions,
             rows_emptying,
             rows_replacing_lists,
+            rows_removing_from_lists,
             operations: operations
                 .into_values()
                 .map(|(action, count)| ToolCallBatchOperation { action, count })
@@ -1820,12 +1833,20 @@ impl<'a> Walk<'a> {
             .iter()
             .filter_map(|(value, path)| self.shown(value, path))
             .collect();
+        // "Labels: Bug removed on all 2 rows", never "Remove labels: …".
+        let verb = member_list_verb(tally.raw_name);
+        let says = (tally.removed > 0 && verb == Some(ToolCallAction::Delete))
+            || (tally.added > 0 && verb == Some(ToolCallAction::Create));
+        let mut name = tally.name.clone();
+        self.drop_first_word(tally.raw_name, &mut name, says);
         ToolCallBatchField {
-            name: self.display_name(&tally.name),
+            name: self.display_name(&name),
             raw_name: self.raw_name(tally.raw_name),
             rows: tally.rows,
             emptied: tally.emptied,
             lists_replaced: tally.lists,
+            lists_removed: tally.removed,
+            lists_added: tally.added,
             distinct: u32::try_from(tally.distinct.len()).unwrap_or(u32::MAX),
             distinct_capped: tally.distinct.len() >= MAX_DISTINCT_TRACKED,
             samples,
@@ -2163,6 +2184,8 @@ struct FieldTally<'a> {
     rows: u32,
     emptied: u32,
     lists: u32,
+    removed: u32,
+    added: u32,
     distinct: HashSet<u64>,
     first: Vec<(&'a Value, String)>,
 }
@@ -2175,6 +2198,8 @@ impl<'a> FieldTally<'a> {
             rows: 0,
             emptied: 0,
             lists: 0,
+            removed: 0,
+            added: 0,
             distinct: HashSet::new(),
             first: Vec::new(),
         }
@@ -2207,15 +2232,21 @@ fn value_hash(value: &Value) -> u64 {
 
 /// What a list member's own name says it does with the items it holds:
 /// `removeLabels` removes and `addLabels` adds, when its first word is a
-/// verb that removes or adds. `new_labels` holds the new list.
+/// verb that only ever removes or adds. Words that are nouns as often, as in
+/// `post_ids`, `duplicate_ids` or `cancel_reasons`, say nothing, and
+/// `new_labels` holds the new list.
 fn member_list_verb(member: &str) -> Option<ToolCallAction> {
+    const ADDS: [&str; 2] = ["add", "append"];
+    const REMOVES: [&str; 3] = ["remove", "delete", "unassign"];
     let words = name_words(member);
     let first = words.first().filter(|_| words.len() > 1)?;
-    if first == "new" {
-        return None;
+    if ADDS.contains(&first.as_str()) {
+        Some(ToolCallAction::Create)
+    } else if REMOVES.contains(&first.as_str()) {
+        Some(ToolCallAction::Delete)
+    } else {
+        None
     }
-    rules::action_of(first)
-        .filter(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Create))
 }
 
 /// Where a place member sits in what the card says, broadest first.
@@ -2811,28 +2842,165 @@ fn claims(lower: &str, phrases: &[&str]) -> bool {
 }
 
 /// What a list member's description says when it holds what the call adds
-/// or removes, as "Label IDs to add" or "The labels to remove".
-const ADDS_PHRASES: [&str; 3] = ["to add", "to be added", "will be added"];
-const REMOVES_PHRASES: [&str; 6] = [
-    "to remove",
-    "to be removed",
-    "will be removed",
-    "to delete",
-    "to be deleted",
-    "to unassign",
+/// or removes, as "Label IDs to add" or "The labels to remove", in words.
+const ADDS_PHRASES: [&[&str]; 3] = [
+    &["to", "add"],
+    &["to", "be", "added"],
+    &["will", "be", "added"],
 ];
+const REMOVES_PHRASES: [&[&str]; 6] = [
+    &["to", "remove"],
+    &["to", "be", "removed"],
+    &["will", "be", "removed"],
+    &["to", "delete"],
+    &["to", "be", "deleted"],
+    &["to", "unassign"],
+];
+/// A sentence with one of these sets a condition, negates, or speaks of the
+/// whole list, as "Pass an empty array to remove all labels" or "Labels not
+/// in this list will be removed" do: it says nothing of what the member holds.
+const NOT_WHAT_IT_HOLDS: [&str; 26] = [
+    "if",
+    "when",
+    "unless",
+    "not",
+    "never",
+    "no",
+    "t",
+    "without",
+    "empty",
+    "all",
+    "full",
+    "every",
+    "everyone",
+    "everybody",
+    "everything",
+    "entire",
+    "whole",
+    "existing",
+    "current",
+    "currently",
+    "rest",
+    "others",
+    "replace",
+    "replaces",
+    "replaced",
+    "overwrites",
+];
+const ADD_WORDS: [&str; 6] = ["add", "adds", "added", "adding", "append", "appended"];
+const REMOVE_WORDS: [&str; 9] = [
+    "remove",
+    "removes",
+    "removed",
+    "removing",
+    "delete",
+    "deleted",
+    "unassign",
+    "unassigned",
+    "unassigns",
+];
+/// Nouns that name the entries of a list by what identifies them, as in
+/// "Label IDs to add": the noun before them names what the list holds.
+const ENTRY_NOUNS: [&str; 6] = ["id", "ids", "identifier", "identifiers", "key", "keys"];
 
-/// A claim made in a sentence that sets no condition: "Labels to remove
-/// when append is false" says nothing about a call that leaves `append` out.
-fn unconditional_claim(lower: &str, phrases: &[&str]) -> bool {
-    const CONDITIONS: [&str; 4] = ["if", "when", "unless", "only when"];
-    lower.split(['.', ';', '\n']).any(|sentence| {
+/// What a list member's own description says of the items it holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Holds {
+    Added,
+    Removed,
+    /// It speaks of adding or removing, but not as what the member holds.
+    Unclear,
+    Unsaid,
+}
+
+/// Whether a list member's own description says it holds what the call adds
+/// or removes: a phrase such as "to remove" right after the member's own
+/// noun, as in "The identifiers of the issue labels to remove" for
+/// `removeLabels` or "Label IDs to add to the issue" for `labelIds`, or one
+/// that ends a sentence that is only a noun phrase, as "The labels to
+/// remove". A sentence that sets a condition, negates, speaks of the whole
+/// list or both adds and removes never says it.
+fn holds_of(description: &str, member: &str) -> Holds {
+    let lower = text_prefix(description, MAX_DESCRIPTION_BYTES).to_lowercase();
+    let nouns = member_nouns(member);
+    let (mut added, mut removed, mut mentioned) = (false, false, false);
+    for sentence in lower.split(['.', ';', '\n']) {
         let words: Vec<&str> = sentence
             .split(|c: char| !c.is_alphanumeric())
             .filter(|word| !word.is_empty())
             .collect();
-        claims(sentence, phrases) && !words.iter().any(|word| CONDITIONS.contains(word))
-    })
+        let adds = phrase_starts(&words, &ADDS_PHRASES);
+        let removes = phrase_starts(&words, &REMOVES_PHRASES);
+        if adds.is_empty() && removes.is_empty() {
+            continue;
+        }
+        mentioned = true;
+        let both = words.iter().any(|word| ADD_WORDS.contains(word))
+            && words.iter().any(|word| REMOVE_WORDS.contains(word));
+        if both || words.iter().any(|word| NOT_WHAT_IT_HOLDS.contains(word)) {
+            continue;
+        }
+        let holds = |starts: &[(usize, usize)]| {
+            starts.iter().any(|&(at, len)| {
+                let before = at.checked_sub(1).map(|index| words[index]);
+                let noun = |word: Option<&str>| {
+                    word.is_some_and(|word| nouns.iter().any(|noun| noun == word))
+                };
+                let after_noun = noun(before)
+                    || (before.is_some_and(|word| ENTRY_NOUNS.contains(&word))
+                        && noun(at.checked_sub(2).map(|index| words[index])));
+                let whole = at + len == words.len()
+                    && words
+                        .first()
+                        .is_some_and(|first| *first == "the" || noun(Some(first)));
+                after_noun || whole
+            })
+        };
+        added |= holds(&adds);
+        removed |= holds(&removes);
+    }
+    match (added, removed) {
+        (true, false) => Holds::Added,
+        (false, true) => Holds::Removed,
+        _ if mentioned => Holds::Unclear,
+        _ => Holds::Unsaid,
+    }
+}
+
+/// Where each of `phrases` starts in `words`, with its length in words.
+fn phrase_starts(words: &[&str], phrases: &[&[&str]]) -> Vec<(usize, usize)> {
+    (0..words.len())
+        .flat_map(|at| {
+            phrases
+                .iter()
+                .filter(move |phrase| words[at..].starts_with(phrase))
+                .map(move |phrase| (at, phrase.len()))
+        })
+        .collect()
+}
+
+/// The nouns of a list member's name, in the singular and the plural, as
+/// `labels`, `label` and `ids`, `id` for `removeLabelIds`: its words but a
+/// leading verb or `new`.
+fn member_nouns(member: &str) -> Vec<String> {
+    let mut words = name_words(member);
+    if words.len() > 1 && (words[0] == "new" || rules::action_of(&words[0]).is_some()) {
+        words.remove(0);
+    }
+    let mut nouns = Vec::new();
+    for word in words {
+        if let Some(stem) = word.strip_suffix("ies") {
+            nouns.push(format!("{stem}y"));
+        } else if let Some(stem) = word.strip_suffix('s') {
+            nouns.push(stem.to_string());
+        } else if let Some(stem) = word.strip_suffix('y') {
+            nouns.push(format!("{stem}ies"));
+        } else {
+            nouns.push(format!("{word}s"));
+        }
+        nouns.push(word);
+    }
+    nouns
 }
 
 /// What a tool's own description says about what it does, as closed facts.
@@ -2841,11 +3009,6 @@ fn unconditional_claim(lower: &str, phrases: &[&str]) -> bool {
 struct ToolText {
     replaces_list: bool,
     adds_to_list: bool,
-    /// What only a list member's own description can say: it holds what the
-    /// call adds, or what it removes. A tool's "to add a comment" says
-    /// nothing about its lists.
-    holds_added: bool,
-    holds_removed: bool,
     ignored_if_missing: bool,
     permanent: bool,
     restorable: bool,
@@ -2869,8 +3032,6 @@ impl ToolText {
                 ],
             ),
             adds_to_list: claims(&lower, &["append-only", "only adds"]),
-            holds_added: unconditional_claim(&lower, &ADDS_PHRASES),
-            holds_removed: unconditional_claim(&lower, &REMOVES_PHRASES),
             ignored_if_missing: has("ignored if") || has("ignores this") || has("silently ignored"),
             permanent: (has("permanently") && !has("not permanently"))
                 || has("cannot be undone")

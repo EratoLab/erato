@@ -13489,6 +13489,12 @@
             "format": "int32",
             "minimum": 0
           },
+          "rows_removing_from_lists": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows that remove items from a list, on the tool's word.",
+            "minimum": 0
+          },
           "rows_replacing_lists": {
             "type": "integer",
             "format": "int32",
@@ -13535,6 +13541,18 @@
           "emptied": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          },
+          "lists_added": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items added.",
+            "minimum": 0
+          },
+          "lists_removed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items removed.",
             "minimum": 0
           },
           "lists_replaced": {

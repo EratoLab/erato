@@ -8740,6 +8740,16 @@ msgstr "Jede Zeile ist anders."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.added"
+msgstr "{added, plural, one {Einträge hinzugefügt in # Zeile} other {Einträge hinzugefügt in # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.addedValues"
+msgstr "{samples} hinzugefügt {scope}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.allEmptied"
 msgstr "Geleert {scope}"
 
@@ -8767,6 +8777,16 @@ msgstr "{replaced, plural, one {Liste möglicherweise ersetzt in # Zeile} other 
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "Viele verschiedene Werte {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removed"
+msgstr "{removed, plural, one {Einträge entfernt in # Zeile} other {Einträge entfernt in # Zeilen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removedValues"
+msgstr "{samples} entfernt {scope}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8807,6 +8827,11 @@ msgstr "{replacing, plural, one {# Zeile ersetzt möglicherweise eine Liste} oth
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.none"
 msgstr "Keine Zeile löscht oder leert etwas."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.removing"
+msgstr "{removing, plural, one {# Zeile entfernt Einträge aus einer Liste} other {# Zeilen entfernen Einträge aus einer Liste}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

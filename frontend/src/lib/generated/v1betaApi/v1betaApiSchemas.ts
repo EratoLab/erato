@@ -4538,6 +4538,13 @@ export type ToolCallBatch = {
    */
   rows_emptying?: number;
   /**
+   * Rows that remove items from a list, on the tool's word.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  rows_removing_from_lists?: number;
+  /**
    * @format int32
    * @minimum 0
    */
@@ -4577,6 +4584,20 @@ export type ToolCallBatchField = {
    * @minimum 0
    */
   emptied?: number;
+  /**
+   * Rows whose list the tool says has its items added.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  lists_added?: number;
+  /**
+   * Rows whose list the tool says has its items removed.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  lists_removed?: number;
   /**
    * @format int32
    * @minimum 0

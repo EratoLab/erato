@@ -117,6 +117,10 @@ export interface ChangeBatchField {
   rows: number;
   emptied: number;
   listsReplaced: number;
+  /** Rows whose list the tool says has items removed. */
+  listsRemoved: number;
+  /** Rows whose list the tool says has items added. */
+  listsAdded: number;
   distinct: number;
   distinctCapped: boolean;
   samples: ChangeValue[];
@@ -131,6 +135,8 @@ export interface ChangeBatch {
   deletions: number;
   rowsEmptying: number;
   rowsReplacingLists: number;
+  /** Rows that remove items from a list, on the tool's word. */
+  rowsRemovingFromLists: number;
   operations: { action: ToolCallAction; count: number }[];
   fields: ChangeBatchField[];
   fieldsOmitted: number;
@@ -428,6 +434,7 @@ class Reader {
       deletions: countOf(raw.deletions),
       rowsEmptying: countOf(raw.rows_emptying),
       rowsReplacingLists: countOf(raw.rows_replacing_lists),
+      rowsRemovingFromLists: countOf(raw.rows_removing_from_lists),
       operations: listOf(raw.operations, MAX_GROUPS).flatMap((operation) =>
         isRecord(operation) && isOneOf(ROW_ACTIONS, operation.action)
           ? [{ action: operation.action, count: countOf(operation.count) }]
@@ -442,6 +449,8 @@ class Reader {
                 rows: countOf(field.rows),
                 emptied: countOf(field.emptied),
                 listsReplaced: countOf(field.lists_replaced),
+                listsRemoved: countOf(field.lists_removed),
+                listsAdded: countOf(field.lists_added),
                 distinct: countOf(field.distinct),
                 distinctCapped: field.distinct_capped === true,
                 samples: this.values(field.samples, MAX_FOUND),

@@ -265,6 +265,7 @@ describe("the words of a change", () => {
       deletions: 0,
       rowsEmptying: 0,
       rowsReplacingLists: 0,
+      rowsRemovingFromLists: 0,
       operations: [],
       fields: [],
       fieldsOmitted: 0,
@@ -276,6 +277,8 @@ describe("the words of a change", () => {
       rows: 200,
       emptied: 0,
       listsReplaced: 0,
+      listsRemoved: 0,
+      listsAdded: 0,
       distinct: 1,
       distinctCapped: false,
       samples: [{ text: "Closed", truncated: false, machineId: false }],
@@ -300,6 +303,13 @@ describe("the words of a change", () => {
     expect(
       batchFieldLine({ ...field, rows: 5, listsReplaced: 5, samples: [] }, 5),
     ).toBe("list replaced on 5 rows");
+    // Items the tool says a row removes or adds are no list replaced.
+    expect(
+      batchFieldLine({ ...field, rows: 2, listsRemoved: 2, distinct: 1 }, 2),
+    ).toBe("Closed removed on all 2 rows");
+    expect(
+      batchFieldLine({ ...field, rows: 3, listsAdded: 2, distinct: 1 }, 3),
+    ).toBe("Set to Closed on 1 of 3 rows · items added on 2 rows");
     expect(
       batchOperationsLine({
         ...batch,
@@ -328,6 +338,9 @@ describe("the words of a change", () => {
     expect(
       batchLossLines({ ...batch, rowsEmptying: 3, rowsReplacingLists: 1 }),
     ).toEqual(["3 rows empty a field", "1 row replaces a list"]);
+    expect(batchLossLines({ ...batch, rowsRemovingFromLists: 2 })).toEqual([
+      "2 rows remove items from a list",
+    ]);
   });
 });
 

@@ -957,6 +957,9 @@ pub struct ToolCallBatch {
     pub rows_emptying: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub rows_replacing_lists: u32,
+    /// Rows that remove items from a list, on the tool's word.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rows_removing_from_lists: u32,
     /// Rows per operation, when rows name their own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<ToolCallBatchOperation>,
@@ -981,6 +984,12 @@ pub struct ToolCallBatchField {
     pub emptied: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub lists_replaced: u32,
+    /// Rows whose list the tool says has its items removed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lists_removed: u32,
+    /// Rows whose list the tool says has its items added.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lists_added: u32,
     /// How many different values the rows write.
     pub distinct: u32,
     /// `distinct` stopped counting at its cap.

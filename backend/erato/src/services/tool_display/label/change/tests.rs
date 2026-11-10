@@ -2377,7 +2377,7 @@ fn a_list_that_removes_or_adds_reads_as_removed_or_added_items() {
     // With no description, only a first word that is a known verb counts.
     for (member, kind) in [
         ("removeLabels", ToolCallEffectKind::ListRemoved),
-        ("clear_tags", ToolCallEffectKind::ListRemoved),
+        ("clear_tags", ToolCallEffectKind::ListReplaced),
         ("addAssignees", ToolCallEffectKind::ListAdded),
         ("append_items", ToolCallEffectKind::ListAdded),
         ("new_labels", ToolCallEffectKind::ListReplaced),
@@ -2389,6 +2389,179 @@ fn a_list_that_removes_or_adds_reads_as_removed_or_added_items() {
         let change = change_of("update_issue", arguments);
         assert_eq!(effect(&change, member).effect, kind, "{member}");
     }
+}
+
+#[test]
+fn a_list_described_as_its_whole_set_never_reads_as_only_removed_or_added() {
+    for (member, description) in [
+        (
+            "labels",
+            "Labels to set on the issue. Pass an empty array to remove all labels.",
+        ),
+        (
+            "labels",
+            "The full list of labels. Labels not in this list will be removed.",
+        ),
+        (
+            "assigneeIds",
+            "User IDs to assign. Pass [] to unassign everyone.",
+        ),
+        ("labels", "Labels to add or remove."),
+        ("tags", "Tags to add or remove from the page"),
+        ("removeLabels", "Labels to add or remove."),
+    ] {
+        let mut properties = serde_json::Map::new();
+        properties.insert("id".into(), json!({"type": "string"}));
+        properties.insert(
+            member.into(),
+            json!({"type": "array", "items": {"type": "string"}, "description": description}),
+        );
+        let update = tool_with_schema(
+            "update_issue",
+            "",
+            json!({"type": "object", "properties": properties}),
+        );
+        let mut arguments = json!({"id": "ENG-1"});
+        arguments[member] = json!(["urgent"]);
+        let change = change_with(&update, arguments, &ToolResultContext::default()).0;
+        assert_eq!(
+            effect(&change, member).effect,
+            ToolCallEffectKind::ListReplaced,
+            "{description}"
+        );
+        assert_eq!(
+            change.notes,
+            [ToolCallChangeNote::ListReplaceUnknown],
+            "{description}"
+        );
+    }
+
+    // What the member holds, said of the member's own noun or as the whole
+    // description, still counts.
+    for (member, description, kind) in [
+        (
+            "labels",
+            "The labels to remove",
+            ToolCallEffectKind::ListRemoved,
+        ),
+        ("labels", "Label IDs to add", ToolCallEffectKind::ListAdded),
+        (
+            "user_ids",
+            "IDs of the users to unassign from the issue",
+            ToolCallEffectKind::ListRemoved,
+        ),
+    ] {
+        let mut properties = serde_json::Map::new();
+        properties.insert(
+            member.into(),
+            json!({"type": "array", "items": {"type": "string"}, "description": description}),
+        );
+        let update = tool_with_schema(
+            "update_issue",
+            "",
+            json!({"type": "object", "properties": properties}),
+        );
+        let mut arguments = json!({"id": "ENG-1"});
+        arguments[member] = json!(["urgent"]);
+        let change = change_with(&update, arguments, &ToolResultContext::default()).0;
+        assert_eq!(effect(&change, member).effect, kind, "{description}");
+    }
+}
+
+#[test]
+fn a_list_named_for_a_noun_that_looks_like_a_verb_is_no_removal_or_addition() {
+    for member in [
+        "post_ids",
+        "duplicate_ids",
+        "cancel_reasons",
+        "insert_points",
+        "fork_ids",
+        "drop_zones",
+    ] {
+        let mut arguments = json!({"id": "c1"});
+        arguments[member] = json!(["12", "15"]);
+        let change = change_of("update_category", arguments);
+        assert_eq!(
+            effect(&change, member).effect,
+            ToolCallEffectKind::ListReplaced,
+            "{member}"
+        );
+        assert_eq!(
+            change.notes,
+            [ToolCallChangeNote::ListReplaceUnknown],
+            "{member}"
+        );
+    }
+    for (member, kind) in [
+        ("add_ids", ToolCallEffectKind::ListAdded),
+        ("appendItems", ToolCallEffectKind::ListAdded),
+        ("remove_ids", ToolCallEffectKind::ListRemoved),
+        ("deleteTags", ToolCallEffectKind::ListRemoved),
+        ("unassignUsers", ToolCallEffectKind::ListRemoved),
+    ] {
+        let mut arguments = json!({"id": "c1"});
+        arguments[member] = json!(["12"]);
+        assert_eq!(
+            effect(&change_of("update_category", arguments), member).effect,
+            kind,
+            "{member}"
+        );
+    }
+}
+
+#[test]
+fn batch_rows_that_remove_items_say_so_and_never_that_they_replace_a_list() {
+    let (change, _) = change_with(
+        &tool("update_issues", "", None),
+        json!({"issues": [
+            {"id": "ENG-1", "removeLabels": ["Bug"]},
+            {"id": "ENG-2", "removeLabels": ["Bug"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    let batch = change.batch.as_ref().unwrap();
+    assert_eq!(batch.rows_replacing_lists, 0);
+    assert_eq!(batch.rows_removing_from_lists, 2);
+    let field = &batch.fields[0];
+    assert_eq!(field.name, "Labels");
+    assert_eq!(field.lists_replaced, 0);
+    assert_eq!(field.lists_removed, 2);
+    assert!(
+        !change
+            .notes
+            .contains(&ToolCallChangeNote::ListReplaceUnknown),
+        "{:?}",
+        change.notes
+    );
+
+    let (added, _) = change_with(
+        &tool("update_issues", "", None),
+        json!({"issues": [
+            {"id": "ENG-1", "addLabels": ["Bug"]},
+            {"id": "ENG-2", "addLabels": ["Bug"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    let batch = added.batch.as_ref().unwrap();
+    assert_eq!(batch.rows_replacing_lists, 0);
+    assert_eq!(batch.rows_removing_from_lists, 0);
+    assert_eq!(batch.fields[0].lists_added, 2);
+
+    // A list nobody says anything about still may replace.
+    let (unknown, _) = change_with(
+        &tool("update_issues", "", None),
+        json!({"issues": [
+            {"id": "ENG-1", "labels": ["Bug"]},
+            {"id": "ENG-2", "labels": ["Bug"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(unknown.batch.as_ref().unwrap().rows_replacing_lists, 2);
+    assert!(
+        unknown
+            .notes
+            .contains(&ToolCallChangeNote::ListReplaceUnknown)
+    );
 }
 
 #[test]
