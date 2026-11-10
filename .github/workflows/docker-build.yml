@@ -579,6 +579,10 @@ jobs:
         with:
           cache-all-crates: "true"
           workspaces: "./backend -> target"
+      - name: "Refresh APT package lists"
+        # The cache action resolves versions with apt-cache, which finds
+        # nothing on a runner without fresh package lists.
+        run: sudo apt-get update
       - name: "Cache APT packages"
         uses: awalsh128/cache-apt-pkgs-action@v1.6.0
         with:
@@ -769,6 +773,11 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
             ${{ runner.os }}-playwright-
+
+      - name: "Refresh APT package lists"
+        # The cache action resolves versions with apt-cache, which finds
+        # nothing on a runner without fresh package lists.
+        run: sudo apt-get update
 
       # Derived from https://github.com/microsoft/playwright/blob/3b5fe8705d1ded55a6b0aa6381008c636e496f54/packages/playwright-core/src/server/registry/nativeDeps.ts
       - name: Cache APT packages
