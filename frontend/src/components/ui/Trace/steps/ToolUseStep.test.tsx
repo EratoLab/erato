@@ -806,7 +806,7 @@ describe("ToolUseStep gist row", () => {
     labelled(
       {
         output: {
-          error: `Principal user (Id=${id}, type=8, AADObjectId='${id}', businessUnitId=${id}), is missing prvCreateAccount privilege on the record.`,
+          error: `User (Id=${id}, type=8, ObjectId='${id}', unitId=${id}), lacks the createRecord permission on the record.`,
         } as unknown as ToolUse["output"],
       },
       "error",
@@ -819,7 +819,7 @@ describe("ToolUseStep gist row", () => {
     expect(failure.textContent).not.toContain(id);
     const message = screen.getByTestId("tool-failure-message");
     expect(message).toHaveTextContent(
-      "Principal user (Id=an ID (see Technical details), type=8,",
+      "User (Id=an ID (see Technical details), type=8,",
     );
     expect(message.className).not.toContain("error");
     const more = within(failure).getByRole("button", {

@@ -64,12 +64,12 @@ describe("maskMachineIds", () => {
   it("masks ids inside a server's message and keeps the words around them", () => {
     const id = "aaaaaaaa-0000-4000-8000-0000000000a1";
     const masked = maskMachineIds(
-      `Principal user (Id=${id}, type=8, AADObjectId='${id}', businessUnitId=${id}), is missing prvCreateAccount privilege. Record ${id}.`,
+      `User (Id=${id}, type=8, ObjectId='${id}', unitId=${id}), lacks the createRecord permission. Record ${id}.`,
       "[ID]",
     );
     expect(masked).not.toContain(id);
     expect(masked).toBe(
-      "Principal user (Id=[ID], type=8, AADObjectId='[ID]', businessUnitId=[ID]), is missing prvCreateAccount privilege. Record [ID].",
+      "User (Id=[ID], type=8, ObjectId='[ID]', unitId=[ID]), lacks the createRecord permission. Record [ID].",
     );
   });
 
