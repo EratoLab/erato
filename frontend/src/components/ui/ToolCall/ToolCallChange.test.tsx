@@ -1088,6 +1088,9 @@ describe("what stays outside the card's scroll box", () => {
     expect(within(scroll).getAllByTestId("tool-call-change-row")).toHaveLength(
       5,
     );
+    expect(names).toHaveTextContent(
+      /^These fields: Field 5, Field 6, .*, Field 12, \+17 more$/,
+    );
   });
 });
 

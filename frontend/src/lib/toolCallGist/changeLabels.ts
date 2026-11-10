@@ -380,13 +380,14 @@ export const incompleteLines = (change: GistChange): string[] => {
   ];
 };
 
+/** Under a closed See more, which fields it holds. */
 export const changeNamesOnly = (names: string, more: number): string =>
   more > 0
     ? t({
         id: "toolChange.namesOnly.more",
-        message: `Names only: ${names}, +${more} more`,
+        message: `These fields: ${names}, +${more} more`,
       })
-    : t({ id: "toolChange.namesOnly", message: `Names only: ${names}` });
+    : t({ id: "toolChange.namesOnly", message: `These fields: ${names}` });
 
 export const machineIdPhrase = (): string =>
   t({ id: "toolChange.value.anId", message: "an ID (see Technical details)" });

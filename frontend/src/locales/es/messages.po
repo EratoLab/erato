@@ -9076,12 +9076,12 @@ msgstr "{name} que se quedarían"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly"
-msgstr "Solo nombres: {names}"
+msgstr "Estos campos: {names}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly.more"
-msgstr "Solo nombres: {names}, +{more} más"
+msgstr "Estos campos: {names}, +{more} más"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
