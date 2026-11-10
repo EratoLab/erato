@@ -419,6 +419,19 @@ pub fn rules_label(
     if item.id.is_none() && matches!(action, ToolCallAction::Delete | ToolCallAction::Archive) {
         item.title = title_pointer(arguments);
     }
+    if item.id.is_none()
+        && item.title.is_none()
+        && matches!(
+            action,
+            ToolCallAction::Delete | ToolCallAction::Archive | ToolCallAction::Update
+        )
+        && let Some(place) = place_the_name_ends_in(&name, arguments)
+    {
+        if item.target.as_deref() == Some(place.as_str()) {
+            item.target = None;
+        }
+        item.title = Some(place);
+    }
     item.before = find(arguments, Skip::Lookups, text_member(&BEFORE_MEMBERS));
     if matches!(
         action,
@@ -1078,6 +1091,46 @@ fn place_pointer(
                 && placed(pointer))
             .then(|| pointer.to_string())
         })
+    })
+}
+
+/// The place member a call acts on itself, when it names nothing inside it:
+/// the tool's name ends in what that member names, as `delete_repository`
+/// does with `repo` or `delete_branch` with `branch`. A name that goes on
+/// past it, as `clear_repository_cache`, or names a preposition, as
+/// `remove_bot_from_repo`, acts on something inside.
+fn place_the_name_ends_in(name: &[String], arguments: &Value) -> Option<String> {
+    const MIN_STEM_CHARS: usize = 4;
+    // `remove_bot_from_repo` acts on what comes before its preposition.
+    if name
+        .iter()
+        .any(|word| PREPOSITIONS.contains(&word.as_str()))
+    {
+        return None;
+    }
+    let head = name
+        .iter()
+        .rev()
+        .find(|word| actions_of(std::slice::from_ref(*word)).is_empty())?;
+    let top = arguments.as_object()?;
+    top.iter().find_map(|(member, value)| {
+        if !is_one_of(member, &PLACE_MEMBERS) || !is_text_or_number(value) {
+            return None;
+        }
+        let words = name_words(member);
+        let stem = match words.as_slice() {
+            [stem, rest] if matches!(rest.as_str(), "id" | "key" | "path") => stem,
+            [stem] => stem,
+            _ => return None,
+        };
+        let (short, long) = if stem.len() <= head.len() {
+            (stem.as_str(), head.as_str())
+        } else {
+            (head.as_str(), stem.as_str())
+        };
+        let names_it =
+            short == long || (short.chars().count() >= MIN_STEM_CHARS && long.starts_with(short));
+        names_it.then(|| child_pointer("", member)).flatten()
     })
 }
 

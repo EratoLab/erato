@@ -2046,6 +2046,38 @@ fn a_kind_that_names_no_verb_qualifies_what_the_call_acts_on() {
 }
 
 #[test]
+fn a_call_that_names_nothing_inside_the_place_its_name_ends_in_acts_on_that_place() {
+    let delete = tool("delete_repository", "", Some(true));
+    let arguments = json!({"owner": "contoso", "repo": "uploader-archive"});
+    let label = labelled(&delete, &arguments, &ToolResultContext::default());
+    let item = &label.items[0];
+    let title = item.title.as_ref().unwrap();
+    assert_eq!(title.values[0].text, "uploader-archive");
+    assert!(item.target.is_none());
+    let change = change_with(&delete, arguments, &ToolResultContext::default()).0;
+    assert_eq!(change.place.as_deref(), Some("contoso"));
+
+    let branch = labelled(
+        &tool("delete_branch", "", None),
+        &json!({"owner": "contoso", "repo": "uploader", "branch": "feature-x"}),
+        &ToolResultContext::default(),
+    );
+    let item = &branch.items[0];
+    assert_eq!(item.title.as_ref().unwrap().values[0].text, "feature-x");
+
+    // What the name goes on to, or names past a preposition, is inside it.
+    for name in ["clear_repository_cache", "remove_bot_from_repo"] {
+        let label = labelled(
+            &tool(name, "", None),
+            &json!({"owner": "contoso", "repo": "uploader"}),
+            &ToolResultContext::default(),
+        );
+        let titled = label.items.iter().any(|item| item.title.is_some());
+        assert!(!titled, "{name}");
+    }
+}
+
+#[test]
 fn an_address_counts_as_reach_only_on_a_send_or_share() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
     let shared = change_with(

@@ -254,6 +254,8 @@ struct Walk<'a> {
     named: HashSet<&'a str>,
     /// Those of them whose value the line can show, a machine ID only by name.
     named_shown: HashSet<&'a str>,
+    /// Paths that name the record itself, its ID or title: never where it lives.
+    record: HashSet<&'a str>,
     /// The text the call says it replaces and the text it writes, by path.
     before: Option<&'a str>,
     after: HashSet<&'a str>,
@@ -307,6 +309,13 @@ impl<'a> Walk<'a> {
             .filter(|value| !value.machine_id || value.resolved.is_some())
             .map(|value| value.path.as_str())
             .collect();
+        let record = item
+            .into_iter()
+            .flat_map(|item| [&item.id, &item.title])
+            .flatten()
+            .flat_map(|slot| &slot.values)
+            .map(|value| value.path.as_str())
+            .collect();
         let after = item
             .and_then(|item| item.after.as_ref())
             .into_iter()
@@ -330,6 +339,7 @@ impl<'a> Walk<'a> {
             record_unread,
             named,
             named_shown,
+            record,
             before,
             after,
             earlier,
@@ -404,7 +414,7 @@ impl<'a> Walk<'a> {
             self.table(value);
             return;
         }
-        if depth == 0 && is_scalar(value) && self.is_place(member) {
+        if depth == 0 && is_scalar(value) && self.is_place(member) && !self.record.contains(path) {
             self.place(member, value);
             return;
         }
