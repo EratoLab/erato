@@ -74,6 +74,7 @@ fn mcp_server_config(
     authentication: McpServerAuthenticationConfig,
 ) -> McpServerConfig {
     McpServerConfig {
+        glossary: Default::default(),
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),
@@ -4690,6 +4691,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
     app_config.mcp_servers.insert(
         "mock_mcp_approval".to_string(),
         McpServerConfig {
+            glossary: Default::default(),
             display_name: Some("Approval Probe".into()),
             ..mcp_server_config(
                 &mock_mcp_base_url(),

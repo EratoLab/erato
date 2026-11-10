@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 import { Fragment, useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -6,9 +7,11 @@ import {
   changeLayout,
   collapsedNames,
   hidesMachineId,
+  listReplaceIsUnknown,
   MAX_FIRST_VIEW_BATCH_FIELDS,
   MAX_FIRST_VIEW_ROWS,
   TEXT_LINES,
+  toolSaysOnlyAdds,
 } from "@/lib/toolCallGist/change";
 import {
   batchDeletionsLine,
@@ -26,6 +29,7 @@ import {
   changeNoteLabel,
   changeSeeMoreLine,
   changeSummaryLine,
+  codedValueText,
   cutValuePhrase,
   dryRunLabel,
   emptiedLabel,
@@ -42,10 +46,14 @@ import {
   listAddedLabel,
   listAddsClaim,
   listKeptLabel,
+  listMaybeReplacedLine,
   listRemovedLabel,
   listReplacedLine,
   listSetLabel,
+  listWouldGoLabel,
+  listWouldStayLabel,
   machineIdPhrase,
+  newNamePhrase,
   opaqueCutLine,
   outsideLine,
   plainChangeValue,
@@ -55,11 +63,23 @@ import {
   textHeading,
   textOldLabel,
   textSeeAll,
+  toolTitleLabel,
   uncheckedLine,
   writeInsideReadLine,
 } from "@/lib/toolCallGist/changeLabels";
-import { gistWarningLabel } from "@/lib/toolCallGist/gistLabels";
+import {
+  gistUnreadRecordLine,
+  gistWarningLabel,
+  namesOnlyAnItem,
+  showsUnreadRecord,
+} from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+import {
+  NEW_TEXT_CLASS,
+  NEW_VALUE_CLASS,
+  OLD_TEXT_CLASS,
+  OLD_VALUE_CLASS,
+} from "@/lib/toolCallGist/valueStyle";
 
 import { ToolCallGistLine } from "./ToolCallGist";
 import { Collapse } from "../Controls/Collapse";
@@ -75,7 +95,7 @@ import type {
   ChangeValue,
   GistChange,
 } from "@/lib/toolCallGist/change";
-import type { Gist, GistPhase } from "@/lib/toolCallGist/gist";
+import type { Gist, GistAction, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ScrollBoxKind } from "@/lib/toolCallGist/scrollBox";
 import type { ReactNode, Ref } from "react";
 
@@ -84,6 +104,8 @@ const MUTED = "text-xs text-theme-fg-muted";
 const LIST_VALUES = 6;
 /** Values named under a trace row; the rest are counted. */
 const ROW_VALUES = 2;
+/** Option chips and statements sit on the card, so they need a colour of their own. */
+const ON_CARD = "border border-theme-border bg-theme-bg-tertiary";
 
 /**
  * A box that scrolls when its content does not fit. Only then is it a tab
@@ -208,17 +230,74 @@ const ValueText = ({
       </span>
     );
   }
-  const shown = value.truncated ? `${value.text}…` : value.text;
+  const text = codedValueText(value);
+  const shown = value.truncated ? `${text}…` : text;
+  // A meaning read from an earlier result looks like any other earlier value.
+  const earlier = value.meaning?.source === "earlier";
   return (
     <span
       dir="auto"
-      data-origin={value.machineId ? "resolved" : "written"}
-      className={ISOLATED}
+      data-origin={
+        earlier ? "earlier" : value.machineId ? "resolved" : "written"
+      }
+      title={
+        earlier
+          ? t({
+              id: "toolGist.value.earlier",
+              message: "Value from an earlier result in this chat",
+            })
+          : undefined
+      }
+      className={clsx(
+        ISOLATED,
+        earlier && "underline decoration-dotted underline-offset-2",
+      )}
     >
       {link ? linkPhrase(shown) : shown}
     </span>
   );
 };
+
+/** An old value struck through in red and the new one in green, on any theme. */
+const OldToNew = ({
+  old,
+  arrow,
+  children,
+}: {
+  old: ChangeValue;
+  /** A row line reads as text: its arrow stays a plain character there. */
+  arrow: "text" | "spoken";
+  children: ReactNode;
+}) => (
+  <>
+    <span
+      dir="auto"
+      data-testid="tool-call-change-old"
+      className={clsx(OLD_VALUE_CLASS, ISOLATED)}
+    >
+      <ValueText value={old} />
+    </span>
+    {arrow === "spoken" ? (
+      <>
+        <span aria-hidden="true" className="px-1 text-theme-fg-muted">
+          →
+        </span>
+        <span className="sr-only">
+          {t({ id: "toolGist.changesTo", message: "changes to" })}
+        </span>
+      </>
+    ) : (
+      " → "
+    )}
+    <span
+      dir="auto"
+      data-testid="tool-call-change-new"
+      className={clsx(NEW_VALUE_CLASS, ISOLATED)}
+    >
+      {children}
+    </span>
+  </>
+);
 
 const ValueList = ({
   values,
@@ -244,6 +323,17 @@ const ValueList = ({
   );
 };
 
+/** "set to" before a name given to a record nobody read, so it never reads as that record's name. */
+const NewName = ({ effect }: { effect: ChangeEffect }) =>
+  effect.newName ? (
+    <span
+      className="text-theme-fg-muted"
+      data-testid="tool-call-change-new-name"
+    >
+      {newNamePhrase()}{" "}
+    </span>
+  ) : null;
+
 const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
   if (effect.values.length === 0) {
     return (
@@ -252,30 +342,21 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
       </span>
     );
   }
-  return (
+  const value =
+    effect.values.length === 1 ? (
+      <ValueText value={effect.values[0]} link={effect.link} />
+    ) : (
+      <ValueList values={effect.values} omitted={effect.omitted} />
+    );
+  // An unchanged value has no old → new to show: it stays what it is.
+  return effect.old && effect.effect !== "unchanged" ? (
+    <OldToNew old={effect.old} arrow="spoken">
+      {value}
+    </OldToNew>
+  ) : (
     <>
-      {effect.old && (
-        <>
-          <span
-            dir="auto"
-            data-testid="tool-call-change-old"
-            className={clsx(
-              "underline decoration-dotted underline-offset-2",
-              ISOLATED,
-            )}
-          >
-            <ValueText value={effect.old} />
-          </span>
-          <span aria-hidden="true" className="px-1 text-theme-fg-muted">
-            →
-          </span>
-        </>
-      )}
-      {effect.values.length === 1 ? (
-        <ValueText value={effect.values[0]} link={effect.link} />
-      ) : (
-        <ValueList values={effect.values} omitted={effect.omitted} />
-      )}
+      <NewName effect={effect} />
+      {value}
     </>
   );
 };
@@ -301,7 +382,9 @@ const ValueRow = ({
     )}
     {showRawName &&
       effect.rawName.length > 0 &&
-      effect.rawName !== effect.name && (
+      effect.rawName !== effect.name &&
+      // A glossary name already carries the raw name beside it.
+      !effect.name.endsWith(`(${effect.rawName})`) && (
         <p
           dir="auto"
           className={clsx(
@@ -331,22 +414,41 @@ const EmptiedRow = ({ effects }: { effects: ChangeEffect[] }) =>
     </div>
   );
 
-const ListRow = ({ effect }: { effect: ChangeEffect }) => (
+const ListRow = ({
+  effect,
+  replaceUnknown,
+}: {
+  effect: ChangeEffect;
+  /** Whether it is unknown if the call replaces the list or adds to it. */
+  replaceUnknown: boolean;
+}) => (
   <div className="space-y-0.5" data-testid="tool-call-change-list">
     {effect.removed.length > 0 ? (
       <>
         <p className="text-xs text-theme-fg-primary">
-          {listReplacedLine(
+          {(replaceUnknown ? listMaybeReplacedLine : listReplacedLine)(
             effect.name,
             effect.removed.length,
             effect.kept.length,
           )}
         </p>
-        <Row name={listRemovedLabel(effect.name)}>
+        <Row
+          name={
+            replaceUnknown
+              ? listWouldGoLabel(effect.name)
+              : listRemovedLabel(effect.name)
+          }
+        >
           <ValueList values={effect.removed} limit={MAX_FIRST_VIEW_ROWS * 4} />
         </Row>
         {effect.kept.length > 0 && (
-          <Row name={listKeptLabel(effect.name)}>
+          <Row
+            name={
+              replaceUnknown
+                ? listWouldStayLabel(effect.name)
+                : listKeptLabel(effect.name)
+            }
+          >
             <ValueList values={effect.kept} />
           </Row>
         )}
@@ -357,7 +459,7 @@ const ListRow = ({ effect }: { effect: ChangeEffect }) => (
         )}
       </>
     ) : (
-      <Row name={listSetLabel(effect.name)}>
+      <Row name={replaceUnknown ? effect.name : listSetLabel(effect.name)}>
         <ValueList values={effect.values} omitted={effect.omitted} />
       </Row>
     )}
@@ -457,7 +559,7 @@ const FlagsPart = ({ flags }: { flags: GistChange["flags"] }) => (
           <span
             key={index}
             dir="auto"
-            className={clsx("rounded bg-theme-bg-secondary px-1.5", ISOLATED)}
+            className={clsx("rounded px-1.5", ON_CARD, ISOLATED)}
           >
             {flag.dryRun ? dryRunLabel(flag.name) : flag.name}
           </span>
@@ -477,7 +579,10 @@ const OpaquePart = ({ opaque }: { opaque: ChangeOpaque }) => (
     )}
     <ScrollBox
       kind="value"
-      className="max-h-40 rounded bg-theme-bg-secondary p-2 font-mono text-xs text-theme-fg-primary"
+      className={clsx(
+        "max-h-40 rounded p-2 font-mono text-xs text-theme-fg-primary",
+        ON_CARD,
+      )}
       data-testid="tool-call-change-statement"
     >
       <span
@@ -505,6 +610,7 @@ const TextPart = ({
   const id = useId();
   const hiddenLines = Math.max(entry.lines - TEXT_LINES, 0);
   const collapsible = hiddenLines > 0;
+  const newTextClass = entry.before ? NEW_TEXT_CLASS : "text-theme-fg-primary";
   return (
     <div className="space-y-1" data-testid="tool-call-change-text">
       <p className="text-xs text-theme-fg-primary">
@@ -518,7 +624,8 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "max-h-24 overflow-hidden whitespace-pre-wrap text-xs text-theme-fg-muted line-through [overflow-wrap:anywhere]",
+              "max-h-24 overflow-hidden whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              OLD_TEXT_CLASS,
               ISOLATED,
             )}
           >
@@ -531,7 +638,8 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "line-clamp-6 whitespace-pre-wrap text-xs text-theme-fg-primary [overflow-wrap:anywhere]",
+              "line-clamp-6 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              newTextClass,
               ISOLATED,
             )}
             data-testid="tool-call-change-text-start"
@@ -541,7 +649,10 @@ const TextPart = ({
         ) : (
           <ScrollBox
             kind="value"
-            className="max-h-64 whitespace-pre-wrap text-xs text-theme-fg-primary [overflow-wrap:anywhere]"
+            className={clsx(
+              "max-h-64 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              newTextClass,
+            )}
             as="p"
           >
             <span dir="auto" className={ISOLATED}>
@@ -566,18 +677,32 @@ const TextPart = ({
   );
 };
 
-/** A value's old → new as plain text, for a row that shows a few in one line. */
-const rowChangeText = (effect: ChangeEffect): string => {
+/** A value's old → new, for a row that shows a few in one line. */
+const RowChange = ({ effect }: { effect: ChangeEffect }) => {
   const value = effect.values.map(plainChangeValue).join(", ");
-  return effect.old
-    ? `${effect.name} ${plainChangeValue(effect.old)} → ${value}`
-    : `${effect.name} ${value}`;
+  return (
+    <>
+      {effect.name}{" "}
+      {effect.old && effect.effect !== "unchanged" ? (
+        <OldToNew old={effect.old} arrow="text">
+          {value}
+        </OldToNew>
+      ) : (
+        <>
+          <NewName effect={effect} />
+          {value}
+        </>
+      )}
+    </>
+  );
 };
 
-const batchEffectText = (effect: ChangeEffect): string =>
-  effect.effect === "emptied"
-    ? beingEmptiedLabel(effect.name)
-    : rowChangeText(effect);
+const BatchEffect = ({ effect }: { effect: ChangeEffect }) =>
+  effect.effect === "emptied" ? (
+    <>{beingEmptiedLabel(effect.name)}</>
+  ) : (
+    <RowChange effect={effect} />
+  );
 
 const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
   <li className="space-y-0.5" data-testid="tool-call-change-batch-row">
@@ -595,7 +720,12 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
           ISOLATED,
         )}
       >
-        {row.effects.map(batchEffectText).join(" · ")}
+        {row.effects.map((effect, index) => (
+          <Fragment key={index}>
+            {index > 0 && " · "}
+            <BatchEffect effect={effect} />
+          </Fragment>
+        ))}
         {row.effectsOmitted > 0 && (
           <span className="text-theme-fg-muted"> +{row.effectsOmitted}</span>
         )}
@@ -604,7 +734,13 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
   </li>
 );
 
-const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
+const BatchFields = ({
+  batch,
+  listsMaybeReplaced,
+}: {
+  batch: ChangeBatch;
+  listsMaybeReplaced: boolean;
+}) => {
   const shown = batch.fields.slice(0, MAX_FIRST_VIEW_BATCH_FIELDS);
   const more = batch.fields.length - shown.length + batch.fieldsOmitted;
   return shown.length === 0 ? null : (
@@ -612,7 +748,7 @@ const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
       {shown.map((field, index) => (
         <Row key={index} name={field.name}>
           <span dir="auto" className={ISOLATED}>
-            {batchFieldLine(field, batch.total)}
+            {batchFieldLine(field, batch.total, listsMaybeReplaced)}
           </span>
         </Row>
       ))}
@@ -621,7 +757,15 @@ const BatchFields = ({ batch }: { batch: ChangeBatch }) => {
   );
 };
 
-const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
+const BatchPart = ({
+  batch,
+  listsMaybeReplaced,
+  onlyAdds,
+}: {
+  batch: ChangeBatch;
+  listsMaybeReplaced: boolean;
+  onlyAdds: boolean;
+}) => {
   const deleted = batch.rows
     .filter((row) => row.action === "delete")
     .slice(0, 3)
@@ -629,7 +773,7 @@ const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
   const first = batch.rows.slice(0, MAX_FIRST_VIEW_ROWS);
   const rest = batch.rows.slice(MAX_FIRST_VIEW_ROWS);
   const unstored = batch.total - batch.rows.length;
-  const losses = batchLossLines(batch);
+  const losses = batchLossLines(batch, listsMaybeReplaced, onlyAdds);
   const seeMoreCount = batch.sameChange
     ? batch.total
     : batch.total - first.length;
@@ -671,7 +815,7 @@ const BatchPart = ({ batch }: { batch: ChangeBatch }) => {
         </>
       ) : (
         <>
-          <BatchFields batch={batch} />
+          <BatchFields batch={batch} listsMaybeReplaced={listsMaybeReplaced} />
           <p className={MUTED}>{batchDifferentLine()}</p>
           <ul className="space-y-1">
             {first.map((row) => (
@@ -703,7 +847,11 @@ const LossesPart = ({ change }: { change: GistChange }) => {
     <>
       <EmptiedRow effects={layout.emptied} />
       {layout.lists.map((effect, index) => (
-        <ListRow key={index} effect={effect} />
+        <ListRow
+          key={index}
+          effect={effect}
+          replaceUnknown={listReplaceIsUnknown(change)}
+        />
       ))}
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
@@ -712,7 +860,13 @@ const LossesPart = ({ change }: { change: GistChange }) => {
   );
 };
 
-const ValuesPart = ({ change }: { change: GistChange }) => {
+const ValuesPart = ({
+  change,
+  action,
+}: {
+  change: GistChange;
+  action: GistAction | undefined;
+}) => {
   const layout = changeLayout(change);
   const collapsedTotal = layout.collapsed.length + layout.beyondCap;
   const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
@@ -727,7 +881,7 @@ const ValuesPart = ({ change }: { change: GistChange }) => {
       ))}
       {collapsedTotal > 0 && (
         <SeeMore
-          label={changeSeeMoreLine(change, layout)}
+          label={changeSeeMoreLine(change, layout, action)}
           defaultOpen={layout.opensByDefault}
           hint={
             shown.length > 0 ? (
@@ -812,9 +966,11 @@ export const ToolCallChangeRowDetails = ({
       {change.batch &&
         (change.batch.rowsEmptying > 0 ||
           change.batch.rowsReplacingLists > 0) &&
-        batchLossLines(change.batch).map((line, index) => (
-          <p key={index}>{line}</p>
-        ))}
+        batchLossLines(
+          change.batch,
+          listReplaceIsUnknown(change),
+          toolSaysOnlyAdds(change),
+        ).map((line, index) => <p key={index}>{line}</p>)}
       {layout.emptied.length > 0 && (
         <p dir="auto" className={ISOLATED}>
           {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
@@ -822,8 +978,10 @@ export const ToolCallChangeRowDetails = ({
       )}
       {removals.map((effect, index) => (
         <p key={index} dir="auto" className={ISOLATED}>
-          {listRemovedLabel(effect.name)}:{" "}
-          {effect.removed.map(plainChangeValue).join(", ")}
+          {listReplaceIsUnknown(change)
+            ? listWouldGoLabel(effect.name)
+            : listRemovedLabel(effect.name)}
+          : {effect.removed.map(plainChangeValue).join(", ")}
         </p>
       ))}
       {found.map((line, index) => (
@@ -831,7 +989,12 @@ export const ToolCallChangeRowDetails = ({
       ))}
       {shown.length > 0 && (
         <p dir="auto" className={ISOLATED}>
-          {shown.map(rowChangeText).join(", ")}
+          {shown.map((effect, index) => (
+            <Fragment key={index}>
+              {index > 0 && ", "}
+              <RowChange effect={effect} />
+            </Fragment>
+          ))}
           {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
         </p>
       )}
@@ -871,10 +1034,12 @@ const IncompleteAlert = ({ change }: { change: GistChange }) =>
  */
 export const ToolCallChangeBody = ({
   change,
+  action,
   replacesText = false,
   values = true,
 }: {
   change: GistChange;
+  action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
 }) => (
@@ -887,11 +1052,17 @@ export const ToolCallChangeBody = ({
     {change.opaque.map((opaque, index) => (
       <OpaquePart key={index} opaque={opaque} />
     ))}
-    {change.batch && <BatchPart batch={change.batch} />}
+    {change.batch && (
+      <BatchPart
+        batch={change.batch}
+        listsMaybeReplaced={listReplaceIsUnknown(change)}
+        onlyAdds={toolSaysOnlyAdds(change)}
+      />
+    )}
     {change.texts.map((entry, index) => (
       <TextPart key={index} entry={entry} replaced={replacesText} />
     ))}
-    {values && <ValuesPart change={change} />}
+    {values && <ValuesPart change={change} action={action} />}
     <ChangeNotes change={change} />
   </div>
 );
@@ -908,13 +1079,18 @@ export const ToolCallChangeCard = ({
   change,
   phase,
   notes,
+  toolTitle,
 }: {
   gist: Gist;
   change: GistChange;
   phase: GistPhase;
   notes?: ReactNode;
+  /** The tool's own title or name, said where the line can only say "item". */
+  toolTitle?: string;
 }) => {
-  const summary = changeSummaryLine(change);
+  const summary = changeSummaryLine(change, gist.action);
+  const showsToolTitle =
+    toolTitle !== undefined && toolTitle.length > 0 && namesOnlyAnItem(gist);
   return (
     <div className="space-y-2" data-testid="tool-call-gist">
       {gist.warnings.map((warning) => (
@@ -929,22 +1105,40 @@ export const ToolCallChangeCard = ({
         data-testid="tool-call-gist-scroll"
       >
         {gist.items.map((item, index) => (
-          <p
-            key={index}
-            className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
-            data-testid="tool-call-gist-line"
-          >
-            <ToolCallGistLine
-              gist={gist}
-              item={item}
-              phase={phase}
-              variant="card"
-            />
-          </p>
+          <Fragment key={index}>
+            <p
+              className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
+              data-testid="tool-call-gist-line"
+            >
+              <ToolCallGistLine
+                gist={gist}
+                item={item}
+                phase={phase}
+                variant="card"
+              />
+            </p>
+            {showsUnreadRecord(gist, item) && (
+              <p className={MUTED} data-testid="tool-call-gist-unread">
+                {gistUnreadRecordLine(gist)}
+              </p>
+            )}
+          </Fragment>
         ))}
+        {showsToolTitle && (
+          <p
+            className={clsx(MUTED, "break-words [overflow-wrap:anywhere]")}
+            data-testid="tool-call-change-tool-title"
+          >
+            {toolTitleLabel()}{" "}
+            <q dir="auto" className={clsx(ISOLATED, "text-theme-fg-secondary")}>
+              {toolTitle}
+            </q>
+          </p>
+        )}
         {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody
           change={change}
+          action={gist.action}
           replacesText={gist.action === "update" || gist.action === "upsert"}
         />
       </ScrollBox>

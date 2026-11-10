@@ -1,7 +1,7 @@
 use super::*;
 use crate::models::message::{
-    ToolAllowedBy, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource, ToolCallObjectKind,
-    ToolDisplayMetadata,
+    ContentPartText, InputMessage, ToolAllowedBy, ToolCallLabelItem, ToolCallLabelSlot,
+    ToolCallLabelSource, ToolCallObjectKind, ToolDisplayMetadata,
 };
 use crate::services::prompt_composition::transforms::replay_assistant_content;
 use crate::services::tool_display::label::{
@@ -1910,4 +1910,710 @@ fn tool_names_split_into_words() {
         ["crm", "records", "upsert"]
     );
     assert_eq!(name_words("recreate_x"), ["recreate", "x"]);
+}
+
+const PAGE: &str = "5f0c2a10-0000-4000-8000-00000000e001";
+
+/// A read of a page that keeps its title among its properties.
+fn page_read(properties: Value) -> ToolUse {
+    call(
+        "page",
+        "retrieve_page",
+        json!({ "page_id": PAGE }),
+        json!({ "id": PAGE, "properties": properties }),
+    )
+}
+
+/// What an update of the page shows: its name and the old value of `Stage`.
+fn page_update(context: &ToolResultContext) -> (Option<String>, Option<String>) {
+    let arguments =
+        json!({ "page_id": PAGE, "properties": { "Stage": { "select": { "name": "Lost" } } } });
+    let mapping = ToolCallLabelItemMapping {
+        id: Some("/page_id".into()),
+        fields: vec!["/properties/Stage".into()],
+        ..Default::default()
+    };
+    let item = item(context, ToolCallAction::Update, mapping, &arguments);
+    (
+        item.id.unwrap().values[0].resolved.clone(),
+        item.fields[0].values[0].resolved.clone(),
+    )
+}
+
+#[test]
+fn a_records_name_inside_a_wrapper_names_it_when_it_is_the_only_one() {
+    let stage = json!({ "select": { "name": "Review" } });
+    let context = after(vec![page_read(json!({
+        "Name": { "title": [{ "plain_text": "Grant application Example Ltd" }] },
+        "Stage": stage,
+    }))]);
+    assert_eq!(
+        page_update(&context),
+        (
+            Some("Grant application Example Ltd".into()),
+            Some("Review".into())
+        )
+    );
+
+    // Two members named like a name, or a name slot holding something that is
+    // no name, name nothing; the old values still count.
+    for properties in [
+        json!({ "Name": "Plan A", "Title": "Plan B", "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "+49 30 1234567" }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": OTHER_CONTACT }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "ana@example.com" }] }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "https://example.com/x" }] }, "Stage": stage }),
+        json!({ "Name": { "id": OTHER_CONTACT, "name": "Linked record" }, "Stage": stage }),
+        json!({ "Name": { "title": [{ "plain_text": "Part one" }, { "plain_text": "Part two" }] }, "Stage": stage }),
+        json!({ "Name": 4211, "Stage": stage }),
+        json!({ "Name": "x".repeat(MAX_WRAPPED_NAME_CHARS + 1), "Stage": stage }),
+    ] {
+        let context = after(vec![page_read(properties.clone())]);
+        assert_eq!(
+            page_update(&context),
+            (None, Some("Review".into())),
+            "{properties}"
+        );
+    }
+
+    // A name the record itself holds still wins over one below it.
+    let context = after(vec![call(
+        "page",
+        "retrieve_page",
+        json!({ "page_id": PAGE }),
+        json!({ "id": PAGE, "title": "Own title", "properties": { "Name": "Inner", "Stage": stage } }),
+    )]);
+    assert_eq!(page_update(&context).0.as_deref(), Some("Own title"));
+}
+
+#[test]
+fn a_number_read_from_one_table_never_names_a_row_of_another() {
+    for table in ["tablename", "objectName"] {
+        let context = after(vec![call(
+            "row",
+            "get_record",
+            json!({ table: "account", "recordId": 7 }),
+            json!({ "Id": 7, "Name": "Acme" }),
+        )]);
+        let named = |arguments: Value| {
+            let mapping = ToolCallLabelItemMapping {
+                id: Some("/recordId".into()),
+                ..Default::default()
+            };
+            let item = item(&context, ToolCallAction::Delete, mapping, &arguments);
+            item.id.unwrap().values[0].resolved.clone()
+        };
+        assert_eq!(
+            named(json!({ table: "account", "recordId": 7 })).as_deref(),
+            Some("Acme"),
+            "{table}"
+        );
+        assert_eq!(
+            named(json!({ table: "contact", "recordId": 7 })),
+            None,
+            "{table}"
+        );
+    }
+}
+
+#[test]
+fn a_person_or_other_object_nested_in_a_record_never_names_it() {
+    const COMMENT: &str = "c0ffee00-0000-4000-8000-000000000001";
+    const TICKET: &str = "c0ffee00-0000-4000-8000-000000000002";
+    let person = json!({ "name": "Dana Pike", "email": "dana@example.com" });
+    let context = after(vec![
+        call(
+            "comments",
+            "list_comments",
+            json!({ "issue": "OPS-7" }),
+            json!([{ "id": COMMENT, "body": "Looks good", "author": person }]),
+        ),
+        call(
+            "ticket",
+            "get_ticket",
+            json!({ "ticket_id": TICKET }),
+            json!({ "id": TICKET, "status": "open", "requester": person }),
+        ),
+        call(
+            "tasks",
+            "list_tasks",
+            json!({}),
+            json!([{ "id": TASK, "content": "Fix it",
+                     "project": { "name": "Operations", "lead": "Ana" } }]),
+        ),
+    ]);
+    assert_eq!(name(&context, json!(COMMENT)), None);
+    assert_eq!(name(&context, json!(TICKET)), None);
+    assert_eq!(name(&context, json!(TASK)), None);
+    // Nor are its values the record's.
+    assert_eq!(earlier(&context, TICKET, "name", json!("New")), None);
+    assert_eq!(earlier(&context, TASK, "lead", json!("Ben")), None);
+    // The record's own field bag still names it and holds its values.
+    let context = after(vec![call(
+        "ticket",
+        "get_ticket",
+        json!({ "ticket_id": TICKET }),
+        json!({ "id": TICKET, "requester": person,
+                "fields": { "name": "Printer jam", "priority": "high" } }),
+    )]);
+    assert_eq!(
+        name(&context, json!(TICKET)).as_deref(),
+        Some("Printer jam")
+    );
+    assert_eq!(
+        earlier(&context, TICKET, "priority", json!("low")).as_deref(),
+        Some("high")
+    );
+}
+
+#[test]
+fn a_records_members_listed_as_name_and_value_pairs_are_read_as_its_members() {
+    let describe = |path: &str| {
+        call(
+            "describe",
+            "describe",
+            json!({ "path": path }),
+            json!({
+                "id": ACCOUNT,
+                "url": format!("https://crm.example.invalid/main.aspx?id={ACCOUNT}"),
+                "text": {
+                    "Id": ACCOUNT,
+                    "Attributes": [
+                        { "Key": "name", "Value": "Example Industries" },
+                        { "Key": "category", "Value": { "Value": 1 } },
+                        { "Key": "phone", "Value": "+49 30 5550000" },
+                        { "Key": "primary_contact_id", "Value": { "Id": CONTACT, "Name": "Ana Example", "LogicalName": "contact" } },
+                    ],
+                },
+            }),
+        )
+    };
+    let context = after(vec![describe(&format!("tables/account/records/{ACCOUNT}"))]);
+    assert_eq!(
+        name(&context, json!(ACCOUNT)).as_deref(),
+        Some("Example Industries")
+    );
+    assert_eq!(
+        earlier(&context, ACCOUNT, "category", json!(4)).as_deref(),
+        Some("1")
+    );
+    // The link reads as the record it links to, by the name the server gave it.
+    assert_eq!(
+        earlier(
+            &context,
+            ACCOUNT,
+            "primary_contact_id",
+            json!(OTHER_CONTACT)
+        )
+        .as_deref(),
+        Some("Ana Example")
+    );
+    assert_eq!(
+        name(&context, json!(CONTACT)).as_deref(),
+        Some("Ana Example")
+    );
+    // A contact number is never a name, nor the old value of one.
+    assert_eq!(
+        earlier(&context, ACCOUNT, "phone", json!("+49 30 5550111")),
+        None
+    );
+    assert_eq!(name(&context, json!("+49 30 5550000")), None);
+
+    // Pairs that name a member twice, or carry more than a name and a value,
+    // are a list like any other.
+    let twice = call(
+        "row",
+        "get_row",
+        json!({ "row_id": ACCOUNT }),
+        json!({ "id": ACCOUNT, "attributes": [
+            { "name": "name", "value": "First" },
+            { "name": "name", "value": "Second" },
+        ]}),
+    );
+    assert_eq!(name(&after(vec![twice]), json!(ACCOUNT)), None);
+    let richer = call(
+        "row",
+        "get_row",
+        json!({ "row_id": ACCOUNT }),
+        json!({ "id": ACCOUNT, "attributes": [
+            { "name": "name", "value": "First", "type": "text" },
+        ]}),
+    );
+    assert_eq!(name(&after(vec![richer]), json!(ACCOUNT)), None);
+}
+
+#[test]
+fn a_path_that_points_at_a_record_by_its_id_names_that_record() {
+    let context = after(vec![read_query(
+        "accounts",
+        "SELECT name, accountid FROM account",
+        json!([{ "name": "Example Industries", "accountid": ACCOUNT }]),
+    )]);
+    assert_eq!(
+        name(&context, json!(format!("/accounts({ACCOUNT})"))).as_deref(),
+        Some("Example Industries")
+    );
+    assert_eq!(
+        name(&context, json!(format!("/accounts({OTHER_CONTACT})"))),
+        None
+    );
+}
+
+#[test]
+fn an_id_counts_as_never_read_only_when_no_result_held_it_in_any_form() {
+    let arguments = json!({ "recordId": ACCOUNT });
+    let never = |context: &ToolResultContext| context.never_read(&arguments, "/recordId");
+    assert!(never(&ToolResultContext::default()));
+    assert!(never(&after(vec![read_query(
+        "other",
+        "SELECT name, accountid FROM account",
+        json!([{ "name": "Another", "accountid": OTHER_CONTACT }]),
+    )])));
+    // Held anywhere: as a value, in text, in a link path, as a member name,
+    // or by a result the index keeps nothing of.
+    for output in [
+        json!([{ "accountid": ACCOUNT }]),
+        json!(format!("Found account {ACCOUNT} with 3 contacts.")),
+        json!({ "parent": format!("/accounts({ACCOUNT})") }),
+        json!({ ACCOUNT: { "stage": "won" } }),
+        json!({ "deep": [[[[[[[[[[{ "ref": ACCOUNT.to_uppercase() }]]]]]]]]]] }),
+    ] {
+        let context = after(vec![call("read", "search", json!({}), output.clone())]);
+        assert!(!never(&context), "{output}");
+    }
+    let unplaced = ToolUse {
+        display: on(None),
+        ..call("read", "search", json!({}), json!([{ "id": ACCOUNT }]))
+    };
+    assert!(!never(&after(vec![unplaced])));
+
+    // A task's child, or a result too large to read whole, may have read it.
+    let task = call(
+        "task",
+        erato_config::config::DELEGATE_TASK_TOOL_NAME,
+        json!({ "task": "Look around" }),
+        json!({ "status": "completed", "result": "Done." }),
+    );
+    assert!(!never(&after(vec![task])));
+    let huge: Vec<_> = (0..MAX_ID_SCAN_NODES).map(|index| json!(index)).collect();
+    let big = call("read", "search", json!({}), json!(huge));
+    assert!(!never(&after(vec![big])));
+    // A failed call's error text is no read, and a recipient is never asked about.
+    let failed = ToolUse {
+        status: ToolCallStatus::Error,
+        ..call(
+            "read",
+            "get_row",
+            json!({}),
+            json!(format!("No row {ACCOUNT}.")),
+        )
+    };
+    assert!(never(&after(vec![failed])));
+    assert!(!ToolResultContext::default().never_read(&json!({ "to": ACCOUNT }), "/to"));
+}
+
+#[test]
+fn a_label_column_beside_a_code_is_that_codes_label_and_no_field_of_its_own() {
+    let context = after(vec![read_query(
+        "rows",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{
+            "name": "Line 4 retrofit",
+            "opportunityid": OPPORTUNITY,
+            "risklevel": 727000001,
+            "risklevelname": "Medium",
+            "stage": "q1",
+            "stage_label": "Qualify",
+            "owner_id": 7,
+            "owner_id_name": "Ada",
+            "telephone1": 2,
+            "telephone1name": "Work",
+            "region": 3,
+            "regionname": "3",
+        }]),
+    )]);
+    let record = context.record_by_id(SERVER, OPPORTUNITY).unwrap();
+    for (column, code, label) in [
+        ("risklevel", "727000001", "Medium"),
+        ("stage", "q1", "Qualify"),
+    ] {
+        assert_eq!(record.field(column).map(String::as_str), Some(code));
+        let coded = record.coded(column).unwrap();
+        assert_eq!((coded.code.as_str(), coded.label.as_str()), (code, label));
+    }
+    assert_eq!(
+        record.coded("risklevel").map(|coded| coded.numeric),
+        Some(true)
+    );
+    assert_eq!(record.field("risklevelname"), None);
+    assert_eq!(record.field("stage_label"), None);
+    // An ID, a contact number or a label that only repeats the code stay as read.
+    for (column, sibling) in [
+        ("owner_id", "owner_id_name"),
+        ("telephone1", "telephone1name"),
+        ("region", "regionname"),
+    ] {
+        assert_eq!(record.coded(column), None, "{column}");
+        assert!(record.field(sibling).is_some(), "{sibling}");
+    }
+    assert_eq!(
+        earlier(&context, OPPORTUNITY, "risklevel", json!(727000002)).as_deref(),
+        Some("727000001")
+    );
+
+    // Two label columns that disagree, or one with hidden characters, say nothing.
+    let context = after(vec![read_query(
+        "rows",
+        "SELECT name, opportunityid, risklevel FROM opportunity",
+        json!([{
+            "name": "Line 4 retrofit",
+            "opportunityid": OPPORTUNITY,
+            "risklevel": 1,
+            "risklevelname": "Medium",
+            "risklevel_label": "High",
+            "stage": 2,
+            "stagename": "Qual\u{202E}ify",
+        }]),
+    )]);
+    let record = context.record_by_id(SERVER, OPPORTUNITY).unwrap();
+    assert_eq!(record.coded("risklevel"), None);
+    assert_eq!(record.coded("stage"), None);
+    assert!(record.field("risklevelname").is_some());
+}
+
+#[test]
+fn no_id_counts_as_never_read_where_the_replay_misses_earlier_results() {
+    use crate::services::chat_history_compaction::{SummaryResult, replacement};
+    let arguments = json!({ "recordId": ACCOUNT });
+    let never = |context: &ToolResultContext| context.never_read(&arguments, "/recordId");
+    let text = |role: MessageRole, text: &str| InputMessage {
+        role,
+        content: ContentPart::Text(ContentPartText { text: text.into() }),
+    };
+    let read = call(
+        "read",
+        "get_record",
+        json!({ "tablename": "account", "recordId": ACCOUNT }),
+        json!({ "name": "Contoso", "accountid": ACCOUNT }),
+    );
+    let mut chat = vec![
+        text(MessageRole::System, "You help with the CRM."),
+        text(MessageRole::User, "Look up the account."),
+    ];
+    chat.extend(replay_assistant_content(
+        &MessageRole::Assistant,
+        vec![ContentPart::ToolUse(read)],
+    ));
+    chat.push(text(MessageRole::Assistant, "It is Contoso."));
+    let next_turn = text(MessageRole::User, "Rename it.");
+    let turn = |mut messages: Vec<InputMessage>| {
+        messages.push(next_turn.clone());
+        ToolResultContext::from_messages(&GenerationInputMessages { messages })
+    };
+    assert!(!never(&turn(chat.clone())));
+    assert!(never(&turn(chat[..2].to_vec())));
+
+    // A compaction replaces the turns that read it with their summary.
+    let summary = SummaryResult {
+        summary: "The user looked up the account Contoso.".into(),
+        files: Vec::new(),
+    };
+    let compacted = replacement(&GenerationInputMessages { messages: chat }, &summary);
+    assert!(!never(&turn(compacted.messages)));
+
+    // An earlier turn's call replayed as a receipt kept only some fields.
+    let receipt = call(
+        "receipt",
+        "read_comments",
+        json!({ replay_policy::RECEIPT_MARKER_KEY: "omitted", "kept": {} }),
+        json!({ replay_policy::RECEIPT_MARKER_KEY: "omitted", "kept": { "count": 2 } }),
+    );
+    assert!(!never(&after(vec![receipt])));
+
+    // A chat spawned from another one may act on what that one read.
+    assert!(!never(&after(Vec::new()).spawned_from_another_chat(true)));
+    assert!(never(&after(Vec::new()).spawned_from_another_chat(false)));
+}
+
+#[test]
+fn a_machine_id_written_in_brackets_a_link_or_with_its_padding_counts_as_read() {
+    let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N";
+    let session = format!("Session {jwt}.");
+    for (id, text) in [
+        (
+            "0015g00000XyZabAAB",
+            "Found 1 account: Acme Corp (0015g00000XyZabAAB)",
+        ),
+        (
+            "0015g00000XyZabAAB",
+            "Open https://crm.example.com/r/Account/0015g00000XyZabAAB/view",
+        ),
+        ("0015g00000XyZabAAB", "Saved {0015g00000XyZabAAB}."),
+        (
+            "0015g00000XyZabAAB",
+            "Linked to /accounts(0015g00000XyZabAAB).",
+        ),
+        (
+            "/accounts(0015g00000XyZabAAB)",
+            "Acme Corp (0015g00000XyZabAAB)",
+        ),
+        (
+            "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=",
+            "Token aGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=, kept.",
+        ),
+        (jwt, session.as_str()),
+    ] {
+        assert!(is_machine_id(id), "{id}");
+        let context = after(vec![call("read", "search", json!({}), json!(text))]);
+        assert!(
+            !context.never_read(&json!({ "recordId": id }), "/recordId"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn option_sets_are_kept_per_read_scope_and_capped() {
+    let described = |table: &str, options: &str| {
+        call(
+            &format!("describe-{table}-{options}"),
+            "describe",
+            json!({"path": format!("tables/{table}")}),
+            json!(format!("priority CHOICE (Options: {options})")),
+        )
+    };
+    let context = after(vec![
+        described("task", "Low (0), High (2)"),
+        described("account", "Cold (0), Hot (2)"),
+        described("task", "Low (0), Urgent (2)"),
+    ]);
+    assert_eq!(context.vocabularies.len(), 2);
+    let label = |table, code| context.table_choice_label(SERVER, table, "priority", code);
+    assert_eq!(label("task", "2"), Said::Label("Urgent".into()));
+    assert_eq!(label("Account", "2"), Said::Label("Hot".into()));
+    assert_eq!(label("task", "1"), Said::Nothing);
+    assert_eq!(label("contact", "2"), Said::Nothing);
+    assert_eq!(
+        context.table_choice_label("Other", "task", "priority", "2"),
+        Said::Nothing
+    );
+
+    // A read without arguments, or naming more than one table's worth of
+    // words, scopes nothing; the store keeps its newest vocabularies only.
+    let unscoped = call(
+        "unscoped",
+        "describe",
+        json!({}),
+        json!("priority CHOICE (Options: Low (0), High (2))"),
+    );
+    let wide = call(
+        "wide",
+        "describe",
+        json!({"path": (0..80).map(|n| format!("t{n}")).collect::<Vec<_>>().join("/")}),
+        json!("priority CHOICE (Options: Low (0), High (2))"),
+    );
+    let context = after(vec![unscoped, wide]);
+    assert!(context.vocabularies.is_empty());
+    let many: Vec<_> = (0..MAX_VOCABULARIES + 5)
+        .map(|n| described(&format!("table{n}"), "Low (0), High (2)"))
+        .collect();
+    let context = after(many);
+    assert_eq!(context.vocabularies.len(), MAX_VOCABULARIES);
+    assert!(context.vocabulary_bytes <= MAX_VOCABULARY_BYTES);
+    assert_eq!(
+        context.table_choice_label(SERVER, "table0", "priority", "2"),
+        Said::Nothing
+    );
+    assert_eq!(
+        context.table_choice_label(
+            SERVER,
+            &format!("table{}", MAX_VOCABULARIES + 4),
+            "priority",
+            "2"
+        ),
+        Said::Label("High".into())
+    );
+}
+
+#[test]
+fn option_sets_go_once_a_call_may_have_changed_them() {
+    let describe = call(
+        "describe",
+        "describe",
+        json!({"path": "tables/account"}),
+        json!(
+            "type CHOICE (Options: Partner (1), Prospect (8))\nsize CHOICE (Options: Small (1), Large (2))"
+        ),
+    );
+    let writing = |id: &str, tool: &str, input: Value, action: ToolCallAction| {
+        let mut write = call(id, tool, input, json!("Done."));
+        if let Some(display) = write.display.as_mut() {
+            display.label = Some(ToolCallLabel {
+                action,
+                object_kind: ToolCallObjectKind::Row,
+                items: Vec::new(),
+                arguments: None,
+                warnings: Vec::new(),
+                source: ToolCallLabelSource::Rules,
+                change: None,
+            });
+        }
+        write
+    };
+    let labels = |context: &ToolResultContext| {
+        (
+            context.table_choice_label(SERVER, "account", "type", "8"),
+            context.table_choice_label(SERVER, "account", "size", "2"),
+        )
+    };
+    let both = (Said::Label("Prospect".into()), Said::Label("Large".into()));
+
+    // Writing a record's values, or reading the member, changes no option.
+    let context = after(vec![
+        describe.clone(),
+        writing(
+            "row",
+            "update_record",
+            json!({"tablename": "account", "recordId": ACCOUNT, "item": {"type": 1}}),
+            ToolCallAction::Update,
+        ),
+        writing(
+            "query",
+            "run_query",
+            json!({"tablename": "account", "query": "SELECT type FROM account"}),
+            ToolCallAction::Run,
+        ),
+    ]);
+    assert_eq!(labels(&context), both);
+
+    // A write that acts on the member itself may have changed its options.
+    let context = after(vec![
+        describe.clone(),
+        writing(
+            "column",
+            "update_column",
+            json!({"tablename": "account", "column": "type", "options": [{"label": "Lead", "value": 8}]}),
+            ToolCallAction::Update,
+        ),
+    ]);
+    assert_eq!(
+        labels(&context),
+        (Said::Nothing, Said::Label("Large".into()))
+    );
+    let other_table = after(vec![
+        describe.clone(),
+        writing(
+            "column",
+            "update_column",
+            json!({"tablename": "contact", "column": "type"}),
+            ToolCallAction::Update,
+        ),
+    ]);
+    assert_eq!(labels(&other_table), both);
+
+    // A task's child may have changed anything.
+    let task = call(
+        "task",
+        erato_config::config::DELEGATE_TASK_TOOL_NAME,
+        json!({ "task": "Tidy the account options" }),
+        json!({ "status": "completed", "result": "Done." }),
+    );
+    let context = after(vec![describe, task]);
+    assert_eq!(labels(&context), (Said::Nothing, Said::Nothing));
+}
+
+#[test]
+fn a_list_read_is_matched_by_its_arguments_and_the_members_noun() {
+    let list = |tool: &str, input: Value| {
+        call(
+            tool,
+            tool,
+            input,
+            json!([{"id": "1", "name": "Highest", "color": "red"}, {"id": "2", "name": "High"}]),
+        )
+    };
+    let context = after(vec![
+        list("get_priorities", json!({})),
+        list("list_project_statuses", json!({"project": "OPS"})),
+    ]);
+    let label = |arguments: Value, member: &str| {
+        context.listed_choice_label(SERVER, &arguments, member, "2")
+    };
+    let high = Said::Label("High".into());
+    assert_eq!(label(json!({"issue": "OPS-1"}), "priority_id"), high);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "priorityId"), high);
+    assert_eq!(label(json!({"project": "OPS"}), "status"), high);
+    assert_eq!(label(json!({"project": "WEB"}), "status"), Said::Nothing);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "status"), Said::Nothing);
+    assert_eq!(label(json!({"issue": "OPS-1"}), "id"), Said::Nothing);
+    assert_eq!(
+        context.listed_choice_label(SERVER, &json!({}), "priority", "3"),
+        Said::Nothing
+    );
+    // Only what the list holds names it: never the read's verb or a word
+    // that qualifies what it lists.
+    assert_eq!(
+        label(json!({"project": "OPS"}), "target_project"),
+        Said::Nothing
+    );
+    let context = after(vec![
+        list("list_labels", json!({"board_id": "B1"})),
+        list("labels_list", json!({"board_id": "B2"})),
+        call(
+            "items",
+            "fetch",
+            json!({"board_id": "B3"}),
+            json!({"items": [{"id": "1", "name": "Highest"}, {"id": "2", "name": "High"}]}),
+        ),
+    ]);
+    let label = |arguments: Value, member: &str| {
+        context.listed_choice_label(SERVER, &arguments, member, "2")
+    };
+    assert_eq!(label(json!({"board_id": "B1"}), "label_id"), high);
+    assert_eq!(label(json!({"board_id": "B2"}), "labels"), high);
+    for board in ["B1", "B2"] {
+        assert_eq!(
+            label(json!({"board_id": board}), "list_id"),
+            Said::Nothing,
+            "{board}"
+        );
+    }
+    assert_eq!(label(json!({"board_id": "B3"}), "item_id"), Said::Nothing);
+    for (one, other) in [
+        ("priority", "priorities"),
+        ("status", "statuses"),
+        ("label", "labels"),
+    ] {
+        assert!(same_noun(one, other) && same_noun(other, one), "{one}");
+    }
+    assert!(!same_noun("status", "statue") && !same_noun("type", "types_x"));
+}
+
+#[test]
+fn a_hostile_description_is_read_within_its_byte_caps() {
+    let digits = "1 = 1 = ".repeat(MAX_DESCRIBED_LINE_BYTES / 8);
+    let brackets = "x (1".repeat(MAX_DESCRIBED_LINE_BYTES / 4);
+    let mut text = String::new();
+    while text.len() < 2 * MAX_DESCRIBED_BYTES {
+        text.push_str("priority CHOICE ");
+        text.push_str(&digits[..digits.len() - 64]);
+        text.push('\n');
+        text.push_str("status CHOICE ");
+        text.push_str(&brackets[..brackets.len() - 64]);
+        text.push('\n');
+    }
+    text.push_str("stage CHOICE (Options: Low (0), High (1))\n");
+    let started = std::time::Instant::now();
+    let context = after(vec![call(
+        "describe",
+        "describe",
+        json!({"path": "tables/task"}),
+        json!(text),
+    )]);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // Past the bytes read, nothing more is listed.
+    assert_eq!(
+        context.table_choice_label(SERVER, "task", "stage", "1"),
+        Said::Nothing
+    );
 }

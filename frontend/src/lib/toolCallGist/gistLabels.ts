@@ -28,8 +28,87 @@ export const GIST_SHAPES = ["full", "titled", "placed", "other"] as const;
 export const gistShape = (hasTitle: boolean, hasWhere: boolean): GistShape =>
   hasTitle ? (hasWhere ? "full" : "titled") : hasWhere ? "placed" : "other";
 
-/** The kind as a noun; more than one reads as a count, e.g. "3 rows". */
-export const gistKindLabel = (kind: GistKind, count: number): string => {
+/**
+ * The kind of one of a table's records, the table read as part of the kind
+ * and never as where the record lives: "account row", "3 account rows".
+ */
+const tableKindLabel = (kind: GistKind, count: number, table: string): string =>
+  t({
+    id: "toolGist.kind.ofTable",
+    message: select(kind, {
+      page: plural(count, {
+        one: `${table} page`,
+        other: `# ${table} pages`,
+      }),
+      database: plural(count, {
+        one: `${table} database`,
+        other: `# ${table} databases`,
+      }),
+      folder: plural(count, {
+        one: `${table} folder`,
+        other: `# ${table} folders`,
+      }),
+      note: plural(count, {
+        one: `${table} note`,
+        other: `# ${table} notes`,
+      }),
+      comment: plural(count, {
+        one: `${table} comment`,
+        other: `# ${table} comments`,
+      }),
+      paragraph: plural(count, {
+        one: `${table} paragraph`,
+        other: `# ${table} paragraphs`,
+      }),
+      document: plural(count, {
+        one: `${table} document`,
+        other: `# ${table} documents`,
+      }),
+      email: plural(count, {
+        one: `${table} email`,
+        other: `# ${table} emails`,
+      }),
+      message: plural(count, {
+        one: `${table} message`,
+        other: `# ${table} messages`,
+      }),
+      event: plural(count, {
+        one: `${table} event`,
+        other: `# ${table} events`,
+      }),
+      file: plural(count, {
+        one: `${table} file`,
+        other: `# ${table} files`,
+      }),
+      task: plural(count, {
+        one: `${table} task`,
+        other: `# ${table} tasks`,
+      }),
+      row: plural(count, {
+        one: `${table} row`,
+        other: `# ${table} rows`,
+      }),
+      other: plural(count, {
+        one: `${table} item`,
+        other: `# ${table} items`,
+      }),
+    }),
+  });
+
+/**
+ * The kind as a noun; more than one reads as a count, e.g. "3 rows". A
+ * `table` the record is one of qualifies the kind: "account row".
+ */
+export const gistKindLabel = (
+  kind: GistKind,
+  count: number,
+  table?: string,
+): string => {
+  if (table !== undefined && table.length > 0) {
+    // A type the call names, such as "Namespace", is the noun itself.
+    if (kind === "other" && count === 1) return table;
+    return tableKindLabel(kind, count, table);
+  }
   switch (kind) {
     case "page":
       return t({
@@ -609,11 +688,52 @@ export const gistLineSentence = (
     phase,
     // A batch is counted in the line and named in its rows.
     shape: gistShape(namesInLine(item), item.where.length > 0),
-    kind: gistKindLabel(gist.kind, item.count),
+    kind: gistKindLabel(gist.kind, item.count, gist.change?.table),
     title: GIST_TITLE_SLOT,
     where: GIST_WHERE_SLOT,
   });
 };
+
+/**
+ * The line under an item's sentence when the one record it acts on is named
+ * only by an ID no result in this chat held, so nothing could name it: which
+ * record it is stays unknown here, and the ID is in the card's details.
+ */
+export const gistUnreadRecordLine = (gist: Gist): string => {
+  const kind = gist.kind;
+  const noun = gistKindLabel(kind, 1, gist.change?.table);
+  const details = t({
+    id: "toolCall.technicalDetails",
+    message: "Technical details",
+  });
+  return t({
+    id: "toolGist.unreadRecord",
+    message: select(kind, {
+      other: `Which ${noun}: not read in this chat (its ID is in ${details})`,
+    }),
+  });
+};
+
+/**
+ * Whether the card's lines call what the call acts on only an "item": no
+ * kind, no table or type and no statement the line names instead. The
+ * tool's own name for the call then says what the card cannot.
+ */
+export const namesOnlyAnItem = (gist: Gist): boolean =>
+  gist.kind === "other" &&
+  !gist.change?.table &&
+  !(gist.action === "run" && (gist.change?.opaque.length ?? 0) > 0);
+
+/**
+ * Whether an item's line is followed by the line that its record was not
+ * read: the backend says so for the label's first item only, and only a line
+ * that names nothing needs it.
+ */
+export const showsUnreadRecord = (gist: Gist, item: GistItem): boolean =>
+  gist.change?.recordUnread === true &&
+  gist.items[0] === item &&
+  item.count === 1 &&
+  item.names.length === 0;
 
 const plainValues = (values: GistValue[]) =>
   listedValues(values)

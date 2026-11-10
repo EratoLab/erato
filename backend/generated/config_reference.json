@@ -4118,6 +4118,18 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers.<server-id>.glossary.choice_labels.<field-name>.<choice-value>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.glossary.field_names.<field-name>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers.<server-id>.http_headers.<key>": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

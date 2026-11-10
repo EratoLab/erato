@@ -136,6 +136,16 @@ chat_provider_ids = ["test-token-limit"]
 # # model, asks before each call of a tool that declares it, and fills it from the
 # # user's decision.
 # approval_argument = "hasUserApproved"
+# # Optional: how this server's machine names read on approval cards. A glossary
+# # name is shown with the raw name beside it; it never changes what a call does.
+# [mcp_servers.file_provider.glossary.field_names]
+# # The field's exact name = what people call it.
+# duedate = "Due"
+# [mcp_servers.file_provider.glossary.choice_labels.priority]
+# # Value as the tool writes it = what it means. An entry holds for every tool
+# # and table of the server.
+# 1 = "Low"
+# 2 = "High"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)

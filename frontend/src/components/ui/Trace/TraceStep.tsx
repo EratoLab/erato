@@ -15,6 +15,12 @@ interface TraceStepProps {
   hasTrailingRailLine: boolean;
   /** A short, single-line label rendered in the step header. */
   title: ReactNode;
+  /**
+   * Text that belongs after the title and must stay readable, such as a tool
+   * call's counts: it is never cut off with the title, and drops below it
+   * when the row is too narrow for both.
+   */
+  titleAfter?: ReactNode;
   /** Optional inline node next to the title (e.g. a tool status pill). */
   titleSlot?: ReactNode;
   /**
@@ -52,6 +58,27 @@ interface TraceStepProps {
   isActive?: boolean;
 }
 
+const TraceStepTitle = ({
+  title,
+  after,
+}: {
+  title: ReactNode;
+  after: ReactNode;
+}) =>
+  after == null ? (
+    <span className="truncate font-medium">{title}</span>
+  ) : (
+    <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+      <span className="min-w-0 max-w-full truncate font-medium">{title}</span>
+      <span
+        className="min-w-0 max-w-full whitespace-normal break-words font-normal text-theme-fg-muted"
+        data-testid="trace-step-title-after"
+      >
+        {after}
+      </span>
+    </span>
+  );
+
 /**
  * Visual primitive for a single trace row: rail (icon + connecting line) +
  * collapsible body. Stateless about content type — just a layout shell.
@@ -66,6 +93,7 @@ export const TraceStep = ({
   railIcon,
   hasTrailingRailLine,
   title,
+  titleAfter,
   titleSlot,
   headerSlot,
   detailSlot,
@@ -103,7 +131,7 @@ export const TraceStep = ({
         <div className="flex min-w-0 items-center gap-1">
           {children == null ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary">
-              <span className="truncate font-medium">{title}</span>
+              <TraceStepTitle title={title} after={titleAfter} />
               {titleSlot}
             </div>
           ) : (
@@ -117,7 +145,7 @@ export const TraceStep = ({
                 "min-w-0",
               )}
             >
-              <span className="truncate font-medium">{title}</span>
+              <TraceStepTitle title={title} after={titleAfter} />
               {titleSlot}
               <ChevronRightIcon
                 aria-hidden="true"

@@ -192,6 +192,14 @@ interface LabelItem {
   fields: LabelSlot[];
 }
 
+/**
+ * A path that only points at a record by its UUID, as `/accounts(<uuid>)`:
+ * a machine ID however the label marks it, as a label stored before the
+ * backend marked these may not.
+ */
+const LINK_PATH =
+  /^\/[^\s()]+\(\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?\)$/i;
+
 const readValue = (raw: unknown): LabelValue | undefined => {
   if (!isRecord(raw) || typeof raw.path !== "string") return undefined;
   if (raw.path.length > MAX_PATH_CHARS) return undefined;
@@ -204,7 +212,7 @@ const readValue = (raw: unknown): LabelValue | undefined => {
     resolved: resolved.text.length > 0 ? resolved.text : undefined,
     truncated: raw.truncated === true || text.truncated,
     hidden: text.hiddenCharacters || resolved.hiddenCharacters,
-    machineId: raw.machine_id === true,
+    machineId: raw.machine_id === true || LINK_PATH.test(text.text.trim()),
   };
 };
 

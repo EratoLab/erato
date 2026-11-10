@@ -42,6 +42,24 @@ pub fn is_machine_id(text: &str) -> bool {
         || is_short_mixed_id(text)
         || is_jwt_like(text)
         || is_opaque_token(text)
+        || id_inside_a_link_path(text).is_some()
+}
+
+/// The machine ID a path such as `/accounts(aaaaaaaa-0000-4000-8000-0000000000a1)`
+/// holds: such a path only points at the record that ID stands for, so it is
+/// one too, and is looked up by the ID inside it.
+pub fn id_inside_a_link_path(text: &str) -> Option<&str> {
+    let text = text.trim();
+    let open = text.rfind('(')?;
+    let inner = text[open + 1..].strip_suffix(')')?;
+    let path = &text[..open];
+    (path.starts_with('/')
+        && path.len() > 1
+        && !path
+            .chars()
+            .any(|c| c.is_whitespace() || matches!(c, '(' | ')'))
+        && is_machine_id(inner))
+    .then_some(inner)
 }
 
 fn is_long_digits(text: &str) -> bool {
@@ -173,6 +191,27 @@ mod tests {
             "",
         ] {
             assert!(!is_machine_id(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_path_that_only_points_at_a_record_by_its_machine_id_is_one() {
+        let id = "aaaaaaaa-0000-4000-8000-0000000000a1";
+        for path in [format!("/accounts({id})"), format!("/contacts({{{id}}})")] {
+            assert!(is_machine_id(&path), "{path}");
+        }
+        assert_eq!(id_inside_a_link_path(&format!("/accounts({id})")), Some(id));
+        for text in [
+            "/accounts(4211)".to_string(),
+            "/accounts(name='Contoso')".to_string(),
+            format!("accounts({id})"),
+            format!("/({id})"),
+            format!("/my accounts({id})"),
+            format!("/accounts({id}) and more"),
+            format!("/a(b)({id})"),
+        ] {
+            assert_eq!(id_inside_a_link_path(&text), None, "{text}");
+            assert!(!is_machine_id(&text), "{text}");
         }
     }
 

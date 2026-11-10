@@ -7,6 +7,7 @@ import type {
   ToolCallEffectKind,
   ToolCallOpaqueKind,
   ToolCallRecipientKind,
+  ToolCallValueMeaningSource,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
 /**
@@ -15,11 +16,18 @@ import type {
  * one renders as it did before.
  */
 
+export interface ChangeMeaning {
+  label: string;
+  source: ToolCallValueMeaningSource;
+}
+
 export interface ChangeValue {
   text: string;
   truncated: boolean;
   /** A machine identifier: `text` is its name, or empty when none is known. */
   machineId: boolean;
+  /** What a coded value stands for, where a glossary, the tool or a read says so. */
+  meaning?: ChangeMeaning;
 }
 
 export interface ChangeEffect {
@@ -36,6 +44,8 @@ export interface ChangeEffect {
   /** The value is a list, whatever the card can say about what happens to it. */
   list: boolean;
   link: boolean;
+  /** A name the call gives a record nobody read in this chat: a new value, not its name. */
+  newName: boolean;
 }
 
 export interface ChangeText {
@@ -148,6 +158,10 @@ export interface GistChange {
   textsOmitted: number;
   batch?: ChangeBatch;
   place?: string;
+  /** The table the record is one of, read as part of its kind, never as a place. */
+  table?: string;
+  /** The one record the call acts on was never read in this chat, so no name is known. */
+  recordUnread: boolean;
   notes: ToolCallChangeNote[];
   complete: boolean;
   consentLeftOut: boolean;
@@ -172,6 +186,7 @@ const OPAQUE_KINDS: readonly ToolCallOpaqueKind[] = [
 ];
 const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "marked_destructive",
+  "operator_marked_destructive",
   "delete_outcome_unknown",
   "tool_says_permanent",
   "tool_says_restorable",
@@ -185,6 +200,11 @@ const CHANGE_NOTES: readonly ToolCallChangeNote[] = [
   "nothing_changes",
 ];
 const RECIPIENT_KINDS: readonly ToolCallRecipientKind[] = ["to", "cc", "bcc"];
+const MEANING_SOURCES: readonly ToolCallValueMeaningSource[] = [
+  "glossary",
+  "earlier",
+  "tool",
+];
 const ROW_ACTIONS: readonly ToolCallAction[] = [
   "create",
   "update",
@@ -242,7 +262,16 @@ class Reader {
       text: withIdPhrase(cleaned.text),
       truncated: raw.truncated === true || cleaned.truncated,
       machineId: raw.machine_id === true,
+      meaning: this.meaning(raw.meaning),
     };
+  }
+
+  meaning(raw: unknown): ChangeMeaning | undefined {
+    if (!isRecord(raw) || !isOneOf(MEANING_SOURCES, raw.source)) {
+      return undefined;
+    }
+    const label = this.text(raw.label);
+    return label.length > 0 ? { label, source: raw.source } : undefined;
   }
 
   values(raw: unknown, max: number): ChangeValue[] {
@@ -267,6 +296,7 @@ class Reader {
       added: this.values(raw.added, MAX_LIST_VALUES),
       list: raw.list === true,
       link: raw.link === true,
+      newName: raw.new_name === true,
     };
   }
 
@@ -457,6 +487,8 @@ export const readChange = (raw: unknown): GistChange | undefined => {
     textsOmitted: countOf(raw.texts_omitted),
     batch: reader.batch(raw.batch),
     place: typeof raw.place === "string" ? reader.text(raw.place) : undefined,
+    table: typeof raw.table === "string" ? reader.text(raw.table) : undefined,
+    recordUnread: raw.record_unread === true,
     notes: listOf(raw.notes, MAX_NOTES).filter(
       (note): note is ToolCallChangeNote => isOneOf(CHANGE_NOTES, note),
     ),
@@ -538,6 +570,16 @@ export const collapsedNames = (
 /** Whether a value needs the phrase for "no name known" instead of its text. */
 export const hidesMachineId = (value: ChangeValue): boolean =>
   value.machineId && value.text.length === 0;
+
+/** Whether it is unknown if this call replaces a list or adds to it. */
+export const listReplaceIsUnknown = (change: GistChange): boolean =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  change.notes.includes("list_replace_unknown");
+
+/** Whether only the tool's word says this call adds to its lists. */
+export const toolSaysOnlyAdds = (change: GistChange): boolean =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  change.notes.includes("tool_says_adds_to_list");
 
 /** Whether the description says something a card should show. */
 export const changeSaysSomething = (change: GistChange): boolean =>

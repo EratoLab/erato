@@ -289,11 +289,7 @@ const PlainToolUseStep = ({
                 data-testid="tool-call-gist-line"
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={phase} />
-                {counts !== undefined && (
-                  <span className="font-normal text-theme-fg-muted">
-                    : {counts}
-                  </span>
-                )}
+                {counts !== undefined && ":"}
               </span>
             ) : (
               toolName
@@ -317,6 +313,7 @@ const PlainToolUseStep = ({
             )}
           </>
         }
+        titleAfter={counts}
         titleSlot={
           notRun ? undefined : (
             <ToolStatusPill

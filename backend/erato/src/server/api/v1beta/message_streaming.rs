@@ -4709,6 +4709,15 @@ pub(crate) async fn prepare_chat_request_with_adapters(
     .await
 }
 
+/// Whether `chat` was spawned from another chat, such as a task's run; a
+/// configuration that cannot be read counts as one.
+fn spawned_from_another_chat(chat: &chats::Model) -> bool {
+    match crate::models::chat::parse_chat_configuration(chat) {
+        Ok(configuration) => configuration.is_some_and(|c| c.provenance.is_some()),
+        Err(_) => true,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_chat_request_with_adapters_memory_inner(
     app_state: &AppState,
@@ -4906,6 +4915,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         crate::services::tool_display::label::ToolResultContext::from_messages(
             &generation_input_messages,
         )
+        .spawned_from_another_chat(spawned_from_another_chat(chat))
         .with_organization(
             me_profile_input.email,
             &app_state
@@ -7696,6 +7706,7 @@ async fn stream_generate_chat_completion<'a>(
                             &mcp.config,
                             &managed.server_id,
                             &managed.tool,
+                            managed.destructive_hint_source,
                             &unfinished_tool_call.fn_arguments,
                             managed.approval_argument.as_deref(),
                             &label_mapping.mapping,
@@ -9618,6 +9629,7 @@ async fn stream_generate_chat_completion<'a>(
                         key,
                         server_id: managed_tool_call.server_id.clone(),
                         tool: managed_tool_call.tool.clone(),
+                        destructive_hint_source: managed_tool.destructive_hint_source,
                         arguments: crate::services::tool_display::labelled_arguments(
                             &managed_tool_call.tool_call.fn_arguments,
                             managed_tool.approval_argument.as_deref(),
@@ -13506,6 +13518,7 @@ mod tests {
             approval_argument: None,
             server_id: server_id.to_string(),
             tool,
+            destructive_hint_source: Default::default(),
         }
     }
 
@@ -23809,6 +23822,7 @@ async fn resume_parked_generation(
             &retrieval_source,
             &parsed.content,
         )
+        .spawned_from_another_chat(spawned_from_another_chat(&chat))
         .with_organization(
             me_profile_input.email,
             &app_state

@@ -4674,11 +4674,23 @@ export type ToolCallChange = {
    */
   opaque_omitted?: number;
   /**
-   * Where the record lives when no target says so: the table, the project,
-   * joined when the call names several.
+   * Where the record lives when no target says so, such as its project
+   * or repository, joined when the call names several; never its table.
    */
   place?: string;
   recipients?: ToolCallRecipients;
+  /**
+   * The one record the call acts on is named only by a machine ID that no
+   * result in this chat held, every result read whole: a card says the
+   * record was not read here and where its ID is.
+   */
+  record_unread?: boolean;
+  /**
+   * The table or type the record is one of, as the call names it, when
+   * that says more than the label's kind: a card reads it as part of the
+   * kind ("account row", "Namespace"), never as where the record goes.
+   */
+  table?: string;
   /**
    * Long text the call writes, shown as a block.
    */
@@ -4698,6 +4710,7 @@ export type ToolCallChange = {
  */
 export type ToolCallChangeNote =
   | "marked_destructive"
+  | "operator_marked_destructive"
   | "delete_outcome_unknown"
   | "tool_says_permanent"
   | "tool_says_restorable"
@@ -4736,6 +4749,12 @@ export type ToolCallEffect = {
    * A readable name, display-cleaned.
    */
   name: string;
+  /**
+   * A name the call gives a record nobody read in this chat (see
+   * `record_unread`): a card reads it as a new value, never as the name of
+   * the record being changed.
+   */
+  new_name?: boolean;
   old?: ToolCallEffectValue;
   /**
    * List values past the cap.
@@ -4817,6 +4836,7 @@ export type ToolCallEffectValue = {
    * A machine identifier: the card shows `text`, or a phrase when it is empty.
    */
   machine_id?: boolean;
+  meaning?: ToolCallValueMeaning;
   /**
    * Display-cleaned and capped. For a machine identifier: the name of the
    * record it stands for, or empty when no result names it.
@@ -5099,6 +5119,27 @@ export type ToolCallTextChange = {
   text: string;
   truncated?: boolean;
 };
+
+/**
+ * What a coded value stands for, and whose word that is.
+ */
+export type ToolCallValueMeaning = {
+  /**
+   * Display-cleaned and capped.
+   */
+  label: string;
+  source: ToolCallValueMeaningSource;
+};
+
+/**
+ * Whose word a value's meaning is; a card marks every meaning but the
+ * glossary's as the tool's claim, an earlier result's included.
+ */
+export type ToolCallValueMeaningSource =
+  | "glossary"
+  | "earlier"
+  | "tool"
+  | "other";
 
 /**
  * Inert display text for a tool call, captured with the call: the tool

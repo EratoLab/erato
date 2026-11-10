@@ -600,6 +600,8 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub recipients: Option<ToolCallRecipients>,
+    /// Which records or which part of one the call applies to: a filter, or
+    /// the values beside content the call marks new, such as a heading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub filter: Option<ToolCallFilter>,
@@ -612,11 +614,22 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub batch: Option<ToolCallBatch>,
-    /// Where the record lives when no target says so: the table, the project,
-    /// joined when the call names several.
+    /// Where the record lives when no target says so, such as its project
+    /// or repository, joined when the call names several; never its table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub place: Option<String>,
+    /// The table or type the record is one of, as the call names it, when
+    /// that says more than the label's kind: a card reads it as part of the
+    /// kind ("account row", "Namespace"), never as where the record goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub table: Option<String>,
+    /// The one record the call acts on is named only by a machine ID that no
+    /// result in this chat held, every result read whole: a card says the
+    /// record was not read here and where its ID is.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record_unread: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<ToolCallChangeNote>,
     /// Every value was read and classified. Only then may a card state what
@@ -669,6 +682,11 @@ pub struct ToolCallEffect {
     /// The value only links to another record.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub link: bool,
+    /// A name the call gives a record nobody read in this chat (see
+    /// `record_unread`): a card reads it as a new value, never as the name of
+    /// the record being changed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub new_name: bool,
 }
 
 /// One value as a card shows it.
@@ -683,6 +701,37 @@ pub struct ToolCallEffectValue {
     /// A machine identifier: the card shows `text`, or a phrase when it is empty.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub machine_id: bool,
+    /// What a coded value (`text`, as written) stands for, where the
+    /// operator's glossary, the tool's own schema or an earlier result says so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub meaning: Option<ToolCallValueMeaning>,
+}
+
+/// What a coded value stands for, and whose word that is.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallValueMeaning {
+    /// Display-cleaned and capped.
+    pub label: String,
+    pub source: ToolCallValueMeaningSource,
+}
+
+/// Whose word a value's meaning is; a card marks every meaning but the
+/// glossary's as the tool's claim, an earlier result's included.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallValueMeaningSource {
+    /// The operator's glossary for the server.
+    Glossary,
+    /// An earlier result in the chat paired the value with this label.
+    Earlier,
+    /// The tool's own input schema or description.
+    Tool,
+    /// A source from a newer version; clients show the value alone.
+    #[serde(other)]
+    Other,
 }
 
 /// What happens to a value, ranked from most to least to lose.
@@ -979,6 +1028,8 @@ pub struct ToolCallBatchOperation {
 pub enum ToolCallChangeNote {
     /// The tool's annotations mark it as destructive.
     MarkedDestructive,
+    /// The operator's configuration marks the tool as destructive.
+    OperatorMarkedDestructive,
     /// What else goes, and whether it can be restored, is not known.
     DeleteOutcomeUnknown,
     ToolSaysPermanent,
@@ -1029,7 +1080,7 @@ pub enum ToolCallAction {
     Run,
     /// Creates or updates, the call does not say which.
     Upsert,
-    /// Moves to an archive or trash rather than deleting.
+    /// Moves to an archive rather than deleting; a move to the trash is a delete.
     Archive,
     Upload,
     /// Also what a value from a newer version reads as.

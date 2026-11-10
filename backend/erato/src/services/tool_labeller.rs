@@ -58,6 +58,8 @@ pub struct LabelJob {
     pub key: ToolLabelCacheKey,
     pub server_id: String,
     pub tool: rmcp::model::Tool,
+    /// Who set the tool's destructive hint.
+    pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
     /// The model's arguments without the tool's consent argument; see
     /// [`crate::services::tool_display::labelled_arguments`].
     pub arguments: Value,
@@ -520,6 +522,7 @@ fn shown_label(
         config,
         &job.server_id,
         &job.tool,
+        job.destructive_hint_source,
         &job.arguments,
         job.approval_argument.as_deref(),
         &with_model_verb(rules.mapping, mapping),
@@ -924,6 +927,7 @@ mod tests {
             key: ToolLabelCacheKey::new("user", "records", &tool, &arguments),
             server_id: "records".into(),
             tool,
+            destructive_hint_source: Default::default(),
             arguments,
             approval_argument: None,
             context: Default::default(),

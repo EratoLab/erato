@@ -403,6 +403,7 @@ async fn setup_search_and_paced_task(
             default_tool_annotations: Default::default(),
             override_tool_annotations: Default::default(),
             tools: Default::default(),
+            glossary: Default::default(),
         },
     );
     config.mcp_server_permissions.rules.insert(

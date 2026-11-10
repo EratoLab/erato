@@ -7,20 +7,27 @@
 
 use super::MAX_LABEL_VALUE_CHARS;
 use super::arguments::names_an_id;
-use super::context::{
-    ListEntry, ToolResultContext, is_link, link_id_member, list_entries_match, list_entry,
-    name_words, text_prefix,
+use super::choices::{
+    MAX_CHOICE_LABEL_CHARS, Said, choice_label, is_choice_code, property_at, schema_choice_label,
 };
-use super::machine_id::is_machine_id;
+use super::context::{
+    CodedValue, ListEntry, ToolResultContext, call_table, is_link, link_id_member,
+    list_entries_match, list_entry, name_words, text_prefix,
+};
+use super::machine_id::{id_inside_a_link_path, is_machine_id};
 use super::pointer::escape;
 use super::recipients::{ADDRESS_MEMBERS, bare_member, is_phone_shaped};
-use super::rules::{self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, recipients_in};
+use super::rules::{
+    self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, TITLE_MEMBERS, WRAPPER_MEMBERS,
+    recipients_in,
+};
 use crate::models::message::{
     ToolCallAction, ToolCallBatch, ToolCallBatchField, ToolCallBatchOperation, ToolCallBatchRow,
     ToolCallChange, ToolCallChangeNote, ToolCallEffect, ToolCallEffectKind, ToolCallEffectValue,
     ToolCallFilter, ToolCallFilterPart, ToolCallFlag, ToolCallLabel, ToolCallLabelItem,
-    ToolCallLabelSource, ToolCallOpaque, ToolCallOpaqueKind, ToolCallRecipientGroup,
-    ToolCallRecipientKind, ToolCallTextChange,
+    ToolCallLabelSource, ToolCallObjectKind, ToolCallOpaque, ToolCallOpaqueKind,
+    ToolCallRecipientGroup, ToolCallRecipientKind, ToolCallTextChange, ToolCallValueMeaning,
+    ToolCallValueMeaningSource,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
@@ -77,25 +84,6 @@ const LONG_TEXT_CHARS: usize = 240;
 /// Bytes of a tool's description read for what it says about itself.
 const MAX_DESCRIPTION_BYTES: usize = 8 * 1024;
 
-/// Objects whose members are the values a call writes, flattened into plain
-/// rows of the same names.
-const WRAPPER_MEMBERS: [&str; 15] = [
-    "properties",
-    "fields",
-    "item",
-    "record",
-    "data",
-    "set",
-    "attributes",
-    "values",
-    "updates",
-    "changes",
-    "params",
-    "payload",
-    "update",
-    "patch",
-    "additional_fields",
-];
 const FILTER_MEMBERS: [&str; 9] = [
     "where",
     "filter",
@@ -200,6 +188,11 @@ pub struct ChangeFacts<'a> {
     pub rules_action: ToolCallAction,
     /// The server whose earlier results may name this call's IDs.
     pub server: Option<&'a str>,
+    /// The operator's words for this server's field names and choice values.
+    pub glossary: Option<&'a erato_config::config::McpGlossaryConfig>,
+    /// Who set the tool's destructive hint: its server, or the operator's
+    /// configuration.
+    pub destructive_hint_source: crate::services::mcp_tool_annotations::McpToolAnnotationSource,
 }
 
 /// The call's change description, and whether cleaning a value or name it
@@ -212,7 +205,7 @@ pub fn describe(label: &ToolCallLabel, facts: ChangeFacts<'_>) -> Option<(ToolCa
         facts.rules_action
     };
     let item = label.items.first();
-    let mut walk = Walk::new(action, item, &facts);
+    let mut walk = Walk::new(action, label.object_kind, item, &facts);
     if let Value::Object(members) = facts.arguments {
         walk.members(members, "", 0, false, "");
     }
@@ -252,14 +245,26 @@ enum Pushed {
 struct Walk<'a> {
     facts: &'a ChangeFacts<'a>,
     action: ToolCallAction,
+    /// What the label says the record is; a table that only repeats it is
+    /// left out.
+    kind: ToolCallObjectKind,
+    /// See [`ToolCallChange::record_unread`].
+    record_unread: bool,
     /// Paths the line names: the record, its title, where it goes.
     named: HashSet<&'a str>,
     /// Those of them whose value the line can show, a machine ID only by name.
     named_shown: HashSet<&'a str>,
+    /// Paths that name the record itself, its ID or title: never where it lives.
+    record: HashSet<&'a str>,
+    /// The call marks its new content as new (`new_content`), so the plain
+    /// text beside it picks the part that content replaces.
+    picks_part: bool,
     /// The text the call says it replaces and the text it writes, by path.
     before: Option<&'a str>,
     after: HashSet<&'a str>,
     earlier: Option<EarlierRecord<'a>>,
+    /// The table the call names, which earlier descriptions of it speak for.
+    table: Option<String>,
     change: ToolCallChange,
     places: Vec<(usize, String)>,
     nodes: usize,
@@ -269,7 +274,7 @@ struct Walk<'a> {
     complete: bool,
     says: ToolText,
     before_stored: bool,
-    saw_list: bool,
+    lists: ListClaims,
     /// A value was compared with what an earlier result showed.
     used_earlier: bool,
 }
@@ -279,12 +284,21 @@ struct EarlierRecord<'a> {
     server: &'a str,
 }
 
+/// One field of the record, as an earlier read wrote it.
+struct EarlierField {
+    text: String,
+    coded: Option<CodedValue>,
+}
+
 impl<'a> Walk<'a> {
     fn new(
         action: ToolCallAction,
+        kind: ToolCallObjectKind,
         item: Option<&'a ToolCallLabelItem>,
         facts: &'a ChangeFacts<'a>,
     ) -> Self {
+        let record_unread =
+            action != ToolCallAction::Other && item.is_some_and(|item| record_unread(item, facts));
         let named_values = item
             .into_iter()
             .flat_map(|item| [&item.id, &item.title, &item.target])
@@ -296,6 +310,13 @@ impl<'a> Walk<'a> {
             .collect();
         let named_shown = named_values
             .filter(|value| !value.machine_id || value.resolved.is_some())
+            .map(|value| value.path.as_str())
+            .collect();
+        let record = item
+            .into_iter()
+            .flat_map(|item| [&item.id, &item.title])
+            .flatten()
+            .flat_map(|slot| &slot.values)
             .map(|value| value.path.as_str())
             .collect();
         let after = item
@@ -317,11 +338,16 @@ impl<'a> Walk<'a> {
         Self {
             facts,
             action,
+            kind,
+            record_unread,
             named,
             named_shown,
+            record,
+            picks_part: is_update_like(action) && marks_new_content(facts.arguments),
             before,
             after,
             earlier,
+            table: call_table(facts.arguments),
             change: ToolCallChange::default(),
             places: Vec::new(),
             nodes: MAX_NODES,
@@ -331,7 +357,7 @@ impl<'a> Walk<'a> {
             complete: true,
             says: ToolText::read(facts.tool.description.as_deref()),
             before_stored: false,
-            saw_list: false,
+            lists: ListClaims::default(),
             used_earlier: false,
         }
     }
@@ -354,7 +380,7 @@ impl<'a> Walk<'a> {
             }
             self.nodes -= 1;
             let path = format!("{base}/{}", escape(member));
-            let name = readable_name(member, shared.as_deref(), prefix);
+            let name = self.member_name(member, shared.as_deref(), prefix);
             self.member(member, value, &path, name, depth, flat);
         }
     }
@@ -377,6 +403,10 @@ impl<'a> Walk<'a> {
             Some(Claim::LookupName) => return,
             None => {}
         }
+        if depth == 0 && self.kind == ToolCallObjectKind::Other && is_type_member(member, value) {
+            self.table(value);
+            return;
+        }
         if is_verb_field(member, value) {
             return;
         }
@@ -384,11 +414,11 @@ impl<'a> Walk<'a> {
             self.recipients(member, value, path);
             return;
         }
-        if is_one_of(member, &TABLE_MEMBERS) && value.is_string() {
-            self.place(member, value);
+        if is_one_of(member, &TABLE_MEMBERS) && value.as_str().is_some_and(is_table_name) {
+            self.table(value);
             return;
         }
-        if depth == 0 && is_scalar(value) && self.is_place(member) {
+        if depth == 0 && is_scalar(value) && self.is_place(member) && !self.record.contains(path) {
             self.place(member, value);
             return;
         }
@@ -400,6 +430,10 @@ impl<'a> Walk<'a> {
             return;
         }
         if self.is_named(path, value) {
+            return;
+        }
+        if depth == 0 && self.picks_part && picks_a_part(member, value) {
+            self.part_picked_by(value, path, name);
             return;
         }
         if is_one_of(member, &FILTER_MEMBERS) {
@@ -471,6 +505,26 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// What a member reads as on the card: the operator's name with the raw
+    /// one beside it, else the member in words.
+    fn member_name(&self, member: &str, shared: Option<&str>, prefix: &str) -> String {
+        match self.glossary_name(member) {
+            Some(name) => format!("{prefix}{name} ({member})"),
+            None => readable_name(member, shared, prefix),
+        }
+    }
+
+    fn glossary_name(&self, member: &str) -> Option<&'a str> {
+        if is_machine_id(member) {
+            return None;
+        }
+        self.facts
+            .glossary?
+            .field_names
+            .get(member)
+            .map(String::as_str)
+    }
+
     fn is_named(&self, path: &str, value: &Value) -> bool {
         if self.named.contains(path) {
             return true;
@@ -526,6 +580,24 @@ impl<'a> Walk<'a> {
                 self.places.push((place_order(member), cleaned));
             }
         }
+    }
+
+    /// The table a record is one of qualifies its kind, unless its name only
+    /// repeats the kind; the first one the call names counts.
+    fn table(&mut self, value: &Value) {
+        let Some(text) = value.as_str() else {
+            return;
+        };
+        let cleaned = self.clean(text);
+        if cleaned.is_empty()
+            || is_machine_id(&cleaned)
+            || self.change.table.is_some()
+            || rules::table_repeats_kind(&cleaned, self.kind)
+            || !self.take_bytes(&cleaned)
+        {
+            return;
+        }
+        self.change.table = Some(cleaned);
     }
 
     fn clean(&mut self, text: &str) -> String {
@@ -585,6 +657,7 @@ impl<'a> Walk<'a> {
                 text: self.name_of_id(&cleaned.text, path).unwrap_or_default(),
                 truncated: false,
                 machine_id: true,
+                meaning: None,
             });
         }
         if cleaned.text.is_empty() {
@@ -596,12 +669,14 @@ impl<'a> Walk<'a> {
                 text: String::new(),
                 truncated: true,
                 machine_id: false,
+                meaning: None,
             });
         }
         Some(ToolCallEffectValue {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -693,6 +768,7 @@ impl<'a> Walk<'a> {
             added: Vec::new(),
             list: false,
             link: false,
+            new_name: false,
         };
         match unwrap(value, is_plural(member)) {
             Unwrapped::Empty => {
@@ -703,19 +779,23 @@ impl<'a> Walk<'a> {
             }
             Unwrapped::Scalar(scalar) => {
                 effect.link = is_link_shaped(member, value);
-                let shown = self.link_or_value(scalar, path);
+                let shown = self
+                    .shown(scalar, path)
+                    .map(|value| self.with_meaning(value, member, path, scalar));
                 effect.values.extend(shown);
                 self.classify_scalar(member, path, scalar, &mut effect);
+                effect.new_name = self.record_unread
+                    && update_like
+                    && effect.effect == ToolCallEffectKind::Set
+                    && !effect.link
+                    && is_one_of(member, &TITLE_MEMBERS);
             }
             Unwrapped::List(entries) => {
                 effect.list = true;
                 self.list_values(&entries, path, &mut effect);
-                if update_like && !only_adds(member) {
-                    self.saw_list = true;
-                    if !self.says.adds_to_list {
-                        effect.effect = ToolCallEffectKind::ListReplaced;
-                        self.diff_list(member, path, &entries, &mut effect);
-                    }
+                if update_like && !only_adds(member) && self.list_claim(path) != ListClaim::Adds {
+                    effect.effect = ToolCallEffectKind::ListReplaced;
+                    self.diff_list(member, path, &entries, &mut effect);
                 }
             }
             Unwrapped::Other => {
@@ -726,17 +806,93 @@ impl<'a> Walk<'a> {
         effect
     }
 
-    fn link_or_value(&mut self, scalar: &Value, path: &str) -> Option<ToolCallEffectValue> {
-        if let Value::String(text) = scalar
-            && let Some(inside) = id_inside_a_link_path(text)
-        {
-            return Some(ToolCallEffectValue {
-                text: self.name_of_id(inside, path).unwrap_or_default(),
-                truncated: false,
-                machine_id: true,
-            });
+    /// `value` with what its code means, where someone has said so. The
+    /// glossary is the operator's word; the tool's schema and earlier reads
+    /// count only when they all agree, and a card marks theirs as the tool's
+    /// claim beside the code.
+    fn with_meaning(
+        &self,
+        mut value: ToolCallEffectValue,
+        member: &str,
+        path: &str,
+        scalar: &Value,
+    ) -> ToolCallEffectValue {
+        if value.machine_id || value.truncated || value.text.is_empty() {
+            return value;
         }
-        self.shown(scalar, path)
+        let code = match scalar {
+            Value::String(_) | Value::Number(_) => value.text.as_str(),
+            _ => return value,
+        };
+        if !is_choice_code(code) || below_a_recipient(path) {
+            return value;
+        }
+        value.meaning = self.meaning_of(member, path, code);
+        value
+    }
+
+    fn meaning_of(&self, member: &str, path: &str, code: &str) -> Option<ToolCallValueMeaning> {
+        let meaning = |label: &str, source| {
+            // A label that only repeats its code says nothing more.
+            if label.trim().eq_ignore_ascii_case(code.trim()) {
+                return None;
+            }
+            if source != ToolCallValueMeaningSource::Glossary {
+                // A server's words are never an ID, a number to call, a
+                // link or an address, however they reached the index.
+                return choice_label(label).map(|label| ToolCallValueMeaning { label, source });
+            }
+            let cleaned = sanitize_display_text(label, MAX_CHOICE_LABEL_CHARS);
+            (!cleaned.text.is_empty() && !cleaned.truncated && !is_machine_id(&cleaned.text))
+                .then_some(ToolCallValueMeaning {
+                    label: cleaned.text,
+                    source,
+                })
+        };
+        let schema = Said::from(schema_choice_label(
+            &self.facts.tool.input_schema,
+            path,
+            code,
+        ));
+        let read = self.read_meaning(member, code);
+        if let Some(label) = self
+            .facts
+            .glossary
+            .and_then(|glossary| glossary.choice_labels.get(member)?.get(code))
+        {
+            // A glossary entry holds for every table of the server; a tool
+            // or a read that numbers this field otherwise is about another.
+            return (schema.allows(label) && read.allows(label))
+                .then(|| meaning(label, ToolCallValueMeaningSource::Glossary))
+                .flatten();
+        }
+        let source = if matches!(read, Said::Label(_)) {
+            ToolCallValueMeaningSource::Earlier
+        } else {
+            ToolCallValueMeaningSource::Tool
+        };
+        match read.and(schema) {
+            Said::Label(label) => meaning(&label, source),
+            Said::Nothing | Said::Conflict => None,
+        }
+    }
+
+    /// What earlier reads of the call's server say `code` of `member` means:
+    /// the read that reported the record, the newest description of the
+    /// call's table, and lists of options read for the same place.
+    fn read_meaning(&self, member: &str, code: &str) -> Said {
+        let Some(server) = self.facts.server else {
+            return Said::Nothing;
+        };
+        let context = self.facts.context;
+        let record = self.earlier.as_ref().map_or(Said::Nothing, |earlier| {
+            context.earlier_choice_label(earlier.server, earlier.record, member, code)
+        });
+        let table = self.table.as_deref().map_or(Said::Nothing, |table| {
+            context.table_choice_label(server, table, member, code)
+        });
+        let listed = context.listed_choice_label(server, self.facts.arguments, member, code);
+        record.and(table).and(listed)
     }
 
     fn classify_scalar(
@@ -749,29 +905,62 @@ impl<'a> Walk<'a> {
         if !is_update_like(self.action) {
             return;
         }
-        let Some(earlier) = self.earlier_text(member) else {
+        let Some(earlier) = self.earlier_field(member) else {
             return;
         };
         let new = scalar_text(scalar).unwrap_or_default();
-        effect.effect = if earlier == new {
+        let coded = earlier.coded.as_ref();
+        let same_code = coded.is_some_and(|coded| {
+            coded.code == new || (coded.numeric && same_number(&coded.code, scalar))
+        });
+        effect.effect = if earlier.text == new || same_code {
             ToolCallEffectKind::Unchanged
         } else {
             ToolCallEffectKind::Changed
         };
-        effect.old = self.old_shown(member, &earlier, path);
+        let compared_as_code = same_code || (coded.is_some() && scalar_is_number(scalar, &new));
+        effect.old = match coded.filter(|_| compared_as_code && !below_a_recipient(path)) {
+            Some(coded) => Some(self.old_code_shown(member, path, coded)),
+            None => self.old_shown(member, &earlier.text, path).map(|mut old| {
+                if old.meaning.is_none()
+                    && !old.machine_id
+                    && !old.truncated
+                    && is_choice_code(&old.text)
+                    && !below_a_recipient(path)
+                {
+                    old.meaning = self.meaning_of(member, path, &old.text);
+                }
+                old
+            }),
+        };
         self.used_earlier = true;
     }
 
     fn fill_old(&mut self, member: &str, path: &str, effect: &mut ToolCallEffect) {
-        if let Some(earlier) = self.earlier_text(member) {
-            effect.old = self.old_shown(member, &earlier, path);
+        if let Some(earlier) = self.earlier_field(member) {
+            effect.old = self.old_shown(member, &earlier.text, path);
             self.used_earlier = true;
         }
     }
 
-    fn earlier_text(&self, member: &str) -> Option<String> {
-        let earlier = self.earlier.as_ref()?;
-        earlier.record.field(member)
+    fn earlier_field(&self, member: &str) -> Option<EarlierField> {
+        let record = self.earlier.as_ref()?.record;
+        Some(EarlierField {
+            text: record.field(member)?.clone(),
+            coded: record.coded(member).cloned(),
+        })
+    }
+
+    /// An earlier value in the form it was compared in: its code, with what
+    /// the result said it means unless another source says otherwise.
+    fn old_code_shown(&self, member: &str, path: &str, coded: &CodedValue) -> ToolCallEffectValue {
+        let cleaned = sanitize_display_text(&coded.code, MAX_DISPLAY_NAME_CHARS);
+        ToolCallEffectValue {
+            text: cleaned.text,
+            truncated: cleaned.truncated,
+            machine_id: false,
+            meaning: self.meaning_of(member, path, &coded.code),
+        }
     }
 
     /// An earlier ID shows as its record's name, never as the raw ID.
@@ -794,16 +983,19 @@ impl<'a> Walk<'a> {
                     text: name.to_string(),
                     truncated: false,
                     machine_id: true,
+                    meaning: None,
                 },
                 None if is_machine_id(earlier) => ToolCallEffectValue {
                     text: String::new(),
                     truncated: false,
                     machine_id: true,
+                    meaning: None,
                 },
                 None => ToolCallEffectValue {
                     text: self.clean(earlier),
                     truncated: false,
                     machine_id: false,
+                    meaning: None,
                 },
             });
         }
@@ -815,6 +1007,7 @@ impl<'a> Walk<'a> {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -826,7 +1019,7 @@ impl<'a> Walk<'a> {
             }
             let entry_path = format!("{path}/{index}");
             let shown = match unwrap(entry, false) {
-                Unwrapped::Scalar(scalar) => self.link_or_value(scalar, &entry_path),
+                Unwrapped::Scalar(scalar) => self.shown(scalar, &entry_path),
                 Unwrapped::Empty => None,
                 _ => self.shown(entry, &entry_path),
             };
@@ -906,6 +1099,7 @@ impl<'a> Walk<'a> {
                     .join(", "),
                 truncated: old_shown.iter().any(|value| value.truncated),
                 machine_id: false,
+                meaning: None,
             });
     }
 
@@ -997,7 +1191,7 @@ impl<'a> Walk<'a> {
                 let shared = shared_prefix(members);
                 for (member, inner) in members.iter().take(MAX_FILTER_PARTS) {
                     let inner_path = format!("{path}/{}", escape(member));
-                    let name = readable_name(member, shared.as_deref(), "");
+                    let name = self.member_name(member, shared.as_deref(), "");
                     let name = self.display_name(&name);
                     let is_empty = matches!(unwrap(inner, false), Unwrapped::Empty);
                     let value = if is_empty {
@@ -1005,6 +1199,7 @@ impl<'a> Walk<'a> {
                             text: String::new(),
                             truncated: false,
                             machine_id: false,
+                            meaning: None,
                         })
                     } else {
                         self.shown(inner, &inner_path)
@@ -1024,6 +1219,54 @@ impl<'a> Walk<'a> {
             other => filter.text = self.shown(other, path),
         }
         self.change.filter = Some(filter);
+    }
+
+    /// A value beside content the call marks new picks where that content
+    /// goes, as the heading of the section it replaces does: it reads as
+    /// where the change applies, never as a value that changes.
+    fn part_picked_by(&mut self, value: &'a Value, path: &str, name: String) {
+        let name = self.display_name(&name);
+        let Some(value) = self.shown(value, path) else {
+            return;
+        };
+        let filter = self.change.filter.get_or_insert_with(|| ToolCallFilter {
+            path: path.to_string(),
+            every_record: false,
+            parts: Vec::new(),
+            text: None,
+            omitted: 0,
+        });
+        if filter.parts.len() < MAX_FILTER_PARTS {
+            filter.parts.push(ToolCallFilterPart {
+                name,
+                value,
+                is_empty: false,
+            });
+        } else {
+            filter.omitted = filter.omitted.saturating_add(1);
+            self.complete = false;
+        }
+    }
+
+    /// Whether the tool says the list at `path` replaces what is there or
+    /// adds to it: the member's own description first, then the tool's.
+    fn list_claim(&mut self, path: &str) -> ListClaim {
+        let own = property_at(&self.facts.tool.input_schema, path)
+            .and_then(|property| property.get("description")?.as_str())
+            .map(|text| ToolText::read(Some(text)));
+        let claim = match own {
+            Some(own) if own.adds_to_list && !own.replaces_list => ListClaim::Adds,
+            Some(own) if own.replaces_list && !own.adds_to_list => ListClaim::Replaces,
+            _ if self.says.adds_to_list => ListClaim::Adds,
+            _ if self.says.replaces_list => ListClaim::Replaces,
+            _ => ListClaim::Unknown,
+        };
+        match claim {
+            ListClaim::Replaces => self.lists.replaces = true,
+            ListClaim::Adds => self.lists.adds = true,
+            ListClaim::Unknown => self.lists.unknown = true,
+        }
+        claim
     }
 
     fn recipients(&mut self, member: &str, value: &'a Value, path: &str) {
@@ -1217,6 +1460,7 @@ impl<'a> Walk<'a> {
             truncated: cleaned.truncated,
             text: cleaned.text,
             machine_id: false,
+            meaning: None,
         })
     }
 
@@ -1280,7 +1524,8 @@ impl<'a> Walk<'a> {
                 let hash = value_hash(value);
                 shape.push((member.as_str(), hash));
                 let at = *order.entry(member.as_str()).or_insert_with(|| {
-                    tallies.push(FieldTally::new(member, shared.as_deref()));
+                    let name = self.member_name(member, shared.as_deref(), "");
+                    tallies.push(FieldTally::new(member, name));
                     tallies.len() - 1
                 });
                 let update_like =
@@ -1290,7 +1535,11 @@ impl<'a> Walk<'a> {
                         empties = true;
                         tallies[at].emptied += 1;
                     }
-                    Unwrapped::List(_) if update_like => {
+                    Unwrapped::List(_)
+                        if update_like
+                            && !only_adds(member)
+                            && self.list_claim(&value_path) != ListClaim::Adds =>
+                    {
                         replaces = true;
                         tallies[at].lists += 1;
                     }
@@ -1416,7 +1665,7 @@ impl<'a> Walk<'a> {
                 effects_omitted = effects_omitted.saturating_add(1);
                 continue;
             }
-            let readable = readable_name(member, shared.as_deref(), "");
+            let readable = self.member_name(member, shared.as_deref(), "");
             let effect = match edit {
                 Some((before, after)) if after == member.as_str() => {
                     self.text_edit_effect(member, before, members, value, &value_path, readable)
@@ -1510,6 +1759,7 @@ impl<'a> Walk<'a> {
         let action = self.action;
         self.change.complete = self.complete;
         self.change.consent_left_out = self.consent_left_out;
+        self.change.record_unread = self.record_unread;
         if self.places.len() > 1 {
             self.places.sort_by_key(|(order, _)| *order);
             let joined: Vec<&str> = self.places.iter().map(|(_, text)| text.as_str()).collect();
@@ -1519,14 +1769,21 @@ impl<'a> Walk<'a> {
         }
         let mut notes = Vec::new();
         let says = &self.says;
-        if facts
+        let marked_destructive = facts
             .tool
             .annotations
             .as_ref()
             .and_then(|hints| hints.destructive_hint)
-            == Some(true)
-        {
-            notes.push(ToolCallChangeNote::MarkedDestructive);
+            == Some(true);
+        let source = facts.destructive_hint_source;
+        // An update lists what it changes, which says more than the mark;
+        // an operator's override is said wherever it applies.
+        if marked_destructive && (source.is_override() || !is_update_like(action)) {
+            notes.push(if source.is_operators() {
+                ToolCallChangeNote::OperatorMarkedDestructive
+            } else {
+                ToolCallChangeNote::MarkedDestructive
+            });
         }
         if matches!(action, ToolCallAction::Delete | ToolCallAction::Archive) {
             match says.keeps_after_delete() {
@@ -1539,14 +1796,16 @@ impl<'a> Walk<'a> {
                 _ => notes.push(ToolCallChangeNote::DeleteOutcomeUnknown),
             }
         }
-        if self.saw_list {
-            notes.push(if says.adds_to_list {
-                ToolCallChangeNote::ToolSaysAddsToList
-            } else if says.replaces_list {
-                ToolCallChangeNote::ToolSaysReplacesList
-            } else {
-                ToolCallChangeNote::ListReplaceUnknown
-            });
+        let lists = self.lists;
+        if lists.unknown {
+            notes.push(ToolCallChangeNote::ListReplaceUnknown);
+        } else {
+            if lists.replaces {
+                notes.push(ToolCallChangeNote::ToolSaysReplacesList);
+            }
+            if lists.adds {
+                notes.push(ToolCallChangeNote::ToolSaysAddsToList);
+            }
         }
         if says.ignored_if_missing && is_update_like(action) {
             notes.push(ToolCallChangeNote::ToolSaysIgnoredIfMissing);
@@ -1556,11 +1815,12 @@ impl<'a> Walk<'a> {
             .opaque
             .iter()
             .any(|opaque| opaque.kind == ToolCallOpaqueKind::Sql)
-            || self
-                .change
-                .filter
-                .as_ref()
-                .is_some_and(|filter| !filter.every_record)
+            || (!self.picks_part
+                && self
+                    .change
+                    .filter
+                    .as_ref()
+                    .is_some_and(|filter| !filter.every_record))
         {
             notes.push(ToolCallChangeNote::RowCountUnknown);
         }
@@ -1599,6 +1859,111 @@ impl<'a> Walk<'a> {
     }
 }
 
+/// What the tool says about the lists a call writes, over all of them.
+#[derive(Debug, Default, Clone, Copy)]
+struct ListClaims {
+    replaces: bool,
+    adds: bool,
+    unknown: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ListClaim {
+    Replaces,
+    Adds,
+    Unknown,
+}
+
+/// A `kind` that names what the record is, as `Namespace` does, rather than
+/// what the call does: it qualifies the record's kind as a table does.
+fn is_type_member(member: &str, value: &Value) -> bool {
+    member.eq_ignore_ascii_case("kind")
+        && value
+            .as_str()
+            .is_some_and(|text| is_table_name(text) && rules::action_of(text).is_none())
+}
+
+/// Words that, after `new`, name the content a call writes: `new_content`,
+/// `newText`, `new_value`.
+const NEW_CONTENT_WORDS: [&str; 6] = ["content", "text", "body", "markdown", "html", "value"];
+
+/// Whether the call marks the content it writes as new and says neither what
+/// it was nor which records to filter: then the plain values beside that
+/// content pick the part it replaces.
+fn marks_new_content(arguments: &Value) -> bool {
+    let Some(top) = arguments.as_object() else {
+        return false;
+    };
+    let marked = |member: &str, word: &str| {
+        name_words(member)
+            .first()
+            .is_some_and(|first| first.as_str() == word)
+    };
+    let new_content = top.iter().any(|(member, value)| {
+        value.is_string()
+            && matches!(
+                name_words(member).as_slice(),
+                [new, content] if new.as_str() == "new" && NEW_CONTENT_WORDS.contains(&content.as_str())
+            )
+    });
+    new_content
+        && !top.keys().any(|member| {
+            marked(member, "old")
+                || is_one_of(member, &FILTER_MEMBERS)
+                || is_one_of(member, &BEFORE_TEXT_MEMBERS)
+        })
+}
+
+/// A short value of one line that the call does not mark new or old.
+fn picks_a_part(member: &str, value: &Value) -> bool {
+    let marked = name_words(member)
+        .first()
+        .is_some_and(|word| matches!(word.as_str(), "new" | "old"));
+    !marked
+        && match value {
+            Value::String(text) => {
+                !text.trim().is_empty()
+                    && !text.contains('\n')
+                    && text.chars().count() <= LONG_TEXT_CHARS
+            }
+            Value::Number(_) => true,
+            _ => false,
+        }
+}
+
+/// A table's name a card can read as part of a kind: one word of letters,
+/// digits, `_`, `-` or `.`. Anything else is a value like any other.
+fn is_table_name(text: &str) -> bool {
+    const MAX_TABLE_NAME_CHARS: usize = 64;
+    let text = text.trim();
+    !text.is_empty()
+        && text.chars().count() <= MAX_TABLE_NAME_CHARS
+        && text
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+/// Whether the one record an item names is named only by a machine ID no
+/// result in this chat held: no title names it, its single ID is a machine
+/// ID nothing resolved, and the chat's results, all read whole, never showed
+/// that ID in any form.
+fn record_unread(item: &ToolCallLabelItem, facts: &ChangeFacts<'_>) -> bool {
+    let titled = item
+        .title
+        .as_ref()
+        .is_some_and(|title| !title.values.is_empty());
+    let Some(id) = item.id.as_ref().filter(|id| id.omitted == 0) else {
+        return false;
+    };
+    let [only] = id.values.as_slice() else {
+        return false;
+    };
+    !titled
+        && only.machine_id
+        && only.resolved.is_none()
+        && facts.context.never_read(facts.arguments, &only.path)
+}
+
 /// A call's own text can never pose as the mark for a hidden ID.
 fn without_mark(text: &str) -> String {
     text.replace(HIDDEN_ID_MARK, "")
@@ -1606,6 +1971,18 @@ fn without_mark(text: &str) -> String {
 
 fn is_update_like(action: ToolCallAction) -> bool {
     matches!(action, ToolCallAction::Update | ToolCallAction::Upsert)
+}
+
+fn scalar_is_number(scalar: &Value, text: &str) -> bool {
+    scalar.is_number() || text.parse::<f64>().is_ok()
+}
+
+/// `4` and `4.0` written as JSON numbers are one value.
+fn same_number(code: &str, scalar: &Value) -> bool {
+    scalar
+        .as_f64()
+        .zip(code.parse::<f64>().ok())
+        .is_some_and(|(new, old)| new == old)
 }
 
 fn is_one_of(member: &str, names: &[&str]) -> bool {
@@ -1653,9 +2030,9 @@ struct FieldTally<'a> {
 }
 
 impl<'a> FieldTally<'a> {
-    fn new(member: &'a str, shared: Option<&str>) -> Self {
+    fn new(member: &'a str, name: String) -> Self {
         Self {
-            name: readable_name(member, shared, ""),
+            name,
             raw_name: member,
             rows: 0,
             emptied: 0,
@@ -1699,12 +2076,11 @@ fn only_adds(member: &str) -> bool {
 
 /// Where a place member sits in what the card says, broadest first.
 fn place_order(member: &str) -> usize {
-    const ORDER: [&str; 7] = [
+    const ORDER: [&str; 6] = [
         "owner",
         "organization",
         "repository",
         "repo",
-        "objectname",
         "namespace",
         "branch",
     ];
@@ -1826,12 +2202,16 @@ fn member_words(member: &str, shared: Option<&str>) -> String {
     if words.is_empty() {
         return member.to_string();
     }
+    let words: Vec<String> = words
+        .iter()
+        .flat_map(|word| super::words::split_glued(word))
+        .collect();
     words
         .iter()
         .enumerate()
         .map(|(index, word)| {
             let lower = word.to_lowercase();
-            if matches!(lower.as_str(), "id" | "ids") {
+            if matches!(lower.as_str(), "id" | "ids" | "url" | "urls") {
                 return lower.to_uppercase();
             }
             if index == 0 {
@@ -1913,7 +2293,7 @@ pub(super) fn unwrap(value: &Value, list_like: bool) -> Unwrapped<'_> {
 
 /// What a wrapper object holds: its one member, or its best value key when it
 /// holds only such keys.
-fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
+pub(super) fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
     if members.len() == 1 {
         return members.values().next();
     }
@@ -1929,14 +2309,6 @@ fn wrapped_value(members: &Map<String, Value>) -> Option<&Value> {
             .find(|(key, _)| key.eq_ignore_ascii_case(name))
             .map(|(_, value)| value)
     })
-}
-
-/// `/accounts(aaaaaaaa-0000-4000-8000-0000000000a1)` and the like: a path that
-/// only points at a record, whose ID it holds.
-fn id_inside_a_link_path(text: &str) -> Option<&str> {
-    let open = text.rfind('(')?;
-    let inner = text[open + 1..].strip_suffix(')')?;
-    (text.starts_with('/') && !text[..open].contains(' ') && is_machine_id(inner)).then_some(inner)
 }
 
 fn is_link_shaped(member: &str, value: &Value) -> bool {
@@ -2276,6 +2648,24 @@ const NEGATIONS: [&str; 7] = [
     "not ", "n't", "no way", "never", "cannot", "without", "unable",
 ];
 
+/// Whether `lower` holds one of `phrases` not right after a word that negates
+/// it, as in "not only adds" or "never replaces the list".
+fn claims(lower: &str, phrases: &[&str]) -> bool {
+    const NEGATING: [&str; 5] = ["not", "never", "n't", "cannot", "no"];
+    phrases.iter().any(|phrase| {
+        lower.match_indices(phrase).any(|(at, _)| {
+            let before = lower[..at].trim_end();
+            !NEGATING.iter().any(|word| {
+                before.ends_with(word)
+                    && before[..before.len() - word.len()]
+                        .chars()
+                        .next_back()
+                        .is_none_or(|c| !c.is_alphanumeric() || *word == "n't")
+            })
+        })
+    })
+}
+
 /// What a tool's own description says about what it does, as closed facts.
 /// Text the server wrote only ever selects one of these.
 struct ToolText {
@@ -2293,12 +2683,17 @@ impl ToolText {
             .unwrap_or_default();
         let has = |phrase: &str| lower.contains(phrase);
         Self {
-            replaces_list: has("replaces the")
-                || has("replace all")
-                || has("replaces all")
-                || has("overwrites")
-                || has("will be replaced"),
-            adds_to_list: has("append-only") || has("only adds"),
+            replaces_list: claims(
+                &lower,
+                &[
+                    "replaces the",
+                    "replace all",
+                    "replaces all",
+                    "overwrites",
+                    "will be replaced",
+                ],
+            ),
+            adds_to_list: claims(&lower, &["append-only", "only adds"]),
             ignored_if_missing: has("ignored if") || has("ignores this") || has("silently ignored"),
             permanent: (has("permanently") && !has("not permanently"))
                 || has("cannot be undone")
@@ -2332,8 +2727,16 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
         if value.machine_id {
             value.text.clear();
         }
+        if value
+            .meaning
+            .as_ref()
+            .is_some_and(|meaning| meaning.source == ToolCallValueMeaningSource::Earlier)
+        {
+            value.meaning = None;
+        }
     }
     fn forget_effect(effect: &mut ToolCallEffect) {
+        effect.new_name = false;
         effect.old = None;
         effect.removed.clear();
         effect.kept.clear();
@@ -2398,6 +2801,8 @@ pub fn forget_earlier(change: &mut ToolCallChange) {
             ToolCallChangeNote::OldValuesFromEarlier | ToolCallChangeNote::NothingChanges
         )
     });
+    // Whether a chat read the record says nothing about another chat.
+    change.record_unread = false;
 }
 
 #[cfg(test)]

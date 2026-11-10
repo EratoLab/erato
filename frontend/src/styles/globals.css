@@ -523,7 +523,7 @@ body {
    Rings are keyed to :focus-visible only, so mouse clicks never leave a
    lingering ring; keyboard navigation still gets the full indicator. */
 .focus-ring {
-  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2;
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-theme-focus focus-visible:ring-offset-2 focus-visible:ring-offset-theme-bg-primary;
 }
 
 .focus-ring-tight {

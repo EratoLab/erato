@@ -251,8 +251,12 @@ describe("ToolUseStep with a change description", () => {
       />,
     );
     expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
-      "Updated row Tailspin Toys: 1 emptied, 1 changed, 10 unchanged",
+      "Updated row Tailspin Toys:",
     );
+    const counts = screen.getByTestId("trace-step-title-after");
+    expect(counts).toHaveTextContent("1 emptied, 1 changed, 10 unchanged");
+    // A long title is cut; the counts after it must not be cut with it.
+    expect(counts.closest(".truncate")).toBeNull();
     const details = screen.getByTestId("tool-call-change-row-details");
     expect(details).toHaveTextContent("Emptied: Owner");
     expect(details).toHaveTextContent("Stage lead → customer");

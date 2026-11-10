@@ -37,6 +37,14 @@ fn map_key_placeholder(path: &[String]) -> String {
         Some("localized_prompts") => "<locale>".to_string(),
         Some("mcp_servers") => "<server-id>".to_string(),
         Some("tools") if path.len() == 3 && path[0] == "mcp_servers" => "<tool-name>".to_string(),
+        Some("field_names" | "choice_labels")
+            if path.first().map(String::as_str) == Some("mcp_servers") =>
+        {
+            "<field-name>".to_string()
+        }
+        Some(key) if path.len() == 5 && key.starts_with('<') && path[3] == "choice_labels" => {
+            "<choice-value>".to_string()
+        }
         Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
         Some("providers" | "provider") => "<provider-id>".to_string(),

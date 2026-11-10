@@ -317,6 +317,68 @@ describe("the change card", () => {
     expect(within(list).getByText("Carl")).toBeInTheDocument();
   });
 
+  it("words a replaced list conditionally when it may only be added to", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/labels",
+          name: "Labels",
+          raw_name: "labels",
+          effect: "list_replaced",
+          values: [{ text: "bug" }],
+          removed: [{ text: "p1" }],
+          kept: [{ text: "bug" }],
+          list: true,
+        },
+        {
+          path: "/owners",
+          name: "Owners",
+          raw_name: "owners",
+          effect: "list_replaced",
+          values: [{ text: "Ann" }],
+          list: true,
+        },
+        set(1),
+      ],
+      counts: { list_replaced: 2, set: 1 },
+      notes: ["list_replace_unknown"],
+    });
+    expect(
+      screen.getByText("If this replaces the list Labels: 1 goes, 1 stays"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/is replaced/)).toBeNull();
+    const [labels, owners] = screen.getAllByTestId("tool-call-change-list");
+    expect(
+      within(labels).getByText("Labels that would go"),
+    ).toBeInTheDocument();
+    expect(
+      within(labels).getByText("Labels that would stay"),
+    ).toBeInTheDocument();
+    expect(within(owners).queryByText("Owners set to")).toBeNull();
+    expect(screen.getByText(/2 lists maybe replaced/)).toBeInTheDocument();
+    expect(screen.queryByText(/lists replaced/)).toBeNull();
+  });
+
+  it("states a known replacement as a fact", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/labels",
+          name: "Labels",
+          raw_name: "labels",
+          effect: "list_replaced",
+          values: [{ text: "bug" }],
+          removed: [{ text: "p1" }],
+          list: true,
+        },
+      ],
+      counts: { list_replaced: 1 },
+      notes: ["tool_says_replaces_list"],
+    });
+    expect(screen.getByText(/is replaced: 1 goes/)).toBeInTheDocument();
+    expect(screen.queryByText(/If this replaces/)).toBeNull();
+  });
+
   it("marks a list the tool says it only adds to as the tool's word", () => {
     renderCard({
       effects: [
@@ -532,6 +594,25 @@ describe("the change card", () => {
     );
     unmount();
 
+    // That no row loses anything would be the tool's word, not Erato's.
+    const { unmount: unmountClaimed } = renderCard({
+      batch: {
+        path: "/r",
+        name: "R",
+        total: 200,
+        same_change: true,
+        shared,
+        rows: [{ number: 1, effects: shared }],
+        read_all: true,
+      },
+      notes: ["tool_says_adds_to_list"],
+    });
+    expect(screen.queryByTestId("tool-call-change-batch-loss")).toBeNull();
+    expect(
+      screen.getByText("The tool says it only adds to the list."),
+    ).toBeInTheDocument();
+    unmountClaimed();
+
     renderCard({
       batch: {
         path: "/r",
@@ -575,6 +656,257 @@ describe("the change card", () => {
     expect(document.querySelector("b")).toBeNull();
     expect(
       screen.getByText("<img src=x onerror=alert(1)>"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("old and new values", () => {
+  const changed = (extra: object) => ({
+    path: "/priority",
+    name: "Priority",
+    raw_name: "priority",
+    effect: "changed",
+    values: [{ text: "2" }],
+    old: { text: "4" },
+    ...extra,
+  });
+
+  it("render differently: old struck through in red, new in green", () => {
+    renderCard({
+      effects: [changed({})],
+      counts: { changed: 1 },
+      notes: ["old_values_from_earlier"],
+    });
+    const old = screen.getByTestId("tool-call-change-old");
+    const fresh = screen.getByTestId("tool-call-change-new");
+    expect(old).toHaveClass("line-through");
+    expect(old.className).toContain("--theme-diff-removed-fg");
+    expect(fresh).not.toHaveClass("line-through");
+    expect(fresh.className).toContain("--theme-diff-added-fg");
+    expect(old.className).not.toEqual(fresh.className);
+  });
+
+  it("show a code's meaning as the tool's word unless the glossary gives it", () => {
+    const { unmount } = renderCard({
+      effects: [
+        changed({
+          old: {
+            text: "4",
+            meaning: { label: "Low", source: "earlier" },
+          },
+          values: [{ text: "2", meaning: { label: "High", source: "tool" } }],
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    expect(screen.getByTestId("tool-call-change-old")).toHaveTextContent(
+      "4 (the tool says: Low)",
+    );
+    expect(screen.getByTestId("tool-call-change-new")).toHaveTextContent(
+      "2 (the tool says: High)",
+    );
+    unmount();
+    renderCard({
+      effects: [
+        changed({
+          values: [
+            { text: "2", meaning: { label: "High", source: "glossary" } },
+          ],
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    expect(screen.getByTestId("tool-call-change-new")).toHaveTextContent(
+      "High (2)",
+    );
+  });
+
+  it("mark a meaning from an earlier read as such", () => {
+    renderCard({
+      effects: [
+        changed({
+          old: { text: "4", meaning: { label: "Low", source: "earlier" } },
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    const old = screen
+      .getByTestId("tool-call-change-old")
+      .querySelector("[data-origin]");
+    expect(old).toHaveAttribute("data-origin", "earlier");
+    expect(old).toHaveClass("decoration-dotted");
+  });
+
+  it("leave a code alone when nobody says what it means", () => {
+    renderCard({
+      effects: [
+        {
+          ...set(1),
+          values: [{ text: "8" }],
+        },
+      ],
+      counts: { set: 1 },
+    });
+    expect(screen.getByText("8")).toBeInTheDocument();
+    expect(screen.queryByText(/says/)).toBeNull();
+  });
+
+  it("show no arrow for a value that stays the same", () => {
+    renderCard({
+      effects: [
+        changed({
+          effect: "unchanged",
+          values: [{ text: "4", meaning: { label: "Low", source: "earlier" } }],
+          old: { text: "4", meaning: { label: "Low", source: "earlier" } },
+        }),
+      ],
+      counts: { unchanged: 1 },
+    });
+    expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
+    expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
+      "Priority4 (the tool says: Low)",
+    );
+  });
+
+  it("colour a trace row's values and a batch row's values too", () => {
+    const change = readAs({
+      effects: [changed({})],
+      counts: { changed: 1 },
+    });
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeRowDetails change={change} />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId("tool-call-change-old")).toHaveClass(
+      "line-through",
+    );
+    expect(screen.getByTestId("tool-call-change-new").className).toContain(
+      "--theme-diff-added-fg",
+    );
+  });
+});
+
+describe("a card for something new", () => {
+  const renderCreate = (raw: object) => {
+    const change = readAs(raw);
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={{ ...gistFor(change), action: "create" }}
+          change={change}
+          phase="ask"
+        />
+      </I18nProvider>,
+    );
+  };
+
+  it("says fields are set and counts long text fields", () => {
+    const effects = Array.from({ length: 7 }, (_, index) => set(index));
+    renderCreate({
+      effects,
+      counts: { set: 7 },
+      texts: [
+        {
+          path: "/d",
+          name: "Description",
+          raw_name: "description",
+          text: "Short text.",
+          lines: 1,
+          chars: 11,
+        },
+      ],
+    });
+    expect(screen.getByText("8 fields are set")).toBeInTheDocument();
+    expect(screen.queryByText(/fields change/)).toBeNull();
+  });
+
+  it("never says an old value is unknown or that nothing is emptied", () => {
+    const effects = Array.from({ length: 7 }, (_, index) => set(index));
+    renderCreate({ effects, counts: { set: 7 } });
+    expect(
+      screen.getByRole("button", { name: "See 2 more fields" }),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("old value unknown");
+    expect(document.body.textContent).not.toContain("none is emptied");
+  });
+
+  it("gives the size of long text only", () => {
+    renderCreate({
+      effects: [],
+      counts: {},
+      texts: [
+        {
+          path: "/a",
+          name: "Description",
+          raw_name: "description",
+          text: "Artificial test record, safe to delete.",
+          lines: 1,
+          chars: 39,
+        },
+        {
+          path: "/b",
+          name: "Body",
+          raw_name: "body",
+          text: "x\ny\nz\nw",
+          lines: 4,
+          chars: 300,
+        },
+      ],
+    });
+    const [short, long] = screen.getAllByTestId("tool-call-change-text");
+    expect(short).toHaveTextContent(/^Description/);
+    expect(short).not.toHaveTextContent("39 characters");
+    expect(long).toHaveTextContent("Body: 4 lines, 300 characters");
+  });
+});
+
+describe("what sits on the card", () => {
+  it("gives statements and option chips a surface of their own", () => {
+    renderCard({
+      effects: [],
+      counts: {},
+      opaque: [{ kind: "sql", path: "/q", text: "select 1", lines: 1 }],
+      flags: [{ name: "Force", raw_name: "force" }],
+    });
+    expect(screen.getByTestId("tool-call-change-statement")).toHaveClass(
+      "bg-theme-bg-tertiary",
+    );
+    expect(
+      within(screen.getByTestId("tool-call-change-flags")).getByText("Force"),
+    ).toHaveClass("bg-theme-bg-tertiary");
+  });
+
+  it("shows a glossary name with the raw name beside it, and not twice", () => {
+    renderCard({
+      effects: [
+        {
+          ...set(1),
+          name: "Due (duedate)",
+          raw_name: "duedate",
+        },
+        ...Array.from({ length: 6 }, (_, index) => set(index + 2)),
+        { ...set(8), name: "Subject", raw_name: "Subject" },
+      ],
+      counts: { set: 8 },
+    });
+    expect(screen.getByText("Due (duedate)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /See 3 more fields/ }));
+    expect(screen.queryByText("duedate")).toBeNull();
+    expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
+    expect(screen.getAllByText("Subject")).toHaveLength(1);
+  });
+
+  it("says who marked a tool as destructive", () => {
+    renderCard({
+      effects: [],
+      counts: {},
+      notes: ["operator_marked_destructive"],
+    });
+    expect(
+      screen.getByText(
+        "Your organisation has marked this tool as destructive.",
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -644,5 +976,194 @@ describe("the scroll box", () => {
     expect(box).toHaveAccessibleName("Scrollable details of this call");
     scrollHeight.mockRestore();
     clientHeight.mockRestore();
+  });
+});
+
+describe("a card for a record no result in the chat named", () => {
+  const renderUnread = (raw: object) => {
+    const change = readAs(raw);
+    const gist: Gist = {
+      ...gistFor(change),
+      items: [{ ...gistFor(change).items[0], where: [] }],
+    };
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard gist={gist} change={change} phase="ask" />
+      </I18nProvider>,
+    );
+  };
+  const renamed = (newName: boolean) => ({
+    path: "/item/name",
+    name: "Name",
+    raw_name: "name",
+    effect: "set",
+    values: [{ text: "Renamed" }],
+    new_name: newName,
+  });
+
+  it("says under the line that the record was not read, and reads a new name as one", () => {
+    renderUnread({
+      table: "account",
+      record_unread: true,
+      effects: [renamed(true)],
+      counts: { set: 1 },
+    });
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Update account row",
+    );
+    expect(screen.getByTestId("tool-call-gist-unread")).toHaveTextContent(
+      "Which account row: not read in this chat (its ID is in Technical details)",
+    );
+    const row = screen.getByTestId("tool-call-change-row");
+    expect(row).toHaveTextContent("Nameset to Renamed");
+    expect(
+      within(row).getByTestId("tool-call-change-new-name"),
+    ).toBeInTheDocument();
+  });
+
+  it("says neither when the backend does not", () => {
+    renderUnread({
+      table: "account",
+      effects: [renamed(false)],
+      counts: { set: 1 },
+    });
+    expect(screen.queryByTestId("tool-call-gist-unread")).toBeNull();
+    expect(screen.queryByTestId("tool-call-change-new-name")).toBeNull();
+    expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
+      "NameRenamed",
+    );
+  });
+});
+
+describe("what the card names when it can only say item", () => {
+  const itemGist = (change: GistChange, action: Gist["action"]): Gist => ({
+    ...gistFor(change),
+    action,
+    kind: "other",
+    items: [
+      {
+        ...gistFor(change).items[0],
+        names: [
+          {
+            text: "uploader-archive",
+            origin: "written",
+            path: "/repo",
+            truncated: false,
+          },
+        ],
+        where: [
+          { text: "contoso", origin: "place", path: "", truncated: false },
+        ],
+        hiddenIdPaths: [],
+      },
+    ],
+  });
+  const renderItemCard = (
+    raw: object,
+    action: Gist["action"],
+    toolTitle?: string,
+  ) => {
+    const change = readAs(raw);
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={itemGist(change, action)}
+          change={change}
+          phase="ask"
+          toolTitle={toolTitle}
+        />
+      </I18nProvider>,
+    );
+  };
+
+  it("says the tool's own name for the call as the tool's word", () => {
+    renderItemCard(
+      { effects: [], counts: {}, place: "contoso" },
+      "delete",
+      "Delete repository",
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Delete item uploader-archive from contoso",
+    );
+    expect(screen.getByTestId("tool-call-change-tool-title")).toHaveTextContent(
+      "The tool calls this Delete repository",
+    );
+  });
+
+  it("says none where a type the call names is the noun", () => {
+    renderItemCard(
+      { effects: [], counts: {}, table: "Namespace" },
+      "delete",
+      "Resources: Delete",
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      "Delete Namespace uploader-archive from contoso",
+    );
+    expect(screen.queryByTestId("tool-call-change-tool-title")).toBeNull();
+  });
+
+  it("says none where the line names a statement instead", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        opaque: [{ kind: "sql", path: "/q", text: "select 1", lines: 1 }],
+      },
+      "run",
+      "execute_sql",
+    );
+    expect(screen.queryByTestId("tool-call-change-tool-title")).toBeNull();
+  });
+
+  it("counts no fields for a run, whose values are no record's fields", () => {
+    renderItemCard(
+      { effects: [set(1), set(2)], counts: { set: 2 } },
+      "run",
+      "exec_op",
+    );
+    expect(screen.queryByText(/fields are set/)).toBeNull();
+    expect(screen.getByTestId("tool-call-change-tool-title")).toHaveTextContent(
+      "The tool calls this exec_op",
+    );
+  });
+
+  it("lists the options a call turns on as turned on", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        flags: [
+          { name: "Safe preview", raw_name: "safe_preview", dry_run: true },
+          { name: "Push to production", raw_name: "push_to_production" },
+        ],
+      },
+      "send",
+    );
+    expect(screen.getByTestId("tool-call-change-flags")).toHaveTextContent(
+      /^Turned on/,
+    );
+  });
+
+  it("gives the size of a replaced text as the new text's", () => {
+    renderItemCard(
+      {
+        effects: [],
+        counts: {},
+        texts: [
+          {
+            path: "/body",
+            name: "Body",
+            raw_name: "body",
+            text: "x\ny\nz\nw",
+            lines: 4,
+            chars: 300,
+          },
+        ],
+      },
+      "update",
+    );
+    expect(screen.getByTestId("tool-call-change-text")).toHaveTextContent(
+      "Body replaced by 4 lines, 300 characters",
+    );
   });
 });

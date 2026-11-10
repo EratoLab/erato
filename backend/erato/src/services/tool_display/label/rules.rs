@@ -51,7 +51,7 @@ const MAX_VERB_VALUE_CHARS: usize = 40;
 const MAX_SEARCH_VALUES: usize = 5_000;
 /// The start of a tool name or table name that is read for words; MCP names
 /// are far shorter, and a server can send any length.
-const MAX_NAME_BYTES: usize = 256;
+pub(super) const MAX_NAME_BYTES: usize = 256;
 /// Verb fields read from one call's arguments.
 const MAX_VERB_FIELDS: usize = 32;
 const MAX_SEARCH_DEPTH: usize = 6;
@@ -119,9 +119,10 @@ const VERBS: [(ToolCallAction, &[&str]); 11] = [
             "terminate",
             "wipe",
             "erase",
+            "trash",
         ],
     ),
-    (ToolCallAction::Archive, &["archive", "trash"]),
+    (ToolCallAction::Archive, &["archive"]),
     (ToolCallAction::Move, &["move"]),
     (
         ToolCallAction::Send,
@@ -138,7 +139,7 @@ const VERBS: [(ToolCallAction, &[&str]); 11] = [
     ),
     (ToolCallAction::Comment, &["comment", "annotate"]),
 ];
-const READ_VERBS: [&str; 11] = [
+pub(super) const READ_VERBS: [&str; 11] = [
     "get", "list", "search", "fetch", "read", "query", "find", "retrieve", "view", "download",
     "describe",
 ];
@@ -149,7 +150,7 @@ const MESSAGE_NOUNS: [&str; 3] = ["message", "messages", "chat"];
 /// Names that create or update depending on whether the arguments carry an ID.
 const SAVE_VERBS: [&str; 3] = ["save", "put", "sync"];
 
-const TITLE_MEMBERS: [&str; 11] = [
+pub(super) const TITLE_MEMBERS: [&str; 11] = [
     "title",
     "name",
     "subject",
@@ -178,15 +179,13 @@ pub(super) const TARGET_MEMBERS: [&str; 12] = [
 ];
 /// Where a record lives, most specific first, when no target names it; the
 /// same words the change description reads as the card's place.
-pub(super) const PLACE_MEMBERS: [&str; 10] = [
+pub(super) const PLACE_MEMBERS: [&str; 8] = [
     "repo",
     "repository",
     "repo_path",
     "project_id",
     "project_key",
     "namespace",
-    "objectname",
-    "object_name",
     "branch",
     "organization",
 ];
@@ -231,8 +230,28 @@ const MAX_RECIPIENT_MEMBERS: usize = MAX_LABEL_FIELDS + 2;
 const MAX_RECIPIENT_OBJECT_MEMBERS: usize = 64;
 /// Where a created item's text sits when none of the above holds it.
 const CREATED_TEXT_MEMBER: &str = "description";
+/// Objects whose members are the values a call writes: the record's own
+/// field bag. A change description flattens them into plain rows of the same
+/// names, and on a create nothing in them is where the record goes.
+pub(super) const WRAPPER_MEMBERS: [&str; 15] = [
+    "properties",
+    "fields",
+    "item",
+    "record",
+    "data",
+    "set",
+    "attributes",
+    "values",
+    "updates",
+    "changes",
+    "params",
+    "payload",
+    "update",
+    "patch",
+    "additional_fields",
+];
 /// Members naming the table or type a record lives in: its kind.
-pub(super) const TABLE_MEMBERS: [&str; 8] = [
+pub(super) const TABLE_MEMBERS: [&str; 10] = [
     "tablename",
     "table",
     "table_name",
@@ -241,6 +260,8 @@ pub(super) const TABLE_MEMBERS: [&str; 8] = [
     "entity_name",
     "object_type",
     "objecttype",
+    "objectname",
+    "object_name",
 ];
 /// Words naming a kind, in tool names and table names. A record of any other
 /// table is a row.
@@ -374,7 +395,7 @@ pub fn rules_label(
     let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
     let verb = verb(&name, Some(arguments));
     let action = verb.action;
-    let (object_kind, table) = kind(&name, arguments);
+    let (mut object_kind, table) = kind(&name, arguments);
     let mut item = ToolCallLabelItemMapping::default();
     let creates = matches!(
         action,
@@ -397,6 +418,19 @@ pub fn rules_label(
     // A delete names what goes; on an update a `name` is a changed value.
     if item.id.is_none() && matches!(action, ToolCallAction::Delete | ToolCallAction::Archive) {
         item.title = title_pointer(arguments);
+    }
+    if item.id.is_none()
+        && item.title.is_none()
+        && matches!(
+            action,
+            ToolCallAction::Delete | ToolCallAction::Archive | ToolCallAction::Update
+        )
+        && let Some(place) = place_the_name_ends_in(&name, arguments)
+    {
+        if item.target.as_deref() == Some(place.as_str()) {
+            item.target = None;
+        }
+        item.title = Some(place);
     }
     item.before = find(arguments, Skip::Lookups, text_member(&BEFORE_MEMBERS));
     if matches!(
@@ -437,6 +471,15 @@ pub fn rules_label(
     } else {
         None
     };
+
+    if action == ToolCallAction::Comment
+        && matches!(
+            object_kind,
+            ToolCallObjectKind::Comment | ToolCallObjectKind::Email
+        )
+    {
+        object_kind = commented_on(item.id.as_deref());
+    }
 
     let empty = item == ToolCallLabelItemMapping::default();
     let mapping = if action == ToolCallAction::Other && empty {
@@ -825,6 +868,29 @@ fn kind(name: &[String], arguments: &Value) -> (ToolCallObjectKind, Option<Strin
     (kind_of(name).unwrap_or(ToolCallObjectKind::Other), None)
 }
 
+/// What a comment is on, by the member that names it (`issueId`, `task_id`,
+/// `page_id`, `thread`): the comment itself is what the call makes, not what
+/// it is on. An ID that names no kind leaves the neutral `Other`.
+fn commented_on(id_pointer: Option<&str>) -> ToolCallObjectKind {
+    let words = id_pointer
+        .and_then(|pointer| pointer::member_names(pointer).into_iter().last())
+        .map(|member| name_words(text_prefix(&member, MAX_NAME_BYTES)))
+        .unwrap_or_default();
+    if words.iter().any(|word| word == "thread") {
+        return ToolCallObjectKind::Comment;
+    }
+    kind_of(&words).unwrap_or(ToolCallObjectKind::Other)
+}
+
+/// Whether a table's name only repeats the kind it gives, as `task` for a
+/// task or `appointment` for an event: the card's kind already says it.
+pub(super) fn table_repeats_kind(table: &str, kind: ToolCallObjectKind) -> bool {
+    let table = table.trim().to_lowercase();
+    KIND_WORDS
+        .iter()
+        .any(|(named, words)| *named == kind && words.contains(&table.as_str()))
+}
+
 fn kind_of(words: &[String]) -> Option<ToolCallObjectKind> {
     let mut found = None;
     for word in words {
@@ -902,11 +968,18 @@ fn id_member(named: fn(&str) -> bool) -> impl FnMut(&str, &str, &[&Value]) -> Op
 /// Where the item goes or lives: a parent, folder, channel or recipient
 /// (copies only when no one else is named), then on a create the first record
 /// it links to, since a record being created has no ID of its own yet. On an
-/// update a link is a changed field.
+/// update a link is a changed field. On a create only a recipient or a member
+/// outside the record's own field bag says where it goes (see
+/// [`outside_the_field_bag`]): a link among its values is one of them.
 fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -> Option<String> {
+    let creates = matches!(
+        action,
+        ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
+    );
     let not_the_id = |pointer: &str| {
         id.is_none_or(|id| id != pointer && !id.starts_with(&format!("{pointer}/")))
     };
+    let placed = |pointer: &str| !creates || outside_the_field_bag(arguments, pointer);
     let found = find(arguments, Skip::Nothing, |pointer, member, values| {
         if !not_the_id(pointer) {
             return None;
@@ -914,7 +987,9 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
         match recipients_in(member, values) {
             Some(Recipients::To) => recipient_at(pointer, values),
             Some(Recipients::Copy | Recipients::Number) => None,
-            None if is_one_of(member, &TARGET_MEMBERS) => target_at(pointer, values),
+            None if is_one_of(member, &TARGET_MEMBERS) && placed(pointer) => {
+                target_at(pointer, values)
+            }
             None => None,
         }
     })
@@ -925,24 +1000,20 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
                 .flatten()
         })
     });
-    let found = found.or_else(|| place_pointer(arguments, id));
-    if found.is_some()
-        || !matches!(
-            action,
-            ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
-        )
-    {
+    let found = found.or_else(|| place_pointer(arguments, id, &placed));
+    if found.is_some() || !creates {
         return found;
     }
     find(arguments, Skip::Nothing, |pointer, member, values| {
         (member.to_ascii_lowercase().starts_with("parent")
-            && recipients_in(member, values).is_none())
+            && recipients_in(member, values).is_none()
+            && placed(pointer))
         .then(|| target_at(pointer, values))
         .flatten()
     })
     .or_else(|| {
         find(arguments, Skip::Nothing, |pointer, member, values| {
-            if recipients_in(member, values).is_some() {
+            if recipients_in(member, values).is_some() || !placed(pointer) {
                 return None;
             }
             let links = values.iter().any(|value| match value {
@@ -961,16 +1032,105 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
     })
 }
 
+/// Whether the member at `pointer` sits where a create says where its record
+/// goes, by its position alone: at the call's top, in a top-level object such
+/// as `{"parent": {"database_id": …}}`, or directly in every entry of a batch.
+/// A wrapper of the record's values (`item`, `properties`, `fields`, …) and
+/// whatever sits below one are those values, whatever they are named.
+fn outside_the_field_bag(arguments: &Value, pointer: &str) -> bool {
+    let Some(tokens) = pointer.strip_prefix('/') else {
+        return false;
+    };
+    let tokens: Vec<_> = tokens.split('/').map(pointer::unescape).collect();
+    // The wrapper itself is the field bag too: `{"data": {"title", "folder_id"}}`
+    // is no link to a folder.
+    if tokens.is_empty()
+        || tokens
+            .iter()
+            .any(|token| is_one_of(token, &WRAPPER_MEMBERS))
+    {
+        return false;
+    }
+    // A member only some entries of a batch hold is a value of those entries.
+    let mut reached = vec![arguments];
+    let mut budget = MAX_SEARCH_VALUES;
+    for token in &tokens {
+        let mut next = Vec::new();
+        for value in reached {
+            let children: Vec<&Value> = match (token.as_ref(), value) {
+                ("*", Value::Array(entries)) if !entries.is_empty() => entries.iter().collect(),
+                (member, Value::Object(members)) => match members.get(member) {
+                    Some(child) => vec![child],
+                    None => return false,
+                },
+                _ => return false,
+            };
+            budget = match budget.checked_sub(children.len()) {
+                Some(left) => left,
+                None => return false,
+            };
+            next.extend(children);
+        }
+        reached = next;
+    }
+    true
+}
+
 /// The most specific member naming where a record lives, for a call with no
-/// parent, folder or channel to go by.
-fn place_pointer(arguments: &Value, id: Option<&str>) -> Option<String> {
+/// parent, folder or channel to go by, where `placed` says one may be.
+fn place_pointer(
+    arguments: &Value,
+    id: Option<&str>,
+    placed: &dyn Fn(&str) -> bool,
+) -> Option<String> {
     PLACE_MEMBERS.iter().find_map(|place| {
         find(arguments, Skip::Lookups, |pointer, member, values| {
             (member.eq_ignore_ascii_case(place)
                 && id != Some(pointer)
-                && values.iter().copied().any(is_text_or_number))
+                && values.iter().copied().any(is_text_or_number)
+                && placed(pointer))
             .then(|| pointer.to_string())
         })
+    })
+}
+
+/// The place member a call acts on itself, when it names nothing inside it:
+/// the tool's name ends in what that member names, as `delete_repository`
+/// does with `repo` or `delete_branch` with `branch`. A name that goes on
+/// past it, as `clear_repository_cache`, or names a preposition, as
+/// `remove_bot_from_repo`, acts on something inside.
+fn place_the_name_ends_in(name: &[String], arguments: &Value) -> Option<String> {
+    const MIN_STEM_CHARS: usize = 4;
+    // `remove_bot_from_repo` acts on what comes before its preposition.
+    if name
+        .iter()
+        .any(|word| PREPOSITIONS.contains(&word.as_str()))
+    {
+        return None;
+    }
+    let head = name
+        .iter()
+        .rev()
+        .find(|word| actions_of(std::slice::from_ref(*word)).is_empty())?;
+    let top = arguments.as_object()?;
+    top.iter().find_map(|(member, value)| {
+        if !is_one_of(member, &PLACE_MEMBERS) || !is_text_or_number(value) {
+            return None;
+        }
+        let words = name_words(member);
+        let stem = match words.as_slice() {
+            [stem, rest] if matches!(rest.as_str(), "id" | "key" | "path") => stem,
+            [stem] => stem,
+            _ => return None,
+        };
+        let (short, long) = if stem.len() <= head.len() {
+            (stem.as_str(), head.as_str())
+        } else {
+            (head.as_str(), stem.as_str())
+        };
+        let names_it =
+            short == long || (short.chars().count() >= MIN_STEM_CHARS && long.starts_with(short));
+        names_it.then(|| child_pointer("", member)).flatten()
     })
 }
 
@@ -1373,6 +1533,18 @@ fn fields(
                 }
                 if values.iter().copied().any(is_short_scalar) {
                     out.push(pointer);
+                    continue;
+                }
+                // A link among the record's values shows as the record it
+                // links to, as on an update.
+                if let Some(link) = values
+                    .iter()
+                    .find_map(|value| value.as_object().filter(|members| is_lookup(members)))
+                    .and_then(link_id_member)
+                    .and_then(|id| child_pointer(&pointer, id))
+                    && !covers(&used, &link)
+                {
+                    out.push(link);
                 }
             }
         }

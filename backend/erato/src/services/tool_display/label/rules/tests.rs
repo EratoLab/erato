@@ -180,12 +180,64 @@ fn a_batch_of_different_operations_updates_what_holds_them() {
 }
 
 #[test]
+fn a_comment_says_what_it_is_on() {
+    for (tool, arguments, kind) in [
+        (
+            "add_comment",
+            json!({"issueId": "ERMAIN-1159", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "save_comment",
+            json!({"issue_id": "ERMAIN-1159", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "create_comment",
+            json!({"task_id": "42", "body": "Done"}),
+            ToolCallObjectKind::Task,
+        ),
+        (
+            "notion-create-comment",
+            json!({"page_id": "p1", "markdown": "Done"}),
+            ToolCallObjectKind::Page,
+        ),
+        (
+            "add_comment",
+            json!({"item_id": "42", "body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+        (
+            "add_comment",
+            json!({"id": "42", "body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+        (
+            "add_comment",
+            json!({"body": "Done"}),
+            ToolCallObjectKind::Other,
+        ),
+    ] {
+        let rules = label(tool, arguments);
+        assert_eq!(rules.mapping.action, ToolCallAction::Comment, "{tool}");
+        assert_eq!(rules.mapping.object_kind, kind, "{tool}");
+        // The rules know it is a comment, so no model is asked for its kind.
+        assert_eq!(rules.unsure, None, "{tool}");
+    }
+    let reply = label(
+        "reply_to_comment",
+        json!({"comment_id": "c1", "body": "Hi"}),
+    );
+    assert_eq!(reply.mapping.object_kind, ToolCallObjectKind::Comment);
+}
+
+#[test]
 fn some_names_read_as_one_verb() {
     for (tool, action, kind) in [
         (
             "notion-create-comment",
             ToolCallAction::Comment,
-            ToolCallObjectKind::Comment,
+            ToolCallObjectKind::Other,
         ),
         (
             "post_message",
@@ -199,7 +251,7 @@ fn some_names_read_as_one_verb() {
         ),
         (
             "trash_file",
-            ToolCallAction::Archive,
+            ToolCallAction::Delete,
             ToolCallObjectKind::File,
         ),
     ] {
@@ -370,7 +422,9 @@ fn a_title_names_a_new_item_and_never_comes_from_a_lookup() {
         json!({"tablename": "account", "item": {"name": "Contoso", "parentaccountid": ACCOUNT}}),
     );
     assert_eq!(with_parent.title.as_deref(), Some("/item/name"));
-    assert_eq!(with_parent.target.as_deref(), Some("/item/parentaccountid"));
+    // The parent among the record's values is one of them, not where it goes.
+    assert_eq!(with_parent.target, None);
+    assert_eq!(with_parent.fields, ["/item/parentaccountid"]);
     let renamed = item(
         "update_folder",
         json!({"folder_id": "f_1", "title": "Customer calls"}),
@@ -421,28 +475,66 @@ fn ids_come_before_targets_and_lists_of_ids_point_at_every_entry() {
 }
 
 #[test]
-fn a_new_record_lives_where_it_links_and_an_update_s_links_are_fields() {
+fn a_new_record_goes_where_its_call_says_outside_its_values_and_its_links_are_values() {
     let target =
         |body: Value| item("create_record", json!({"tablename": "email", "item": body})).target;
-    assert_eq!(
-        target(json!({"subject": "Hi", "parentcustomerid": lookup(ACCOUNT, "account")})).as_deref(),
-        Some("/item/parentcustomerid/recordId")
+    // A link among the record's own values is one of them, whatever its name.
+    let linked = item(
+        "create_record",
+        json!({"tablename": "contact", "item": {"lastname": "Lee", "parentcustomerid": lookup(ACCOUNT, "account")}}),
     );
+    assert_eq!(linked.target, None);
+    assert_eq!(linked.fields, ["/item/parentcustomerid/recordId"]);
+    assert_eq!(
+        target(json!({"subject": "Hi", "description": "x", "regardingobjectid": RECORD})),
+        None
+    );
+    assert_eq!(
+        target(json!({"subject": "Hi", "parent@odata.bind": format!("/accounts({ACCOUNT})")})),
+        None
+    );
+    // Recipients say where a message goes wherever they sit.
     assert_eq!(
         target(json!({"subject": "Hi", "to": [lookup(CONTACT, "contact")], "regardingobjectid": lookup(RECORD, "opportunity")})).as_deref(),
         Some("/item/to/*/recordId")
     );
-    assert_eq!(
-        target(json!({"subject": "Hi", "description": "x", "regardingobjectid": RECORD}))
-            .as_deref(),
-        Some("/item/regardingobjectid")
-    );
     assert_eq!(target(json!({"subject": "Hi"})), None);
     let page = item(
         "notion-create-pages",
-        json!({"parent": {"data_source_id": RECORD}, "pages": [{"properties": {"Name": "Acme"}}]}),
+        json!({"parent": {"data_source_id": RECORD}, "pages": [{"properties": {"Name": "Acme", "Parent": {"page_id": ACCOUNT}}}]}),
     );
     assert_eq!(page.target.as_deref(), Some("/parent/data_source_id"));
+
+    // A folder named inside the record's data is one of its values, and
+    // still shows as one; the same folder at the call's top is where it goes.
+    let in_data = item(
+        "create_note",
+        json!({"data": {"title": "Calls", "folder_id": "fld_1"}}),
+    );
+    assert_eq!(in_data.target, None);
+    assert_eq!(in_data.fields, ["/data/folder_id"]);
+    let at_top = item(
+        "create_note",
+        json!({"folder_id": "fld_1", "data": {"title": "Calls"}}),
+    );
+    assert_eq!(at_top.target.as_deref(), Some("/folder_id"));
+
+    // A batch goes where every entry says, never where only some do.
+    let every = item(
+        "create_issues",
+        json!({"issues": [{"project_key": "OPS", "summary": "A"}, {"project_key": "OPS", "summary": "B"}]}),
+    );
+    assert_eq!(every.target.as_deref(), Some("/issues/*/project_key"));
+    let some = item(
+        "create_issues",
+        json!({"issues": [{"project_key": "OPS", "summary": "A"}, {"summary": "B"}]}),
+    );
+    assert_eq!(some.target, None);
+    let wrapped = item(
+        "create_issues",
+        json!({"issues": [{"fields": {"project_key": "OPS", "summary": "A"}}, {"fields": {"project_key": "OPS", "summary": "B"}}]}),
+    );
+    assert_eq!(wrapped.target, None);
 
     let updated = item(
         "update_record",
@@ -997,7 +1089,7 @@ fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
         ["/phone_number"]
     );
 
-    // A contact's numbers are its data: where it goes is still its parent.
+    // A contact's numbers are its data, and its parent account one more value.
     let contact = item(
         "create_record",
         json!({"tablename": "contact", "item": {
@@ -1010,14 +1102,16 @@ fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
     );
     assert_eq!(
         (contact.title.as_deref(), contact.target.as_deref()),
-        (
-            Some("/item/lastname"),
-            Some("/item/parentcustomerid/recordId")
-        )
+        (Some("/item/lastname"), None)
     );
     assert_eq!(
         contact.fields,
-        ["/item/telephone1", "/item/mobilephone", "/item/jobtitle"]
+        [
+            "/item/telephone1",
+            "/item/mobilephone",
+            "/item/jobtitle",
+            "/item/parentcustomerid/recordId"
+        ]
     );
     let updated = item(
         "update_record",
@@ -1458,6 +1552,19 @@ struct Case {
     input_schema: JsonObject,
     arguments: Value,
     expected: Expected,
+    /// Calls that ran earlier in the chat, on the call's own server.
+    #[serde(default)]
+    context: Vec<ContextCall>,
+    /// What the record the call acts on is called, by those calls.
+    #[serde(default)]
+    expected_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContextCall {
+    tool: String,
+    input: Value,
+    output: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1587,9 +1694,6 @@ const TESTSET_MISSES: [(&str, &[&str]); 8] = [
             "n03-batch-rows",
             "n04-meeting-note",
             "n07-inject-content",
-            "n21-comment-page",
-            "n23-comment-selection",
-            "n24-comment-inject",
             "n26-suggest",
             "n28-update-ds",
             "n31-read-query",
@@ -1837,7 +1941,7 @@ fn more_verbs_come_from_a_tools_name_in_a_closed_list() {
         (
             "trash_file",
             json!({"fileId": "f_1"}),
-            ToolCallAction::Archive,
+            ToolCallAction::Delete,
         ),
         (
             "archive_page",
@@ -1932,4 +2036,86 @@ fn where_a_record_lives_is_a_target_when_nothing_else_is() {
         json!({"id": "t1", "project": "Apollo", "state": "done"}),
     );
     assert_eq!(field.mapping.items[0].target, None);
+}
+
+#[test]
+fn an_odata_link_path_is_a_machine_id_wherever_a_label_shows_it() {
+    let bind = format!("/accounts({ACCOUNT})");
+    // At the call's top it is where the record goes; among its values, one of them.
+    for (arguments, pointer) in [
+        (
+            json!({"tablename": "lead", "parent@odata.bind": bind, "item": {"lastname": "Tester"}}),
+            "target",
+        ),
+        (
+            json!({"tablename": "lead", "item": {"lastname": "Tester", "parent@odata.bind": bind}}),
+            "field",
+        ),
+    ] {
+        let rules = label("create_record", arguments.clone());
+        let label = super::super::resolve_label(&rules.mapping, &arguments, None).expect("a label");
+        let item = &label.items[0];
+        let slot = match pointer {
+            "target" => item.target.as_ref().expect("a target"),
+            _ => {
+                assert_eq!(item.target, None);
+                item.fields
+                    .iter()
+                    .find(|field| field.pointer.ends_with("@odata.bind"))
+                    .expect("the link as a field")
+            }
+        };
+        let value = &slot.values[0];
+        assert!(value.machine_id, "{arguments}");
+        assert_eq!(value.text, bind);
+    }
+}
+
+/// The test set's calls whose record an earlier call read are named after
+/// what that read called it, wherever the read kept the name.
+#[test]
+fn the_test_sets_records_are_named_by_the_reads_before_them() {
+    use crate::models::message::{ContentPart, ToolCallStatus, ToolDisplayMetadata, ToolUse};
+    use crate::services::tool_display::label::{ToolResultContext, checked_label};
+    const SERVER: &str = "Server";
+    let mut named = 0;
+    for line in include_str!("fixtures/testset.jsonl").lines() {
+        let case: Case = serde_json::from_str(line).unwrap();
+        let Some(expected) = case.expected_name else {
+            continue;
+        };
+        let mut context = ToolResultContext::default();
+        for (index, call) in case.context.into_iter().enumerate() {
+            context.observe(&[ContentPart::ToolUse(ToolUse {
+                tool_call_id: format!("{}-{index}", case.id),
+                status: ToolCallStatus::Success,
+                tool_name: call.tool,
+                display: Some(ToolDisplayMetadata {
+                    title: "Read".into(),
+                    description: None,
+                    description_truncated: false,
+                    server_name: Some(SERVER.into()),
+                    label: None,
+                    read_only: true,
+                }),
+                input: Some(call.input),
+                output: Some(call.output),
+                ..Default::default()
+            })]);
+        }
+        let mut tool = Tool::new(case.tool.clone(), "", case.input_schema.clone());
+        tool.annotations = case.annotations.clone();
+        let rules = rules_label(&case.tool, &case.arguments, case.annotations.as_ref(), None);
+        let mut label = checked_label(SERVER, &tool, &case.arguments, &rules.mapping, None);
+        context.resolve(&mut label, &case.arguments, SERVER);
+        let id = label.items[0].id.as_ref().expect("an ID");
+        assert_eq!(
+            id.values[0].resolved.as_deref(),
+            Some(expected.as_str()),
+            "{}",
+            case.id
+        );
+        named += 1;
+    }
+    assert_eq!(named, 4);
 }

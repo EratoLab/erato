@@ -1073,6 +1073,7 @@ mod tests {
                 server_id: "dv".to_string(),
                 tool,
                 approval_argument: Some("hasUserApproved".to_string()),
+                destructive_hint_source: Default::default(),
             }],
             false,
         );
@@ -1132,6 +1133,7 @@ mod tests {
                 server_id: "docs".to_string(),
                 tool: mcp_tool,
                 approval_argument: None,
+                destructive_hint_source: Default::default(),
             }],
             false,
         );
