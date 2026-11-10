@@ -8831,7 +8831,7 @@ msgstr "No row deletes or empties anything."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.removing"
-msgstr "{0, plural, one {# row removes items from a list} other {# rows remove items from a list}}"
+msgstr "{removing, plural, one {# row removes items from a list} other {# rows remove items from a list}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
