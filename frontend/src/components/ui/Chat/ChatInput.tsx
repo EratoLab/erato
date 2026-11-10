@@ -3455,6 +3455,10 @@ export const ChatInput = ({
               {showControls && useUnifiedMobileMenu && hasFacets && (
                 <ComposerToolChips
                   facets={selectedFacets}
+                  showFacetIndicatorWithDisplayName={
+                    globalFacetSettings?.show_facet_indicator_with_display_name ??
+                    false
+                  }
                   onDeselect={toggleFacetId}
                   locked={enforceSelectedFacetIds || composeLocked}
                   lockReason={

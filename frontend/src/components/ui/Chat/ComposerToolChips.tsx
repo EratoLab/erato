@@ -11,6 +11,8 @@ import type { FacetInfo } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 export interface ComposerToolChipsProps {
   /** The selected tools, in the order the server lists them. */
   facets: FacetInfo[];
+  /** Default for facets that do not set `show_indicator_with_display_name`. */
+  showFacetIndicatorWithDisplayName: boolean;
   onDeselect: (facetId: string) => void;
   /** Nothing can be deselected: the assistant sets the tools, or the composer is busy. */
   locked?: boolean;
@@ -33,6 +35,7 @@ const deselectLabel = (facetDisplayName: string) =>
  */
 export const ComposerToolChips = ({
   facets,
+  showFacetIndicatorWithDisplayName,
   onDeselect,
   locked = false,
   lockReason,
@@ -100,6 +103,9 @@ export const ComposerToolChips = ({
           {facets.map((facet, index) => {
             const name = getFacetDisplayName(facet);
             const label = deselectLabel(name);
+            const showDisplayName =
+              facet.show_indicator_with_display_name ??
+              showFacetIndicatorWithDisplayName;
             return (
               <button
                 key={facet.id}
@@ -118,9 +124,11 @@ export const ComposerToolChips = ({
                 <span aria-hidden="true" className="inline-flex shrink-0">
                   <ResolvedIcon iconId={facet.icon} className="size-[15px]" />
                 </span>
-                <span data-ui="composer-tool-chip-label" className="truncate">
-                  {name}
-                </span>
+                {showDisplayName && (
+                  <span data-ui="composer-tool-chip-label" className="truncate">
+                    {name}
+                  </span>
+                )}
                 <span
                   aria-hidden="true"
                   data-ui={
