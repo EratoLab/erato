@@ -8917,10 +8917,22 @@ msgid "toolChange.count.emptied"
 msgstr "{0, plural, one {# wyczyszczony} few {# wyczyszczone} many {# wyczyszczonych} other {# wyczyszczone}}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: counts.listAdded
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listAdded"
+msgstr "{0, plural, one {# z dodanymi elementami} few {# z dodanymi elementami} many {# z dodanymi elementami} other {# z dodanymi elementami}}"
+
+#. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.listMaybeReplaced"
 msgstr "{0, plural, one {# lista może zostać zastąpiona} few {# listy mogą zostać zastąpione} many {# list może zostać zastąpionych} other {# listy mogą zostać zastąpione}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listRemoved
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listRemoved"
+msgstr "{0, plural, one {# z usuniętymi elementami} few {# z usuniętymi elementami} many {# z usuniętymi elementami} other {# z usuniętymi elementami}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
@@ -9030,6 +9042,11 @@ msgstr "{name} zachowane"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.removed"
 msgstr "{name} usunięte"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.removesClaim"
+msgstr "Tylko usuwanie, według narzędzia"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9219,6 +9236,11 @@ msgstr "{name} (było {was})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.unreadable"
+msgstr "Nieczytelne"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.allSet"
 msgstr "{total, plural, one {Pokaż jeszcze # pole, ustawione, poprzednia wartość nieznana (żadne nie jest czyszczone)} few {Pokaż jeszcze # pola, wszystkie ustawione, poprzednia wartość nieznana (żadne nie jest czyszczone)} many {Pokaż jeszcze # pól, wszystkie ustawione, poprzednia wartość nieznana (żadne nie jest czyszczone)} other {Pokaż jeszcze # pola, wszystkie ustawione, poprzednia wartość nieznana (żadne nie jest czyszczone)}}"
 
@@ -9241,6 +9263,11 @@ msgstr "{count, plural, one {Pozostałe # pole jest w Szczegółach technicznych
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.mixed"
 msgstr "{total, plural, one {Pokaż jeszcze # pole: {detail} (żadne nie jest czyszczone)} few {Pokaż jeszcze # pola: {detail} (żadne nie jest czyszczone)} many {Pokaż jeszcze # pól: {detail} (żadne nie jest czyszczone)} other {Pokaż jeszcze # pola: {detail} (żadne nie jest czyszczone)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.added"
+msgstr "{added, plural, one {# z dodanymi elementami} few {# z dodanymi elementami} many {# z dodanymi elementami} other {# z dodanymi elementami}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

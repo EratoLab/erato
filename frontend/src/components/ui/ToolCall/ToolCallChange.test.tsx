@@ -399,6 +399,45 @@ describe("the change card", () => {
     );
   });
 
+  it("reads a list the tool says it removes from as removed items, counted as removed", () => {
+    renderCard({
+      effects: [
+        {
+          path: "/removeLabels",
+          name: "Labels",
+          raw_name: "removeLabels",
+          effect: "list_removed",
+          values: [{ text: "Bug" }],
+          list: true,
+        },
+        {
+          path: "/addLabels",
+          name: "Labels",
+          raw_name: "addLabels",
+          effect: "list_added",
+          values: [{ text: "Feature" }],
+          list: true,
+        },
+        set(1),
+      ],
+      counts: { list_removed: 1, list_added: 1, set: 1 },
+    });
+    const removed = screen.getByTestId("tool-call-change-list");
+    expect(within(removed).getByText("Labels removed")).toBeInTheDocument();
+    expect(within(removed).getByText("Bug")).toBeInTheDocument();
+    expect(
+      within(removed).getByTestId("tool-call-change-claim"),
+    ).toHaveTextContent("Only removed, the tool says");
+    expect(screen.getByText("Labels added")).toBeInTheDocument();
+    expect(screen.getByText("Only added, the tool says")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "3 fields change: 1 with items removed, 1 with items added, 1 set",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/maybe replaced|would go|not known/)).toBeNull();
+  });
+
   it("never claims a batch row was emptied in a phrase that reads as its old value", () => {
     renderCard({
       batch: {
@@ -959,6 +998,66 @@ describe("a trace row's details", () => {
     expect(details).toHaveTextContent("Stage lead → customer");
     expect(details).toHaveTextContent("+1");
     expect(details.textContent).not.toContain(UUID);
+  });
+
+  it("lists every list, unreadable value and text its count line counts", () => {
+    const change = readAs({
+      effects: [
+        {
+          path: "/removeLabels",
+          name: "Labels",
+          raw_name: "removeLabels",
+          effect: "list_removed",
+          values: [{ text: "Bug" }],
+          list: true,
+        },
+        {
+          path: "/owners",
+          name: "Owners",
+          raw_name: "owners",
+          effect: "list_replaced",
+          values: [{ text: "Ann" }],
+          list: true,
+        },
+        {
+          path: "/blob",
+          name: "Blob",
+          raw_name: "blob",
+          effect: "unreadable",
+        },
+        {
+          path: "/priority",
+          name: "Priority",
+          raw_name: "priority",
+          effect: "changed",
+          values: [{ text: "4" }],
+          old: { text: "3" },
+        },
+      ],
+      texts: [
+        {
+          path: "/body",
+          name: "Body",
+          raw_name: "body",
+          text: "Hello",
+          lines: 1,
+          chars: 5,
+        },
+      ],
+      counts: { list_removed: 1, list_replaced: 1, unreadable: 1, changed: 1 },
+      notes: ["list_replace_unknown"],
+    });
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeRowDetails change={change} />
+      </I18nProvider>,
+    );
+    const details = screen.getByTestId("tool-call-change-row-details");
+    expect(details).toHaveTextContent("Labels removed: Bug");
+    expect(details).toHaveTextContent("Owners: Ann");
+    expect(details).toHaveTextContent("Not readable: Blob");
+    expect(details).toHaveTextContent("Body");
+    expect(details).toHaveTextContent("Priority 3 → 4");
   });
 });
 

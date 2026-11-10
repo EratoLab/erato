@@ -48,6 +48,7 @@ import {
   listKeptLabel,
   listMaybeReplacedLine,
   listRemovedLabel,
+  listRemovesClaim,
   listReplacedLine,
   listSetLabel,
   listWouldGoLabel,
@@ -65,6 +66,7 @@ import {
   textSeeAll,
   toolTitleLabel,
   uncheckedLine,
+  unreadableLabel,
   writeInsideReadLine,
 } from "@/lib/toolCallGist/changeLabels";
 import {
@@ -361,6 +363,18 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
   );
 };
 
+/** A list the tool says gains or loses items is named for what it does. */
+const effectName = (effect: ChangeEffect): string => {
+  switch (effect.effect) {
+    case "list_added":
+      return listAddedLabel(effect.name);
+    case "list_removed":
+      return listRemovedLabel(effect.name);
+    default:
+      return effect.name;
+  }
+};
+
 const ValueRow = ({
   effect,
   showRawName = false,
@@ -371,7 +385,7 @@ const ValueRow = ({
   /** What the tool claims about this value, so the card says whose word it is. */
   claim?: string;
 }) => (
-  <Row name={effect.name}>
+  <Row name={effectName(effect)}>
     <ScrollBox kind="value" className="max-h-24">
       <EffectValue effect={effect} />
     </ScrollBox>
@@ -463,6 +477,22 @@ const ListRow = ({
         <ValueList values={effect.values} omitted={effect.omitted} />
       </Row>
     )}
+  </div>
+);
+
+/** Items the tool says the call removes from a list: a loss, and the tool's word. */
+const RemovedFromListRow = ({ effect }: { effect: ChangeEffect }) => (
+  <div className="space-y-0.5" data-testid="tool-call-change-list">
+    <Row name={listRemovedLabel(effect.name)}>
+      <ValueList
+        values={effect.values}
+        omitted={effect.omitted}
+        limit={MAX_FIRST_VIEW_ROWS * 4}
+      />
+      <p className={MUTED} data-testid="tool-call-change-claim">
+        {listRemovesClaim()}
+      </p>
+    </Row>
   </div>
 );
 
@@ -682,7 +712,7 @@ const RowChange = ({ effect }: { effect: ChangeEffect }) => {
   const value = effect.values.map(plainChangeValue).join(", ");
   return (
     <>
-      {effect.name}{" "}
+      {effectName(effect)}{" "}
       {effect.old && effect.effect !== "unchanged" ? (
         <OldToNew old={effect.old} arrow="text">
           {value}
@@ -853,6 +883,9 @@ const LossesPart = ({ change }: { change: GistChange }) => {
           replaceUnknown={listReplaceIsUnknown(change)}
         />
       ))}
+      {layout.removedFromLists.map((effect, index) => (
+        <RemovedFromListRow key={index} effect={effect} />
+      ))}
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
       ))}
@@ -873,7 +906,9 @@ const ValuesPart = ({
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
   const addsOnly = change.notes.includes("tool_says_adds_to_list");
   const claimOf = (effect: ChangeEffect) =>
-    addsOnly && effect.list ? listAddsClaim() : undefined;
+    effect.effect === "list_added" || (addsOnly && effect.list)
+      ? listAddsClaim()
+      : undefined;
   return (
     <>
       {layout.firstRows.map((effect, index) => (
@@ -940,7 +975,7 @@ export const ToolCallChangeRowDetails = ({
   const found = change.opaque.flatMap((opaque) =>
     opaque.found.length > 0 ? [foundLine(opaque.kind, opaque.found)] : [],
   );
-  const removals = layout.lists.filter((effect) => effect.removed.length > 0);
+  const replaceUnknown = listReplaceIsUnknown(change);
   return (
     <div
       className="space-y-0.5 text-xs text-theme-fg-secondary"
@@ -976,14 +1011,44 @@ export const ToolCallChangeRowDetails = ({
           {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
         </p>
       )}
-      {removals.map((effect, index) => (
+      {layout.lists.map((effect, index) => (
         <p key={index} dir="auto" className={ISOLATED}>
-          {listReplaceIsUnknown(change)
-            ? listWouldGoLabel(effect.name)
-            : listRemovedLabel(effect.name)}
-          : {effect.removed.map(plainChangeValue).join(", ")}
+          {effect.removed.length > 0 ? (
+            <>
+              {replaceUnknown
+                ? listWouldGoLabel(effect.name)
+                : listRemovedLabel(effect.name)}
+              : {effect.removed.map(plainChangeValue).join(", ")}
+            </>
+          ) : (
+            <>
+              {replaceUnknown ? effect.name : listSetLabel(effect.name)}:{" "}
+              {effect.values.map(plainChangeValue).join(", ")}
+            </>
+          )}
         </p>
       ))}
+      {layout.removedFromLists.map((effect, index) => (
+        <p key={index} dir="auto" className={ISOLATED}>
+          {listRemovedLabel(effect.name)}:{" "}
+          {effect.values.map(plainChangeValue).join(", ")}
+        </p>
+      ))}
+      {layout.unreadable.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {unreadableLabel()}:{" "}
+          {layout.unreadable.map((effect) => effect.name).join(", ")}
+        </p>
+      )}
+      {change.texts.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {change.texts
+            .map((entry) =>
+              textHeading(entry.name, entry.lines, entry.chars, false),
+            )
+            .join(", ")}
+        </p>
+      )}
       {found.map((line, index) => (
         <p key={index}>{line}</p>
       ))}
@@ -1012,7 +1077,10 @@ export const changeRowHasDetails = (change: GistChange): boolean => {
     (change.batch?.rowsReplacingLists ?? 0) > 0 ||
     layout.emptied.length > 0 ||
     layout.firstRows.length > 0 ||
-    layout.lists.some((effect) => effect.removed.length > 0) ||
+    layout.lists.length > 0 ||
+    layout.removedFromLists.length > 0 ||
+    layout.unreadable.length > 0 ||
+    change.texts.length > 0 ||
     change.opaque.some((opaque) => opaque.found.length > 0)
   );
 };

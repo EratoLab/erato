@@ -4799,6 +4799,16 @@ export type ToolCallEffectCounts = {
    * @format int32
    * @minimum 0
    */
+  list_added?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  list_removed?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
   list_replaced?: number;
   /**
    * @format int32
@@ -4823,6 +4833,8 @@ export type ToolCallEffectCounts = {
 export type ToolCallEffectKind =
   | "emptied"
   | "list_replaced"
+  | "list_removed"
+  | "list_added"
   | "changed"
   | "set"
   | "unchanged"

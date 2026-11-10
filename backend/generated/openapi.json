@@ -13813,6 +13813,16 @@
             "format": "int32",
             "minimum": 0
           },
+          "list_added": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "list_removed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
           "list_replaced": {
             "type": "integer",
             "format": "int32",
@@ -13841,6 +13851,8 @@
         "enum": [
           "emptied",
           "list_replaced",
+          "list_removed",
+          "list_added",
           "changed",
           "set",
           "unchanged",

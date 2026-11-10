@@ -59,12 +59,30 @@ const countParts = (
             }),
           })
       : undefined,
+    counts.listRemoved > 0
+      ? t({
+          id: "toolChange.count.listRemoved",
+          message: plural(counts.listRemoved, {
+            one: "# with items removed",
+            other: "# with items removed",
+          }),
+        })
+      : undefined,
     counts.changed > 0
       ? t({
           id: "toolChange.count.changed",
           message: plural(counts.changed, {
             one: "# changed",
             other: "# changed",
+          }),
+        })
+      : undefined,
+    counts.listAdded > 0
+      ? t({
+          id: "toolChange.count.listAdded",
+          message: plural(counts.listAdded, {
+            one: "# with items added",
+            other: "# with items added",
           }),
         })
       : undefined,
@@ -94,6 +112,8 @@ const countParts = (
 const changingOf = (counts: ChangeCounts, texts: number) =>
   counts.emptied +
   counts.listReplaced +
+  counts.listRemoved +
+  counts.listAdded +
   counts.changed +
   counts.set +
   counts.unreadable +
@@ -193,17 +213,23 @@ export const changeSeeMoreLine = (
 ): string => {
   const { counts } = change;
   const total = layout.collapsed.length + layout.beyondCap;
-  const behind = (kind: "changed" | "set" | "unchanged") =>
-    counts[kind] -
-    layout.firstRows.filter((effect) => effect.effect === kind).length;
-  const changed = behind("changed");
-  const set = behind("set");
-  const unchanged = behind("unchanged");
+  const behind = (
+    kind: "changed" | "set" | "unchanged" | "list_added",
+    count: number,
+  ) =>
+    count - layout.firstRows.filter((effect) => effect.effect === kind).length;
+  const changed = behind("changed", counts.changed);
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  const added = behind("list_added", counts.listAdded);
+  const set = behind("set", counts.set);
+  const unchanged = behind("unchanged", counts.unchanged);
   const losses =
     counts.emptied -
     layout.emptied.length +
     counts.listReplaced -
     layout.lists.length +
+    counts.listRemoved -
+    layout.removedFromLists.length +
     counts.unreadable -
     layout.unreadable.length;
   const noLoss = change.complete && losses <= 0;
@@ -250,6 +276,15 @@ export const changeSeeMoreLine = (
       ? t({
           id: "toolChange.seeMore.part.changed",
           message: plural(changed, { one: "# changed", other: "# changed" }),
+        })
+      : undefined,
+    added > 0
+      ? t({
+          id: "toolChange.seeMore.part.added",
+          message: plural(added, {
+            one: "# with items added",
+            other: "# with items added",
+          }),
         })
       : undefined,
     set > 0
@@ -449,6 +484,16 @@ export const listAddsClaim = (): string =>
     id: "toolChange.list.addsClaim",
     message: "Only added, the tool says",
   });
+
+export const listRemovesClaim = (): string =>
+  t({
+    id: "toolChange.list.removesClaim",
+    message: "Only removed, the tool says",
+  });
+
+/** Under a trace row, the values the card could not read. */
+export const unreadableLabel = (): string =>
+  t({ id: "toolChange.row.unreadable", message: "Not readable" });
 
 export const recipientKindWord = (kind: ToolCallRecipientKind): string => {
   switch (kind) {

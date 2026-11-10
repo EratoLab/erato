@@ -793,9 +793,30 @@ impl<'a> Walk<'a> {
             Unwrapped::List(entries) => {
                 effect.list = true;
                 self.list_values(&entries, path, &mut effect);
-                if update_like && !only_adds(member) && self.list_claim(path) != ListClaim::Adds {
-                    effect.effect = ToolCallEffectKind::ListReplaced;
-                    self.diff_list(member, path, &entries, &mut effect);
+                if update_like {
+                    match self.list_claim(member, path) {
+                        ListClaim::Removes => {
+                            effect.effect = ToolCallEffectKind::ListRemoved;
+                            self.drop_leading_verb(
+                                member,
+                                &mut effect.name,
+                                ToolCallAction::Delete,
+                            );
+                        }
+                        ListClaim::OwnAdds => {
+                            effect.effect = ToolCallEffectKind::ListAdded;
+                            self.drop_leading_verb(
+                                member,
+                                &mut effect.name,
+                                ToolCallAction::Create,
+                            );
+                        }
+                        ListClaim::Adds => {}
+                        ListClaim::Replaces | ListClaim::Unknown => {
+                            effect.effect = ToolCallEffectKind::ListReplaced;
+                            self.diff_list(member, path, &entries, &mut effect);
+                        }
+                    }
                 }
             }
             Unwrapped::Other => {
@@ -1108,6 +1129,8 @@ impl<'a> Walk<'a> {
         let count = match effect.effect {
             ToolCallEffectKind::Emptied => &mut counts.emptied,
             ToolCallEffectKind::ListReplaced => &mut counts.list_replaced,
+            ToolCallEffectKind::ListRemoved => &mut counts.list_removed,
+            ToolCallEffectKind::ListAdded => &mut counts.list_added,
             ToolCallEffectKind::Changed => &mut counts.changed,
             ToolCallEffectKind::Set => &mut counts.set,
             ToolCallEffectKind::Unchanged => &mut counts.unchanged,
@@ -1118,6 +1141,7 @@ impl<'a> Walk<'a> {
             effect.effect,
             ToolCallEffectKind::Emptied
                 | ToolCallEffectKind::ListReplaced
+                | ToolCallEffectKind::ListRemoved
                 | ToolCallEffectKind::Unreadable
         );
         let cap = if is_loss {
@@ -1285,15 +1309,24 @@ impl<'a> Walk<'a> {
         }
     }
 
-    /// Whether the tool says the list at `path` replaces what is there or
-    /// adds to it: the member's own description first, then the tool's.
-    fn list_claim(&mut self, path: &str) -> ListClaim {
+    /// Whether the tool says the list `member` at `path` replaces what is
+    /// there, adds to it or removes from it: the member's own description
+    /// first, then, where it says none of these, the member's first word when
+    /// that is a verb that removes or adds, as in `removeLabels`, then the
+    /// tool's description.
+    fn list_claim(&mut self, member: &str, path: &str) -> ListClaim {
         let own = property_at(&self.facts.tool.input_schema, path)
             .and_then(|property| property.get("description")?.as_str())
-            .map(|text| ToolText::read(Some(text)));
-        let claim = match own {
-            Some(own) if own.adds_to_list && !own.replaces_list => ListClaim::Adds,
-            Some(own) if own.replaces_list && !own.adds_to_list => ListClaim::Replaces,
+            .map(|text| ToolText::read(Some(text)))
+            .unwrap_or_default();
+        let named = member_list_verb(member);
+        let adds = own.adds_to_list || own.holds_added;
+        let claim = match (own.replaces_list, adds, own.holds_removed) {
+            (true, false, false) => ListClaim::Replaces,
+            (false, true, false) => ListClaim::OwnAdds,
+            (false, false, true) => ListClaim::Removes,
+            (false, false, false) if named == Some(ToolCallAction::Delete) => ListClaim::Removes,
+            (false, false, false) if named == Some(ToolCallAction::Create) => ListClaim::OwnAdds,
             _ if self.says.adds_to_list => ListClaim::Adds,
             _ if self.says.replaces_list => ListClaim::Replaces,
             _ => ListClaim::Unknown,
@@ -1302,8 +1335,25 @@ impl<'a> Walk<'a> {
             ListClaim::Replaces => self.lists.replaces = true,
             ListClaim::Adds => self.lists.adds = true,
             ListClaim::Unknown => self.lists.unknown = true,
+            // The card says on the list's own row whose word this is.
+            ListClaim::Removes | ListClaim::OwnAdds => {}
         }
         claim
+    }
+
+    /// "Labels" for `removeLabels` once the row says the labels are removed:
+    /// the verb would only repeat what the row says. A glossary's name stays.
+    fn drop_leading_verb(&self, member: &str, name: &mut String, action: ToolCallAction) {
+        if self.glossary_name(member).is_some() || member_list_verb(member) != Some(action) {
+            return;
+        }
+        let Some((_, rest)) = name.split_once(' ') else {
+            return;
+        };
+        let mut chars = rest.chars();
+        if let Some(first) = chars.next() {
+            *name = first.to_uppercase().chain(chars).collect();
+        }
     }
 
     fn recipients(&mut self, member: &str, value: &'a Value, path: &str) {
@@ -1574,8 +1624,10 @@ impl<'a> Walk<'a> {
                     }
                     Unwrapped::List(_)
                         if update_like
-                            && !only_adds(member)
-                            && self.list_claim(&value_path) != ListClaim::Adds =>
+                            && !matches!(
+                                self.list_claim(member, &value_path),
+                                ListClaim::Adds | ListClaim::OwnAdds
+                            ) =>
                     {
                         replaces = true;
                         tallies[at].lists += 1;
@@ -1876,6 +1928,8 @@ impl<'a> Walk<'a> {
         if counts.unchanged > 0
             && counts.emptied
                 + counts.list_replaced
+                + counts.list_removed
+                + counts.list_added
                 + counts.changed
                 + counts.set
                 + counts.unreadable
@@ -1907,7 +1961,12 @@ struct ListClaims {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ListClaim {
     Replaces,
+    /// The tool's own description says its calls only add.
     Adds,
+    /// The member says it adds the items it holds.
+    OwnAdds,
+    /// The member says it removes the items it holds.
+    Removes,
     Unknown,
 }
 
@@ -2100,11 +2159,17 @@ fn value_hash(value: &Value) -> u64 {
     hasher.finish()
 }
 
-/// `addLabels`, `append_items`: the member's own name says it adds.
-fn only_adds(member: &str) -> bool {
-    name_words(member)
-        .first()
-        .is_some_and(|word| matches!(word.as_str(), "add" | "append" | "include"))
+/// What a list member's own name says it does with the items it holds:
+/// `removeLabels` removes and `addLabels` adds, when its first word is a
+/// verb that removes or adds. `new_labels` holds the new list.
+fn member_list_verb(member: &str) -> Option<ToolCallAction> {
+    let words = name_words(member);
+    let first = words.first().filter(|_| words.len() > 1)?;
+    if first == "new" {
+        return None;
+    }
+    rules::action_of(first)
+        .filter(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Create))
 }
 
 /// Where a place member sits in what the card says, broadest first.
@@ -2699,11 +2764,42 @@ fn claims(lower: &str, phrases: &[&str]) -> bool {
     })
 }
 
+/// What a list member's description says when it holds what the call adds
+/// or removes, as "Label IDs to add" or "The labels to remove".
+const ADDS_PHRASES: [&str; 3] = ["to add", "to be added", "will be added"];
+const REMOVES_PHRASES: [&str; 6] = [
+    "to remove",
+    "to be removed",
+    "will be removed",
+    "to delete",
+    "to be deleted",
+    "to unassign",
+];
+
+/// A claim made in a sentence that sets no condition: "Labels to remove
+/// when append is false" says nothing about a call that leaves `append` out.
+fn unconditional_claim(lower: &str, phrases: &[&str]) -> bool {
+    const CONDITIONS: [&str; 4] = ["if", "when", "unless", "only when"];
+    lower.split(['.', ';', '\n']).any(|sentence| {
+        let words: Vec<&str> = sentence
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        claims(sentence, phrases) && !words.iter().any(|word| CONDITIONS.contains(word))
+    })
+}
+
 /// What a tool's own description says about what it does, as closed facts.
 /// Text the server wrote only ever selects one of these.
+#[derive(Default)]
 struct ToolText {
     replaces_list: bool,
     adds_to_list: bool,
+    /// What only a list member's own description can say: it holds what the
+    /// call adds, or what it removes. A tool's "to add a comment" says
+    /// nothing about its lists.
+    holds_added: bool,
+    holds_removed: bool,
     ignored_if_missing: bool,
     permanent: bool,
     restorable: bool,
@@ -2727,6 +2823,8 @@ impl ToolText {
                 ],
             ),
             adds_to_list: claims(&lower, &["append-only", "only adds"]),
+            holds_added: unconditional_claim(&lower, &ADDS_PHRASES),
+            holds_removed: unconditional_claim(&lower, &REMOVES_PHRASES),
             ignored_if_missing: has("ignored if") || has("ignores this") || has("silently ignored"),
             permanent: (has("permanently") && !has("not permanently"))
                 || has("cannot be undone")

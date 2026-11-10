@@ -2302,6 +2302,96 @@ fn a_statement_beside_new_content_keeps_its_warning() {
 }
 
 #[test]
+fn a_list_that_removes_or_adds_reads_as_removed_or_added_items() {
+    let save = tool_with_schema(
+        "save_issue",
+        "Create or update an issue.",
+        json!({"type": "object", "properties": {
+            "id": {"type": "string"},
+            "removeLabels": {"type": "array", "items": {"type": "string"},
+                "description": "The identifiers of the issue labels to remove"},
+            "labelIds": {"type": "array", "items": {"type": "string"},
+                "description": "Label IDs to add to the issue."},
+            "removedLabels": {"type": "array", "items": {"type": "string"},
+                "description": "Replaces the full label set."},
+            "watchers": {"type": "array", "items": {"type": "string"},
+                "description": "People to remove when notify is false"},
+        }}),
+    );
+    let removed = change_with(
+        &save,
+        json!({"id": "ENG-1", "removeLabels": ["Bug"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    let labels = effect(&removed, "removeLabels");
+    assert_eq!(labels.effect, ToolCallEffectKind::ListRemoved);
+    assert_eq!(labels.name, "Labels");
+    assert_eq!(texts(&labels.values), ["Bug"]);
+    assert_eq!(removed.counts.list_removed, 1);
+    assert_eq!(removed.counts.list_replaced, 0);
+    assert!(removed.notes.is_empty(), "{:?}", removed.notes);
+
+    let added = change_with(
+        &save,
+        json!({"id": "ENG-1", "labelIds": ["Feature"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(
+        effect(&added, "labelIds").effect,
+        ToolCallEffectKind::ListAdded
+    );
+    assert_eq!(added.counts.list_added, 1);
+
+    // The member's own description says more than its name, and a sentence
+    // that holds a condition says nothing.
+    let replaced = change_with(
+        &save,
+        json!({"id": "ENG-1", "removedLabels": ["Bug"], "watchers": ["ana"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(
+        effect(&replaced, "removedLabels").effect,
+        ToolCallEffectKind::ListReplaced
+    );
+    assert_eq!(
+        effect(&replaced, "watchers").effect,
+        ToolCallEffectKind::ListReplaced
+    );
+
+    // What the tool says it is for says nothing about one of its lists.
+    let tool_words = change_with(
+        &tool("update_issue", "Use this to add or remove a label.", None),
+        json!({"id": "ENG-1", "labels": ["x"]}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert_eq!(
+        effect(&tool_words, "labels").effect,
+        ToolCallEffectKind::ListReplaced
+    );
+    assert_eq!(tool_words.notes, [ToolCallChangeNote::ListReplaceUnknown]);
+
+    // With no description, only a first word that is a known verb counts.
+    for (member, kind) in [
+        ("removeLabels", ToolCallEffectKind::ListRemoved),
+        ("clear_tags", ToolCallEffectKind::ListRemoved),
+        ("addAssignees", ToolCallEffectKind::ListAdded),
+        ("append_items", ToolCallEffectKind::ListAdded),
+        ("new_labels", ToolCallEffectKind::ListReplaced),
+        ("include_labels", ToolCallEffectKind::ListReplaced),
+        ("labels_remove", ToolCallEffectKind::ListReplaced),
+    ] {
+        let mut arguments = json!({"id": "ENG-1"});
+        arguments[member] = json!(["x"]);
+        let change = change_of("update_issue", arguments);
+        assert_eq!(effect(&change, member).effect, kind, "{member}");
+    }
+}
+
+#[test]
 fn a_list_reads_what_its_own_description_says_before_the_tools() {
     let save = tool_with_schema(
         "save_issue",
@@ -2334,8 +2424,9 @@ fn a_list_reads_what_its_own_description_says_before_the_tools() {
         &ToolResultContext::default(),
     )
     .0;
-    assert_eq!(effect(&added, "tags").effect, ToolCallEffectKind::Set);
-    assert_eq!(added.notes, [ToolCallChangeNote::ToolSaysAddsToList]);
+    assert_eq!(effect(&added, "tags").effect, ToolCallEffectKind::ListAdded);
+    assert_eq!(added.counts.list_added, 1);
+    assert!(added.notes.is_empty());
 
     let unsaid = change_with(
         &tool_with_schema(
@@ -2374,7 +2465,10 @@ fn an_address_counts_as_reach_only_on_a_send_or_share() {
 #[test]
 fn a_member_named_add_says_it_only_adds_and_a_path_names_what_a_write_acts_on() {
     let add = change_of("save_issue", json!({"id": "ENG-1", "addLabels": ["x"]}));
-    assert_eq!(effect(&add, "addLabels").effect, ToolCallEffectKind::Set);
+    assert_eq!(
+        effect(&add, "addLabels").effect,
+        ToolCallEffectKind::ListAdded
+    );
 
     let rules = rules_label(
         "write_file",

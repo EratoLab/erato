@@ -62,6 +62,8 @@ const change = (effects: ToolCallEffect[], extra: object = {}): GistChange => {
   const counts = {
     emptied: 0,
     list_replaced: 0,
+    list_removed: 0,
+    list_added: 0,
     changed: 0,
     set: 0,
     unchanged: 0,

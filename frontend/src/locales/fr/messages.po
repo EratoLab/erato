@@ -8917,10 +8917,22 @@ msgid "toolChange.count.emptied"
 msgstr "{0, plural, one {# vidé} other {# vidés}}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: counts.listAdded
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listAdded"
+msgstr "{0, plural, one {# avec des éléments ajoutés} other {# avec des éléments ajoutés}}"
+
+#. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.listMaybeReplaced"
 msgstr "{0, plural, one {# liste peut-être remplacée} other {# listes peut-être remplacées}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listRemoved
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listRemoved"
+msgstr "{0, plural, one {# avec des éléments retirés} other {# avec des éléments retirés}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
@@ -9030,6 +9042,11 @@ msgstr "{name} conservés"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.removed"
 msgstr "{name} supprimés"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.removesClaim"
+msgstr "Retrait uniquement, selon l’outil"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9219,6 +9236,11 @@ msgstr "{name} (était {was})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.unreadable"
+msgstr "Illisible"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.allSet"
 msgstr "{total, plural, one {Voir # champ de plus, défini, ancienne valeur inconnue (aucun n’est vidé)} other {Voir # champs de plus, tous définis, ancienne valeur inconnue (aucun n’est vidé)}}"
 
@@ -9241,6 +9263,11 @@ msgstr "{count, plural, one {L’autre champ (#) se trouve dans les Détails tec
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.mixed"
 msgstr "{total, plural, one {Voir # champ de plus : {detail} (aucun n’est vidé)} other {Voir # champs de plus : {detail} (aucun n’est vidé)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.added"
+msgstr "{added, plural, one {# avec des éléments ajoutés} other {# avec des éléments ajoutés}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

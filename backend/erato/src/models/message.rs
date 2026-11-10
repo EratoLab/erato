@@ -742,6 +742,10 @@ pub enum ToolCallValueMeaningSource {
 pub enum ToolCallEffectKind {
     Emptied,
     ListReplaced,
+    /// Items the tool says the call removes from a list; the rest stays.
+    ListRemoved,
+    /// Items the tool says the call adds to a list; nothing goes.
+    ListAdded,
     /// The old value is known and differs.
     Changed,
     /// The old value is unknown.
@@ -772,6 +776,10 @@ pub struct ToolCallEffectCounts {
     pub emptied: u32,
     #[serde(default)]
     pub list_replaced: u32,
+    #[serde(default)]
+    pub list_removed: u32,
+    #[serde(default)]
+    pub list_added: u32,
     #[serde(default)]
     pub changed: u32,
     #[serde(default)]
