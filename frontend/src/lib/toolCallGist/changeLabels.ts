@@ -371,11 +371,7 @@ export const emptiedWasLabel = (name: string, was: string): string =>
 export const beingEmptiedLabel = (name: string): string =>
   t({ id: "toolChange.row.beingEmptied", message: `${name} is emptied` });
 
-export const listReplacedLine = (
-  name: string,
-  removed: number,
-  kept: number,
-): string => {
+const goesAndStays = (removed: number, kept: number): string => {
   const goes = t({
     id: "toolChange.list.goes",
     message: plural(removed, { one: "# goes", other: "# go" }),
@@ -387,7 +383,15 @@ export const listReplacedLine = (
           message: plural(kept, { one: "# stays", other: "# stay" }),
         })
       : undefined;
-  const parts = stays === undefined ? goes : `${goes}, ${stays}`;
+  return stays === undefined ? goes : `${goes}, ${stays}`;
+};
+
+export const listReplacedLine = (
+  name: string,
+  removed: number,
+  kept: number,
+): string => {
+  const parts = goesAndStays(removed, kept);
   return t({
     id: "toolChange.list.replaced",
     message: `The list ${name} is replaced: ${parts}`,
@@ -400,18 +404,7 @@ export const listMaybeReplacedLine = (
   removed: number,
   kept: number,
 ): string => {
-  const goes = t({
-    id: "toolChange.list.goes",
-    message: plural(removed, { one: "# goes", other: "# go" }),
-  });
-  const stays =
-    kept > 0
-      ? t({
-          id: "toolChange.list.stays",
-          message: plural(kept, { one: "# stays", other: "# stay" }),
-        })
-      : undefined;
-  const parts = stays === undefined ? goes : `${goes}, ${stays}`;
+  const parts = goesAndStays(removed, kept);
   return t({
     id: "toolChange.list.ifReplaced",
     message: `If this replaces the list ${name}: ${parts}`,
@@ -615,10 +608,14 @@ export const batchSameLine = (): string =>
 export const batchDifferentLine = (): string =>
   t({ id: "toolChange.batch.different", message: "Each row is different." });
 
-/** Whether any row loses something, or a statement that none does. */
+/**
+ * Whether any row loses something, or a statement that none does. Where only
+ * the tool says its lists are added to, that statement would be the tool's.
+ */
 export const batchLossLines = (
   batch: ChangeBatch,
   listsMaybeReplaced = false,
+  toolSaysOnlyAdds = false,
 ): string[] => {
   const lines: string[] = [];
   if (batch.rowsEmptying > 0) {
@@ -653,7 +650,12 @@ export const batchLossLines = (
           }),
     );
   }
-  if (lines.length === 0 && batch.deletions === 0 && batch.readAll) {
+  if (
+    lines.length === 0 &&
+    batch.deletions === 0 &&
+    batch.readAll &&
+    !toolSaysOnlyAdds
+  ) {
     lines.push(
       t({
         id: "toolChange.batch.losses.none",
@@ -968,19 +970,20 @@ export const changeNoteLabel = (note: ToolCallChangeNote): string => {
 };
 
 /**
- * A coded value with its meaning: the label first and the value as written
- * beside it, or for a meaning only the tool states, the value and its claim.
+ * A coded value with its meaning: for the operator's glossary the label first
+ * and the value as written beside it; for a meaning the tool's schema or an
+ * earlier result of it gives, the value and the tool's claim.
  */
 export const codedValueText = (value: ChangeValue): string => {
   const { text, meaning } = value;
   if (meaning === undefined) return text;
   const label = meaning.label;
-  return meaning.source === "tool"
-    ? t({
+  return meaning.source === "glossary"
+    ? t({ id: "toolChange.value.meaning", message: `${label} (${text})` })
+    : t({
         id: "toolChange.value.toolSaysMeaning",
         message: `${text} (the tool says: ${label})`,
-      })
-    : t({ id: "toolChange.value.meaning", message: `${label} (${text})` });
+      });
 };
 
 /** A value as plain text, for a trace row's one-line summary. */

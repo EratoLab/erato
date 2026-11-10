@@ -5102,7 +5102,8 @@ export type ToolCallValueMeaning = {
 };
 
 /**
- * Whose word a value's meaning is; a card marks a tool's own as a claim.
+ * Whose word a value's meaning is; a card marks every meaning but the
+ * glossary's as the tool's claim, an earlier result's included.
  */
 export type ToolCallValueMeaningSource =
   | "glossary"

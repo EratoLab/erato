@@ -567,6 +567,11 @@ export const listReplaceIsUnknown = (change: GistChange): boolean =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
   change.notes.includes("list_replace_unknown");
 
+/** Whether only the tool's word says this call adds to its lists. */
+export const toolSaysOnlyAdds = (change: GistChange): boolean =>
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  change.notes.includes("tool_says_adds_to_list");
+
 /** Whether the description says something a card should show. */
 export const changeSaysSomething = (change: GistChange): boolean =>
   change.effects.length > 0 ||

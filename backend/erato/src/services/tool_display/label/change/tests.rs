@@ -2595,6 +2595,43 @@ fn a_list_the_tool_or_the_member_says_is_only_added_to_is_never_counted_as_repla
     );
     let batch = rows.batch.as_ref().unwrap();
     assert_eq!(batch.rows_replacing_lists, 0);
+    assert!(rows.notes.contains(&ToolCallChangeNote::ToolSaysAddsToList));
+
+    let late: Vec<Value> = (0..60)
+        .map(|index| {
+            let mut row = json!({"id": format!("r{index}"), "name": "A", "note": "x"});
+            if index >= 55 {
+                row["labels"] = json!(["x"]);
+            }
+            row
+        })
+        .collect();
+    let (late, _) = change_with(
+        &tool("update_items", "Only adds labels.", None),
+        json!({"items": late}),
+        &ToolResultContext::default(),
+    );
+    assert!(late.notes.contains(&ToolCallChangeNote::ToolSaysAddsToList));
+
+    let (negated, _) = change_with(
+        &tool(
+            "update_items",
+            "Not only adds, it also removes the rest. It never replaces the order.",
+            None,
+        ),
+        json!({"items": [
+            {"id": "r1", "name": "A", "labels": ["x"]},
+            {"id": "r2", "name": "B", "labels": ["y", "z"]},
+        ]}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(negated.batch.as_ref().unwrap().rows_replacing_lists, 2);
+    assert!(
+        negated
+            .notes
+            .contains(&ToolCallChangeNote::ListReplaceUnknown)
+    );
+
     let (added, _) = change_with(
         &tool("update_items", "", None),
         json!({"items": [

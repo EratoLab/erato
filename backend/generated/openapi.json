@@ -14308,7 +14308,7 @@
       },
       "ToolCallValueMeaningSource": {
         "type": "string",
-        "description": "Whose word a value's meaning is; a card marks a tool's own as a claim.",
+        "description": "Whose word a value's meaning is; a card marks every meaning but the\nglossary's as the tool's claim, an earlier result's included.",
         "enum": [
           "glossary",
           "earlier",

@@ -11,6 +11,7 @@ import {
   MAX_FIRST_VIEW_BATCH_FIELDS,
   MAX_FIRST_VIEW_ROWS,
   TEXT_LINES,
+  toolSaysOnlyAdds,
 } from "@/lib/toolCallGist/change";
 import {
   batchDeletionsLine,
@@ -360,6 +361,7 @@ const ValueRow = ({
     )}
     {showRawName &&
       effect.rawName.length > 0 &&
+      effect.rawName !== effect.name &&
       // A glossary name already carries the raw name beside it.
       !effect.name.endsWith(`(${effect.rawName})`) && (
         <p
@@ -734,9 +736,11 @@ const BatchFields = ({
 const BatchPart = ({
   batch,
   listsMaybeReplaced,
+  onlyAdds,
 }: {
   batch: ChangeBatch;
   listsMaybeReplaced: boolean;
+  onlyAdds: boolean;
 }) => {
   const deleted = batch.rows
     .filter((row) => row.action === "delete")
@@ -745,7 +749,7 @@ const BatchPart = ({
   const first = batch.rows.slice(0, MAX_FIRST_VIEW_ROWS);
   const rest = batch.rows.slice(MAX_FIRST_VIEW_ROWS);
   const unstored = batch.total - batch.rows.length;
-  const losses = batchLossLines(batch, listsMaybeReplaced);
+  const losses = batchLossLines(batch, listsMaybeReplaced, onlyAdds);
   const seeMoreCount = batch.sameChange
     ? batch.total
     : batch.total - first.length;
@@ -938,7 +942,11 @@ export const ToolCallChangeRowDetails = ({
       {change.batch &&
         (change.batch.rowsEmptying > 0 ||
           change.batch.rowsReplacingLists > 0) &&
-        batchLossLines(change.batch, listReplaceIsUnknown(change)).map(
+        batchLossLines(
+          change.batch,
+          listReplaceIsUnknown(change),
+          toolSaysOnlyAdds(change),
+        ).map(
           (line, index) => <p key={index}>{line}</p>,
         )}
       {layout.emptied.length > 0 && (
@@ -1026,6 +1034,7 @@ export const ToolCallChangeBody = ({
       <BatchPart
         batch={change.batch}
         listsMaybeReplaced={listReplaceIsUnknown(change)}
+        onlyAdds={toolSaysOnlyAdds(change)}
       />
     )}
     {change.texts.map((entry, index) => (

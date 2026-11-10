@@ -311,6 +311,7 @@ describe("the words of a change", () => {
       "No row deletes or empties anything.",
     ]);
     expect(batchLossLines({ ...batch, readAll: false })).toEqual([]);
+    expect(batchLossLines(batch, false, true)).toEqual([]);
     expect(batchLossLines({ ...batch, deletions: 2 })).toEqual([]);
     expect(
       batchLossLines({ ...batch, rowsEmptying: 3, rowsReplacingLists: 1 }),

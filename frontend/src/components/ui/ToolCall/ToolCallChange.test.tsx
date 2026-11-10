@@ -594,6 +594,25 @@ describe("the change card", () => {
     );
     unmount();
 
+    // That no row loses anything would be the tool's word, not Erato's.
+    const { unmount: unmountClaimed } = renderCard({
+      batch: {
+        path: "/r",
+        name: "R",
+        total: 200,
+        same_change: true,
+        shared,
+        rows: [{ number: 1, effects: shared }],
+        read_all: true,
+      },
+      notes: ["tool_says_adds_to_list"],
+    });
+    expect(screen.queryByTestId("tool-call-change-batch-loss")).toBeNull();
+    expect(
+      screen.getByText("The tool says it only adds to the list."),
+    ).toBeInTheDocument();
+    unmountClaimed();
+
     renderCard({
       batch: {
         path: "/r",
@@ -667,8 +686,8 @@ describe("old and new values", () => {
     expect(old.className).not.toEqual(fresh.className);
   });
 
-  it("show a code's meaning, and say so when only the tool says it", () => {
-    renderCard({
+  it("show a code's meaning as the tool's word unless the glossary gives it", () => {
+    const { unmount } = renderCard({
       effects: [
         changed({
           old: {
@@ -681,10 +700,24 @@ describe("old and new values", () => {
       counts: { changed: 1 },
     });
     expect(screen.getByTestId("tool-call-change-old")).toHaveTextContent(
-      "Low (4)",
+      "4 (the tool says: Low)",
     );
     expect(screen.getByTestId("tool-call-change-new")).toHaveTextContent(
       "2 (the tool says: High)",
+    );
+    unmount();
+    renderCard({
+      effects: [
+        changed({
+          values: [
+            { text: "2", meaning: { label: "High", source: "glossary" } },
+          ],
+        }),
+      ],
+      counts: { changed: 1 },
+    });
+    expect(screen.getByTestId("tool-call-change-new")).toHaveTextContent(
+      "High (2)",
     );
   });
 
@@ -731,7 +764,7 @@ describe("old and new values", () => {
     });
     expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
     expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
-      "PriorityLow (4)",
+      "Priority4 (the tool says: Low)",
     );
   });
 
@@ -849,19 +882,19 @@ describe("what sits on the card", () => {
       effects: [
         {
           ...set(1),
-          name: "Expected close (estimatedclosedate)",
-          raw_name: "estimatedclosedate",
+          name: "Due (duedate)",
+          raw_name: "duedate",
         },
-        ...Array.from({ length: 7 }, (_, index) => set(index + 2)),
+        ...Array.from({ length: 6 }, (_, index) => set(index + 2)),
+        { ...set(8), name: "Subject", raw_name: "Subject" },
       ],
       counts: { set: 8 },
     });
-    expect(
-      screen.getByText("Expected close (estimatedclosedate)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Due (duedate)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /See 3 more fields/ }));
-    expect(screen.queryByText("estimatedclosedate")).toBeNull();
+    expect(screen.queryByText("duedate")).toBeNull();
     expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
+    expect(screen.getAllByText("Subject")).toHaveLength(1);
   });
 
   it("says who marked a tool as destructive", () => {

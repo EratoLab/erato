@@ -1435,11 +1435,12 @@ impl<'a> Walk<'a> {
                         empties = true;
                         tallies[at].emptied += 1;
                     }
-                    Unwrapped::List(_)
-                        if update_like && !only_adds(member) && !self.says.adds_to_list =>
-                    {
-                        replaces = true;
-                        tallies[at].lists += 1;
+                    Unwrapped::List(_) if update_like && !only_adds(member) => {
+                        self.saw_list = true;
+                        if !self.says.adds_to_list {
+                            replaces = true;
+                            tallies[at].lists += 1;
+                        }
                     }
                     // What such a value holds was not looked at.
                     Unwrapped::Other => read_all = false,
@@ -2446,6 +2447,24 @@ const NEGATIONS: [&str; 7] = [
     "not ", "n't", "no way", "never", "cannot", "without", "unable",
 ];
 
+/// Whether `lower` holds one of `phrases` not right after a word that negates
+/// it, as in "not only adds" or "never replaces the list".
+fn claims(lower: &str, phrases: &[&str]) -> bool {
+    const NEGATING: [&str; 5] = ["not", "never", "n't", "cannot", "no"];
+    phrases.iter().any(|phrase| {
+        lower.match_indices(phrase).any(|(at, _)| {
+            let before = lower[..at].trim_end();
+            !NEGATING.iter().any(|word| {
+                before.ends_with(word)
+                    && before[..before.len() - word.len()]
+                        .chars()
+                        .next_back()
+                        .is_none_or(|c| !c.is_alphanumeric() || *word == "n't")
+            })
+        })
+    })
+}
+
 /// What a tool's own description says about what it does, as closed facts.
 /// Text the server wrote only ever selects one of these.
 struct ToolText {
@@ -2463,12 +2482,17 @@ impl ToolText {
             .unwrap_or_default();
         let has = |phrase: &str| lower.contains(phrase);
         Self {
-            replaces_list: has("replaces the")
-                || has("replace all")
-                || has("replaces all")
-                || has("overwrites")
-                || has("will be replaced"),
-            adds_to_list: has("append-only") || has("only adds"),
+            replaces_list: claims(
+                &lower,
+                &[
+                    "replaces the",
+                    "replace all",
+                    "replaces all",
+                    "overwrites",
+                    "will be replaced",
+                ],
+            ),
+            adds_to_list: claims(&lower, &["append-only", "only adds"]),
             ignored_if_missing: has("ignored if") || has("ignores this") || has("silently ignored"),
             permanent: (has("permanently") && !has("not permanently"))
                 || has("cannot be undone")
