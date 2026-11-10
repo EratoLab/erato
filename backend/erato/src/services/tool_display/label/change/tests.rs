@@ -2078,6 +2078,43 @@ fn a_call_that_names_nothing_inside_the_place_its_name_ends_in_acts_on_that_plac
 }
 
 #[test]
+fn text_beside_content_the_call_marks_new_picks_where_it_goes() {
+    let section = tool("update_page_section", "", None);
+    let change = change_with(
+        &section,
+        json!({"page_id": "123456", "heading_text": "Laptop setup", "new_content": "Use the portal."}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    let filter = change.filter.as_ref().unwrap();
+    assert_eq!(filter.parts.len(), 1);
+    assert_eq!(filter.parts[0].name, "Heading text");
+    assert_eq!(filter.parts[0].value.text, "Laptop setup");
+    assert_eq!(change.counts.set, 1);
+    assert!(
+        change
+            .effects
+            .iter()
+            .all(|effect| effect.raw_name != "heading_text")
+    );
+    assert!(!change.notes.contains(&ToolCallChangeNote::RowCountUnknown));
+
+    // A rename marks only the new name: its other values still change, and
+    // an edit that says what the text was needs nothing to pick it.
+    let rename = change_of(
+        "update_label",
+        json!({"id": "l1", "new_name": "defect", "color": "ff0000"}),
+    );
+    assert!(rename.filter.is_none());
+    assert_eq!(effect(&rename, "color").effect, ToolCallEffectKind::Set);
+    let edit = change_of(
+        "edit_file",
+        json!({"path": "/a.txt", "old_text": "a", "new_text": "b", "encoding": "utf-8"}),
+    );
+    assert!(edit.filter.is_none());
+}
+
+#[test]
 fn an_address_counts_as_reach_only_on_a_send_or_share() {
     let context = ToolResultContext::default().with_organization(Some("me@contoso.example"), &[]);
     let shared = change_with(

@@ -256,6 +256,9 @@ struct Walk<'a> {
     named_shown: HashSet<&'a str>,
     /// Paths that name the record itself, its ID or title: never where it lives.
     record: HashSet<&'a str>,
+    /// The call marks its new content as new (`new_content`), so the plain
+    /// text beside it picks the part that content replaces.
+    picks_part: bool,
     /// The text the call says it replaces and the text it writes, by path.
     before: Option<&'a str>,
     after: HashSet<&'a str>,
@@ -340,6 +343,7 @@ impl<'a> Walk<'a> {
             named,
             named_shown,
             record,
+            picks_part: is_update_like(action) && marks_new_content(facts.arguments),
             before,
             after,
             earlier,
@@ -426,6 +430,10 @@ impl<'a> Walk<'a> {
             return;
         }
         if self.is_named(path, value) {
+            return;
+        }
+        if depth == 0 && self.picks_part && picks_a_part(member, value) {
+            self.part_picked_by(value, path, name);
             return;
         }
         if is_one_of(member, &FILTER_MEMBERS) {
@@ -1216,6 +1224,33 @@ impl<'a> Walk<'a> {
         self.change.filter = Some(filter);
     }
 
+    /// A value beside content the call marks new picks where that content
+    /// goes, as the heading of the section it replaces does: it reads as
+    /// where the change applies, never as a value that changes.
+    fn part_picked_by(&mut self, value: &'a Value, path: &str, name: String) {
+        let name = self.display_name(&name);
+        let Some(value) = self.shown(value, path) else {
+            return;
+        };
+        let filter = self.change.filter.get_or_insert_with(|| ToolCallFilter {
+            path: path.to_string(),
+            every_record: false,
+            parts: Vec::new(),
+            text: None,
+            omitted: 0,
+        });
+        if filter.parts.len() < MAX_FILTER_PARTS {
+            filter.parts.push(ToolCallFilterPart {
+                name,
+                value,
+                is_empty: false,
+            });
+        } else {
+            filter.omitted = filter.omitted.saturating_add(1);
+            self.complete = false;
+        }
+    }
+
     fn recipients(&mut self, member: &str, value: &'a Value, path: &str) {
         let name = readable_name(member, None, "");
         let name = self.display_name(&name);
@@ -1759,11 +1794,12 @@ impl<'a> Walk<'a> {
             .opaque
             .iter()
             .any(|opaque| opaque.kind == ToolCallOpaqueKind::Sql)
-            || self
-                .change
-                .filter
-                .as_ref()
-                .is_some_and(|filter| !filter.every_record)
+            || (!self.picks_part
+                && self
+                    .change
+                    .filter
+                    .as_ref()
+                    .is_some_and(|filter| !filter.every_record))
         {
             notes.push(ToolCallChangeNote::RowCountUnknown);
         }
@@ -1809,6 +1845,54 @@ fn is_type_member(member: &str, value: &Value) -> bool {
         && value
             .as_str()
             .is_some_and(|text| is_table_name(text) && rules::action_of(text).is_none())
+}
+
+/// Words that, after `new`, name the content a call writes: `new_content`,
+/// `newText`, `new_value`.
+const NEW_CONTENT_WORDS: [&str; 6] = ["content", "text", "body", "markdown", "html", "value"];
+
+/// Whether the call marks the content it writes as new and says neither what
+/// it was nor which records to filter: then the plain values beside that
+/// content pick the part it replaces.
+fn marks_new_content(arguments: &Value) -> bool {
+    let Some(top) = arguments.as_object() else {
+        return false;
+    };
+    let marked = |member: &str, word: &str| {
+        name_words(member)
+            .first()
+            .is_some_and(|first| first.as_str() == word)
+    };
+    let new_content = top.iter().any(|(member, value)| {
+        value.is_string()
+            && matches!(
+                name_words(member).as_slice(),
+                [new, content] if new.as_str() == "new" && NEW_CONTENT_WORDS.contains(&content.as_str())
+            )
+    });
+    new_content
+        && !top.keys().any(|member| {
+            marked(member, "old")
+                || is_one_of(member, &FILTER_MEMBERS)
+                || is_one_of(member, &BEFORE_TEXT_MEMBERS)
+        })
+}
+
+/// A short value of one line that the call does not mark new or old.
+fn picks_a_part(member: &str, value: &Value) -> bool {
+    let marked = name_words(member)
+        .first()
+        .is_some_and(|word| matches!(word.as_str(), "new" | "old"));
+    !marked
+        && match value {
+            Value::String(text) => {
+                !text.trim().is_empty()
+                    && !text.contains('\n')
+                    && text.chars().count() <= LONG_TEXT_CHARS
+            }
+            Value::Number(_) => true,
+            _ => false,
+        }
 }
 
 /// A table's name a card can read as part of a kind: one word of letters,

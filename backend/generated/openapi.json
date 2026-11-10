@@ -13635,7 +13635,8 @@
             "description": "Every value the call writes, in the call's order. Capped; `counts`\ncounts them all, and `complete` says whether everything was read."
           },
           "filter": {
-            "$ref": "#/components/schemas/ToolCallFilter"
+            "$ref": "#/components/schemas/ToolCallFilter",
+            "description": "Which records or which part of one the call applies to: a filter, or\nthe values beside content the call marks new, such as a heading."
           },
           "flags": {
             "type": "array",

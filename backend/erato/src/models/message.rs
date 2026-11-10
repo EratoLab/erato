@@ -600,6 +600,8 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub recipients: Option<ToolCallRecipients>,
+    /// Which records or which part of one the call applies to: a filter, or
+    /// the values beside content the call marks new, such as a heading.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub filter: Option<ToolCallFilter>,
