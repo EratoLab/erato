@@ -81,7 +81,10 @@ const renderTrace = (
     maskReasoningText?: boolean;
     isStreaming?: boolean;
     toolDecisions?: Record<string, ToolDecision>;
-    waitingCall?: { toolCallId: string; inReview: boolean };
+    waitingCall?: {
+      toolCallId: string;
+      review?: "open" | "asking" | "ended";
+    };
   } = {},
 ) => {
   mockUseTraceFeature.mockReturnValue({
@@ -175,7 +178,7 @@ describe("Trace — a call the writer never finished", () => {
 
 describe("Trace — a call the turn is parked on", () => {
   const CHAT = "chat-under-test";
-  const WAITING = { toolCallId: "tool-abc", inReview: false };
+  const WAITING = { toolCallId: "tool-abc" };
   const parkOnPage = (kind: "action_required" | "finished") =>
     useGenerationStatusStore.setState({
       currentChatId: CHAT,
@@ -220,17 +223,33 @@ describe("Trace — a call the turn is parked on", () => {
     expect(screen.queryByText("Interrupted")).toBeNull();
   });
 
-  it("names the review in the Erato desktop app when the call waits for one", () => {
+  it.each(["open", "asking"] as const)(
+    "names the review in the Erato desktop app while it is %s",
+    (review) => {
+      renderTrace([toolUsePart("in_progress")], {
+        waitingCall: { ...WAITING, review },
+      });
+
+      expect(
+        screen.getByText("Review in the Erato desktop app"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Waiting for a connected app on this device"),
+      ).toBeNull();
+    },
+  );
+
+  it("says the review ended, not that it waits for one or for an app", () => {
     renderTrace([toolUsePart("in_progress")], {
-      waitingCall: { ...WAITING, inReview: true },
+      waitingCall: { ...WAITING, review: "ended" },
     });
 
-    expect(
-      screen.getByText("Review in the Erato desktop app"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("This review has ended")).toBeInTheDocument();
+    expect(screen.queryByText("Review in the Erato desktop app")).toBeNull();
     expect(
       screen.queryByText("Waiting for a connected app on this device"),
     ).toBeNull();
+    expect(screen.queryByText("Interrupted")).toBeNull();
   });
 
   it("ends on done once the call returned, with the trace Done again", () => {
@@ -244,7 +263,7 @@ describe("Trace — a call the turn is parked on", () => {
 
   it("keeps Interrupted for an unfinished call the turn does not wait on", () => {
     renderTrace([toolUsePart("in_progress")], {
-      waitingCall: { toolCallId: "another-call", inReview: true },
+      waitingCall: { toolCallId: "another-call", review: "open" },
     });
 
     expect(screen.getByText("Interrupted")).toBeInTheDocument();

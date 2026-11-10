@@ -23,6 +23,7 @@ import { ToolUseStep } from "./steps/ToolUseStep";
 import { isTraceablePart, type LogicalStep, type TraceablePart } from "./types";
 import { approvalStopState } from "../Message/approvalItems";
 
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ApprovalScopeCovers,
   ContentPart,
@@ -57,13 +58,21 @@ interface TraceProps {
   toolDecisions?: Record<string, ToolDecision>;
   /**
    * The call this message's turn is parked on, as its own last
-   * `client_tool_pending` part names it (`waitingCallOf`), and whether that
-   * call waits for its review in the Erato desktop app.
+   * `client_tool_pending` part names it (`waitingCallOf`), and where its
+   * review in the Erato desktop app stands, if it has one.
    */
   waitingCall?: WaitingCall;
 }
 
-type WaitingCall = { toolCallId: string; inReview: boolean };
+type WaitingCall = {
+  toolCallId: string;
+  /**
+   * The state of the link the call's review left: `open` and `asking` wait
+   * on the review, `ended` on the user asking again. None for a call that
+   * waits on any other connected app.
+   */
+  review?: SidecarReviewLink["state"];
+};
 
 export type ToolApprovalStatus = "approved" | "denied";
 
@@ -267,7 +276,7 @@ const TraceTimeline = ({
           renderMarkdown,
           maskReasoningText,
           toolDecisions,
-          inReview: status === "waiting" && waitingCall?.inReview === true,
+          review: status === "waiting" ? waitingCall?.review : undefined,
         });
 
         return (
@@ -363,8 +372,8 @@ interface RenderStepArgs {
   renderMarkdown: (text: string) => ReactNode;
   maskReasoningText: boolean;
   toolDecisions: Record<string, ToolDecision>;
-  /** The step's call waits for its review in the Erato desktop app. */
-  inReview: boolean;
+  /** Where the waiting step's review in the Erato desktop app stands. */
+  review: SidecarReviewLink["state"] | undefined;
 }
 
 /**
@@ -433,7 +442,7 @@ const renderStep = (args: RenderStepArgs): ReactNode => {
           isCollapsed={args.isCollapsed}
           isLastStep={args.isLastStep}
           decision={decisionForStep(args.step.part, args.toolDecisions)}
-          inReview={args.inReview}
+          review={args.review}
         />
       );
     default: {

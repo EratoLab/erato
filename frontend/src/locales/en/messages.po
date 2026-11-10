@@ -8341,6 +8341,7 @@ msgstr "Nothing was shared. A review ends one hour after it starts."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "sidecarReview.ended.title"
 msgstr "This review has ended"
 

@@ -11,6 +11,7 @@ import {
 import { componentRegistry } from "@/config/componentRegistry";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import {
+  askForReviewAgain,
   markReviewEnded,
   rememberReview,
   reviewLinkKey,
@@ -2634,6 +2635,33 @@ describe("a turn parked on a review in the Erato desktop app", () => {
       "This review has ended",
     );
     expect(screen.getByTestId("sidecar-review-ask-again")).toBeInTheDocument();
+  });
+
+  it("says on the call's step that its review ended, as the item does", () => {
+    markReviewEnded(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("This review has ended");
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    // The call waits for the user to ask again, not for an app.
+    expect(step).not.toHaveTextContent(
+      "Waiting for a connected app on this device",
+    );
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
+  it("names the review on the call's step again once the user asked again", () => {
+    markReviewEnded(key);
+    askForReviewAgain(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("This review has ended");
   });
 
   it("takes the call from the message's own last marker, never an earlier one", () => {
