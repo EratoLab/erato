@@ -146,6 +146,7 @@ the context version. The schema offered to the task leaves both out, in every
 | The user declined on the device (a validation code `declined`, live or durable) | `{"status":"cancelled","reason":"declined","error":…}` |
 | Durable: no client ran it before the attempt ended | `{"status":"cancelled","reason":"expired","error":…}` |
 | Durable: the parent moved on, or the tool became Never or lost its grant | `{"status":"cancelled","reason":"withdrawn","error":…}` |
+| Durable: the user stopped waiting for the call (`/me/client-operations/{id}/cancel`) | `{"status":"cancelled","reason":"cancelled","error":…}`, which also says not to call the tool again in the task |
 | A call under a document approval whose document changed, and no one can be asked (`propagate_child_mcp_approvals` off) | `{"status":"cancelled","reason":"scope_changed","error":…}` |
 
 The host's own outcomes, such as Word's `capture-unavailable`, come back as tool
@@ -254,14 +255,26 @@ first try and no 15 s grace.
   children, converted children), or calls the model when nothing waits. A child
   that finishes while approvals are open settles its slot and keeps the parent
   parked.
-- **Moving on.** A new user turn makes the parked message no longer the tip. A
-  waiting call is withdrawn at its next claim, renewal or result, the child
-  answers without it, and its old slot is settled by
-  `reconcile_orphaned_parent_slot` when the child finishes, also while the newer
-  turn still runs: that check stands down only for a running turn that answers
-  the old message.
-- **Task result.** `client_tools` counts `declined` and `expired` granted calls,
-  each left out when 0.
+- **Moving on.** A new user turn makes the parked message no longer the tip.
+  The user turn's lease (`acquire_user_generation_lease`, and the revision lease
+  of an edit or regeneration) withdraws the open calls of the chat's tasks that
+  another turn made (`store::withdraw_task_calls`, ERMAIN-1165), each under its
+  own chat's lock; one it misses is still withdrawn at its next claim, renewal
+  or result. A client's `/continue` then lets the child answer without it, and
+  its old slot is settled by `reconcile_orphaned_parent_slot` when the child
+  finishes, also while the newer turn still runs: that check stands down only
+  for a running turn that answers the old message.
+- **Stop.** `abortstream` that stops a running turn, or a turn parked on its own
+  durable call, withdraws the open calls of every task of the chat the same
+  way. A turn parked on its tasks alone has nothing to stop and still answers
+  404; its waits end one at a time from the card.
+- **Stopping a wait.** "Stop waiting" on a waiting item, and on the task chat's
+  notice of its own call, sends `/cancel` for the item's `waiting_for.attempt_id`
+  and then `/continue`: the call settles `cancelled`, the child answers without
+  it, and the parent's item settles with that answer. A `409` (the call had
+  already ended) reads the row again.
+- **Task result.** `client_tools` counts `declined`, `expired` and `cancelled`
+  granted calls, each left out when 0.
 
 ## Run mode
 
@@ -440,7 +453,10 @@ the same code to the declined output itself.
 The parent chat lists waiting items below the decisions, naming the host
 ("Waiting for Outlook on this device"), and reads the row again every 5 s while
 one shows. A stop that only waits holds the chat's message queue as waiting only
-and asks nothing of the user.
+and asks nothing of the user. Each waiting item offers "Stop waiting"
+(`StopWaitingAction`), and so does a task chat's notice of its own waiting call.
+A stop with a user turn below it in the transcript no longer shows its waiting
+items, reads nothing again and holds no queue: that turn withdrew their calls.
 
 ## Conformance
 

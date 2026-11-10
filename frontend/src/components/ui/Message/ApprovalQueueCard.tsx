@@ -266,7 +266,11 @@ export const ApprovalQueueCard = ({
             </p>
           )}
           {waiting.map((item) => (
-            <WaitingTaskItem key={item.approval_id} item={item} />
+            <WaitingTaskItem
+              key={item.approval_id}
+              item={item}
+              isArchived={isArchived}
+            />
           ))}
         </div>
       )}

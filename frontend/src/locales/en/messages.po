@@ -8370,6 +8370,21 @@ msgid "sidecarReview.unreachable"
 msgstr "Start the Erato desktop app to continue this review."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.action"
+msgstr "Stop waiting"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.done"
+msgstr "You stopped waiting. The task answers without this result."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.failed"
+msgstr "Waiting could not be stopped. Try again."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr "{itemCount, plural, one {The assistant planned this sub-task. Declining it is refused to the assistant and the response continues without it.} other {The assistant planned these sub-tasks. Decide each one; the ones you decline are refused and the response continues without them.}}"

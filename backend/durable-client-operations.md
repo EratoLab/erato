@@ -462,8 +462,10 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   park tail never accepts a raced-in fast result for them.
 - **Decline.** `{outcome: "rejected", result: null, error: {code: "declined"}}`
   is valid only for grant operations and is stored as `{status: "cancelled",
-  reason: "declined", error}`. `expired` and `withdrawn` carry an `error` text
-  for the task's model.
+  reason: "declined", error}`. `expired`, `withdrawn` and `cancelled` (the user
+  stopped waiting, through `/cancel`) carry an `error` text for the task's
+  model; the `cancelled` one also tells it not to call the tool again in the
+  task.
 - **Continuation.** Any coordinator of the account continues a ready or
   continuing grant operation, or expires a pending or claimed one past its
   attempt end, with a detached `/continue`, so a closed pane never strands the

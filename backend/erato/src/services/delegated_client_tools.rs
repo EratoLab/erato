@@ -533,6 +533,8 @@ pub struct GrantedCallSummary {
     pub declined: u32,
     /// Durable granted calls no client ran before they expired.
     pub expired: u32,
+    /// Durable granted calls the user stopped waiting for.
+    pub cancelled: u32,
 }
 
 /// Reads the granted calls off a child's stored answer parts.
@@ -557,6 +559,7 @@ pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> Grant
             Some("cancelled") => match output.get("reason").and_then(Value::as_str) {
                 Some(DECLINED) => summary.declined += 1,
                 Some(EXPIRED) => summary.expired += 1,
+                Some(CANCELLED) => summary.cancelled += 1,
                 _ => {}
             },
             _ => {}
@@ -631,6 +634,9 @@ fn contract_freshness(freshness: &Value) -> Option<Value> {
 pub const DECLINED: &str = "declined";
 /// The outcome of a durable granted call no client ran in time.
 const EXPIRED: &str = "expired";
+/// The outcome of a durable granted call the user stopped waiting for
+/// (`/me/client-operations/{id}/cancel`).
+const CANCELLED: &str = "cancelled";
 
 /// The stored output of a granted call the user declined, on either path.
 pub fn declined_output(tool_name: &str) -> Value {
@@ -652,6 +658,11 @@ pub fn unanswered_grant_call_text(code: &str, tool_name: &str) -> Option<String>
         )),
         "withdrawn" => Some(format!(
             "This call was withdrawn because the task's parent turn moved on or the tool is no longer allowed, so the task has no result from '{tool_name}'; say in the answer what is missing."
+        )),
+        // The person chose to stop waiting: calling again would only make
+        // them wait again.
+        CANCELLED => Some(format!(
+            "The user stopped waiting for this call, so the task has no result from '{tool_name}'. Do not call '{tool_name}' again in this task; say in the answer what is missing because of it."
         )),
         _ => None,
     }
@@ -1720,7 +1731,8 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_keeps_the_last_freshness_and_counts_declined_and_expired_granted_calls() {
+    fn the_summary_keeps_the_last_freshness_and_counts_declined_expired_and_cancelled_granted_calls()
+     {
         let part = |tool: &str, output: Value| {
             json!({"content_type": "tool_use", "tool_call_id": "c", "tool_name": tool,
                    "status": "success", "output": output})
@@ -1750,6 +1762,18 @@ mod tests {
                 "search_web",
                 json!({"status": "cancelled", "reason": "expired"}),
             ),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "cancelled", "error": "e"}),
+            ),
+            part(
+                "search_web",
+                json!({"status": "cancelled", "reason": "cancelled"}),
+            ),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "withdrawn", "error": "e"}),
+            ),
             json!({"content_type": "text", "text": "answer"}),
         ];
         assert_eq!(
@@ -1758,12 +1782,28 @@ mod tests {
                 freshness: Some(json!({"changes": "in-scope"})),
                 declined: 2,
                 expired: 1,
+                cancelled: 1,
             }
         );
         assert_eq!(
             granted_call_summary(&grant(), &[]),
             GrantedCallSummary::default()
         );
+    }
+
+    #[test]
+    fn a_stopped_wait_tells_the_task_what_is_missing_and_not_to_call_again() {
+        let text = unanswered_grant_call_text("cancelled", READ_NAME).unwrap();
+        assert!(
+            text.starts_with("The user stopped waiting for this call"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("Do not call '{READ_NAME}' again")),
+            "{text}"
+        );
+        assert!(text.contains("say in the answer what is missing"), "{text}");
+        assert!(unanswered_grant_call_text("declined", READ_NAME).is_none());
     }
 
     #[test]

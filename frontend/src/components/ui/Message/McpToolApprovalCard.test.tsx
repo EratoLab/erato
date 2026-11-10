@@ -2546,6 +2546,170 @@ describe("tasks waiting on the device", () => {
       expect(screen.queryByText(new RegExp(code))).toBeNull();
     },
   );
+
+  describe("stopping a task's wait (ERMAIN-1165)", () => {
+    const waitingCard = (
+      overrides: Partial<ChatContextValue> = {},
+      props: { openItems?: (typeof asking)[] } = {},
+    ) =>
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={props.openItems ? mixedStop : waitingStop}
+          openItems={props.openItems ?? []}
+          waitingItems={[waits]}
+          resolution={null}
+        />,
+        "chat-1",
+        overrides,
+      );
+    const posted = (fetchMock: ReturnType<typeof vi.fn>) =>
+      fetchMock.mock.calls.map(([url, init]) => [
+        String(url),
+        (init as RequestInit | undefined)?.method,
+      ]);
+
+    it("ends the call's wait and continues the task at once", async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string) =>
+        url.endsWith("/cancel")
+          ? new Response(JSON.stringify({ state: "ready" }), { status: 200 })
+          : new Response(JSON.stringify({ state: "continuing" }), {
+              status: 200,
+            }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(waitingCard());
+
+      const item = screen.getByTestId("waiting-task-item");
+      fireEvent.click(
+        within(item).getByRole("button", { name: "Stop waiting" }),
+      );
+
+      expect(
+        await within(item).findByText(
+          "You stopped waiting. The task answers without this result.",
+        ),
+      ).toBeInTheDocument();
+      expect(posted(fetchMock)).toEqual([
+        ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
+        ["/api/v1beta/me/client-operations/attempt/continue", "POST"],
+      ]);
+      expect(
+        within(item).queryByRole("button", { name: "Stop waiting" }),
+      ).toBeNull();
+    });
+
+    it("reads the row again when the wait had already ended", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const refetchMessages = vi.fn(async () => undefined);
+      renderCard(waitingCard({ refetchMessages }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
+      expect(posted(fetchMock)).toEqual([
+        ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
+      ]);
+      expect(screen.queryByText(/You stopped waiting/)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("says so when the wait could not be stopped, and lets the user try again", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response("", { status: 500 })),
+      );
+      renderCard(waitingCard());
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Waiting could not be stopped. Try again.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Stop waiting" }),
+      ).not.toBeDisabled();
+    });
+
+    it("offers no stop in an archived chat", () => {
+      archived.value = true;
+      renderCard(waitingCard());
+
+      expect(screen.getByTestId("waiting-task-item")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+    });
+
+    it("no longer waits or holds the queue once a later turn moved the chat on", () => {
+      vi.useFakeTimers();
+      try {
+        const refetchMessages = vi.fn(async () => undefined);
+        const { container } = renderCard(
+          waitingCard({
+            refetchMessages,
+            messageOrder: ["message-1", "user-2", "message-2"],
+            messages: {
+              "message-1": { id: "message-1", role: "assistant" },
+              "user-2": { id: "user-2", role: "user" },
+              "message-2": { id: "message-2", role: "assistant" },
+            } as unknown as ChatContextValue["messages"],
+          }),
+        );
+
+        expect(container).toBeEmptyDOMElement();
+        expect(
+          useConfirmationRegistryStore.getState().pendingIdsByChatId["chat-1"],
+        ).toBeUndefined();
+        act(() => {
+          vi.advanceTimersByTime(10_000);
+        });
+        expect(refetchMessages).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps waiting while the same turn streams on, and keeps a later turn's open questions", () => {
+      const { rerender } = renderCard(
+        waitingCard({
+          messageOrder: ["user-1", "message-1", "streaming"],
+          messages: {
+            "user-1": { id: "user-1", role: "user" },
+            "message-1": { id: "message-1", role: "assistant" },
+            streaming: { id: "streaming", role: "assistant" },
+          } as unknown as ChatContextValue["messages"],
+        }),
+      );
+      expect(screen.getByTestId("waiting-task-item")).toBeInTheDocument();
+
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {waitingCard(
+            {
+              messageOrder: ["message-1", "user-2"],
+              messages: {
+                "message-1": { id: "message-1", role: "assistant" },
+                "user-2": { id: "user-2", role: "user" },
+              } as unknown as ChatContextValue["messages"],
+            },
+            { openItems: [asking] },
+          )}
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      const ids =
+        useConfirmationRegistryStore.getState().pendingIdsByChatId["chat-1"];
+      expect(ids).toHaveLength(1);
+      expect(
+        useConfirmationRegistryStore.getState().waitingOnlyIds[ids?.[0] ?? ""],
+      ).toBeUndefined();
+    });
+  });
 });
 
 describe("document and response approvals", () => {

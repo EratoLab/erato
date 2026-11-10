@@ -32,6 +32,7 @@ use super::slow_path::{
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
     a_stop_keeps_the_slot_of_an_archived_task_it_carries,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
+    a_wait_that_already_ended_cannot_be_stopped,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
@@ -49,6 +50,8 @@ use super::slow_path::{
     continuestream_refuses_a_single_decision_when_only_waiting_items_are_open,
     no_client_before_the_attempt_ends_gives_expired,
     resume_parked_refuses_a_chat_whose_generation_moved_on,
+    stopping_the_parent_withdraws_its_tasks_waiting_calls,
+    stopping_the_wait_ends_the_durable_call_as_cancelled,
     the_old_slot_settles_while_a_newer_parent_turn_runs,
     the_sweep_reaches_a_parent_behind_a_full_batch_that_never_changes,
     the_sweep_scans_only_the_last_stop_of_a_reparked_parent,
@@ -178,6 +181,9 @@ macro_rules! host_conformance {
             a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt
             a_device_decline_ends_the_durable_call_as_declined
             no_client_before_the_attempt_ends_gives_expired
+            stopping_the_wait_ends_the_durable_call_as_cancelled
+            a_wait_that_already_ended_cannot_be_stopped
+            stopping_the_parent_withdraws_its_tasks_waiting_calls
             a_durable_and_a_live_child_only_the_durable_one_waits
             a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once
             two_waiting_children_one_still_running_give_one_parent_continuation_with_both_answers

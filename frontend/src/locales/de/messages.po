@@ -8370,6 +8370,21 @@ msgid "sidecarReview.unreachable"
 msgstr "Starte die Erato-Desktop-App, um diese Prüfung fortzusetzen."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.action"
+msgstr "Nicht mehr warten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.done"
+msgstr "Du wartest nicht mehr. Die Aufgabe antwortet ohne dieses Ergebnis."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.failed"
+msgstr "Das Warten konnte nicht beendet werden. Versuche es erneut."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
 msgid "taskPlanApproval.description"
 msgstr ""

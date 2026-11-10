@@ -17,6 +17,7 @@ import {
   useSidecarReviewLinks,
 } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { chatDetailQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatContext } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
@@ -34,6 +35,7 @@ const mermaidMock = vi.hoisted(() => ({
 vi.mock("mermaid", () => ({ default: mermaidMock }));
 
 import type {
+  ChatDetail,
   ContentPart,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -2654,7 +2656,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
   it("says one of the chat's calls is in review when the row still names a finished call", () => {
     const reviewEnded = markAwaitingReview("chat");
     try {
-      renderWithTheme(
+      renderWithQueryClient(
         <ChatContext.Provider
           value={
             { currentChatId: "chat" } as React.ContextType<typeof ChatContext>
@@ -2680,6 +2682,83 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(notice).toHaveTextContent("waiting for a connected app");
     expect(notice).not.toHaveTextContent("task");
     expect(screen.queryByTestId("sidecar-review-item")).toBeNull();
+  });
+});
+
+describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "task-attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const renderInChat = (detail: Partial<ChatDetail>, readOnly = false) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    queryClient.setQueryData(
+      chatDetailQuery({ pathParams: { chatId: "task-chat" } }).queryKey,
+      { id: "task-chat", ...detail },
+    );
+    return renderWithTheme(
+      <QueryClientProvider client={queryClient}>
+        <ChatContext.Provider
+          value={
+            {
+              currentChatId: "task-chat",
+              refetchMessages: async () => undefined,
+            } as unknown as React.ContextType<typeof ChatContext>
+          }
+        >
+          <MessageContent
+            messageId="task-message"
+            content={[pending]}
+            readOnly={readOnly}
+          />
+        </ChatContext.Provider>
+      </QueryClientProvider>,
+    );
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("can stop the wait beside the notice, for the call's own attempt", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInChat({ provenance_kind: "delegation" });
+
+    expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+
+    expect(await screen.findByTestId("stop-waiting-done")).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "/api/v1beta/me/client-operations/task-attempt/cancel",
+    );
+  });
+
+  it.each([
+    ["the user's own chat", {}],
+    [
+      "a task chat the user took over",
+      { provenance_kind: "delegation", adopted_at: "2026-11-10T10:00:00Z" },
+    ],
+    [
+      "an archived task chat",
+      { provenance_kind: "delegation", archived_at: "2026-11-10T10:00:00Z" },
+    ],
+  ])("offers no stop in %s", (_name, detail: Partial<ChatDetail>) => {
+    renderInChat(detail);
+    expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+  });
+
+  it("offers no stop in a read-only view", () => {
+    renderInChat({ provenance_kind: "delegation" }, true);
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
   });
 });
 

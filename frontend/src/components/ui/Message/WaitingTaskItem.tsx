@@ -7,6 +7,7 @@ import {
 } from "@/lib/delegation/taskBrief";
 
 import { ComputerIcon } from "../icons";
+import { StopWaitingAction } from "./StopWaitingAction";
 import { TaskChatLink } from "./TaskChatLink";
 
 import type { ApprovalItemPart } from "./approvalItems";
@@ -14,10 +15,19 @@ import type { ApprovalItemPart } from "./approvalItems";
 /**
  * One task child that waits for one of its calls to run on the device. Nothing
  * here is decided: the call runs where the host picks it up, and the response
- * goes on by itself once every such task stopped again.
+ * goes on by itself once every such task stopped again. The wait can be ended
+ * here, and the task then answers without that call's result (ERMAIN-1165).
  */
-export const WaitingTaskItem = ({ item }: { item: ApprovalItemPart }) => {
+export const WaitingTaskItem = ({
+  item,
+  isArchived = false,
+}: {
+  item: ApprovalItemPart;
+  /** An archived chat's wait is shown, never acted on. */
+  isArchived?: boolean;
+}) => {
   const child = item.child ?? undefined;
+  const attemptId = child?.waiting_for?.attempt_id;
   const brief = taskBriefFromInput(item.input, TASK_BRIEF_PREVIEW_CHARS);
   return (
     <div
@@ -46,6 +56,11 @@ export const WaitingTaskItem = ({ item }: { item: ApprovalItemPart }) => {
             {t({ id: "waitingTask.open", message: "Open the task" })}
           </TaskChatLink>
         </p>
+      )}
+      {attemptId && !isArchived && (
+        <div className="mt-2">
+          <StopWaitingAction attemptId={attemptId} />
+        </div>
       )}
     </div>
   );

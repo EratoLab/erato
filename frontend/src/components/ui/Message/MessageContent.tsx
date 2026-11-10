@@ -45,6 +45,7 @@ import {
   useSidecarReviewLinks,
 } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { useChatDetail } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   WORD_EDITS_FENCE,
@@ -56,6 +57,7 @@ import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { ChatContext } from "@/providers/ChatProvider";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
+import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
@@ -68,6 +70,7 @@ import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import { SidecarReviewItem } from "./SidecarReviewItem";
+import { StopWaitingAction } from "./StopWaitingAction";
 import {
   SyntaxHighlightedCode,
   useCodeBlockSurfaceStyle,
@@ -714,6 +717,26 @@ const rewriteFootnoteValue = (
 };
 
 /**
+ * The wait of a task's own call, in the task's chat, can be ended there as it
+ * can from the parent's slot (ERMAIN-1165). A chat the user took over makes
+ * its own calls, which this leaves alone.
+ */
+function TaskCallStopWaiting({
+  chatId,
+  attemptId,
+}: {
+  chatId: string;
+  attemptId: string;
+}) {
+  const { data: chat } = useChatDetail({ pathParams: { chatId } });
+  const isTaskCall =
+    chat?.provenance_kind === DELEGATION_PROVENANCE_KIND &&
+    !chat.adopted_at &&
+    !chat.archived_at;
+  return isTaskCall ? <StopWaitingAction attemptId={attemptId} /> : null;
+}
+
+/**
  * A turn parked on a client tool call. A call whose review the Erato desktop
  * app shows gets its item in the approval slot; any other call says what the
  * turn waits for. While a row names a call that has ended, one of the chat's
@@ -724,10 +747,14 @@ function ClientToolPendingNotice({
   messageId,
   toolCallId,
   toolName,
+  attemptId,
+  readOnly,
 }: {
   messageId: string | undefined;
   toolCallId: string;
   toolName: string | undefined;
+  attemptId: string;
+  readOnly: boolean;
 }) {
   const key = messageId ? reviewLinkKey(messageId, toolCallId) : undefined;
   const link = useSidecarReviewLinks((state) =>
@@ -737,15 +764,24 @@ function ClientToolPendingNotice({
   const chatInReview = useSidecarReviewStore(
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );
-  if (key && link) {
-    return <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />;
+  const notice =
+    key && link ? (
+      <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
+    ) : (
+      <Alert type="info" role="status" geometryVariant="message">
+        {chatInReview
+          ? t`Ready for review in the Erato desktop app`
+          : t`This response is waiting for a connected app. You can leave this chat and return later.`}
+      </Alert>
+    );
+  if (!chatId || readOnly) {
+    return notice;
   }
   return (
-    <Alert type="info" role="status" geometryVariant="message">
-      {chatInReview
-        ? t`Ready for review in the Erato desktop app`
-        : t`This response is waiting for a connected app. You can leave this chat and return later.`}
-    </Alert>
+    <div className="space-y-2">
+      {notice}
+      <TaskCallStopWaiting chatId={chatId} attemptId={attemptId} />
+    </div>
   );
 }
 
@@ -1834,6 +1870,8 @@ export const MessageContent = memo(function MessageContent({
               messageId={messageId}
               toolCallId={part.tool_call_id}
               toolName={toolNameOfCall(content, part.tool_call_id)}
+              attemptId={part.attempt_id}
+              readOnly={readOnly}
             />
           );
         }
