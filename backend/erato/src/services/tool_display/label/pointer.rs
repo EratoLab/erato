@@ -198,7 +198,7 @@ pub fn escape(key: &str) -> Cow<'_, str> {
     }
 }
 
-fn unescape(token: &str) -> Cow<'_, str> {
+pub(super) fn unescape(token: &str) -> Cow<'_, str> {
     if token.contains('~') {
         Cow::Owned(token.replace("~1", "/").replace("~0", "~"))
     } else {

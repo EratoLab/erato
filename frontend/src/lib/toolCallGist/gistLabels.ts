@@ -28,8 +28,85 @@ export const GIST_SHAPES = ["full", "titled", "placed", "other"] as const;
 export const gistShape = (hasTitle: boolean, hasWhere: boolean): GistShape =>
   hasTitle ? (hasWhere ? "full" : "titled") : hasWhere ? "placed" : "other";
 
-/** The kind as a noun; more than one reads as a count, e.g. "3 rows". */
-export const gistKindLabel = (kind: GistKind, count: number): string => {
+/**
+ * The kind of one of a table's records, the table read as part of the kind
+ * and never as where the record lives: "account row", "3 account rows".
+ */
+const tableKindLabel = (kind: GistKind, count: number, table: string): string =>
+  t({
+    id: "toolGist.kind.ofTable",
+    message: select(kind, {
+      page: plural(count, {
+        one: `${table} page`,
+        other: `# ${table} pages`,
+      }),
+      database: plural(count, {
+        one: `${table} database`,
+        other: `# ${table} databases`,
+      }),
+      folder: plural(count, {
+        one: `${table} folder`,
+        other: `# ${table} folders`,
+      }),
+      note: plural(count, {
+        one: `${table} note`,
+        other: `# ${table} notes`,
+      }),
+      comment: plural(count, {
+        one: `${table} comment`,
+        other: `# ${table} comments`,
+      }),
+      paragraph: plural(count, {
+        one: `${table} paragraph`,
+        other: `# ${table} paragraphs`,
+      }),
+      document: plural(count, {
+        one: `${table} document`,
+        other: `# ${table} documents`,
+      }),
+      email: plural(count, {
+        one: `${table} email`,
+        other: `# ${table} emails`,
+      }),
+      message: plural(count, {
+        one: `${table} message`,
+        other: `# ${table} messages`,
+      }),
+      event: plural(count, {
+        one: `${table} event`,
+        other: `# ${table} events`,
+      }),
+      file: plural(count, {
+        one: `${table} file`,
+        other: `# ${table} files`,
+      }),
+      task: plural(count, {
+        one: `${table} task`,
+        other: `# ${table} tasks`,
+      }),
+      row: plural(count, {
+        one: `${table} row`,
+        other: `# ${table} rows`,
+      }),
+      other: plural(count, {
+        one: `${table} item`,
+        other: `# ${table} items`,
+      }),
+    }),
+  });
+
+/**
+ * The kind as a noun; more than one reads as a count, e.g. "3 rows". A
+ * `table` the record is one of qualifies the kind: "account row".
+ */
+export const gistKindLabel = (
+  kind: GistKind,
+  count: number,
+  table?: string,
+): string => {
+  if (table !== undefined && table.length > 0) {
+    return tableKindLabel(kind, count, table);
+  }
   switch (kind) {
     case "page":
       return t({
@@ -609,7 +686,7 @@ export const gistLineSentence = (
     phase,
     // A batch is counted in the line and named in its rows.
     shape: gistShape(namesInLine(item), item.where.length > 0),
-    kind: gistKindLabel(gist.kind, item.count),
+    kind: gistKindLabel(gist.kind, item.count, gist.change?.table),
     title: GIST_TITLE_SLOT,
     where: GIST_WHERE_SLOT,
   });

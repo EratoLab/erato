@@ -422,7 +422,9 @@ fn a_title_names_a_new_item_and_never_comes_from_a_lookup() {
         json!({"tablename": "account", "item": {"name": "Contoso", "parentaccountid": ACCOUNT}}),
     );
     assert_eq!(with_parent.title.as_deref(), Some("/item/name"));
-    assert_eq!(with_parent.target.as_deref(), Some("/item/parentaccountid"));
+    // The parent among the record's values is one of them, not where it goes.
+    assert_eq!(with_parent.target, None);
+    assert_eq!(with_parent.fields, ["/item/parentaccountid"]);
     let renamed = item(
         "update_folder",
         json!({"folder_id": "f_1", "title": "Customer calls"}),
@@ -473,28 +475,66 @@ fn ids_come_before_targets_and_lists_of_ids_point_at_every_entry() {
 }
 
 #[test]
-fn a_new_record_lives_where_it_links_and_an_update_s_links_are_fields() {
+fn a_new_record_goes_where_its_call_says_outside_its_values_and_its_links_are_values() {
     let target =
         |body: Value| item("create_record", json!({"tablename": "email", "item": body})).target;
-    assert_eq!(
-        target(json!({"subject": "Hi", "parentcustomerid": lookup(ACCOUNT, "account")})).as_deref(),
-        Some("/item/parentcustomerid/recordId")
+    // A link among the record's own values is one of them, whatever its name.
+    let linked = item(
+        "create_record",
+        json!({"tablename": "contact", "item": {"lastname": "Lee", "parentcustomerid": lookup(ACCOUNT, "account")}}),
     );
+    assert_eq!(linked.target, None);
+    assert_eq!(linked.fields, ["/item/parentcustomerid/recordId"]);
+    assert_eq!(
+        target(json!({"subject": "Hi", "description": "x", "regardingobjectid": RECORD})),
+        None
+    );
+    assert_eq!(
+        target(json!({"subject": "Hi", "parent@odata.bind": format!("/accounts({ACCOUNT})")})),
+        None
+    );
+    // Recipients say where a message goes wherever they sit.
     assert_eq!(
         target(json!({"subject": "Hi", "to": [lookup(CONTACT, "contact")], "regardingobjectid": lookup(RECORD, "opportunity")})).as_deref(),
         Some("/item/to/*/recordId")
     );
-    assert_eq!(
-        target(json!({"subject": "Hi", "description": "x", "regardingobjectid": RECORD}))
-            .as_deref(),
-        Some("/item/regardingobjectid")
-    );
     assert_eq!(target(json!({"subject": "Hi"})), None);
     let page = item(
         "notion-create-pages",
-        json!({"parent": {"data_source_id": RECORD}, "pages": [{"properties": {"Name": "Acme"}}]}),
+        json!({"parent": {"data_source_id": RECORD}, "pages": [{"properties": {"Name": "Acme", "Parent": {"page_id": ACCOUNT}}}]}),
     );
     assert_eq!(page.target.as_deref(), Some("/parent/data_source_id"));
+
+    // A folder named inside the record's data is one of its values, and
+    // still shows as one; the same folder at the call's top is where it goes.
+    let in_data = item(
+        "create_note",
+        json!({"data": {"title": "Calls", "folder_id": "fld_1"}}),
+    );
+    assert_eq!(in_data.target, None);
+    assert_eq!(in_data.fields, ["/data/folder_id"]);
+    let at_top = item(
+        "create_note",
+        json!({"folder_id": "fld_1", "data": {"title": "Calls"}}),
+    );
+    assert_eq!(at_top.target.as_deref(), Some("/folder_id"));
+
+    // A batch goes where every entry says, never where only some do.
+    let every = item(
+        "create_issues",
+        json!({"issues": [{"project_key": "OPS", "summary": "A"}, {"project_key": "OPS", "summary": "B"}]}),
+    );
+    assert_eq!(every.target.as_deref(), Some("/issues/*/project_key"));
+    let some = item(
+        "create_issues",
+        json!({"issues": [{"project_key": "OPS", "summary": "A"}, {"summary": "B"}]}),
+    );
+    assert_eq!(some.target, None);
+    let wrapped = item(
+        "create_issues",
+        json!({"issues": [{"fields": {"project_key": "OPS", "summary": "A"}}, {"fields": {"project_key": "OPS", "summary": "B"}}]}),
+    );
+    assert_eq!(wrapped.target, None);
 
     let updated = item(
         "update_record",
@@ -1049,7 +1089,7 @@ fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
         ["/phone_number"]
     );
 
-    // A contact's numbers are its data: where it goes is still its parent.
+    // A contact's numbers are its data, and its parent account one more value.
     let contact = item(
         "create_record",
         json!({"tablename": "contact", "item": {
@@ -1062,14 +1102,16 @@ fn a_contact_number_shows_ahead_of_other_fields_and_is_never_the_target() {
     );
     assert_eq!(
         (contact.title.as_deref(), contact.target.as_deref()),
-        (
-            Some("/item/lastname"),
-            Some("/item/parentcustomerid/recordId")
-        )
+        (Some("/item/lastname"), None)
     );
     assert_eq!(
         contact.fields,
-        ["/item/telephone1", "/item/mobilephone", "/item/jobtitle"]
+        [
+            "/item/telephone1",
+            "/item/mobilephone",
+            "/item/jobtitle",
+            "/item/parentcustomerid/recordId"
+        ]
     );
     let updated = item(
         "update_record",

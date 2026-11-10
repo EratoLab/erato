@@ -637,10 +637,8 @@ mod tests {
         );
         let item = &rules.items[0];
         assert_eq!(item.title.as_ref().unwrap().values[0].text, "Contoso");
-        assert_eq!(
-            item.target.as_ref().unwrap().pointer,
-            "/item/parentaccountid"
-        );
+        assert!(item.target.is_none());
+        assert_eq!(item.fields[0].pointer, "/item/parentaccountid");
         assert_eq!(rules.arguments, label::generic_label(&arguments).arguments);
         let paths: Vec<_> = display
             .label

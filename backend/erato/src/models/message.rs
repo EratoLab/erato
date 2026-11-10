@@ -612,11 +612,17 @@ pub struct ToolCallChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub batch: Option<ToolCallBatch>,
-    /// Where the record lives when no target says so: the table, the project,
-    /// joined when the call names several.
+    /// Where the record lives when no target says so, such as its project
+    /// or repository, joined when the call names several; never its table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub place: Option<String>,
+    /// The table the record is one of, as the call names it, when that says
+    /// more than the label's kind: a card reads it as part of the kind
+    /// ("account row"), never as where the record goes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub table: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<ToolCallChangeNote>,
     /// Every value was read and classified. Only then may a card state what

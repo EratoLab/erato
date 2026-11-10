@@ -4662,11 +4662,17 @@ export type ToolCallChange = {
    */
   opaque_omitted?: number;
   /**
-   * Where the record lives when no target says so: the table, the project,
-   * joined when the call names several.
+   * Where the record lives when no target says so, such as its project
+   * or repository, joined when the call names several; never its table.
    */
   place?: string;
   recipients?: ToolCallRecipients;
+  /**
+   * The table the record is one of, as the call names it, when that says
+   * more than the label's kind: a card reads it as part of the kind
+   * ("account row"), never as where the record goes.
+   */
+  table?: string;
   /**
    * Long text the call writes, shown as a block.
    */

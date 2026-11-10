@@ -1,6 +1,7 @@
 import { i18n } from "@lingui/core";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { messages as deMessages } from "@/locales/de/messages.json";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import {
@@ -540,5 +541,85 @@ describe("the place on the line", () => {
     expect(
       hidesMachineId({ text: "Contoso", truncated: false, machineId: true }),
     ).toBe(false);
+  });
+});
+
+const UUID = "9b1d5f2e-3c4a-4f88-a1b2-0c1d2e3f4a5b";
+
+/** An update or delete of one row named only by a machine ID. */
+const byHiddenId = (
+  extra: object,
+  overrides: Partial<ToolCallLabel> = {},
+): ToolCallLabel =>
+  labelled({
+    items: [
+      {
+        id: {
+          pointer: "/recordId",
+          values: [{ path: "/recordId", text: UUID, machine_id: true }],
+        },
+      },
+    ],
+    change: { counts: {}, complete: true, ...extra },
+    ...overrides,
+  });
+
+describe("the table a record is one of", () => {
+  afterEach(() => {
+    i18n.load("en", enMessages as unknown as Messages);
+    i18n.activate("en");
+  });
+
+  it("qualifies the kind and never reads as where the record lives", () => {
+    const gist = gistOf(byHiddenId({ table: "account" }), {})!;
+    expect(gist.change?.table).toBe("account");
+    expect(gist.items[0].where).toEqual([]);
+    expect(gistPlainLine(gist, gist.items[0], "ask")).toBe(
+      "Update account row",
+    );
+    const created = gistOf(
+      labelled({
+        action: "create",
+        items: [
+          {
+            title: {
+              pointer: "/item/name",
+              values: [{ path: "/item/name", text: "Example Ltd" }],
+            },
+          },
+        ],
+        change: { table: "account", counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(gistPlainLine(created, created.items[0], "ask")).toBe(
+      "Create account row “Example Ltd”",
+    );
+    const batch = gistOf(
+      labelled({
+        action: "delete",
+        items: [
+          {
+            id: {
+              pointer: "/ids/*",
+              values: ["a1", "a2", "a3"].map((text, index) => ({
+                path: `/ids/${index}`,
+                text,
+              })),
+            },
+          },
+        ],
+        change: { table: "account", counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(gistPlainLine(batch, batch.items[0], "ask")).toBe(
+      "Delete 3 account rows",
+    );
+    i18n.load("de", deMessages as unknown as Messages);
+    i18n.activate("de");
+    expect(gistPlainLine(created, created.items[0], "ask")).toBe(
+      "account-Zeile “Example Ltd” erstellen",
+    );
   });
 });

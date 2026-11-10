@@ -15,13 +15,16 @@ use super::context::{
 use super::machine_id::is_machine_id;
 use super::pointer::escape;
 use super::recipients::{ADDRESS_MEMBERS, bare_member, is_phone_shaped};
-use super::rules::{self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, recipients_in};
+use super::rules::{
+    self, Claim, PLACE_MEMBERS, Recipients, TABLE_MEMBERS, WRAPPER_MEMBERS, recipients_in,
+};
 use crate::models::message::{
     ToolCallAction, ToolCallBatch, ToolCallBatchField, ToolCallBatchOperation, ToolCallBatchRow,
     ToolCallChange, ToolCallChangeNote, ToolCallEffect, ToolCallEffectKind, ToolCallEffectValue,
     ToolCallFilter, ToolCallFilterPart, ToolCallFlag, ToolCallLabel, ToolCallLabelItem,
-    ToolCallLabelSource, ToolCallOpaque, ToolCallOpaqueKind, ToolCallRecipientGroup,
-    ToolCallRecipientKind, ToolCallTextChange, ToolCallValueMeaning, ToolCallValueMeaningSource,
+    ToolCallLabelSource, ToolCallObjectKind, ToolCallOpaque, ToolCallOpaqueKind,
+    ToolCallRecipientGroup, ToolCallRecipientKind, ToolCallTextChange, ToolCallValueMeaning,
+    ToolCallValueMeaningSource,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde_json::{Map, Value};
@@ -78,25 +81,6 @@ const LONG_TEXT_CHARS: usize = 240;
 /// Bytes of a tool's description read for what it says about itself.
 const MAX_DESCRIPTION_BYTES: usize = 8 * 1024;
 
-/// Objects whose members are the values a call writes, flattened into plain
-/// rows of the same names.
-const WRAPPER_MEMBERS: [&str; 15] = [
-    "properties",
-    "fields",
-    "item",
-    "record",
-    "data",
-    "set",
-    "attributes",
-    "values",
-    "updates",
-    "changes",
-    "params",
-    "payload",
-    "update",
-    "patch",
-    "additional_fields",
-];
 const FILTER_MEMBERS: [&str; 9] = [
     "where",
     "filter",
@@ -218,7 +202,7 @@ pub fn describe(label: &ToolCallLabel, facts: ChangeFacts<'_>) -> Option<(ToolCa
         facts.rules_action
     };
     let item = label.items.first();
-    let mut walk = Walk::new(action, item, &facts);
+    let mut walk = Walk::new(action, label.object_kind, item, &facts);
     if let Value::Object(members) = facts.arguments {
         walk.members(members, "", 0, false, "");
     }
@@ -258,6 +242,9 @@ enum Pushed {
 struct Walk<'a> {
     facts: &'a ChangeFacts<'a>,
     action: ToolCallAction,
+    /// What the label says the record is; a table that only repeats it is
+    /// left out.
+    kind: ToolCallObjectKind,
     /// Paths the line names: the record, its title, where it goes.
     named: HashSet<&'a str>,
     /// Those of them whose value the line can show, a machine ID only by name.
@@ -294,6 +281,7 @@ struct EarlierField {
 impl<'a> Walk<'a> {
     fn new(
         action: ToolCallAction,
+        kind: ToolCallObjectKind,
         item: Option<&'a ToolCallLabelItem>,
         facts: &'a ChangeFacts<'a>,
     ) -> Self {
@@ -329,6 +317,7 @@ impl<'a> Walk<'a> {
         Self {
             facts,
             action,
+            kind,
             named,
             named_shown,
             before,
@@ -396,8 +385,8 @@ impl<'a> Walk<'a> {
             self.recipients(member, value, path);
             return;
         }
-        if is_one_of(member, &TABLE_MEMBERS) && value.is_string() {
-            self.place(member, value);
+        if is_one_of(member, &TABLE_MEMBERS) && value.as_str().is_some_and(is_table_name) {
+            self.table(value);
             return;
         }
         if depth == 0 && is_scalar(value) && self.is_place(member) {
@@ -558,6 +547,24 @@ impl<'a> Walk<'a> {
                 self.places.push((place_order(member), cleaned));
             }
         }
+    }
+
+    /// The table a record is one of qualifies its kind, unless its name only
+    /// repeats the kind; the first one the call names counts.
+    fn table(&mut self, value: &Value) {
+        let Some(text) = value.as_str() else {
+            return;
+        };
+        let cleaned = self.clean(text);
+        if cleaned.is_empty()
+            || is_machine_id(&cleaned)
+            || self.change.table.is_some()
+            || rules::table_repeats_kind(&cleaned, self.kind)
+            || !self.take_bytes(&cleaned)
+        {
+            return;
+        }
+        self.change.table = Some(cleaned);
     }
 
     fn clean(&mut self, text: &str) -> String {
@@ -1752,6 +1759,18 @@ impl<'a> Walk<'a> {
         self.change.notes = notes;
         (self.change, self.hidden)
     }
+}
+
+/// A table's name a card can read as part of a kind: one word of letters,
+/// digits, `_`, `-` or `.`. Anything else is a value like any other.
+fn is_table_name(text: &str) -> bool {
+    const MAX_TABLE_NAME_CHARS: usize = 64;
+    let text = text.trim();
+    !text.is_empty()
+        && text.chars().count() <= MAX_TABLE_NAME_CHARS
+        && text
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 
 /// A call's own text can never pose as the mark for a hidden ID.

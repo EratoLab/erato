@@ -9404,6 +9404,11 @@ msgstr "{count, plural, one {notatka} few {# notatki} many {# notatek} other {# 
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.ofTable"
+msgstr "{kind, select, page {{count, plural, one {strona {table}} few {# strony {table}} many {# stron {table}} other {# strony {table}}}} database {{count, plural, one {baza danych {table}} few {# bazy danych {table}} many {# baz danych {table}} other {# bazy danych {table}}}} folder {{count, plural, one {folder {table}} few {# foldery {table}} many {# folderów {table}} other {# folderu {table}}}} note {{count, plural, one {notatka {table}} few {# notatki {table}} many {# notatek {table}} other {# notatki {table}}}} comment {{count, plural, one {komentarz {table}} few {# komentarze {table}} many {# komentarzy {table}} other {# komentarza {table}}}} paragraph {{count, plural, one {akapit {table}} few {# akapity {table}} many {# akapitów {table}} other {# akapitu {table}}}} document {{count, plural, one {dokument {table}} few {# dokumenty {table}} many {# dokumentów {table}} other {# dokumentu {table}}}} email {{count, plural, one {e-mail {table}} few {# e-maile {table}} many {# e-maili {table}} other {# e-maila {table}}}} message {{count, plural, one {wiadomość {table}} few {# wiadomości {table}} many {# wiadomości {table}} other {# wiadomości {table}}}} event {{count, plural, one {wydarzenie {table}} few {# wydarzenia {table}} many {# wydarzeń {table}} other {# wydarzenia {table}}}} file {{count, plural, one {plik {table}} few {# pliki {table}} many {# plików {table}} other {# pliku {table}}}} task {{count, plural, one {zadanie {table}} few {# zadania {table}} many {# zadań {table}} other {# zadania {table}}}} row {{count, plural, one {wiersz {table}} few {# wiersze {table}} many {# wierszy {table}} other {# wiersza {table}}}} other {{count, plural, one {element {table}} few {# elementy {table}} many {# elementów {table}} other {# elementu {table}}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.kind.other"
 msgstr "{count, plural, one {element} few {# elementy} many {# elementów} other {# elementu}}"
 

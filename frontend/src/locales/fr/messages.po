@@ -9404,6 +9404,11 @@ msgstr "{count, plural, one {note} other {# notes}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.ofTable"
+msgstr "{kind, select, page {{count, plural, one {page {table}} other {# pages {table}}}} database {{count, plural, one {base de données {table}} other {# bases de données {table}}}} folder {{count, plural, one {dossier {table}} other {# dossiers {table}}}} note {{count, plural, one {note {table}} other {# notes {table}}}} comment {{count, plural, one {commentaire {table}} other {# commentaires {table}}}} paragraph {{count, plural, one {paragraphe {table}} other {# paragraphes {table}}}} document {{count, plural, one {document {table}} other {# documents {table}}}} email {{count, plural, one {e-mail {table}} other {# e-mails {table}}}} message {{count, plural, one {message {table}} other {# messages {table}}}} event {{count, plural, one {événement {table}} other {# événements {table}}}} file {{count, plural, one {fichier {table}} other {# fichiers {table}}}} task {{count, plural, one {tâche {table}} other {# tâches {table}}}} row {{count, plural, one {ligne {table}} other {# lignes {table}}}} other {{count, plural, one {élément {table}} other {# éléments {table}}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.kind.other"
 msgstr "{count, plural, one {élément} other {# éléments}}"
 

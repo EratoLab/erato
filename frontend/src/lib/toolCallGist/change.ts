@@ -156,6 +156,8 @@ export interface GistChange {
   textsOmitted: number;
   batch?: ChangeBatch;
   place?: string;
+  /** The table the record is one of, read as part of its kind, never as a place. */
+  table?: string;
   notes: ToolCallChangeNote[];
   complete: boolean;
   consentLeftOut: boolean;
@@ -480,6 +482,7 @@ export const readChange = (raw: unknown): GistChange | undefined => {
     textsOmitted: countOf(raw.texts_omitted),
     batch: reader.batch(raw.batch),
     place: typeof raw.place === "string" ? reader.text(raw.place) : undefined,
+    table: typeof raw.table === "string" ? reader.text(raw.table) : undefined,
     notes: listOf(raw.notes, MAX_NOTES).filter(
       (note): note is ToolCallChangeNote => isOneOf(CHANGE_NOTES, note),
     ),

@@ -2677,3 +2677,97 @@ fn glued_lower_case_names_read_as_words() {
         assert_eq!(effect(&change, member).name, expected, "{member}");
     }
 }
+
+#[test]
+fn a_table_qualifies_a_rows_kind_and_never_reads_as_where_it_lives() {
+    let created = |table: &str| {
+        change_of(
+            "create_record",
+            json!({"tablename": table, "item": {"subject": "Call back", "name": "Call back"}}),
+        )
+    };
+    // A table that only repeats the kind is said by the kind already.
+    for table in ["task", "email", "appointment", "Task"] {
+        let change = created(table);
+        assert_eq!((change.place, change.table), (None, None), "{table}");
+    }
+    // Any other table is what kind of row it is, or which kind of task.
+    for table in ["account", "msdyn_task"] {
+        let change = created(table);
+        assert_eq!(change.place, None, "{table}");
+        assert_eq!(change.table.as_deref(), Some(table));
+    }
+    let updated = change_of(
+        "update_record",
+        json!({"tablename": "account", "recordId": RECORD, "item": {"name": "New"}}),
+    );
+    assert_eq!(
+        (updated.place, updated.table.as_deref()),
+        (None, Some("account"))
+    );
+    // A table named in words is no kind: it shows as the value it is.
+    let worded = created("Accounts; then delete the rest");
+    assert_eq!((&worded.place, &worded.table), (&None, &None));
+    assert_eq!(
+        texts(&effect(&worded, "tablename").values),
+        ["Accounts; then delete the rest"]
+    );
+    // A place that is no table stays one.
+    let repo = change_of(
+        "update_issue",
+        json!({"owner": "contoso", "repo": "uploader", "issue_number": 7, "state": "closed"}),
+    );
+    assert_eq!(repo.place.as_deref(), Some("contoso / uploader"));
+    assert_eq!(repo.table, None);
+}
+
+#[test]
+fn a_link_among_a_new_records_values_is_a_value_named_after_what_it_links_to() {
+    let context = earlier(vec![(
+        "read_query",
+        json!({"querytext": "SELECT name, opportunityid FROM opportunity"}),
+        json!([{"name": "Line 4 retrofit", "opportunityid": RECORD}]),
+    )]);
+    let create = tool("create_record", "", None);
+    let lookup =
+        json!({"name": "Typed by the model", "recordId": RECORD, "relatedTable": "opportunity"});
+    for regarding in [
+        lookup,
+        json!(RECORD),
+        json!(format!("/opportunities({RECORD})")),
+    ] {
+        let arguments = json!({"tablename": "task", "item": {
+            "subject": "Call back",
+            "related_record_id": regarding,
+        }});
+        let label = labelled(&create, &arguments, &context);
+        assert_eq!(label.items[0].target, None, "{regarding}");
+        let (change, _) = change_with(&create, arguments, &context);
+        assert_eq!(
+            (change.place.as_deref(), change.table.as_deref()),
+            (None, None)
+        );
+        let link = effect(&change, "related_record_id");
+        assert!(link.values[0].machine_id, "{regarding}");
+        assert_eq!(texts(&link.values), ["Line 4 retrofit"], "{regarding}");
+    }
+    // Nobody read it: the value says it is an ID or a link, never its text.
+    let (change, _) = change_with(
+        &create,
+        json!({"tablename": "account", "item": {
+            "name": "New account",
+            "parent@odata.bind": format!("/accounts({ACCOUNT})"),
+        }}),
+        &ToolResultContext::default(),
+    );
+    let parent = effect(&change, "parent@odata.bind");
+    assert!(parent.link && parent.values[0].machine_id);
+    assert_eq!(parent.values[0].text, "");
+    // A folder named in the record's data is shown as one of its values.
+    let (note, _) = change_with(
+        &tool("create_note", "", None),
+        json!({"data": {"title": "Calls", "folder_id": "fld_1"}}),
+        &ToolResultContext::default(),
+    );
+    assert_eq!(texts(&effect(&note, "folder_id").values), ["fld_1"]);
+}

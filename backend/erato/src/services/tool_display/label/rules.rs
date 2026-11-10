@@ -231,6 +231,26 @@ const MAX_RECIPIENT_MEMBERS: usize = MAX_LABEL_FIELDS + 2;
 const MAX_RECIPIENT_OBJECT_MEMBERS: usize = 64;
 /// Where a created item's text sits when none of the above holds it.
 const CREATED_TEXT_MEMBER: &str = "description";
+/// Objects whose members are the values a call writes: the record's own
+/// field bag. A change description flattens them into plain rows of the same
+/// names, and on a create nothing in them is where the record goes.
+pub(super) const WRAPPER_MEMBERS: [&str; 15] = [
+    "properties",
+    "fields",
+    "item",
+    "record",
+    "data",
+    "set",
+    "attributes",
+    "values",
+    "updates",
+    "changes",
+    "params",
+    "payload",
+    "update",
+    "patch",
+    "additional_fields",
+];
 /// Members naming the table or type a record lives in: its kind.
 pub(super) const TABLE_MEMBERS: [&str; 8] = [
     "tablename",
@@ -848,6 +868,15 @@ fn commented_on(id_pointer: Option<&str>) -> ToolCallObjectKind {
     kind_of(&words).unwrap_or(ToolCallObjectKind::Other)
 }
 
+/// Whether a table's name only repeats the kind it gives, as `task` for a
+/// task or `appointment` for an event: the card's kind already says it.
+pub(super) fn table_repeats_kind(table: &str, kind: ToolCallObjectKind) -> bool {
+    let table = table.trim().to_lowercase();
+    KIND_WORDS
+        .iter()
+        .any(|(named, words)| *named == kind && words.contains(&table.as_str()))
+}
+
 fn kind_of(words: &[String]) -> Option<ToolCallObjectKind> {
     let mut found = None;
     for word in words {
@@ -925,11 +954,18 @@ fn id_member(named: fn(&str) -> bool) -> impl FnMut(&str, &str, &[&Value]) -> Op
 /// Where the item goes or lives: a parent, folder, channel or recipient
 /// (copies only when no one else is named), then on a create the first record
 /// it links to, since a record being created has no ID of its own yet. On an
-/// update a link is a changed field.
+/// update a link is a changed field. On a create only a recipient or a member
+/// outside the record's own field bag says where it goes (see
+/// [`outside_the_field_bag`]): a link among its values is one of them.
 fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -> Option<String> {
+    let creates = matches!(
+        action,
+        ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
+    );
     let not_the_id = |pointer: &str| {
         id.is_none_or(|id| id != pointer && !id.starts_with(&format!("{pointer}/")))
     };
+    let placed = |pointer: &str| !creates || outside_the_field_bag(arguments, pointer);
     let found = find(arguments, Skip::Nothing, |pointer, member, values| {
         if !not_the_id(pointer) {
             return None;
@@ -937,7 +973,9 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
         match recipients_in(member, values) {
             Some(Recipients::To) => recipient_at(pointer, values),
             Some(Recipients::Copy | Recipients::Number) => None,
-            None if is_one_of(member, &TARGET_MEMBERS) => target_at(pointer, values),
+            None if is_one_of(member, &TARGET_MEMBERS) && placed(pointer) => {
+                target_at(pointer, values)
+            }
             None => None,
         }
     })
@@ -948,24 +986,20 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
                 .flatten()
         })
     });
-    let found = found.or_else(|| place_pointer(arguments, id));
-    if found.is_some()
-        || !matches!(
-            action,
-            ToolCallAction::Create | ToolCallAction::Upload | ToolCallAction::Upsert
-        )
-    {
+    let found = found.or_else(|| place_pointer(arguments, id, &placed));
+    if found.is_some() || !creates {
         return found;
     }
     find(arguments, Skip::Nothing, |pointer, member, values| {
         (member.to_ascii_lowercase().starts_with("parent")
-            && recipients_in(member, values).is_none())
+            && recipients_in(member, values).is_none()
+            && placed(pointer))
         .then(|| target_at(pointer, values))
         .flatten()
     })
     .or_else(|| {
         find(arguments, Skip::Nothing, |pointer, member, values| {
-            if recipients_in(member, values).is_some() {
+            if recipients_in(member, values).is_some() || !placed(pointer) {
                 return None;
             }
             let links = values.iter().any(|value| match value {
@@ -984,14 +1018,63 @@ fn target_pointer(arguments: &Value, action: ToolCallAction, id: Option<&str>) -
     })
 }
 
+/// Whether the member at `pointer` sits where a create says where its record
+/// goes, by its position alone: at the call's top, in a top-level object such
+/// as `{"parent": {"database_id": …}}`, or directly in every entry of a batch.
+/// A wrapper of the record's values (`item`, `properties`, `fields`, …) and
+/// whatever sits below one are those values, whatever they are named.
+fn outside_the_field_bag(arguments: &Value, pointer: &str) -> bool {
+    let Some(tokens) = pointer.strip_prefix('/') else {
+        return false;
+    };
+    let tokens: Vec<_> = tokens.split('/').map(pointer::unescape).collect();
+    // The wrapper itself is the field bag too: `{"data": {"title", "folder_id"}}`
+    // is no link to a folder.
+    if tokens.is_empty()
+        || tokens
+            .iter()
+            .any(|token| is_one_of(token, &WRAPPER_MEMBERS))
+    {
+        return false;
+    }
+    // A member only some entries of a batch hold is a value of those entries.
+    let mut reached = vec![arguments];
+    let mut budget = MAX_SEARCH_VALUES;
+    for token in &tokens {
+        let mut next = Vec::new();
+        for value in reached {
+            let children: Vec<&Value> = match (token.as_ref(), value) {
+                ("*", Value::Array(entries)) if !entries.is_empty() => entries.iter().collect(),
+                (member, Value::Object(members)) => match members.get(member) {
+                    Some(child) => vec![child],
+                    None => return false,
+                },
+                _ => return false,
+            };
+            budget = match budget.checked_sub(children.len()) {
+                Some(left) => left,
+                None => return false,
+            };
+            next.extend(children);
+        }
+        reached = next;
+    }
+    true
+}
+
 /// The most specific member naming where a record lives, for a call with no
-/// parent, folder or channel to go by.
-fn place_pointer(arguments: &Value, id: Option<&str>) -> Option<String> {
+/// parent, folder or channel to go by, where `placed` says one may be.
+fn place_pointer(
+    arguments: &Value,
+    id: Option<&str>,
+    placed: &dyn Fn(&str) -> bool,
+) -> Option<String> {
     PLACE_MEMBERS.iter().find_map(|place| {
         find(arguments, Skip::Lookups, |pointer, member, values| {
             (member.eq_ignore_ascii_case(place)
                 && id != Some(pointer)
-                && values.iter().copied().any(is_text_or_number))
+                && values.iter().copied().any(is_text_or_number)
+                && placed(pointer))
             .then(|| pointer.to_string())
         })
     })
@@ -1396,6 +1479,18 @@ fn fields(
                 }
                 if values.iter().copied().any(is_short_scalar) {
                     out.push(pointer);
+                    continue;
+                }
+                // A link among the record's values shows as the record it
+                // links to, as on an update.
+                if let Some(link) = values
+                    .iter()
+                    .find_map(|value| value.as_object().filter(|members| is_lookup(members)))
+                    .and_then(link_id_member)
+                    .and_then(|id| child_pointer(&pointer, id))
+                    && !covers(&used, &link)
+                {
+                    out.push(link);
                 }
             }
         }
