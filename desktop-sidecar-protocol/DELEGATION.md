@@ -28,7 +28,11 @@ The six `desktop/*` client tools (`list_sidecar_mailboxes`,
 `get_sidecar_folder_hierarchy`, `get_sidecar_search_fields`,
 `search_sidecar_index`, `get_sidecar_document`, `read_sidecar_conversation`) are
 the tool catalogue in both modes. Strict mode changes how the desktop app runs
-them, never which tools exist or their arguments, results and errors.
+them, never which tools exist or their arguments, results and errors. One
+result is strict-only, and the client gives it: when the person's "Never allow"
+upload setting blocks a file they shared in the review, the call reports
+`FILE_BLOCKED_AFTER_REVIEW`, an error that names that setting, instead of a
+declined upload.
 
 `jobs.start.v1` takes a batch of independent calls, each `{server, name,
 arguments}`. `server: "sidecar"` is reserved for the six built-ins; other ids are
@@ -146,13 +150,13 @@ window. It lists the items each call's selection names, with their item
 metadata and any text the result already holds (message bodies, text blocks) as
 plain text, and shows no remote resources or document scripts. The selection
 starts empty.
-Upload-policy checks run on the text of the selected items, not on the whole
-snapshot, and gate "Approve selected". The decision is made only in the window:
-no RPC submits it, repeated `jobs.review.v1` calls focus the open window, and
-closing a pane neither cancels the job nor decides it. A review has no
-client-side deadline: a client polls the job until the user decides or the job
-ends. A policy guide whose decision provider is remote sends it the selected
-items' text.
+The strict review runs no upload-policy check for now: a configured policy guide
+stays saved, but selecting an item sends its text nowhere, and no decision
+provider receives anything before the user approves. The decision is made only
+in the window: no RPC submits it, repeated `jobs.review.v1` calls focus the open
+window, and closing a pane neither cancels the job nor decides it. A review has
+no client-side deadline: a client polls the job until the user decides or the
+job ends.
 
 `jobs.review.v1` may carry `client` (package 0.1.48): `platform`, the client's
 `X-Erato-Platform` value (`web`, `outlook`, ...), and `locale`, its active
@@ -181,7 +185,14 @@ job, and calls that did not run, are exported unchanged. `priority` orders
 review, `audience` is honored on export, and a `resource_link` exports as a
 reference only. `declined`, `cancelled` and `expired` carry no results; a client
 reports them to the model as errors that a retry cannot fix, shaped like the
-existing "do not retry" errors.
+existing "do not retry" errors. An expired review of the user's own call, on
+which the server parked the turn, is the exception: the call stays open, and
+the person can ask again, which runs the call once more with a new review. A
+task's call, or a call the server did not park, is still answered with the
+error. A client remembers the job behind a call's review, so a re-run first
+asks `jobs.status.v1` about that job: a decision made while no page was polling
+is delivered, and an undecided review opens again, instead of a second job
+starting.
 
 Not implemented yet: snapshots that hold search metadata only and extract text
 when the user opens an item; pinning a digest at approval and re-reading the
@@ -209,8 +220,8 @@ package:
   downloads, permission requests and developer tools are refused.
 - The decision stays in the sidecar process. No RPC approves a review. The
   window's approve action names items, and the sidecar accepts only items of
-  the job's frozen snapshot, and only once the upload-policy checks completed
-  for exactly that selection.
+  the job's frozen snapshot, and only once the checks for exactly that
+  selection completed. With no policy check, as now, they complete at once.
 - A package cannot take the review away. A package whose review window does not
   speak the sidecar's message contract, or whose page does not report ready in
   time, is replaced by the seed.

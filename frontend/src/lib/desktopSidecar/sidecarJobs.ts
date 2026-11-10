@@ -6,8 +6,16 @@ import {
 } from "@erato/desktop-sidecar-protocol";
 import { i18n } from "@lingui/core";
 
+import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import { getClientPlatform } from "@/lib/clientPlatform";
 
+import {
+  forgetReview,
+  markReviewEnded,
+  rememberReview,
+  reviewLink,
+  reviewLinkKey,
+} from "./sidecarReviewLinks";
 import { markAwaitingReview } from "./sidecarReviewStore";
 
 import type {
@@ -151,8 +159,13 @@ export interface SidecarJobOptions {
   signal?: AbortSignal;
   /** The chat that made the call, which waits while its review is open. */
   chatId?: string;
-  /** The call itself, so a turn parked on it can say where it waits. */
+  /**
+   * The call itself, with its message: a review it reaches is kept under
+   * them, so a later run of the same call finds its job and the chat can show
+   * the window again.
+   */
   toolCallId?: string;
+  messageId?: string;
   /**
    * Called once when the job waits for its review and the native window has
    * been asked to open, so the caller can stop holding its turn for the
@@ -167,36 +180,51 @@ export interface SidecarJobOptions {
  * once and is polled until the user decides there: a review has no deadline
  * on this side. A call that fails throws the error its direct RPC would have
  * thrown, so callers handle both paths alike. Each call is its own job: the
- * client tool runner hands the executors one call at a time. The sidecar
- * answers a start of the same call while its job is pending with that job
- * (DELEGATION.md, "Job envelope"), so a call resumed after a reload finds its
- * open review.
+ * client tool runner hands the executors one call at a time.
+ *
+ * A call run again after its page went away first asks after the job it
+ * remembers: the decision may have been made while no page polled. Only a
+ * job that nothing decided, one that was cancelled or that failed, starts
+ * over. A pending job is also what a start of the same call would have found
+ * (DELEGATION.md, "Job envelope").
  */
 export async function runSidecarJob(
   client: DesktopSidecarClient,
   name: string,
   args: Record<string, unknown>,
-  { signal, chatId, toolCallId, onReview }: SidecarJobOptions = {},
+  { signal, chatId, toolCallId, messageId, onReview }: SidecarJobOptions = {},
 ): Promise<CallToolResult> {
   const waitMs = client.getSnapshot().jobs?.maxWaitMs ?? 0;
   const wait = waitMs > 0 ? { wait_ms: waitMs } : {};
+  const key =
+    messageId !== undefined && toolCallId !== undefined
+      ? reviewLinkKey(messageId, toolCallId)
+      : undefined;
+  const resumed = key ? await resumedJob(client, key, signal) : undefined;
   let askedAt = Date.now();
-  let status = await client.invoke(
-    "jobs.start.v1",
-    {
-      calls: [{ server: SIDECAR_PROVIDER.id, name, arguments: args }],
-      ...wait,
-    },
-    { signal },
-  );
+  let status =
+    resumed ??
+    (await client.invoke(
+      "jobs.start.v1",
+      {
+        calls: [{ server: SIDECAR_PROVIDER.id, name, arguments: args }],
+        ...wait,
+      },
+      { signal },
+    ));
   const { handle } = status;
-  let reviewed = false;
+  // A remembered job reached its review on an earlier run.
+  let reviewed = resumed !== undefined;
+  let reviewOpened = false;
   let reviewEnded: (() => void) | undefined;
   try {
     while (!status.results && PENDING_STATES.has(status.state)) {
-      if (status.state === "ready_for_review" && !reviewed) {
+      if (status.state === "ready_for_review" && !reviewOpened) {
         reviewed = true;
-        if (chatId) reviewEnded = markAwaitingReview(chatId, toolCallId);
+        reviewOpened = true;
+        if (chatId) reviewEnded = markAwaitingReview(chatId);
+        // Before the window opens: the decision can outlive this page.
+        if (key) rememberReview(key, handle);
         // The decision is made only in the native window; this opens it.
         if (client.supports("jobs.review.v1"))
           await client.invoke(
@@ -224,6 +252,11 @@ export async function runSidecarJob(
     reviewEnded?.();
   }
   const outcome = status.results?.[0];
+  if (key) {
+    if (!outcome && reviewed && status.state === "expired")
+      markReviewEnded(key);
+    else forgetReview(key);
+  }
   if (!outcome) throw endedWithoutResult(status.state, reviewed);
   // The sidecar keeps delivered results until they are acknowledged; this
   // client never reads them again.
@@ -233,6 +266,58 @@ export async function runSidecarJob(
     throw new SidecarRpcError(code, message, data);
   }
   return outcome.result;
+}
+
+/** Job states that say nothing about the user's decision. */
+const STARTS_OVER = new Set<JobStatus["state"]>([
+  "cancelled",
+  "failed",
+  "acked",
+]);
+
+/**
+ * The job whose review `key`'s call reached on an earlier run, as it stands
+ * now, or nothing when the call starts a job of its own. It may have been
+ * decided since, with no page polling, so a Share or a Decline is delivered
+ * rather than asked again.
+ */
+async function resumedJob(
+  client: DesktopSidecarClient,
+  key: string,
+  signal: AbortSignal | undefined,
+): Promise<JobStatus | undefined> {
+  const link = reviewLink(key);
+  if (link?.state === "ended") throw new SidecarReviewEndedError("expired");
+  if (link?.state !== "open") return undefined;
+  // No wait: an undecided review opens again right away.
+  const status = await client.invoke(
+    "jobs.status.v1",
+    { handle: link.handle },
+    { signal },
+  );
+  if (!STARTS_OVER.has(status.state)) return status;
+  forgetReview(key);
+  return undefined;
+}
+
+/**
+ * Shows the review of `key`'s call again, with its selection, or brings its
+ * window to the front. `jobs.review.v1` only ever opens the job the link
+ * names and reports any other state, so asking can never start a second
+ * review. A job decided in the meantime is delivered by the call's next run.
+ */
+export async function reopenSidecarReview(
+  client: DesktopSidecarClient,
+  key: string,
+): Promise<void> {
+  const link = reviewLink(key);
+  if (link?.state !== "open") return;
+  const { state } = await client.invoke("jobs.review.v1", {
+    handle: link.handle,
+    client: reviewClient(),
+  });
+  if (state === "expired") markReviewEnded(key);
+  else if (state !== "ready_for_review") requestClientOperationSweep();
 }
 
 /** The schema admits a result or an error per call, never both. */

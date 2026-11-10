@@ -118,6 +118,9 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
     private readonly inFlight: (
       toolCallId: string,
     ) => boolean = isClientToolCallInFlight,
+    /** The call waits on the user until they act; no run can answer it now. */
+    private readonly waitsOnUser: (request: OperationRequest) => boolean = () =>
+      false,
   ) {}
   // By bare name, like the live call's executor lookup: the namespace is
   // deployment configuration the pane does not know.
@@ -129,7 +132,7 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
     );
   }
   defer(request: OperationRequest): boolean {
-    return this.inFlight(request.tool_call_id);
+    return this.inFlight(request.tool_call_id) || this.waitsOnUser(request);
   }
   executor(): ExecutorBinding | undefined {
     return this.ready() ? this.binding() : undefined;
@@ -159,6 +162,7 @@ export class ClientToolOperationHandler implements ClientOperationHandler {
       outcome = undefined;
     }
     signal.throwIfAborted();
+    if (outcome && !outcome.ok && outcome.stillWaiting) return undefined;
     // A task's call whose context this device cannot serve right now keeps
     // waiting for a client that can, rather than ending the task's call.
     if (

@@ -40,6 +40,10 @@ import {
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
 import { WaitingHostsContext } from "@/lib/delegation/waitingHosts";
+import {
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
@@ -49,6 +53,7 @@ import {
   WORD_REPLACE_FENCE,
 } from "@/lib/wordReview/wordHistoryNames";
 import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
+import { ChatContext } from "@/providers/ChatProvider";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -62,11 +67,13 @@ import { LocalSearchCoverageNotice } from "./LocalSearchCoverageNotice";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
+import { SidecarReviewItem } from "./SidecarReviewItem";
 import {
   SyntaxHighlightedCode,
   useCodeBlockSurfaceStyle,
 } from "./SyntaxHighlightedCode";
 import { approvalStopState } from "./approvalItems";
+import { toolNameOfCall, waitingCallOf } from "./waitingCall";
 
 import type { ApprovalStopState } from "./approvalItems";
 import type { ToolDecision } from "../Trace/Trace";
@@ -707,34 +714,40 @@ const rewriteFootnoteValue = (
 };
 
 /**
- * A turn parked on a client tool call. A call that waits for its review in
- * the Erato desktop app on this device points there; the turn resumes once
- * the user decides.
+ * A turn parked on a client tool call. A call whose review the Erato desktop
+ * app shows gets its item in the approval slot; any other call says what the
+ * turn waits for. While a row names a call that has ended, one of the chat's
+ * calls can already be in review: the row is refetched when the turn parks
+ * again, and nothing here may act on the ended call meanwhile.
  */
-function ClientToolPendingNotice({ toolCallId }: { toolCallId: string }) {
-  const awaitingReview = useSidecarReviewStore((state) =>
-    state.waitingByToolCallId.has(toolCallId),
+function ClientToolPendingNotice({
+  messageId,
+  toolCallId,
+  toolName,
+}: {
+  messageId: string | undefined;
+  toolCallId: string;
+  toolName: string | undefined;
+}) {
+  const key = messageId ? reviewLinkKey(messageId, toolCallId) : undefined;
+  const link = useSidecarReviewLinks((state) =>
+    key ? state.links[key] : undefined,
   );
+  const chatId = React.useContext(ChatContext)?.currentChatId ?? undefined;
+  const chatInReview = useSidecarReviewStore(
+    (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
+  );
+  if (key && link) {
+    return <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />;
+  }
   return (
     <Alert type="info" role="status" geometryVariant="message">
-      {awaitingReview
+      {chatInReview
         ? t`Ready for review in the Erato desktop app`
-        : t`This task is waiting for a connected app. You can leave this chat and return later.`}
+        : t`This response is waiting for a connected app. You can leave this chat and return later.`}
     </Alert>
   );
 }
-
-/**
- * Whether a turn still waits on this client tool call's marker. A call that
- * waits ends the row, or sits right before the stop that carries its tasks'
- * questions. A marker further up belongs to a call that already ended.
- */
-const isWaitingCallMarker = (
-  content: readonly ContentPart[],
-  index: number,
-): boolean =>
-  index === content.length - 1 ||
-  content[index + 1]?.content_type === "tool_approval_request";
 
 const isRenderableContentPart = (part: ContentPart): boolean =>
   part.content_type === "text" ||
@@ -1392,6 +1405,8 @@ export const MessageContent = memo(function MessageContent({
     return statuses;
   }, [content]);
 
+  const waitingCall = React.useMemo(() => waitingCallOf(content), [content]);
+
   // Only the last stop can still wait on tasks: an earlier one was carried
   // onto a later one or settled.
   const lastStop = React.useMemo(():
@@ -1812,11 +1827,13 @@ export const MessageContent = memo(function MessageContent({
         }
 
         if (part.content_type === "client_tool_pending") {
-          if (!isWaitingCallMarker(content, index)) return null;
+          if (part !== waitingCall) return null;
           return (
             <ClientToolPendingNotice
               key={`client-operation-${part.attempt_id}`}
+              messageId={messageId}
               toolCallId={part.tool_call_id}
+              toolName={toolNameOfCall(content, part.tool_call_id)}
             />
           );
         }
@@ -1836,8 +1853,7 @@ export const MessageContent = memo(function MessageContent({
           // A stop right behind the response's own waiting call: deciding lets
           // the tasks go on, while the response still waits for that call.
           const awaitsOwnCall =
-            content[index - 1]?.content_type === "client_tool_pending" &&
-            isWaitingCallMarker(content, index - 1);
+            waitingCall !== undefined && content[index - 1] === waitingCall;
           return (
             <McpToolApprovalCard
               key={`tool-approval-${index}`}

@@ -11,6 +11,7 @@ import {
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 import { desktopSidecarBinding } from "@/lib/desktopSidecar/binding";
 import { createSidecarChatTools } from "@/lib/desktopSidecar/chatTools";
+import { reviewHasEnded } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import {
   fetchUploadFile,
   type UploadFileVariables,
@@ -80,6 +81,9 @@ export function DesktopSidecarClientTools() {
           tool.execute,
           binding,
           tool.isAvailable,
+          undefined,
+          ({ message_id, tool_call_id }) =>
+            reviewHasEnded(message_id, tool_call_id),
         ),
       ),
     ]);
