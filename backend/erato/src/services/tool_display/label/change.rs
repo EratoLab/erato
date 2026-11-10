@@ -2134,7 +2134,7 @@ fn is_update_like(action: ToolCallAction) -> bool {
 }
 
 /// Two values that are a day each, one written as a bare date and the other
-/// as midnight of a date, as (old, new) bare dates; `None` when either holds
+/// as midnight of a date with no zone, as (old, new) bare dates; `None` when either holds
 /// a time of day or is no date at all.
 fn same_date_form(old: &str, new: &str) -> Option<(String, String)> {
     fn bare_date(text: &str) -> bool {
@@ -2147,11 +2147,9 @@ fn same_date_form(old: &str, new: &str) -> Option<(String, String)> {
     }
     fn midnight_of(text: &str) -> Option<&str> {
         let date = text.get(..10).filter(|date| bare_date(date))?;
+        // Midnight in a zone, `Z` included, may be another day where the
+        // record keeps its dates.
         let time = text.get(10..)?.strip_prefix(['T', ' '])?;
-        let time = time
-            .strip_suffix('Z')
-            .or_else(|| time.strip_suffix("+00:00"))
-            .unwrap_or(time);
         let zero = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte == b'0');
         let mut parts = time.split([':', '.']);
         let (hours, minutes) = (parts.next()?, parts.next()?);

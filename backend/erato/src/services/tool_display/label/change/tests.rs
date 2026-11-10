@@ -2697,6 +2697,27 @@ fn a_purge_or_clear_of_a_place_never_reads_as_the_place_deleted() {
 }
 
 #[test]
+fn a_date_and_midnight_in_a_zone_are_never_the_same_day() {
+    let context = read_of(
+        "get_task",
+        json!({"id": RECORD}),
+        json!({"id": RECORD, "subject": "Call back", "scheduledstart": "2026-11-18",
+               "scheduledend": "2026-11-20T00:00:00+00:00"}),
+    );
+    let (change, _) = change_with(
+        &tool("update_task", "", None),
+        json!({"id": RECORD, "scheduledstart": "2026-11-18T00:00:00Z", "scheduledend": "2026-11-27"}),
+        &context,
+    );
+    let start = effect(&change, "scheduledstart");
+    assert_ne!(start.effect, ToolCallEffectKind::Unchanged);
+    assert_eq!(texts(&start.values), ["2026-11-18T00:00:00Z"]);
+    let end = effect(&change, "scheduledend");
+    assert_eq!(end.old.as_ref().unwrap().text, "2026-11-20T00:00:00+00:00");
+    assert_eq!(change.counts.unchanged, 0);
+}
+
+#[test]
 fn a_list_reads_what_its_own_description_says_before_the_tools() {
     let save = tool_with_schema(
         "save_issue",
@@ -2902,7 +2923,7 @@ fn an_old_and_a_new_date_read_in_one_form() {
     );
     let (change, _) = change_with(
         &tool("update_task", "", None),
-        json!({"id": RECORD, "scheduledend": "2026-11-27", "scheduledstart": "2026-11-18T00:00:00Z",
+        json!({"id": RECORD, "scheduledend": "2026-11-27", "scheduledstart": "2026-11-18T00:00:00",
                "duedate": "2026-11-21"}),
         &context,
     );
