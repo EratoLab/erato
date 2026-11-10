@@ -2079,7 +2079,15 @@ fn a_call_that_names_nothing_inside_the_place_its_name_ends_in_acts_on_that_plac
 
 #[test]
 fn text_beside_content_the_call_marks_new_picks_where_it_goes() {
-    let section = tool("update_page_section", "", None);
+    let section = tool_with_schema(
+        "update_page_section",
+        "",
+        json!({"type": "object", "properties": {
+            "page_id": {"type": "string", "description": "The ID of the page to update"},
+            "heading_text": {"type": "string", "description": "The heading text of the section to replace"},
+            "new_content": {"type": "string", "description": "The new content of the section"},
+        }}),
+    );
     let change = change_with(
         &section,
         json!({"page_id": "123456", "heading_text": "Laptop setup", "new_content": "Use the portal."}),
@@ -2112,6 +2120,66 @@ fn text_beside_content_the_call_marks_new_picks_where_it_goes() {
         json!({"path": "/a.txt", "old_text": "a", "new_text": "b", "encoding": "utf-8"}),
     );
     assert!(edit.filter.is_none());
+
+    // Without a description that says it picks the part, the heading is a
+    // value the call writes.
+    let undescribed = change_of(
+        "update_page_section",
+        json!({"page_id": "123456", "heading_text": "Laptop setup", "new_content": "Use the portal."}),
+    );
+    assert!(undescribed.filter.is_none());
+    assert_eq!(
+        effect(&undescribed, "heading_text").effect,
+        ToolCallEffectKind::Set
+    );
+}
+
+#[test]
+fn a_value_beside_new_content_that_the_call_writes_still_changes() {
+    let update = tool_with_schema(
+        "update_document",
+        "",
+        json!({"type": "object", "properties": {
+            "document_id": {"type": "string", "description": "The document to update"},
+            "new_content": {"type": "string", "description": "The new text of the document"},
+            "status": {"type": "string", "description": "The document's new status"},
+        }}),
+    );
+    let change = change_with(
+        &update,
+        json!({"document_id": "d1", "new_content": "Final text", "status": "published"}),
+        &ToolResultContext::default(),
+    )
+    .0;
+    assert!(change.filter.is_none());
+    let status = effect(&change, "status");
+    assert_eq!(status.effect, ToolCallEffectKind::Set);
+    assert_eq!(texts(&status.values), ["published"]);
+    assert_eq!(change.counts.set, 2);
+}
+
+#[test]
+fn a_statement_beside_new_content_keeps_its_warning() {
+    for (member, statement, found) in [
+        ("command", "rm -rf /var/backups/*", "rm"),
+        ("query", "DELETE FROM audit_log", "DELETE"),
+    ] {
+        let mut arguments = json!({"job_id": "nightly", "new_value": "0 3 * * *"});
+        arguments[member] = json!(statement);
+        let change = change_with(
+            &tool("update_scheduled_job", "", None),
+            arguments,
+            &ToolResultContext::default(),
+        )
+        .0;
+        assert!(change.filter.is_none(), "{member}");
+        let opaque = change
+            .opaque
+            .iter()
+            .find(|opaque| opaque.raw_name == member)
+            .unwrap_or_else(|| panic!("{member} is not scanned: {change:#?}"));
+        assert_eq!(opaque.found, [found], "{member}");
+    }
 }
 
 #[test]

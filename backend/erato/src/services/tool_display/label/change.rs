@@ -256,8 +256,9 @@ struct Walk<'a> {
     named_shown: HashSet<&'a str>,
     /// Paths that name the record itself, its ID or title: never where it lives.
     record: HashSet<&'a str>,
-    /// The call marks its new content as new (`new_content`), so the plain
-    /// text beside it picks the part that content replaces.
+    /// The call marks its new content as new (`new_content`), so a plain
+    /// value beside it that its description says picks a part, such as a
+    /// section's heading, says where that content goes.
     picks_part: bool,
     /// The text the call says it replaces and the text it writes, by path.
     before: Option<&'a str>,
@@ -432,10 +433,6 @@ impl<'a> Walk<'a> {
         if self.is_named(path, value) {
             return;
         }
-        if depth == 0 && self.picks_part && picks_a_part(member, value) {
-            self.part_picked_by(value, path, name);
-            return;
-        }
         if is_one_of(member, &FILTER_MEMBERS) {
             self.filter(value, path);
             return;
@@ -453,6 +450,9 @@ impl<'a> Walk<'a> {
         match value {
             Value::String(text) if self.is_long_text(member, text) => {
                 self.text(member, value, path, &name);
+            }
+            _ if depth == 0 && self.picks_part && self.picks_a_part(member, value, path) => {
+                self.part_picked_by(value, path, name);
             }
             Value::Array(entries) if is_batch(entries) => {
                 self.batch(entries, path, &name);
@@ -1221,6 +1221,43 @@ impl<'a> Walk<'a> {
         self.change.filter = Some(filter);
     }
 
+    /// A short value of one line beside content the call marks new, not
+    /// marked new or old itself and never a statement, that its own schema
+    /// description says picks the part that content replaces, as "The
+    /// heading text of the section to replace" does. Any other value is one
+    /// the call writes.
+    fn picks_a_part(&self, member: &str, value: &Value, path: &str) -> bool {
+        let words = name_words(member);
+        let marked = words
+            .first()
+            .is_some_and(|word| matches!(word.as_str(), "new" | "old"));
+        let statement = words.last().is_some_and(|last| {
+            [
+                &SQL_MEMBERS[..],
+                &SHELL_MEMBERS,
+                &CODE_MEMBERS,
+                &INSTRUCTION_MEMBERS,
+            ]
+            .iter()
+            .any(|names| names.contains(&last.as_str()))
+        });
+        let short = match value {
+            Value::String(text) => {
+                !text.trim().is_empty()
+                    && !text.contains('\n')
+                    && text.chars().count() <= LONG_TEXT_CHARS
+            }
+            Value::Number(_) => true,
+            _ => false,
+        };
+        !marked
+            && !statement
+            && short
+            && property_at(&self.facts.tool.input_schema, path)
+                .and_then(|property| property.get("description")?.as_str())
+                .is_some_and(names_a_part)
+    }
+
     /// A value beside content the call marks new picks where that content
     /// goes, as the heading of the section it replaces does: it reads as
     /// where the change applies, never as a value that changes.
@@ -1888,8 +1925,8 @@ fn is_type_member(member: &str, value: &Value) -> bool {
 const NEW_CONTENT_WORDS: [&str; 6] = ["content", "text", "body", "markdown", "html", "value"];
 
 /// Whether the call marks the content it writes as new and says neither what
-/// it was nor which records to filter: then the plain values beside that
-/// content pick the part it replaces.
+/// it was nor which records to filter: then a plain value beside that
+/// content may pick the part it replaces.
 fn marks_new_content(arguments: &Value) -> bool {
     let Some(top) = arguments.as_object() else {
         return false;
@@ -1914,21 +1951,17 @@ fn marks_new_content(arguments: &Value) -> bool {
         })
 }
 
-/// A short value of one line that the call does not mark new or old.
-fn picks_a_part(member: &str, value: &Value) -> bool {
-    let marked = name_words(member)
-        .first()
-        .is_some_and(|word| matches!(word.as_str(), "new" | "old"));
-    !marked
-        && match value {
-            Value::String(text) => {
-                !text.trim().is_empty()
-                    && !text.contains('\n')
-                    && text.chars().count() <= LONG_TEXT_CHARS
-            }
-            Value::Number(_) => true,
-            _ => false,
-        }
+/// Words in a member's description that say it picks a part of what a call
+/// replaces.
+const PART_WORDS: [&str; 12] = [
+    "section", "sections", "heading", "headings", "anchor", "anchors", "path", "paths", "key",
+    "keys", "index", "indices",
+];
+
+fn names_a_part(description: &str) -> bool {
+    name_words(text_prefix(description, MAX_DESCRIPTION_BYTES))
+        .iter()
+        .any(|word| PART_WORDS.contains(&word.as_str()))
 }
 
 /// A table's name a card can read as part of a kind: one word of letters,
