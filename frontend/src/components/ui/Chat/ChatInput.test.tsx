@@ -6941,6 +6941,60 @@ describe("ChatInput", () => {
         document.querySelectorAll('[data-ui="composer-tool-chip"]'),
       ).map((chip) => chip.getAttribute("aria-label"));
 
+    describe.each(["mobile", "Office add-in"])("%s facet labels", (layout) => {
+      it.each([
+        { global: false, own: undefined, labelled: false },
+        { global: true, own: undefined, labelled: true },
+        { global: false, own: true, labelled: true },
+        { global: true, own: false, labelled: false },
+      ])(
+        "respects the display-name settings: %o",
+        async ({ global, own, labelled }) => {
+          mockUseIsMobile.mockReturnValue(layout === "mobile");
+          const previousExtraContent =
+            componentRegistry.ChatAddMenuExtraContent;
+          if (layout === "Office add-in") {
+            componentRegistry.ChatAddMenuExtraContent =
+              function MockChatAddMenuExtraContent() {
+                return null;
+              };
+          }
+          mockUseFacets.mockReturnValue({
+            data: {
+              facets: facets.map((facet) => ({
+                ...facet,
+                show_indicator_with_display_name: own,
+              })),
+              global_facet_settings: {
+                show_facet_indicator_with_display_name: global,
+              },
+            },
+            error: null,
+          });
+
+          try {
+            const onFacetSelectionChange = vi.fn();
+            await renderTools({ onFacetSelectionChange });
+            const chip = screen.getByRole("button", {
+              name: "Deselect Web search",
+            });
+            expect(chip.textContent?.includes("Web search")).toBe(labelled);
+            expect(chip.querySelector("svg")).not.toBeNull();
+            expect(chip).toHaveAttribute("title", "Deselect Web search");
+            chip.focus();
+            expect(chip).toHaveFocus();
+            fireEvent.click(chip);
+            expect(onFacetSelectionChange).toHaveBeenLastCalledWith(["code"]);
+            expect(
+              screen.getByRole("button", { name: "Deselect Code" }),
+            ).toHaveFocus();
+          } finally {
+            componentRegistry.ChatAddMenuExtraContent = previousExtraContent;
+          }
+        },
+      );
+    });
+
     it("draws the selected tools after + and the modes, in the server's order", async () => {
       mockUseIsMobile.mockReturnValue(true);
       await renderTools({
