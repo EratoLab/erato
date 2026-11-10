@@ -521,8 +521,8 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other && !name_loses {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
     }
-    // A delete or archive that the name or a verb field's words state is
-    // never hidden behind another verb.
+    // A delete or archive that the name or a verb field's words state,
+    // wherever the field sits, is never hidden behind another verb.
     let fields = verb_fields(arguments);
     let field_loses = fields.iter().any(|(member, value)| {
         matches!(
@@ -536,6 +536,7 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     ) && (fields
         .iter()
         .any(|(member, value)| hides_a_loss(member, value))
+        || loss_out_of_reach(arguments)
         || (verb.source == VerbSource::Field && name_sounds_like_a_loss(&name) && !field_loses));
     if loss_left_out {
         flags.push(CrossCheckFlag::LossLeftOut);
@@ -624,6 +625,57 @@ pub fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
     let mut budget = MAX_SEARCH_VALUES;
     walk(arguments, 0, &mut budget, &mut out);
     out
+}
+
+/// Whether a verb field whose words delete or archive sits where
+/// [`verb_fields`] does not read it, deeper or past its cap, as the last of
+/// many rows or an operation inside an edit inside the call does: the verb
+/// was chosen without it.
+fn loss_out_of_reach(arguments: &Value) -> bool {
+    fn walk(value: &Value, depth: usize, budget: &mut usize, read: &mut usize) -> bool {
+        if depth > MAX_SEARCH_DEPTH || *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+        match value {
+            Value::Object(members) => {
+                let mut scanned = 0;
+                for (member, value) in members {
+                    if *budget == 0 {
+                        break;
+                    }
+                    *budget -= 1;
+                    scanned += 1;
+                    let Some(text) = value
+                        .as_str()
+                        .filter(|text| is_one_of(member, &VERB_FIELDS) && is_identifier(text))
+                    else {
+                        continue;
+                    };
+                    // The same walk as `verb_fields`, so this counts what it read.
+                    if depth <= VERB_FIELD_DEPTH && *read < MAX_VERB_FIELDS {
+                        *read += 1;
+                    } else if name_sounds_like_a_loss(&name_words(text_prefix(
+                        text,
+                        MAX_NAME_BYTES,
+                    ))) {
+                        return true;
+                    }
+                }
+                members
+                    .values()
+                    .take(scanned)
+                    .filter(|child| is_container(child))
+                    .any(|child| walk(child, depth + 1, budget, read))
+            }
+            Value::Array(entries) => entries
+                .iter()
+                .any(|entry| walk(entry, depth + 1, budget, read)),
+            _ => false,
+        }
+    }
+    let mut budget = MAX_SEARCH_VALUES;
+    walk(arguments, 0, &mut budget, &mut 0)
 }
 
 fn is_identifier(text: &str) -> bool {

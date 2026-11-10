@@ -4465,16 +4465,42 @@ fn a_row_deletes_when_any_of_its_operation_fields_says_so_whichever_comes_first(
 
 #[test]
 fn a_row_whose_kind_is_one_lower_case_word_that_deletes_counts_as_a_deletion() {
-    // Past the verb fields a label reads, only the batch can still say it.
     let mut changes: Vec<Value> = (0..33)
         .map(|n| json!({"kind": "update", "id": format!("t{n}"), "title": "Draft"}))
         .collect();
     changes.push(json!({"kind": "delete", "id": "z"}));
-    let (change, _) = change_with(
-        &tool("apply_changes", "", None),
-        json!({"changes": changes}),
-        &ToolResultContext::default(),
+    let arguments = json!({"changes": changes});
+    let tool = tool("apply_changes", "", None);
+    // Past the verb fields a label reads, the delete still leaves no label
+    // that hides it.
+    assert_eq!(
+        labelled(&tool, &arguments, &ToolResultContext::default()).source,
+        ToolCallLabelSource::Generic
     );
+    // Whatever label a call is shown with, its batch counts the row.
+    let mapping = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: Vec::new(),
+        source: ToolCallLabelSource::Rules,
+    };
+    let label = crate::services::tool_display::label::filtered_label(
+        SERVER, &tool.name, &arguments, &mapping, None,
+    );
+    let (change, _) = describe(
+        &label,
+        ChangeFacts {
+            tool: &tool,
+            arguments: &arguments,
+            approval_argument: None,
+            context: &ToolResultContext::default(),
+            server: Some(SERVER),
+            rules_action: ToolCallAction::Update,
+            glossary: None,
+            destructive_hint_source: Default::default(),
+        },
+    )
+    .unwrap();
     let batch = change.batch.as_ref().unwrap();
     assert_eq!(batch.deletions, 1, "{batch:#?}");
     assert_eq!(batch.rows[0].number, 34);
@@ -4493,6 +4519,32 @@ fn a_row_whose_kind_is_one_lower_case_word_that_deletes_counts_as_a_deletion() {
         rules::row_field_action("op", "HardDelete"),
         Some(ToolCallAction::Delete)
     );
+}
+
+#[test]
+fn a_delete_an_operation_states_deeper_than_a_label_reads_gets_the_generic_label() {
+    let arguments = json!({"params": {"edit": {"documentChanges": [
+        {"kind": "rename", "oldUri": "file:///a.txt", "newUri": "file:///b.txt"},
+        {"kind": "delete", "uri": "file:///old.txt"},
+    ]}}});
+    let label = labelled(
+        &tool("apply_edit", "", None),
+        &arguments,
+        &ToolResultContext::default(),
+    );
+    assert_eq!(label.source, ToolCallLabelSource::Generic);
+
+    // A deep operation that deletes nothing leaves the label as it was.
+    let arguments = json!({"params": {"edit": {"documentChanges": [
+        {"kind": "rename", "oldUri": "file:///a.txt", "newUri": "file:///b.txt"},
+        {"kind": "create", "uri": "file:///new.txt"},
+    ]}}});
+    let label = labelled(
+        &tool("apply_edit", "", None),
+        &arguments,
+        &ToolResultContext::default(),
+    );
+    assert_eq!(label.action, ToolCallAction::Update);
 }
 
 #[test]
