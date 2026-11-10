@@ -57,7 +57,7 @@ export const WaitingTaskItem = ({ item }: { item: ApprovalItemPart }) => {
           linkKey={reviewKey}
           link={review}
           toolName={child?.tool_name}
-          forTask
+          inTaskItem
         />
       ) : (
         <p className="mt-1 flex items-center gap-1 text-xs text-theme-fg-secondary">

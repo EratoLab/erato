@@ -1072,7 +1072,9 @@ export function createSidecarChatTools(
                 context.messageId,
                 context.toolCallId,
               );
-              // A task's review that ran out stays on its parent's item.
+              // A task's review that ran out stays, marked as the task's, so
+              // its own chat and its parent's item say it ended and neither
+              // offers to ask again.
               if (error.state === "expired") markTaskReviewEnded(review);
               else forgetReview(review);
             }

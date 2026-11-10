@@ -593,10 +593,12 @@ describe("runSidecarJob", () => {
         expect(links).toEqual([
           expect.objectContaining({ state: "open", handle: JOB_HANDLE }),
         ]);
+        // The user's own call is no task's.
+        expect(links[0]).not.toHaveProperty("task");
         expect(reviewLink(key)).toBeUndefined();
       });
 
-      it("names the call's chat and the chat it runs for on the job it records", async () => {
+      it("names the call's chat and the chat it runs for on the job it records, as a task's", async () => {
         vi.useFakeTimers();
         const links: unknown[] = [];
         const { client } = fakeSidecarClient((method) => {
@@ -618,6 +620,7 @@ describe("runSidecarJob", () => {
           expect.objectContaining({
             state: "open",
             chatIds: ["chat", "origin-chat"],
+            task: true,
           }),
         ]);
       });

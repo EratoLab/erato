@@ -1156,12 +1156,17 @@ describe("desktop sidecar tools in strict mode", () => {
               : { ok: false, error },
         );
         // A review that ran out stays on the slot: the user's own with the
-        // chat that waits to ask again, a task's on its parent's item with
-        // no chat waiting, since its call ended with it.
+        // chat that waits to ask again, a task's marked as the task's, for
+        // its own chat and its parent's item, with no chat waiting, since its
+        // call ended with it.
         const link = reviewLink(reviewLinkKey("message", "call"));
         if (state !== "expired") expect(link).toBeUndefined();
         else if (callContext === grantContext)
-          expect(link).toEqual({ state: "ended", at: expect.any(Number) });
+          expect(link).toEqual({
+            state: "ended",
+            task: true,
+            at: expect.any(Number),
+          });
         else
           expect(link).toEqual({
             state: "ended",
