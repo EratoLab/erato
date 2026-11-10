@@ -23,6 +23,10 @@ export const CLIENT_TOOL_OPERATION_KIND = "client_tool.v1";
 // The server rejects a longer claimed message and cleans it the same way.
 const MAX_MESSAGE_CHARS = 1024;
 
+/** The codes of a task's call that a prompt on the device ended without a
+ * result: a decline, or a review that ended without the user's decision. */
+const ENDED_ON_DEVICE = new Set(["declined", "review_expired"]);
+
 function cleanMessage(message: string): string | undefined {
   const cleaned = Array.from(message.replace(/\p{Cc}/gu, " ").trim())
     .slice(0, MAX_MESSAGE_CHARS)
@@ -76,15 +80,16 @@ export function toOperationResult(
       },
     });
   }
-  // Only a task's call reports a decline on the device as such; the user's own
-  // call keeps the validation shape its host family already reads.
-  if (
-    request.lineage &&
-    outcome.validationErrors?.some((issue) => issue.code === "declined")
-  )
+  // Only a task's call reports a decline on the device, or a review there that
+  // ended without the user's decision, as such; the user's own call keeps the
+  // validation shape its host family already reads.
+  const ended = request.lineage
+    ? outcome.validationErrors?.find((issue) => ENDED_ON_DEVICE.has(issue.code))
+    : undefined;
+  if (ended)
     return settle(request, {
       outcome: "rejected",
-      error: { code: "declined" },
+      error: { code: ended.code },
     });
   if (outcome.validationErrors?.length)
     return settle(request, {

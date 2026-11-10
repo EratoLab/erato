@@ -9406,17 +9406,20 @@ async fn stream_generate_chat_completion<'a>(
                     output_value = output;
                     response_text = output_value.to_string();
                 }
-                // A device prompt the user declined ends a task's live call as
-                // the durable path and the server's own Ask end it, so the
-                // task result counts it.
+                // A device prompt that ended a task's live call without a
+                // result, a decline or a review that ended without the user's
+                // decision, ends it as the durable path does (a decline also
+                // as the server's own Ask does), so the task result counts it.
                 if live_grant.is_some()
-                    && matches!(&outcome, ClientToolOutcome::ValidationFailed(issues, _)
-                    if issues.iter().any(|issue| {
-                        issue.code == crate::services::delegated_client_tools::DECLINED
-                    }))
+                    && let ClientToolOutcome::ValidationFailed(issues, _) = &outcome
+                    && let Some(output) = issues.iter().find_map(|issue| {
+                        crate::services::delegated_client_tools::ended_on_device_output(
+                            &issue.code,
+                            &tool_name,
+                        )
+                    })
                 {
-                    output_value =
-                        crate::services::delegated_client_tools::declined_output(&tool_name);
+                    output_value = output;
                     response_text = output_value.to_string();
                 }
                 if tool_charges

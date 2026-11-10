@@ -30,6 +30,7 @@ use super::slow_path::{
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
     a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
+    a_review_ended_without_a_decision_ends_the_durable_call_as_expired,
     a_stop_keeps_the_slot_of_an_archived_task_it_carries,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
@@ -148,6 +149,7 @@ macro_rules! host_conformance {
                 an_approved_child_call_reaches_the_pane_under_the_same_grant
                 a_denied_child_call_is_declined_and_the_task_result_says_so
                 a_device_decline_of_a_live_grant_call_is_declined
+                a_review_ended_without_a_decision_on_a_live_grant_call_is_expired
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
             );
@@ -177,6 +179,7 @@ macro_rules! host_conformance {
             a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked
             a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt
             a_device_decline_ends_the_durable_call_as_declined
+            a_review_ended_without_a_decision_ends_the_durable_call_as_expired
             no_client_before_the_attempt_ends_gives_expired
             a_durable_and_a_live_child_only_the_durable_one_waits
             a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once
@@ -1452,6 +1455,44 @@ async fn a_denied_child_call_is_declined_and_the_task_result_says_so(
 }
 
 async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>, row: &HostRow) {
+    a_device_prompt_ends_a_live_grant_call(pool, row, "declined", "declined", |child_turn| {
+        assert!(child_turn.contains("The user declined this call"));
+    })
+    .await;
+}
+
+/// A review on the device that ended without the user's decision is no
+/// decline on the live path either: the call is expired, the task's model is
+/// told not to retry it without the user, and the task result counts it as
+/// expired.
+async fn a_review_ended_without_a_decision_on_a_live_grant_call_is_expired(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    a_device_prompt_ends_a_live_grant_call(pool, row, "review_expired", "expired", |child_turn| {
+        assert!(
+            child_turn.contains("ended without their decision"),
+            "{child_turn}"
+        );
+        assert!(
+            child_turn.contains("Do not retry it without the user"),
+            "{child_turn}"
+        );
+        assert!(!child_turn.contains("The user declined this call"));
+    })
+    .await;
+}
+
+/// The pane answers a task's live call with the validation code `code`: the
+/// call is stored with the server's output for `reason`, the task's model
+/// reads it, and the task result counts it under `reason`.
+async fn a_device_prompt_ends_a_live_grant_call(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+    code: &str,
+    reason: &str,
+    child_reads: impl FnOnce(&str),
+) {
     let (parent, child) = (RequestBodyRecorder::new(), RequestBodyRecorder::new());
     let mut mocks = MockSet::new();
     mock_parent(&mut mocks, &parent, vec![client_task(None)]);
@@ -1462,7 +1503,7 @@ async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>,
     let chat_id = seed_origin_chat(&state.db).await;
     let run = spawn_parent(row, &base, chat_id, ACTION_FACET, Some(row.binding()));
     let event = pane.call().await;
-    let declined = post_live(
+    let ended = post_live(
         &state,
         event["chat_id"].as_str().unwrap().parse().unwrap(),
         &(
@@ -1470,13 +1511,13 @@ async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>,
             event["tool_call_id"].as_str().unwrap().to_string(),
         ),
         json!({"validation_errors": [{
-            "path": "", "code": "declined", "message": "The user declined on the device.",
+            "path": "", "code": code, "message": "The prompt on the device ended the call.",
         }]}),
         Some(&row.binding()),
     )
     .await;
-    declined.assert_status_ok();
-    assert_eq!(declined.json::<Value>()["delivered"], true);
+    ended.assert_status_ok();
+    assert_eq!(ended.json::<Value>()["delivered"], true);
     assert!(finish(run).await.contains(PARENT_FINAL));
 
     let client_child = child_chat(&state.db, chat_id, CHILD_FACET).await.unwrap();
@@ -1486,24 +1527,21 @@ async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>,
     );
     assert_eq!(read["status"], "error", "{read}");
     assert_eq!(read["output"]["status"], "cancelled", "{read}");
-    assert_eq!(read["output"]["reason"], "declined");
+    assert_eq!(read["output"]["reason"], reason);
+    let ended_text = read["output"]["error"].as_str().unwrap();
+    assert!(ended_text.contains(row.read_tool), "{ended_text}");
+    // The server's text, never the device's.
     assert!(
-        read["output"]["error"]
-            .as_str()
-            .unwrap()
-            .contains(row.read_tool)
+        !ended_text.contains("The prompt on the device"),
+        "{ended_text}"
     );
     let child_turns = turn_bodies(&child);
     assert_eq!(child_turns.len(), 2);
-    assert!(
-        child_turns[1]
-            .to_string()
-            .contains("The user declined this call")
-    );
+    child_reads(&child_turns[1].to_string());
     let parent_message = assistant_row(&state.db, chat_id).await;
     let slot = part_for(&parent_message, CLIENT_TASK_CALL);
     assert_eq!(slot["output"]["status"], "completed", "{slot}");
-    assert_eq!(slot["output"]["client_tools"], json!({"declined": 1}));
+    assert_eq!(slot["output"]["client_tools"], json!({ reason: 1 }));
     let answered: String = parent_message.raw_message["content"]
         .as_array()
         .unwrap()

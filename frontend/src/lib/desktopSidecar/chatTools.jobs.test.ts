@@ -2,6 +2,10 @@ import { SIDECAR_PROVIDER } from "@erato/desktop-sidecar-protocol";
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  registerClientToolExecutor,
+  resetClientToolRegistryForTests,
+} from "@/hooks/chat/clientToolExecutors";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import { useClientToolFileApproval } from "@/hooks/chat/useClientToolFileApproval";
 import {
@@ -1140,14 +1144,19 @@ describe("desktop sidecar tools in strict mode", () => {
             .tool(READ_SIDECAR_CONVERSATION_TOOL)
             .execute(INPUTS[READ_SIDECAR_CONVERSATION_TOOL], callContext),
         );
-        // A task's call reports it as declined, as a declined upload does.
+        // A task's call reports a decline as such, as a declined upload does,
+        // and a review nobody decided as expired.
         expect(outcome).toEqual(
           callContext === grantContext
             ? {
                 ok: false,
                 error,
                 validationErrors: [
-                  { path: "", code: "declined", message: error },
+                  {
+                    path: "",
+                    code: state === "expired" ? "review_expired" : "declined",
+                    message: error,
+                  },
                 ],
               }
             : state === "expired"
@@ -1402,6 +1411,64 @@ describe("desktop sidecar tools in strict mode", () => {
       coordinator.dispose();
     }
   });
+
+  it.each([
+    ["while the page polls it", false],
+    ["after the app restarted and lost its job", true],
+  ] as const)(
+    "ends a task's parked call whose review ended without a decision %s as expired, not declined, and opens no other review",
+    async (_case, restarted) => {
+      registerClientToolExecutor(
+        SEARCH_SIDECAR_INDEX_TOOL,
+        vi.fn(),
+        undefined,
+        { acceptsGrantCalls: true },
+      );
+      try {
+        // A restarted app knows no handle and reports it as expired.
+        const path = sidecar(RPC, strict, undefined, "expired");
+        const tool = path.tool(SEARCH_SIDECAR_INDEX_TOOL);
+        const { binding, request } = parkedReviewOperation();
+        const taskRequest: OperationRequest = {
+          ...request,
+          lineage: {
+            owner_chat_id: "00000000-0000-4000-8000-0000000000c0",
+            owner_message_id: "00000000-0000-4000-8000-0000000000e0",
+            requesting_chat_id: request.chat_id,
+            requesting_message_id: request.message_id,
+          },
+        };
+        const key = reviewLinkKey(request.message_id, request.tool_call_id);
+        if (restarted) rememberReview(key, JOB_HANDLE);
+        const handler = new ClientToolOperationHandler(
+          tool.name,
+          tool.execute,
+          () => binding,
+          tool.isAvailable,
+          () => false,
+        );
+        const result = await settled(
+          handler.execute(taskRequest, undefined, new AbortController().signal),
+        );
+        expect(result).toEqual({
+          attempt_id: request.attempt_id,
+          operation_id: request.operation_id,
+          executor: binding,
+          outcome: "rejected",
+          error: { code: "review_expired" },
+        });
+        expect(path.methods()).toEqual(
+          restarted
+            ? ["jobs.status.v1"]
+            : ["jobs.start.v1", "jobs.review.v1", "jobs.status.v1"],
+        );
+        // The call is over: nothing is left for the chat to open again.
+        expect(reviewLink(key)).toBeUndefined();
+      } finally {
+        resetClientToolRegistryForTests();
+      }
+    },
+  );
 
   it("offers a reviewed tool only while the strict sidecar enables jobs.review.v1", async () => {
     const path = sidecar(RPC, strict);

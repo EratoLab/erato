@@ -341,19 +341,21 @@ function callErrorText(result: CallToolResult): string {
 }
 
 /**
- * A call the user declined on this device. A task's call reports the decline
- * as such, so the task's result counts it; the user's own call keeps the
- * error its turn reads.
+ * A call the user declined on this device, or one whose review ended without
+ * their decision (`review_expired`). A task's call reports which, so the
+ * task's result counts it as declined or expired; the user's own call keeps
+ * the error its turn reads.
  */
 function declined(
   error: string,
   context: ClientToolCallContext | undefined,
+  code: "declined" | "review_expired" = "declined",
 ): ClientToolExecutionResult {
   return context?.hostGrant
     ? {
         ok: false,
         error,
-        validationErrors: [{ path: "", code: "declined", message: error }],
+        validationErrors: [{ path: "", code, message: error }],
       }
     : { ok: false, error };
 }
@@ -1067,7 +1069,13 @@ export function createSidecarChatTools(
               forgetReview(
                 reviewLinkKey(context.messageId, context.toolCallId),
               );
-            return declined(REVIEW_ENDED[error.state], context);
+            // Nobody decided a task's review in time, or the app lost its job
+            // when it restarted: expired, not declined.
+            return declined(
+              REVIEW_ENDED[error.state],
+              context,
+              error.state === "expired" ? "review_expired" : "declined",
+            );
           }
           if (grant && isLostSidecar(error))
             return contextLoss(SIDECAR_UNAVAILABLE);
