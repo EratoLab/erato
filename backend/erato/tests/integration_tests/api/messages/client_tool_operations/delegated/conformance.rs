@@ -34,6 +34,7 @@ use super::slow_path::{
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_wait_that_already_ended_cannot_be_stopped,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
+    a_waiting_call_is_withdrawn_once_the_parent_turn_is_edited,
     a_waiting_child_left_out_of_the_stop_keeps_its_call_and_its_slot_settles,
     a_waiting_child_that_parks_on_an_ask_during_the_decision_continuation_reparks_as_an_approval,
     a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked,
@@ -197,6 +198,7 @@ macro_rules! host_conformance {
             a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls
             the_sweep_settles_a_waiting_child_whose_tail_never_ran_and_an_empty_continue_resumes_the_parent
             a_waiting_call_is_withdrawn_once_the_parent_moved_on
+            a_waiting_call_is_withdrawn_once_the_parent_turn_is_edited
             a_withdrawn_childs_ask_is_answerable_in_its_own_chat
             a_failed_task_call_continuation_is_not_run_again_and_the_parent_reads_it_as_failed
             a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed

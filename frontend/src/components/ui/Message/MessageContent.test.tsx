@@ -2692,6 +2692,10 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
     tool_call_id: "call",
     pending_tool_calls: [],
   };
+  const taskChat: Partial<ChatDetail> = {
+    provenance_kind: "delegation",
+    can_edit: true,
+  };
   const renderInChat = (detail: Partial<ChatDetail>, readOnly = false) => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { staleTime: Infinity, retry: false } },
@@ -2729,7 +2733,7 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
       .fn()
       .mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
-    renderInChat({ provenance_kind: "delegation" });
+    renderInChat(taskChat);
 
     const notice = screen.getByText(/waiting for a connected app/);
     const button = screen.getByRole("button", { name: "Stop waiting" });
@@ -2752,16 +2756,43 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
     expect(document.activeElement).toContainElement(notice);
   });
 
+  it("says the wait had already ended, and keeps the stop away for it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        ),
+    );
+    renderInChat(taskChat);
+
+    const button = screen.getByRole("button", { name: "Stop waiting" });
+    button.focus();
+    fireEvent.click(button);
+
+    expect(await screen.findByText("This wait has already ended.")).toBe(
+      screen.getByTestId("stop-waiting-status"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Stop waiting" }),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).toContainElement(
+      screen.getByText(/waiting for a connected app/),
+    );
+  });
+
   it.each([
-    ["the user's own chat", {}],
+    ["the user's own chat", { can_edit: true }],
     [
       "a task chat the user took over",
-      { provenance_kind: "delegation", adopted_at: "2026-11-10T10:00:00Z" },
+      { ...taskChat, adopted_at: "2026-11-10T10:00:00Z" },
     ],
     [
       "an archived task chat",
-      { provenance_kind: "delegation", archived_at: "2026-11-10T10:00:00Z" },
+      { ...taskChat, archived_at: "2026-11-10T10:00:00Z" },
     ],
+    ["a task chat the viewer cannot edit", { ...taskChat, can_edit: false }],
   ])("offers no stop in %s", (_name, detail: Partial<ChatDetail>) => {
     renderInChat(detail);
     expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
@@ -2769,7 +2800,7 @@ describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
   });
 
   it("offers no stop in a read-only view", () => {
-    renderInChat({ provenance_kind: "delegation" }, true);
+    renderInChat(taskChat, true);
     expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
   });
 });

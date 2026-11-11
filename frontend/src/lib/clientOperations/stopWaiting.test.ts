@@ -50,16 +50,32 @@ describe("stopWaitingForCall", () => {
     }
   });
 
-  it("reports a call that had already ended, without continuing it", async () => {
+  it("reports a call that had already ended, without continuing it, and asks for a sweep", async () => {
     const fetchMock = respond(409);
-    await expect(stopWaitingForCall("attempt-1")).resolves.toBe("settled");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    const swept = vi.fn();
+    const unsubscribe = clientOperationHandlerRegistry.subscribe(swept);
+    try {
+      await expect(stopWaitingForCall("attempt-1")).resolves.toBe("settled");
+      expect(fetchMock).toHaveBeenCalledOnce();
+      // A call a stopped parent withdrew is ready, but continued by no one
+      // until the next sweep.
+      expect(swept).toHaveBeenCalledOnce();
+    } finally {
+      unsubscribe();
+    }
   });
 
-  it("throws on any other refusal", async () => {
+  it("throws on any other refusal, without a sweep", async () => {
     respond(404);
-    await expect(stopWaitingForCall("attempt-1")).rejects.toMatchObject({
-      status: 404,
-    });
+    const swept = vi.fn();
+    const unsubscribe = clientOperationHandlerRegistry.subscribe(swept);
+    try {
+      await expect(stopWaitingForCall("attempt-1")).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(swept).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 });

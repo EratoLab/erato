@@ -1422,8 +1422,12 @@ pub(super) async fn stopping_the_parent_withdraws_its_tasks_waiting_calls(
         build_openai_text_streaming_response(&[CHILD_ANSWER]),
         &[],
     );
-    // The parent's own turn runs again while its task still waits, as a
-    // decision continuation on a stop that also waits does.
+    // A Stop needs a running turn: one parked on its tasks alone answers 404.
+    // The parent's own turn takes its chat again here, as a decision
+    // continuation on a stop that also waits does. Taking the lease directly
+    // withdraws nothing, so this does not show that a turn running again
+    // keeps its own tasks' calls; the continuestream decision in
+    // approvals_decided_while_a_child_waits_repark_on_the_waiting_child does.
     let (_events, running) = waiting
         .state
         .background_tasks
@@ -1438,7 +1442,7 @@ pub(super) async fn stopping_the_parent_withdraws_its_tasks_waiting_calls(
     assert_eq!(
         attempt_row(&waiting).await.state,
         attempts::AttemptState::Pending,
-        "the same turn running again keeps its task's call"
+        "the call still waits until the Stop"
     );
 
     app_server(waiting.state.clone())
@@ -2627,6 +2631,67 @@ pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_moved_on(
             .as_str()
             .unwrap()
             .contains(CHILD_ANSWER)
+    );
+    waiting.server.abort();
+}
+
+/// The user edits the question of the parent's turn while its task waits.
+async fn edit_the_parent_turn(waiting: &mut Waiting) {
+    waiting.llm.mock_with_options(OVERRIDE, None, |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[MOVED_ON], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&[MOVED_ON_ANSWER]),
+        );
+    });
+    let question = waiting
+        .parent_message
+        .previous_message_id
+        .expect("the parent's answer follows its question");
+    let edited = app_server(waiting.state.clone())
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": question, "replace_user_message": MOVED_ON }))
+        .await;
+    edited.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&edited)).contains(MOVED_ON_ANSWER));
+}
+
+/// An edit takes the lease through the revision path, which must withdraw the
+/// waits of the turn it replaces as a new turn does (ERMAIN-1165).
+pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_turn_is_edited(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    edit_the_parent_turn(&mut waiting).await;
+    // Withdrawn when the edit took the chat, before any client came back.
+    let withdrawn = attempt_row(&waiting).await;
+    assert_eq!(withdrawn.state, attempts::AttemptState::Ready);
+    assert_eq!(
+        withdrawn.validated_result.unwrap()["output"]["reason"],
+        "withdrawn"
+    );
+    let refused = claim_as_pane(row, &waiting, true).await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation authorization withdrawn");
+
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let child_turns = turn_bodies(&child_turns);
+    assert!(
+        child_turns[0]
+            .to_string()
+            .contains("This call was withdrawn")
     );
     waiting.server.abort();
 }

@@ -30,6 +30,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import {
   DELEGATE_TASK_TOOL_NAME,
@@ -57,7 +58,7 @@ import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { ChatContext } from "@/providers/ChatProvider";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
-import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
+import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
@@ -719,7 +720,8 @@ const rewriteFootnoteValue = (
 /**
  * The wait of a task's own call, in the task's chat, can be ended there as it
  * can from the parent's slot (ERMAIN-1165). A chat the user took over makes
- * its own calls, which this leaves alone.
+ * its own calls, which this leaves alone, and a chat the viewer cannot edit
+ * (archived, or not theirs) offers no stop.
  */
 function TaskCallStopWaiting({
   chatId,
@@ -731,10 +733,9 @@ function TaskCallStopWaiting({
   focusNotice: () => void;
 }) {
   const { data: chat } = useChatDetail({ pathParams: { chatId } });
+  const canEdit = useChatCanEdit(chatId);
   const isTaskCall =
-    chat?.provenance_kind === DELEGATION_PROVENANCE_KIND &&
-    !chat.adopted_at &&
-    !chat.archived_at;
+    chat !== undefined && isDelegatedRun(chat) && !chat.adopted_at && canEdit;
   return isTaskCall ? (
     <StopWaitingAction attemptId={attemptId} focusItem={focusNotice} />
   ) : null;

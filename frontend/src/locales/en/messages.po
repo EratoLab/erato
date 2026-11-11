@@ -8376,6 +8376,11 @@ msgstr "Stop waiting"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr "This wait has already ended."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
 msgid "stopWaiting.done"
 msgstr "You stopped waiting. The task answers without this result."
 

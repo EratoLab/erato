@@ -8376,6 +8376,11 @@ msgstr "Nicht mehr warten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr "Dieses Warten ist schon beendet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
 msgid "stopWaiting.done"
 msgstr "Du wartest nicht mehr. Die Aufgabe antwortet ohne dieses Ergebnis."
 

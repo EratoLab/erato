@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { waitingForHostLabel } from "@/lib/delegation/delegationLabels";
 import {
@@ -17,7 +17,8 @@ import type { ApprovalItemPart } from "./approvalItems";
  * One task child that waits for one of its calls to run on the device. Nothing
  * here is decided: the call runs where the host picks it up, and the response
  * goes on by itself once every such task stopped again. The wait can be ended
- * here, and the task then answers without that call's result (ERMAIN-1165).
+ * here, and the task then answers without that call's result (ERMAIN-1165);
+ * the item then no longer says what it waits for.
  *
  * Like `SidecarReviewItem`, the item is a labelled group that takes keyboard
  * focus when the button that had it goes away. When the item goes itself,
@@ -44,6 +45,11 @@ export const WaitingTaskItem = ({
       id: "delegatedTaskApproval.unnamedTask",
       message: "A task this response started",
     });
+
+  // The attempt whose wait was stopped or found ended. The row keeps listing
+  // it until the task answered, but it no longer waits for the host.
+  const [overAttemptId, setOverAttemptId] = useState<string>();
+  const waitOver = attemptId !== undefined && overAttemptId === attemptId;
 
   const itemRef = useRef<HTMLDivElement | null>(null);
   const focusItem = useCallback(() => {
@@ -75,10 +81,12 @@ export const WaitingTaskItem = ({
       className="focus-ring rounded-md border border-theme-border p-2"
     >
       <p className="text-sm font-medium text-theme-fg-primary">{title}</p>
-      <p className="mt-1 flex items-center gap-1 text-xs text-theme-fg-secondary">
-        <ComputerIcon className="size-4 shrink-0" />
-        <span>{waitingForHostLabel(child?.waiting_for?.host_context)}</span>
-      </p>
+      {!waitOver && (
+        <p className="mt-1 flex items-center gap-1 text-xs text-theme-fg-secondary">
+          <ComputerIcon className="size-4 shrink-0" />
+          <span>{waitingForHostLabel(child?.waiting_for?.host_context)}</span>
+        </p>
+      )}
       {child && (
         <p className="mt-1 text-xs">
           <TaskChatLink
@@ -91,7 +99,11 @@ export const WaitingTaskItem = ({
       )}
       {attemptId && !isArchived && (
         <div className="mt-2">
-          <StopWaitingAction attemptId={attemptId} focusItem={focusItem} />
+          <StopWaitingAction
+            attemptId={attemptId}
+            focusItem={focusItem}
+            onWaitOver={setOverAttemptId}
+          />
         </div>
       )}
     </div>

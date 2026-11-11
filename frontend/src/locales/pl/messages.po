@@ -8376,6 +8376,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
 msgid "stopWaiting.done"
 msgstr ""
 

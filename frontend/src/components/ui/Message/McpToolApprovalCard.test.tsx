@@ -15,6 +15,7 @@ import {
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 import {
   listMcpServerToolsQuery,
@@ -2604,6 +2605,8 @@ describe("tasks waiting on the device", () => {
       expect(
         within(item).queryByRole("button", { name: "Stop waiting" }),
       ).toBeNull();
+      // It no longer says it waits for the host.
+      expect(item).not.toHaveTextContent("Waiting for Outlook on this device");
       // The button that had focus is gone: the item, named by its task, has it.
       expect(item).toHaveFocus();
       expect(screen.getByRole("group", { name: "Check the calendar" })).toBe(
@@ -2728,24 +2731,88 @@ describe("tasks waiting on the device", () => {
       expect(elsewhere).toHaveFocus();
     });
 
-    it("reads the row again when the wait had already ended", async () => {
+    it("says the wait had already ended, reads the row again and asks for a sweep", async () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(
           new Response("Operation already settled", { status: 409 }),
         );
       vi.stubGlobal("fetch", fetchMock);
-      const refetchMessages = vi.fn(async () => undefined);
-      renderCard(waitingCard({ refetchMessages }));
+      const swept = vi.fn();
+      const unsubscribe = clientOperationHandlerRegistry.subscribe(swept);
+      try {
+        const refetchMessages = vi.fn(async () => undefined);
+        renderCard(waitingCard({ refetchMessages }));
+
+        const item = screen.getByTestId("waiting-task-item");
+        const button = within(item).getByRole("button", {
+          name: "Stop waiting",
+        });
+        button.focus();
+        fireEvent.click(button);
+
+        await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
+        expect(
+          await within(item).findByText("This wait has already ended."),
+        ).toBe(within(item).getByRole("status"));
+        expect(swept).toHaveBeenCalledOnce();
+        expect(posted(fetchMock)).toEqual([
+          ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
+        ]);
+        expect(screen.queryByText(/You stopped waiting/)).toBeNull();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(item).not.toHaveTextContent(
+          "Waiting for Outlook on this device",
+        );
+        expect(item).toHaveFocus();
+      } finally {
+        unsubscribe();
+      }
+    });
+
+    it("keeps the stop away while the row still lists an ended wait, and offers it for the next one", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const { rerender, queryClient } = renderCard(waitingCard());
 
       fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+      await screen.findByText("This wait has already ended.");
 
-      await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
-      expect(posted(fetchMock)).toEqual([
-        ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
-      ]);
-      expect(screen.queryByText(/You stopped waiting/)).toBeNull();
-      expect(screen.queryByRole("alert")).toBeNull();
+      // The device's result is being continued: the row read again still
+      // lists the same wait.
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { waitingItems: [{ ...waits }] })}
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+      expect(screen.getByText("This wait has already ended.")).toBeVisible();
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      // The task went on to wait for another call.
+      const next = {
+        ...waits,
+        child: {
+          ...waits.child,
+          waiting_for: { ...waits.child.waiting_for, attempt_id: "attempt-2" },
+        },
+      };
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { waitingItems: [next] })}
+        </QueryClientProvider>,
+      );
+      expect(
+        screen.getByRole("button", { name: "Stop waiting" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("This wait has already ended.")).toBeNull();
+      expect(screen.getByTestId("waiting-task-item")).toHaveTextContent(
+        "Waiting for Outlook on this device",
+      );
     });
 
     it("says so when the wait could not be stopped, and lets the user try again", async () => {
