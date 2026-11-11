@@ -118,7 +118,10 @@ use crate::services::template_rendering::contexts::chat_provider_headers::ChatPr
 use crate::services::template_rendering::contexts::error_report::ErrorReportContext;
 use crate::state::{AppState, ChatProviderConfigWithId};
 use axum::extract::{DefaultBodyLimit, Path, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_TYPE};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_SECURITY_POLICY, CONTENT_TYPE, InvalidHeaderValue,
+    X_CONTENT_TYPE_OPTIONS,
+};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post, put};
@@ -4405,6 +4408,62 @@ fn preview_content_type(filename: &str) -> &'static str {
     }
 }
 
+/// Content types a browser displays without running scripts or loading
+/// subresources on the application's origin, even when a preview URL is
+/// opened as a page of its own. Every other preview carries
+/// [`ACTIVE_CONTENT_PREVIEW_CSP`].
+///
+/// `application/pdf` is listed because browsers show a PDF in their own viewer,
+/// which runs the PDF's scripts apart from the page's origin, and leaving it
+/// unsandboxed keeps a PDF opened by its preview URL, or embedded in a frame,
+/// displayable in every browser. The frontend draws PDFs from fetched bytes, so
+/// its own viewer is unaffected either way.
+const PASSIVE_PREVIEW_CONTENT_TYPES: &[&str] = &[
+    "application/pdf",
+    "image/bmp",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+];
+
+/// Policy for previews whose content type can carry active content, such as
+/// SVG, HTML or XML: no scripts, subresources, plugins or form submissions, and
+/// an opaque origin when the preview is opened as a document. Inline styles
+/// stay allowed so a styled SVG still draws. Responses read with `fetch` and
+/// images drawn by `<img>` are not affected.
+const ACTIVE_CONTENT_PREVIEW_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+
+/// The Content-Security-Policy a preview of `content_type` is served with, or
+/// `None` for a passive type.
+fn preview_content_security_policy(content_type: &str) -> Option<&'static str> {
+    let content_type = content_type_essence(content_type);
+    let is_passive = PASSIVE_PREVIEW_CONTENT_TYPES
+        .iter()
+        .any(|passive| passive.eq_ignore_ascii_case(content_type));
+    (!is_passive).then_some(ACTIVE_CONTENT_PREVIEW_CSP)
+}
+
+/// Response headers for the inline preview of a file named `filename`.
+fn file_preview_headers(filename: &str) -> Result<HeaderMap, InvalidHeaderValue> {
+    let content_type = preview_content_type(filename);
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    headers.insert(
+        CONTENT_DISPOSITION,
+        HeaderValue::from_str(&build_content_disposition(
+            ContentDispositionKind::Inline,
+            Some(filename),
+        ))?,
+    );
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    if let Some(policy) = preview_content_security_policy(content_type) {
+        headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(policy));
+    }
+    Ok(headers)
+}
+
 fn is_eml_filename(filename: &str) -> bool {
     filename
         .rsplit('.')
@@ -4510,21 +4569,10 @@ pub async fn get_file_preview(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
-    let content_disposition = build_content_disposition(
-        ContentDispositionKind::Inline,
-        Some(file_upload.filename.as_str()),
-    );
-    let content_disposition = HeaderValue::from_str(&content_disposition).map_err(|e| {
+    let headers = file_preview_headers(&file_upload.filename).map_err(|e| {
         tracing::error!("Failed to build preview content disposition header: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    headers.insert(CONTENT_DISPOSITION, content_disposition);
-    headers.insert(
-        CONTENT_TYPE,
-        HeaderValue::from_static(preview_content_type(&file_upload.filename)),
-    );
     Ok((headers, bytes))
 }
 
@@ -4978,10 +5026,15 @@ pub struct FileCapabilitiesQuery {
 #[cfg(test)]
 mod tests {
     use super::{
-        ProfilePhotoSubject, effective_upload_content_type, fetch_entra_id_profile_photo_data_url,
-        graph_profile_photo_path, is_entra_id_profile, preview_content_type,
+        ACTIVE_CONTENT_PREVIEW_CSP, ProfilePhotoSubject, effective_upload_content_type,
+        fetch_entra_id_profile_photo_data_url, file_preview_headers, graph_profile_photo_path,
+        is_entra_id_profile, preview_content_security_policy, preview_content_type,
     };
     use axum::http::StatusCode;
+    use axum::http::header::{
+        CACHE_CONTROL, CONTENT_DISPOSITION, CONTENT_SECURITY_POLICY, CONTENT_TYPE,
+        X_CONTENT_TYPE_OPTIONS,
+    };
     use axum::routing::get;
     use axum::{Router, response::IntoResponse};
     use serde_json::json;
@@ -4989,6 +5042,110 @@ mod tests {
     #[test]
     fn preview_content_type_supports_eml() {
         assert_eq!(preview_content_type("message.eml"), "message/rfc822");
+    }
+
+    #[test]
+    fn preview_content_security_policy_restricts_active_content_types() {
+        for content_type in [
+            "image/svg+xml",
+            "text/html",
+            "application/xhtml+xml",
+            "text/xml",
+            "application/xml",
+            "IMAGE/SVG+XML",
+            "text/html; charset=utf-8",
+        ] {
+            assert_eq!(
+                preview_content_security_policy(content_type),
+                Some(ACTIVE_CONTENT_PREVIEW_CSP),
+                "{content_type} should be served with the restrictive policy"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_content_security_policy_restricts_types_not_listed_as_passive() {
+        for content_type in [
+            "application/octet-stream",
+            "message/rfc822",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+            "application/javascript",
+            "",
+        ] {
+            assert_eq!(
+                preview_content_security_policy(content_type),
+                Some(ACTIVE_CONTENT_PREVIEW_CSP),
+                "{content_type:?} should be served with the restrictive policy"
+            );
+        }
+    }
+
+    #[test]
+    fn preview_content_security_policy_leaves_passive_types_unrestricted() {
+        for content_type in [
+            "application/pdf",
+            "image/bmp",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "Image/PNG",
+            "application/pdf; name=report.pdf",
+        ] {
+            assert_eq!(
+                preview_content_security_policy(content_type),
+                None,
+                "{content_type} should not carry a Content-Security-Policy"
+            );
+        }
+    }
+
+    #[test]
+    fn file_preview_headers_send_nosniff_and_policy_per_type() {
+        let cases = [
+            ("diagram.svg", "image/svg+xml", true),
+            ("page.html", "application/octet-stream", true),
+            ("feed.xml", "application/octet-stream", true),
+            ("message.eml", "message/rfc822", true),
+            (
+                "draft.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                true,
+            ),
+            ("recording.mp3", "application/octet-stream", true),
+            ("transcript.md", "application/octet-stream", true),
+            ("no_extension", "application/octet-stream", true),
+            ("report.pdf", "application/pdf", false),
+            ("photo.JPG", "image/jpeg", false),
+            ("photo.jpeg", "image/jpeg", false),
+            ("photo.png", "image/png", false),
+            ("animation.gif", "image/gif", false),
+            ("photo.webp", "image/webp", false),
+            ("scan.bmp", "image/bmp", false),
+        ];
+
+        for (filename, content_type, restricted) in cases {
+            let headers = file_preview_headers(filename).unwrap();
+
+            assert_eq!(headers[CONTENT_TYPE], content_type, "{filename}");
+            assert_eq!(headers[X_CONTENT_TYPE_OPTIONS], "nosniff", "{filename}");
+            assert_eq!(headers[CACHE_CONTROL], "private, no-store", "{filename}");
+            assert!(
+                headers[CONTENT_DISPOSITION]
+                    .to_str()
+                    .unwrap()
+                    .starts_with("inline; "),
+                "{filename}"
+            );
+            assert_eq!(
+                headers
+                    .get(CONTENT_SECURITY_POLICY)
+                    .map(|value| value.to_str().unwrap()),
+                restricted.then_some("default-src 'none'; style-src 'unsafe-inline'; sandbox"),
+                "{filename}"
+            );
+        }
     }
 
     #[test]

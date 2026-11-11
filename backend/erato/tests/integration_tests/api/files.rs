@@ -738,6 +738,121 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
     }
 }
 
+/// Every preview is served with `nosniff`; previews whose type can carry active
+/// content (SVG, HTML, XML and anything not known to be passive) also carry a
+/// sandboxing Content-Security-Policy, while raster images and PDFs do not.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn test_file_preview_security_headers_per_content_type(pool: Pool<Postgres>) {
+    let (mut app_config, _server) = setup_mock_llm_server(None).await;
+    app_config.file_uploads.upload_allowed_if_supports =
+        vec![erato::config::FileUploadOperationSelector::Any];
+    let app_state = test_app_state(app_config, pool).await;
+
+    let app: Router = router(app_state.clone())
+        .split_for_parts()
+        .0
+        .with_state(app_state);
+    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
+
+    let chat_id = create_chat(&server).await;
+    let restrictive_policy = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+    let svg_bytes = br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#.to_vec();
+    let html_bytes = b"<!doctype html><title>Page</title><p>Text</p>".to_vec();
+    let xml_bytes = b"<?xml version=\"1.0\"?><feed></feed>".to_vec();
+    let test_cases = [
+        (
+            "diagram.svg",
+            "image/svg+xml",
+            svg_bytes,
+            "image/svg+xml",
+            Some(restrictive_policy),
+        ),
+        (
+            "page.html",
+            "text/html",
+            html_bytes,
+            "application/octet-stream",
+            Some(restrictive_policy),
+        ),
+        (
+            "feed.xml",
+            "application/xml",
+            xml_bytes,
+            "application/octet-stream",
+            Some(restrictive_policy),
+        ),
+        (
+            "message.eml",
+            "message/rfc822",
+            read_integration_test_file_bytes("please_review_attached_draft.eml"),
+            "message/rfc822",
+            Some(restrictive_policy),
+        ),
+        (
+            "image_1.png",
+            "image/png",
+            read_integration_test_file_bytes("image_1.png"),
+            "image/png",
+            None,
+        ),
+        (
+            "report.pdf",
+            "application/pdf",
+            read_integration_test_file_bytes("sample-report-compressed.pdf"),
+            "application/pdf",
+            None,
+        ),
+    ];
+
+    for (filename, upload_mime_type, bytes, expected_content_type, expected_policy) in test_cases {
+        let upload_json =
+            upload_file_to_chat(&server, &chat_id, bytes.clone(), filename, upload_mime_type).await;
+        let preview_url = upload_json["files"][0]["preview_url"]
+            .as_str()
+            .expect("Expected preview URL")
+            .to_string();
+
+        let preview_response = server
+            .get(&preview_url)
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .await;
+
+        preview_response.assert_status_ok();
+        let headers = preview_response.headers();
+        let header = |name: http::header::HeaderName| {
+            headers
+                .get(name)
+                .map(|value| value.to_str().expect("Header should be ASCII"))
+        };
+        assert_eq!(
+            header(http::header::CONTENT_TYPE),
+            Some(expected_content_type),
+            "{filename}"
+        );
+        assert_eq!(
+            header(http::header::X_CONTENT_TYPE_OPTIONS),
+            Some("nosniff"),
+            "{filename}"
+        );
+        assert_eq!(
+            header(http::header::CONTENT_SECURITY_POLICY),
+            expected_policy,
+            "{filename}"
+        );
+        assert_eq!(
+            header(http::header::CACHE_CONTROL),
+            Some("private, no-store"),
+            "{filename}"
+        );
+        assert!(
+            header(http::header::CONTENT_DISPOSITION)
+                .is_some_and(|value| value.starts_with("inline; ")),
+            "{filename}"
+        );
+        assert_eq!(preview_response.as_bytes().to_vec(), bytes, "{filename}");
+    }
+}
+
 fn canonical_pcm_data_range(bytes: &[u8]) -> std::ops::Range<usize> {
     assert!(bytes.len() >= CANONICAL_WAV_HEADER_BYTES);
     assert_eq!(&bytes[0..4], b"RIFF");

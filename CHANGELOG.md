@@ -44,6 +44,8 @@ Typical "Notable changes" categories to copy & paste:
 
 MCP servers that ask for the user's consent through a tool argument (such as Dataverse's `hasUserApproved` on `delete_record`) can name it in `mcp_servers.<id>.approval_argument`. Erato then hides the argument from the model, asks the user before every call of a tool that declares it (no "Always allow" for those), and fills it from the user's decision at dispatch, so the model can no longer claim a consent it was never given.
 
+File previews (`/api/v1beta/files/{file_id}/preview`) are served with `X-Content-Type-Options: nosniff`. Previews of any type other than raster images (JPEG, PNG, GIF, WebP, BMP) and PDF, among them SVG, HTML and XML, also carry `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, so a preview opened in a tab of its own runs no scripts and loads nothing on the application's origin. Previews in the chat and the preview dialog draw as before. PDFs are left without the policy: browsers show them in their own viewers, which keep a PDF's scripts apart from the page, so a PDF opened by its link displays as before in every browser.
+
 #### Bug fixes
 
 MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
