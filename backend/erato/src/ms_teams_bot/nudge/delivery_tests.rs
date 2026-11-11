@@ -647,7 +647,9 @@ fn created_turn(ids: &[Uuid]) -> crate::ms_teams_bot::reminders::TurnReminders {
 fn assert_sample(name: &str, sample: String) {
     let mut snapshot = insta::Settings::clone_current();
     snapshot.set_prepend_module_to_snapshot(false);
-    snapshot.bind(|| insta::assert_binary_snapshot!(name, sample.into_bytes()));
+    snapshot.bind(|| {
+        insta::assert_binary_snapshot!(name, sample.into_bytes());
+    });
 }
 
 fn reminder_registry(bot: Arc<TeamsBot>) -> DeliveryRegistry {

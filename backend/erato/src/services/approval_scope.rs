@@ -448,6 +448,7 @@ mod tests {
             owner_chat_id: Uuid::new_v4(),
             owner_message_id: Uuid::new_v4(),
             context_ref: None,
+            strict_mode: false,
         }
     }
 

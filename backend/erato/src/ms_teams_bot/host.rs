@@ -1002,6 +1002,7 @@ fn completion_from_content(
                             display: child.display.map(approval_display),
                             input: child.input,
                             own_tool: false,
+                            budget: false,
                         },
                         None => PendingApprovalItem {
                             approval_id: item.approval_id,
@@ -1010,6 +1011,7 @@ fn completion_from_content(
                             display: item.display.map(approval_display),
                             input: item.input,
                             own_tool: request.kind == ToolApprovalKind::BuiltinTool,
+                            budget: request.kind == ToolApprovalKind::ToolCallLimit,
                         },
                     })
                     .collect(),
@@ -1658,6 +1660,23 @@ mod tests {
         assert_eq!(approvals.kind, ApprovalKind::BuiltinTool);
         let own: Vec<bool> = approvals.items.iter().map(|item| item.own_tool).collect();
         assert_eq!(own, [true, false]);
+    }
+
+    /// On the tool-call limit's card the limit's own item is the budget choice
+    /// and a task's question stays an item of its own.
+    #[test]
+    fn a_tool_call_limit_card_keeps_its_tasks_question() {
+        let completion = completion_from_content(
+            &FacetsConfig::default(),
+            Uuid::nil(),
+            Uuid::nil(),
+            &[mixed_approval(ToolApprovalKind::ToolCallLimit)],
+        );
+        let approvals = completion.approvals.expect("an approval card");
+        assert_eq!(approvals.kind, ApprovalKind::ToolCallLimit);
+        let budget: Vec<bool> = approvals.items.iter().map(|item| item.budget).collect();
+        assert_eq!(budget, [true, false]);
+        assert_eq!(approvals.items[1].tool_name, "publish_page");
     }
 
     /// The turn's own gated call with one parked child folded onto its part.

@@ -8361,6 +8361,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "sidecarReview.ended.title"
 msgstr ""
 
@@ -8387,6 +8388,26 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.done"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.failed"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -8714,27 +8735,32 @@ msgid "toolCall.technicalDetails.tool"
 msgstr "Herramienta"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.answer"
 msgstr "Generar respuesta ahora"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.continue"
 msgstr "Continuar llamadas a herramientas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.description"
 msgstr "Continuar con el doble de llamadas a herramientas permitidas, generar una respuesta con la información recopilada hasta ahora o detener esta respuesta."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.stop"
 msgstr "Detener"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
+msgid "toolCallLimit.tasksAsk"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.title"
 msgstr "Se alcanzó el límite de llamadas a herramientas"
 
@@ -8757,6 +8783,16 @@ msgstr "Cada fila es diferente."
 #: src/lib/toolCallGist/changeLabels.ts
 #~ msgid "toolChange.batch.differentNoneEmptied"
 #~ msgstr "Cada fila es diferente. Ninguna fila vacía un campo."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.added"
+msgstr "{added, plural, one {elementos añadidos en # fila, según la herramienta} other {elementos añadidos en # filas, según la herramienta}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.addedValues"
+msgstr "{samples} añadido {scope}, según la herramienta"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8787,6 +8823,16 @@ msgstr "{replaced, plural, one {lista quizá reemplazada en # fila} other {lista
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "Muchos valores distintos {scope}: {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removed"
+msgstr "{removed, plural, one {elementos quitados en # fila, según la herramienta} other {elementos quitados en # filas, según la herramienta}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removedValues"
+msgstr "{samples} quitado {scope}, según la herramienta"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8827,6 +8873,11 @@ msgstr "{replacing, plural, one {# fila puede reemplazar una lista} other {# fil
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.none"
 msgstr "Ninguna fila elimina ni vacía nada."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.removing"
+msgstr "{removing, plural, one {# fila quita elementos de una lista, según la herramienta} other {# filas quitan elementos de una lista, según la herramienta}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8937,10 +8988,22 @@ msgid "toolChange.count.emptied"
 msgstr "{0, plural, one {# vaciado} other {# vaciados}}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: counts.listAdded
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listAdded"
+msgstr "{0, plural, one {# con elementos añadidos} other {# con elementos añadidos}}"
+
+#. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.listMaybeReplaced"
 msgstr "{0, plural, one {# lista quizá reemplazada} other {# listas quizá reemplazadas}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listRemoved
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listRemoved"
+msgstr "{0, plural, one {# con elementos quitados} other {# con elementos quitados}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
@@ -9053,6 +9116,11 @@ msgstr "{name} eliminados"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.removesClaim"
+msgstr "Solo se quita, según la herramienta"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.replaced"
 msgstr "La lista {name} se reemplaza: {parts}"
 
@@ -9079,12 +9147,12 @@ msgstr "{name} que se quedarían"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly"
-msgstr "Solo nombres: {names}"
+msgstr "Estos campos: {names}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly.more"
-msgstr "Solo nombres: {names}, +{more} más"
+msgstr "Estos campos: {names}, +{more} más"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9239,6 +9307,11 @@ msgstr "{name} (era {was})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.unreadable"
+msgstr "Ilegible"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.allSet"
 msgstr "{total, plural, one {Ver # campo más, definido, con el valor anterior desconocido (ninguno se vacía)} other {Ver # campos más, todos definidos, con el valor anterior desconocido (ninguno se vacía)}}"
 
@@ -9261,6 +9334,11 @@ msgstr "{count, plural, one {El otro campo (#) está en Detalles técnicos.} oth
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.mixed"
 msgstr "{total, plural, one {Ver # campo más: {detail} (ninguno se vacía)} other {Ver # campos más: {detail} (ninguno se vacía)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.added"
+msgstr "{added, plural, one {# con elementos añadidos} other {# con elementos añadidos}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9985,6 +10063,11 @@ msgstr "Necesitaba una herramienta sobre la que no pudo consultarte"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Detenida en su límite de llamadas a herramientas; la respuesta puede ser parcial"
 
@@ -10048,6 +10131,11 @@ msgstr "Delegando a {name}"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.running.unnamed"
 msgstr "Delegando a un asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.archived"
+msgstr "Archivado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -10260,6 +10348,41 @@ msgid "trace.tool.failed"
 msgstr "Falló"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.answerUnreadable"
+msgstr "La herramienta respondió, pero Erato no pudo leer su respuesta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.line"
+msgstr "La llamada ha fallado."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.noAnswer"
+msgstr "Erato no recibió respuesta de la herramienta. Puede que la llamada se haya ejecutado o no."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.notRun"
+msgstr "Erato no ejecutó la llamada."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showAll"
+msgstr "Mostrar el mensaje completo"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showLess"
+msgstr "Mostrar menos del mensaje"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.toolSays"
+msgstr "Según la herramienta:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.interrupted"
 msgstr ""
@@ -10291,6 +10414,11 @@ msgstr "Preparando"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "En ejecución"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx

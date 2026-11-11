@@ -10,7 +10,6 @@ import {
 import { sidecarToolLabel } from "@/lib/desktopSidecar/toolLabels";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
-import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { Button } from "../Controls/Button";
 
 import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
@@ -20,10 +19,12 @@ import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks"
  * the approval slot. The decision is made only in the app's window; this
  * shows that window again, or, once the review has ended, asks again.
  *
- * Like `ActionConfirmationCard`, the item is a labelled group that announces
- * its title politely and takes keyboard focus when the button that had it
- * goes away. While the app cannot be reached, its action stays focusable but
- * inert, and a visible line says why.
+ * Like `WaitingTaskItem` and `ParkedChildItem`, it sits inside the card that
+ * owns the approval shell. Like `ActionConfirmationCard` inside that shell,
+ * the item is a labelled group that announces its title politely and takes
+ * keyboard focus when the button that had it goes away. While the app cannot
+ * be reached, its action stays focusable but inert, and a visible line says
+ * why.
  *
  * A task's review shows inside the task's item on the response it runs for,
  * so that response's slot holds it too. A task's call ends with its review,
@@ -108,7 +109,9 @@ export const SidecarReviewItem = ({
       aria-label={title}
       data-testid="sidecar-review-item"
       data-review-state={link.state}
-      className={`${inTaskItem ? "mt-1 rounded-md" : APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
+      // Rounded and offset, as the ring was when the item drew the card; it
+      // now sits inside the card that owns the shell, or inside a task's item.
+      className={`${inTaskItem ? "mt-1 rounded-md" : "rounded-[var(--theme-radius-message)]"} focus-ring space-y-2`}
     >
       <div>
         <p className="text-sm font-medium text-theme-fg-primary">{title}</p>

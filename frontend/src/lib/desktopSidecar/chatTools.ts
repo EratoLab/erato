@@ -345,19 +345,21 @@ function callErrorText(result: CallToolResult): string {
 }
 
 /**
- * A call the user declined on this device. A task's call reports the decline
- * as such, so the task's result counts it; the user's own call keeps the
- * error its turn reads.
+ * A call the user declined on this device, or one whose review ended before
+ * its result arrived (`review_expired`). A task's call reports which, so the
+ * task's result counts it as declined or expired; the user's own call keeps
+ * the error its turn reads.
  */
-function declined(
+function endedOnDevice(
   error: string,
   context: ClientToolCallContext | undefined,
+  code: "declined" | "review_expired" = "declined",
 ): ClientToolExecutionResult {
   return context?.hostGrant
     ? {
         ok: false,
         error,
-        validationErrors: [{ path: "", code: "declined", message: error }],
+        validationErrors: [{ path: "", code, message: error }],
       }
     : { ok: false, error };
 }
@@ -1078,7 +1080,15 @@ export function createSidecarChatTools(
               if (error.state === "expired") markTaskReviewEnded(review);
               else forgetReview(review);
             }
-            return declined(REVIEW_ENDED[error.state], context);
+            // A task's review ended before its result arrived: nobody decided
+            // in time, or the app no longer has the job (its record ran out,
+            // its store dropped the results, or it restarted), also after a
+            // Share. Expired, not declined.
+            return endedOnDevice(
+              REVIEW_ENDED[error.state],
+              context,
+              error.state === "expired" ? "review_expired" : "declined",
+            );
           }
           if (grant && isLostSidecar(error))
             return contextLoss(SIDECAR_UNAVAILABLE);
@@ -1688,7 +1698,7 @@ export function createSidecarChatTools(
           // setting's block as a failure with its reason, not as a decline.
           if (reads.reviewed)
             return { ok: false, error: FILE_BLOCKED_AFTER_REVIEW };
-          return declined(
+          return endedOnDevice(
             "The user rejected uploading this file. Do not retry without their permission.",
             context,
           );

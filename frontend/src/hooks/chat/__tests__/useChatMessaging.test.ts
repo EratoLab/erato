@@ -3622,6 +3622,7 @@ describe("useChatMessaging", () => {
         message_id: parkedMessage.id,
         decision: "approve",
         shows_child_items: true,
+        shows_limit_and_builtin_child_items: true,
       });
     });
 
@@ -4052,6 +4053,7 @@ describe("useChatMessaging", () => {
           { approval_id: "plan:0:1", decision: "reject" },
         ],
         shows_child_items: true,
+        shows_limit_and_builtin_child_items: true,
       });
     });
 

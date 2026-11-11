@@ -212,16 +212,20 @@ impl OperationKind for ConfiguredClientToolKind {
                     file_ids: Vec::new(),
                 })
             }
-            // A device prompt the user declined. Only a task's granted call
-            // counts it as declined; the user's own calls have their card.
-            (OperationOutcome::Rejected, None, Some(error))
-                if error.code == crate::services::delegated_client_tools::DECLINED
-                    && request.lineage.is_some() =>
-            {
-                bounded_message(error)?;
+            // A device prompt that ended a task's granted call without a
+            // result: the user declined it, or its review ended before its
+            // result reached the task. Only a task's call counts it; the
+            // user's own calls have their card.
+            (OperationOutcome::Rejected, None, Some(error)) if request.lineage.is_some() => {
                 let tool_name = request.operation_id.rsplit('/').next().unwrap_or_default();
+                let output = crate::services::delegated_client_tools::ended_on_device_output(
+                    &error.code,
+                    tool_name,
+                )
+                .ok_or("Unsupported client tool result")?;
+                bounded_message(error)?;
                 Ok(ValidatedResult {
-                    output: crate::services::delegated_client_tools::declined_output(tool_name),
+                    output,
                     succeeded: false,
                     file_ids: Vec::new(),
                 })
@@ -776,12 +780,51 @@ mod tests {
                     Some("x".repeat(MAX_OPERATION_MESSAGE_CHARS + 1)),
                 )),
             ),
+            result(
+                &request,
+                OperationOutcome::Rejected,
+                None,
+                Some(("expired", None)),
+            ),
         ] {
             assert!(
                 kind.validate_result(&request, &refused).is_err(),
                 "{refused:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_review_that_ended_before_its_result_arrived_is_stored_as_expired_only_for_grant_operations()
+     {
+        let mut request = request();
+        let kind = kind(Some(SCHEMA));
+        let ended = |request: &OperationRequest| {
+            result(
+                request,
+                OperationOutcome::Rejected,
+                None,
+                Some(("review_expired", Some("The review ended.".into()))),
+            )
+        };
+        assert!(kind.validate_result(&request, &ended(&request)).is_err());
+        request.lineage = Some(super::super::executor_stream::CallLineage {
+            owner_chat_id: Uuid::new_v4(),
+            owner_message_id: Uuid::new_v4(),
+            requesting_chat_id: request.chat_id,
+            requesting_message_id: request.message_id,
+            context_ref: None,
+            approval_scope: None,
+        });
+        let validated = kind.validate_result(&request, &ended(&request)).unwrap();
+        assert!(!validated.succeeded);
+        assert_eq!(validated.output["status"], "cancelled");
+        assert_eq!(validated.output["reason"], "expired");
+        // The server's own text, never the device's, and never a decline.
+        let text = validated.output["error"].as_str().unwrap();
+        assert!(text.contains("'fetch_availability'"), "{text}");
+        assert!(text.contains("Do not retry it without the user"), "{text}");
+        assert!(!text.contains("declined"), "{text}");
     }
 
     #[test]

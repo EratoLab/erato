@@ -226,9 +226,24 @@ pub struct GenerationRequestContext {
     /// `X-Erato-Additional-Executors`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    /// Those of the bindings above whose page said the app behind them runs
+    /// in strict mode, from `X-Erato-Strict-Mode-Executors`. Never stored: a
+    /// stored turn's word would outlive the app it was said of, so every
+    /// continuation reads its own request's.
+    #[serde(skip)]
+    pub strict_mode_executors: Vec<crate::services::client_operations::ExecutorBinding>,
 }
 
 impl GenerationRequestContext {
+    /// Whether this request's page said the app behind `binding` runs in
+    /// strict mode.
+    pub fn says_strict_mode(
+        &self,
+        binding: &crate::services::client_operations::ExecutorBinding,
+    ) -> bool {
+        self.strict_mode_executors.contains(binding)
+    }
+
     /// Every binding of the turn, the primary first.
     pub fn executors(
         &self,
@@ -468,6 +483,39 @@ pub struct ToolUse {
 pub struct ToolResultDetails {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<ToolResultLink>,
+    /// Set by Erato when a call failed without an answer from the tool that
+    /// Erato could read: the row's error text is then Erato's, never the
+    /// tool's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub failure: Option<ToolCallFailure>,
+}
+
+impl ToolResultDetails {
+    pub fn failed(failure: ToolCallFailure) -> Self {
+        Self {
+            links: Vec::new(),
+            failure: Some(failure),
+        }
+    }
+}
+
+/// How a call failed when Erato, not the tool, wrote its error.
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallFailure {
+    /// No answer came back: the tool could not be reached, the connection
+    /// broke, or the call timed out. It may or may not have run.
+    NoAnswer,
+    /// The tool answered, and Erato could not process the answer.
+    AnswerUnreadable,
+    /// Erato did not run the call.
+    NotRun,
+    /// A kind from a newer version; clients treat it as no answer.
+    #[serde(other)]
+    Other,
 }
 
 /// A resource link from the result. Only `https` links with a host, without
@@ -742,6 +790,10 @@ pub enum ToolCallValueMeaningSource {
 pub enum ToolCallEffectKind {
     Emptied,
     ListReplaced,
+    /// Items the tool says the call removes from a list; the rest stays.
+    ListRemoved,
+    /// Items the tool says the call adds to a list; nothing goes.
+    ListAdded,
     /// The old value is known and differs.
     Changed,
     /// The old value is unknown.
@@ -772,6 +824,10 @@ pub struct ToolCallEffectCounts {
     pub emptied: u32,
     #[serde(default)]
     pub list_replaced: u32,
+    #[serde(default)]
+    pub list_removed: u32,
+    #[serde(default)]
+    pub list_added: u32,
     #[serde(default)]
     pub changed: u32,
     #[serde(default)]
@@ -949,6 +1005,9 @@ pub struct ToolCallBatch {
     pub rows_emptying: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub rows_replacing_lists: u32,
+    /// Rows that remove items from a list, on the tool's word.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rows_removing_from_lists: u32,
     /// Rows per operation, when rows name their own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<ToolCallBatchOperation>,
@@ -973,6 +1032,12 @@ pub struct ToolCallBatchField {
     pub emptied: u32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub lists_replaced: u32,
+    /// Rows whose list the tool says has its items removed.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lists_removed: u32,
+    /// Rows whose list the tool says has its items added.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lists_added: u32,
     /// How many different values the rows write.
     pub distinct: u32,
     /// `distinct` stopped counting at its cap.
@@ -3696,5 +3761,22 @@ mod generation_request_context_tests {
         let context: GenerationRequestContext = serde_json::from_value(stored.clone()).unwrap();
         assert!(context.additional_executors.is_empty());
         assert_eq!(serde_json::to_value(&context).unwrap(), stored);
+    }
+
+    #[test]
+    fn the_strict_mode_word_is_never_stored_with_the_turn() {
+        let sidecar = binding(ExecutionRealm::DesktopSidecar, "desktop_sidecar");
+        let context = GenerationRequestContext {
+            additional_executors: vec![sidecar.clone()],
+            strict_mode_executors: vec![sidecar.clone()],
+            ..Default::default()
+        };
+        assert!(context.says_strict_mode(&sidecar));
+        let stored = serde_json::to_value(&context).unwrap();
+        assert!(stored.get("strict_mode_executors").is_none(), "{stored}");
+        let mut forged = stored.clone();
+        forged["strict_mode_executors"] = serde_json::json!([sidecar]);
+        let read: GenerationRequestContext = serde_json::from_value(forged).unwrap();
+        assert!(!read.says_strict_mode(&sidecar));
     }
 }

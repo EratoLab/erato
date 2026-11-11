@@ -1,4 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
+import { useCallback, useId, useRef } from "react";
 
 import {
   reviewLinkKey,
@@ -13,6 +14,7 @@ import {
 import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { ParkedChildItem } from "./ParkedChildItem";
+import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import { WaitingTaskItem } from "./WaitingTaskItem";
 import {
   approvalQueueOf,
@@ -38,12 +40,18 @@ import type {
  * The server still takes one request covering every open item, so an answer
  * is held until the last one is in; the queue only decides what the user sees
  * next. The turn's own gated call keeps its MCP or client-tool layout, and each
- * parked child is named by its task. Tasks that wait for a call on the device
- * are listed below without decisions: the response goes on once they finish.
- * A task whose call waits for its review in the Erato desktop app shows that
- * review, so the card says the task waits for the user, not that it goes on.
+ * parked child is named by its task. On the tool-call limit's stop the limit's
+ * choice comes first. Its Stop answers the whole stop at once and sends the
+ * tasks' questions back to their own chats, so that stop offers no bulk
+ * answers. Tasks that wait for a call on the device are listed below without
+ * decisions: the response goes on once they finish. A task whose call waits
+ * for its review in the Erato desktop app shows that review, so the card says
+ * the task waits for the user, not that it goes on.
  * A stop behind the response's own waiting client tool call says the tasks go
  * on, but the response only continues once that call has finished too.
+ *
+ * The card is a group named by its title, and takes the focus a waiting task's
+ * item held when the item goes.
  */
 export const ApprovalQueueCard = ({
   request,
@@ -106,19 +114,31 @@ export const ApprovalQueueCard = ({
         return link?.state === "open";
       }).length,
   );
+  const titleId = useId();
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const focusCard = useCallback(() => {
+    cardRef.current?.focus({ preventScroll: true });
+  }, []);
 
   return (
     <div
+      ref={cardRef}
+      tabIndex={-1}
+      role="group"
+      aria-labelledby={titleId}
       data-testid="approval-queue"
       data-approval-kind={kind}
       data-item-count={itemCount}
       data-position={ordinal}
-      className={`${APPROVAL_CARD_SHELL_CLASS} space-y-2`}
+      className={`${APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
     >
       <div>
         {itemCount > 0 ? (
           <>
-            <p className="text-sm font-medium text-theme-fg-primary">
+            <p
+              id={titleId}
+              className="text-sm font-medium text-theme-fg-primary"
+            >
               {t({
                 id: "approvalQueue.title",
                 message: plural(itemCount, {
@@ -149,7 +169,10 @@ export const ApprovalQueueCard = ({
           </>
         ) : (
           <>
-            <p className="text-sm font-medium text-theme-fg-primary">
+            <p
+              id={titleId}
+              className="text-sm font-medium text-theme-fg-primary"
+            >
               {t({
                 id: "approvalQueue.waitingTitle",
                 message: plural(waitingCount, {
@@ -248,6 +271,26 @@ export const ApprovalQueueCard = ({
               onDecideScope ? () => onDecideScope(current) : undefined
             }
           />
+        ) : kind === "tool_call_limit" ? (
+          <div
+            key={current.approval_id}
+            data-testid="tool-call-limit-approval"
+            data-approval-id={current.approval_id}
+          >
+            <ToolCallLimitItem
+              tasksAsk={itemCount > 1}
+              // Held answers are not shown on it: it comes first, and Stop
+              // sends the stop at once.
+              {...stagedItemPresentation(undefined, isArchived)}
+              isBusy={isBusy}
+              scrollIntoViewOnMount
+              onDecide={(decision) =>
+                decision === "withdraw"
+                  ? onDecideAll(decision)
+                  : onDecideItem(current.approval_id, decision)
+              }
+            />
+          </div>
         ) : (
           <div
             key={current.approval_id}
@@ -293,7 +336,7 @@ export const ApprovalQueueCard = ({
             )}
           </div>
         ))}
-      {!isArchived && itemCount > 0 && (
+      {!isArchived && itemCount > 0 && kind !== "tool_call_limit" && (
         <ApprovalBulkActions
           itemCount={itemCount}
           onDecideAll={onDecideAll}
@@ -315,7 +358,12 @@ export const ApprovalQueueCard = ({
             </p>
           )}
           {waiting.map((item) => (
-            <WaitingTaskItem key={item.approval_id} item={item} />
+            <WaitingTaskItem
+              key={item.approval_id}
+              item={item}
+              isArchived={isArchived}
+              onRemovedWithFocus={focusCard}
+            />
           ))}
         </div>
       )}

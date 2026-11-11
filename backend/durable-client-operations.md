@@ -196,6 +196,21 @@ when the call's binding is among the approving client's bindings, and
 has one transport row, so the generation picks its binding deterministically:
 tools bound to the primary first, then by qualified name.
 
+A page whose Erato desktop app runs in strict mode says so in
+`X-Erato-Strict-Mode-Executors` (ERMAIN-1155): a JSON array of those of the
+request's own bindings whose app runs in strict mode. It travels beside the
+bindings, never in them, because a binding is compared as a whole. The server
+reads it on the submit, `continuestream` and an attached `/continue`, never
+from the stored turn, and drops an entry that is not one of the request's
+bindings. A call of a tool the app reviews (`get_sidecar_folder_hierarchy`,
+`search_sidecar_index`, `get_sidecar_document`, `read_sidecar_conversation`)
+that is set to Ask and routed to such a binding then runs without the chat
+question: the review on the device asks. Never still refuses, Always and no
+decision run as before, and mailboxes and search fields keep asking. A task
+keeps its launching turn's word in its grant's `strict_mode`. The word is the
+page's, at the trust the frontend already has, not attestation; a missing or
+false word keeps the question.
+
 `user_confirmed` consent and device/host identifiers are client assertions, at the
 same trust level as existing client actions. Kinds requiring stronger proof must
 validate it themselves.
@@ -462,8 +477,14 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   park tail never accepts a raced-in fast result for them.
 - **Decline.** `{outcome: "rejected", result: null, error: {code: "declined"}}`
   is valid only for grant operations and is stored as `{status: "cancelled",
-  reason: "declined", error}`. `expired` and `withdrawn` carry an `error` text
-  for the task's model.
+  reason: "declined", error}`. `error: {code: "review_expired"}`, a review on
+  the device that ended before its result reached the task, is valid only for
+  grant operations too and is stored as `{status: "cancelled", reason:
+  "expired", error}`, so the task result counts it as expired. `expired`,
+  `withdrawn` and `cancelled` (the user stopped waiting, through `/cancel`)
+  carry an `error` text for the task's model; the `cancelled` one also tells it
+  not to call the tool again in the task. The server writes every one of these
+  texts, never the client.
 - **Continuation.** Any coordinator of the account continues a ready or
   continuing grant operation, or expires a pending or claimed one past its
   attempt end, with a detached `/continue`, so a closed pane never strands the

@@ -3279,7 +3279,7 @@
             "description": "When the chat does not exist or is not accessible"
           },
           "409": {
-            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items`, names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
+            "description": "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8218,6 +8218,10 @@
           "shows_child_items": {
             "type": "boolean",
             "description": "Whether the client shows each task child an `mcp_tool` or `client_tool`\npart carries as an item of its own. Decisions on such a part are refused\nwithout it while a child is open: an older client shows only the turn's\nown call and would answer the children unseen."
+          },
+          "shows_limit_and_builtin_child_items": {
+            "type": "boolean",
+            "description": "Whether the client also shows each task child a `tool_call_limit` or\n`builtin_tool` part carries as an item of its own. Those parts carry\nchildren since later than `shows_child_items` says, and a client that\npredates them sends that flag while it shows the limit's choice, or a\ngeneric card for a kind it does not know, alone and answers every open\nitem with it. Decisions on such a part are refused without both flags\nwhile a child is open."
           }
         }
       },
@@ -13489,6 +13493,12 @@
             "format": "int32",
             "minimum": 0
           },
+          "rows_removing_from_lists": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows that remove items from a list, on the tool's word.",
+            "minimum": 0
+          },
           "rows_replacing_lists": {
             "type": "integer",
             "format": "int32",
@@ -13535,6 +13545,18 @@
           "emptied": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          },
+          "lists_added": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items added.",
+            "minimum": 0
+          },
+          "lists_removed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items removed.",
             "minimum": 0
           },
           "lists_replaced": {
@@ -13813,6 +13835,16 @@
             "format": "int32",
             "minimum": 0
           },
+          "list_added": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "list_removed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
           "list_replaced": {
             "type": "integer",
             "format": "int32",
@@ -13841,6 +13873,8 @@
         "enum": [
           "emptied",
           "list_replaced",
+          "list_removed",
+          "list_added",
           "changed",
           "set",
           "unchanged",
@@ -13867,6 +13901,16 @@
             "type": "boolean"
           }
         }
+      },
+      "ToolCallFailure": {
+        "type": "string",
+        "description": "How a call failed when Erato, not the tool, wrote its error.",
+        "enum": [
+          "no_answer",
+          "answer_unreadable",
+          "not_run",
+          "other"
+        ]
       },
       "ToolCallFilter": {
         "type": "object",
@@ -14375,6 +14419,10 @@
         "type": "object",
         "description": "What a tool row keeps of an MCP result besides `output`: at most ten of its\nlinks. Its structured content and embedded resources are not kept.",
         "properties": {
+          "failure": {
+            "$ref": "#/components/schemas/ToolCallFailure",
+            "description": "Set by Erato when a call failed without an answer from the tool that\nErato could read: the row's error text is then Erato's, never the\ntool's."
+          },
           "links": {
             "type": "array",
             "items": {

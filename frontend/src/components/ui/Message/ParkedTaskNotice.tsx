@@ -6,9 +6,9 @@ import { TaskChatLink } from "./TaskChatLink";
 
 /**
  * A task of this turn that stopped where this chat is not the one asking: the
- * turn was stopped, or it ended on something no task's question joins today,
- * such as the tool-call limit (an open question: CT-10 allows only the stopped
- * turn). The task either waits for a decision in its own chat or for one of
+ * user stopped the turn, while it ran or with Stop at the tool-call limit (the
+ * one case CT-10 leaves to the task's own chat), or the turn ended on an
+ * error. The task either waits for a decision in its own chat or for one of
  * its calls to run on this device, so this says which and opens it — the
  * reverse of `OriginApprovalLink`.
  */

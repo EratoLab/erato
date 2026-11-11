@@ -198,6 +198,11 @@ pub struct ClientToolGrant {
     /// arguments, written into each call's input in place of the model's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_ref: Option<String>,
+    /// The page that launched the task said the app behind `binding` runs in
+    /// strict mode. Kept beside the binding, never in it: claims compare the
+    /// binding as a whole. Absent on grants written before ERMAIN-1155.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub strict_mode: bool,
 }
 
 /// What a client task's result reports about its client side.

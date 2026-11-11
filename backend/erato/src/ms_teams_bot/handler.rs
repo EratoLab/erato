@@ -2235,6 +2235,7 @@ mod tests {
                 source: None,
                 input: json!({}),
                 own_tool: false,
+                budget: false,
             }],
         });
         assert_eq!(
