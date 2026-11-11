@@ -11,6 +11,7 @@ import {
 import { componentRegistry } from "@/config/componentRegistry";
 import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFileApprovalStore";
 import {
+  askForReviewAgain,
   markReviewEnded,
   rememberReview,
   reviewLinkKey,
@@ -2636,6 +2637,33 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(screen.getByTestId("sidecar-review-ask-again")).toBeInTheDocument();
   });
 
+  it("says on the call's step that its review ended, as the item does", () => {
+    markReviewEnded(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("This review has ended");
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    // The call waits for the user to ask again, not for an app.
+    expect(step).not.toHaveTextContent(
+      "Waiting for a connected app on this device",
+    );
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
+  it("names the review on the call's step again once the user asked again", () => {
+    markReviewEnded(key);
+    askForReviewAgain(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("This review has ended");
+  });
+
   it("takes the call from the message's own last marker, never an earlier one", () => {
     rememberReview(key, "handle-1");
     rememberReview(reviewLinkKey("message-1", "next"), "handle-2");
@@ -2680,6 +2708,59 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(notice).toHaveTextContent("waiting for a connected app");
     expect(notice).not.toHaveTextContent("task");
     expect(screen.queryByTestId("sidecar-review-item")).toBeNull();
+  });
+
+  it("shows the call's step waiting for its review, neither done nor interrupted", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.queryByText("Done")).toBeNull();
+  });
+
+  it("shows any other parked call's step waiting for a connected app", () => {
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).toHaveTextContent(
+      "Waiting for a connected app on this device",
+    );
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+  });
+
+  it("ends the step on done once the call returned and the turn went on", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent
+        messageId="message-1"
+        content={[
+          { ...search, status: "success" },
+          pending,
+          { content_type: "text", text: "Found the report." },
+        ]}
+      />,
+    );
+    const step = screen.getByTestId("tool-call-item");
+    expect(step).not.toHaveTextContent("Review in the Erato desktop app");
+    expect(step).not.toHaveTextContent("Interrupted");
+    expect(screen.getByText("Done")).toBeInTheDocument();
+  });
+
+  it("keeps Interrupted for an unfinished call the row no longer waits on", () => {
+    renderWithTheme(
+      <MessageContent
+        messageId="message-1"
+        content={[search, pending, { content_type: "text", text: "Stopped." }]}
+      />,
+    );
+    expect(screen.getByTestId("tool-call-item")).toHaveTextContent(
+      "Interrupted",
+    );
   });
 });
 

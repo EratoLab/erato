@@ -8341,6 +8341,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "sidecarReview.ended.title"
 msgstr ""
 
@@ -10358,6 +10359,11 @@ msgstr "Préparation"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "En cours"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx

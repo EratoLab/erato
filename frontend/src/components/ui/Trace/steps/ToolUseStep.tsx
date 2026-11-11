@@ -48,6 +48,7 @@ import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
 import type { BaseStepProps } from "../types";
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
@@ -57,7 +58,37 @@ import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 interface ToolUseStepProps extends BaseStepProps {
   part: ToolUse & { content_type: "tool_use" };
   decision?: ToolDecision;
+  /**
+   * Where the waiting call's review in the Erato desktop app stands, so its
+   * pill says what it waits on instead of naming any connected app.
+   */
+  review?: SidecarReviewLink["state"];
 }
+
+/**
+ * What a waiting step's pill says; the pill's own default names no app. An
+ * ended review waits on the user's Ask again, not on an app, so the pill says
+ * it ended, as the review's item in the approval slot does.
+ */
+const waitingPillLabel = (
+  review: SidecarReviewLink["state"] | undefined,
+): string | undefined => {
+  switch (review) {
+    case "open":
+    case "asking":
+      return t({
+        id: "trace.tool.waiting.review",
+        message: "Review in the Erato desktop app",
+      });
+    case "ended":
+      return t({
+        id: "sidecarReview.ended.title",
+        message: "This review has ended",
+      });
+    case undefined:
+      return undefined;
+  }
+};
 
 /**
  * A result's link, named after the server only when it points at the
@@ -296,6 +327,7 @@ const PlainToolUseStep = ({
   isCollapsed,
   isLastStep,
   decision,
+  review,
 }: ToolUseStepProps) => {
   const resolvedStatus = part.status;
   const isRunning = status === "running" && isStreaming;
@@ -462,9 +494,11 @@ const PlainToolUseStep = ({
             <ToolStatusPill
               status={status}
               label={
-                part.status === "preparing" && status !== "interrupted"
-                  ? t({ id: "trace.tool.preparing", message: "Preparing" })
-                  : undefined
+                status === "waiting"
+                  ? waitingPillLabel(review)
+                  : part.status === "preparing" && status !== "interrupted"
+                    ? t({ id: "trace.tool.preparing", message: "Preparing" })
+                    : undefined
               }
             />
           )
