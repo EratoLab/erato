@@ -1982,6 +1982,7 @@ fn is_false(value: &bool) -> bool {
 /// Events that can be streamed during message generation
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "message_type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum StreamingEvent {
     AudioDelta {
         message_id: Uuid,

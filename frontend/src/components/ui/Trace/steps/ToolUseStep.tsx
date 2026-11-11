@@ -1,7 +1,9 @@
 import { t } from "@lingui/core/macro";
-import { useMemo } from "react";
+import clsx from "clsx";
+import { useId, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { DisclosureButton } from "@/components/ui/Controls/Disclosure";
 import {
   changeRowHasDetails,
   ToolCallChangeRowDetails,
@@ -16,9 +18,13 @@ import {
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
-import { changeRowCounts } from "@/lib/toolCallGist/changeLabels";
+import {
+  changeRowCounts,
+  machineIdPhrase,
+} from "@/lib/toolCallGist/changeLabels";
 import { gistOf } from "@/lib/toolCallGist/gist";
 import { gistPlainLine } from "@/lib/toolCallGist/gistLabels";
+import { maskMachineIds } from "@/lib/toolCallGist/machineId";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   commentChangeRow,
@@ -27,7 +33,11 @@ import {
   ownProposalLine,
 } from "@/lib/toolCallGist/ownProposalLabels";
 import { resultLinkOf } from "@/lib/toolCallGist/resultLink";
-import { isRecord, serverFailureMessage } from "@/lib/toolCallGist/serverText";
+import {
+  eratoFailureOf,
+  isRecord,
+  serverFailureMessage,
+} from "@/lib/toolCallGist/serverText";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
@@ -42,7 +52,7 @@ import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks"
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Gist, GistItem, GistPhase } from "@/lib/toolCallGist/gist";
 import type { ResultLink as ResultLinkData } from "@/lib/toolCallGist/resultLink";
-import type { CleanText } from "@/lib/toolCallGist/serverText";
+import type { CleanText, EratoFailure } from "@/lib/toolCallGist/serverText";
 import type { WordCommentOp } from "@/lib/wordReview/wordCommentChanges";
 
 interface ToolUseStepProps extends BaseStepProps {
@@ -115,6 +125,122 @@ const textOf = (value: unknown): string | undefined =>
 const hasRowValues = (item: GistItem) =>
   item.fields.length > 0 || item.before.length > 0 || item.count > 1;
 
+/** A failure message longer than this is one line until it is opened. */
+const FAILURE_LINE_CHARS = 90;
+
+const failedLine = () =>
+  t({ id: "trace.tool.failure.line", message: "The call failed." });
+
+const eratoFailureLine = (failure: EratoFailure): string | undefined => {
+  switch (failure) {
+    case "answer_unreadable":
+      return t({
+        id: "trace.tool.failure.answerUnreadable",
+        message: "The tool answered, but Erato could not read its answer.",
+      });
+    case "not_run":
+      return t({
+        id: "trace.tool.failure.notRun",
+        message: "Erato did not run the call.",
+      });
+    case "no_answer":
+      return t({
+        id: "trace.tool.failure.noAnswer",
+        message:
+          "Erato got no answer from the tool. The call may or may not have run.",
+      });
+    case "other":
+      return undefined;
+  }
+};
+
+/**
+ * A call that failed where Erato, not the tool, wrote the error: what Erato
+ * knows in its own words. Its error text stays in the technical details. An
+ * answer Erato could not read may say the call succeeded, so that row never
+ * says the call failed.
+ */
+const EratoFailureMessage = ({ failure }: { failure: EratoFailure }) => {
+  const line = eratoFailureLine(failure);
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="tool-failure">
+      {failure !== "answer_unreadable" && (
+        <p className="text-theme-error-fg">{failedLine()}</p>
+      )}
+      {line && <p className="text-theme-fg-secondary">{line}</p>}
+    </div>
+  );
+};
+
+/**
+ * A failure after which the call may still have done what it asked. A kind
+ * from a newer Erato says no more than that the call failed.
+ */
+const outcomeUnknown = (failure: EratoFailure | undefined): boolean =>
+  failure === "no_answer" ||
+  failure === "answer_unreadable" ||
+  failure === "other";
+
+/**
+ * A failed call: Erato's own line that it failed, in the row's failure
+ * colour, then the server's message as the tool's word, its machine IDs
+ * masked as on the card, on one line until it is opened.
+ */
+const FailureMessage = ({ failure }: { failure: CleanText }) => {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const text = maskMachineIds(failure.text, machineIdPhrase());
+  const shown = failure.truncated ? `${text}…` : text;
+  const long =
+    failure.truncated ||
+    text.includes("\n") ||
+    Array.from(text).length > FAILURE_LINE_CHARS;
+  return (
+    <div className="space-y-0.5 text-xs" data-testid="tool-failure">
+      <p className="text-theme-error-fg">{failedLine()}</p>
+      <p
+        id={id}
+        className={clsx(
+          "text-theme-fg-secondary",
+          open || !long
+            ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+            : "truncate",
+        )}
+      >
+        {t({ id: "trace.tool.failure.toolSays", message: "The tool says:" })}{" "}
+        <q
+          dir="auto"
+          className="[unicode-bidi:isolate]"
+          data-testid="tool-failure-message"
+        >
+          {shown}
+        </q>
+      </p>
+      {long && (
+        <DisclosureButton
+          open={open}
+          controls={id}
+          onToggle={() => {
+            setOpen(!open);
+          }}
+        >
+          <span className="text-xs">
+            {open
+              ? t({
+                  id: "trace.tool.failure.showLess",
+                  message: "Show less of the message",
+                })
+              : t({
+                  id: "trace.tool.failure.showAll",
+                  message: "Show the whole message",
+                })}
+          </span>
+        </DisclosureButton>
+      )}
+    </div>
+  );
+};
+
 /**
  * What stays visible under a gist row: the key values and old → new of each
  * item, further items' own lines, and a failed call's message from its server.
@@ -123,10 +249,12 @@ const GistRowDetails = ({
   gist,
   phase,
   failure,
+  eratoFailure,
 }: {
   gist: Gist;
   phase: GistPhase;
   failure: CleanText | undefined;
+  eratoFailure: EratoFailure | undefined;
 }) => (
   <div className="space-y-1">
     {gist.change
@@ -143,15 +271,8 @@ const GistRowDetails = ({
             )}
           </div>
         ))}
-    {failure && (
-      <p
-        dir="auto"
-        className="whitespace-pre-wrap break-words text-xs text-theme-error-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]"
-        data-testid="tool-failure-message"
-      >
-        {failure.truncated ? `${failure.text}…` : failure.text}
-      </p>
-    )}
+    {eratoFailure && <EratoFailureMessage failure={eratoFailure} />}
+    {failure && <FailureMessage failure={failure} />}
   </div>
 );
 
@@ -234,17 +355,38 @@ const PlainToolUseStep = ({
       : part.status === "error"
         ? "failed"
         : "ask";
+  const eratoFailure =
+    gist && phase === "failed"
+      ? eratoFailureOf(part.result_details, part.output)
+      : undefined;
   const failure =
-    gist && phase === "failed" ? serverFailureMessage(part.output) : undefined;
+    gist && phase === "failed" && eratoFailure === undefined
+      ? serverFailureMessage(part.output)
+      : undefined;
+  // A call that may have run is named as asked, never as one that could not.
+  const linePhase: GistPhase = outcomeUnknown(eratoFailure) ? "ask" : phase;
   const showsDetails =
     gist !== undefined &&
     (failure !== undefined ||
+      eratoFailure !== undefined ||
       (gist.change
         ? phase === "done" && changeRowHasDetails(gist.change)
         : gist.items.length > 1 || gist.items.some(hasRowValues)));
   // Effects are facts only once the call has run.
   const counts =
     gist?.change && phase === "done" ? changeRowCounts(gist.change) : undefined;
+  // "Updated task X: 2 changed"; a line that names nothing gets no colon.
+  const named =
+    lead?.names.some((name) => !lead.hiddenIdPaths.includes(name.path)) ===
+    true;
+  const server = part.display?.server_name && (
+    <span
+      dir="auto"
+      className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
+    >
+      {part.display.server_name}
+    </span>
+  );
   const link = useMemo(
     () =>
       part.status === "success" ? resultLinkOf(part.result_details) : undefined,
@@ -317,23 +459,16 @@ const PlainToolUseStep = ({
               </span>
             ) : gist && lead ? (
               <span
-                title={gistPlainLine(gist, lead, phase)}
+                title={gistPlainLine(gist, lead, linePhase)}
                 data-testid="tool-call-gist-line"
               >
-                <ToolCallGistLine gist={gist} item={lead} phase={phase} />
-                {counts !== undefined && ":"}
+                <ToolCallGistLine gist={gist} item={lead} phase={linePhase} />
+                {counts !== undefined && named && ":"}
               </span>
             ) : (
               toolName
             )}
-            {part.display?.server_name && (
-              <span
-                dir="auto"
-                className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
-              >
-                {part.display.server_name}
-              </span>
-            )}
+            {counts === undefined && server}
             {progress && (
               <span
                 dir="auto"
@@ -345,7 +480,15 @@ const PlainToolUseStep = ({
             )}
           </>
         }
-        titleAfter={counts}
+        titleAfter={
+          counts === undefined ? undefined : (
+            <>
+              {!named && "· "}
+              {counts}
+              {server}
+            </>
+          )
+        }
         titleSlot={
           notRun ? undefined : (
             <ToolStatusPill
@@ -363,7 +506,12 @@ const PlainToolUseStep = ({
         headerSlot={link && <ResultLink link={link} server={serverName} />}
         detailSlot={
           gist && showsDetails ? (
-            <GistRowDetails gist={gist} phase={phase} failure={failure} />
+            <GistRowDetails
+              gist={gist}
+              phase={linePhase}
+              failure={failure}
+              eratoFailure={eratoFailure}
+            />
           ) : undefined
         }
         defaultOpen={hasTrace}
