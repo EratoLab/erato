@@ -545,10 +545,12 @@ fn embedded_section_range(template: &[u8]) -> Result<(usize, usize)> {
     }
     match sections.as_slice() {
         [section] => Ok(*section),
-        _ => bail!(
-            "expected exactly one .erato section, found {}",
-            sections.len()
-        ),
+        _ => {
+            bail!(
+                "expected exactly one .erato section, found {}",
+                sections.len()
+            );
+        }
     }
 }
 

@@ -343,10 +343,12 @@ fn entry_path(path: &Path) -> Result<Option<String>> {
                     .to_owned(),
             ),
             Component::CurDir => {}
-            _ => bail!(
-                "archive entry is outside the package root: {}",
-                path.display()
-            ),
+            _ => {
+                bail!(
+                    "archive entry is outside the package root: {}",
+                    path.display()
+                );
+            }
         }
     }
     ensure!(
@@ -694,9 +696,13 @@ pub fn assemble(
     {
         Some(Ok(manifest)) => match manifest.get("imports").and_then(Value::as_object) {
             Some(imports) => serde_json::from_str(&serialize_import_map(imports, APP_MOUNT_PATH))?,
-            None => bail!("{IMPORT_MAP_MANIFEST_PATH} has no imports object"),
+            None => {
+                bail!("{IMPORT_MAP_MANIFEST_PATH} has no imports object");
+            }
         },
-        Some(Err(error)) => bail!("{IMPORT_MAP_MANIFEST_PATH} is not valid JSON: {error}"),
+        Some(Err(error)) => {
+            bail!("{IMPORT_MAP_MANIFEST_PATH} is not valid JSON: {error}");
+        }
         None => {
             tracing::warn!("The desktop UI bundle ships no {IMPORT_MAP_MANIFEST_PATH}");
             json!({ "imports": {} })
