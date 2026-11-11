@@ -370,7 +370,7 @@ mod generation_tool_call_id_tests {
             }
             let mut request = ChatRequest::new(replay);
             restore_provider_tool_call_ids(&mut request);
-            for pair in request.messages.chunks_exact(2) {
+            for pair in request.messages.as_chunks::<2>().0 {
                 let call = pair[0].content.tool_calls()[0];
                 let parts = pair[1].content.clone().into_parts();
                 let GenAiContentPart::ToolResponse(response) = &parts[0] else {

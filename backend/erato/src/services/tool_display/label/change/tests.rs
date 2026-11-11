@@ -496,7 +496,7 @@ fn long_text_is_measured_and_stored_only_up_to_its_start() {
 #[test]
 fn a_batch_of_identical_rows_collapses_to_one_statement() {
     let rows: Vec<_> = (0..200)
-        .map(|index| json!({"Id": format!("{RECORD}"), "Name": format!("row {index}"), "StageName": "Closed", "Loss_Reason__c": "No budget"}))
+        .map(|index| json!({"Id": RECORD.to_string(), "Name": format!("row {index}"), "StageName": "Closed", "Loss_Reason__c": "No budget"}))
         .collect();
     let change = change_of(
         "salesforce_dml_records",

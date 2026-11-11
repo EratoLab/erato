@@ -42,7 +42,9 @@ pub fn init() -> eyre::Result<()> {
             Ok(value) if value == "false" => false,
             Ok(value) if value == "true" => true,
             Err(std::env::VarError::NotPresent) => true,
-            _ => eyre::bail!("ERATO_JEMALLOC_BACKGROUND_THREAD must be true or false"),
+            _ => {
+                eyre::bail!("ERATO_JEMALLOC_BACKGROUND_THREAD must be true or false");
+            }
         };
         background_thread::write(enabled)
             .wrap_err("Failed to configure jemalloc background purging")?;

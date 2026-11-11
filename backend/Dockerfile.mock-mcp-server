@@ -1,8 +1,8 @@
-# cargo-chef version = 0.1.77
-# Rust version = 1.96.0 - Should be kept up-to-date with rust-toolchain.toml
+# cargo-chef version = 0.1.78
+# Rust version = 1.99.1 - Should be kept up-to-date with rust-toolchain.toml
 # Trixie = Debian 13 -> LTS support until 2030
 # Pinned for security & build performance reasons
-FROM lukemathwalker/cargo-chef:0.1.77-rust-1.96.0-trixie@sha256:e606721f52d95169364bf39cae726a94ed8b397625011ccfaa8340db488b823b AS chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-trixie@sha256:420b7375dc4059a85f1c365f23f96b8f561c2861e365645b413c531b206c528a AS chef
 WORKDIR /app
 
 FROM chef AS planner
