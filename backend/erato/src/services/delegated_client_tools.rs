@@ -812,10 +812,12 @@ pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
     states
 }
 
-/// The output of a task's slot once its chat was archived: the park's envelope
-/// is kept for its ids, so the slot still links to the run.
+/// The output of a task's slot once its chat was archived while the run was
+/// still parked: the park's envelope is kept for its ids, so the slot still
+/// links to the run. Its `archived` reason replaces the park's, so the step
+/// says why and offers no retry, which the route refuses for a parked run.
 fn archived_task_output(parked_output: Option<&Value>) -> Value {
-    use crate::services::delegation::DelegationRunStatus;
+    use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 
     let mut output = parked_output
         .filter(|output| output.is_object())
@@ -826,7 +828,10 @@ fn archived_task_output(parked_output: Option<&Value>) -> Value {
             "status".to_string(),
             json!(DelegationRunStatus::Failed.as_str()),
         );
-        object.remove("reason");
+        object.insert(
+            "reason".to_string(),
+            json!(DelegationRunReason::Archived.as_str()),
+        );
         object.insert(
             "error".to_string(),
             json!("The delegated run was archived."),
@@ -975,19 +980,24 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
             return ChildWaitState::Open;
         }
     };
-    // Nothing claims, continues or expires an archived chat's call, so its
-    // item would wait for ever. The run still exists, so the park's envelope
-    // is kept for its ids and the slot still links to it.
-    if child_chat.archived_at.is_some() {
-        return ChildWaitState::Settle {
-            output: archived_task_output(parked_output),
-            failed: true,
-        };
-    }
     // A running child may still be between two calls of its continuation:
     // its row can end on anything until its turn is over.
     if child_chat.generation_state.as_deref() == Some("running") {
         return ChildWaitState::Open;
+    }
+    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
+    // Nothing claims, continues or expires an archived chat's call, so its
+    // item would wait for ever. A run archived while parked has no outcome
+    // and the retry route refuses it: the park's envelope is kept for its ids,
+    // so the slot still links to the run, and says it was archived. A run
+    // archived after it errored or finished settles below with its outcome,
+    // so its step keeps Retry wherever the route accepts it.
+    let archived = child_chat.archived_at.is_some();
+    if archived && parked {
+        return ChildWaitState::Settle {
+            output: archived_task_output(parked_output),
+            failed: true,
+        };
     }
     let errored = child_chat.generation_state.as_deref() == Some("errored");
     match attempts::Entity::find_by_id(attempt_id).one(conn).await {
@@ -997,7 +1007,11 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
             // continues it any more.
             let failed_continuation =
                 attempt.state == attempts::AttemptState::Continuing && errored;
-            if attempt.state != attempts::AttemptState::Completed && !failed_continuation {
+            // An archived child's call is never continued, so it settles now.
+            if attempt.state != attempts::AttemptState::Completed
+                && !failed_continuation
+                && !archived
+            {
                 return ChildWaitState::Open;
             }
         }
@@ -1021,7 +1035,6 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
     let Ok(parsed) = crate::models::message::MessageSchema::validate(&row.raw_message) else {
         return gone("The delegated run's answer could not be read.");
     };
-    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
     let stopped = match parsed.content.last() {
         Some(ContentPart::ToolApprovalRequest(request)) => {
             if parked {

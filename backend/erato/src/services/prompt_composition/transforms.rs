@@ -1194,6 +1194,7 @@ mod tests {
                 name: Some("row-1".to_string()),
                 title: Some("SYNTHETIC-LINK-TITLE".to_string()),
             }],
+            failure: None,
         });
 
         let replayed = replay_assistant_content(

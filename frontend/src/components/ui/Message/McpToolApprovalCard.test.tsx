@@ -1,3 +1,4 @@
+import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -22,6 +23,10 @@ import {
   listUserToolApprovalSettingsQuery,
   profileQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { messages as deMessages } from "@/locales/de/messages.json";
+import { messages as esMessages } from "@/locales/es/messages.json";
+import { messages as frMessages } from "@/locales/fr/messages.json";
+import { messages as plMessages } from "@/locales/pl/messages.json";
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
@@ -33,6 +38,7 @@ import type {
   ToolArgumentNode,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
+import type { Messages } from "@lingui/core";
 import type { ReactNode } from "react";
 
 vi.mock("@/auth/tokenStore", () => ({
@@ -273,6 +279,40 @@ describe("McpToolApprovalCard", () => {
     // approve, like the add-in's confirmation summary.
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
     expect(screen.getByText(/"release"/)).toBeInTheDocument();
+  });
+
+  it("asks in the reader's language, on the card and to a screen reader", async () => {
+    for (const [locale, messages, title] of [
+      ["de", deMessages, "MCP-Tool-Aufruf erlauben?"],
+      ["fr", frMessages, "Autoriser l’appel de l’outil MCP ?"],
+      ["es", esMessages, "¿Permitir la llamada a la herramienta MCP?"],
+      ["pl", plMessages, "Zezwolić na wywołanie narzędzia MCP?"],
+    ] as const) {
+      i18n.load(locale, messages as unknown as Messages);
+      i18n.activate(locale);
+      try {
+        const { unmount } = renderCard(
+          <McpToolApprovalCard
+            messageId="message-1"
+            request={approvalRequest}
+            resolution={null}
+          />,
+        );
+        expect(screen.getByRole("group", { name: title })).toBeInTheDocument();
+        expect(
+          screen.getByText(title, { selector: "p:not(.sr-only)" }),
+        ).toBeInTheDocument();
+        await waitFor(() => {
+          expect(
+            screen.getByText(title, { selector: ".sr-only" }),
+          ).toBeInTheDocument();
+        });
+        expect(screen.queryByText("Allow MCP tool call?")).toBeNull();
+        unmount();
+      } finally {
+        i18n.activate("en");
+      }
+    }
   });
 
   it("names the server by the name saved with the request", () => {

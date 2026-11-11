@@ -41,6 +41,7 @@ use super::slow_path::{
     a_waiting_task_that_starts_asking_offers_the_response_scope,
     a_withdrawn_childs_ask_is_answerable_in_its_own_chat,
     an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it,
+    an_archived_child_whose_continuation_failed_settles_with_its_outcome,
     an_archived_task_no_stop_carries_settles_its_slot,
     an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once,
     an_empty_continuestream_while_children_wait_is_children_waiting,
@@ -215,6 +216,7 @@ macro_rules! host_conformance {
             a_crashed_parent_the_cleanup_cleared_resumes_once_when_the_waiting_child_finishes
             a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed
             an_archived_waiting_child_settles_as_failed_and_the_parent_resumes_once
+            an_archived_child_whose_continuation_failed_settles_with_its_outcome
             the_sweep_scans_only_the_last_stop_of_a_reparked_parent
         ]);
     };

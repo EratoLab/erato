@@ -117,6 +117,10 @@ export interface ChangeBatchField {
   rows: number;
   emptied: number;
   listsReplaced: number;
+  /** Rows whose list the tool says has items removed. */
+  listsRemoved: number;
+  /** Rows whose list the tool says has items added. */
+  listsAdded: number;
   distinct: number;
   distinctCapped: boolean;
   samples: ChangeValue[];
@@ -131,6 +135,8 @@ export interface ChangeBatch {
   deletions: number;
   rowsEmptying: number;
   rowsReplacingLists: number;
+  /** Rows that remove items from a list, on the tool's word. */
+  rowsRemovingFromLists: number;
   operations: { action: ToolCallAction; count: number }[];
   fields: ChangeBatchField[];
   fieldsOmitted: number;
@@ -140,6 +146,10 @@ export interface ChangeBatch {
 export interface ChangeCounts {
   emptied: number;
   listReplaced: number;
+  /** Lists the tool says the call removes items from. */
+  listRemoved: number;
+  /** Lists the tool says the call adds items to. */
+  listAdded: number;
   changed: number;
   set: number;
   unchanged: number;
@@ -173,6 +183,8 @@ export interface GistChange {
 const EFFECT_KINDS: readonly ToolCallEffectKind[] = [
   "emptied",
   "list_replaced",
+  "list_removed",
+  "list_added",
   "changed",
   "set",
   "unchanged",
@@ -422,6 +434,7 @@ class Reader {
       deletions: countOf(raw.deletions),
       rowsEmptying: countOf(raw.rows_emptying),
       rowsReplacingLists: countOf(raw.rows_replacing_lists),
+      rowsRemovingFromLists: countOf(raw.rows_removing_from_lists),
       operations: listOf(raw.operations, MAX_GROUPS).flatMap((operation) =>
         isRecord(operation) && isOneOf(ROW_ACTIONS, operation.action)
           ? [{ action: operation.action, count: countOf(operation.count) }]
@@ -436,6 +449,8 @@ class Reader {
                 rows: countOf(field.rows),
                 emptied: countOf(field.emptied),
                 listsReplaced: countOf(field.lists_replaced),
+                listsRemoved: countOf(field.lists_removed),
+                listsAdded: countOf(field.lists_added),
                 distinct: countOf(field.distinct),
                 distinctCapped: field.distinct_capped === true,
                 samples: this.values(field.samples, MAX_FOUND),
@@ -454,6 +469,8 @@ const countsOf = (raw: unknown): ChangeCounts => {
   return {
     emptied: countOf(counts.emptied),
     listReplaced: countOf(counts.list_replaced),
+    listRemoved: countOf(counts.list_removed),
+    listAdded: countOf(counts.list_added),
     changed: countOf(counts.changed),
     set: countOf(counts.set),
     unchanged: countOf(counts.unchanged),
@@ -511,13 +528,22 @@ export const TEXT_LINES = 6;
 /** Names listed in a collapsed part before the rest are counted. */
 export const MAX_COLLAPSED_NAMES = 8;
 
-const RANKED: readonly ToolCallEffectKind[] = ["changed", "set", "unchanged"];
-// eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+/* eslint-disable lingui/no-unlocalized-strings -- API enum values */
+const RANKED: readonly ToolCallEffectKind[] = [
+  "changed",
+  "list_added",
+  "set",
+  "unchanged",
+];
 const LIST_REPLACED: ToolCallEffectKind = "list_replaced";
+const LIST_REMOVED: ToolCallEffectKind = "list_removed";
+/* eslint-enable lingui/no-unlocalized-strings */
 
 export interface ChangeLayout {
   emptied: ChangeEffect[];
   lists: ChangeEffect[];
+  /** Lists the tool says the call removes items from: a loss, but no replacement. */
+  removedFromLists: ChangeEffect[];
   unreadable: ChangeEffect[];
   /** At most `MAX_FIRST_VIEW_VALUES`, changed before set before unchanged. */
   firstRows: ChangeEffect[];
@@ -531,6 +557,8 @@ export interface ChangeLayout {
 const totalOf = (counts: ChangeCounts): number =>
   counts.emptied +
   counts.listReplaced +
+  counts.listRemoved +
+  counts.listAdded +
   counts.changed +
   counts.set +
   counts.unchanged +
@@ -551,6 +579,7 @@ export const changeLayout = (change: GistChange): ChangeLayout => {
   return {
     emptied: byKind("emptied"),
     lists: byKind(LIST_REPLACED),
+    removedFromLists: byKind(LIST_REMOVED),
     unreadable: byKind("unreadable"),
     firstRows,
     collapsed,

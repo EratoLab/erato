@@ -61,6 +61,7 @@ import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
 import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
@@ -83,6 +84,7 @@ import type { ApprovalStopState } from "./approvalItems";
 import type { ToolDecision } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ContentPart,
   ContentPartTaskResult,
@@ -743,8 +745,9 @@ function TaskCallStopWaiting({
 
 /**
  * A turn parked on a client tool call. A call whose review the Erato desktop
- * app shows gets its item in the approval slot; any other call says what the
- * turn waits for. While a row names a call that has ended, one of the chat's
+ * app shows gets its item in the approval slot, inside a card shell this
+ * notice owns, as `McpToolApprovalCard` does for its items; any other call
+ * says what the turn waits for. While a row names a call that has ended, one of the chat's
  * calls can already be in review: the row is refetched when the turn parks
  * again, and nothing here may act on the ended call meanwhile.
  */
@@ -776,7 +779,12 @@ function ClientToolPendingNotice({
   }, []);
   const notice =
     key && link ? (
-      <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
+      <div
+        className={APPROVAL_CARD_SHELL_CLASS}
+        data-testid="sidecar-review-card"
+      >
+        <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
+      </div>
     ) : (
       <Alert type="info" role="status" geometryVariant="message">
         {chatInReview
@@ -1456,6 +1464,31 @@ export const MessageContent = memo(function MessageContent({
   }, [content]);
 
   const waitingCall = React.useMemo(() => waitingCallOf(content), [content]);
+  // The trace step of the waiting call says it waits, and on what: a review
+  // in the Erato desktop app is known by the link the review left, which a
+  // reload keeps, under the key the notice reads. The link's state says
+  // whether the review is open or asked for again, or ended and waits for
+  // Ask again, as the slot item says it.
+  const waitingCallId = waitingCall?.tool_call_id;
+  const waitingCallReview = useSidecarReviewLinks(
+    (state): SidecarReviewLink["state"] | undefined => {
+      if (messageId === undefined || waitingCallId === undefined) {
+        return undefined;
+      }
+      // A call that has no review has no link under its key.
+      const key = reviewLinkKey(messageId, waitingCallId);
+      return Object.hasOwn(state.links, key)
+        ? state.links[key].state
+        : undefined;
+    },
+  );
+  const traceWaitingCall = React.useMemo(
+    () =>
+      waitingCallId === undefined
+        ? undefined
+        : { toolCallId: waitingCallId, review: waitingCallReview },
+    [waitingCallId, waitingCallReview],
+  );
 
   // Only the last stop can still wait on tasks: an earlier one was carried
   // onto a later one or settled.
@@ -1852,6 +1885,7 @@ export const MessageContent = memo(function MessageContent({
                   }
                   hasError={hasError}
                   toolDecisions={toolDecisions}
+                  waitingCall={traceWaitingCall}
                 />
               </WaitingHostsContext.Provider>
               {/* Outside the trace, which folds away once the turn ends. */}

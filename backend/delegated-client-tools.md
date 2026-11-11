@@ -202,10 +202,14 @@ first try and no 15 s grace.
   tip, its last stop has waiting items, and the chat is not archived and runs no
   generation. The chat's state is not asked beyond that: the heartbeat cleanup
   clears an ended turn's state a minute later, and a task may wait far longer.
-  Per open waiting item: the child chat was archived, so the slot settles failed
-  (nothing claims, continues or expires an archived chat's call); the child still
-  runs or its call is not completed, so the item stays open (a call left
-  `continuing` on an errored child counts as failed); the child parked on an Ask, so the item becomes an approval
+  Per open waiting item: the child still runs, so the item stays open; the
+  child chat was archived while parked, so the slot settles failed with reason
+  `archived` (nothing claims, continues or expires an archived chat's call, and
+  the retry route refuses the parked run); its call is not completed, so the
+  item stays open (a call left `continuing` on an errored child counts as
+  failed, and the call of an archived child, which nothing continues, counts
+  as ended, so a child archived after it errored or finished settles with its
+  outcome below and keeps Retry where the route accepts it); the child parked on an Ask, so the item becomes an approval
   item in place (slot reason `approval_pending`); the child parked on another
   grant call, so the item is rewritten to that call and attempt; otherwise the
   slot settles with the task result. It is failed when the child's row still
@@ -224,9 +228,11 @@ first try and no 15 s grace.
   sweep visits them in chat order, 100 a tick, and carries a cursor to the next
   tick.
 - **Archived task no stop carries.** Archiving a parked task chat, on its own or
-  through "Archive all", settles its slot in the parent's row as failed when no
-  open item of the parent's last stop names it, so `ParkedTaskNotice` does not
-  stay for good. A turn still running on that row writes the slot itself.
+  through "Archive all", settles its slot in the parent's row as failed with
+  reason `archived` when no open item of the parent's last stop names it, so
+  `ParkedTaskNotice` does not stay for good. The task's step then says the run
+  was archived and offers no retry. A turn still running on that row writes the
+  slot itself.
 - **Resume.** Once nothing is left to decide and every waiting item settled, the
   tail starts the parent's continuation in process (`WaitingSettled`) under
   `Takeover::ResumeParked {expected_generation}`, which takes only the generation

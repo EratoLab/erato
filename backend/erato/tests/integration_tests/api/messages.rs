@@ -7182,7 +7182,7 @@ async fn continuation_refuses_an_abandoned_call_denied_after_the_park(pool: Pool
 /// - `uses-mock-mcp`
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn continuation_settles_every_open_item_when_a_call_fails(pool: Pool<Postgres>) {
-    const CALL_FAILURE: &str = "Failed to call MCP tool";
+    const CALL_FAILURE: &str = "Simulated read_file error";
     let mut mocks = MockSet::new();
     mocks.mock(|when, then| {
         when.post()
@@ -7300,13 +7300,16 @@ async fn continuation_settles_every_open_item_when_a_call_fails(pool: Pool<Postg
     );
     assert_eq!(parts[2]["tool_call_id"], "call_first");
     assert_eq!(parts[2]["status"], "error");
+    // The server answered with its own error: the row holds its words and
+    // no failure of Erato's.
+    assert_eq!(
+        parts[2]["output"]["error"],
+        "Simulated read_file error for path: first.txt"
+    );
     assert!(
-        parts[2]["output"]["error"]
-            .as_str()
-            .unwrap()
-            .contains(CALL_FAILURE),
+        parts[2]["result_details"]["failure"].is_null(),
         "{}",
-        parts[2]["output"]
+        parts[2]["result_details"]
     );
     assert_eq!(parts[4]["tool_call_id"], "call_second");
     assert_eq!(parts[4]["status"], "error");

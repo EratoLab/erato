@@ -51,6 +51,11 @@ export const delegationReasonLabel = (reason: string): string => {
         id: "trace.delegation.reason.clientPending",
         message: "Waiting for one of its calls to run on this device",
       });
+    case "archived":
+      return t({
+        id: "trace.delegation.reason.archived",
+        message: "The run was archived before it finished",
+      });
     default:
       return reason;
   }
