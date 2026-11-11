@@ -9965,6 +9965,11 @@ msgstr "Benötigte ein Tool, zu dem keine Rückfrage möglich war"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr "Der Lauf wurde archiviert, bevor er fertig war"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Am Budget für Tool-Aufrufe gestoppt; die Antwort kann unvollständig sein"
 

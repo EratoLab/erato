@@ -2647,6 +2647,10 @@ pub(super) async fn an_archived_waiting_child_settles_as_failed_and_the_parent_r
     let slot = part_for(&swept, CLIENT_TASK_CALL);
     assert_eq!(slot["status"], "error", "{slot}");
     assert_eq!(slot["output"]["status"], "failed");
+    assert_eq!(
+        slot["output"]["reason"], "archived",
+        "the step says why and offers no retry: {slot}"
+    );
     assert_eq!(slot["output"]["error"], "The delegated run was archived.");
     assert_eq!(
         slot["output"]["child_run_id"],
@@ -2751,10 +2755,9 @@ async fn assert_slot_settled_as_archived(waiting: &Waiting) {
     assert_eq!(slot["status"], "error", "{slot}");
     assert_eq!(slot["output"]["status"], "failed", "{slot}");
     assert_eq!(slot["output"]["error"], "The delegated run was archived.");
-    assert!(
-        slot["output"].get("reason").is_none(),
-        "the notice reads the reason: {slot}"
-    );
+    // The park's `client_pending` is gone, so no notice reads the slot as
+    // waiting, and the step says why it failed and offers no retry.
+    assert_eq!(slot["output"]["reason"], "archived", "{slot}");
     assert_eq!(
         slot["output"]["child_run_id"],
         json!(waiting.child.id),

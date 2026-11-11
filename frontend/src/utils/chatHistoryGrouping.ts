@@ -5,6 +5,7 @@
  */
 import { t } from "@lingui/core/macro";
 
+import { waitsOnly } from "@/hooks/chat/store/generationStatusStore";
 import { DELEGATION_PROVENANCE_KIND } from "@/utils/chat/recentChatSession";
 
 import type { ChatHistoryGroupBy } from "@/hooks/chat/store/chatHistoryFilterStore";
@@ -17,10 +18,6 @@ export type ChatAttentionStatus = Exclude<
   ChatGenerationStatus["kind"],
   "cleared"
 >;
-
-/** A parked entry whose stop has nothing for the user to decide. */
-const waitsOnly = (status: ChatGenerationStatus | undefined): boolean =>
-  status?.kind === "action_required" && status.waitingOnly === true;
 
 /**
  * Resolves a row's status indicator; an unresolved tool confirmation outranks

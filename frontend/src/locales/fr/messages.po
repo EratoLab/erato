@@ -9965,6 +9965,11 @@ msgstr "Nécessitait un outil à propos duquel elle ne pouvait pas vous consulte
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Arrêtée à son budget d'appels d'outils ; la réponse peut être partielle"
 

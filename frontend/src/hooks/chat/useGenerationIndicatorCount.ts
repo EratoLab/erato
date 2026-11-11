@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 
-import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import {
+  useGenerationStatusStore,
+  waitsOnly,
+} from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 
 import { useChatsAskingForDecision } from "./useChatAsksForDecision";
@@ -50,7 +53,7 @@ export const useGenerationIndicatorCount = (): number => {
     let count = 0;
     for (const [chatId, status] of Object.entries(statusByChatId)) {
       if (status?.kind === "action_required") {
-        if (status.waitingOnly !== true) actionRequiredChatIds.add(chatId);
+        if (!waitsOnly(status)) actionRequiredChatIds.add(chatId);
         continue;
       }
       if (inView.has(chatId)) {

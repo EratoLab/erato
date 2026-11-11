@@ -1123,6 +1123,10 @@ pub enum DelegationRunReason {
     /// report, or it was cut off before it could, so nothing is lost by
     /// saying so plainly.
     Interrupted,
+    /// The run's chat was archived while its slot still waited, so nothing
+    /// will answer it. Rides a `failed` that the retry route refuses, because
+    /// the archived run itself is still parked and has no outcome.
+    Archived,
 }
 
 impl DelegationRunStatus {
@@ -1152,6 +1156,7 @@ impl DelegationRunReason {
             DelegationRunReason::ApprovalUnavailable => "approval_unavailable",
             DelegationRunReason::ResultMissing => "result_missing",
             DelegationRunReason::Interrupted => "interrupted",
+            DelegationRunReason::Archived => "archived",
         }
     }
 }

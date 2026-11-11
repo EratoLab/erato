@@ -283,10 +283,13 @@ export const DelegationStep = ({
   // Only the task route can be retried — a mention child is bound to the
   // assistant it was addressed to, and the endpoint refuses it. The failure
   // may be stated by the frozen envelope itself, or, for a detached dispatch
-  // whose slot says nothing, only by what this client knows of the run.
+  // whose slot says nothing, only by what this client knows of the run. A
+  // slot failed because its run was archived is not retried: the run is still
+  // parked in its archived chat, and the endpoint refuses it.
   const retryableChildChatId =
     part.tool_name === DELEGATE_TASK_TOOL_NAME &&
-    (envelope.status === "failed" || liveStatus === "error")
+    ((envelope.status === "failed" && envelope.reason !== "archived") ||
+      liveStatus === "error")
       ? envelope.delegateChatId
       : undefined;
   const model = envelope.model;

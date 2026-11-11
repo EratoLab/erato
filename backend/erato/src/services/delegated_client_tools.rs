@@ -802,9 +802,10 @@ pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
 }
 
 /// The output of a task's slot once its chat was archived: the park's envelope
-/// is kept for its ids, so the slot still links to the run.
+/// is kept for its ids, so the slot still links to the run. Its `archived`
+/// reason replaces the park's, so the step says why and offers no retry.
 fn archived_task_output(parked_output: Option<&Value>) -> Value {
-    use crate::services::delegation::DelegationRunStatus;
+    use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 
     let mut output = parked_output
         .filter(|output| output.is_object())
@@ -815,7 +816,10 @@ fn archived_task_output(parked_output: Option<&Value>) -> Value {
             "status".to_string(),
             json!(DelegationRunStatus::Failed.as_str()),
         );
-        object.remove("reason");
+        object.insert(
+            "reason".to_string(),
+            json!(DelegationRunReason::Archived.as_str()),
+        );
         object.insert(
             "error".to_string(),
             json!("The delegated run was archived."),

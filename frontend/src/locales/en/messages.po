@@ -9965,6 +9965,11 @@ msgstr "Needed a tool it could not ask you about"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr "The run was archived before it finished"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Stopped at its tool-call budget; the answer may be partial"
 

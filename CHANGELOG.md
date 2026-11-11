@@ -48,6 +48,8 @@ MCP servers that ask for the user's consent through a tool argument (such as Dat
 
 MCP tool results that the server flags as failed (`isError`) are now stored and shown as failed calls; previously every result without a transport error counted as a success, so a failed write looked like a check mark in the trace.
 
+A task whose chat was archived while it waited now says on its step that the run was archived, instead of only "Failed", and no longer offers Retry, which the server refused for it. The slot's output carries the new delegation reason `archived` (ERMAIN-1168).
+
 ## [0.8.0] - 2026-11-03
 
 ### Notable changes

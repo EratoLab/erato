@@ -446,6 +446,30 @@ describe("delegation step", () => {
     expect(screen.queryByTestId("delegation-retry")).toBeNull();
   });
 
+  it("says a task's run was archived and offers no retry the server would refuse", () => {
+    // The slot the server settles when the task's chat is archived: the
+    // park's envelope with `failed`, the `archived` reason and an error.
+    renderStep(
+      {
+        ...IDENTITY,
+        status: "failed",
+        reason: "archived",
+        error: "The delegated run was archived.",
+      },
+      "delegate_task",
+      false,
+      RETRY_ON,
+    );
+
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
+      "The run was archived before it finished",
+    );
+    expect(screen.queryByTestId("delegation-retry")).toBeNull();
+    // The run can still be opened, in its archived chat.
+    expect(screen.getByTestId("delegation-open-run")).toBeInTheDocument();
+  });
+
   it("says a delegate_task step is running while it streams", () => {
     renderStep({ ...IDENTITY }, "delegate_task");
     expect(screen.getByText("Running a task")).toBeInTheDocument();

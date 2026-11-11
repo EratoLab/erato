@@ -7,7 +7,6 @@ import { askForReviewAgain } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { sidecarToolLabel } from "@/lib/desktopSidecar/toolLabels";
 import { useDesktopSidecar } from "@/providers/DesktopSidecarProvider";
 
-import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { Button } from "../Controls/Button";
 
 import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
@@ -17,10 +16,12 @@ import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks"
  * the approval slot. The decision is made only in the app's window; this
  * shows that window again, or, once the review has ended, asks again.
  *
- * Like `ActionConfirmationCard`, the item is a labelled group that announces
- * its title politely and takes keyboard focus when the button that had it
- * goes away. While the app cannot be reached, its action stays focusable but
- * inert, and a visible line says why.
+ * Like `WaitingTaskItem` and `ParkedChildItem`, it sits inside the card that
+ * owns the approval shell. Like `ActionConfirmationCard` inside that shell,
+ * the item is a labelled group that announces its title politely and takes
+ * keyboard focus when the button that had it goes away. While the app cannot
+ * be reached, its action stays focusable but inert, and a visible line says
+ * why.
  */
 export const SidecarReviewItem = ({
   linkKey,
@@ -92,7 +93,7 @@ export const SidecarReviewItem = ({
       aria-label={title}
       data-testid="sidecar-review-item"
       data-review-state={link.state}
-      className={`${APPROVAL_CARD_SHELL_CLASS} focus-ring space-y-2`}
+      className="focus-ring-tight space-y-2"
     >
       <div>
         <p className="text-sm font-medium text-theme-fg-primary">{title}</p>
