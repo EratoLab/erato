@@ -58,6 +58,7 @@ import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
 import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
@@ -716,8 +717,9 @@ const rewriteFootnoteValue = (
 
 /**
  * A turn parked on a client tool call. A call whose review the Erato desktop
- * app shows gets its item in the approval slot; any other call says what the
- * turn waits for. While a row names a call that has ended, one of the chat's
+ * app shows gets its item in the approval slot, inside a card shell this
+ * notice owns, as `McpToolApprovalCard` does for its items; any other call
+ * says what the turn waits for. While a row names a call that has ended, one of the chat's
  * calls can already be in review: the row is refetched when the turn parks
  * again, and nothing here may act on the ended call meanwhile.
  */
@@ -739,7 +741,14 @@ function ClientToolPendingNotice({
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );
   if (key && link) {
-    return <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />;
+    return (
+      <div
+        className={APPROVAL_CARD_SHELL_CLASS}
+        data-testid="sidecar-review-card"
+      >
+        <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
+      </div>
+    );
   }
   return (
     <Alert type="info" role="status" geometryVariant="message">

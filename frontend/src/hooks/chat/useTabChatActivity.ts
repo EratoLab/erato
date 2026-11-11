@@ -4,7 +4,10 @@ import {
   hasDecisionIn,
   useConfirmationRegistryStore,
 } from "@/hooks/chat/store/confirmationRegistryStore";
-import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import {
+  useGenerationStatusStore,
+  waitsOnly,
+} from "@/hooks/chat/store/generationStatusStore";
 import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useChatsInReview } from "@/lib/desktopSidecar/sidecarReviewLinks";
 
@@ -54,7 +57,7 @@ export const useTabChatActivity = (): TabChatActivity => {
     const status = state.statusByChatId[chatId];
     return (
       status?.kind === "action_required" &&
-      (status.waitingOnly !== true || hasDecision || inReview.has(chatId))
+      (!waitsOnly(status) || hasDecision || inReview.has(chatId))
     );
   });
 

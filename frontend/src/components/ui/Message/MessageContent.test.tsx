@@ -23,6 +23,7 @@ import { ChatContext } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { MessageContent, useHostArtifact } from "./MessageContent";
 
 const mermaidMock = vi.hoisted(() => ({
@@ -2624,6 +2625,20 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(screen.getByRole("status")).not.toHaveTextContent(
       "waiting for a connected app",
     );
+  });
+
+  it("sits in the approval card shell, as the other approval items do", () => {
+    rememberReview(key, "handle-1");
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const card = screen.getByTestId("sidecar-review-card");
+    const item = screen.getByTestId("sidecar-review-item");
+    expect(card).toContainElement(item);
+    expect(card).toHaveClass(...APPROVAL_CARD_SHELL_CLASS.split(" "));
+    // One shell, the card's: the item draws none of its own.
+    expect(item).not.toHaveClass("bg-theme-bg-secondary");
+    expect(item).not.toHaveClass("border");
   });
 
   it("says a review ended and offers to ask again", () => {

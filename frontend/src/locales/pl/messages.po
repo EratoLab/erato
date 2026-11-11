@@ -10018,6 +10018,11 @@ msgstr "Potrzebował narzędzia, o które nie mógł Cię zapytać"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Zatrzymany na limicie wywołań narzędzi; odpowiedź może być niepełna"
 
@@ -10081,6 +10086,11 @@ msgstr "Przekazywanie do {name}"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.running.unnamed"
 msgstr "Przekazywanie do asystenta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.archived"
+msgstr "Zarchiwizowano"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
