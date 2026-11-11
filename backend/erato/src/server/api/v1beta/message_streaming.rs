@@ -694,6 +694,7 @@ fn scope_changed_request(
         namespace,
         tool_call,
         Some(crate::models::user_preference::ClientToolDecision::Ask),
+        false,
     ) else {
         return None;
     };
@@ -715,15 +716,23 @@ fn scope_changed_request(
 ///
 /// Asking parks the same durable stop an MCP approval does, so the user's time
 /// to decide never counts against the tool's result timeout.
+///
+/// `reviewed_on_device` (see [`OfferedClientTool::reviewed_on_device`]): the
+/// Erato desktop app asks about the call itself, so Ask is answered there
+/// alone. Never still refuses here.
+///
+/// [`OfferedClientTool::reviewed_on_device`]: crate::services::client_tools::OfferedClientTool::reviewed_on_device
 fn gate_client_tool_call(
     namespace: &str,
     tool_call: &genai::chat::ToolCall,
     decision: Option<crate::models::user_preference::ClientToolDecision>,
+    reviewed_on_device: bool,
 ) -> ToolCallGate {
     use crate::models::user_preference::ClientToolDecision;
     match decision {
         None | Some(ClientToolDecision::AlwaysAllow) => ToolCallGate::Run(None),
         Some(ClientToolDecision::NeverAllow) => refuse_denied_tool_call(tool_call),
+        Some(ClientToolDecision::Ask) if reviewed_on_device => ToolCallGate::Run(None),
         Some(ClientToolDecision::Ask) => ask_for_tool_call(
             tool_call,
             ToolApprovalKind::ClientTool,
@@ -2633,6 +2642,10 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Additional-Executors` of the device answering.
     #[serde(skip)]
     additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    /// Those of the answering device's bindings whose app it says runs in
+    /// strict mode (`X-Erato-Strict-Mode-Executors`).
+    #[serde(skip)]
+    strict_mode_executors: Vec<crate::services::client_operations::ExecutorBinding>,
     /// The validated `approve_context` decisions, by approval id.
     #[serde(skip)]
     context: HashMap<String, crate::services::approval_scope::ContextDecision>,
@@ -2666,6 +2679,7 @@ impl ContinueStreamRequest {
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -4206,7 +4220,7 @@ pub(crate) fn generation_request_context_from_headers(
     headers: &HeaderMap,
 ) -> GenerationRequestContext {
     let executor = crate::services::client_operations::ExecutorBinding::from_headers(headers);
-    GenerationRequestContext {
+    let mut context = GenerationRequestContext {
         platform: Some(platform_from_headers(headers)),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
         additional_executors:
@@ -4215,7 +4229,14 @@ pub(crate) fn generation_request_context_from_headers(
                 executor.as_ref(),
             ),
         executor,
-    }
+        strict_mode_executors: Vec::new(),
+    };
+    context.strict_mode_executors =
+        crate::services::client_operations::ExecutorBinding::strict_mode_from_headers(
+            headers,
+            context.executors(),
+        );
+    context
 }
 
 /// Returns whether the given platform string is a known platform value.
@@ -5193,6 +5214,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
             policy.executor = generation_request_context
                 .executor_for_tool(client_tool)
                 .cloned();
+            policy.executor_strict_mode = policy
+                .executor
+                .as_ref()
+                .is_some_and(|binding| generation_request_context.says_strict_mode(binding));
             offered_client_tools.insert(name.to_string(), policy);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
@@ -8687,6 +8712,7 @@ async fn stream_generate_chat_completion<'a>(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
                             decision,
+                            policy.reviewed_on_device(),
                         );
                         let gate = match (gate, scope_key) {
                             (ToolCallGate::Ask(request), Some((grant, key)))
@@ -14153,6 +14179,7 @@ mod tests {
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -14175,6 +14202,7 @@ mod tests {
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -14767,6 +14795,7 @@ mod tests {
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         };
@@ -15443,6 +15472,7 @@ mod tests {
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         };
@@ -21771,6 +21801,11 @@ pub async fn continue_message_sse(
             &headers,
             request.executor.as_ref(),
         );
+    request.strict_mode_executors =
+        crate::services::client_operations::ExecutorBinding::strict_mode_from_headers(
+            &headers,
+            request.executor.iter().chain(&request.additional_executors),
+        );
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let started = start_continuation(&app_state, &policy, &me_user, request, tx).await?;
     let stream: SseEventStream = Box::pin(futures::StreamExt::inspect(
@@ -22041,6 +22076,7 @@ async fn resume_parked_child(
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval,
         };
@@ -23868,6 +23904,7 @@ pub(crate) async fn run_continuation(
             .chain(&request.additional_executors)
             .cloned()
             .collect(),
+        &request.strict_mode_executors,
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
@@ -23888,7 +23925,7 @@ async fn append_granted_client_tools(
     tools: &mut Vec<genai::chat::Tool>,
     policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
 ) -> Result<(), Report> {
-    let Some((binding, granted)) = crate::services::delegated_client_tools::granted_tools(
+    let Some((grant, granted)) = crate::services::delegated_client_tools::granted_tools(
         app_state, chat, executor, account_id,
     )
     .await
@@ -23925,7 +23962,10 @@ async fn append_granted_client_tools(
         };
         let mut policy = crate::services::client_tools::OfferedClientTool::prepare(config, &schema)
             .map_err(|error| eyre!(error))?;
-        policy.executor = Some(binding.clone());
+        policy.executor = Some(grant.binding.clone());
+        // The launching page's word, the only one a task has: a later
+        // request may come from a device without the app.
+        policy.executor_strict_mode = grant.strict_mode;
         policy.grant = granted
             .iter()
             .find(|(granted, _)| granted.qualified_name() == config.qualified_name())
@@ -24043,6 +24083,9 @@ async fn resume_parked_generation(
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
     continuing_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    // The continuing request's own word, never the stored turn's: the app
+    // may have changed since the turn began.
+    continuing_strict_mode_executors: &[crate::services::client_operations::ExecutorBinding],
     assistant_mcp_server_ids: Option<Vec<String>>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
@@ -24234,6 +24277,10 @@ async fn resume_parked_generation(
                 .request_context
                 .as_ref()
                 .and_then(|context| context.executor_for_tool(&current).cloned());
+            policy.executor_strict_mode = policy
+                .executor
+                .as_ref()
+                .is_some_and(|binding| continuing_strict_mode_executors.contains(binding));
             let strict = crate::services::client_tools::native_strict_for_submission(
                 &current,
                 &schema,
@@ -24905,8 +24952,13 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map(|context| context.registered_client_tools.clone()),
         context
+            .as_ref()
             .map(|context| context.executors().cloned().collect())
             .unwrap_or_default(),
+        // A result posted with no page attached says nothing about the app.
+        context
+            .as_ref()
+            .map_or(&[], |context| context.strict_mode_executors.as_slice()),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await

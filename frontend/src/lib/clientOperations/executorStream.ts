@@ -49,7 +49,11 @@ export function paneInstance(): string {
 /** The headers this pane would open its stream with, or `undefined` while it
  * has no binding or no tools. A change means the stream must reopen. */
 export function executorStreamHeaders(): Record<string, string> | undefined {
-  const { "X-Erato-Additional-Executors": _submitOnly, ...headers } = {
+  const {
+    "X-Erato-Additional-Executors": _submitOnly,
+    "X-Erato-Strict-Mode-Executors": _alsoSubmitOnly,
+    ...headers
+  } = {
     ...getClientToolHeaders(),
     ...getChildClientToolHeaders(),
   };

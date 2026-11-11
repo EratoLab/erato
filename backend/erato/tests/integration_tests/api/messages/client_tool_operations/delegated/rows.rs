@@ -54,6 +54,9 @@ pub(super) struct HostRow {
     pub freshness: Value,
     /// The task result's note for a client task that asked for `async`.
     pub wait_note: &'static str,
+    /// Whether the shell says, whenever it sends the row's binding, that the
+    /// app behind it runs in strict mode (`X-Erato-Strict-Mode-Executors`).
+    pub strict_mode: bool,
 }
 
 impl HostRow {
@@ -87,7 +90,13 @@ impl HostRow {
                 serde_json::to_string(&[binding]).unwrap(),
             )
         });
-        match &self.envelope {
+        let strict_mode = executor.filter(|_| self.strict_mode).map(|binding| {
+            (
+                "X-Erato-Strict-Mode-Executors",
+                serde_json::to_string(&[binding]).unwrap(),
+            )
+        });
+        let headers: Vec<(&'static str, String)> = match &self.envelope {
             Envelope::Primary => executor
                 .map(|binding| ("X-Erato-Executor", serde_json::to_string(binding).unwrap()))
                 .into_iter()
@@ -98,7 +107,8 @@ impl HostRow {
                     .collect()
             }
             Envelope::Alone => additional.into_iter().collect(),
-        }
+        };
+        headers.into_iter().chain(strict_mode).collect()
     }
 
     /// `durable` adds a `[durable]` table; `dispatch` is the tool's own
@@ -218,6 +228,7 @@ pub(super) fn fake_host(host: ClientToolHostContext) -> HostRow {
             "counts": counts(),
         }),
         wait_note: wait_note(host),
+        strict_mode: false,
     }
 }
 
@@ -283,6 +294,7 @@ pub(super) fn word_document() -> HostRow {
             "sections": ["b7"],
         }),
         wait_note: wait_note(ClientToolHostContext::WordDocument),
+        strict_mode: false,
     }
 }
 
@@ -315,6 +327,7 @@ pub(super) fn outlook_mailbox() -> HostRow {
             "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
         }),
         wait_note: wait_note(ClientToolHostContext::OutlookMailbox),
+        strict_mode: false,
     }
 }
 
@@ -366,6 +379,7 @@ pub(super) fn desktop_sidecar() -> HostRow {
             "counts": {"own": 0, "local": 0, "remote": 0, "unknown": 0},
         }),
         wait_note: wait_note(ClientToolHostContext::DesktopSidecar),
+        strict_mode: false,
     }
 }
 

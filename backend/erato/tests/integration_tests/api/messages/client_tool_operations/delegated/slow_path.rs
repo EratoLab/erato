@@ -1924,6 +1924,69 @@ pub(super) async fn an_approved_child_call_on_a_durable_tool_waits_and_the_paren
     launched.server.abort();
 }
 
+/// A task's call of a reviewed sidecar tool set to Ask, planned by a turn whose
+/// page said its Erato desktop app runs in strict mode: the grant keeps that
+/// word, so the call waits for the app's review without a chat question
+/// (ERMAIN-1155). Without the word, as in
+/// [`an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it`],
+/// the task asks first.
+pub(super) async fn a_strict_apps_task_call_waits_for_its_review_without_asking(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    assert!(row.strict_mode);
+    let mut launched = launch(
+        row,
+        pool,
+        vec![client_task(None)],
+        |mocks| {
+            mock_child(
+                mocks,
+                CLIENT_BRIEF,
+                read_call(row),
+                CHILD_READ_CALL,
+                CHILD_ANSWER,
+            )
+        },
+        |_| {},
+        &[row.qualified()],
+    )
+    .await;
+    let parked = launched.parked().await;
+    assert_row_reads(&parked);
+    let child = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
+    assert_eq!(
+        task_spec(&child)["client_grant"]["strict_mode"],
+        json!(true)
+    );
+    assert_eq!(
+        task_spec(&child)["client_grant"]["binding"],
+        serde_json::to_value(row.binding()).unwrap(),
+        "the word travels beside the binding"
+    );
+    let request = operation_of(&launched.state, child.id, 0).await;
+    let items = parked_part(&parked)["approvals"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(
+        items[0]["child"]["waiting_for"]["attempt_id"],
+        json!(request.attempt_id),
+        "the call waits for the review, never a chat question"
+    );
+    assert_eq!(stops(&parked).len(), 1);
+    assert!(
+        stops(&assistant_row(&launched.state.db, child.id).await).is_empty(),
+        "the task asked nothing"
+    );
+    let resumed = record_parent_resumes(&mut launched.llm);
+    answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
+    wait_answered(&launched.state, launched.chat_id).await;
+    assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    launched.server.abort();
+}
+
 pub(super) async fn a_response_approval_lets_a_durable_task_call_park_without_asking(
     pool: Pool<Postgres>,
     row: &HostRow,
