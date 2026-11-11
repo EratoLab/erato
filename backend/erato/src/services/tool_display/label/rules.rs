@@ -537,8 +537,7 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
         .iter()
         .any(|(member, value)| hides_a_loss(member, value))
         || loss_out_of_reach(arguments)
-        || (verb.source == VerbSource::Field && name_sounds_like_a_loss(&name) && !field_loses)
-        || row_value_loss_out_of_label(arguments, action));
+        || (verb.source == VerbSource::Field && name_sounds_like_a_loss(&name) && !field_loses));
     if loss_left_out {
         flags.push(CrossCheckFlag::LossLeftOut);
     }
@@ -925,81 +924,12 @@ fn names_a_kind(member: &str) -> bool {
     member.eq_ignore_ascii_case("kind")
 }
 
-/// What a row's verb fields say it does: a delete or archive any of them
-/// states, whichever field comes first, as in `{kind: "Page", op:
-/// "delete"}`, else the first verb one names.
-pub(super) fn row_action(members: &Map<String, Value>) -> Option<ToolCallAction> {
-    let actions: Vec<ToolCallAction> = members
-        .iter()
-        .filter(|(member, _)| is_one_of(member, &VERB_FIELDS))
-        .filter_map(|(member, value)| {
-            row_field_action(member, value.as_str().filter(|text| is_identifier(text))?)
-        })
-        .collect();
-    [ToolCallAction::Delete, ToolCallAction::Archive]
-        .into_iter()
-        .find(|loss| actions.contains(loss))
-        .or_else(|| actions.first().copied())
-}
-
-/// What a batch row does: what its verb fields say, else the verb its value
-/// in the batch's [`operation_member`] names.
-pub(super) fn row_operation(
-    members: &Map<String, Value>,
-    operation: Option<&str>,
-) -> Option<ToolCallAction> {
-    row_action(members).or_else(|| {
-        let member = operation?;
-        row_value_action(member, members.get(member)?)
-    })
-}
-
-/// The member that picks each row's operation in rows that keep it in no
-/// verb field, as `type` does in `[{type: "item_update"}, {type:
-/// "item_delete"}]`: in every row its value names one verb, and the rows'
-/// verbs differ, one of them a delete or archive. A value all rows share
-/// may as well be data, such as a folder named `trash`.
-pub(super) fn operation_member<'a>(rows: &[&'a Map<String, Value>]) -> Option<&'a str> {
-    let (first, rest) = rows.split_first()?;
-    let mut candidates: Vec<(&'a str, Vec<ToolCallAction>)> = first
-        .iter()
-        .take(MAX_SEARCH_VALUES)
-        .filter_map(|(member, value)| {
-            Some((member.as_str(), vec![row_value_action(member, value)?]))
-        })
-        .take(MAX_VERB_FIELDS)
-        .collect();
-    for row in rest {
-        if candidates.is_empty() {
-            return None;
-        }
-        candidates.retain_mut(|(member, actions)| {
-            let Some(action) = row
-                .get(*member)
-                .and_then(|value| row_value_action(member, value))
-            else {
-                return false;
-            };
-            if !actions.contains(&action) {
-                actions.push(action);
-            }
-            true
-        });
-    }
-    candidates
-        .into_iter()
-        .find(|(_, actions)| {
-            actions.len() > 1
-                && actions.iter().any(|action| {
-                    matches!(action, ToolCallAction::Delete | ToolCallAction::Archive)
-                })
-        })
-        .map(|(member, _)| member)
-}
-
 /// Whether a batch row's plain value names a delete or archive by a whole
 /// word part, as `item_delete` or `HardDelete` do, that the row's `action`
-/// leaves out. A row that deletes loses all its values name.
+/// leaves out. Such a value may name the row's operation or only hold data,
+/// as a permission named `delete` does, so it never sets what a row does;
+/// it only keeps a batch from saying that no row deletes. A row that deletes
+/// loses all its values name.
 pub(super) fn row_value_loss_left_out(
     members: &Map<String, Value>,
     action: Option<ToolCallAction>,
@@ -1016,14 +946,6 @@ pub(super) fn row_value_loss_left_out(
                             && action != Some(ToolCallAction::Archive))
                 })
             })
-}
-
-/// The one verb a batch row's plain value names.
-fn row_value_action(member: &str, value: &Value) -> Option<ToolCallAction> {
-    match actions_of(&row_value_words(member, value)?).as_slice() {
-        [action] => Some(*action),
-        _ => None,
-    }
 }
 
 /// The words of a row's plain value that reads as an operation's name, such
@@ -1069,76 +991,6 @@ fn holds_data(member: &str) -> bool {
         ]
         .iter()
         .any(|names| is_one_of(member, names))
-}
-
-/// Whether rows in the arguments hold a plain value that names a delete or
-/// archive `action` leaves out: one neither a verb field nor the rows'
-/// [`operation_member`] counts, or one only that member counts while the
-/// verb is no update of the rows. Rows are read in the lists the call's
-/// objects hold, never in lists inside a row.
-fn row_value_loss_out_of_label(arguments: &Value, action: ToolCallAction) -> bool {
-    fn rows_lose(entries: &[Value], budget: &mut usize, action: ToolCallAction) -> bool {
-        let Some(rows) = entries
-            .iter()
-            .map(Value::as_object)
-            .collect::<Option<Vec<_>>>()
-        else {
-            return false;
-        };
-        let mut read = 0;
-        for row in &rows {
-            let Some(left) = budget.checked_sub(row.len() + 1) else {
-                break;
-            };
-            *budget = left;
-            read += 1;
-        }
-        let rows = &rows[..read];
-        let operation = operation_member(rows);
-        rows.iter().any(|row| {
-            let operation_says = row_operation(row, operation);
-            row_value_loss_left_out(row, operation_says)
-                || (row_action(row).is_none()
-                    && matches!(
-                        operation_says,
-                        Some(ToolCallAction::Delete | ToolCallAction::Archive)
-                    )
-                    && action != ToolCallAction::Update)
-        })
-    }
-    fn walk(
-        members: &Map<String, Value>,
-        depth: usize,
-        budget: &mut usize,
-        action: ToolCallAction,
-    ) -> bool {
-        for (member, value) in members {
-            if *budget == 0 {
-                return false;
-            }
-            *budget -= 1;
-            if is_recipient_member(member) {
-                continue;
-            }
-            let loses = match value {
-                Value::Object(inner) if depth < MAX_FIELD_DEPTH => {
-                    walk(inner, depth + 1, budget, action)
-                }
-                Value::Array(entries) => rows_lose(entries, budget, action),
-                _ => false,
-            };
-            if loses {
-                return true;
-            }
-        }
-        false
-    }
-    let mut budget = MAX_SEARCH_VALUES;
-    match arguments {
-        Value::Object(members) => walk(members, 0, &mut budget, action),
-        Value::Array(entries) => rows_lose(entries, &mut budget, action),
-        _ => false,
-    }
 }
 
 /// The actions the words name, in the order of `VERBS`.

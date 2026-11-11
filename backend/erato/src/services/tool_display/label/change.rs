@@ -1610,17 +1610,12 @@ impl<'a> Walk<'a> {
         let mut rows_removing_from_lists = 0u32;
         let mut deletions = 0u32;
         let mut deleted: Vec<usize> = Vec::new();
-        let rows: Vec<&Map<String, Value>> = entries
-            .iter()
-            .take(read)
-            .filter_map(Value::as_object)
-            .collect();
-        let operation = rules::operation_member(&rows);
+        let mut losses_unsure = false;
         for (index, row) in entries.iter().take(read).enumerate() {
             let Value::Object(members) = row else {
                 continue;
             };
-            let action = rules::row_operation(members, operation);
+            let action = row_action(members);
             // A row whose own verb may delete says nothing a card can rule out.
             if row_hides_a_loss(members, action) {
                 read_all = false;
@@ -1631,13 +1626,11 @@ impl<'a> Walk<'a> {
                 deletions = deletions.saturating_add(1);
                 deleted.push(index);
             }
-            let counted = if is_delete {
-                Some(ToolCallAction::Delete)
-            } else {
-                action
-            };
-            if rules::row_value_loss_left_out(members, counted) {
-                read_all = false;
+            // A value such as `type: "item_delete"` may name the row's
+            // operation or be data: it counts as neither, yet no card can say
+            // that no row deletes. The rows were read, so they still compare.
+            if rules::row_value_loss_left_out(members, action.or(Some(self.action))) {
+                losses_unsure = true;
             }
             if let Some(action) = action {
                 operations
@@ -1660,7 +1653,6 @@ impl<'a> Walk<'a> {
                 self.nodes -= 1;
                 let value_path = format!("{row_path}/{}", escape(member));
                 if is_verb_field(member, value)
-                    || operation == Some(member.as_str())
                     || is_row_identifier(member, value)
                     || self.row_member_left_out(&value_path, value)
                 {
@@ -1748,7 +1740,7 @@ impl<'a> Walk<'a> {
                 break;
             }
             self.bytes -= ENTRY_OVERHEAD_BYTES;
-            rows.push(self.batch_row(index, members, path, operation));
+            rows.push(self.batch_row(index, members, path));
         }
         // Fields past a row's cap were never compared on the card.
         let every_field_stated = !rows.is_empty()
@@ -1784,7 +1776,7 @@ impl<'a> Walk<'a> {
                 .collect(),
             fields,
             fields_omitted,
-            read_all,
+            read_all: read_all && !losses_unsure,
         });
     }
 
@@ -1793,7 +1785,6 @@ impl<'a> Walk<'a> {
         index: usize,
         members: &'a Map<String, Value>,
         path: &str,
-        operation: Option<&str>,
     ) -> ToolCallBatchRow {
         let row_path = format!("{path}/{index}");
         let number = u32::try_from(index + 1).unwrap_or(u32::MAX);
@@ -1809,7 +1800,6 @@ impl<'a> Walk<'a> {
         for (member, value) in members {
             let value_path = format!("{row_path}/{}", escape(member));
             if is_verb_field(member, value)
-                || operation == Some(member.as_str())
                 || self.row_member_left_out(&value_path, value)
                 || edit.is_some_and(|(before, _)| before == member.as_str())
                 || self.adds_or_removes_nothing(member, value, &value_path)
@@ -1847,7 +1837,7 @@ impl<'a> Walk<'a> {
             number,
             name,
             name_from_earlier,
-            action: rules::row_operation(members, operation),
+            action: row_action(members),
             effects,
             effects_omitted,
         }
@@ -2711,6 +2701,21 @@ fn is_row_identifier(member: &str, value: &Value) -> bool {
         && (names_an_id(member)
             || is_one_of(member, &ROW_NAMES)
             || value.as_str().is_some_and(is_machine_id))
+}
+
+/// What a row's verb fields say it does: a delete or archive any of them
+/// states, whichever field comes first, as in `{kind: "Page", op:
+/// "delete"}`, else the first verb one names.
+fn row_action(members: &Map<String, Value>) -> Option<ToolCallAction> {
+    let actions: Vec<ToolCallAction> = members
+        .iter()
+        .filter(|(member, value)| is_verb_field(member, value))
+        .filter_map(|(member, value)| rules::row_field_action(member, value.as_str()?))
+        .collect();
+    [ToolCallAction::Delete, ToolCallAction::Archive]
+        .into_iter()
+        .find(|loss| actions.contains(loss))
+        .or_else(|| actions.first().copied())
 }
 
 /// Whether a row's verb field has a word that deletes or archives while the
