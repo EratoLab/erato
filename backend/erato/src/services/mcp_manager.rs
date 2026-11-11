@@ -223,22 +223,27 @@ impl McpServers {
         }
     }
 
-    /// Call a tool on the appropriate MCP server and return the raw MCP result
+    /// Call a tool on the appropriate MCP server and return the raw MCP
+    /// result, without naming the surface the call comes from.
     pub async fn call_tool(
         &self,
         chat_id: Uuid,
         managed_tool_call: ManagedToolCall,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<rmcp::model::CallToolResult, Report> {
-        self.call_tool_with_progress(chat_id, managed_tool_call, auth_context, None)
+        self.call_tool_with_progress(chat_id, managed_tool_call, auth_context, None, None)
             .await
     }
 
+    /// Call a tool for a request from `platform`, its `X-Erato-Platform`
+    /// value. A server with `surface_hints` is told that surface and what it
+    /// accepts in the call's MCP metadata; the arguments stay as they are.
     pub async fn call_tool_with_progress(
         &self,
         chat_id: Uuid,
         managed_tool_call: ManagedToolCall,
         auth_context: &McpRequestAuthContext<'_>,
+        platform: Option<&str>,
         progress: Option<
             tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
         >,
@@ -264,6 +269,7 @@ impl McpServers {
                 &managed_tool_call.server_id,
                 params,
                 auth_context,
+                platform,
                 progress,
             )
             .await

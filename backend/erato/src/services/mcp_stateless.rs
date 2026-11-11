@@ -2,6 +2,7 @@
 //! Legacy protocol services continue to live in McpSessionManager.
 use super::mcp_call_error::{McpCallError, McpCallFailure};
 use super::mcp_manager::McpRequestAuthContext;
+use super::mcp_surface::SurfaceHint;
 use super::mcp_transports::{apply_auth_headers, oauth_default_headers};
 use crate::config::{McpProtocolMode, McpServerConfig};
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -260,7 +261,7 @@ impl HttpRequest {
         }
         let response = tokio::time::timeout(
             Duration::from_secs(3),
-            self.rpc("server/discover", json!({}), None),
+            self.rpc("server/discover", json!({}), json!({}), None),
         )
         .await;
         let modern = match response {
@@ -355,12 +356,14 @@ impl HttpRequest {
                 Some(value) => json!({"cursor": value}),
                 None => json!({}),
             };
-            let first = self.rpc("tools/list", params.clone(), None).await;
+            let first = self
+                .rpc("tools/list", params.clone(), json!({}), None)
+                .await;
             let result = match first {
                 Err(error) if error.transient() => {
                     // rmcp does not expose Retry-After; use one bounded retry.
                     tokio::time::sleep(Duration::from_millis(200)).await;
-                    self.rpc("tools/list", params, None).await?
+                    self.rpc("tools/list", params, json!({}), None).await?
                 }
                 result => result?,
             };
@@ -401,9 +404,12 @@ impl HttpRequest {
         ))
     }
 
+    /// Call a tool. A surface hint goes into this call's
+    /// `clientCapabilities` alone: tool listing and discovery never carry it.
     pub async fn call_tool(
         &self,
         params: CallToolRequestParams,
+        surface: Option<&SurfaceHint>,
         progress: Option<UnboundedSender<ProgressNotificationParam>>,
     ) -> Result<CallToolResult, Report> {
         let not_sent =
@@ -418,7 +424,8 @@ impl HttpRequest {
             ));
         }
         let params = serde_json::to_value(params).map_err(|error| not_sent(&error))?;
-        let result = self.rpc("tools/call", params, progress).await;
+        let capabilities = surface.map_or_else(|| json!({}), SurfaceHint::client_capabilities);
+        let result = self.rpc("tools/call", params, capabilities, progress).await;
         if let Err(error) = &result {
             let mut state = self.partition.lock().await;
             if error.code == Some(-32022) {
@@ -439,6 +446,7 @@ impl HttpRequest {
         &self,
         method: &str,
         mut params: Value,
+        client_capabilities: Value,
         progress: Option<UnboundedSender<ProgressNotificationParam>>,
     ) -> Result<Value, RequestError> {
         let id = sea_orm::prelude::Uuid::new_v4().to_string();
@@ -455,7 +463,7 @@ impl HttpRequest {
         );
         meta.insert(
             "io.modelcontextprotocol/clientCapabilities".into(),
-            json!({}),
+            client_capabilities,
         );
         meta.insert(
             "io.modelcontextprotocol/clientInfo".into(),

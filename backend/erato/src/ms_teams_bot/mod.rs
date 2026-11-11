@@ -49,8 +49,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use user_token::UserTokenClient;
 
-/// The `X-Erato-Platform` value recorded on messages sent through Teams.
+/// The `X-Erato-Platform` value of the Erato tab in Teams.
 pub const TEAMS_PLATFORM: &str = "teams";
+/// The platform value recorded on messages sent through the Teams bot, so
+/// the bot can be told apart from the tab.
+pub const TEAMS_BOT_PLATFORM: &str = "teams-bot";
 /// Path of the messaging endpoint configured on the Azure Bot resource.
 pub const MESSAGES_ROUTE: &str = erato_config::config::TEAMS_BOT_MESSAGES_PATH;
 /// Teams caps a message at about 100 KB; card actions and file metadata stay
@@ -58,6 +61,14 @@ pub const MESSAGES_ROUTE: &str = erato_config::config::TEAMS_BOT_MESSAGES_PATH;
 const MAX_ACTIVITY_BYTES: usize = 256 * 1024;
 const HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const IDENTITY_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
+
+/// Whether a request from `platform` falls under a setting scoped to `scope`,
+/// such as a hidden facet's `hidden_always_active_for_platform`. A `teams`
+/// scope also covers the bot: it did when the bot reported `teams` as well,
+/// and the tab and the bot are both Teams.
+pub fn platform_in_scope(scope: &str, platform: &str) -> bool {
+    scope == platform || (scope == TEAMS_PLATFORM && platform == TEAMS_BOT_PLATFORM)
+}
 
 pub struct TeamsBotSettings {
     pub tenant_id: String,

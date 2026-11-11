@@ -4313,6 +4313,34 @@ show_in_assistant_editor = true
 
 To show chat connectors while hiding preferences, set `show_frontend_tab = false` and `show_in_chat_input = true`. An omitted `show_in_assistant_editor` still inherits `false`.
 
+#### `mcp_servers_global.surfaces`
+
+{/* erato_toml_config_key: mcp_servers_global.surfaces */}
+{/* erato_toml_config_key: mcp_servers_global.surfaces.<surface> */}
+{/* erato_toml_config_key: mcp_servers_global.surfaces.<surface>.accept */}
+{/* erato_toml_config_key: mcp_servers_global.surfaces.<surface>.accept.[] */}
+
+What each surface accepts, keyed by its `X-Erato-Platform` value, as told to MCP servers that enable [`surface_hints`](#mcp_serversserver-idsurface_hints). `accept` lists MIME types in order of preference: exact types such as `image/png`, `type/*` or `*/*`, sent in lower case. An entry replaces the built-in list of its surface, and an entry for another value, such as a future `excel`, adds a surface. An empty list still names the surface, with no accepted formats. Surface names are matched exactly and must be 1 to 64 visible ASCII characters without spaces.
+
+| Surface | Built-in `accept` |
+| --- | --- |
+| `web`, `outlook`, `word`, `addin-neutral`, `teams` (the Teams tab) | `["image/svg+xml", "image/png"]` |
+| `teams-bot` (the Teams bot) | `["image/png"]` |
+
+**Type:** `object<string, { accept: array<string> }>`
+
+**Default value:** the built-in lists above
+
+**Example:**
+
+```toml
+[mcp_servers_global.surfaces.teams-bot]
+accept = ["image/png", "image/jpeg"]
+
+[mcp_servers_global.surfaces.excel]
+accept = ["image/png"]
+```
+
 #### `mcp_servers.<server-id>.display_name`
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.display_name */}
@@ -4443,6 +4471,49 @@ Name of a tool argument through which this server asks for the user's consent to
 ```toml
 [mcp_servers.dynamics]
 approval_argument = "hasUserApproved"
+```
+
+#### `mcp_servers.<server-id>.surface_hints`
+
+{/* erato_toml_config_key: mcp_servers.<server-id>.surface_hints */}
+
+Whether this server is told, with every tool call, which surface the call comes from and which output formats that surface accepts, so that it can choose what to return, for example an SVG for the web app and a PNG for the Teams bot. The hint travels in the call's MCP metadata, never as a tool argument, so the model never sees it. Servers without this setting receive nothing.
+
+For a server on the stateless protocol, the hint is a client capability extension of the `tools/call` request:
+
+```json
+"_meta": {
+  "io.modelcontextprotocol/clientCapabilities": {
+    "extensions": {
+      "chat.erato/surface": { "surface": "teams-bot", "accept": ["image/png"] }
+    }
+  }
+}
+```
+
+For a legacy server, it is an entry of the tool call's `_meta`:
+
+```json
+"_meta": {
+  "chat.erato/surface": { "surface": "web", "accept": ["image/svg+xml", "image/png"] }
+}
+```
+
+`surface` is the request's `X-Erato-Platform` value: `web`, `outlook`, `word`, `addin-neutral`, `teams` (the Erato tab in Teams) or `teams-bot` (the Teams bot). `accept` lists MIME types in order of preference, as set in [`mcp_servers_global.surfaces`](#mcp_servers_globalsurfaces). A call the user approves on an approval card carries the surface of the turn that asked, wherever the card was answered. A call from a surface that has no list, such as an unrecognized platform value, and a call from a run without a surface, such as a delegated task, carry no hint.
+
+Only tool calls carry the hint: initialization, discovery and tool listing are unchanged, and so is the cache of tool lists.
+
+**Type:** `boolean`
+
+**Default value:** `false`
+
+**Example:**
+
+```toml
+[mcp_servers.diagrams]
+transport_type = "streamable_http"
+url = "https://diagrams.example.com/mcp"
+surface_hints = true
 ```
 
 #### `mcp_servers.<server-id>.glossary`
@@ -6607,7 +6678,7 @@ additional_system_prompt = { source = "static", prompt = "Please execute one or 
 
 A facet with `hidden = true` is a platform-baseline: it never appears in the facet pool and cannot be selected or removed by the user. Instead of being toggled, it is injected as an always-on system prompt once at the start of a conversation — under the same rule as the base system prompt — and then persists in history for the rest of the conversation. Because it is an ordinary facet, its `model_settings` and `tool_call_allowlist` still apply (per request) like any active facet.
 
-Scope activation to a platform with `hidden_always_active_for_platform`, matched against the request's `X-Erato-Platform` header. Omit it to apply on all platforms.
+Scope activation to a platform with `hidden_always_active_for_platform`, matched against the request's `X-Erato-Platform` header. Omit it to apply on all platforms. The Teams tab sends `teams` and the Teams bot reports `teams-bot`: a facet scoped to `teams` applies to both, one scoped to `teams-bot` only to the bot.
 
 Use a hidden facet for general platform-baseline behavior that should always be present (e.g. "you are running inside the Outlook add-in"). For per-request, task-specific instructions that should _not_ persist across turns, use an [action facet](#action_facets) instead.
 

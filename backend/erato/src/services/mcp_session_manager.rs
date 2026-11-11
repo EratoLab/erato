@@ -2,11 +2,12 @@ use super::mcp_call_error::{McpCallError, McpCallFailure};
 use super::mcp_stateless::{HttpRequest, HttpServer, RequestError, transport_failure};
 use crate::config::{
     AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
-    McpServerForwardedCredential, McpToolAnnotationsConfig,
+    McpServerForwardedCredential, McpSurfaceConfig, McpToolAnnotationsConfig,
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
+use crate::services::mcp_surface::SurfaceHint;
 use crate::services::mcp_tool_annotations::{ResolvedMcpTool, resolve_tool_annotations};
 use crate::services::mcp_transports::{ProgressClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
@@ -312,6 +313,9 @@ struct McpSessionManagerConfig {
     default_max_idle_seconds: u64,
     default_tool_annotations: McpToolAnnotationsConfig,
     override_tool_annotations: McpToolAnnotationsConfig,
+    /// What each surface accepts, as configured. Read per call, so a change
+    /// keeps every cached session.
+    surfaces: HashMap<String, McpSurfaceConfig>,
 }
 
 /// Everything that can affect a cached connection and its resolved tools.
@@ -425,6 +429,7 @@ impl McpSessionManager {
             default_max_idle_seconds,
             default_tool_annotations: config.mcp_servers_global.default_tool_annotations,
             override_tool_annotations: config.mcp_servers_global.override_tool_annotations,
+            surfaces: config.mcp_servers_global.surfaces.clone(),
         }));
 
         // Spawn background cleanup task
@@ -490,6 +495,9 @@ impl McpSessionManager {
         configuration.default_tool_annotations = config.mcp_servers_global.default_tool_annotations;
         configuration.override_tool_annotations =
             config.mcp_servers_global.override_tool_annotations;
+        configuration
+            .surfaces
+            .clone_from(&config.mcp_servers_global.surfaces);
 
         self.http_servers
             .lock()
@@ -919,8 +927,9 @@ impl McpSessionManager {
             || error_msg.contains("connection")
     }
 
-    /// Call a tool on the appropriate MCP server for the given chat
-    /// Automatically retries once with a new session if the session has become invalid
+    /// Call a tool on the appropriate MCP server for the given chat, without
+    /// naming a surface. Automatically retries once with a new session if
+    /// the session has become invalid.
     pub async fn call_tool(
         &self,
         chat_id: Uuid,
@@ -928,20 +937,37 @@ impl McpSessionManager {
         params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<CallToolResult, Report> {
-        self.call_tool_with_progress(chat_id, server_id, params, auth_context, None)
+        self.call_tool_with_progress(chat_id, server_id, params, auth_context, None, None)
             .await
     }
 
+    /// The surface hint a call of `server_id` from `platform` carries: none
+    /// unless the server opted in and the surface is one Erato knows.
+    async fn surface_hint(&self, server_id: &str, platform: Option<&str>) -> Option<SurfaceHint> {
+        let platform = platform?;
+        let configuration = self.configuration.read().await;
+        configuration
+            .server_configs
+            .get(server_id)
+            .filter(|server| server.surface_hints)?;
+        SurfaceHint::resolve(platform, &configuration.surfaces)
+    }
+
+    /// Call a tool for a request from `platform`, its `X-Erato-Platform`
+    /// value, which an opted-in server is told along with what that surface
+    /// accepts.
     pub async fn call_tool_with_progress(
         &self,
         chat_id: Uuid,
         server_id: &str,
-        params: CallToolRequestParams,
+        mut params: CallToolRequestParams,
         auth_context: &McpRequestAuthContext<'_>,
+        platform: Option<&str>,
         progress: Option<
             tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
         >,
     ) -> Result<CallToolResult, Report> {
+        let surface = self.surface_hint(server_id, platform).await;
         if let Some(request) = self.stateless_request(server_id, auth_context).await? {
             let config = self.server_config(server_id).await?;
             if !is_tool_allowed_by_server_config(&params.name, &config) {
@@ -950,7 +976,10 @@ impl McpSessionManager {
                     "MCP tool is excluded by server configuration",
                 ));
             }
-            return request.call_tool(params, progress).await;
+            return request.call_tool(params, surface.as_ref(), progress).await;
+        }
+        if let Some(surface) = &surface {
+            surface.add_to_call(&mut params);
         }
         // Try calling the tool with the current legacy session
         match self
@@ -1201,6 +1230,7 @@ mod tests {
     };
     use crate::config::{
         AppConfig, McpRuntimeConfig, McpServerAuthenticationConfig, McpServerConfig,
+        McpSurfaceConfig,
     };
     use rmcp::model::Tool;
 
@@ -1212,6 +1242,7 @@ mod tests {
             display_name: None,
             approval_argument: None,
             glossary: Default::default(),
+            surface_hints: false,
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),
@@ -1335,6 +1366,39 @@ mod tests {
         next.mcp_servers
             .insert("added".to_string(), server_config(None, vec![]));
         assert_eq!(manager.reconfigure(&next).await, vec!["added", "changed"]);
+    }
+
+    #[tokio::test]
+    async fn surface_lists_reload_without_dropping_sessions() {
+        let mut app_config = AppConfig::default();
+        app_config
+            .mcp_servers
+            .insert("files".to_string(), server_config(None, vec![]));
+        let manager = McpSessionManager::new(&app_config);
+        assert_eq!(manager.surface_hint("files", Some("web")).await, None);
+
+        let mut next = McpRuntimeConfig::from_app_config(&app_config);
+        next.mcp_servers_global.surfaces.insert(
+            "teams-bot".to_string(),
+            McpSurfaceConfig {
+                accept: vec!["image/jpeg".to_string()],
+            },
+        );
+        assert!(manager.reconfigure(&next).await.is_empty());
+        assert_eq!(manager.surface_hint("files", Some("teams-bot")).await, None);
+
+        next.mcp_servers.get_mut("files").unwrap().surface_hints = true;
+        assert_eq!(manager.reconfigure(&next).await, vec!["files"]);
+        assert_eq!(
+            manager
+                .surface_hint("files", Some("teams-bot"))
+                .await
+                .unwrap()
+                .to_value(),
+            serde_json::json!({"surface": "teams-bot", "accept": ["image/jpeg"]})
+        );
+        assert_eq!(manager.surface_hint("files", None).await, None);
+        assert_eq!(manager.surface_hint("other", Some("web")).await, None);
     }
 }
 

@@ -1,6 +1,6 @@
 use erato_config::config::{
-    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_invisible_format_char,
-    mark_hidden_chars, validate_mcp_server_ids,
+    McpProtocolMode, McpRuntimeConfig, McpServerConfig, McpServersGlobalConfig, has_hidden_chars,
+    is_invisible_format_char, mark_hidden_chars, validate_mcp_server_ids,
 };
 use std::collections::HashMap;
 
@@ -12,6 +12,52 @@ fn parse(mode: &str) -> Result<McpServerConfig, config::ConfigError> {
         ))
         .build()?
         .try_deserialize()
+}
+
+fn parse_global(toml: &str) -> Result<McpServersGlobalConfig, config::ConfigError> {
+    config::Config::builder()
+        .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+        .build()?
+        .try_deserialize()
+}
+
+#[test]
+fn surface_hints_are_opt_in() {
+    assert!(!parse("").unwrap().surface_hints);
+    assert!(parse("surface_hints = true").unwrap().surface_hints);
+    assert!(parse_global("").unwrap().surfaces.is_empty());
+}
+
+#[test]
+fn configured_surface_lists_keep_their_order_and_are_validated() {
+    let global = parse_global(
+        "[surfaces.teams-bot]\naccept = ['image/png']\n\n[surfaces.excel]\naccept = ['image/svg+xml', 'image/*', '*/*']\n\n[surfaces.web]\naccept = []\n",
+    )
+    .unwrap();
+    global.validate().unwrap();
+    assert_eq!(global.surfaces["teams-bot"].accept, ["image/png"]);
+    assert_eq!(
+        global.surfaces["excel"].accept,
+        ["image/svg+xml", "image/*", "*/*"]
+    );
+    assert!(global.surfaces["web"].accept.is_empty());
+
+    for invalid in [
+        "[surfaces.web]\naccept = ['png']",
+        "[surfaces.web]\naccept = ['image/png ']",
+        "[surfaces.web]\naccept = ['*/png']",
+        "[surfaces.web]\naccept = ['image/']",
+        "[surfaces.web]\naccept = ['image/png;q=0.5']",
+        "[surfaces.'two words']\naccept = ['image/png']",
+        "[surfaces.'']\naccept = ['image/png']",
+    ] {
+        assert!(
+            parse_global(invalid).unwrap().validate().is_err(),
+            "{invalid}"
+        );
+    }
+    // A surface entry names its list; anything else is a typo.
+    assert!(parse_global("[surfaces.web]\nformats = ['image/png']").is_err());
 }
 
 #[test]

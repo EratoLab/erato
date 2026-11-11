@@ -26,6 +26,7 @@ fn mcp_server_config(
 ) -> McpServerConfig {
     McpServerConfig {
         glossary: Default::default(),
+        surface_hints: false,
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),

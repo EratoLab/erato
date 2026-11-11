@@ -136,6 +136,10 @@ chat_provider_ids = ["test-token-limit"]
 # # model, asks before each call of a tool that declares it, and fills it from the
 # # user's decision.
 # approval_argument = "hasUserApproved"
+# # Tell this server on every tool call which surface the call comes from and
+# # which MIME types it accepts, in the call's MCP metadata (default: false).
+# # Lists per surface: [mcp_servers_global.surfaces.<surface>] accept = [...]
+# surface_hints = true
 # # Optional: how this server's machine names read on approval cards. A glossary
 # # name is shown with the raw name beside it; it never changes what a call does.
 # [mcp_servers.file_provider.glossary.field_names]

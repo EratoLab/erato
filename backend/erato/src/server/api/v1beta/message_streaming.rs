@@ -4194,7 +4194,8 @@ pub(crate) fn is_known_platform(config: &crate::config::AppConfig, platform: &st
     if platform == DEFAULT_ERATO_PLATFORM {
         return true;
     }
-    if platform == crate::ms_teams_bot::TEAMS_PLATFORM
+    if (platform == crate::ms_teams_bot::TEAMS_PLATFORM
+        || platform == crate::ms_teams_bot::TEAMS_BOT_PLATFORM)
         && config.integrations.ms_office.teams.bot.enabled
     {
         return true;
@@ -4419,7 +4420,9 @@ pub(crate) fn active_hidden_facet_ids(
         .filter(
             |(_, facet)| match &facet.hidden_always_active_for_platform {
                 None => true,
-                Some(required) => platform == Some(required.as_str()),
+                Some(required) => platform.is_some_and(|platform| {
+                    crate::ms_teams_bot::platform_in_scope(required, platform)
+                }),
             },
         )
         .map(|(id, _)| id.clone())
@@ -6791,6 +6794,9 @@ async fn stream_generate_chat_completion<'a>(
     // The turn's `X-Erato-Executor` binding, which an attached transport
     // prefers over the bindings sent beside it.
     primary_executor: Option<&crate::services::client_operations::ExecutorBinding>,
+    // The turn's `X-Erato-Platform` value, which MCP servers that opted in to
+    // surface hints are told with every tool call.
+    platform: Option<&str>,
     chat_provider_headers_context: &'a ChatProviderHeadersContext<'a>,
     streaming_task: Option<&Arc<StreamingTask>>,
     assistant_id: Option<Uuid>,
@@ -9755,6 +9761,7 @@ async fn stream_generate_chat_completion<'a>(
                 chat_id,
                 managed_tool_call,
                 &mcp_auth_context,
+                platform,
                 Some(progress_tx),
             );
             let tool_call_result = await_mcp_tool_with_progress::<GenerationStreamingMessage>(
@@ -15732,6 +15739,39 @@ mod tests {
     }
 
     #[test]
+    fn a_teams_scoped_hidden_facet_covers_the_tab_and_the_bot() {
+        use super::active_hidden_facet_ids;
+        use crate::config::{FacetConfig, FacetsConfig};
+        use crate::ms_teams_bot::{TEAMS_BOT_PLATFORM, TEAMS_PLATFORM};
+        use std::collections::HashMap;
+
+        let hidden = |platform: &str| FacetConfig {
+            display_name: "Baseline".to_string(),
+            hidden: true,
+            hidden_always_active_for_platform: Some(platform.to_string()),
+            delegation: None,
+            ..Default::default()
+        };
+        let config = FacetsConfig {
+            facets: HashMap::from([
+                ("teams_baseline".to_string(), hidden(TEAMS_PLATFORM)),
+                ("bot_baseline".to_string(), hidden(TEAMS_BOT_PLATFORM)),
+            ]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            active_hidden_facet_ids(&config, Some(TEAMS_BOT_PLATFORM)),
+            vec!["bot_baseline".to_string(), "teams_baseline".to_string()]
+        );
+        assert_eq!(
+            active_hidden_facet_ids(&config, Some(TEAMS_PLATFORM)),
+            vec!["teams_baseline".to_string()]
+        );
+        assert!(active_hidden_facet_ids(&config, Some("web")).is_empty());
+    }
+
+    #[test]
     fn sanitize_drops_hidden_facets_from_user_selection() {
         use super::sanitize_selected_facet_ids;
         use crate::config::{FacetConfig, FacetsConfig};
@@ -16108,6 +16148,15 @@ mod tests {
             let config = AppConfig::default();
             assert!(is_known_platform(&config, "web"));
             assert!(!is_known_platform(&config, "outlook"));
+        }
+
+        #[test]
+        fn the_teams_bot_and_tab_are_known_while_the_bot_is_enabled() {
+            let mut config = AppConfig::default();
+            assert!(!is_known_platform(&config, "teams-bot"));
+            config.integrations.ms_office.teams.bot.enabled = true;
+            assert!(is_known_platform(&config, "teams-bot"));
+            assert!(is_known_platform(&config, "teams"));
         }
 
         #[test]
@@ -18119,6 +18168,7 @@ async fn run_generation_after_user_message_memory_inner(
         available_mcp_tools,
         offered_client_tools,
         generation_request_context.executor.as_ref(),
+        generation_request_context.platform.as_deref(),
         &chat_provider_headers_context,
         Some(task),
         chat.assistant_id,
@@ -18869,6 +18919,7 @@ pub(crate) async fn start_regeneration(
                 available_mcp_tools,
                 offered_client_tools,
                 generation_request_context.executor.as_ref(),
+                generation_request_context.platform.as_deref(),
                 &chat_provider_headers_context,
                 Some(&task_for_stream),
                 chat.assistant_id,
@@ -19500,6 +19551,7 @@ pub(crate) async fn start_edit(
                 available_mcp_tools,
                 offered_client_tools,
                 generation_request_context.executor.as_ref(),
+                generation_request_context.platform.as_deref(),
                 &chat_provider_headers_context,
                 Some(&task_for_stream),
                 chat.assistant_id,
@@ -22927,6 +22979,11 @@ pub(crate) async fn run_continuation(
                     }),
                 },
                 &mcp_auth_context,
+                // The parked turn's surface, wherever the card was answered.
+                generation_parameters
+                    .request_context
+                    .as_ref()
+                    .and_then(|context| context.platform.as_deref()),
                 Some(progress_tx),
             );
             let dispatched = await_mcp_tool_with_progress::<MessageSubmitStreamingResponseMessage>(
@@ -24285,6 +24342,12 @@ async fn resume_parked_generation(
             .request_context
             .as_ref()
             .and_then(|context| context.executor.as_ref()),
+        // The surface the parked turn came from: the run continues that turn,
+        // whichever client the decision or result arrived on.
+        generation_parameters
+            .request_context
+            .as_ref()
+            .and_then(|context| context.platform.as_deref()),
         &headers_context,
         Some(task),
         chat.assistant_id,
