@@ -144,6 +144,7 @@ the context version. The schema offered to the task leaves both out, in every
 | Not granted, not offered, or set to Never | refused per call |
 | The user declined an Ask (Reject, Never allow or Withdraw) | `{"status":"cancelled","reason":"declined","error":…}` |
 | The user declined on the device (a validation code `declined`, live or durable) | `{"status":"cancelled","reason":"declined","error":…}` |
+| A review on the device ended before its result reached the task (a validation code `review_expired`, live or durable) | `{"status":"cancelled","reason":"expired","error":…}` |
 | Durable: no client ran it before the attempt ended | `{"status":"cancelled","reason":"expired","error":…}` |
 | Durable: the parent moved on, or the tool became Never or lost its grant | `{"status":"cancelled","reason":"withdrawn","error":…}` |
 | Durable: the user stopped waiting for the call (`/me/client-operations/{id}/cancel`) | `{"status":"cancelled","reason":"cancelled","error":…}`, which also says not to call the tool again in the task |
@@ -281,7 +282,11 @@ first try and no 15 s grace.
   it, and the parent's item settles with that answer. A `409` (the call had
   already ended) reads the row again.
 - **Task result.** `client_tools` counts `declined`, `expired` and `cancelled`
-  granted calls, each left out when 0.
+  granted calls, each left out when 0. A review on the device that ended before
+  its result reached the task counts as `expired`, not `declined`: nobody
+  decided within the job's hour, or the app no longer had the job (its record
+  ran out, the store dropped the results, or a strict app restarted with an
+  empty store), so a Share the user made can be lost too.
 
 ## Run mode
 
@@ -448,7 +453,10 @@ it.
   from its four values, integer `counts`, `sections`), each string at most 256
   characters and at most 64 sections, because the task result reaches the parent's
   model outside the untrusted framing;
-- `declined`: the number of granted calls the user declined.
+- `declined`: the number of granted calls the user declined;
+- `expired`: the number of granted calls that ran out of time: durable ones no
+  client ran before their attempt ended, and ones whose review on the device
+  ended before its result reached the task.
 
 The parent's trace steps (`localTrace`) for granted reads carry the part read and
 the freshness, read from the same place: `detail` is the call's receipt input fields
@@ -560,7 +568,10 @@ A host's handlers pass `clientToolHostAdapterConformanceFailures` from
   sidecar's stream and an Outlook task of the same turn the add-in's.
 - A device decline on the live path (the pane answers with a validation code
   `declined`) ends a granted call with the declined output, as on the durable
-  path, so the task result counts it. The user's own calls keep their outcome.
+  path, so the task result counts it. A review on the device that ended before
+  its result reached the task (validation code `review_expired`) ends it as
+  `expired` instead, with the server's text telling the task's model not to
+  retry it without the user. The user's own calls keep their outcome.
 - A call handed to an executor stream carries `expires_at`, when the run stops
   waiting (the hand-over plus the tool's timeout), and on delivery `timeout_ms`,
   the time left by the server's clock, so a device prompt can close with the
