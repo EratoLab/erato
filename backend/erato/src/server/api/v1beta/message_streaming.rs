@@ -2888,7 +2888,7 @@ async fn acquire_user_generation_lease(
             .await);
     }
 
-    app_state
+    let started = app_state
         .background_tasks
         .try_start_task(
             chat_id,
@@ -2899,7 +2899,30 @@ async fn acquire_user_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| lease_held_error(chat_id, held))
+        .map_err(|held| lease_held_error(chat_id, held))?;
+    withdraw_task_calls(app_state, chat_id, Some(message_id)).await;
+    Ok(started)
+}
+
+/// Ends the waits of the tasks this chat's turns started, but those of
+/// `kept_turn` (all of them when `None`), once the lease went to another turn or
+/// the user stopped the turn (ERMAIN-1165). Their calls are withdrawn at once,
+/// so a device stops asking and the old card stops waiting, instead of at their
+/// next claim, renewal or result; each task then answers without the result
+/// once a client continues it. A failure leaves them to that later withdrawal.
+async fn withdraw_task_calls(app_state: &AppState, chat_id: Uuid, kept_turn: Option<Uuid>) {
+    if !app_state.config.client_tools.durable_operations_enabled {
+        return;
+    }
+    if let Err(error) = crate::services::client_operations::store::withdraw_task_calls(
+        &app_state.db,
+        chat_id,
+        kept_turn,
+    )
+    .await
+    {
+        tracing::warn!(%error, %chat_id, "Could not withdraw the open calls of a chat's tasks");
+    }
 }
 
 /// The typed 409 for a refused lease claim.
@@ -18318,6 +18341,7 @@ async fn acquire_revision_generation_lease(
         return Err(error);
     }
     lease_guard.disarm();
+    withdraw_task_calls(app_state, chat_id, Some(task.message_id())).await;
     Ok((events, task))
 }
 
@@ -19703,6 +19727,10 @@ pub async fn abort_message_stream(
             "No active generation task found for this chat".to_string(),
         ));
     }
+    // The stopped turn's tasks stop waiting for their calls too. A parked turn
+    // that only waits for its tasks has nothing to stop and answers 404 above;
+    // its waits end one by one from the card.
+    withdraw_task_calls(&app_state, request.chat_id, None).await;
 
     Ok(Json(AbortStreamResponse {
         abort_requested: true,

@@ -7,6 +7,7 @@ import {
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 
 import { continueAttachedOperation } from "./attachedContinuation";
+import { isConflict } from "./conflict";
 import { clientOperationDeviceId } from "./deviceId";
 import {
   executorStreamHeaderSets,
@@ -164,14 +165,7 @@ interface HeldClaim {
 const CLAIM_RETRY_MS = 1_500;
 /** The server answers 409 for every unclaimable attempt, including one whose
  * chat still generates right after the park; the reason is not distinguishable. */
-function isClaimRefusal(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    error.status === 409
-  );
-}
+const isClaimRefusal = isConflict;
 
 /** One account-scoped shell coordinator. Claims/results/continuations are
  * durable server authority; maps only avoid redundant work within this view. */

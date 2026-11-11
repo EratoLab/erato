@@ -18,6 +18,7 @@ import {
   useSidecarReviewLinks,
 } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { markAwaitingReview } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { chatDetailQuery } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as enMessages } from "@/locales/en/messages.json";
 import { ChatContext } from "@/providers/ChatProvider";
 import { StaticFeatureConfigProvider } from "@/providers/FeatureConfigProvider";
@@ -36,6 +37,7 @@ const mermaidMock = vi.hoisted(() => ({
 vi.mock("mermaid", () => ({ default: mermaidMock }));
 
 import type {
+  ChatDetail,
   ContentPart,
   FileUploadItem,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -2697,7 +2699,7 @@ describe("a turn parked on a review in the Erato desktop app", () => {
   it("says one of the chat's calls is in review when the row still names a finished call", () => {
     const reviewEnded = markAwaitingReview("chat");
     try {
-      renderWithTheme(
+      renderWithQueryClient(
         <ChatContext.Provider
           value={
             { currentChatId: "chat" } as React.ContextType<typeof ChatContext>
@@ -2776,6 +2778,126 @@ describe("a turn parked on a review in the Erato desktop app", () => {
     expect(screen.getByTestId("tool-call-item")).toHaveTextContent(
       "Interrupted",
     );
+  });
+});
+
+describe("a task's own waiting call, in the task's chat (ERMAIN-1165)", () => {
+  const pending: ContentPart = {
+    content_type: "client_tool_pending",
+    attempt_id: "task-attempt",
+    tool_call_id: "call",
+    pending_tool_calls: [],
+  };
+  const taskChat: Partial<ChatDetail> = {
+    provenance_kind: "delegation",
+    can_edit: true,
+  };
+  const renderInChat = (detail: Partial<ChatDetail>, readOnly = false) => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    });
+    queryClient.setQueryData(
+      chatDetailQuery({ pathParams: { chatId: "task-chat" } }).queryKey,
+      { id: "task-chat", ...detail },
+    );
+    return renderWithTheme(
+      <QueryClientProvider client={queryClient}>
+        <ChatContext.Provider
+          value={
+            {
+              currentChatId: "task-chat",
+              refetchMessages: async () => undefined,
+            } as unknown as React.ContextType<typeof ChatContext>
+          }
+        >
+          <MessageContent
+            messageId="task-message"
+            content={[pending]}
+            readOnly={readOnly}
+          />
+        </ChatContext.Provider>
+      </QueryClientProvider>,
+    );
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("can stop the wait beside the notice, for the call's own attempt", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInChat(taskChat);
+
+    const notice = screen.getByText(/waiting for a connected app/);
+    const button = screen.getByRole("button", { name: "Stop waiting" });
+    button.focus();
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText(
+        "You stopped waiting. The task answers without this result.",
+      ),
+    ).toBe(screen.getByTestId("stop-waiting-status"));
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      "/api/v1beta/me/client-operations/task-attempt/cancel",
+    );
+    // The button that had focus is gone: the notice it stood beside has it.
+    expect(
+      screen.queryByRole("button", { name: "Stop waiting" }),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toContainElement(notice);
+  });
+
+  it("says the wait had already ended, and keeps the stop away for it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        ),
+    );
+    renderInChat(taskChat);
+
+    const button = screen.getByRole("button", { name: "Stop waiting" });
+    button.focus();
+    fireEvent.click(button);
+
+    expect(await screen.findByText("This wait has already ended.")).toBe(
+      screen.getByTestId("stop-waiting-status"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Stop waiting" }),
+    ).not.toBeInTheDocument();
+    expect(document.activeElement).toContainElement(
+      screen.getByText(/waiting for a connected app/),
+    );
+  });
+
+  it.each([
+    ["the user's own chat", { can_edit: true }],
+    [
+      "a task chat the user took over",
+      { ...taskChat, adopted_at: "2026-11-10T10:00:00Z" },
+    ],
+    [
+      "an archived task chat",
+      { ...taskChat, archived_at: "2026-11-10T10:00:00Z" },
+    ],
+    ["a task chat the viewer cannot edit", { ...taskChat, can_edit: false }],
+  ])("offers no stop in %s", (_name, detail: Partial<ChatDetail>) => {
+    renderInChat(detail);
+    expect(screen.getByText(/waiting for a connected app/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+  });
+
+  it("offers no stop in a read-only view", () => {
+    renderInChat(taskChat, true);
+    expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
   });
 });
 
