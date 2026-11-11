@@ -150,9 +150,17 @@ window. It lists the items each call's selection names, with their item
 metadata and any text the result already holds (message bodies, text blocks) as
 plain text, and shows no remote resources or document scripts. The selection
 starts empty.
-The strict review runs no upload-policy check for now: a configured policy guide
-stays saved, but selecting an item sends its text nowhere, and no decision
-provider receives anything before the user approves. The decision is made only
+The strict review runs an upload-policy check while a model is available to
+decide a policy: today the one behind the decision endpoint the policy's
+metadata names; an on-device model is to follow as a second source. The
+endpoint comes from the organization configuration a client relays through
+`sidecar.configure.v1` (and the sidecar's persisted copy of it), so it is
+trusted like the client and, through it, the deployment's server, and the
+selected items' text reaches it before the user approves. The check is
+advisory: approval waits until the checks of exactly the selection completed,
+then goes through whatever they reported. A policy that names no endpoint is
+left out, so while no model is available selecting an item sends its text
+nowhere and approval needs only a selection. The decision is made only
 in the window: no RPC submits it, repeated `jobs.review.v1` calls focus the open
 window, and closing a pane neither cancels the job nor decides it. A review has
 no client-side deadline: a client polls the job until the user decides or the
@@ -221,7 +229,8 @@ package:
 - The decision stays in the sidecar process. No RPC approves a review. The
   window's approve action names items, and the sidecar accepts only items of
   the job's frozen snapshot, and only once the checks for exactly that
-  selection completed. With no policy check, as now, they complete at once.
+  selection completed. While no policy names a decision endpoint, they complete
+  at once.
 - A package cannot take the review away. A package whose review window does not
   speak the sidecar's message contract, or whose page does not report ready in
   time, is replaced by the seed.
