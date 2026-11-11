@@ -39,6 +39,9 @@ export const isTraceablePart = (part: ContentPart): part is TraceablePart =>
  * Visual status of a single step. Used to pick the rail icon and pulse state.
  *
  * - `running`  – step is the live tail of an ongoing stream (current writer)
+ * - `waiting`  – the turn is parked on this call: the message's own
+ *   `client_tool_pending` part names it and it has not returned. A connected
+ *   app on the device, or a review in the Erato desktop app, settles it.
  * - `done`     – step finished successfully
  * - `error`    – step ended in an error (only meaningful for tool calls today)
  * - `interrupted` – step never finished and nothing is left to finish it
@@ -46,7 +49,12 @@ export const isTraceablePart = (part: ContentPart): part is TraceablePart =>
  *   not fail, it was abandoned, and the distinction is what stops the rail
  *   from reporting an unfinished call as a success.
  */
-export type TraceStepStatus = "running" | "done" | "error" | "interrupted";
+export type TraceStepStatus =
+  | "running"
+  | "waiting"
+  | "done"
+  | "error"
+  | "interrupted";
 
 /**
  * One renderable row in the timeline. Reasoning ContentParts may expand into

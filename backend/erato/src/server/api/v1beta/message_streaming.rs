@@ -15,8 +15,8 @@ use crate::models::message::{
     ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
     DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
     GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolAllowedBy,
-    ToolApprovalKind, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    ToolApprovalKind, ToolCallFailure, ToolCallStatus as MessageToolCallStatus, ToolResultDetails,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -45,6 +45,7 @@ use crate::services::genai_langfuse::{
     langfuse_model_tag, langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
+use crate::services::mcp_call_error::failed_call_row;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
 use crate::services::mcp_tool_approval::{
@@ -369,7 +370,7 @@ mod generation_tool_call_id_tests {
             }
             let mut request = ChatRequest::new(replay);
             restore_provider_tool_call_ids(&mut request);
-            for pair in request.messages.chunks_exact(2) {
+            for pair in request.messages.as_chunks::<2>().0 {
                 let call = pair[0].content.tool_calls()[0];
                 let parts = pair[1].content.clone().into_parts();
                 let GenAiContentPart::ToolResponse(response) = &parts[0] else {
@@ -1532,6 +1533,7 @@ pub struct MessageSubmitRequest {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "audio_delta")]
     AudioDelta {
@@ -2886,7 +2888,7 @@ async fn acquire_user_generation_lease(
             .await);
     }
 
-    app_state
+    let started = app_state
         .background_tasks
         .try_start_task(
             chat_id,
@@ -2897,7 +2899,30 @@ async fn acquire_user_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| lease_held_error(chat_id, held))
+        .map_err(|held| lease_held_error(chat_id, held))?;
+    withdraw_task_calls(app_state, chat_id, Some(message_id)).await;
+    Ok(started)
+}
+
+/// Ends the waits of the tasks this chat's turns started, but those of
+/// `kept_turn` (all of them when `None`), once the lease went to another turn or
+/// the user stopped the turn (ERMAIN-1165). Their calls are withdrawn at once,
+/// so a device stops asking and the old card stops waiting, instead of at their
+/// next claim, renewal or result; each task then answers without the result
+/// once a client continues it. A failure leaves them to that later withdrawal.
+async fn withdraw_task_calls(app_state: &AppState, chat_id: Uuid, kept_turn: Option<Uuid>) {
+    if !app_state.config.client_tools.durable_operations_enabled {
+        return;
+    }
+    if let Err(error) = crate::services::client_operations::store::withdraw_task_calls(
+        &app_state.db,
+        chat_id,
+        kept_turn,
+    )
+    .await
+    {
+        tracing::warn!(%error, %chat_id, "Could not withdraw the open calls of a chat's tasks");
+    }
 }
 
 /// The typed 409 for a refused lease claim.
@@ -3044,6 +3069,7 @@ pub struct ClientToolParkResponse {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "assistant_message_started")]
     /// Sent when the assistant message entry has been created, before generation starts.
@@ -6740,6 +6766,7 @@ mod generation_event_wire_format_tests {
                                     name: Some("row-1".into()),
                                     title: None,
                                 }],
+                                failure: None,
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -8763,7 +8790,9 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(json!({ "status": status, "error": response_text })),
-                            result_details: None,
+                            result_details: Some(ToolResultDetails::failed(
+                                ToolCallFailure::NotRun,
+                            )),
                             allowed_by: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -9961,7 +9990,9 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(ToolResultDetails::failed(
+                                    ToolCallFailure::AnswerUnreadable,
+                                )),
                                 allowed_by,
                             };
                             if let Some(task) = streaming_task {
@@ -9979,7 +10010,9 @@ async fn stream_generate_chat_completion<'a>(
                                         progress: None,
                                         total: None,
                                         output: Some(output_value.clone()),
-                                        result_details: None,
+                                        result_details: Some(ToolResultDetails::failed(
+                                            ToolCallFailure::AnswerUnreadable,
+                                        )),
                                         allowed_by,
                                     },
                                     "broadcast failed MCP tool output processing",
@@ -10003,7 +10036,9 @@ async fn stream_generate_chat_completion<'a>(
                                     progress: None,
                                     total: None,
                                     output: Some(output_value),
-                                    result_details: None,
+                                    result_details: Some(ToolResultDetails::failed(
+                                        ToolCallFailure::AnswerUnreadable,
+                                    )),
                                     allowed_by,
                                     started_at: Some(tool_call_started),
                                     ended_at: Some(now_timestamp()),
@@ -10129,10 +10164,7 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(err) => {
                     let tool_error = format!("Failed to call MCP tool: {err}");
-                    let output_value = json!({
-                        "status": "error",
-                        "error": tool_error,
-                    });
+                    let (output_value, failure_details) = failed_call_row(&err);
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
                         &unfinished_tool_call,
@@ -10157,7 +10189,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
-                        result_details: None,
+                        result_details: Some(failure_details.clone()),
                         allowed_by,
                     };
                     if let Some(task) = streaming_task {
@@ -10175,7 +10207,7 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(failure_details.clone()),
                                 allowed_by,
                             },
                             "broadcast failed MCP tool call",
@@ -10199,7 +10231,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value),
-                            result_details: None,
+                            result_details: Some(failure_details.clone()),
                             allowed_by,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -18313,6 +18345,7 @@ async fn acquire_revision_generation_lease(
         return Err(error);
     }
     lease_guard.disarm();
+    withdraw_task_calls(app_state, chat_id, Some(task.message_id())).await;
     Ok((events, task))
 }
 
@@ -19698,6 +19731,10 @@ pub async fn abort_message_stream(
             "No active generation task found for this chat".to_string(),
         ));
     }
+    // The stopped turn's tasks stop waiting for their calls too. A parked turn
+    // that only waits for its tasks has nothing to stop and answers 404 above;
+    // its waits end one by one from the card.
+    withdraw_task_calls(&app_state, request.chat_id, None).await;
 
     Ok(Json(AbortStreamResponse {
         abort_requested: true,
@@ -22992,7 +23029,7 @@ pub(crate) async fn run_continuation(
                                     &result,
                                     &format!("Failed to process MCP tool output: {error}"),
                                 )),
-                                None,
+                                Some(ToolResultDetails::failed(ToolCallFailure::AnswerUnreadable)),
                             ),
                         }
                     };
@@ -23012,24 +23049,24 @@ pub(crate) async fn run_continuation(
                         ended_at: Some(now_timestamp()),
                     }
                 }
-                Err(error) => ToolUse {
-                    tool_call_id: item.tool_call_id.clone(),
-                    status: MessageToolCallStatus::Error,
-                    tool_name: item.tool_name.clone(),
-                    display: item.display.as_ref().map(tool_row_display),
-                    input: Some(item.input.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(json!({
-                        "status": "error",
-                        "error": format!("Failed to call MCP tool: {error}"),
-                    })),
-                    result_details: None,
-                    allowed_by: None,
-                    started_at: Some(now_timestamp()),
-                    ended_at: Some(now_timestamp()),
-                },
+                Err(error) => {
+                    let (output, details) = failed_call_row(&error);
+                    ToolUse {
+                        tool_call_id: item.tool_call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: item.tool_name.clone(),
+                        display: item.display.as_ref().map(tool_row_display),
+                        input: Some(item.input.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output),
+                        result_details: Some(details),
+                        allowed_by: None,
+                        started_at: Some(now_timestamp()),
+                        ended_at: Some(now_timestamp()),
+                    }
+                }
             }
         } else {
             // A server that dropped out between the check above and this item is

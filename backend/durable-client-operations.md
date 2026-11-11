@@ -465,9 +465,11 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
   reason: "declined", error}`. `error: {code: "review_expired"}`, a review on
   the device that ended before its result reached the task, is valid only for
   grant operations too and is stored as `{status: "cancelled", reason:
-  "expired", error}`, so the task result counts it as expired. `expired` and `withdrawn`
-  carry an `error` text for the task's model; the server writes every one of
-  these texts, never the client.
+  "expired", error}`, so the task result counts it as expired. `expired`,
+  `withdrawn` and `cancelled` (the user stopped waiting, through `/cancel`)
+  carry an `error` text for the task's model; the `cancelled` one also tells it
+  not to call the tool again in the task. The server writes every one of these
+  texts, never the client.
 - **Continuation.** Any coordinator of the account continues a ready or
   continuing grant operation, or expires a pending or claimed one past its
   attempt end, with a detached `/continue`, so a closed pane never strands the

@@ -30,6 +30,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import {
   DELEGATE_TASK_TOOL_NAME,
@@ -45,6 +46,7 @@ import {
   useSidecarReviewLinks,
 } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import { useSidecarReviewStore } from "@/lib/desktopSidecar/sidecarReviewStore";
+import { useChatDetail } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { ownProposalOf } from "@/lib/toolCallGist/ownProposal";
 import {
   WORD_EDITS_FENCE,
@@ -56,8 +58,10 @@ import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { ChatContext } from "@/providers/ChatProvider";
 import { useTraceFeature } from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
+import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
 
+import { APPROVAL_CARD_SHELL_CLASS } from "./ApprovalDecisionActions";
 import { ClientToolFileApprovals } from "./ClientToolFileApproval";
 import { CollapsibleCodeBlock } from "./CollapsibleCodeBlock";
 import { EratoAppointmentBlock } from "./EratoAppointmentBlock";
@@ -68,6 +72,7 @@ import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import { SidecarReviewItem } from "./SidecarReviewItem";
+import { StopWaitingAction } from "./StopWaitingAction";
 import {
   SyntaxHighlightedCode,
   useCodeBlockSurfaceStyle,
@@ -79,6 +84,7 @@ import type { ApprovalStopState } from "./approvalItems";
 import type { ToolDecision } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ContentPart,
   ContentPartTaskResult,
@@ -714,9 +720,34 @@ const rewriteFootnoteValue = (
 };
 
 /**
+ * The wait of a task's own call, in the task's chat, can be ended there as it
+ * can from the parent's slot (ERMAIN-1165). A chat the user took over makes
+ * its own calls, which this leaves alone, and a chat the viewer cannot edit
+ * (archived, or not theirs) offers no stop.
+ */
+function TaskCallStopWaiting({
+  chatId,
+  attemptId,
+  focusNotice,
+}: {
+  chatId: string;
+  attemptId: string;
+  focusNotice: () => void;
+}) {
+  const { data: chat } = useChatDetail({ pathParams: { chatId } });
+  const canEdit = useChatCanEdit(chatId);
+  const isTaskCall =
+    chat !== undefined && isDelegatedRun(chat) && !chat.adopted_at && canEdit;
+  return isTaskCall ? (
+    <StopWaitingAction attemptId={attemptId} focusItem={focusNotice} />
+  ) : null;
+}
+
+/**
  * A turn parked on a client tool call. A call whose review the Erato desktop
- * app shows gets its item in the approval slot; any other call says what the
- * turn waits for. While a row names a call that has ended, one of the chat's
+ * app shows gets its item in the approval slot, inside a card shell this
+ * notice owns, as `McpToolApprovalCard` does for its items; any other call
+ * says what the turn waits for. While a row names a call that has ended, one of the chat's
  * calls can already be in review: the row is refetched when the turn parks
  * again, and nothing here may act on the ended call meanwhile.
  */
@@ -724,10 +755,14 @@ function ClientToolPendingNotice({
   messageId,
   toolCallId,
   toolName,
+  attemptId,
+  readOnly,
 }: {
   messageId: string | undefined;
   toolCallId: string;
   toolName: string | undefined;
+  attemptId: string;
+  readOnly: boolean;
 }) {
   const key = messageId ? reviewLinkKey(messageId, toolCallId) : undefined;
   const link = useSidecarReviewLinks((state) =>
@@ -737,15 +772,38 @@ function ClientToolPendingNotice({
   const chatInReview = useSidecarReviewStore(
     (state) => chatId !== undefined && state.waitingByChatId.has(chatId),
   );
-  if (key && link) {
-    return <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />;
+  // Takes the focus of the stop button once a stopped wait takes it away.
+  const noticeRef = React.useRef<HTMLDivElement | null>(null);
+  const focusNotice = React.useCallback(() => {
+    noticeRef.current?.focus({ preventScroll: true });
+  }, []);
+  const notice =
+    key && link ? (
+      <div
+        className={APPROVAL_CARD_SHELL_CLASS}
+        data-testid="sidecar-review-card"
+      >
+        <SidecarReviewItem linkKey={key} link={link} toolName={toolName} />
+      </div>
+    ) : (
+      <Alert type="info" role="status" geometryVariant="message">
+        {chatInReview
+          ? t`Ready for review in the Erato desktop app`
+          : t`This response is waiting for a connected app. You can leave this chat and return later.`}
+      </Alert>
+    );
+  if (!chatId || readOnly) {
+    return notice;
   }
   return (
-    <Alert type="info" role="status" geometryVariant="message">
-      {chatInReview
-        ? t`Ready for review in the Erato desktop app`
-        : t`This response is waiting for a connected app. You can leave this chat and return later.`}
-    </Alert>
+    <div ref={noticeRef} tabIndex={-1} className="focus-ring space-y-2">
+      {notice}
+      <TaskCallStopWaiting
+        chatId={chatId}
+        attemptId={attemptId}
+        focusNotice={focusNotice}
+      />
+    </div>
   );
 }
 
@@ -1406,6 +1464,31 @@ export const MessageContent = memo(function MessageContent({
   }, [content]);
 
   const waitingCall = React.useMemo(() => waitingCallOf(content), [content]);
+  // The trace step of the waiting call says it waits, and on what: a review
+  // in the Erato desktop app is known by the link the review left, which a
+  // reload keeps, under the key the notice reads. The link's state says
+  // whether the review is open or asked for again, or ended and waits for
+  // Ask again, as the slot item says it.
+  const waitingCallId = waitingCall?.tool_call_id;
+  const waitingCallReview = useSidecarReviewLinks(
+    (state): SidecarReviewLink["state"] | undefined => {
+      if (messageId === undefined || waitingCallId === undefined) {
+        return undefined;
+      }
+      // A call that has no review has no link under its key.
+      const key = reviewLinkKey(messageId, waitingCallId);
+      return Object.hasOwn(state.links, key)
+        ? state.links[key].state
+        : undefined;
+    },
+  );
+  const traceWaitingCall = React.useMemo(
+    () =>
+      waitingCallId === undefined
+        ? undefined
+        : { toolCallId: waitingCallId, review: waitingCallReview },
+    [waitingCallId, waitingCallReview],
+  );
 
   // Only the last stop can still wait on tasks: an earlier one was carried
   // onto a later one or settled.
@@ -1802,6 +1885,7 @@ export const MessageContent = memo(function MessageContent({
                   }
                   hasError={hasError}
                   toolDecisions={toolDecisions}
+                  waitingCall={traceWaitingCall}
                 />
               </WaitingHostsContext.Provider>
               {/* Outside the trace, which folds away once the turn ends. */}
@@ -1834,6 +1918,8 @@ export const MessageContent = memo(function MessageContent({
               messageId={messageId}
               toolCallId={part.tool_call_id}
               toolName={toolNameOfCall(content, part.tool_call_id)}
+              attemptId={part.attempt_id}
+              readOnly={readOnly}
             />
           );
         }

@@ -396,6 +396,14 @@ async fn approval_from_a_device_without_the_executor_settles_at_once(pool: Pool<
         output["error"],
         format!("The tool '{SEARCH}' is not available on this device; the call was not executed.")
     );
+    let part = row["content"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|part| part["content_type"] == "tool_use" && part["output"] == output)
+        .unwrap();
+    // Erato wrote that error, so the row says the call did not run.
+    assert_eq!(part["result_details"]["failure"], "not_run");
 }
 
 /// A client that declares no client tools at all cannot run the approved call either.

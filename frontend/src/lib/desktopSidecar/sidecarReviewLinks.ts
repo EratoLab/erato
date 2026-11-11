@@ -24,6 +24,12 @@ export type SidecarReviewLink = { at: number } & (
 
 type Links = Readonly<Record<string, SidecarReviewLink>>;
 
+// Storage is read and written here rather than through `usePersistedState` or
+// zustand's `persist`. The first is read only in a hook and follows writes in
+// one tab, but `sidecarJobs` reads a link outside React and the links must
+// hold across tabs. The second writes this tab's copy over storage, which can
+// drop a link another tab has just stored and so open its review again; every
+// write here reads storage first.
 const STORAGE_KEY = "erato.desktopSidecar.reviewLinks.v1";
 /**
  * A link outlives its job so a call that still waits can say its review

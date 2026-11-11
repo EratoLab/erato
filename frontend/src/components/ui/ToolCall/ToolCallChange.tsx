@@ -48,6 +48,7 @@ import {
   listKeptLabel,
   listMaybeReplacedLine,
   listRemovedLabel,
+  listRemovesClaim,
   listReplacedLine,
   listSetLabel,
   listWouldGoLabel,
@@ -65,6 +66,7 @@ import {
   textSeeAll,
   toolTitleLabel,
   uncheckedLine,
+  unreadableLabel,
   writeInsideReadLine,
 } from "@/lib/toolCallGist/changeLabels";
 import {
@@ -361,6 +363,18 @@ const EffectValue = ({ effect }: { effect: ChangeEffect }) => {
   );
 };
 
+/** A list the tool says gains or loses items is named for what it does. */
+const effectName = (effect: ChangeEffect): string => {
+  switch (effect.effect) {
+    case "list_added":
+      return listAddedLabel(effect.name);
+    case "list_removed":
+      return listRemovedLabel(effect.name);
+    default:
+      return effect.name;
+  }
+};
+
 const ValueRow = ({
   effect,
   showRawName = false,
@@ -371,7 +385,7 @@ const ValueRow = ({
   /** What the tool claims about this value, so the card says whose word it is. */
   claim?: string;
 }) => (
-  <Row name={effect.name}>
+  <Row name={effectName(effect)}>
     <ScrollBox kind="value" className="max-h-24">
       <EffectValue effect={effect} />
     </ScrollBox>
@@ -463,6 +477,22 @@ const ListRow = ({
         <ValueList values={effect.values} omitted={effect.omitted} />
       </Row>
     )}
+  </div>
+);
+
+/** Items the tool says the call removes from a list: a loss, and the tool's word. */
+const RemovedFromListRow = ({ effect }: { effect: ChangeEffect }) => (
+  <div className="space-y-0.5" data-testid="tool-call-change-list">
+    <Row name={listRemovedLabel(effect.name)}>
+      <ValueList
+        values={effect.values}
+        omitted={effect.omitted}
+        limit={MAX_FIRST_VIEW_ROWS * 4}
+      />
+      <p className={MUTED} data-testid="tool-call-change-claim">
+        {listRemovesClaim()}
+      </p>
+    </Row>
   </div>
 );
 
@@ -682,7 +712,7 @@ const RowChange = ({ effect }: { effect: ChangeEffect }) => {
   const value = effect.values.map(plainChangeValue).join(", ");
   return (
     <>
-      {effect.name}{" "}
+      {effectName(effect)}{" "}
       {effect.old && effect.effect !== "unchanged" ? (
         <OldToNew old={effect.old} arrow="text">
           {value}
@@ -853,6 +883,9 @@ const LossesPart = ({ change }: { change: GistChange }) => {
           replaceUnknown={listReplaceIsUnknown(change)}
         />
       ))}
+      {layout.removedFromLists.map((effect, index) => (
+        <RemovedFromListRow key={index} effect={effect} />
+      ))}
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
       ))}
@@ -860,53 +893,75 @@ const LossesPart = ({ change }: { change: GistChange }) => {
   );
 };
 
-const ValuesPart = ({
+/** What the tool claims about a value, so the card says whose word it is. */
+const claimOf = (change: GistChange, effect: ChangeEffect) =>
+  effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list)
+    ? listAddsClaim()
+    : undefined;
+
+const ValuesPart = ({ change }: { change: GistChange }) => (
+  <>
+    {changeLayout(change).firstRows.map((effect, index) => (
+      <ValueRow key={index} effect={effect} claim={claimOf(change, effect)} />
+    ))}
+  </>
+);
+
+/**
+ * The values past the first view, behind one line that says what they hold,
+ * with their names while closed. Opened, they scroll in a box of their own.
+ */
+const SeeMorePart = ({
   change,
   action,
+  bounded = false,
 }: {
   change: GistChange;
   action: GistAction | undefined;
+  /** On a card, past its scroll box, where the opened values need one. */
+  bounded?: boolean;
 }) => {
   const layout = changeLayout(change);
   const collapsedTotal = layout.collapsed.length + layout.beyondCap;
+  if (collapsedTotal === 0) return null;
   const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
-  const addsOnly = change.notes.includes("tool_says_adds_to_list");
-  const claimOf = (effect: ChangeEffect) =>
-    addsOnly && effect.list ? listAddsClaim() : undefined;
-  return (
+  const values = (
     <>
-      {layout.firstRows.map((effect, index) => (
-        <ValueRow key={index} effect={effect} claim={claimOf(effect)} />
+      {layout.collapsed.map((effect, index) => (
+        <ValueRow
+          key={index}
+          effect={effect}
+          showRawName
+          claim={claimOf(change, effect)}
+        />
       ))}
-      {collapsedTotal > 0 && (
-        <SeeMore
-          label={changeSeeMoreLine(change, layout, action)}
-          defaultOpen={layout.opensByDefault}
-          hint={
-            shown.length > 0 ? (
-              <p className={MUTED} data-testid="tool-call-change-names">
-                <span dir="auto" className={ISOLATED}>
-                  {changeNamesOnly(shown.join(", "), more)}
-                </span>
-              </p>
-            ) : undefined
-          }
-        >
-          {layout.collapsed.map((effect, index) => (
-            <ValueRow
-              key={index}
-              effect={effect}
-              showRawName
-              claim={claimOf(effect)}
-            />
-          ))}
-          {layout.beyondCap > 0 && (
-            <p className={MUTED}>{fieldsInDetails(layout.beyondCap)}</p>
-          )}
-        </SeeMore>
+      {layout.beyondCap > 0 && (
+        <p className={MUTED}>{fieldsInDetails(layout.beyondCap)}</p>
       )}
     </>
+  );
+  return (
+    <SeeMore
+      label={changeSeeMoreLine(change, layout, action)}
+      defaultOpen={layout.opensByDefault}
+      hint={
+        shown.length > 0 ? (
+          <p className={MUTED} data-testid="tool-call-change-names">
+            <span dir="auto" className={ISOLATED}>
+              {changeNamesOnly(shown.join(", "), more)}
+            </span>
+          </p>
+        ) : undefined
+      }
+    >
+      {bounded ? (
+        <ScrollBox kind="card" className="max-h-[40vh] min-w-0 space-y-1">
+          {values}
+        </ScrollBox>
+      ) : (
+        values
+      )}
+    </SeeMore>
   );
 };
 
@@ -940,7 +995,7 @@ export const ToolCallChangeRowDetails = ({
   const found = change.opaque.flatMap((opaque) =>
     opaque.found.length > 0 ? [foundLine(opaque.kind, opaque.found)] : [],
   );
-  const removals = layout.lists.filter((effect) => effect.removed.length > 0);
+  const replaceUnknown = listReplaceIsUnknown(change);
   return (
     <div
       className="space-y-0.5 text-xs text-theme-fg-secondary"
@@ -965,7 +1020,8 @@ export const ToolCallChangeRowDetails = ({
       )}
       {change.batch &&
         (change.batch.rowsEmptying > 0 ||
-          change.batch.rowsReplacingLists > 0) &&
+          change.batch.rowsReplacingLists > 0 ||
+          change.batch.rowsRemovingFromLists > 0) &&
         batchLossLines(
           change.batch,
           listReplaceIsUnknown(change),
@@ -976,14 +1032,44 @@ export const ToolCallChangeRowDetails = ({
           {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
         </p>
       )}
-      {removals.map((effect, index) => (
+      {layout.lists.map((effect, index) => (
         <p key={index} dir="auto" className={ISOLATED}>
-          {listReplaceIsUnknown(change)
-            ? listWouldGoLabel(effect.name)
-            : listRemovedLabel(effect.name)}
-          : {effect.removed.map(plainChangeValue).join(", ")}
+          {effect.removed.length > 0 ? (
+            <>
+              {replaceUnknown
+                ? listWouldGoLabel(effect.name)
+                : listRemovedLabel(effect.name)}
+              : {effect.removed.map(plainChangeValue).join(", ")}
+            </>
+          ) : (
+            <>
+              {replaceUnknown ? effect.name : listSetLabel(effect.name)}:{" "}
+              {effect.values.map(plainChangeValue).join(", ")}
+            </>
+          )}
         </p>
       ))}
+      {layout.removedFromLists.map((effect, index) => (
+        <p key={index} dir="auto" className={ISOLATED}>
+          {listRemovedLabel(effect.name)}:{" "}
+          {effect.values.map(plainChangeValue).join(", ")}
+        </p>
+      ))}
+      {layout.unreadable.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {unreadableLabel()}:{" "}
+          {layout.unreadable.map((effect) => effect.name).join(", ")}
+        </p>
+      )}
+      {change.texts.length > 0 && (
+        <p dir="auto" className={ISOLATED}>
+          {change.texts
+            .map((entry) =>
+              textHeading(entry.name, entry.lines, entry.chars, false),
+            )
+            .join(", ")}
+        </p>
+      )}
       {found.map((line, index) => (
         <p key={index}>{line}</p>
       ))}
@@ -1010,9 +1096,13 @@ export const changeRowHasDetails = (change: GistChange): boolean => {
     (change.batch?.deletions ?? 0) > 0 ||
     (change.batch?.rowsEmptying ?? 0) > 0 ||
     (change.batch?.rowsReplacingLists ?? 0) > 0 ||
+    (change.batch?.rowsRemovingFromLists ?? 0) > 0 ||
     layout.emptied.length > 0 ||
     layout.firstRows.length > 0 ||
-    layout.lists.some((effect) => effect.removed.length > 0) ||
+    layout.lists.length > 0 ||
+    layout.removedFromLists.length > 0 ||
+    layout.unreadable.length > 0 ||
+    change.texts.length > 0 ||
     change.opaque.some((opaque) => opaque.found.length > 0)
   );
 };
@@ -1037,11 +1127,17 @@ export const ToolCallChangeBody = ({
   action,
   replacesText = false,
   values = true,
+  outside = true,
 }: {
   change: GistChange;
   action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
+  /**
+   * Whether See more and the notes are part of the body; a card puts them
+   * after its scroll box instead, so they never scroll out of sight.
+   */
+  outside?: boolean;
 }) => (
   <div className="space-y-2" data-testid="tool-call-change-body">
     <IncompleteAlert change={change} />
@@ -1062,8 +1158,9 @@ export const ToolCallChangeBody = ({
     {change.texts.map((entry, index) => (
       <TextPart key={index} entry={entry} replaced={replacesText} />
     ))}
-    {values && <ValuesPart change={change} action={action} />}
-    <ChangeNotes change={change} />
+    {values && <ValuesPart change={change} />}
+    {values && outside && <SeeMorePart change={change} action={action} />}
+    {outside && <ChangeNotes change={change} />}
   </div>
 );
 
@@ -1140,8 +1237,11 @@ export const ToolCallChangeCard = ({
           change={change}
           action={gist.action}
           replacesText={gist.action === "update" || gist.action === "upsert"}
+          outside={false}
         />
       </ScrollBox>
+      <SeeMorePart change={change} action={gist.action} bounded />
+      <ChangeNotes change={change} />
     </div>
   );
 };

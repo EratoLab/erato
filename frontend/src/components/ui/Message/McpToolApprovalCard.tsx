@@ -51,6 +51,7 @@ import type {
   ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
+import type { ChatContextValue } from "@/providers/ChatProvider";
 
 /** The `409` a child card gets while its origin is asking the same question. */
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
@@ -81,6 +82,31 @@ const APPROVE_CONTEXT: ToolApprovalDecision = "approve_context";
 
 /** How often a card that shows waiting tasks reads the row again. */
 const WAITING_REFRESH_MS = 5_000;
+
+/**
+ * Whether the user wrote a later turn below `messageId`: its stop no longer
+ * waits for its tasks, whose calls that turn withdrew (ERMAIN-1165), so it
+ * neither shows them nor holds the chat's queued messages. Read off the
+ * transcript on screen; a card rendered without one keeps waiting.
+ */
+const answeredByLaterTurn = (
+  context: ChatContextValue | null,
+  messageId: string,
+): boolean => {
+  const order: readonly string[] | undefined = context?.messageOrder;
+  if (!context || !order) return false;
+  const index = order.indexOf(messageId);
+  return (
+    index !== -1 &&
+    order
+      .slice(index + 1)
+      .some(
+        (id) =>
+          (context.messages[id] as { role?: string } | undefined)?.role ===
+          "user",
+      )
+  );
+};
 
 /** The `missing` ids of a `400 decisions_mismatch`, or none for anything else. */
 const mismatchedIds = (
@@ -171,19 +197,20 @@ export const McpToolApprovalCard = ({
   // writes an empty server id), so they must not reach the MCP layout.
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API kind value
   const kind = request.kind ?? "mcp_tool";
+  // This component is also rendered in isolated stories/tests, where the chat
+  // provider is deliberately absent. The in-app path always has it.
+  const chatContext = useContext(ChatContext);
+  const superseded = answeredByLaterTurn(chatContext, messageId);
   const approvalItems =
     openItems ??
     approvalItemsOf(request).filter((item) => !isWaitingItem(item));
-  const waiting =
-    waitingItems ?? approvalItemsOf(request).filter(isWaitingItem);
+  const waiting: ApprovalItemPart[] = superseded
+    ? []
+    : (waitingItems ?? approvalItemsOf(request).filter(isWaitingItem));
   const approvalIds = approvalItems.map((item) => item.approval_id);
   const openItemCount = approvalItems.length;
   // Nothing to decide: the stop waits for its tasks alone.
   const waitingOnly = openItemCount === 0 && waiting.length > 0;
-
-  // This component is also rendered in isolated stories/tests, where the chat
-  // provider is deliberately absent. The in-app path always has it.
-  const chatContext = useContext(ChatContext);
   const queryClient = useQueryClient();
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,7 +230,11 @@ export const McpToolApprovalCard = ({
   // While the decision is pending, hold the chat's message-queue auto-send
   // and surface the sidebar "action required" state, exactly like the
   // add-in's client-action cards (ERMAIN-470).
-  const isPending = resolution === null && localResolution === null;
+  const isPending =
+    resolution === null &&
+    localResolution === null &&
+    // A stop that only waited is over once a later turn withdrew its waits.
+    (!superseded || openItemCount > 0);
   const chatId = chatContext?.currentChatId ?? null;
   // The approval is durable, so it outlives an archive. Continuing it is a
   // write the backend refuses, so the card states that instead of offering it.

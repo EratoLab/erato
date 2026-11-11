@@ -535,6 +535,8 @@ pub struct GrantedCallSummary {
     /// they expired, and ones whose review on the device ended before its
     /// result reached the task.
     pub expired: u32,
+    /// Durable granted calls the user stopped waiting for.
+    pub cancelled: u32,
 }
 
 /// Reads the granted calls off a child's stored answer parts.
@@ -559,6 +561,7 @@ pub fn granted_call_summary(grant: &ClientToolGrant, content: &[Value]) -> Grant
             Some("cancelled") => match output.get("reason").and_then(Value::as_str) {
                 Some(DECLINED) => summary.declined += 1,
                 Some(EXPIRED) => summary.expired += 1,
+                Some(CANCELLED) => summary.cancelled += 1,
                 _ => {}
             },
             _ => {}
@@ -639,6 +642,9 @@ pub const DECLINED: &str = "declined";
 pub const REVIEW_EXPIRED: &str = "review_expired";
 /// The outcome of a granted call that ran out of time.
 const EXPIRED: &str = "expired";
+/// The outcome of a durable granted call the user stopped waiting for
+/// (`/me/client-operations/{id}/cancel`).
+const CANCELLED: &str = "cancelled";
 
 /// The stored output of a granted call the user declined, on either path.
 pub fn declined_output(tool_name: &str) -> Value {
@@ -682,6 +688,11 @@ pub fn unanswered_grant_call_text(code: &str, tool_name: &str) -> Option<String>
         )),
         "withdrawn" => Some(format!(
             "This call was withdrawn because the task's parent turn moved on or the tool is no longer allowed, so the task has no result from '{tool_name}'; say in the answer what is missing."
+        )),
+        // The person chose to stop waiting: calling again would only make
+        // them wait again.
+        CANCELLED => Some(format!(
+            "The user stopped waiting for this call, so the task has no result from '{tool_name}'. Do not call '{tool_name}' again in this task; say in the answer what is missing because of it."
         )),
         _ => None,
     }
@@ -831,10 +842,12 @@ pub(crate) async fn read_waiting_children<C: sea_orm::ConnectionTrait>(
     states
 }
 
-/// The output of a task's slot once its chat was archived: the park's envelope
-/// is kept for its ids, so the slot still links to the run.
+/// The output of a task's slot once its chat was archived while the run was
+/// still parked: the park's envelope is kept for its ids, so the slot still
+/// links to the run. Its `archived` reason replaces the park's, so the step
+/// says why and offers no retry, which the route refuses for a parked run.
 fn archived_task_output(parked_output: Option<&Value>) -> Value {
-    use crate::services::delegation::DelegationRunStatus;
+    use crate::services::delegation::{DelegationRunReason, DelegationRunStatus};
 
     let mut output = parked_output
         .filter(|output| output.is_object())
@@ -845,7 +858,10 @@ fn archived_task_output(parked_output: Option<&Value>) -> Value {
             "status".to_string(),
             json!(DelegationRunStatus::Failed.as_str()),
         );
-        object.remove("reason");
+        object.insert(
+            "reason".to_string(),
+            json!(DelegationRunReason::Archived.as_str()),
+        );
         object.insert(
             "error".to_string(),
             json!("The delegated run was archived."),
@@ -994,19 +1010,24 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
             return ChildWaitState::Open;
         }
     };
-    // Nothing claims, continues or expires an archived chat's call, so its
-    // item would wait for ever. The run still exists, so the park's envelope
-    // is kept for its ids and the slot still links to it.
-    if child_chat.archived_at.is_some() {
-        return ChildWaitState::Settle {
-            output: archived_task_output(parked_output),
-            failed: true,
-        };
-    }
     // A running child may still be between two calls of its continuation:
     // its row can end on anything until its turn is over.
     if child_chat.generation_state.as_deref() == Some("running") {
         return ChildWaitState::Open;
+    }
+    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
+    // Nothing claims, continues or expires an archived chat's call, so its
+    // item would wait for ever. A run archived while parked has no outcome
+    // and the retry route refuses it: the park's envelope is kept for its ids,
+    // so the slot still links to the run, and says it was archived. A run
+    // archived after it errored or finished settles below with its outcome,
+    // so its step keeps Retry wherever the route accepts it.
+    let archived = child_chat.archived_at.is_some();
+    if archived && parked {
+        return ChildWaitState::Settle {
+            output: archived_task_output(parked_output),
+            failed: true,
+        };
     }
     let errored = child_chat.generation_state.as_deref() == Some("errored");
     match attempts::Entity::find_by_id(attempt_id).one(conn).await {
@@ -1016,7 +1037,11 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
             // continues it any more.
             let failed_continuation =
                 attempt.state == attempts::AttemptState::Continuing && errored;
-            if attempt.state != attempts::AttemptState::Completed && !failed_continuation {
+            // An archived child's call is never continued, so it settles now.
+            if attempt.state != attempts::AttemptState::Completed
+                && !failed_continuation
+                && !archived
+            {
                 return ChildWaitState::Open;
             }
         }
@@ -1040,7 +1065,6 @@ async fn read_waiting_child<C: sea_orm::ConnectionTrait>(
     let Ok(parsed) = crate::models::message::MessageSchema::validate(&row.raw_message) else {
         return gone("The delegated run's answer could not be read.");
     };
-    let parked = child_chat.generation_state.as_deref() == Some("awaiting_approval");
     let stopped = match parsed.content.last() {
         Some(ContentPart::ToolApprovalRequest(request)) => {
             if parked {
@@ -1750,7 +1774,8 @@ mod tests {
     }
 
     #[test]
-    fn the_summary_keeps_the_last_freshness_and_counts_declined_and_expired_granted_calls() {
+    fn the_summary_keeps_the_last_freshness_and_counts_declined_expired_and_cancelled_granted_calls()
+     {
         let part = |tool: &str, output: Value| {
             json!({"content_type": "tool_use", "tool_call_id": "c", "tool_name": tool,
                    "status": "success", "output": output})
@@ -1780,6 +1805,18 @@ mod tests {
                 "search_web",
                 json!({"status": "cancelled", "reason": "expired"}),
             ),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "cancelled", "error": "e"}),
+            ),
+            part(
+                "search_web",
+                json!({"status": "cancelled", "reason": "cancelled"}),
+            ),
+            part(
+                READ_NAME,
+                json!({"status": "cancelled", "reason": "withdrawn", "error": "e"}),
+            ),
             json!({"content_type": "text", "text": "answer"}),
         ];
         assert_eq!(
@@ -1788,6 +1825,7 @@ mod tests {
                 freshness: Some(json!({"changes": "in-scope"})),
                 declined: 2,
                 expired: 1,
+                cancelled: 1,
             }
         );
         assert_eq!(
@@ -1824,8 +1862,24 @@ mod tests {
                 freshness: None,
                 declined: 0,
                 expired: 1,
+                cancelled: 0,
             }
         );
+    }
+
+    #[test]
+    fn a_stopped_wait_tells_the_task_what_is_missing_and_not_to_call_again() {
+        let text = unanswered_grant_call_text("cancelled", READ_NAME).unwrap();
+        assert!(
+            text.starts_with("The user stopped waiting for this call"),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("Do not call '{READ_NAME}' again")),
+            "{text}"
+        );
+        assert!(text.contains("say in the answer what is missing"), "{text}");
+        assert!(unanswered_grant_call_text("declined", READ_NAME).is_none());
     }
 
     #[test]

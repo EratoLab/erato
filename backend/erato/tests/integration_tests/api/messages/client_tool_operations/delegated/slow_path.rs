@@ -1354,6 +1354,176 @@ pub(super) async fn no_client_before_the_attempt_ends_gives_expired(
     waiting.server.abort();
 }
 
+/// What "Stop waiting" sends for a waiting task's call.
+async fn cancel_operation(
+    state: &erato::state::AppState,
+    attempt_id: Uuid,
+) -> axum_test::TestResponse {
+    app_server(state.clone())
+        .post(&format!(
+            "/api/v1beta/me/client-operations/{attempt_id}/cancel"
+        ))
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .await
+}
+
+pub(super) async fn stopping_the_wait_ends_the_durable_call_as_cancelled(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, true, |_| {}).await;
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    cancel_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    // A second click, or a second tab, stops the same wait.
+    cancel_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    let answered = wait_answered(&waiting.state, waiting.chat_id).await;
+
+    let read = part_for(
+        &assistant_row(&waiting.state.db, waiting.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["output"]["status"], "cancelled", "{read}");
+    assert_eq!(read["output"]["reason"], "cancelled");
+    let child_turns = turn_bodies(&child_turns);
+    assert_eq!(child_turns.len(), 1, "one child continuation");
+    let child_turn = child_turns[0].to_string();
+    assert!(child_turn.contains("The user stopped waiting for this call"));
+    assert!(child_turn.contains("again in this task"));
+    assert!(child_turn.contains("say in the answer what is missing"));
+    let slot = part_for(&answered, CLIENT_TASK_CALL);
+    assert_eq!(
+        slot["output"]["client_tools"],
+        json!({"cancelled": 1}),
+        "{slot}"
+    );
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    let told = task_result_in(&parent_turns[0], CLIENT_TASK_CALL);
+    assert_eq!(told["client_tools"], json!({"cancelled": 1}), "{told}");
+    assert!(told.to_string().contains(CHILD_ANSWER), "{told}");
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Completed
+    );
+    assert_eq!(attempts_of(&waiting.state, waiting.child.id).await.len(), 1);
+    waiting.server.abort();
+}
+
+pub(super) async fn a_wait_that_already_ended_cannot_be_stopped(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    record_parent_resumes(&mut waiting.llm);
+    answer_as_pane(
+        row,
+        &waiting.state,
+        &waiting.request,
+        pane_result(row, &waiting.request),
+    )
+    .await;
+    wait_answered(&waiting.state, waiting.chat_id).await;
+
+    // The card that still showed the wait reads the row again on this.
+    let late = cancel_operation(&waiting.state, waiting.request.attempt_id).await;
+    late.assert_status_conflict();
+    let read = part_for(
+        &assistant_row(&waiting.state.db, waiting.child.id).await,
+        CHILD_READ_CALL,
+    );
+    assert_eq!(read["status"], "success", "{read}");
+    waiting.server.abort();
+}
+
+pub(super) async fn stopping_the_parent_withdraws_its_tasks_waiting_calls(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    use erato::services::background_tasks::{Takeover, TaskOutcome};
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    // A Stop needs a running turn: one parked on its tasks alone answers 404.
+    // The parent's own turn takes its chat again here, as a decision
+    // continuation on a stop that also waits does. Taking the lease directly
+    // withdraws nothing, so this does not show that a turn running again
+    // keeps its own tasks' calls; the continuestream decision in
+    // approvals_decided_while_a_child_waits_repark_on_the_waiting_child does.
+    let (_events, running) = waiting
+        .state
+        .background_tasks
+        .try_start_task(
+            waiting.chat_id,
+            waiting.parent_message.id,
+            Takeover::TakeParked,
+            waiting.state.config.generation_status.stale_after_secs,
+        )
+        .await
+        .expect("the parent's turn takes its chat again");
+    assert_eq!(
+        attempt_row(&waiting).await.state,
+        attempts::AttemptState::Pending,
+        "the call still waits until the Stop"
+    );
+
+    app_server(waiting.state.clone())
+        .post("/api/v1beta/me/messages/abortstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "chat_id": waiting.chat_id }))
+        .await
+        .assert_status_ok();
+    let stopped = attempt_row(&waiting).await;
+    assert_eq!(stopped.state, attempts::AttemptState::Ready);
+    assert_eq!(
+        stopped.validated_result.unwrap()["output"]["reason"],
+        "withdrawn"
+    );
+    claim_as_pane(row, &waiting, true)
+        .await
+        .assert_status_conflict();
+
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let child_turns = turn_bodies(&child_turns);
+    assert!(
+        child_turns[0]
+            .to_string()
+            .contains("This call was withdrawn")
+    );
+    waiting
+        .state
+        .background_tasks
+        .remove_task(
+            &waiting.chat_id,
+            running.generation_id,
+            TaskOutcome::Completed,
+        )
+        .await;
+    waiting.server.abort();
+}
+
 pub(super) async fn a_durable_and_a_live_child_only_the_durable_one_waits(
     pool: Pool<Postgres>,
     row: &HostRow,
@@ -2460,11 +2630,17 @@ pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_moved_on(
         &[],
     );
     move_on(&mut waiting).await;
+    // The new turn withdrew the call when it took the chat, before any client
+    // came back for it (ERMAIN-1165).
+    let withdrawn = attempt_row(&waiting).await;
+    assert_eq!(withdrawn.state, attempts::AttemptState::Ready);
+    assert_eq!(
+        withdrawn.validated_result.unwrap()["output"]["reason"],
+        "withdrawn"
+    );
     let refused = claim_as_pane(row, &waiting, true).await;
     refused.assert_status_conflict();
     assert_eq!(refused.text(), "Operation authorization withdrawn");
-    let withdrawn = attempt_row(&waiting).await.validated_result.unwrap();
-    assert_eq!(withdrawn["output"]["reason"], "withdrawn");
 
     continue_operation(&waiting.state, waiting.request.attempt_id)
         .await
@@ -2496,6 +2672,67 @@ pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_moved_on(
             .as_str()
             .unwrap()
             .contains(CHILD_ANSWER)
+    );
+    waiting.server.abort();
+}
+
+/// The user edits the question of the parent's turn while its task waits.
+async fn edit_the_parent_turn(waiting: &mut Waiting) {
+    waiting.llm.mock_with_options(OVERRIDE, None, |when, then| {
+        when.post()
+            .path("/v1/chat/completions")
+            .matcher(BodyContainsMatcher::new(&[MOVED_ON], &[]));
+        mock_llm_sse_response(
+            then,
+            build_openai_text_streaming_response(&[MOVED_ON_ANSWER]),
+        );
+    });
+    let question = waiting
+        .parent_message
+        .previous_message_id
+        .expect("the parent's answer follows its question");
+    let edited = app_server(waiting.state.clone())
+        .post("/api/v1beta/me/messages/editstream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({ "message_id": question, "replace_user_message": MOVED_ON }))
+        .await;
+    edited.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&edited)).contains(MOVED_ON_ANSWER));
+}
+
+/// An edit takes the lease through the revision path, which must withdraw the
+/// waits of the turn it replaces as a new turn does (ERMAIN-1165).
+pub(super) async fn a_waiting_call_is_withdrawn_once_the_parent_turn_is_edited(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let child_turns = after_the_read(
+        &mut waiting.llm,
+        build_openai_text_streaming_response(&[CHILD_ANSWER]),
+        &[],
+    );
+    edit_the_parent_turn(&mut waiting).await;
+    // Withdrawn when the edit took the chat, before any client came back.
+    let withdrawn = attempt_row(&waiting).await;
+    assert_eq!(withdrawn.state, attempts::AttemptState::Ready);
+    assert_eq!(
+        withdrawn.validated_result.unwrap()["output"]["reason"],
+        "withdrawn"
+    );
+    let refused = claim_as_pane(row, &waiting, true).await;
+    refused.assert_status_conflict();
+    assert_eq!(refused.text(), "Operation authorization withdrawn");
+
+    continue_operation(&waiting.state, waiting.request.attempt_id)
+        .await
+        .assert_status_ok();
+    wait_idle(&waiting.state, waiting.child.id, "completed").await;
+    let child_turns = turn_bodies(&child_turns);
+    assert!(
+        child_turns[0]
+            .to_string()
+            .contains("This call was withdrawn")
     );
     waiting.server.abort();
 }
@@ -2688,6 +2925,10 @@ pub(super) async fn an_archived_waiting_child_settles_as_failed_and_the_parent_r
     let slot = part_for(&swept, CLIENT_TASK_CALL);
     assert_eq!(slot["status"], "error", "{slot}");
     assert_eq!(slot["output"]["status"], "failed");
+    assert_eq!(
+        slot["output"]["reason"], "archived",
+        "the step says why and offers no retry: {slot}"
+    );
     assert_eq!(slot["output"]["error"], "The delegated run was archived.");
     assert_eq!(
         slot["output"]["child_run_id"],
@@ -2709,6 +2950,57 @@ pub(super) async fn an_archived_waiting_child_settles_as_failed_and_the_parent_r
             .to_string()
             .contains("archived")
     );
+    waiting.server.abort();
+}
+
+/// A child archived after its continuation failed is no longer parked: its
+/// slot settles with the run's own outcome, without the `archived` reason, so
+/// the step keeps the Retry the route accepts for an errored run.
+pub(super) async fn an_archived_child_whose_continuation_failed_settles_with_its_outcome(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    answered_and_left_continuing(row, &waiting).await;
+    // The continuation failed, the write that ends its call did not land, and
+    // the user then archived the task's chat.
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE chats SET generation_state = 'errored', archived_at = now() WHERE id = '{}'",
+            waiting.child.id
+        ),
+    )
+    .await;
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args(&waiting.state))
+        .await
+        .unwrap();
+    let swept = assistant_row(&waiting.state.db, waiting.chat_id).await;
+    let slot = part_for(&swept, CLIENT_TASK_CALL);
+    assert_eq!(slot["status"], "error", "{slot}");
+    assert_eq!(slot["output"]["status"], "failed", "{slot}");
+    assert_ne!(
+        slot["output"]["reason"], "archived",
+        "a run that errored keeps its Retry: {slot}"
+    );
+    assert_ne!(slot["output"]["error"], "The delegated run was archived.");
+    assert_eq!(
+        slot["output"]["child_run_id"],
+        json!(waiting.child.id),
+        "the slot still links to the run"
+    );
+    let continued = continuestream(
+        &waiting,
+        json!({ "decisions": [], "shows_child_items": true }),
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&continued)).contains(PARENT_FINAL));
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    assert_failed_task_result(&parent_turns[0]);
     waiting.server.abort();
 }
 
@@ -2792,10 +3084,9 @@ async fn assert_slot_settled_as_archived(waiting: &Waiting) {
     assert_eq!(slot["status"], "error", "{slot}");
     assert_eq!(slot["output"]["status"], "failed", "{slot}");
     assert_eq!(slot["output"]["error"], "The delegated run was archived.");
-    assert!(
-        slot["output"].get("reason").is_none(),
-        "the notice reads the reason: {slot}"
-    );
+    // The park's `client_pending` is gone, so no notice reads the slot as
+    // waiting, and the step says why it failed and offers no retry.
+    assert_eq!(slot["output"]["reason"], "archived", "{slot}");
     assert_eq!(
         slot["output"]["child_run_id"],
         json!(waiting.child.id),

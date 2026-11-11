@@ -587,12 +587,17 @@ export const useGenerationRunningCount = (): number =>
 export const useGenerationAttentionCount = (): number =>
   useGenerationStatusStore(selectAttentionCount);
 
+/**
+ * Whether an entry is parked with nothing for the user to decide: it waits for
+ * a connected app or for its tasks. The one reading of `waitingOnly`, so the
+ * sidebar, the badge and the tab marker cannot disagree about it.
+ */
+export const waitsOnly = (status: ChatGenerationStatus | undefined): boolean =>
+  status?.kind === "action_required" && status.waitingOnly === true;
+
 /** Whether a chat is parked with nothing for the user to decide. */
 export const useChatWaitsOnly = (chatId: string): boolean =>
-  useGenerationStatusStore((state) => {
-    const status = state.statusByChatId[chatId];
-    return status?.kind === "action_required" && status.waitingOnly === true;
-  });
+  useGenerationStatusStore((state) => waitsOnly(state.statusByChatId[chatId]));
 
 export const useGenerationStatusFor = (
   chatId: string,

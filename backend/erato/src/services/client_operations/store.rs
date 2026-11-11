@@ -479,6 +479,56 @@ pub async fn withdraw(
     settle_server_outcome(db, account_id, attempt_id, "withdrawn").await
 }
 
+/// Withdraws the open calls the tasks of `owner_chat_id` made for any of its
+/// turns but `kept_turn` (for every turn when `None`): a turn that moved on or
+/// was stopped holds no client context any more, so their waits end now rather
+/// than at their next claim, renewal or result. Each call is settled as its own
+/// operation, under its own chat's lock and none of the owner's, and waits for a
+/// client's `/continue` as every withdrawn call does. Returns how many it
+/// withdrew; a call that settled meanwhile is left as it is.
+pub async fn withdraw_task_calls(
+    db: &DatabaseConnection,
+    owner_chat_id: Uuid,
+    kept_turn: Option<Uuid>,
+) -> Result<usize, Report> {
+    use crate::db::entity::chats;
+    let Some(owner) = chats::Entity::find_by_id(owner_chat_id).one(db).await? else {
+        return Ok(0);
+    };
+    // Only an account's own chats have operations; the account narrows the
+    // scan to the account's open ones.
+    let Ok(account_id) = Uuid::parse_str(&owner.owner_user_id) else {
+        return Ok(0);
+    };
+    let rows = db
+        .query_all_raw(statement(
+            "client_operations.withdraw_task_calls",
+            r#"
+        SELECT attempt_id FROM client_operation_attempts
+        WHERE account_id = $1 AND state IN ('pending', 'claimed')
+          AND request #>> '{lineage,owner_chat_id}' = $2
+          AND ($3::text IS NULL OR request #>> '{lineage,owner_message_id}' <> $3::text)
+    "#,
+            vec![
+                account_id.into(),
+                owner_chat_id.to_string().into(),
+                kept_turn.map(|id| id.to_string()).into(),
+            ],
+        ))
+        .await?;
+    let mut withdrawn = 0;
+    for row in rows {
+        let attempt_id: Uuid = row.try_get("", "attempt_id")?;
+        match withdraw(db, account_id, attempt_id).await {
+            Ok(()) => withdrawn += 1,
+            Err(error) if error.downcast_ref::<sea_orm::DbErr>().is_some() => return Err(error),
+            // Its result, a refused claim or its expiry settled it first.
+            Err(_) => {}
+        }
+    }
+    Ok(withdrawn)
+}
+
 async fn settle_server_outcome(
     db: &DatabaseConnection,
     account_id: Uuid,
