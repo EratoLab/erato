@@ -8740,6 +8740,16 @@ msgstr "Chaque ligne est différente."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.added"
+msgstr "{added, plural, one {éléments ajoutés sur # ligne, selon l’outil} other {éléments ajoutés sur # lignes, selon l’outil}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.addedValues"
+msgstr "{samples} ajouté {scope}, selon l’outil"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.allEmptied"
 msgstr "Vidé {scope}"
 
@@ -8767,6 +8777,16 @@ msgstr "{replaced, plural, one {liste peut-être remplacée sur # ligne} other {
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.field.many"
 msgstr "De nombreuses valeurs différentes {scope} : {samples}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removed"
+msgstr "{removed, plural, one {éléments retirés sur # ligne, selon l’outil} other {éléments retirés sur # lignes, selon l’outil}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.field.removedValues"
+msgstr "{samples} retiré {scope}, selon l’outil"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8807,6 +8827,11 @@ msgstr "{replacing, plural, one {# ligne peut remplacer une liste} other {# lign
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.batch.losses.none"
 msgstr "Aucune ligne ne supprime ni ne vide quoi que ce soit."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.batch.losses.removing"
+msgstr "{removing, plural, one {# ligne retire des éléments d’une liste, selon l’outil} other {# lignes retirent des éléments d’une liste, selon l’outil}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -8917,10 +8942,22 @@ msgid "toolChange.count.emptied"
 msgstr "{0, plural, one {# vidé} other {# vidés}}"
 
 #. js-lingui-explicit-id
+#. placeholder {0}: counts.listAdded
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listAdded"
+msgstr "{0, plural, one {# avec des éléments ajoutés} other {# avec des éléments ajoutés}}"
+
+#. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.count.listMaybeReplaced"
 msgstr "{0, plural, one {# liste peut-être remplacée} other {# listes peut-être remplacées}}"
+
+#. js-lingui-explicit-id
+#. placeholder {0}: counts.listRemoved
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.count.listRemoved"
+msgstr "{0, plural, one {# avec des éléments retirés} other {# avec des éléments retirés}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.listReplaced
@@ -9033,6 +9070,11 @@ msgstr "{name} supprimés"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.list.removesClaim"
+msgstr "Retrait uniquement, selon l’outil"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.list.replaced"
 msgstr "La liste {name} est remplacée : {parts}"
 
@@ -9059,12 +9101,12 @@ msgstr "{name} qui resteraient"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly"
-msgstr "Noms seulement : {names}"
+msgstr "Ces champs : {names}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.namesOnly.more"
-msgstr "Noms seulement : {names}, +{more} de plus"
+msgstr "Ces champs : {names}, +{more} de plus"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9219,6 +9261,11 @@ msgstr "{name} (était {was})"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.row.unreadable"
+msgstr "Illisible"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.allSet"
 msgstr "{total, plural, one {Voir # champ de plus, défini, ancienne valeur inconnue (aucun n’est vidé)} other {Voir # champs de plus, tous définis, ancienne valeur inconnue (aucun n’est vidé)}}"
 
@@ -9241,6 +9288,11 @@ msgstr "{count, plural, one {L’autre champ (#) se trouve dans les Détails tec
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.mixed"
 msgstr "{total, plural, one {Voir # champ de plus : {detail} (aucun n’est vidé)} other {Voir # champs de plus : {detail} (aucun n’est vidé)}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.part.added"
+msgstr "{added, plural, one {# avec des éléments ajoutés} other {# avec des éléments ajoutés}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -10238,6 +10290,41 @@ msgstr ""
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.failed"
 msgstr "Échec"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.answerUnreadable"
+msgstr "L’outil a répondu, mais Erato n’a pas pu lire sa réponse."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.line"
+msgstr "L’appel a échoué."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.noAnswer"
+msgstr "Erato n’a reçu aucune réponse de l’outil. L’appel a peut-être été exécuté, ou peut-être pas."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.notRun"
+msgstr "Erato n’a pas exécuté l’appel."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showAll"
+msgstr "Afficher tout le message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.showLess"
+msgstr "Afficher moins du message"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.failure.toolSays"
+msgstr "Selon l’outil :"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
