@@ -461,7 +461,9 @@ describe("delegation step", () => {
       RETRY_ON,
     );
 
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    // The header says it too, since the step is usually folded.
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByText("Failed")).toBeNull();
     expect(screen.getByTestId("delegation-reason")).toHaveTextContent(
       "The run was archived before it finished",
     );

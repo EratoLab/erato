@@ -10036,6 +10036,11 @@ msgstr "Delegiert an einen Assistenten"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.archived"
+msgstr "Archiviert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
 #: src/components/ui/Trace/steps/TaskResultStep.tsx
 msgid "trace.delegation.status.cancelled"
 msgstr "Abgebrochen"

@@ -93,7 +93,9 @@ export const SidecarReviewItem = ({
       aria-label={title}
       data-testid="sidecar-review-item"
       data-review-state={link.state}
-      className="focus-ring-tight space-y-2"
+      // Rounded and offset, as the ring was when the item drew the card;
+      // it now sits inside the card that owns the shell.
+      className="focus-ring space-y-2 rounded-[var(--theme-radius-message)]"
     >
       <div>
         <p className="text-sm font-medium text-theme-fg-primary">{title}</p>

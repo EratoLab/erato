@@ -1123,9 +1123,10 @@ pub enum DelegationRunReason {
     /// report, or it was cut off before it could, so nothing is lost by
     /// saying so plainly.
     Interrupted,
-    /// The run's chat was archived while its slot still waited, so nothing
-    /// will answer it. Rides a `failed` that the retry route refuses, because
-    /// the archived run itself is still parked and has no outcome.
+    /// The run's chat was archived while the run was still parked, so
+    /// nothing will answer it. Rides a `failed` that the retry route refuses,
+    /// because the parked run has no outcome. A run archived after it errored
+    /// or finished settles with its own outcome instead.
     Archived,
 }
 

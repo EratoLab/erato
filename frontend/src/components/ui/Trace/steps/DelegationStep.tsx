@@ -85,8 +85,17 @@ const stepTitle = (
     : t({ id: "trace.delegation.done", message: `Delegated to ${name}` });
 };
 
-/** Outcomes worth spelling out; a completed run is already said by the rail. */
-const outcomeLabel = (status: string): string | undefined => {
+/**
+ * Outcomes worth spelling out; a completed run is already said by the rail. A
+ * run that failed because its chat was archived says that, so a folded step
+ * names the archive too.
+ */
+const outcomeLabel = (
+  status: string,
+  reason: string | undefined,
+): string | undefined => {
+  if (status === "failed" && reason === "archived")
+    return t({ id: "trace.delegation.status.archived", message: "Archived" });
   switch (status) {
     case "completed":
     case "dispatched":
@@ -260,7 +269,9 @@ export const DelegationStep = ({
   const isRunning = stepStatus === "running" && isStreaming && !isQueued;
   const nested = trace && trace.steps.length > 0 ? trace : undefined;
   const outcome =
-    envelope.status !== undefined ? outcomeLabel(envelope.status) : undefined;
+    envelope.status !== undefined
+      ? outcomeLabel(envelope.status, envelope.reason)
+      : undefined;
   const pending =
     envelope.status !== undefined
       ? pendingPill(envelope.status, envelope.reason, waitingHost)

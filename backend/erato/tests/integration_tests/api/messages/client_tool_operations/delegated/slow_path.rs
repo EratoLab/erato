@@ -2675,6 +2675,57 @@ pub(super) async fn an_archived_waiting_child_settles_as_failed_and_the_parent_r
     waiting.server.abort();
 }
 
+/// A child archived after its continuation failed is no longer parked: its
+/// slot settles with the run's own outcome, without the `archived` reason, so
+/// the step keeps the Retry the route accepts for an errored run.
+pub(super) async fn an_archived_child_whose_continuation_failed_settles_with_its_outcome(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
+    let resumed = record_parent_resumes(&mut waiting.llm);
+    answered_and_left_continuing(row, &waiting).await;
+    // The continuation failed, the write that ends its call did not land, and
+    // the user then archived the task's chat.
+    sql(
+        &waiting.state,
+        format!(
+            "UPDATE chats SET generation_state = 'errored', archived_at = now() WHERE id = '{}'",
+            waiting.child.id
+        ),
+    )
+    .await;
+
+    erato::actors::cleanup_worker::run_cleanup_tick(&cleanup_args(&waiting.state))
+        .await
+        .unwrap();
+    let swept = assistant_row(&waiting.state.db, waiting.chat_id).await;
+    let slot = part_for(&swept, CLIENT_TASK_CALL);
+    assert_eq!(slot["status"], "error", "{slot}");
+    assert_eq!(slot["output"]["status"], "failed", "{slot}");
+    assert_ne!(
+        slot["output"]["reason"], "archived",
+        "a run that errored keeps its Retry: {slot}"
+    );
+    assert_ne!(slot["output"]["error"], "The delegated run was archived.");
+    assert_eq!(
+        slot["output"]["child_run_id"],
+        json!(waiting.child.id),
+        "the slot still links to the run"
+    );
+    let continued = continuestream(
+        &waiting,
+        json!({ "decisions": [], "shows_child_items": true }),
+    )
+    .await;
+    continued.assert_status_ok();
+    assert!(extract_full_text(&parse_sse_events(&continued)).contains(PARENT_FINAL));
+    let parent_turns = turn_bodies(&resumed);
+    assert_eq!(parent_turns.len(), 1, "one parent continuation");
+    assert_failed_task_result(&parent_turns[0]);
+    waiting.server.abort();
+}
+
 pub(super) async fn the_old_slot_settles_while_a_newer_parent_turn_runs(
     pool: Pool<Postgres>,
     row: &HostRow,
