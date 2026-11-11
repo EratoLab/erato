@@ -4616,3 +4616,171 @@ fn a_list_named_for_adding_whose_description_drops_or_clears_others_may_replace_
         ToolCallEffectKind::ListRemoved
     );
 }
+
+/// The batch a call's change description gives it under an update label,
+/// whatever label the rules would choose.
+fn batch_under_update(tool: &Tool, arguments: &Value) -> ToolCallBatch {
+    let mapping = ToolCallLabelMapping {
+        action: ToolCallAction::Update,
+        object_kind: ToolCallObjectKind::Row,
+        items: Vec::new(),
+        source: ToolCallLabelSource::Rules,
+    };
+    let label = crate::services::tool_display::label::filtered_label(
+        SERVER, &tool.name, arguments, &mapping, None,
+    );
+    let (change, _) = describe(
+        &label,
+        ChangeFacts {
+            tool,
+            arguments,
+            approval_argument: None,
+            context: &ToolResultContext::default(),
+            server: Some(SERVER),
+            rules_action: ToolCallAction::Update,
+            glossary: None,
+            destructive_hint_source: Default::default(),
+        },
+    )
+    .unwrap();
+    change.batch.expect("a batch")
+}
+
+#[test]
+fn rows_that_name_a_delete_in_a_plain_member_never_read_as_deleting_nothing() {
+    let sync = tool("sync", "", None);
+    let arguments = json!({"commands": [
+        {"type": "item_delete", "uuid": "c1", "args": {"id": "t1"}},
+        {"type": "item_delete", "uuid": "c2", "args": {"id": "t2"}},
+    ]});
+    let label = labelled(&sync, &arguments, &ToolResultContext::default());
+    assert_eq!(label.source, ToolCallLabelSource::Generic, "{label:#?}");
+    let batch = batch_under_update(&sync, &arguments);
+    assert!(!batch.read_all, "{batch:#?}");
+
+    let one = json!({"commands": [{"type": "item_delete", "uuid": "c1", "args": {"id": "t1"}}]});
+    let label = labelled(&sync, &one, &ToolResultContext::default());
+    assert_eq!(label.source, ToolCallLabelSource::Generic, "{label:#?}");
+}
+
+#[test]
+fn bulk_rows_whose_operation_type_deletes_never_read_as_deleting_nothing() {
+    let bulk = tool("bulk_update_documents", "", None);
+    let arguments = json!({"actions": [
+        {"_op_type": "delete", "_index": "orders", "_id": "1"},
+        {"_op_type": "delete", "_index": "orders", "_id": "2"},
+    ]});
+    let label = labelled(&bulk, &arguments, &ToolResultContext::default());
+    assert_eq!(label.source, ToolCallLabelSource::Generic, "{label:#?}");
+    let batch = batch_under_update(&bulk, &arguments);
+    assert!(!batch.read_all, "{batch:#?}");
+    // A value every row shares may be data, such as a folder named so.
+    assert_eq!(batch.deletions, 0);
+
+    for value in [
+        "item_delete",
+        "delete",
+        "HardDelete",
+        "archive_project",
+        "items.delete",
+    ] {
+        let mut row = Map::new();
+        row.insert("type".into(), json!(value));
+        assert!(rules::row_value_loss_left_out(&row, None), "{value}");
+        assert!(
+            !rules::row_value_loss_left_out(&row, Some(ToolCallAction::Delete)),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn a_batch_whose_rows_pick_their_operation_by_a_plain_member_counts_only_the_deletes() {
+    let sync = tool("sync", "", None);
+    let arguments = json!({"commands": [
+        {"type": "item_update", "uuid": "c1", "args": {"id": "t1", "content": "Call the supplier"}},
+        {"type": "item_delete", "uuid": "c2", "args": {"id": "t2"}},
+        {"type": "item_update", "uuid": "c3", "args": {"id": "t3", "content": "Book the room"}},
+        {"type": "item_delete", "uuid": "c4", "args": {"id": "t4"}},
+    ]});
+    let label = labelled(&sync, &arguments, &ToolResultContext::default());
+    assert_eq!(label.action, ToolCallAction::Update, "{label:#?}");
+    let (change, _) = change_with(&sync, arguments, &ToolResultContext::default());
+    let batch = change.batch.as_ref().expect("a batch");
+    assert_eq!(batch.deletions, 2, "{batch:#?}");
+    assert_eq!(
+        batch
+            .rows
+            .iter()
+            .map(|row| (row.number, row.action))
+            .collect::<Vec<_>>(),
+        [
+            (2, Some(ToolCallAction::Delete)),
+            (4, Some(ToolCallAction::Delete)),
+            (1, Some(ToolCallAction::Update)),
+            (3, Some(ToolCallAction::Update)),
+        ]
+    );
+    assert_eq!(
+        batch.operations,
+        [
+            ToolCallBatchOperation {
+                action: ToolCallAction::Update,
+                count: 2
+            },
+            ToolCallBatchOperation {
+                action: ToolCallAction::Delete,
+                count: 2
+            },
+        ]
+    );
+    assert!(batch.fields.iter().all(|field| field.raw_name != "type"));
+    assert!(batch.read_all);
+}
+
+#[test]
+fn a_type_title_or_description_that_mentions_a_delete_never_makes_a_row_one() {
+    let update = tool("batch_update_tasks", "", None);
+    let arguments = json!({"tasks": [
+        {"id": "t1", "type": "item_update", "title": "Delete old files", "description": "delete"},
+        {"id": "t2", "type": "item_delete"},
+    ]});
+    let (change, _) = change_with(&update, arguments, &ToolResultContext::default());
+    let batch = change.batch.as_ref().expect("a batch");
+    assert_eq!(batch.deletions, 1, "{batch:#?}");
+    assert_eq!(batch.rows[0].number, 2);
+    assert!(batch.read_all);
+
+    let arguments = json!({"tasks": [
+        {"id": "t1", "type": "task", "title": "Delete old files",
+            "description": "Delete the stale exports before the release"},
+        {"id": "t2", "type": "bug", "title": "delete_me", "description": "delete"},
+    ]});
+    let label = labelled(&update, &arguments, &ToolResultContext::default());
+    assert_eq!(label.source, ToolCallLabelSource::Rules, "{label:#?}");
+    assert_eq!(label.action, ToolCallAction::Update);
+    let (change, _) = change_with(&update, arguments, &ToolResultContext::default());
+    let batch = change.batch.as_ref().expect("a batch");
+    assert_eq!(batch.deletions, 0, "{batch:#?}");
+    assert!(batch.read_all, "{batch:#?}");
+
+    for (member, value) in [
+        ("type", "task"),
+        ("type", "bug"),
+        ("description", "delete"),
+        ("title", "delete_me"),
+        ("name", "archive_2024"),
+        ("id", "item_delete"),
+        ("to", "delete"),
+        ("phone", "delete"),
+        ("type", "Delete old files"),
+        ("type", "/srv/archive/2025"),
+    ] {
+        let mut row = Map::new();
+        row.insert(member.into(), json!(value));
+        assert!(
+            !rules::row_value_loss_left_out(&row, None),
+            "{member}: {value}"
+        );
+    }
+}
