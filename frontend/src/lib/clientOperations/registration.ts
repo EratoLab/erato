@@ -5,6 +5,7 @@ const executors = new Set<{
   binding: () => ExecutorBinding | undefined;
   yields: boolean;
   additional: boolean;
+  strictMode: () => boolean;
 }>();
 
 /** As many as the server keeps; further bindings never reach a task. */
@@ -15,17 +16,26 @@ const MAX_ADDITIONAL_EXECUTORS = 4;
  * the submit header only when its binding is equal. An additional executor
  * never takes part in choosing `X-Erato-Executor`: its binding travels in
  * `X-Erato-Additional-Executors`, which a server without it ignores, so the
- * primary header stays what an older server routes by. */
+ * primary header stays what an older server routes by. `strictMode` says
+ * whether the app behind the binding runs in strict mode, where it reviews
+ * its own results; a sent binding that every executor registered with it says
+ * so of is listed in `X-Erato-Strict-Mode-Executors`, beside the bindings
+ * rather than in them, and the server then leaves the question to the app. */
 export function registerOperationExecutor(
   name: string,
   binding: () => ExecutorBinding | undefined,
-  options: { yields?: boolean; additional?: boolean } = {},
+  options: {
+    yields?: boolean;
+    additional?: boolean;
+    strictMode?: () => boolean;
+  } = {},
 ): () => void {
   const entry = {
     name,
     binding,
     yields: options.yields ?? false,
     additional: options.additional ?? false,
+    strictMode: options.strictMode ?? (() => false),
   };
   executors.add(entry);
   return () => {
@@ -96,7 +106,8 @@ export function operationExecutorHeaders(): Partial<
   Record<
     | "X-Erato-Executor"
     | "X-Erato-Additional-Executors"
-    | "X-Erato-Client-Tools",
+    | "X-Erato-Client-Tools"
+    | "X-Erato-Strict-Mode-Executors",
     string
   >
 > {
@@ -116,6 +127,14 @@ export function operationExecutorHeaders(): Partial<
       return true;
     })
     .slice(0, MAX_ADDITIONAL_EXECUTORS);
+  const strictMode = [
+    ...(primary ? [primary.binding] : []),
+    ...additional,
+  ].filter((binding) => {
+    const serialized = JSON.stringify(binding);
+    const registered = ready.filter((entry) => entry.serialized === serialized);
+    return registered.every((entry) => entry.strictMode());
+  });
   return {
     ...(primary
       ? {
@@ -137,6 +156,9 @@ export function operationExecutorHeaders(): Partial<
       : {}),
     ...(additional.length
       ? { "X-Erato-Additional-Executors": JSON.stringify(additional) }
+      : {}),
+    ...(strictMode.length
+      ? { "X-Erato-Strict-Mode-Executors": JSON.stringify(strictMode) }
       : {}),
   };
 }

@@ -104,10 +104,45 @@ impl ExecutorBinding {
         }
         bindings
     }
+
+    /// The bindings among `sent`, the request's own, whose page says the app
+    /// behind them runs in strict mode. It travels beside the bindings, never
+    /// in them: a binding is compared as a whole wherever a call is routed or
+    /// claimed. The page's word, not attestation (ERMAIN-1155): an entry that
+    /// is not one of `sent`, or that does not parse, says nothing.
+    pub fn strict_mode_from_headers<'a>(
+        headers: &axum::http::HeaderMap,
+        sent: impl IntoIterator<Item = &'a Self>,
+    ) -> Vec<Self> {
+        let Some(value) = headers
+            .get(STRICT_MODE_EXECUTORS_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| value.len() <= MAX_ADDITIONAL_EXECUTORS_BYTES)
+        else {
+            return Vec::new();
+        };
+        let Ok(entries) = serde_json::from_str::<Vec<Value>>(value) else {
+            return Vec::new();
+        };
+        let sent: Vec<&Self> = sent.into_iter().collect();
+        let mut bindings: Vec<Self> = Vec::new();
+        for entry in entries.into_iter().take(MAX_ADDITIONAL_EXECUTORS + 1) {
+            let Ok(binding) = serde_json::from_value::<Self>(entry) else {
+                continue;
+            };
+            if sent.contains(&&binding) && !bindings.contains(&binding) {
+                bindings.push(binding);
+            }
+        }
+        bindings
+    }
 }
 
 /// Submit header listing the bindings beside `X-Erato-Executor`.
 pub const ADDITIONAL_EXECUTORS_HEADER: &str = "X-Erato-Additional-Executors";
+/// Submit and continuation header listing those of the request's bindings
+/// whose page says the app behind them runs in strict mode.
+pub const STRICT_MODE_EXECUTORS_HEADER: &str = "X-Erato-Strict-Mode-Executors";
 pub const MAX_ADDITIONAL_EXECUTORS: usize = 4;
 const MAX_ADDITIONAL_EXECUTORS_BYTES: usize = 4096;
 
@@ -638,6 +673,44 @@ mod tests {
             {"pad": "x".repeat(MAX_ADDITIONAL_EXECUTORS_BYTES)}
         ]);
         assert!(additional(&padded.to_string(), None).is_empty());
+    }
+
+    #[test]
+    fn strict_mode_names_only_the_requests_own_bindings() {
+        let strict = |value: &str, sent: &[ExecutorBinding]| {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                STRICT_MODE_EXECUTORS_HEADER,
+                HeaderValue::from_str(value).unwrap(),
+            );
+            ExecutorBinding::strict_mode_from_headers(&headers, sent)
+        };
+        let sidecar: ExecutorBinding =
+            serde_json::from_value(binding_json("desktop_sidecar", "client")).unwrap();
+        let other: ExecutorBinding =
+            serde_json::from_value(binding_json("desktop_sidecar", "other")).unwrap();
+        let sent = [sidecar.clone()];
+        assert!(
+            ExecutorBinding::strict_mode_from_headers(&HeaderMap::new(), &sent).is_empty(),
+            "no header says nothing"
+        );
+        assert_eq!(strict(&json!([sidecar, sidecar]).to_string(), &sent), sent);
+        assert!(
+            strict(&json!([other]).to_string(), &sent).is_empty(),
+            "a binding the request does not send"
+        );
+        assert!(strict(&json!([sidecar]).to_string(), &[]).is_empty());
+        let mut future = binding_json("desktop_sidecar", "client");
+        future["strict"] = json!(true);
+        assert_eq!(
+            strict(&json!([future, 7, sidecar]).to_string(), &sent),
+            sent,
+            "an entry that does not parse drops only itself"
+        );
+        assert!(strict(&json!(sidecar).to_string(), &sent).is_empty());
+        assert!(strict("true", &sent).is_empty());
+        let padded = json!([sidecar, {"pad": "x".repeat(MAX_ADDITIONAL_EXECUTORS_BYTES)}]);
+        assert!(strict(&padded.to_string(), &sent).is_empty());
     }
 
     fn stored_request() -> Value {

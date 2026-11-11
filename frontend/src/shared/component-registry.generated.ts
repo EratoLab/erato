@@ -436,6 +436,7 @@ export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighligh
 export type { SyntaxHighlightedCodeProps } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { TaskChatLink } from "@/components/ui/Message/TaskChatLink";
 export { TaskPlanApprovalCard } from "@/components/ui/Message/TaskPlanApprovalCard";
+export { ToolCallLimitItem } from "@/components/ui/Message/ToolCallLimitItem";
 export { toolNameOfCall } from "@/components/ui/Message/waitingCall";
 export { waitingCallOf } from "@/components/ui/Message/waitingCall";
 export type { WaitingCallPart } from "@/components/ui/Message/waitingCall";

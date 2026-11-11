@@ -562,6 +562,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "reject_always",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1018,6 +1019,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "tool-call-2", decision: "approve" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1061,6 +1063,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "approve",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1258,6 +1261,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "reject" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1351,6 +1355,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "withdraw" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -5071,5 +5076,139 @@ describe("gist cards", () => {
         screen.getByRole("button", { name: "Allow once" }),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("tool-call limit with a task's question", () => {
+  // The task asked before the limit was reached, yet the limit's choice comes
+  // first: its Stop answers the whole stop at once.
+  const limitRequest = {
+    ...approvalRequest,
+    kind: "tool_call_limit" as const,
+    tool_call_id: "tool-budget:1",
+    tool_name: "Tool-call budget",
+    mcp_server_id: "",
+    allow_always: false,
+    input: { budget: 15 },
+    requested_at: "2026-08-06T00:00:05Z",
+    approvals: [
+      {
+        approval_id: "tool-budget:1",
+        tool_call_id: "tool-budget:1",
+        tool_name: "Tool-call budget",
+        input: { budget: 15 },
+        child: null,
+      },
+      {
+        approval_id: "task-a",
+        tool_call_id: "task-a",
+        tool_name: "delegate_task",
+        input: { task: "Summarize the release notes" },
+        child: {
+          ...childApprovalRef,
+          child_chat_id: "child-a",
+          requested_at: "2026-08-06T00:00:01Z",
+          allow_always: false,
+        },
+      },
+    ],
+  };
+
+  const okResponse = () =>
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+
+  const sentDecisions = (fetchMock: ReturnType<typeof vi.fn>) =>
+    (
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+        decisions: unknown[];
+      }
+    ).decisions;
+
+  it("asks the limit's choice first, then the task's question, and sends both", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={limitRequest}
+        resolution={null}
+      />,
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveAttribute("data-approval-kind", "tool_call_limit");
+    expect(queue).toHaveAttribute("data-item-count", "2");
+    expect(
+      screen.getByRole("group", { name: "Tool-call limit reached" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/If you stop, each task waits for your decision/),
+    ).toBeInTheDocument();
+    // Allow all would pick the limit's choice without asking it.
+    expect(screen.queryByTestId("approval-queue-bulk")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate answer now" }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Summarize the release notes")).toBeInTheDocument();
+    expect(screen.getByTestId("delegated-task-approval-item")).toHaveAttribute(
+      "data-child-chat-id",
+      "child-a",
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-budget:1", decision: "reject" },
+      { approval_id: "task-a", decision: "approve" },
+    ]);
+    // Without saying it shows the task's question here, the server refuses
+    // the decision as one from a client that shows the limit's choice alone.
+    expect(
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body),
+    ).toMatchObject({
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
+
+  it("sends Stop at once and withdraws the task's question with it", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={limitRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-budget:1", decision: "withdraw" },
+      { approval_id: "task-a", decision: "withdraw" },
+    ]);
+  });
+
+  it("keeps the single card for a limit no task asks on", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{ ...limitRequest, approvals: [limitRequest.approvals[0]] }}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("tool-call-limit-approval")).toBeInTheDocument();
+    expect(screen.queryByTestId("approval-queue")).toBeNull();
+    expect(
+      screen.queryByText(/If you stop, each task waits for your decision/),
+    ).toBeNull();
   });
 });
