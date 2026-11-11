@@ -24,7 +24,7 @@ export const CLIENT_TOOL_OPERATION_KIND = "client_tool.v1";
 const MAX_MESSAGE_CHARS = 1024;
 
 /** The codes of a task's call that a prompt on the device ended without a
- * result: a decline, or a review that ended without the user's decision. */
+ * result: a decline, or a review that ended before its result arrived. */
 const ENDED_ON_DEVICE = new Set(["declined", "review_expired"]);
 
 function cleanMessage(message: string): string | undefined {
@@ -81,7 +81,7 @@ export function toOperationResult(
     });
   }
   // Only a task's call reports a decline on the device, or a review there that
-  // ended without the user's decision, as such; the user's own call keeps the
+  // ended before its result arrived, as such; the user's own call keeps the
   // validation shape its host family already reads.
   const ended = request.lineage
     ? outcome.validationErrors?.find((issue) => ENDED_ON_DEVICE.has(issue.code))

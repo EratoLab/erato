@@ -1228,17 +1228,17 @@ pub(super) async fn a_device_decline_ends_the_durable_call_as_declined(
     .await;
 }
 
-/// A review on the device that ended without the user's decision, or whose
-/// job the app lost when it restarted, is no decline: the call is expired, the
-/// task's model is told not to retry it without the user, and the task result
-/// counts it as expired.
-pub(super) async fn a_review_ended_without_a_decision_ends_the_durable_call_as_expired(
+/// A review on the device that ended before its result reached the task
+/// (nobody decided in time, or the app lost its job, also after a Share) is
+/// no decline: the call is expired, the task's model is told not to retry it
+/// without the user, and the task result counts it as expired.
+pub(super) async fn a_review_ended_before_its_result_arrived_ends_the_durable_call_as_expired(
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
     a_device_prompt_ends_the_durable_call(pool, row, "review_expired", "expired", |child_turn| {
         assert!(
-            child_turn.contains("ended without their decision"),
+            child_turn.contains("ended before its result reached the task"),
             "{child_turn}"
         );
         assert!(

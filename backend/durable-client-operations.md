@@ -463,9 +463,9 @@ own durable calls, all keyed on `OperationRequest.lineage` (set only for these):
 - **Decline.** `{outcome: "rejected", result: null, error: {code: "declined"}}`
   is valid only for grant operations and is stored as `{status: "cancelled",
   reason: "declined", error}`. `error: {code: "review_expired"}`, a review on
-  the device that ended without the user's decision, is valid only for grant
-  operations too and is stored as `{status: "cancelled", reason: "expired",
-  error}`, so the task result counts it as expired. `expired` and `withdrawn`
+  the device that ended before its result reached the task, is valid only for
+  grant operations too and is stored as `{status: "cancelled", reason:
+  "expired", error}`, so the task result counts it as expired. `expired` and `withdrawn`
   carry an `error` text for the task's model; the server writes every one of
   these texts, never the client.
 - **Continuation.** Any coordinator of the account continues a ready or

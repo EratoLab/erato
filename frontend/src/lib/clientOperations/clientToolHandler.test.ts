@@ -186,10 +186,10 @@ describe("toOperationResult", () => {
     });
   });
 
-  it("reports a review on the device that ended without a decision only for a task's call, never as a decline", () => {
+  it("reports a review on the device that ended before its result arrived only for a task's call, never as a decline", () => {
     const ended: ClientToolExecutionResult = {
       ok: false,
-      error: "The review ended without a decision",
+      error: "The review ended",
       validationErrors: [
         { code: "review_expired", path: "", message: "Ended" },
       ],

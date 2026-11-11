@@ -341,12 +341,12 @@ function callErrorText(result: CallToolResult): string {
 }
 
 /**
- * A call the user declined on this device, or one whose review ended without
- * their decision (`review_expired`). A task's call reports which, so the
+ * A call the user declined on this device, or one whose review ended before
+ * its result arrived (`review_expired`). A task's call reports which, so the
  * task's result counts it as declined or expired; the user's own call keeps
  * the error its turn reads.
  */
-function declined(
+function endedOnDevice(
   error: string,
   context: ClientToolCallContext | undefined,
   code: "declined" | "review_expired" = "declined",
@@ -1069,9 +1069,11 @@ export function createSidecarChatTools(
               forgetReview(
                 reviewLinkKey(context.messageId, context.toolCallId),
               );
-            // Nobody decided a task's review in time, or the app lost its job
-            // when it restarted: expired, not declined.
-            return declined(
+            // A task's review ended before its result arrived: nobody decided
+            // in time, or the app no longer has the job (its record ran out,
+            // its store dropped the results, or it restarted), also after a
+            // Share. Expired, not declined.
+            return endedOnDevice(
               REVIEW_ENDED[error.state],
               context,
               error.state === "expired" ? "review_expired" : "declined",
@@ -1685,7 +1687,7 @@ export function createSidecarChatTools(
           // setting's block as a failure with its reason, not as a decline.
           if (reads.reviewed)
             return { ok: false, error: FILE_BLOCKED_AFTER_REVIEW };
-          return declined(
+          return endedOnDevice(
             "The user rejected uploading this file. Do not retry without their permission.",
             context,
           );

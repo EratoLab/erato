@@ -532,8 +532,8 @@ pub struct GrantedCallSummary {
     /// Granted calls the user declined.
     pub declined: u32,
     /// Granted calls that ran out of time: durable ones no client ran before
-    /// they expired, and ones whose review on the device ended without the
-    /// user's decision.
+    /// they expired, and ones whose review on the device ended before its
+    /// result reached the task.
     pub expired: u32,
 }
 
@@ -632,8 +632,10 @@ fn contract_freshness(freshness: &Value) -> Option<Value> {
 /// The outcome of a granted call the user declined.
 pub const DECLINED: &str = "declined";
 /// What a client reports for a granted call whose review on the device ended
-/// without the user's decision: its time ran out, or the app lost it when it
-/// restarted.
+/// before its result reached the task: nobody decided in time, or the app no
+/// longer had the job (its record ran out, the store dropped the results, or
+/// a strict app restarted with an empty store), so a Share the user made can
+/// be lost too.
 pub const REVIEW_EXPIRED: &str = "review_expired";
 /// The outcome of a granted call that ran out of time.
 const EXPIRED: &str = "expired";
@@ -655,13 +657,16 @@ pub fn declined_output(tool_name: &str) -> Value {
 pub fn ended_on_device_output(code: &str, tool_name: &str) -> Option<Value> {
     match code {
         DECLINED => Some(declined_output(tool_name)),
-        // Nobody said no, so it counts as expired. The task cannot ask the
-        // user, so it is told not to open another review on its own.
+        // Nobody said no, so it counts as expired. The user may have decided,
+        // and the result was lost on the way, so the text says only what
+        // holds either way. The task cannot ask the user, so it is told not to
+        // open another review on its own; whether a task should get a new
+        // review instead is open (ERMAIN-1153).
         REVIEW_EXPIRED => Some(json!({
             "status": "cancelled",
             "reason": EXPIRED,
             "error": format!(
-                "The review of this call on the user's device ended without their decision, so nothing was shared and the task has no result from '{tool_name}'. Do not retry it without the user; say in the answer what is missing because of it."
+                "The review of this call on the user's device ended before its result reached the task, so nothing was shared from it and the task has no result from '{tool_name}'. Do not retry it without the user; say in the answer what is missing because of it."
             ),
         })),
         _ => None,
@@ -1792,12 +1797,18 @@ mod tests {
     }
 
     #[test]
-    fn a_review_that_ended_without_a_decision_counts_as_expired_and_says_not_to_retry() {
+    fn a_review_that_ended_before_its_result_arrived_counts_as_expired_and_says_not_to_retry() {
         let ended = ended_on_device_output(REVIEW_EXPIRED, READ_NAME).unwrap();
         assert_eq!(ended["status"], "cancelled");
         assert_eq!(ended["reason"], "expired");
         let text = ended["error"].as_str().unwrap();
-        assert!(text.contains("ended without their decision"), "{text}");
+        assert!(
+            text.contains("ended before its result reached the task"),
+            "{text}"
+        );
+        // A Share the user made can be lost too, so it never says they did
+        // not decide.
+        assert!(!text.contains("decision"), "{text}");
         assert!(text.contains("Do not retry it without the user"), "{text}");
         assert!(!text.contains("declined"), "{text}");
         assert_eq!(

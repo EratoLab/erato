@@ -9407,9 +9407,10 @@ async fn stream_generate_chat_completion<'a>(
                     response_text = output_value.to_string();
                 }
                 // A device prompt that ended a task's live call without a
-                // result, a decline or a review that ended without the user's
-                // decision, ends it as the durable path does (a decline also
-                // as the server's own Ask does), so the task result counts it.
+                // result, a decline or a review that ended before its result
+                // reached the task, ends it as the durable path does (a
+                // decline also as the server's own Ask does), so the task
+                // result counts it.
                 if live_grant.is_some()
                     && let ClientToolOutcome::ValidationFailed(issues, _) = &outcome
                     && let Some(output) = issues.iter().find_map(|issue| {

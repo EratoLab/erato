@@ -30,7 +30,7 @@ use super::slow_path::{
     a_parent_the_cleanup_cleared_without_its_marker_settles_and_is_not_resumed,
     a_response_approval_lets_a_durable_task_call_park_without_asking,
     a_restart_while_parked_gives_one_continuation_and_no_duplicate_calls,
-    a_review_ended_without_a_decision_ends_the_durable_call_as_expired,
+    a_review_ended_before_its_result_arrived_ends_the_durable_call_as_expired,
     a_stop_keeps_the_slot_of_an_archived_task_it_carries,
     a_task_call_left_continuing_on_an_errored_child_is_refused_and_settles_as_failed,
     a_waiting_call_is_withdrawn_once_the_parent_moved_on,
@@ -149,7 +149,7 @@ macro_rules! host_conformance {
                 an_approved_child_call_reaches_the_pane_under_the_same_grant
                 a_denied_child_call_is_declined_and_the_task_result_says_so
                 a_device_decline_of_a_live_grant_call_is_declined
-                a_review_ended_without_a_decision_on_a_live_grant_call_is_expired
+                a_review_ended_before_its_result_arrived_on_a_live_grant_call_is_expired
                 freshness_reaches_the_task_result_and_the_parent_trace
                 freshness_after_an_approval_reaches_the_task_result_and_the_trace
             );
@@ -179,7 +179,7 @@ macro_rules! host_conformance {
             a_waiting_childs_continuation_is_offered_its_granted_tools_while_the_parent_is_parked
             a_device_prompt_answered_after_the_tool_timeout_completes_within_the_attempt
             a_device_decline_ends_the_durable_call_as_declined
-            a_review_ended_without_a_decision_ends_the_durable_call_as_expired
+            a_review_ended_before_its_result_arrived_ends_the_durable_call_as_expired
             no_client_before_the_attempt_ends_gives_expired
             a_durable_and_a_live_child_only_the_durable_one_waits
             a_durable_child_that_finishes_before_the_parent_parks_resumes_the_parent_once
@@ -1461,17 +1461,17 @@ async fn a_device_decline_of_a_live_grant_call_is_declined(pool: Pool<Postgres>,
     .await;
 }
 
-/// A review on the device that ended without the user's decision is no
-/// decline on the live path either: the call is expired, the task's model is
-/// told not to retry it without the user, and the task result counts it as
-/// expired.
-async fn a_review_ended_without_a_decision_on_a_live_grant_call_is_expired(
+/// A review on the device that ended before its result reached the task is
+/// no decline on the live path either: the call is expired, the task's model
+/// is told not to retry it without the user, and the task result counts it
+/// as expired.
+async fn a_review_ended_before_its_result_arrived_on_a_live_grant_call_is_expired(
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
     a_device_prompt_ends_a_live_grant_call(pool, row, "review_expired", "expired", |child_turn| {
         assert!(
-            child_turn.contains("ended without their decision"),
+            child_turn.contains("ended before its result reached the task"),
             "{child_turn}"
         );
         assert!(

@@ -1416,7 +1416,7 @@ describe("desktop sidecar tools in strict mode", () => {
     ["while the page polls it", false],
     ["after the app restarted and lost its job", true],
   ] as const)(
-    "ends a task's parked call whose review ended without a decision %s as expired, not declined, and opens no other review",
+    "ends a task's parked call whose review ended before its result arrived (%s) as expired, not declined, and opens no other review",
     async (_case, restarted) => {
       registerClientToolExecutor(
         SEARCH_SIDECAR_INDEX_TOOL,

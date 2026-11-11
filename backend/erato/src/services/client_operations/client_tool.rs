@@ -213,9 +213,9 @@ impl OperationKind for ConfiguredClientToolKind {
                 })
             }
             // A device prompt that ended a task's granted call without a
-            // result: the user declined it, or its review ended without their
-            // decision. Only a task's call counts it; the user's own calls
-            // have their card.
+            // result: the user declined it, or its review ended before its
+            // result reached the task. Only a task's call counts it; the
+            // user's own calls have their card.
             (OperationOutcome::Rejected, None, Some(error)) if request.lineage.is_some() => {
                 let tool_name = request.operation_id.rsplit('/').next().unwrap_or_default();
                 let output = crate::services::delegated_client_tools::ended_on_device_output(
@@ -795,7 +795,8 @@ mod tests {
     }
 
     #[test]
-    fn a_review_that_ended_without_a_decision_is_stored_as_expired_only_for_grant_operations() {
+    fn a_review_that_ended_before_its_result_arrived_is_stored_as_expired_only_for_grant_operations()
+     {
         let mut request = request();
         let kind = kind(Some(SCHEMA));
         let ended = |request: &OperationRequest| {
@@ -803,10 +804,7 @@ mod tests {
                 request,
                 OperationOutcome::Rejected,
                 None,
-                Some((
-                    "review_expired",
-                    Some("The review ended without a decision.".into()),
-                )),
+                Some(("review_expired", Some("The review ended.".into()))),
             )
         };
         assert!(kind.validate_result(&request, &ended(&request)).is_err());
