@@ -59,12 +59,30 @@ const countParts = (
             }),
           })
       : undefined,
+    counts.listRemoved > 0
+      ? t({
+          id: "toolChange.count.listRemoved",
+          message: plural(counts.listRemoved, {
+            one: "# with items removed",
+            other: "# with items removed",
+          }),
+        })
+      : undefined,
     counts.changed > 0
       ? t({
           id: "toolChange.count.changed",
           message: plural(counts.changed, {
             one: "# changed",
             other: "# changed",
+          }),
+        })
+      : undefined,
+    counts.listAdded > 0
+      ? t({
+          id: "toolChange.count.listAdded",
+          message: plural(counts.listAdded, {
+            one: "# with items added",
+            other: "# with items added",
           }),
         })
       : undefined,
@@ -94,6 +112,8 @@ const countParts = (
 const changingOf = (counts: ChangeCounts, texts: number) =>
   counts.emptied +
   counts.listReplaced +
+  counts.listRemoved +
+  counts.listAdded +
   counts.changed +
   counts.set +
   counts.unreadable +
@@ -193,17 +213,23 @@ export const changeSeeMoreLine = (
 ): string => {
   const { counts } = change;
   const total = layout.collapsed.length + layout.beyondCap;
-  const behind = (kind: "changed" | "set" | "unchanged") =>
-    counts[kind] -
-    layout.firstRows.filter((effect) => effect.effect === kind).length;
-  const changed = behind("changed");
-  const set = behind("set");
-  const unchanged = behind("unchanged");
+  const behind = (
+    kind: "changed" | "set" | "unchanged" | "list_added",
+    count: number,
+  ) =>
+    count - layout.firstRows.filter((effect) => effect.effect === kind).length;
+  const changed = behind("changed", counts.changed);
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  const added = behind("list_added", counts.listAdded);
+  const set = behind("set", counts.set);
+  const unchanged = behind("unchanged", counts.unchanged);
   const losses =
     counts.emptied -
     layout.emptied.length +
     counts.listReplaced -
     layout.lists.length +
+    counts.listRemoved -
+    layout.removedFromLists.length +
     counts.unreadable -
     layout.unreadable.length;
   const noLoss = change.complete && losses <= 0;
@@ -250,6 +276,15 @@ export const changeSeeMoreLine = (
       ? t({
           id: "toolChange.seeMore.part.changed",
           message: plural(changed, { one: "# changed", other: "# changed" }),
+        })
+      : undefined,
+    added > 0
+      ? t({
+          id: "toolChange.seeMore.part.added",
+          message: plural(added, {
+            one: "# with items added",
+            other: "# with items added",
+          }),
         })
       : undefined,
     set > 0
@@ -345,13 +380,14 @@ export const incompleteLines = (change: GistChange): string[] => {
   ];
 };
 
+/** Under a closed See more, which fields it holds. */
 export const changeNamesOnly = (names: string, more: number): string =>
   more > 0
     ? t({
         id: "toolChange.namesOnly.more",
-        message: `Names only: ${names}, +${more} more`,
+        message: `These fields: ${names}, +${more} more`,
       })
-    : t({ id: "toolChange.namesOnly", message: `Names only: ${names}` });
+    : t({ id: "toolChange.namesOnly", message: `These fields: ${names}` });
 
 export const machineIdPhrase = (): string =>
   t({ id: "toolChange.value.anId", message: "an ID (see Technical details)" });
@@ -449,6 +485,16 @@ export const listAddsClaim = (): string =>
     id: "toolChange.list.addsClaim",
     message: "Only added, the tool says",
   });
+
+export const listRemovesClaim = (): string =>
+  t({
+    id: "toolChange.list.removesClaim",
+    message: "Only removed, the tool says",
+  });
+
+/** Under a trace row, the values the card could not read. */
+export const unreadableLabel = (): string =>
+  t({ id: "toolChange.row.unreadable", message: "Not readable" });
 
 export const recipientKindWord = (kind: ToolCallRecipientKind): string => {
   switch (kind) {
@@ -673,6 +719,18 @@ export const batchLossLines = (
           }),
     );
   }
+  if (batch.rowsRemovingFromLists > 0) {
+    const removing = batch.rowsRemovingFromLists;
+    lines.push(
+      t({
+        id: "toolChange.batch.losses.removing",
+        message: plural(removing, {
+          one: "# row removes items from a list, the tool says",
+          other: "# rows remove items from a list, the tool says",
+        }),
+      }),
+    );
+  }
   if (
     lines.length === 0 &&
     batch.deletions === 0 &&
@@ -695,7 +753,7 @@ export const batchFieldLine = (
   total: number,
   listsMaybeReplaced = false,
 ): string => {
-  const { emptied } = field;
+  const { emptied, listsRemoved: removed, listsAdded: added } = field;
   const replaced = field.listsReplaced;
   const scopeOf = (rows: number) =>
     rows === total
@@ -714,8 +772,16 @@ export const batchFieldLine = (
       message: `Emptied ${scope}`,
     });
   }
-  const written = field.rows - emptied - replaced;
+  const written = field.rows - emptied - replaced - removed - added;
   const samples = field.samples.map(plainChangeValue).join(", ");
+  // The values are what is removed or added only when no row writes one and
+  // every row holds the same ones.
+  const named =
+    written === 0 &&
+    emptied === 0 &&
+    samples.length > 0 &&
+    field.distinct === 1 &&
+    !field.distinctCapped;
   const distinct = field.distinct;
   const parts: string[] = [];
   if (written > 0) {
@@ -756,6 +822,40 @@ export const batchFieldLine = (
           other: "emptied on # rows",
         }),
       }),
+    );
+  }
+  if (removed > 0) {
+    const scope = scopeOf(removed);
+    parts.push(
+      named && added === 0 && replaced === 0
+        ? t({
+            id: "toolChange.batch.field.removedValues",
+            message: `${samples} removed ${scope}, the tool says`,
+          })
+        : t({
+            id: "toolChange.batch.field.removed",
+            message: plural(removed, {
+              one: "items removed on # row, the tool says",
+              other: "items removed on # rows, the tool says",
+            }),
+          }),
+    );
+  }
+  if (added > 0) {
+    const scope = scopeOf(added);
+    parts.push(
+      named && removed === 0 && replaced === 0
+        ? t({
+            id: "toolChange.batch.field.addedValues",
+            message: `${samples} added ${scope}, the tool says`,
+          })
+        : t({
+            id: "toolChange.batch.field.added",
+            message: plural(added, {
+              one: "items added on # row, the tool says",
+              other: "items added on # rows, the tool says",
+            }),
+          }),
     );
   }
   if (replaced > 0) {

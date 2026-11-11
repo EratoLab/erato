@@ -13489,6 +13489,12 @@
             "format": "int32",
             "minimum": 0
           },
+          "rows_removing_from_lists": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows that remove items from a list, on the tool's word.",
+            "minimum": 0
+          },
           "rows_replacing_lists": {
             "type": "integer",
             "format": "int32",
@@ -13535,6 +13541,18 @@
           "emptied": {
             "type": "integer",
             "format": "int32",
+            "minimum": 0
+          },
+          "lists_added": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items added.",
+            "minimum": 0
+          },
+          "lists_removed": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rows whose list the tool says has its items removed.",
             "minimum": 0
           },
           "lists_replaced": {
@@ -13813,6 +13831,16 @@
             "format": "int32",
             "minimum": 0
           },
+          "list_added": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "list_removed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
           "list_replaced": {
             "type": "integer",
             "format": "int32",
@@ -13841,6 +13869,8 @@
         "enum": [
           "emptied",
           "list_replaced",
+          "list_removed",
+          "list_added",
           "changed",
           "set",
           "unchanged",
@@ -13867,6 +13897,16 @@
             "type": "boolean"
           }
         }
+      },
+      "ToolCallFailure": {
+        "type": "string",
+        "description": "How a call failed when Erato, not the tool, wrote its error.",
+        "enum": [
+          "no_answer",
+          "answer_unreadable",
+          "not_run",
+          "other"
+        ]
       },
       "ToolCallFilter": {
         "type": "object",
@@ -14375,6 +14415,10 @@
         "type": "object",
         "description": "What a tool row keeps of an MCP result besides `output`: at most ten of its\nlinks. Its structured content and embedded resources are not kept.",
         "properties": {
+          "failure": {
+            "$ref": "#/components/schemas/ToolCallFailure",
+            "description": "Set by Erato when a call failed without an answer from the tool that\nErato could read: the row's error text is then Erato's, never the\ntool's."
+          },
           "links": {
             "type": "array",
             "items": {

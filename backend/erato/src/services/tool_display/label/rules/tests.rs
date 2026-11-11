@@ -79,9 +79,28 @@ fn a_declared_verb_field_wins_over_the_tool_name() {
         label("delete_page", made_up.clone()).mapping.action,
         ToolCallAction::Create
     );
+    // A name that deletes or archives is never overruled by a field's other
+    // verb, declared or not.
     assert_eq!(
         cross_check(
             &tool("delete_page", None, &["page_id"]),
+            &made_up,
+            ToolCallAction::Create
+        ),
+        [CrossCheckFlag::LossLeftOut, CrossCheckFlag::NameVerb]
+    );
+    assert_eq!(
+        cross_check(
+            &tool("delete_page", None, &["page_id", "mode"]),
+            &made_up,
+            ToolCallAction::Create
+        ),
+        [CrossCheckFlag::LossLeftOut]
+    );
+    // Any other name steps back for a declared field.
+    assert_eq!(
+        cross_check(
+            &tool("rename_page", None, &["page_id"]),
             &made_up,
             ToolCallAction::Create
         ),
@@ -89,7 +108,7 @@ fn a_declared_verb_field_wins_over_the_tool_name() {
     );
     assert_eq!(
         cross_check(
-            &tool("delete_page", None, &["page_id", "mode"]),
+            &tool("rename_page", None, &["page_id", "mode"]),
             &made_up,
             ToolCallAction::Create
         ),
@@ -1680,12 +1699,7 @@ fn score(fixture: &str) -> Score {
 const TESTSET_MISSES: [(&str, &[&str]); 8] = [
     (
         "action",
-        &[
-            "g05-add-note",
-            "g06-remove-note",
-            "w02-plan-insert",
-            "w04-scoped-insert-table",
-        ],
+        &["g05-add-note", "g06-remove-note", "w04-scoped-insert-table"],
     ),
     (
         "kind",
@@ -1716,7 +1730,6 @@ const TESTSET_MISSES: [(&str, &[&str]); 8] = [
             "n19-duplicate",
             "g05-add-note",
             "w01-plan-full",
-            "w02-plan-insert",
             "w03-plan-sections",
             "w16-read-blocks",
             "w19-propose-edits-fence",

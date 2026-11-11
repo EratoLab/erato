@@ -80,6 +80,7 @@ import type { ApprovalStopState } from "./approvalItems";
 import type { ToolDecision } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
 import type { HostCardCodeBlockProps } from "@/config/componentRegistry";
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ContentPart,
   ContentPartTaskResult,
@@ -1415,6 +1416,31 @@ export const MessageContent = memo(function MessageContent({
   }, [content]);
 
   const waitingCall = React.useMemo(() => waitingCallOf(content), [content]);
+  // The trace step of the waiting call says it waits, and on what: a review
+  // in the Erato desktop app is known by the link the review left, which a
+  // reload keeps, under the key the notice reads. The link's state says
+  // whether the review is open or asked for again, or ended and waits for
+  // Ask again, as the slot item says it.
+  const waitingCallId = waitingCall?.tool_call_id;
+  const waitingCallReview = useSidecarReviewLinks(
+    (state): SidecarReviewLink["state"] | undefined => {
+      if (messageId === undefined || waitingCallId === undefined) {
+        return undefined;
+      }
+      // A call that has no review has no link under its key.
+      const key = reviewLinkKey(messageId, waitingCallId);
+      return Object.hasOwn(state.links, key)
+        ? state.links[key].state
+        : undefined;
+    },
+  );
+  const traceWaitingCall = React.useMemo(
+    () =>
+      waitingCallId === undefined
+        ? undefined
+        : { toolCallId: waitingCallId, review: waitingCallReview },
+    [waitingCallId, waitingCallReview],
+  );
 
   // Only the last stop can still wait on tasks: an earlier one was carried
   // onto a later one or settled.
@@ -1811,6 +1837,7 @@ export const MessageContent = memo(function MessageContent({
                   }
                   hasError={hasError}
                   toolDecisions={toolDecisions}
+                  waitingCall={traceWaitingCall}
                 />
               </WaitingHostsContext.Provider>
               {/* Outside the trace, which folds away once the turn ends. */}

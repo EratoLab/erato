@@ -1,6 +1,7 @@
 use crate::config::{AppConfig, McpRuntimeConfig};
 use crate::db::entity::prelude::FileUploads;
 use crate::services::file_storage::SharepointContext;
+use crate::services::mcp_call_error::{McpCallError, McpCallFailure};
 use crate::services::mcp_session_manager::{
     ManagedTool, McpServerToolEnumeration, McpSessionManager,
 };
@@ -250,7 +251,8 @@ impl McpServers {
             &mut tool_args,
             auth_context,
         )
-        .await?;
+        .await
+        .map_err(|error| McpCallError::report(McpCallFailure::NotSent, error))?;
         if let Some(approval) = &managed_tool_call.approval_argument {
             write_approval_argument(&mut tool_args, approval);
         }
