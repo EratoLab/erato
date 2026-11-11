@@ -30,6 +30,7 @@ describe("buildContinueStreamBody", () => {
       message_id: "message-1",
       decision: "approve",
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -45,6 +46,7 @@ describe("buildContinueStreamBody", () => {
       message_id: "message-1",
       decisions: [{ approval_id: "call-a", decision: "approve" }],
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -62,6 +64,7 @@ describe("buildContinueStreamBody", () => {
         { approval_id: "call-b", decision: "reject" },
       ],
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -83,6 +86,7 @@ describe("buildContinueStreamBody", () => {
         { approval_id: "plan:0:1", decision: "reject" },
       ],
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -100,6 +104,7 @@ describe("buildContinueStreamBody", () => {
       message_id: "message-1",
       decision: "withdraw",
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -140,6 +145,7 @@ describe("buildContinueStreamBody", () => {
         { approval_id: "task-c", decision: "reject" },
       ],
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -155,6 +161,7 @@ describe("buildContinueStreamBody", () => {
       message_id: "message-1",
       decisions: [{ approval_id: "task-a", decision: "approve_context" }],
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 
@@ -168,6 +175,7 @@ describe("buildContinueStreamBody", () => {
       message_id: "message-1",
       decision: "approve_always",
       shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
     });
   });
 });

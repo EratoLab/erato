@@ -3145,9 +3145,8 @@ pub(super) async fn a_chat_that_only_waits_is_reported_as_nothing_to_decide(
     waiting.server.abort();
 }
 
-/// What a turn leaves that ended on a stop no child item can share (the
-/// tool-call limit, its own durable operation): the child's slot waits, and
-/// no stop names the child.
+/// What a turn leaves that the user stopped, while it ran or with Stop at the
+/// tool-call limit: the child's slot waits, and no stop names the child.
 async fn drop_the_stop(waiting: &Waiting) {
     let mut raw = waiting.parent_message.raw_message.clone();
     raw["content"]

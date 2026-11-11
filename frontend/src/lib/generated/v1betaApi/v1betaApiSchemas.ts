@@ -1663,6 +1663,16 @@ export type ContinueStreamRequest = {
    * own call and would answer the children unseen.
    */
   shows_child_items?: boolean;
+  /**
+   * Whether the client also shows each task child a `tool_call_limit` or
+   * `builtin_tool` part carries as an item of its own. Those parts carry
+   * children since later than `shows_child_items` says, and a client that
+   * predates them sends that flag while it shows the limit's choice, or a
+   * generic card for a kind it does not know, alone and answers every open
+   * item with it. Decisions on such a part are refused without both flags
+   * while a child is open.
+   */
+  shows_limit_and_builtin_child_items?: boolean;
 };
 
 export type Coverage = "complete" | "partial" | "unavailable";

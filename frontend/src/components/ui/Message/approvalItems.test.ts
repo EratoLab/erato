@@ -148,6 +148,19 @@ describe("approvalQueueOf", () => {
     ).toEqual(["early", "own"]);
   });
 
+  it("puts the tool-call limit's choice before a task that asked earlier", () => {
+    const request = {
+      requested_at: "2026-10-20T10:00:05Z",
+      kind: "tool_call_limit" as const,
+    };
+    const open = [
+      ownItem("budget"),
+      childItem("early", "2026-10-20T10:00:01Z"),
+    ];
+
+    expect(ids(approvalQueueOf(request, open))).toEqual(["budget", "early"]);
+  });
+
   it("puts an approval with an unreadable time after the rest", () => {
     const request = { requested_at: "2026-10-20T10:00:05Z" };
     const open = [childItem("unknown", "not a time"), ownItem("own")];

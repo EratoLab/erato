@@ -32,6 +32,7 @@ import { BuiltinToolApprovalItem } from "./BuiltinToolApprovalItem";
 import { OriginApprovalLink } from "./OriginApprovalLink";
 import { OwnCallApprovalItem } from "./OwnCallApprovalItem";
 import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
+import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import {
   approvalItemsOf,
   isWaitingItem,
@@ -591,13 +592,16 @@ export const McpToolApprovalCard = ({
 
   const isClientTool = kind === "client_tool";
   const isBuiltinTool = kind === "builtin_tool";
-  // The turn's own gated call carries its parked tasks on the same stop, and a
-  // `delegated_task` stop is nothing but them: both are decided one item at a
-  // time. A task plan reviews one plan rather than the turn's approvals, so it
-  // keeps its list.
+  // The turn's own gated call, and its tool-call limit, carry its parked tasks
+  // on the same stop, and a `delegated_task` stop is nothing but them: both are
+  // decided one item at a time. A task plan reviews one plan rather than the
+  // turn's approvals, so it keeps its list.
   const isQueue =
     kind === "delegated_task" ||
-    ((kind === "mcp_tool" || isClientTool || isBuiltinTool) &&
+    ((kind === "mcp_tool" ||
+      isClientTool ||
+      isBuiltinTool ||
+      kind === "tool_call_limit") &&
       (waiting.length > 0 || approvalItems.some((item) => item.child != null)));
 
   // Resolved decisions are represented beside the matching tool call in the
@@ -620,39 +624,18 @@ export const McpToolApprovalCard = ({
     </>
   );
 
-  if (kind === "tool_call_limit") {
+  if (kind === "tool_call_limit" && !isQueue) {
     return (
       <div
         className={APPROVAL_CARD_SHELL_CLASS}
         data-testid="tool-call-limit-approval"
       >
-        <ActionConfirmationCard
-          title={t({
-            id: "toolCallLimit.title",
-            message: "Tool-call limit reached",
-          })}
-          description={t({
-            id: "toolCallLimit.description",
-            message:
-              "Continue with twice the tool-call budget, generate an answer using the information collected so far, or stop this response.",
-          })}
-          allowOnceLabel={t({
-            id: "toolCallLimit.continue",
-            message: "Continue tool calls",
-          })}
-          alwaysAllowLabel={t({
-            id: "toolCallLimit.answer",
-            message: "Generate answer now",
-          })}
-          denyLabel={t({ id: "toolCallLimit.stop", message: "Stop" })}
-          onAllowOnce={() => decideAll("approve")}
-          onAlwaysAllow={() => decideAll("reject")}
-          onDeny={() => decideAll("withdraw")}
+        <ToolCallLimitItem
           status={isArchived ? "dismissed" : "pending"}
           resolvedLabel={isArchived ? archivedNoticeText() : undefined}
           isBusy={cardIsBusy}
           scrollIntoViewOnMount
-          data-testid="tool-call-limit-card"
+          onDecide={decideAll}
         />
         {refusal}
       </div>
