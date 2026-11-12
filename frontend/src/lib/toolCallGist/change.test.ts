@@ -7,7 +7,7 @@ import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
 
-import { cardSourceOf } from "./cardLayout";
+import { cardSourceOf, effectDisplayName } from "./cardLayout";
 import {
   MAX_COLLAPSED_NAMES,
   MAX_FIRST_VIEW_VALUES,
@@ -588,6 +588,28 @@ describe("the place on the line", () => {
     );
     const where = gist!.items[0].where.map((value) => value.text);
     expect(where).toEqual(["Q4 pipeline", "contoso / uploader"]);
+  });
+
+  it("drops a trailing ID from a link that shows a name", () => {
+    const link = (name: string) =>
+      readChange({
+        complete: true,
+        counts: { set: 1 },
+        effects: [
+          {
+            path: "/parent",
+            name,
+            raw_name: "parent",
+            effect: "set",
+            link: true,
+            values: [{ text: "Example Ltd", machine_id: true }],
+          },
+        ],
+      })!.effects[0];
+    expect(effectDisplayName(link("Parent account ID"))).toBe("Parent account");
+    expect(effectDisplayName(link("Parent account Id"))).toBe("Parent account");
+    expect(effectDisplayName(link("Valid"))).toBe("Valid");
+    expect(effectDisplayName(link("Owner  id"))).toBe("Owner");
   });
 
   it("names in the source line every distinct place, even two with one name", () => {

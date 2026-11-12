@@ -230,7 +230,13 @@ export const showsEarlierValues = (gist: Gist): boolean => {
   );
 };
 
-const TRAILING_ID = /\s+id$/i;
+/** The name without a last word "ID", or the name as it is; no regex, so no backtracking. */
+const withoutTrailingId = (name: string): string => {
+  if (name.slice(-2).toLowerCase() !== "id") return name;
+  const before = name.slice(0, -2);
+  const trimmed = before.trimEnd();
+  return trimmed.length < before.length ? trimmed : name;
+};
 
 /**
  * A field's name on its row. A link that shows the linked record's name
@@ -244,6 +250,6 @@ export const effectDisplayName = (effect: ChangeEffect): string => {
     value.machineId &&
     value.text.length > 0;
   if (!showsName) return effect.name;
-  const trimmed = effect.name.replace(TRAILING_ID, "");
+  const trimmed = withoutTrailingId(effect.name);
   return trimmed.length > 0 ? trimmed : effect.name;
 };
