@@ -2154,6 +2154,10 @@ export type DownloadDistributionArtifactQueryParams = {
    * Manifest file identifier. The target's default is used when omitted.
    */
   file?: string;
+  /**
+   * Wrap the personalized artifact in a ZIP archive.
+   */
+  zip?: boolean;
 };
 
 export type DownloadDistributionArtifactError = Fetcher.ErrorWrapper<undefined>;

@@ -4007,6 +4007,16 @@ msgstr "3. Pobierz"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.options"
+msgstr "Opcje pobierania"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.zip"
+msgstr "Pobierz jako .zip"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.eyebrow"
 msgstr "Erato Desktop Sidecar"
 

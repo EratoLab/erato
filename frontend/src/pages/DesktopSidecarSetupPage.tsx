@@ -4,6 +4,7 @@ import {
   AppleMac,
   ArrowLeft,
   Computer,
+  NavArrowDown,
   Download,
   Linux,
   Package,
@@ -13,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Card } from "@/components/ui/Container/Card";
+import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import {
   detectDesktopSidecarArchitecture,
   detectDesktopSidecarClientPlatform,
@@ -150,8 +152,9 @@ function formatFileSize(size: number): string {
   });
 }
 
-function downloadUrl(targetId: string, fileId: string): string {
+function downloadUrl(targetId: string, fileId: string, zip = false): string {
   const query = new URLSearchParams({ target: targetId, file: fileId });
+  if (zip) query.set("zip", "true");
   // API route, not user-facing copy.
   // eslint-disable-next-line lingui/no-unlocalized-strings
   return `/api/v1beta/desktop-sidecar/distribution/download?${query.toString()}`;
@@ -439,6 +442,7 @@ function ArtifactCard({
   target: DistributionTarget;
 }) {
   const isDefault = target.default_file === file.id;
+  const showZipOption = target.platform.os !== "macos";
 
   return (
     <Card
@@ -451,13 +455,43 @@ function ArtifactCard({
           <span className="text-sm text-theme-fg-muted">
             {formatFileSize(file.size)}
           </span>
-          <a
-            href={downloadUrl(target.id, file.id)}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus"
-          >
-            <Download width={18} height={18} aria-hidden />
-            <Trans id="desktopSidecar.setup.download.button">Download</Trans>
-          </a>
+          <div className="inline-flex items-stretch">
+            <a
+              href={downloadUrl(target.id, file.id)}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 ${showZipOption ? "rounded-l-lg" : "rounded-lg"} bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus`}
+            >
+              <Download width={18} height={18} aria-hidden />
+              <Trans id="desktopSidecar.setup.download.button">Download</Trans>
+            </a>
+            {showZipOption && (
+              <DropdownMenu
+                triggerIcon={
+                  <NavArrowDown width={18} height={18} aria-hidden />
+                }
+                triggerButtonVariant="primary"
+                triggerButtonGeometry="icon"
+                triggerButtonClassName="h-full min-h-10 rounded-l-none rounded-r-lg border-l border-theme-border-primary"
+                triggerAriaLabel={t({
+                  id: "desktopSidecar.setup.download.options",
+                  message: "Download options",
+                })}
+                items={[
+                  {
+                    label: t({
+                      id: "desktopSidecar.setup.download.zip",
+                      message: "Download as .zip",
+                    }),
+                    icon: <Download width={16} height={16} aria-hidden />,
+                    onClick: () =>
+                      window.location.assign(
+                        downloadUrl(target.id, file.id, true),
+                      ),
+                    closesImmediately: true,
+                  },
+                ]}
+              />
+            )}
+          </div>
         </div>
       }
     >

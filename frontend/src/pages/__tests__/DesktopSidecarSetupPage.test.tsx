@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -112,7 +118,21 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers the derived Intune package with its own download URL", () => {
+  it("keeps macOS ZIP downloads as a single direct download", () => {
+    renderOnMac();
+    const directDownload = screen.getByRole("link", { name: "Download" });
+    expect(directDownload).toHaveAttribute(
+      "href",
+      "/api/v1beta/desktop-sidecar/distribution/download?target=macos-aarch64&file=application",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Download options" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Download as .zip")).not.toBeInTheDocument();
+    expect(directDownload).toHaveClass("rounded-lg");
+  });
+
+  it("offers the derived Intune package with direct and ZIP downloads", async () => {
     vi.mocked(useDistribution).mockReturnValue({
       data: {
         targets: [
@@ -148,6 +168,18 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     expect(within(card).getByRole("link")).toHaveAttribute(
       "href",
       "/api/v1beta/desktop-sidecar/distribution/download?target=windows-x86_64&file=installer.intunewin",
+    );
+    const options = within(card).getByRole("button", {
+      name: "Download options",
+    });
+    expect(options).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(options);
+    expect(
+      await screen.findByRole("menuitem", { name: "Download as .zip" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() =>
+      expect(options).toHaveAttribute("aria-expanded", "false"),
     );
   });
 });
