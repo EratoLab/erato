@@ -3,6 +3,14 @@ import clsx from "clsx";
 import { Fragment, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
+import { StatusPill } from "@/components/ui/Feedback/StatusPill";
+import {
+  effectDisplayName,
+  headlineItemOf,
+  notePlacesOf,
+  OLD_VALUES_NOTE,
+  showsEarlierValues,
+} from "@/lib/toolCallGist/cardLayout";
 import {
   changeLayout,
   collapsedNames,
@@ -25,13 +33,16 @@ import {
   batchSameLine,
   batchSeeMore,
   beingEmptiedLabel,
-  changeNamesOnly,
   changeNoteLabel,
   changeSeeMoreLine,
   changeSummaryLine,
+  CODE_SLOT,
+  CODED_SLOTS,
+  codedValueFrame,
   codedValueText,
   cutValuePhrase,
   dryRunLabel,
+  earlierValuesFootnote,
   emptiedLabel,
   emptiedWasLabel,
   emptyValuePhrase,
@@ -46,21 +57,23 @@ import {
   listAddedLabel,
   listAddsClaim,
   listKeptLabel,
-  listMaybeReplacedLine,
   listRemovedLabel,
   listRemovesClaim,
-  listReplacedLine,
   listSetLabel,
   listWouldGoLabel,
   listWouldStayLabel,
   machineIdPhrase,
+  MEANING_SLOT,
   newNamePhrase,
   opaqueCutLine,
+  outsideBadgeLabel,
   outsideLine,
   plainChangeValue,
   recipientKindWord,
   recipientsLine,
   recipientsSeeAll,
+  seeMoreWithNames,
+  shareWithLabel,
   textHeading,
   textOldLabel,
   textSeeAll,
@@ -87,6 +100,7 @@ import { ToolCallGistLine } from "./ToolCallGist";
 import { Collapse } from "../Controls/Collapse";
 import { DisclosureButton } from "../Controls/Disclosure";
 
+import type { ToolCallChangeNote } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type {
   ChangeBatch,
   ChangeBatchRow,
@@ -102,6 +116,7 @@ import type { ScrollBoxKind } from "@/lib/toolCallGist/scrollBox";
 import type { ReactNode, Ref } from "react";
 
 const ISOLATED = "[unicode-bidi:isolate]";
+/** Provenance, footnotes and claims under a row: the smallest, quietest step. */
 const MUTED = "text-xs text-theme-fg-muted";
 const LIST_VALUES = 6;
 /** Values named under a trace row; the rest are counted. */
@@ -176,7 +191,7 @@ const SeeMore = ({
           setOpen(!open);
         }}
       >
-        <span className="text-start text-xs [overflow-wrap:anywhere]">
+        <span className="text-start text-sm [overflow-wrap:anywhere]">
           {label}
         </span>
       </DisclosureButton>
@@ -193,13 +208,13 @@ const SeeMore = ({
 /** Name above value in a narrow pane, side by side where there is room. */
 const Row = ({ name, children }: { name: string; children: ReactNode }) => (
   <div
-    className="flex flex-wrap gap-x-3 text-xs"
+    className="flex flex-wrap gap-x-3 text-sm"
     data-testid="tool-call-change-row"
   >
     <span
       dir="auto"
       className={clsx(
-        "min-w-0 basis-40 break-words text-theme-fg-muted",
+        "min-w-0 basis-40 break-words text-theme-fg-secondary",
         ISOLATED,
       )}
     >
@@ -232,6 +247,11 @@ const ValueText = ({
       </span>
     );
   }
+  // The tool's word is greyed around the meaning, so the meaning reads first.
+  const frame =
+    value.meaning && value.meaning.source !== "glossary" && !link
+      ? codedValueFrame(value)
+      : undefined;
   const text = codedValueText(value);
   const shown = value.truncated ? `${text}…` : text;
   // A meaning read from an earlier result looks like any other earlier value.
@@ -255,7 +275,24 @@ const ValueText = ({
         earlier && "underline decoration-dotted underline-offset-2",
       )}
     >
-      {link ? linkPhrase(shown) : shown}
+      {frame
+        ? frame.split(CODED_SLOTS).map((part, index) =>
+            part === CODE_SLOT ? (
+              <Fragment key={index}>
+                {value.text}
+                {value.truncated && "…"}
+              </Fragment>
+            ) : part === MEANING_SLOT ? (
+              <Fragment key={index}>{value.meaning?.label}</Fragment>
+            ) : part.length > 0 ? (
+              <span key={index} className="text-theme-fg-muted">
+                {part}
+              </span>
+            ) : null,
+          )
+        : link
+          ? linkPhrase(shown)
+          : shown}
     </span>
   );
 };
@@ -305,10 +342,13 @@ const ValueList = ({
   values,
   omitted = 0,
   limit = LIST_VALUES,
+  valueClassName,
 }: {
   values: ChangeValue[];
   omitted?: number;
   limit?: number;
+  /** Each value's own style, such as an old value's. */
+  valueClassName?: string;
 }) => {
   const shown = values.slice(0, limit);
   const more = values.length - shown.length + omitted;
@@ -317,7 +357,13 @@ const ValueList = ({
       {shown.map((value, index) => (
         <Fragment key={index}>
           {index > 0 && ", "}
-          <ValueText value={value} />
+          {valueClassName ? (
+            <span className={valueClassName}>
+              <ValueText value={value} />
+            </span>
+          ) : (
+            <ValueText value={value} />
+          )}
         </Fragment>
       ))}
       {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
@@ -371,7 +417,7 @@ const effectName = (effect: ChangeEffect): string => {
     case "list_removed":
       return listRemovedLabel(effect.name);
     default:
-      return effect.name;
+      return effectDisplayName(effect);
   }
 };
 
@@ -436,16 +482,9 @@ const ListRow = ({
   /** Whether it is unknown if the call replaces the list or adds to it. */
   replaceUnknown: boolean;
 }) => (
-  <div className="space-y-0.5" data-testid="tool-call-change-list">
+  <div className="space-y-1" data-testid="tool-call-change-list">
     {effect.removed.length > 0 ? (
       <>
-        <p className="text-xs text-theme-fg-primary">
-          {(replaceUnknown ? listMaybeReplacedLine : listReplacedLine)(
-            effect.name,
-            effect.removed.length,
-            effect.kept.length,
-          )}
-        </p>
         <Row
           name={
             replaceUnknown
@@ -453,7 +492,11 @@ const ListRow = ({
               : listRemovedLabel(effect.name)
           }
         >
-          <ValueList values={effect.removed} limit={MAX_FIRST_VIEW_ROWS * 4} />
+          <ValueList
+            values={effect.removed}
+            limit={MAX_FIRST_VIEW_ROWS * 4}
+            valueClassName={replaceUnknown ? undefined : OLD_VALUE_CLASS}
+          />
         </Row>
         {effect.kept.length > 0 && (
           <Row
@@ -482,7 +525,7 @@ const ListRow = ({
 
 /** Items the tool says the call removes from a list: a loss, and the tool's word. */
 const RemovedFromListRow = ({ effect }: { effect: ChangeEffect }) => (
-  <div className="space-y-0.5" data-testid="tool-call-change-list">
+  <div className="space-y-1" data-testid="tool-call-change-list">
     <Row name={listRemovedLabel(effect.name)}>
       <ValueList
         values={effect.values}
@@ -496,9 +539,92 @@ const RemovedFromListRow = ({ effect }: { effect: ChangeEffect }) => (
   </div>
 );
 
-const RecipientsPart = ({ recipients }: { recipients: ChangeRecipients }) => (
+/** Recipients a card lists by address in their rows, without a count above them. */
+const MAX_INLINE_RECIPIENTS = 3;
+
+const addressKey = (text: string) => text.trim().toLowerCase();
+
+/**
+ * Whether every recipient is listed by address, and every one outside the
+ * organisation among them, so the rows can carry the outside mark.
+ */
+const listsRecipientsInline = (recipients: ChangeRecipients): boolean => {
+  const listed = recipients.groups.flatMap((group) => group.values);
+  if (
+    recipients.total === 0 ||
+    recipients.total > MAX_INLINE_RECIPIENTS ||
+    listed.length !== recipients.total ||
+    recipients.groups.some(
+      (group) => group.omitted > 0 || group.values.length !== group.count,
+    ) ||
+    recipients.outsideOmitted > 0
+  ) {
+    return false;
+  }
+  const keys = new Set(listed.map(addressKey));
+  return recipients.outside.every((address) => keys.has(addressKey(address)));
+};
+
+/** One to three recipients: each by address, the outside ones marked on the address. */
+const InlineRecipients = ({
+  recipients,
+  action,
+}: {
+  recipients: ChangeRecipients;
+  action: GistAction | undefined;
+}) => {
+  const outside = new Set(
+    recipients.outsideKnown ? recipients.outside.map(addressKey) : [],
+  );
+  return (
+    <div className="space-y-1" data-testid="tool-call-change-recipients">
+      {recipients.groups
+        .filter((group) => group.values.length > 0)
+        .map((group, index) => (
+          <Row
+            key={index}
+            name={
+              action === "share"
+                ? shareWithLabel()
+                : recipientKindWord(group.kind)
+            }
+          >
+            <ul className="space-y-1">
+              {group.values.map((address, at) => (
+                <li
+                  key={at}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1"
+                >
+                  <span dir="auto" className={clsx(ISOLATED, "min-w-0")}>
+                    {address}
+                  </span>
+                  {outside.has(addressKey(address)) && (
+                    <span data-testid="tool-call-change-outside-badge">
+                      <StatusPill tone="warning">
+                        {outsideBadgeLabel()}
+                      </StatusPill>
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Row>
+        ))}
+      {recipients.outsideKnown && recipients.unchecked > 0 && (
+        <p className={MUTED}>{uncheckedLine(recipients.unchecked)}</p>
+      )}
+    </div>
+  );
+};
+
+/** From four on: the count by To, Cc and Bcc, every outside address named, the rest behind one control. */
+const CountedRecipients = ({
+  recipients,
+}: {
+  recipients: ChangeRecipients;
+}) => (
   <div className="space-y-1" data-testid="tool-call-change-recipients">
-    <p className="text-xs font-medium text-theme-fg-primary">
+    <p className="text-sm font-semibold text-theme-fg-primary">
       {recipientsLine(recipients)}
     </p>
     {recipients.outsideKnown && recipients.outside.length > 0 && (
@@ -529,6 +655,19 @@ const RecipientsPart = ({ recipients }: { recipients: ChangeRecipients }) => (
     )}
   </div>
 );
+
+const RecipientsPart = ({
+  recipients,
+  action,
+}: {
+  recipients: ChangeRecipients;
+  action: GistAction | undefined;
+}) =>
+  listsRecipientsInline(recipients) ? (
+    <InlineRecipients recipients={recipients} action={action} />
+  ) : (
+    <CountedRecipients recipients={recipients} />
+  );
 
 const FilterPart = ({
   filter,
@@ -599,35 +738,93 @@ const FlagsPart = ({ flags }: { flags: GistChange["flags"] }) => (
   </div>
 );
 
-const OpaquePart = ({ opaque }: { opaque: ChangeOpaque }) => (
-  <div className="space-y-1" data-testid="tool-call-change-opaque">
-    {opaque.found.length > 0 && (
-      <Alert type="warning" role="none" data-testid="tool-call-change-found">
-        {foundLine(opaque.kind, opaque.found)}
-        {opaque.writeInsideRead && <> {writeInsideReadLine()}</>}
-      </Alert>
-    )}
-    <ScrollBox
-      kind="value"
-      className={clsx(
-        "max-h-40 rounded p-2 font-mono text-xs text-theme-fg-primary",
-        ON_CARD,
-      )}
-      data-testid="tool-call-change-statement"
-    >
-      <span
-        dir="auto"
-        className={clsx(
-          "whitespace-pre-wrap [overflow-wrap:anywhere]",
-          ISOLATED,
-        )}
+/** Notes said under the row or statement they are about. */
+const NoteLines = ({
+  notes,
+  className = MUTED,
+}: {
+  notes: readonly ToolCallChangeNote[];
+  className?: string;
+}) => (
+  <>
+    {notes.map((note) => (
+      <p
+        key={note}
+        className={className}
+        data-testid="tool-call-change-row-note"
       >
-        {opaque.truncated ? `${opaque.text}…` : opaque.text}
-      </span>
-    </ScrollBox>
-    {opaque.truncated && <p className={MUTED}>{opaqueCutLine()}</p>}
-  </div>
+        {changeNoteLabel(note)}
+      </p>
+    ))}
+  </>
 );
+
+/**
+ * A statement the call runs, with what was found in it above it; a hand-off's
+ * instruction reads as the quoted content it is, with what Erato can say
+ * about the other assistant under it.
+ */
+const OpaquePart = ({
+  opaque,
+  notes,
+}: {
+  opaque: ChangeOpaque;
+  notes: readonly ToolCallChangeNote[];
+}) => {
+  const text = opaque.truncated ? `${opaque.text}…` : opaque.text;
+  const isInstruction = opaque.kind === "instruction";
+  return (
+    <div className="space-y-1" data-testid="tool-call-change-opaque">
+      {opaque.found.length > 0 && (
+        <Alert type="warning" role="none" data-testid="tool-call-change-found">
+          {foundLine(opaque.kind, opaque.found)}
+          {opaque.writeInsideRead && <> {writeInsideReadLine()}</>}
+        </Alert>
+      )}
+      {isInstruction ? (
+        <ScrollBox
+          kind="value"
+          className="max-h-40 border-l-2 border-theme-border py-0.5 pl-3 text-sm text-theme-fg-primary"
+          data-testid="tool-call-change-statement"
+        >
+          <blockquote
+            dir="auto"
+            className={clsx(
+              "whitespace-pre-wrap [overflow-wrap:anywhere]",
+              ISOLATED,
+            )}
+          >
+            {text}
+          </blockquote>
+        </ScrollBox>
+      ) : (
+        <ScrollBox
+          kind="value"
+          className={clsx(
+            "max-h-40 rounded p-2 font-mono text-xs text-theme-fg-primary",
+            ON_CARD,
+          )}
+          data-testid="tool-call-change-statement"
+        >
+          <span
+            dir="auto"
+            className={clsx(
+              "whitespace-pre-wrap [overflow-wrap:anywhere]",
+              ISOLATED,
+            )}
+          >
+            {text}
+          </span>
+        </ScrollBox>
+      )}
+      {opaque.truncated && <p className={MUTED}>{opaqueCutLine()}</p>}
+      <NoteLines
+        notes={notes}
+        className={isInstruction ? "text-sm text-theme-fg-secondary" : MUTED}
+      />
+    </div>
+  );
+};
 
 const TextPart = ({
   entry,
@@ -641,11 +838,31 @@ const TextPart = ({
   const hiddenLines = Math.max(entry.lines - TEXT_LINES, 0);
   const collapsible = hiddenLines > 0;
   const newTextClass = entry.before ? NEW_TEXT_CLASS : "text-theme-fg-primary";
+  const heading = textHeading(entry.name, entry.lines, entry.chars, replaced);
+  // A short text reads as a row like any other value.
+  if (heading === entry.name && !entry.before && !collapsible) {
+    return (
+      <div data-testid="tool-call-change-text">
+        <Row name={entry.name}>
+          <ScrollBox
+            kind="value"
+            className="max-h-24 whitespace-pre-wrap"
+            as="p"
+          >
+            <span dir="auto" className={ISOLATED}>
+              {entry.text}
+            </span>
+          </ScrollBox>
+          {entry.truncated && <p className={MUTED}>{cutValuePhrase()}</p>}
+        </Row>
+      </div>
+    );
+  }
   return (
     <div className="space-y-1" data-testid="tool-call-change-text">
-      <p className="text-xs text-theme-fg-primary">
+      <p className="text-sm text-theme-fg-secondary">
         <span dir="auto" className={ISOLATED}>
-          {textHeading(entry.name, entry.lines, entry.chars, replaced)}
+          {heading}
         </span>
       </p>
       {entry.before && (
@@ -654,7 +871,7 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "max-h-24 overflow-hidden whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              "max-h-24 overflow-hidden whitespace-pre-wrap text-sm [overflow-wrap:anywhere]",
               OLD_TEXT_CLASS,
               ISOLATED,
             )}
@@ -668,7 +885,7 @@ const TextPart = ({
           <p
             dir="auto"
             className={clsx(
-              "line-clamp-6 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              "line-clamp-6 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]",
               newTextClass,
               ISOLATED,
             )}
@@ -680,7 +897,7 @@ const TextPart = ({
           <ScrollBox
             kind="value"
             className={clsx(
-              "max-h-64 whitespace-pre-wrap text-xs [overflow-wrap:anywhere]",
+              "max-h-64 whitespace-pre-wrap text-sm [overflow-wrap:anywhere]",
               newTextClass,
             )}
             as="p"
@@ -699,7 +916,7 @@ const TextPart = ({
             setOpen(!open);
           }}
         >
-          <span className="text-xs">{textSeeAll(hiddenLines)}</span>
+          <span className="text-sm">{textSeeAll(hiddenLines)}</span>
         </DisclosureButton>
       )}
       {entry.truncated && <p className={MUTED}>{cutValuePhrase()}</p>}
@@ -738,7 +955,7 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
   <li className="space-y-0.5" data-testid="tool-call-change-batch-row">
     <p
       dir="auto"
-      className={clsx("text-xs font-medium text-theme-fg-primary", ISOLATED)}
+      className={clsx("text-sm font-semibold text-theme-fg-primary", ISOLATED)}
     >
       {batchRowLabel(row)}
     </p>
@@ -746,7 +963,7 @@ const BatchRow = ({ row }: { row: ChangeBatchRow }) => (
       <p
         dir="auto"
         className={clsx(
-          "break-words text-xs text-theme-fg-secondary [overflow-wrap:anywhere]",
+          "break-words text-sm text-theme-fg-secondary [overflow-wrap:anywhere]",
           ISOLATED,
         )}
       >
@@ -774,7 +991,7 @@ const BatchFields = ({
   const shown = batch.fields.slice(0, MAX_FIRST_VIEW_BATCH_FIELDS);
   const more = batch.fields.length - shown.length + batch.fieldsOmitted;
   return shown.length === 0 ? null : (
-    <div className="space-y-0.5" data-testid="tool-call-change-batch-fields">
+    <div className="space-y-1" data-testid="tool-call-change-batch-fields">
       {shown.map((field, index) => (
         <Row key={index} name={field.name}>
           <span dir="auto" className={ISOLATED}>
@@ -810,7 +1027,7 @@ const BatchPart = ({
   return (
     <div className="space-y-1" data-testid="tool-call-change-batch">
       {batch.operations.length > 1 && (
-        <p className="text-xs text-theme-fg-primary">
+        <p className="text-sm font-semibold text-theme-fg-primary">
           {batchOperationsLine(batch)}
         </p>
       )}
@@ -828,7 +1045,7 @@ const BatchPart = ({
       {losses.map((line, index) => (
         <p
           key={index}
-          className="text-xs text-theme-fg-primary"
+          className="text-sm text-theme-fg-primary"
           data-testid="tool-call-change-batch-loss"
         >
           {line}
@@ -836,8 +1053,8 @@ const BatchPart = ({
       ))}
       {batch.sameChange ? (
         <>
-          <p className="text-xs text-theme-fg-primary">{batchSameLine()}</p>
-          <div className="space-y-0.5">
+          <p className="text-sm text-theme-fg-primary">{batchSameLine()}</p>
+          <div className="space-y-1">
             {batch.shared.map((effect, index) => (
               <ValueRow key={index} effect={effect} />
             ))}
@@ -873,8 +1090,14 @@ const BatchPart = ({
 /** What the call loses or the card cannot read: above any long text or SQL. */
 const LossesPart = ({ change }: { change: GistChange }) => {
   const layout = changeLayout(change);
-  return (
-    <>
+  const { lists } = notePlacesOf(change);
+  const rows =
+    layout.emptied.length +
+    layout.lists.length +
+    layout.removedFromLists.length +
+    layout.unreadable.length;
+  return rows === 0 ? null : (
+    <div className="space-y-1" data-testid="tool-call-change-losses">
       <EmptiedRow effects={layout.emptied} />
       {layout.lists.map((effect, index) => (
         <ListRow
@@ -883,13 +1106,14 @@ const LossesPart = ({ change }: { change: GistChange }) => {
           replaceUnknown={listReplaceIsUnknown(change)}
         />
       ))}
+      {layout.lists.length > 0 && <NoteLines notes={lists} />}
       {layout.removedFromLists.map((effect, index) => (
         <RemovedFromListRow key={index} effect={effect} />
       ))}
       {layout.unreadable.map((effect, index) => (
         <ValueRow key={index} effect={effect} />
       ))}
-    </>
+    </div>
   );
 };
 
@@ -899,17 +1123,20 @@ const claimOf = (change: GistChange, effect: ChangeEffect) =>
     ? listAddsClaim()
     : undefined;
 
-const ValuesPart = ({ change }: { change: GistChange }) => (
-  <>
-    {changeLayout(change).firstRows.map((effect, index) => (
-      <ValueRow key={index} effect={effect} claim={claimOf(change, effect)} />
-    ))}
-  </>
-);
+const ValuesPart = ({ change }: { change: GistChange }) => {
+  const { firstRows } = changeLayout(change);
+  return firstRows.length === 0 ? null : (
+    <div className="space-y-1" data-testid="tool-call-change-values">
+      {firstRows.map((effect, index) => (
+        <ValueRow key={index} effect={effect} claim={claimOf(change, effect)} />
+      ))}
+    </div>
+  );
+};
 
 /**
- * The values past the first view, behind one line that says what they hold,
- * with their names while closed. Opened, they scroll in a box of their own.
+ * The values past the first view, behind one line that says what they hold
+ * and names them. Opened, they scroll in a box of their own.
  */
 const SeeMorePart = ({
   change,
@@ -924,7 +1151,9 @@ const SeeMorePart = ({
   const layout = changeLayout(change);
   const collapsedTotal = layout.collapsed.length + layout.beyondCap;
   if (collapsedTotal === 0) return null;
-  const { shown, more } = collapsedNames(layout.collapsed.map((e) => e.name));
+  const { shown, more } = collapsedNames(
+    layout.collapsed.map(effectDisplayName),
+  );
   const values = (
     <>
       {layout.collapsed.map((effect, index) => (
@@ -942,17 +1171,12 @@ const SeeMorePart = ({
   );
   return (
     <SeeMore
-      label={changeSeeMoreLine(change, layout, action)}
+      label={seeMoreWithNames(
+        changeSeeMoreLine(change, layout, action),
+        shown.join(", "),
+        more,
+      )}
       defaultOpen={layout.opensByDefault}
-      hint={
-        shown.length > 0 ? (
-          <p className={MUTED} data-testid="tool-call-change-names">
-            <span dir="auto" className={ISOLATED}>
-              {changeNamesOnly(shown.join(", "), more)}
-            </span>
-          </p>
-        ) : undefined
-      }
     >
       {bounded ? (
         <ScrollBox kind="card" className="max-h-[40vh] min-w-0 space-y-1">
@@ -965,24 +1189,77 @@ const SeeMorePart = ({
   );
 };
 
-const ChangeNotes = ({ change }: { change: GistChange }) => {
-  const notes = change.notes
+/**
+ * The card's one footnote: where underlined and old values come from, and
+ * the notes no row or statement carries, with any `extra` lines.
+ */
+const ChangeFootnote = ({
+  notes,
+  earlier,
+  extra = [],
+}: {
+  notes: readonly ToolCallChangeNote[];
+  /** Whether the card underlines a value as one from an earlier result. */
+  earlier: boolean;
+  extra?: ReactNode[];
+}) => {
+  const legend = earlierValuesFootnote(
+    earlier,
+    notes.includes(OLD_VALUES_NOTE),
+  );
+  const lines = notes
+    .filter((note) => note !== OLD_VALUES_NOTE)
     .map(changeNoteLabel)
     .filter((text) => text.length > 0);
-  return notes.length === 0 ? null : (
+  return legend === undefined &&
+    lines.length === 0 &&
+    extra.length === 0 ? null : (
     <div className="space-y-0.5" data-testid="tool-call-change-notes">
-      {notes.map((text, index) => (
+      {legend !== undefined && <p className={MUTED}>{legend}</p>}
+      {lines.map((text, index) => (
         <p key={index} className={MUTED}>
           {text}
         </p>
       ))}
+      {extra.length > 0 && (
+        <div className={clsx(MUTED, "space-y-0.5")}>{extra}</div>
+      )}
     </div>
   );
 };
 
+/** A value's new state for a trace row, whose title already says it changed. */
+const RowNewValue = ({ effect }: { effect: ChangeEffect }) => {
+  const value = effect.values.map(plainChangeValue).join(", ");
+  return (
+    <>
+      {effectName(effect)}
+      {effect.old && effect.effect !== "unchanged" ? (
+        <>
+          {" → "}
+          <span
+            dir="auto"
+            data-testid="tool-call-change-new"
+            className={clsx(NEW_VALUE_CLASS, ISOLATED)}
+          >
+            {value}
+          </span>
+        </>
+      ) : (
+        <>
+          {" "}
+          <NewName effect={effect} />
+          {value}
+        </>
+      )}
+    </>
+  );
+};
+
 /**
- * Under a trace row, what the call did in a line or two: counts live in the
- * row's title, so this names the losses, who it reached and the first values.
+ * Under a trace row, what the call did in one line: counts live in the row's
+ * title, so this names the losses and who it reached first, then the first
+ * values as they are now.
  */
 export const ToolCallChangeRowDetails = ({
   change,
@@ -992,99 +1269,96 @@ export const ToolCallChangeRowDetails = ({
   const layout = changeLayout(change);
   const shown = layout.firstRows.slice(0, ROW_VALUES);
   const more = layout.firstRows.length - shown.length + layout.collapsed.length;
-  const found = change.opaque.flatMap((opaque) =>
-    opaque.found.length > 0 ? [foundLine(opaque.kind, opaque.found)] : [],
-  );
   const replaceUnknown = listReplaceIsUnknown(change);
+  const parts: ReactNode[] = [];
+  if (change.recipients) {
+    parts.push(recipientsLine(change.recipients));
+    if (
+      change.recipients.outsideKnown &&
+      change.recipients.outside.length > 0
+    ) {
+      parts.push(outsideLine(change.recipients));
+    }
+  }
+  if (change.batch && change.batch.deletions > 0) {
+    parts.push(batchDeletionsLine(change.batch.deletions, []));
+  }
+  if (
+    change.batch &&
+    (change.batch.rowsEmptying > 0 ||
+      change.batch.rowsReplacingLists > 0 ||
+      change.batch.rowsRemovingFromLists > 0)
+  ) {
+    parts.push(
+      ...batchLossLines(change.batch, replaceUnknown, toolSaysOnlyAdds(change)),
+    );
+  }
+  if (layout.emptied.length > 0) {
+    parts.push(
+      `${emptiedLabel()}: ${layout.emptied.map(emptiedText).join(", ")}`,
+    );
+  }
+  for (const effect of layout.lists) {
+    parts.push(
+      effect.removed.length > 0
+        ? `${
+            replaceUnknown
+              ? listWouldGoLabel(effect.name)
+              : listRemovedLabel(effect.name)
+          }: ${effect.removed.map(plainChangeValue).join(", ")}`
+        : `${replaceUnknown ? effect.name : listSetLabel(effect.name)}: ${effect.values
+            .map(plainChangeValue)
+            .join(", ")}`,
+    );
+  }
+  for (const effect of layout.removedFromLists) {
+    parts.push(
+      `${listRemovedLabel(effect.name)}: ${effect.values
+        .map(plainChangeValue)
+        .join(", ")}`,
+    );
+  }
+  if (layout.unreadable.length > 0) {
+    parts.push(
+      `${unreadableLabel()}: ${layout.unreadable
+        .map((effect) => effect.name)
+        .join(", ")}`,
+    );
+  }
+  if (change.texts.length > 0) {
+    parts.push(
+      change.texts
+        .map((entry) =>
+          textHeading(entry.name, entry.lines, entry.chars, false),
+        )
+        .join(", "),
+    );
+  }
+  for (const opaque of change.opaque) {
+    if (opaque.found.length > 0) {
+      parts.push(foundLine(opaque.kind, opaque.found));
+    }
+  }
+  shown.forEach((effect, index) =>
+    parts.push(<RowNewValue key={`value-${index}`} effect={effect} />),
+  );
   return (
-    <div
-      className="space-y-0.5 text-xs text-theme-fg-secondary"
+    <p
+      dir="auto"
+      className={clsx(
+        "break-words text-xs text-theme-fg-secondary [overflow-wrap:anywhere]",
+        ISOLATED,
+      )}
       data-testid="tool-call-change-row-details"
     >
-      {change.recipients && (
-        <p>
-          {recipientsLine(change.recipients)}
-          {change.recipients.outsideKnown &&
-            change.recipients.outside.length > 0 && (
-              <span dir="auto" className={ISOLATED}>
-                {" · "}
-                {outsideLine(change.recipients)}
-              </span>
-            )}
-        </p>
-      )}
-      {change.batch && change.batch.deletions > 0 && (
-        <p dir="auto" className={ISOLATED}>
-          {batchDeletionsLine(change.batch.deletions, [])}
-        </p>
-      )}
-      {change.batch &&
-        (change.batch.rowsEmptying > 0 ||
-          change.batch.rowsReplacingLists > 0 ||
-          change.batch.rowsRemovingFromLists > 0) &&
-        batchLossLines(
-          change.batch,
-          listReplaceIsUnknown(change),
-          toolSaysOnlyAdds(change),
-        ).map((line, index) => <p key={index}>{line}</p>)}
-      {layout.emptied.length > 0 && (
-        <p dir="auto" className={ISOLATED}>
-          {emptiedLabel()}: {layout.emptied.map(emptiedText).join(", ")}
-        </p>
-      )}
-      {layout.lists.map((effect, index) => (
-        <p key={index} dir="auto" className={ISOLATED}>
-          {effect.removed.length > 0 ? (
-            <>
-              {replaceUnknown
-                ? listWouldGoLabel(effect.name)
-                : listRemovedLabel(effect.name)}
-              : {effect.removed.map(plainChangeValue).join(", ")}
-            </>
-          ) : (
-            <>
-              {replaceUnknown ? effect.name : listSetLabel(effect.name)}:{" "}
-              {effect.values.map(plainChangeValue).join(", ")}
-            </>
-          )}
-        </p>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && " · "}
+          {part}
+        </Fragment>
       ))}
-      {layout.removedFromLists.map((effect, index) => (
-        <p key={index} dir="auto" className={ISOLATED}>
-          {listRemovedLabel(effect.name)}:{" "}
-          {effect.values.map(plainChangeValue).join(", ")}
-        </p>
-      ))}
-      {layout.unreadable.length > 0 && (
-        <p dir="auto" className={ISOLATED}>
-          {unreadableLabel()}:{" "}
-          {layout.unreadable.map((effect) => effect.name).join(", ")}
-        </p>
-      )}
-      {change.texts.length > 0 && (
-        <p dir="auto" className={ISOLATED}>
-          {change.texts
-            .map((entry) =>
-              textHeading(entry.name, entry.lines, entry.chars, false),
-            )
-            .join(", ")}
-        </p>
-      )}
-      {found.map((line, index) => (
-        <p key={index}>{line}</p>
-      ))}
-      {shown.length > 0 && (
-        <p dir="auto" className={ISOLATED}>
-          {shown.map((effect, index) => (
-            <Fragment key={index}>
-              {index > 0 && ", "}
-              <RowChange effect={effect} />
-            </Fragment>
-          ))}
-          {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
-        </p>
-      )}
-    </div>
+      {more > 0 && <span className="text-theme-fg-muted"> +{more}</span>}
+    </p>
   );
 };
 
@@ -1117,10 +1391,10 @@ const IncompleteAlert = ({ change }: { change: GistChange }) =>
   );
 
 /**
- * What a change description says beyond a card's line: who it reaches, what
- * is lost and what cannot be read first, then statements and long text, then
- * the values. A call with no verb lists its values in its own argument view,
- * so `values` leaves them out there.
+ * What a change description says beyond a card's line, one group after the
+ * other: who it reaches, what is lost and what cannot be read first, then
+ * statements, the values and long text last. A call with no verb lists its
+ * values in its own argument view, so `values` leaves them out there.
  */
 export const ToolCallChangeBody = ({
   change,
@@ -1128,6 +1402,7 @@ export const ToolCallChangeBody = ({
   replacesText = false,
   values = true,
   outside = true,
+  summary,
 }: {
   change: GistChange;
   action?: GistAction;
@@ -1138,58 +1413,164 @@ export const ToolCallChangeBody = ({
    * after its scroll box instead, so they never scroll out of sight.
    */
   outside?: boolean;
+  /** The count line, heading the values where it says what they do not. */
+  summary?: string;
+}) => {
+  const places = notePlacesOf(change);
+  return (
+    <div className="space-y-3" data-testid="tool-call-change-body">
+      <IncompleteAlert change={change} />
+      {change.recipients && (
+        <RecipientsPart recipients={change.recipients} action={action} />
+      )}
+      {change.filter && <FilterPart filter={change.filter} />}
+      {change.flags.length > 0 && <FlagsPart flags={change.flags} />}
+      {summary !== undefined && (
+        <p
+          className="text-sm font-semibold text-theme-fg-primary"
+          data-testid="tool-call-change-summary"
+        >
+          {summary}
+        </p>
+      )}
+      {values && <LossesPart change={change} />}
+      {change.opaque.map((opaque, index) => (
+        <OpaquePart key={index} opaque={opaque} notes={places.statement} />
+      ))}
+      {change.batch && (
+        <BatchPart
+          batch={change.batch}
+          listsMaybeReplaced={listReplaceIsUnknown(change)}
+          onlyAdds={toolSaysOnlyAdds(change)}
+        />
+      )}
+      {values && <ValuesPart change={change} />}
+      {change.texts.map((entry, index) => (
+        <TextPart key={index} entry={entry} replaced={replacesText} />
+      ))}
+      {values && outside && <SeeMorePart change={change} action={action} />}
+      {outside && (
+        <ChangeFootnote
+          notes={[
+            ...places.qualifier,
+            ...(values ? [] : places.lists),
+            ...places.footnote,
+          ]}
+          earlier={false}
+        />
+      )}
+    </div>
+  );
+};
+
+/** What a delete does and that nothing changes: under the headline. */
+const QualifierNotes = ({
+  notes,
+}: {
+  notes: readonly ToolCallChangeNote[];
 }) => (
-  <div className="space-y-2" data-testid="tool-call-change-body">
-    <IncompleteAlert change={change} />
-    {change.recipients && <RecipientsPart recipients={change.recipients} />}
-    {change.filter && <FilterPart filter={change.filter} />}
-    {change.flags.length > 0 && <FlagsPart flags={change.flags} />}
-    {values && <LossesPart change={change} />}
-    {change.opaque.map((opaque, index) => (
-      <OpaquePart key={index} opaque={opaque} />
-    ))}
-    {change.batch && (
-      <BatchPart
-        batch={change.batch}
-        listsMaybeReplaced={listReplaceIsUnknown(change)}
-        onlyAdds={toolSaysOnlyAdds(change)}
-      />
+  <>
+    {notes.map((note) =>
+      note === "tool_says_permanent" ? (
+        <Alert
+          key={note}
+          type="warning"
+          role="none"
+          data-testid="tool-call-change-qualifier"
+        >
+          {changeNoteLabel(note)}
+        </Alert>
+      ) : (
+        <p
+          key={note}
+          className="text-sm text-theme-fg-secondary"
+          data-testid="tool-call-change-qualifier"
+        >
+          {changeNoteLabel(note)}
+        </p>
+      ),
     )}
-    {change.texts.map((entry, index) => (
-      <TextPart key={index} entry={entry} replaced={replacesText} />
-    ))}
-    {values && <ValuesPart change={change} />}
-    {values && outside && <SeeMorePart change={change} action={action} />}
-    {outside && <ChangeNotes change={change} />}
-  </div>
+  </>
 );
 
 /**
- * What an approval card shows for a call with a change description: the
- * sentence, then who it reaches, what is lost and what the card cannot read,
- * and at most five changed values; the rest behind one line that says what
- * it holds. What the card warns about stays on top and the buttons below stay
- * close, in one bounded box as on any other card.
+ * What an approval card shows for a call with a change description, in the
+ * order every card uses: the headline with what qualifies it, the risks the
+ * call itself carries, then in one bounded box who it reaches, what is lost
+ * and the values, at most five unless only one or two more would be hidden;
+ * the rest behind one line that names them, and one footnote. Facts about the
+ * tool rather than the call are the decision area's.
  */
 export const ToolCallChangeCard = ({
   gist,
   change,
   phase,
   notes,
+  footnotes,
   toolTitle,
+  placeInSource = false,
 }: {
   gist: Gist;
   change: GistChange;
   phase: GistPhase;
+  /** The caller's source line names the item's place, so the headline does not. */
+  placeInSource?: boolean;
+  /** What the card warns about beyond the call's values, under the headline. */
   notes?: ReactNode;
+  /** Lines the caller adds to the card's footnote. */
+  footnotes?: ReactNode[];
   /** The tool's own title or name, said where the line can only say "item". */
   toolTitle?: string;
 }) => {
-  const summary = changeSummaryLine(change, gist.action);
+  const layout = changeLayout(change);
+  const summary = changeSummaryLine(change, layout, gist.action);
+  const places = notePlacesOf(change);
   const showsToolTitle =
     toolTitle !== undefined && toolTitle.length > 0 && namesOnlyAnItem(gist);
   return (
-    <div className="space-y-2" data-testid="tool-call-gist">
+    <div className="space-y-3" data-testid="tool-call-gist">
+      <div className="space-y-1" data-testid="tool-call-change-head">
+        {gist.items.map((item, index) => (
+          <Fragment key={index}>
+            <ScrollBox
+              kind="line"
+              as="p"
+              className={clsx(
+                "max-h-32 break-words font-semibold text-theme-fg-primary [overflow-wrap:anywhere]",
+                index === 0 ? "text-base" : "text-sm",
+              )}
+              data-testid="tool-call-gist-line"
+            >
+              <ToolCallGistLine
+                gist={gist}
+                item={headlineItemOf(gist, item, placeInSource)}
+                phase={phase}
+                variant="card"
+              />
+            </ScrollBox>
+            {showsUnreadRecord(gist, item) && (
+              <p
+                className="text-sm text-theme-fg-secondary"
+                data-testid="tool-call-gist-unread"
+              >
+                {gistUnreadRecordLine(gist)}
+              </p>
+            )}
+          </Fragment>
+        ))}
+        {showsToolTitle && (
+          <p
+            className="break-words text-sm text-theme-fg-secondary [overflow-wrap:anywhere]"
+            data-testid="tool-call-change-tool-title"
+          >
+            {toolTitleLabel()}{" "}
+            <q dir="auto" className={ISOLATED}>
+              {toolTitle}
+            </q>
+          </p>
+        )}
+        <QualifierNotes notes={places.qualifier} />
+      </div>
       {gist.warnings.map((warning) => (
         <Alert key={warning} type="warning" role="none">
           {gistWarningLabel(warning)}
@@ -1198,50 +1579,23 @@ export const ToolCallChangeCard = ({
       {notes}
       <ScrollBox
         kind="card"
-        className="max-h-[50vh] min-w-0 space-y-2"
+        className="max-h-[50vh] min-w-0"
         data-testid="tool-call-gist-scroll"
       >
-        {gist.items.map((item, index) => (
-          <Fragment key={index}>
-            <p
-              className="break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]"
-              data-testid="tool-call-gist-line"
-            >
-              <ToolCallGistLine
-                gist={gist}
-                item={item}
-                phase={phase}
-                variant="card"
-              />
-            </p>
-            {showsUnreadRecord(gist, item) && (
-              <p className={MUTED} data-testid="tool-call-gist-unread">
-                {gistUnreadRecordLine(gist)}
-              </p>
-            )}
-          </Fragment>
-        ))}
-        {showsToolTitle && (
-          <p
-            className={clsx(MUTED, "break-words [overflow-wrap:anywhere]")}
-            data-testid="tool-call-change-tool-title"
-          >
-            {toolTitleLabel()}{" "}
-            <q dir="auto" className={clsx(ISOLATED, "text-theme-fg-secondary")}>
-              {toolTitle}
-            </q>
-          </p>
-        )}
-        {summary !== undefined && <p className={MUTED}>{summary}</p>}
         <ToolCallChangeBody
           change={change}
           action={gist.action}
           replacesText={gist.action === "update" || gist.action === "upsert"}
           outside={false}
+          summary={summary}
         />
       </ScrollBox>
       <SeeMorePart change={change} action={gist.action} bounded />
-      <ChangeNotes change={change} />
+      <ChangeFootnote
+        notes={places.footnote}
+        earlier={showsEarlierValues(gist)}
+        extra={footnotes}
+      />
     </div>
   );
 };

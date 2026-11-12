@@ -4,6 +4,15 @@ import {
   TASK_BRIEF_PREVIEW_CHARS,
   taskBriefFromInput,
 } from "@/lib/delegation/taskBrief";
+import { useApprovalCard } from "@/lib/toolCallGist/approvalCard";
+import { allowOnceEmphasisOf, toolMarksOf } from "@/lib/toolCallGist/decision";
+import {
+  alwaysAllowLockedLine,
+  thisToolLabel,
+  toolDenyLabel,
+  toolFactsLine,
+  toolQuestion,
+} from "@/lib/toolCallGist/decisionLabels";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { stagedItemPresentation } from "./ApprovalDecisionActions";
@@ -90,6 +99,11 @@ export const ParkedChildItem = ({
 }) => {
   const child = item.child ?? undefined;
   const isClientTool = child?.kind === "client_tool";
+  const { display: shown, card } = useApprovalCard(
+    child?.display,
+    child?.tool_name ?? "",
+    child?.input,
+  );
   const brief = taskBriefFromInput(item.input, TASK_BRIEF_PREVIEW_CHARS);
   const { status, resolvedLabel } = stagedItemPresentation(
     staged,
@@ -162,15 +176,6 @@ export const ParkedChildItem = ({
             // The task brief above is this item's heading.
             titleClassName="font-normal"
           />
-          {/* A client tool declares no annotations of its own. */}
-          {!isClientTool && child.annotations.openWorldHint && (
-            <p className="mt-1 text-xs text-theme-fg-muted">
-              {t({
-                id: "mcpApproval.openWorldWarning",
-                message: "This tool may send data to an external service.",
-              })}
-            </p>
-          )}
         </>
       ) : (
         // The item outlived the child's own record — the decision still has to
@@ -183,13 +188,18 @@ export const ParkedChildItem = ({
         </p>
       )}
       <ActionConfirmationCard
-        title={t({
-          id: "delegatedTaskApproval.itemTitle",
-          message: "Allow this task to make the call?",
-        })}
+        title={
+          child && !isClientTool
+            ? toolQuestion(shown?.server_name ?? child.mcp_server_id)
+            : t({
+                id: "delegatedTaskApproval.itemTitle",
+                message: "Allow this task to make the call?",
+              })
+        }
         description={scopeNotices}
         onAllowOnce={() => onDecide("approve")}
         {...scopeButton}
+        allowOnceEmphasis={child ? allowOnceEmphasisOf(card) : "plain"}
         // Standing decisions are keyed on the CHILD's server and tool — the
         // parent's `delegate_task` is a synthetic name no grant can name — so
         // they are offered only for an item that names a child. Disabled
@@ -203,11 +213,15 @@ export const ParkedChildItem = ({
               onNeverAllow: () => onDecide("reject_always"),
               alwaysAllowDisabledReason: allowAlways
                 ? undefined
-                : t({
-                    id: "mcpApproval.alwaysAllowDisabled",
-                    message:
-                      "Locked: your organization requires confirmation each time this tool runs.",
-                  }),
+                : alwaysAllowLockedLine(),
+              standingLabel: thisToolLabel(),
+              standingNote: toolFactsLine({
+                ...toolMarksOf(card),
+                locked: !allowAlways,
+                // A client tool declares no annotations of its own.
+                openWorld: !isClientTool && child.annotations.openWorldHint,
+              }),
+              denyLabel: toolDenyLabel(),
             }
           : {})}
         onDeny={() => onDecide("reject")}

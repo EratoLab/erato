@@ -3,7 +3,14 @@ import clsx from "clsx";
 import { Fragment } from "react";
 
 import { Alert } from "@/components/ui/Feedback/Alert";
-import { machineIdPhrase } from "@/lib/toolCallGist/changeLabels";
+import {
+  headlineItemOf,
+  showsEarlierValues,
+} from "@/lib/toolCallGist/cardLayout";
+import {
+  earlierValuesFootnote,
+  machineIdPhrase,
+} from "@/lib/toolCallGist/changeLabels";
 import { gistItemLayout, listedValues, shortId } from "@/lib/toolCallGist/gist";
 import {
   GIST_SLOTS,
@@ -279,17 +286,28 @@ const FieldValues = ({
 const FieldList = ({
   fields,
   wholeId,
+  onCard = false,
 }: {
   fields: GistField[];
   wholeId: boolean;
+  onCard?: boolean;
 }) =>
   fields.length === 0 ? null : (
-    <dl className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
+    <dl
+      className={clsx(
+        "grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3",
+        onCard ? "gap-y-1 text-sm" : "gap-y-0.5 text-xs",
+      )}
+    >
       {fields.map((field, index) => (
         <Fragment key={index}>
           <dt
             dir="auto"
-            className={clsx("break-words text-theme-fg-muted", ISOLATED)}
+            className={clsx(
+              "break-words",
+              onCard ? "text-theme-fg-secondary" : "text-theme-fg-muted",
+              ISOLATED,
+            )}
           >
             {field.name}
           </dt>
@@ -323,7 +341,10 @@ const BatchRows = ({
   rows: GistBatchRow[];
   onCard: boolean;
 }) => (
-  <ul className="space-y-1 text-xs" data-testid="tool-call-gist-rows">
+  <ul
+    className={clsx("space-y-1", onCard ? "text-sm" : "text-xs")}
+    data-testid="tool-call-gist-rows"
+  >
     {rows.map(({ name, fields }, index) => (
       <li key={index} className="min-w-0 break-words [overflow-wrap:anywhere]">
         <div
@@ -337,7 +358,7 @@ const BatchRows = ({
         </div>
         {fields.length > 0 && (
           <div className="mt-0.5 pl-3">
-            <FieldList fields={fields} wholeId={onCard} />
+            <FieldList fields={fields} wholeId={onCard} onCard={onCard} />
           </div>
         )}
       </li>
@@ -365,7 +386,7 @@ const TextBlock = ({
         {...scrollBoxProps("value")}
         className={clsx(
           SCROLL_BOX_CLASS,
-          "max-h-32 whitespace-pre-wrap break-words text-xs [overflow-wrap:anywhere]",
+          "max-h-32 whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]",
           ISOLATED,
           className,
         )}
@@ -384,7 +405,7 @@ const TextChange = ({ item }: { item: GistItem }) => {
   if (item.before.length === 0 && item.after.length === 0) return null;
   return (
     <div className="space-y-1" data-testid="tool-call-gist-text">
-      <p className="text-xs text-theme-fg-muted">
+      <p className="text-sm text-theme-fg-secondary">
         {item.before.length > 0
           ? t({ id: "toolGist.textChange", message: "Text change" })
           : t({ id: "toolGist.content", message: "Content" })}
@@ -422,9 +443,12 @@ export const ToolCallGistValues = ({
   const changes = textChangeCount(item);
   const onCard = variant === "card";
   return (
-    <div className="space-y-2" data-testid="tool-call-gist-values">
+    <div
+      className={onCard ? "space-y-3" : "space-y-2"}
+      data-testid="tool-call-gist-values"
+    >
       {rows && <BatchRows item={item} rows={rows} onCard={onCard} />}
-      <FieldList fields={shared} wholeId={onCard} />
+      <FieldList fields={shared} wholeId={onCard} onCard={onCard} />
       {onCard ? (
         <TextChange item={item} />
       ) : (
@@ -444,58 +468,112 @@ export const ToolCallGistValues = ({
   );
 };
 
+/** A card's headline: the one line at this size, scrolling if it runs long. */
+const GistHeadline = ({
+  gist,
+  item,
+  phase,
+  lead = true,
+  placeInSource,
+}: {
+  gist: Gist;
+  item: GistItem;
+  phase: GistPhase;
+  placeInSource: boolean;
+  /** Further items' lines are group heads, not a second headline. */
+  lead?: boolean;
+}) => (
+  <p
+    {...scrollBoxProps("line")}
+    className={clsx(
+      SCROLL_BOX_CLASS,
+      "max-h-32 break-words font-semibold text-theme-fg-primary [overflow-wrap:anywhere]",
+      lead ? "text-base" : "text-sm",
+    )}
+    data-testid="tool-call-gist-line"
+  >
+    <ToolCallGistLine
+      gist={gist}
+      item={headlineItemOf(gist, item, placeInSource)}
+      phase={phase}
+      variant="card"
+    />
+  </p>
+);
+
 /**
- * The gist a card shows before approval: the warnings its values call for
- * and the card's `notes` first, then each item's line and values and what
- * else the card lists (`children`) in one bounded box. Values show whole, so
- * a long line, field value or row also scrolls in a box of its own; however
- * long a batch, what the card warns about stays on top and the buttons below
- * stay close.
+ * The gist a card shows before approval, in the order of every approval
+ * card: the headline, what the card warns about (`notes`), then each item's
+ * values and what else the card lists (`children`) in one bounded box, and
+ * one footnote. Values show whole, so a long line, field value or row also
+ * scrolls in a box of its own; however long a batch, what the card warns
+ * about stays above it and the buttons below stay close.
  */
 export const ToolCallGist = ({
   gist,
   phase,
   notes,
+  footnotes = [],
   children,
+  placeInSource = false,
 }: {
   gist: Gist;
   phase: GistPhase;
   notes?: ReactNode;
+  /** The caller's source line names the item's place, so the headline does not. */
+  placeInSource?: boolean;
+  /** Lines the caller adds to the card's footnote. */
+  footnotes?: ReactNode[];
   children?: ReactNode;
-}) => (
-  <div className="space-y-2" data-testid="tool-call-gist">
-    {gist.warnings.map((warning) => (
-      <Alert key={warning} type="warning" role="none">
-        {gistWarningLabel(warning)}
-      </Alert>
-    ))}
-    {notes}
-    <div
-      {...scrollBoxProps("card")}
-      className={clsx(SCROLL_BOX_CLASS, "max-h-[50vh] min-w-0 space-y-2")}
-      data-testid="tool-call-gist-scroll"
-    >
-      {gist.items.map((item, index) => (
-        <div key={index} className="space-y-1">
-          <p
-            {...scrollBoxProps("line")}
-            className={clsx(
-              SCROLL_BOX_CLASS,
-              "max-h-32 break-words text-sm font-medium text-theme-fg-primary [overflow-wrap:anywhere]",
-            )}
-            data-testid="tool-call-gist-line"
-          >
-            <ToolCallGistLine
+}) => {
+  const lead = gist.items[0] as GistItem | undefined;
+  const others = gist.items.slice(1);
+  const earlier = showsEarlierValues(gist);
+  return (
+    <div className="space-y-3" data-testid="tool-call-gist">
+      {lead && (
+        <GistHeadline
+          gist={gist}
+          item={lead}
+          phase={phase}
+          placeInSource={placeInSource}
+        />
+      )}
+      {gist.warnings.map((warning) => (
+        <Alert key={warning} type="warning" role="none">
+          {gistWarningLabel(warning)}
+        </Alert>
+      ))}
+      {notes}
+      <div
+        {...scrollBoxProps("card")}
+        className={clsx(SCROLL_BOX_CLASS, "max-h-[50vh] min-w-0 space-y-3")}
+        data-testid="tool-call-gist-scroll"
+      >
+        {lead && <ToolCallGistValues item={lead} variant="card" />}
+        {others.map((item, index) => (
+          <div key={index} className="space-y-1">
+            <GistHeadline
               gist={gist}
               item={item}
               phase={phase}
-              variant="card"
+              lead={false}
+              placeInSource={placeInSource}
             />
-          </p>
-          <ToolCallGistValues item={item} variant="card" />
+            <ToolCallGistValues item={item} variant="card" />
+          </div>
+        ))}
+        {children}
+      </div>
+      {(earlier || footnotes.length > 0) && (
+        <div
+          className="space-y-0.5 text-xs text-theme-fg-muted"
+          data-testid="tool-call-change-notes"
+        >
+          {earlier && <p>{earlierValuesFootnote(true, false)}</p>}
+          {footnotes}
         </div>
-      ))}
-      {children}
+      )}
     </div>
-  </div>
-);
+  );
+};

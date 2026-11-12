@@ -24,6 +24,7 @@ import {
   profileQuery,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { messages as deMessages } from "@/locales/de/messages.json";
+import { messages as enMessages } from "@/locales/en/messages.json";
 import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
@@ -32,10 +33,12 @@ import { FrontendRequestError } from "@/utils/errorReport";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
+import type { McpToolApprovalRequestPart } from "./McpToolApprovalCard";
 import type { ToolApprovalStatus } from "../Trace/Trace";
 import type {
   ApprovalScope,
   ToolArgumentNode,
+  ToolCallLabel,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 import type { Messages } from "@lingui/core";
@@ -283,10 +286,11 @@ describe("McpToolApprovalCard", () => {
 
   it("asks in the reader's language, on the card and to a screen reader", async () => {
     for (const [locale, messages, title] of [
-      ["de", deMessages, "MCP-Tool-Aufruf erlauben?"],
-      ["fr", frMessages, "Autoriser l’appel de l’outil MCP ?"],
-      ["es", esMessages, "¿Permitir la llamada a la herramienta MCP?"],
-      ["pl", plMessages, "Zezwolić na wywołanie narzędzia MCP?"],
+      ["en", enMessages, "Run this action in mock_mcp_approval?"],
+      ["de", deMessages, "Aktion in mock_mcp_approval ausführen?"],
+      ["fr", frMessages, "Exécuter cette action dans mock_mcp_approval ?"],
+      ["es", esMessages, "¿Ejecutar esta acción en mock_mcp_approval?"],
+      ["pl", plMessages, "Wykonać tę akcję w mock_mcp_approval?"],
     ] as const) {
       i18n.load(locale, messages as unknown as Messages);
       i18n.activate(locale);
@@ -307,7 +311,7 @@ describe("McpToolApprovalCard", () => {
             screen.getByText(title, { selector: ".sr-only" }),
           ).toBeInTheDocument();
         });
-        expect(screen.queryByText("Allow MCP tool call?")).toBeNull();
+        expect(screen.queryByText(/MCP/)).toBeNull();
         unmount();
       } finally {
         i18n.activate("en");
@@ -736,7 +740,7 @@ describe("McpToolApprovalCard", () => {
       ),
     );
 
-    fireEvent.click(screen.getByText("Deny once"));
+    fireEvent.click(screen.getByText("Deny"));
 
     await waitFor(() => {
       expect(useConfirmationRegistryStore.getState().hasPending("chat-1")).toBe(
@@ -1820,12 +1824,7 @@ describe("client tool approvals", () => {
       screen.getAllByText("Allow this tool to run on your device?").length,
     ).toBeGreaterThan(0);
     expect(screen.queryByTestId("tool-approval-generic")).toBeNull();
-    for (const label of [
-      "Allow once",
-      "Always allow",
-      "Deny once",
-      "Never allow",
-    ]) {
+    for (const label of ["Allow once", "Always allow", "Deny", "Never allow"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
     expect(
@@ -1978,7 +1977,9 @@ describe("approval queue", () => {
       "tool-call-1",
     );
     expect(
-      screen.getByRole("group", { name: "Allow MCP tool call?" }),
+      screen.getByRole("group", {
+        name: "Run this action in mock_mcp_approval?",
+      }),
     ).toBeInTheDocument();
     expect(screen.getByText("mock_mcp_approval")).toBeInTheDocument();
     expect(
@@ -2001,7 +2002,7 @@ describe("approval queue", () => {
     );
 
     fireEvent.click(screen.getByText("Allow once"));
-    fireEvent.click(screen.getByText("Deny once"));
+    fireEvent.click(screen.getByText("Deny"));
     expect(fetchMock).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Allow once"));
 
@@ -2051,7 +2052,7 @@ describe("approval queue", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Deny once"));
+    fireEvent.click(screen.getByText("Deny"));
     expect(screen.getByTestId("approval-queue")).toHaveAttribute(
       "data-position",
       "2",
@@ -3065,7 +3066,7 @@ describe("document and response approvals", () => {
         "11",
       );
       expect(screen.getByText("Read chapter 30")).toBeInTheDocument();
-      fireEvent.click(screen.getByText("Deny once"));
+      fireEvent.click(screen.getByText("Deny"));
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       const { body, headers } = sentRequest(fetchMock);
@@ -3411,12 +3412,15 @@ describe("gist cards", () => {
       ),
     );
 
+    // The place goes to the source line, so the headline says what and which.
     const line = screen.getByTestId("tool-call-gist-line");
-    expect(line).toHaveTextContent("Create row Northwind in Companies");
+    expect(line).toHaveTextContent(/^Create row Northwind$/);
     const written = line.querySelector('[data-origin="written"]');
     expect(written?.tagName).toBe("Q");
     expect(written).toHaveAttribute("dir", "auto");
-    const resolved = line.querySelector('[data-origin="resolved"]');
+    const source = screen.getByTestId("approval-source-line");
+    expect(source).toHaveTextContent(/^Records · Companies/);
+    const resolved = source.querySelector('[data-origin="resolved"]');
     expect(resolved).toHaveTextContent("Companies");
     expect(resolved).toHaveAttribute(
       "title",
@@ -3481,7 +3485,7 @@ describe("gist cards", () => {
     );
 
     const id = screen
-      .getByTestId("tool-call-gist-line")
+      .getByTestId("approval-source-line")
       .querySelector('[data-origin="id"]');
     expect(id?.textContent).toBe(DATA_SOURCE_ID);
     expect(id).not.toHaveAttribute("title");
@@ -3694,31 +3698,33 @@ describe("gist cards", () => {
       expect(
         screen.getByRole("button", { name: "Allow once" }),
       ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Deny once" }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
     };
 
-    it("shows it whole in the line, which scrolls in a box of its own", () => {
+    it("shows it whole in the source line, which scrolls in a box of its own", () => {
       createIn();
 
-      const line = screen.getByTestId("tool-call-gist-line");
-      const id = line.querySelector('[data-origin="id"]')!;
+      const source = screen.getByTestId("approval-source-line");
+      const id = source.querySelector('[data-origin="id"]')!;
       expect(id.textContent).toBe(LONG_ID);
-      expect(scrollBoxOf(id)).toBe(line);
-      expect(line).toHaveClass("max-h-32");
+      const box = scrollBoxOf(id);
+      expect(source).toContainElement(box);
+      expect(box).toHaveClass("max-h-24");
+      expect(screen.getByTestId("tool-call-gist-line")).not.toHaveTextContent(
+        LONG_ID,
+      );
       expectButtons();
     });
 
-    it("shows it whole beside a resolved name, inside the line's box", () => {
+    it("shows it whole beside a resolved name, inside the source line's box", () => {
       createIn("Companies");
 
-      const line = screen.getByTestId("tool-call-gist-line");
-      const id = within(line)
+      const source = screen.getByTestId("approval-source-line");
+      const id = within(source)
         .getByTestId("tool-call-gist-written")
         .querySelector(".font-mono")!;
       expect(id.textContent).toBe(LONG_ID);
-      expect(scrollBoxOf(id)).toBe(line);
+      expect(source).toContainElement(scrollBoxOf(id));
       expectButtons();
     });
 
@@ -3851,7 +3857,7 @@ describe("gist cards", () => {
       );
     const buttons = () => [
       screen.getByRole("button", { name: "Allow once" }),
-      screen.getByRole("button", { name: "Deny once" }),
+      screen.getByRole("button", { name: "Deny" }),
     ];
     const comesBefore = (first: Element, second: Element) =>
       (first.compareDocumentPosition(second) &
@@ -3866,8 +3872,11 @@ describe("gist cards", () => {
       expect(document.querySelectorAll('[class*="max-h-[50vh]"]')).toHaveLength(
         1,
       );
-      const lines = screen.getAllByTestId("tool-call-gist-line");
-      expect(lines).toHaveLength(3);
+      const [headline, ...lines] = screen.getAllByTestId("tool-call-gist-line");
+      expect(lines).toHaveLength(2);
+      // The headline leads the card, above what it warns about and the box.
+      expect(box).not.toContainElement(headline);
+      expect(comesBefore(headline, box)).toBe(true);
       const rows = Array.from(
         document.querySelectorAll('[data-testid="tool-call-gist-rows"] > li'),
       );
@@ -3900,13 +3909,21 @@ describe("gist cards", () => {
       const above = [
         screen.getByText(/Shared with your workspace/),
         screen.getByTestId("tool-call-hidden-characters"),
-        screen.getByTestId("tool-call-consent-left-out"),
-        screen.getByText(/Some arguments are not shown here/),
         screen.getByTestId("tool-call-other-arguments-note"),
       ];
       for (const note of above) {
         expect(box).not.toContainElement(note);
         expect(comesBefore(note, box)).toBe(true);
+      }
+      // What only Technical details shows is the footnote's, as plain text.
+      const footnote = screen.getByTestId("tool-call-change-notes");
+      expect(comesBefore(box, footnote)).toBe(true);
+      for (const note of [
+        screen.getByTestId("tool-call-consent-left-out"),
+        screen.getByText(/Some arguments are not shown here/),
+      ]) {
+        expect(footnote).toContainElement(note);
+        expect(note.closest('[data-ui="alert"]')).toBeNull();
       }
     });
 
@@ -3981,12 +3998,12 @@ describe("gist cards", () => {
       expect(box).toHaveClass("max-h-48", "focus-ring-inset");
       expect(box).toHaveAttribute("tabindex", "0");
       expect(box).toHaveAccessibleName("Scrollable arguments of this call");
-      for (const note of [
-        screen.getByTestId("tool-call-hidden-characters"),
-        screen.getByText(/Some arguments are not shown here/),
-      ]) {
-        expect(comesBefore(note, box)).toBe(true);
-      }
+      expect(
+        comesBefore(screen.getByTestId("tool-call-hidden-characters"), box),
+      ).toBe(true);
+      const truncated = screen.getByText(/Some arguments are not shown here/);
+      expect(comesBefore(box, truncated)).toBe(true);
+      expect(truncated.closest('[data-ui="alert"]')).toBeNull();
       expect(screen.getByTestId("tool-argument-text")).toHaveAttribute(
         "tabindex",
         "0",
@@ -4272,7 +4289,10 @@ describe("gist cards", () => {
     expect(item).toHaveTextContent("Summarize the release notes");
     expect(
       item.querySelector('[data-testid="tool-call-gist-line"]'),
-    ).toHaveTextContent("Create row Northwind in Companies");
+    ).toHaveTextContent(/^Create row Northwind$/);
+    expect(
+      item.querySelector('[data-testid="approval-source-line"]'),
+    ).toHaveTextContent("Records · Companies");
     expect(item).not.toHaveTextContent("Input Parameters");
     openTechnicalDetails(item);
     expect(item).toHaveTextContent("create_pages");
@@ -4316,7 +4336,10 @@ describe("gist cards", () => {
     expect(item).toHaveAttribute("data-tool-name", "create_pages");
     expect(
       item.querySelector('[data-testid="tool-call-gist-line"]'),
-    ).toHaveTextContent("Create row Northwind in Companies");
+    ).toHaveTextContent(/^Create row Northwind$/);
+    expect(
+      item.querySelector('[data-testid="approval-source-line"]'),
+    ).toHaveTextContent("Records · Companies");
   });
 
   describe("arguments the summary does not show", () => {
@@ -4755,9 +4778,9 @@ describe("gist cards", () => {
     it("puts the whole ID the call writes beside a name", () => {
       cardFor(createRowInput, createRowLabel);
 
-      const line = screen.getByTestId("tool-call-gist-line");
+      const line = screen.getByTestId("approval-source-line");
       expect(line).toHaveTextContent(
-        `in Companies written as <${DATA_SOURCE_ID}>`,
+        `Companies written as <${DATA_SOURCE_ID}>`,
       );
       const id = within(line)
         .getByTestId("tool-call-gist-written")
@@ -5210,5 +5233,286 @@ describe("tool-call limit with a task's question", () => {
     expect(
       screen.queryByText(/If you stop, each task waits for your decision/),
     ).toBeNull();
+  });
+});
+
+describe("the decision area of an MCP approval", () => {
+  const SERVER = "Example CRM";
+  const createLabel = (change: Record<string, unknown>) => ({
+    action: "create" as const,
+    object_kind: "row" as const,
+    source: "rules" as const,
+    items: [
+      {
+        title: {
+          pointer: "/item/name",
+          values: [{ path: "/item/name", text: "Sample record" }],
+        },
+      },
+    ],
+    change: {
+      counts: { set: 1 },
+      complete: true,
+      effects: [
+        {
+          path: "/item/city",
+          name: "City",
+          raw_name: "city",
+          effect: "set",
+          values: [{ text: "Sampletown" }],
+        },
+      ],
+      ...change,
+    },
+  });
+  const requestWith = (
+    label: unknown,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    ...approvalRequest,
+    tool_name: "create_record",
+    mcp_server_id: "example_crm",
+    input: { item: { name: "Sample record", city: "Sampletown" } },
+    annotations: { ...approvalRequest.annotations, openWorldHint: false },
+    display: {
+      title: "Create record",
+      description_truncated: false,
+      server_name: SERVER,
+      label: label as ToolCallLabel,
+    },
+    ...extra,
+  });
+  const renderRequest = (request: unknown) =>
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={request as McpToolApprovalRequestPart}
+        resolution={null}
+      />,
+    );
+  const follows = (first: Element, second: Element) =>
+    (first.compareDocumentPosition(second) &
+      Node.DOCUMENT_POSITION_FOLLOWING) !==
+    0;
+
+  afterEach(() => {
+    i18n.activate("en");
+  });
+
+  it("lays the card out source, headline, qualifier, risk, content, See more, footnote, decision, Technical details", () => {
+    const fields = Array.from({ length: 9 }, (_, index) => ({
+      path: `/item/f${index}`,
+      name: `Field ${index}`,
+      raw_name: `field_${index}`,
+      effect: "set",
+      values: [{ text: `v${index}` }],
+    }));
+    renderRequest(
+      requestWith(
+        {
+          ...createLabel({}),
+          action: "delete",
+          items: [
+            {
+              ...createLabel({}).items[0],
+              fields: [
+                {
+                  pointer: "/visibility",
+                  name: "visibility",
+                  values: [{ path: "/visibility", text: "workspace" }],
+                },
+              ],
+            },
+          ],
+          change: {
+            counts: { set: 9 },
+            complete: true,
+            effects: fields,
+            table: "account",
+            notes: ["delete_outcome_unknown", "old_values_from_earlier"],
+          },
+        },
+        {
+          input: { item: { name: "Sample record" }, visibility: "workspace" },
+        },
+      ),
+    );
+    const slots = [
+      screen.getByTestId("approval-source-line"),
+      screen.getByTestId("tool-call-gist-line"),
+      screen.getByTestId("tool-call-change-qualifier"),
+      screen.getByText(/Shared with your workspace/),
+      screen.getByTestId("tool-call-gist-scroll"),
+      screen.getByTestId("tool-call-change-see-more"),
+      screen.getByTestId("tool-call-change-notes"),
+      screen.getByTestId("mcp-tool-approval-card"),
+      screen.getByTestId("approval-technical-details"),
+    ];
+    for (const [index, slot] of slots.slice(1).entries()) {
+      expect(follows(slots[index], slot)).toBe(true);
+    }
+    expect(slots[0]).toHaveTextContent(`${SERVER} · account`);
+    expect(slots[1]).toHaveTextContent(/^Delete record Sample record$/);
+  });
+
+  it("asks in German where the action runs, calls a table's row a Datensatz and merges the organisation's mark with its lock", () => {
+    i18n.load("de", deMessages as unknown as Messages);
+    i18n.activate("de");
+    renderRequest(
+      requestWith(
+        createLabel({
+          table: "account",
+          notes: ["operator_marked_destructive"],
+        }),
+        { allow_always: false },
+      ),
+    );
+    expect(
+      screen.getByRole("group", { name: `Aktion in ${SERVER} ausführen?` }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      /^Datensatz Sample record erstellen$/,
+    );
+    expect(screen.getByTestId("approval-source-line")).toHaveTextContent(
+      `${SERVER} · account`,
+    );
+    expect(document.body.textContent).not.toMatch(/account-Zeile|MCP/);
+    // No count line on a create: its rows show every field.
+    expect(document.body.textContent).not.toMatch(/Felder? (wird|werden)/);
+    const facts = screen.getByTestId("action-confirmation-tool-facts");
+    expect(facts).toHaveTextContent(
+      "Ihre Organisation hat dieses Tool als destruktiv gekennzeichnet und verlangt jedes Mal eine Bestätigung.",
+    );
+    expect(document.body.textContent?.match(/destruktiv/g)).toHaveLength(1);
+    expect(
+      screen.getByTestId("action-confirmation-standing"),
+    ).toHaveTextContent(/^Dieses Tool:Immer erlauben·Nie erlauben$/);
+    expect(
+      screen.getByRole("button", { name: "Immer erlauben" }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByRole("button", { name: "Ablehnen" }),
+    ).toBeInTheDocument();
+    // A calm create: Allow once is the one filled button.
+    expect(
+      screen.getByRole("button", { name: "Einmal erlauben" }),
+    ).toHaveAttribute("data-variant", "primary");
+  });
+
+  it("asks in English where the action runs", () => {
+    renderRequest(requestWith(createLabel({})));
+    expect(
+      screen.getByRole("group", { name: `Run this action in ${SERVER}?` }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Deny once")).toBeNull();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeInTheDocument();
+    expect(
+      screen.getByTestId("action-confirmation-standing"),
+    ).toHaveTextContent(/^This tool:Always allow·Never allow$/);
+  });
+
+  it.each([
+    [
+      "an address outside the organisation",
+      {
+        action: "share",
+        object_kind: "file",
+        change: {
+          counts: {},
+          complete: true,
+          recipients: {
+            total: 1,
+            groups: [
+              { kind: "to", count: 1, values: ["ana@fabrikam.example"] },
+            ],
+            outside: ["ana@fabrikam.example"],
+            outside_known: true,
+          },
+        },
+      },
+      "plain",
+    ],
+    [
+      "a hand-off",
+      {
+        action: "run",
+        object_kind: "other",
+        change: {
+          counts: {},
+          complete: true,
+          opaque: [
+            {
+              kind: "instruction",
+              path: "/task",
+              text: "Click Publish",
+              lines: 1,
+            },
+          ],
+          notes: ["instruction_outcome_unknown"],
+        },
+      },
+      "plain",
+    ],
+    [
+      "a delete",
+      {
+        action: "delete",
+        change: { counts: {}, complete: true, notes: ["tool_says_permanent"] },
+      },
+      "loss",
+    ],
+  ])("leaves Allow once unfilled for %s", (_case, overrides, emphasis) => {
+    renderRequest(requestWith({ ...createLabel({}), ...overrides }));
+    const allowOnce = screen.getByRole("button", { name: "Allow once" });
+    expect(allowOnce).toHaveAttribute("data-variant", "secondary");
+    expect(allowOnce).toHaveAttribute("data-emphasis", emphasis);
+  });
+
+  it("says that a tool may send data out in the decision area, not above it", () => {
+    renderRequest(
+      requestWith(createLabel({}), {
+        annotations: { ...approvalRequest.annotations, openWorldHint: true },
+      }),
+    );
+    const facts = screen.getByTestId("action-confirmation-tool-facts");
+    expect(facts).toHaveTextContent(
+      "This tool may send data to an external service.",
+    );
+    expect(screen.getByTestId("mcp-tool-approval-card")).toContainElement(
+      facts,
+    );
+  });
+
+  it("gives a task's call in the parent chat's slot the same decision area", () => {
+    renderRequest({
+      ...delegatedTaskRequest,
+      approvals: [
+        {
+          ...delegatedTaskRequest.approvals[0],
+          child: {
+            ...childApprovalRef,
+            tool_name: "create_record",
+            mcp_server_id: "example_crm",
+            input: { item: { name: "Sample record" } },
+            display: requestWith(createLabel({})).display,
+          },
+        },
+      ],
+    });
+    const item = screen.getByTestId("delegated-task-approval-item");
+    expect(
+      within(item).getByRole("group", {
+        name: `Run this action in ${SERVER}?`,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(item).getByTestId("action-confirmation-standing"),
+    ).toHaveTextContent(/^This tool:Always allow·Never allow$/);
+    expect(
+      within(item).getByTestId("action-confirmation-tool-facts"),
+    ).toHaveTextContent("This tool may send data to an external service.");
+    expect(
+      within(item).getByRole("button", { name: "Deny" }),
+    ).toBeInTheDocument();
   });
 });

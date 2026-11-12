@@ -137,6 +137,8 @@ export interface GistItem {
 }
 
 export interface Gist {
+  /** Who mapped the call: code's rules, the operator's mapping, or a model. */
+  source?: ToolCallLabelSource;
   action: GistAction;
   kind: GistKind;
   items: GistItem[];
@@ -618,6 +620,7 @@ export const gistOf = (
   );
   if (items.length === 0 || (needsName && !namesSomething)) return undefined;
   return {
+    source: raw.source,
     action,
     kind,
     items,

@@ -517,6 +517,11 @@ export const readChange = (raw: unknown): GistChange | undefined => {
 
 /** Values shown below the losses; the number is a starting point, not measured. */
 export const MAX_FIRST_VIEW_VALUES = 5;
+/**
+ * Values shown when collapsing the rest would hide only one or two: a See
+ * more costs more reading than the fields it hides.
+ */
+export const MAX_FIRST_VIEW_VALUES_UNCOLLAPSED = 7;
 /** Rows of a batch in the first view. */
 export const MAX_FIRST_VIEW_ROWS = 5;
 /** Lines of a statement or instruction before it collapses. */
@@ -525,16 +530,11 @@ export const STATEMENT_LINES = 10;
 export const MAX_FIRST_VIEW_BATCH_FIELDS = 6;
 /** Lines of long text before it collapses. */
 export const TEXT_LINES = 6;
-/** Names listed in a collapsed part before the rest are counted. */
-export const MAX_COLLAPSED_NAMES = 8;
+/** Names a See more line lists before the rest are counted. */
+export const MAX_COLLAPSED_NAMES = 6;
 
 /* eslint-disable lingui/no-unlocalized-strings -- API enum values */
-const RANKED: readonly ToolCallEffectKind[] = [
-  "changed",
-  "list_added",
-  "set",
-  "unchanged",
-];
+const RANKED: readonly ToolCallEffectKind[] = ["changed", "list_added", "set"];
 const LIST_REPLACED: ToolCallEffectKind = "list_replaced";
 const LIST_REMOVED: ToolCallEffectKind = "list_removed";
 /* eslint-enable lingui/no-unlocalized-strings */
@@ -545,7 +545,10 @@ export interface ChangeLayout {
   /** Lists the tool says the call removes items from: a loss, but no replacement. */
   removedFromLists: ChangeEffect[];
   unreadable: ChangeEffect[];
-  /** At most `MAX_FIRST_VIEW_VALUES`, changed before set before unchanged. */
+  /**
+   * At most `MAX_FIRST_VIEW_VALUES`, or all up to the uncollapsed cap:
+   * changed before set, links and coded values first. Never unchanged ones.
+   */
   firstRows: ChangeEffect[];
   collapsed: ChangeEffect[];
   /** Values read but not stored: counted, and only in Technical details. */
@@ -572,9 +575,18 @@ const totalOf = (counts: ChangeCounts): number =>
 export const changeLayout = (change: GistChange): ChangeLayout => {
   const byKind = (kind: ToolCallEffectKind) =>
     change.effects.filter((effect) => effect.effect === kind);
-  const ranked = RANKED.flatMap(byKind);
-  const firstRows = ranked.slice(0, MAX_FIRST_VIEW_VALUES);
-  const collapsed = ranked.slice(MAX_FIRST_VIEW_VALUES);
+  // Where a record attaches and what its codes mean come before the rest.
+  const weight = (effect: ChangeEffect) =>
+    effect.link ? 0 : effect.values.some((value) => value.meaning) ? 1 : 2;
+  const ranked = RANKED.flatMap((kind) =>
+    byKind(kind).sort((a, b) => weight(a) - weight(b)),
+  );
+  const shown =
+    ranked.length <= MAX_FIRST_VIEW_VALUES_UNCOLLAPSED
+      ? ranked.length
+      : MAX_FIRST_VIEW_VALUES;
+  const firstRows = ranked.slice(0, shown);
+  const collapsed = [...ranked.slice(shown), ...byKind("unchanged")];
   const beyondCap = Math.max(totalOf(change.counts) - change.effects.length, 0);
   return {
     emptied: byKind("emptied"),

@@ -86,14 +86,15 @@ describe("the change card", () => {
         /See 25 more fields, all set with the old value unknown/,
       ),
     ).toBeInTheDocument();
-    // Names are capped and the rest are counted, never silently clipped.
-    expect(screen.getByTestId("tool-call-change-names")).toHaveTextContent(
-      "+17 more",
+    // Its label names what it holds; past six names the rest are counted.
+    const seeMore = screen.getByRole("button", { name: /See 25 more fields/ });
+    expect(seeMore).toHaveTextContent(
+      /· Field 5, Field 6, Field 7, Field 8, Field 9, Field 10 \+19$/,
     );
+    expect(screen.queryByText(/These fields/)).toBeNull();
     expect(screen.queryByText("ppt_field_6")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /See 25 more fields/ }));
+    fireEvent.click(seeMore);
     expect(screen.getByText("ppt_field_6")).toBeInTheDocument();
-    expect(screen.queryByTestId("tool-call-change-names")).toBeNull();
   });
 
   it("opens the collapsed part by default when not everything was read", () => {
@@ -131,16 +132,18 @@ describe("the change card", () => {
     });
     const emptied = screen.getByTestId("tool-call-change-emptied");
     expect(emptied).toHaveTextContent("Owner (was Tess)");
-    expect(
-      screen.getByText("The list Labels is replaced: 2 go, 1 stays"),
-    ).toBeInTheDocument();
+    // The rows say what goes and what stays; no line above them repeats it.
+    expect(screen.queryByText(/is replaced:/)).toBeNull();
     expect(screen.getByTestId("tool-call-change-list")).toHaveTextContent(
       "p1, backend",
     );
+    expect(
+      within(screen.getByTestId("tool-call-change-losses")).getByTestId(
+        "tool-call-change-row-note",
+      ),
+    ).toHaveTextContent("The tool says it replaces the current list.");
     const notes = screen.getByTestId("tool-call-change-notes");
-    expect(notes).toHaveTextContent(
-      "The tool says it replaces the current list.",
-    );
+    expect(notes).not.toHaveTextContent("replaces the current list");
     expect(notes).toHaveTextContent("Old values are from earlier in this chat");
     const scroll = screen.getByTestId("tool-call-gist-scroll");
     const text = scroll.textContent ?? "";
@@ -343,10 +346,7 @@ describe("the change card", () => {
       counts: { list_replaced: 2, set: 1 },
       notes: ["list_replace_unknown"],
     });
-    expect(
-      screen.getByText("If this replaces the list Labels: 1 goes, 1 stays"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/is replaced/)).toBeNull();
+    expect(screen.queryByText(/If this replaces|is replaced/)).toBeNull();
     const [labels, owners] = screen.getAllByTestId("tool-call-change-list");
     expect(
       within(labels).getByText("Labels that would go"),
@@ -355,7 +355,15 @@ describe("the change card", () => {
       within(labels).getByText("Labels that would stay"),
     ).toBeInTheDocument();
     expect(within(owners).queryByText("Owners set to")).toBeNull();
-    expect(screen.getByText(/2 lists maybe replaced/)).toBeInTheDocument();
+    // What could go is not marked as gone.
+    expect(within(labels).queryByTestId("tool-call-change-old")).toBeNull();
+    expect(
+      within(screen.getByTestId("tool-call-change-losses")).getByTestId(
+        "tool-call-change-row-note",
+      ),
+    ).toHaveTextContent(
+      "Whether this replaces the current list or adds to it is not known.",
+    );
     expect(screen.queryByText(/lists replaced/)).toBeNull();
   });
 
@@ -375,8 +383,15 @@ describe("the change card", () => {
       counts: { list_replaced: 1 },
       notes: ["tool_says_replaces_list"],
     });
-    expect(screen.getByText(/is replaced: 1 goes/)).toBeInTheDocument();
-    expect(screen.queryByText(/If this replaces/)).toBeNull();
+    const list = screen.getByTestId("tool-call-change-list");
+    expect(within(list).getByText("Labels removed")).toBeInTheDocument();
+    expect(within(list).getByText("p1").parentElement).toHaveClass(
+      "line-through",
+    );
+    expect(screen.getByTestId("tool-call-change-row-note")).toHaveTextContent(
+      "The tool says it replaces the current list.",
+    );
+    expect(screen.queryByText(/If this replaces|would go/)).toBeNull();
   });
 
   it("marks a list the tool says it only adds to as the tool's word", () => {
@@ -430,11 +445,8 @@ describe("the change card", () => {
     ).toHaveTextContent("Only removed, the tool says");
     expect(screen.getByText("Labels added")).toBeInTheDocument();
     expect(screen.getByText("Only added, the tool says")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "3 fields change: 1 with items removed, 1 with items added, 1 set",
-      ),
-    ).toBeInTheDocument();
+    // Every change is a row on the card, so no count repeats them.
+    expect(screen.queryByTestId("tool-call-change-summary")).toBeNull();
     expect(screen.queryByText(/maybe replaced|would go|not known/)).toBeNull();
   });
 
@@ -801,13 +813,39 @@ describe("old and new values", () => {
       ],
       counts: { unchanged: 1 },
     });
+    fireEvent.click(
+      screen.getByRole("button", { name: /See 1 unchanged field · Priority/ }),
+    );
     expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
     expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
       "Priority4 (the tool says: Low)",
     );
   });
 
-  it("colour a trace row's values and a batch row's values too", () => {
+  it("grey the tool's word around a code's meaning, so the meaning reads first", () => {
+    renderCard({
+      effects: [
+        changed({
+          effect: "set",
+          values: [
+            { text: "8", meaning: { label: "Prospect", source: "tool" } },
+          ],
+          old: undefined,
+        }),
+      ],
+      counts: { set: 1 },
+    });
+    const row = screen.getByTestId("tool-call-change-row");
+    expect(row).toHaveTextContent("8 (the tool says: Prospect)");
+    expect(
+      within(row).getByText("(the tool says:", { exact: false }),
+    ).toHaveClass("text-theme-fg-muted");
+    expect(within(row).getByText("Prospect", { exact: false })).not.toHaveClass(
+      "text-theme-fg-muted",
+    );
+  });
+
+  it("show a trace row's value as it is now, coloured as new", () => {
     const change = readAs({
       effects: [changed({})],
       counts: { changed: 1 },
@@ -817,9 +855,7 @@ describe("old and new values", () => {
         <ToolCallChangeRowDetails change={change} />
       </I18nProvider>,
     );
-    expect(screen.getByTestId("tool-call-change-old")).toHaveClass(
-      "line-through",
-    );
+    expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
     expect(screen.getByTestId("tool-call-change-new").className).toContain(
       "--theme-diff-added-fg",
     );
@@ -840,7 +876,7 @@ describe("a card for something new", () => {
     );
   };
 
-  it("says fields are set and counts long text fields", () => {
+  it("counts no fields: its rows show every one", () => {
     const effects = Array.from({ length: 7 }, (_, index) => set(index));
     renderCreate({
       effects,
@@ -856,15 +892,18 @@ describe("a card for something new", () => {
         },
       ],
     });
-    expect(screen.getByText("8 fields are set")).toBeInTheDocument();
-    expect(screen.queryByText(/fields change/)).toBeNull();
+    expect(screen.queryByText(/fields are set|fields change/)).toBeNull();
+    expect(screen.queryByTestId("tool-call-change-see-more")).toBeNull();
+    expect(screen.getAllByTestId("tool-call-change-row")).toHaveLength(8);
   });
 
   it("never says an old value is unknown or that nothing is emptied", () => {
-    const effects = Array.from({ length: 7 }, (_, index) => set(index));
-    renderCreate({ effects, counts: { set: 7 } });
+    const effects = Array.from({ length: 9 }, (_, index) => set(index));
+    renderCreate({ effects, counts: { set: 9 } });
     expect(
-      screen.getByRole("button", { name: "See 2 more fields" }),
+      screen.getByRole("button", {
+        name: "See 4 more fields · Field 5, Field 6, Field 7, Field 8",
+      }),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("old value unknown");
     expect(document.body.textContent).not.toContain("none is emptied");
@@ -936,17 +975,13 @@ describe("what sits on the card", () => {
     expect(screen.getAllByText("Subject")).toHaveLength(1);
   });
 
-  it("says who marked a tool as destructive", () => {
+  it("leaves who marked the tool as destructive to the decision area", () => {
     renderCard({
-      effects: [],
-      counts: {},
-      notes: ["operator_marked_destructive"],
+      effects: [set(1)],
+      counts: { set: 1 },
+      notes: ["operator_marked_destructive", "marked_destructive"],
     });
-    expect(
-      screen.getByText(
-        "Your organisation has marked this tool as destructive.",
-      ),
-    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("destructive");
   });
 });
 
@@ -995,7 +1030,9 @@ describe("a trace row's details", () => {
     expect(details).toHaveTextContent("Emptied: Owner");
     expect(details).toHaveTextContent("To 2 addresses");
     expect(details).toHaveTextContent("1 address is outside your organisation");
-    expect(details).toHaveTextContent("Stage lead → customer");
+    expect(details).toHaveTextContent("Stage → customer");
+    expect(details).not.toHaveTextContent("lead");
+    expect(details.tagName).toBe("P");
     expect(details).toHaveTextContent("+1");
     expect(details.textContent).not.toContain(UUID);
   });
@@ -1057,12 +1094,12 @@ describe("a trace row's details", () => {
     expect(details).toHaveTextContent("Owners: Ann");
     expect(details).toHaveTextContent("Not readable: Blob");
     expect(details).toHaveTextContent("Body");
-    expect(details).toHaveTextContent("Priority 3 → 4");
+    expect(details).toHaveTextContent("Priority → 4");
   });
 });
 
 describe("what stays outside the card's scroll box", () => {
-  it("keeps the notes, the names-only line and See more after it", () => {
+  it("keeps the footnote and See more after it", () => {
     renderCard({
       effects: Array.from({ length: 30 }, (_, index) => set(index)),
       counts: { set: 30 },
@@ -1070,26 +1107,20 @@ describe("what stays outside the card's scroll box", () => {
     });
     const scroll = screen.getByTestId("tool-call-gist-scroll");
     const seeMore = screen.getByTestId("tool-call-change-see-more");
-    const names = screen.getByTestId("tool-call-change-names");
     const notes = screen.getByTestId("tool-call-change-notes");
-    for (const element of [seeMore, names, notes]) {
+    for (const element of [seeMore, notes]) {
       expect(scroll.contains(element)).toBe(false);
       expect(
         scroll.compareDocumentPosition(element) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
-    expect(notes).toHaveTextContent(
-      "Your organisation has marked this tool as destructive.",
-    );
+    expect(notes).not.toHaveTextContent("destructive");
     expect(notes).toHaveTextContent(
       "Old values are from earlier in this chat and may have changed.",
     );
     expect(within(scroll).getAllByTestId("tool-call-change-row")).toHaveLength(
       5,
-    );
-    expect(names).toHaveTextContent(
-      /^These fields: Field 5, Field 6, .*, Field 12, \+17 more$/,
     );
   });
 });
@@ -1140,11 +1171,12 @@ describe("a card for a record no result in the chat named", () => {
       effects: [renamed(true)],
       counts: { set: 1 },
     });
+    // The table's key goes to the source line; the headline says record.
     expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
-      "Update account row",
+      /^Update record$/,
     );
     expect(screen.getByTestId("tool-call-gist-unread")).toHaveTextContent(
-      "Which account row: not read in this chat (its ID is in Technical details)",
+      "Which record: not read in this chat (its ID is in Technical details)",
     );
     const row = screen.getByTestId("tool-call-change-row");
     expect(row).toHaveTextContent("Nameset to Renamed");
@@ -1297,5 +1329,349 @@ describe("what the card names when it can only say item", () => {
     expect(screen.getByTestId("tool-call-change-text")).toHaveTextContent(
       "Body replaced by 4 lines, 300 characters",
     );
+  });
+});
+
+describe("the card's anatomy", () => {
+  const renderAs = (
+    raw: object,
+    gist: Partial<Gist> = {},
+    props: Partial<React.ComponentProps<typeof ToolCallChangeCard>> = {},
+  ) => {
+    const change = readAs(raw);
+    return render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={{ ...gistFor(change), ...gist }}
+          change={change}
+          phase="ask"
+          {...props}
+        />
+      </I18nProvider>,
+    );
+  };
+  const follows = (first: Element, second: Element) =>
+    (first.compareDocumentPosition(second) &
+      Node.DOCUMENT_POSITION_FOLLOWING) !==
+    0;
+  const recipients = (
+    groups: { kind: string; values: string[] }[],
+    outside: string[],
+  ) => ({
+    total: groups.reduce((sum, group) => sum + group.values.length, 0),
+    groups: groups.map((group) => ({ ...group, count: group.values.length })),
+    outside,
+    outside_known: true,
+  });
+
+  it("gives the headline its own size, then the qualifier, the content and one footnote", () => {
+    renderAs(
+      {
+        effects: [
+          set(1),
+          {
+            ...set(2),
+            values: [
+              { text: "8", meaning: { label: "Prospect", source: "earlier" } },
+            ],
+          },
+        ],
+        counts: { set: 2 },
+        notes: ["delete_outcome_unknown", "old_values_from_earlier"],
+      },
+      { action: "delete" },
+    );
+    const line = screen.getByTestId("tool-call-gist-line");
+    expect(line).toHaveClass("text-base", "font-semibold");
+    const qualifier = screen.getByTestId("tool-call-change-qualifier");
+    expect(qualifier).toHaveTextContent(
+      "What else goes with it, and whether it can be restored, is not known.",
+    );
+    expect(qualifier).toHaveClass("text-sm");
+    const scroll = screen.getByTestId("tool-call-gist-scroll");
+    const footnote = screen.getByTestId("tool-call-change-notes");
+    expect(follows(line, qualifier)).toBe(true);
+    expect(follows(qualifier, scroll)).toBe(true);
+    expect(follows(scroll, footnote)).toBe(true);
+    expect(
+      within(scroll).getAllByTestId("tool-call-change-row")[0],
+    ).toHaveClass("text-sm");
+    // One footnote that also says what the dotted underline means.
+    expect(footnote).toHaveTextContent(
+      /^Dotted and old values are from earlier in this chat and may have changed\.$/,
+    );
+  });
+
+  it("names a dotted value's source even without old values", () => {
+    renderAs({
+      effects: [
+        {
+          ...set(1),
+          values: [
+            { text: "8", meaning: { label: "Prospect", source: "earlier" } },
+          ],
+        },
+      ],
+      counts: { set: 1 },
+    });
+    expect(screen.getByTestId("tool-call-change-notes")).toHaveTextContent(
+      "Dotted values are from earlier in this chat and may have changed.",
+    );
+  });
+
+  it("says in amber, under the headline, when the tool says a delete cannot be undone", () => {
+    renderAs(
+      { effects: [], counts: {}, notes: ["tool_says_permanent"] },
+      { action: "delete" },
+    );
+    const qualifier = screen.getByTestId("tool-call-change-qualifier");
+    expect(qualifier).toHaveAttribute("data-tone", "warning");
+    expect(screen.getByTestId("tool-call-change-head")).toContainElement(
+      qualifier,
+    );
+  });
+
+  it("lists one to three recipients by address, the outside ones marked with the badge", () => {
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients(
+          [{ kind: "to", values: ["ana@fabrikam.example"] }],
+          ["ana@fabrikam.example"],
+        ),
+      },
+      { action: "share", kind: "file" },
+    );
+    const part = screen.getByTestId("tool-call-change-recipients");
+    expect(part).toHaveTextContent("With");
+    const badge = within(part).getByTestId("tool-call-change-outside-badge");
+    expect(badge).toHaveTextContent("outside your organisation");
+    expect(badge.querySelector('[data-ui="status-pill"]')).toHaveAttribute(
+      "data-tone",
+      "warning",
+    );
+    // The badge wraps under the address when the row is narrow.
+    expect(badge.parentElement).toHaveClass("flex-wrap");
+    expect(badge.parentElement).toHaveTextContent("ana@fabrikam.example");
+    expect(screen.queryByText(/To 1 address/)).toBeNull();
+    expect(screen.queryByText(/See the 1 address/)).toBeNull();
+    expect(screen.queryByTestId("tool-call-change-outside")).toBeNull();
+  });
+
+  it("marks only the addresses outside the organisation", () => {
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients(
+          [
+            {
+              kind: "to",
+              values: ["ana@fabrikam.example", "bo@contoso.example"],
+            },
+            { kind: "cc", values: ["cy@contoso.example"] },
+          ],
+          ["ana@fabrikam.example"],
+        ),
+      },
+      { action: "send", kind: "email" },
+    );
+    const part = screen.getByTestId("tool-call-change-recipients");
+    expect(
+      within(part).getAllByTestId("tool-call-change-outside-badge"),
+    ).toHaveLength(1);
+    expect(within(part).getByText("Cc")).toBeInTheDocument();
+    expect(within(part).getByText("cy@contoso.example")).toBeInTheDocument();
+  });
+
+  it("counts four or more by To, Cc and Bcc, names every outside address and keeps the rest behind See all", () => {
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients(
+          [
+            {
+              kind: "to",
+              values: [
+                "a@contoso.example",
+                "b@contoso.example",
+                "ana@fabrikam.example",
+              ],
+            },
+            { kind: "cc", values: ["c@contoso.example"] },
+          ],
+          ["ana@fabrikam.example"],
+        ),
+      },
+      { action: "send", kind: "email" },
+    );
+    const part = screen.getByTestId("tool-call-change-recipients");
+    expect(part).toHaveTextContent("To 4 addresses (3 To, 1 Cc)");
+    expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
+      "1 address is outside your organisation: ana@fabrikam.example",
+    );
+    expect(
+      screen.getByRole("button", { name: "See all 4 addresses" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-call-change-outside-badge")).toBeNull();
+  });
+
+  it("names no address in a mail headline that its recipients list", () => {
+    const to = ["ana@fabrikam.example", "bo@contoso.example"];
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients([{ kind: "to", values: to }], []),
+      },
+      {
+        action: "send",
+        kind: "email",
+        items: [
+          {
+            ...gistFor(readAs({})).items[0],
+            names: [
+              {
+                text: "Quarterly update",
+                origin: "written",
+                path: "/subject",
+                truncated: false,
+              },
+            ],
+            where: to.map((text, index) => ({
+              text,
+              origin: "written" as const,
+              path: `/to/${index}`,
+              truncated: false,
+            })),
+            hiddenIdPaths: [],
+          },
+        ],
+      },
+    );
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      /^Send email Quarterly update$/,
+    );
+  });
+
+  it("drops a trailing ID from a link that shows the linked record's name", () => {
+    renderAs({
+      effects: [
+        {
+          path: "/parentaccountid",
+          name: "Parent account ID",
+          raw_name: "parentaccountid",
+          effect: "set",
+          values: [{ text: "Example Holding", machine_id: true }],
+          link: true,
+        },
+        {
+          path: "/ownerid",
+          name: "Owner ID",
+          raw_name: "ownerid",
+          effect: "set",
+          values: [{ text: "", machine_id: true }],
+          link: true,
+        },
+      ],
+      counts: { set: 2 },
+    });
+    const [parent, owner] = screen.getAllByTestId("tool-call-change-row");
+    expect(parent).toHaveTextContent(/^Parent accountlink to Example Holding$/);
+    // No name is known, so the row still says it is an ID.
+    expect(owner).toHaveTextContent(/^Owner ID/);
+  });
+
+  it("puts links and coded values first, and long text last", () => {
+    renderAs(
+      {
+        effects: [
+          set(1),
+          {
+            ...set(2),
+            name: "Parent account ID",
+            values: [{ text: "Example Holding", machine_id: true }],
+            link: true,
+          },
+        ],
+        counts: { set: 2 },
+        texts: [
+          {
+            path: "/d",
+            name: "Description",
+            raw_name: "description",
+            text: "Card check test record",
+            lines: 1,
+            chars: 22,
+          },
+        ],
+      },
+      { action: "create" },
+    );
+    const rows = screen.getAllByTestId("tool-call-change-row");
+    expect(rows.map((row) => row.firstChild?.textContent)).toEqual([
+      "Parent account",
+      "Field 1",
+      "Description",
+    ]);
+  });
+
+  it("reads a hand-off's instruction as quoted content, with what Erato does not ask under it", () => {
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        opaque: [
+          {
+            kind: "instruction",
+            path: "/task",
+            text: "Click the Publish button and confirm the dialog",
+            lines: 1,
+          },
+        ],
+        notes: ["instruction_outcome_unknown"],
+      },
+      { action: "run" },
+    );
+    const statement = screen.getByTestId("tool-call-change-statement");
+    expect(statement).toHaveClass("border-l-2");
+    expect(statement).not.toHaveClass("font-mono");
+    expect(statement.querySelector("blockquote")).toHaveTextContent(
+      "Click the Publish button and confirm the dialog",
+    );
+    expect(screen.getByTestId("tool-call-change-opaque")).toHaveTextContent(
+      "The other assistant carries this out on its own. Erato does not ask you about its steps and cannot tell what will change.",
+    );
+    expect(screen.queryByTestId("tool-call-change-notes")).toBeNull();
+  });
+
+  it("says under the statement that the row count is unknown", () => {
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        opaque: [
+          {
+            kind: "sql",
+            path: "/q",
+            text: "DELETE FROM log",
+            lines: 1,
+            found: ["DELETE"],
+          },
+        ],
+        notes: ["row_count_unknown", "marked_destructive"],
+      },
+      { action: "run" },
+    );
+    const opaque = screen.getByTestId("tool-call-change-opaque");
+    const found = within(opaque).getByTestId("tool-call-change-found");
+    const note = within(opaque).getByTestId("tool-call-change-row-note");
+    expect(note).toHaveTextContent(
+      "Erato cannot tell how many rows this touches.",
+    );
+    expect(follows(found, note)).toBe(true);
+    expect(document.body.textContent).not.toContain("destructive");
   });
 });

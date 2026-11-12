@@ -18,6 +18,7 @@ import {
   parseDelegationEnvelope,
 } from "@/lib/delegation/delegationEnvelope";
 import { useSidecarLocalTrace } from "@/lib/desktopSidecar/localTraceStore";
+import { tableGoesToSource } from "@/lib/toolCallGist/cardLayout";
 import {
   changeRowCounts,
   machineIdPhrase,
@@ -38,12 +39,13 @@ import {
   isRecord,
   serverFailureMessage,
 } from "@/lib/toolCallGist/serverText";
+import { toolDecisionLabel } from "@/lib/trace/toolDecisionLabel";
 
 import { SidecarLocalTraceSubtree } from "../SidecarLocalTraceSubtree";
 import { TraceStep } from "../TraceStep";
 import { railIconFor } from "../icons";
 import { DelegationStep } from "./DelegationStep";
-import { refusedWithoutDecision, ToolDecisionRow } from "./ToolDecisionRow";
+import { refusedWithoutDecision } from "./ToolDecisionRow";
 import { ToolStatusPill } from "./ToolStatusPill";
 
 import type { ToolDecision } from "../Trace";
@@ -333,9 +335,10 @@ const PlainToolUseStep = ({
   const isRunning = status === "running" && isStreaming;
   const toolName = part.tool_name ?? "";
   const toolCallId = part.tool_call_id;
-  // A denied or refused call never ran: its decision row says so.
-  const notRun =
-    decision?.status === "denied" || refusedWithoutDecision(part, decision);
+  const refused = refusedWithoutDecision(part, decision);
+  // A denied or refused call never ran: its decision tag says so.
+  const notRun = decision?.status === "denied" || refused;
+  const decisionTag = toolDecisionLabel(part, decision, refused);
   const label = part.display?.label;
   // Erato's own proposals have cards of their own: the row only names them.
   const proposal = useMemo(
@@ -375,17 +378,33 @@ const PlainToolUseStep = ({
   // Effects are facts only once the call has run.
   const counts =
     gist?.change && phase === "done" ? changeRowCounts(gist.change) : undefined;
-  // "Updated task X: 2 changed"; a line that names nothing gets no colon.
-  const named =
-    lead?.names.some((name) => !lead.hiddenIdPaths.includes(name.path)) ===
-    true;
-  const server = part.display?.server_name && (
+  // The table a record's line no longer names goes beside the server.
+  const table =
+    gist && lead && tableGoesToSource(gist.kind, lead.count, gist.change?.table)
+      ? gist.change?.table
+      : undefined;
+  const source = [serverName, table].filter(
+    (name): name is string => name !== undefined && name.length > 0,
+  );
+  // With a decision, where it ran and who allowed it close the row instead.
+  const server = decisionTag === undefined && source.length > 0 && (
     <span
       dir="auto"
       className="pl-2 font-normal text-theme-fg-muted [unicode-bidi:isolate]"
     >
-      {part.display.server_name}
+      {source.join(" · ")}
     </span>
+  );
+  const tag = decisionTag && (
+    <p
+      className="text-xs text-theme-fg-muted"
+      data-testid="tool-decision-row"
+      data-tone={decisionTag.tone}
+    >
+      <span dir="auto" className="[unicode-bidi:isolate]">
+        {[...source, decisionTag.label].join(" · ")}
+      </span>
+    </p>
   );
   const link = useMemo(
     () =>
@@ -447,7 +466,6 @@ const PlainToolUseStep = ({
       data-tool-name={toolName}
       data-tool-status={resolvedStatus}
     >
-      <ToolDecisionRow part={part} decision={decision} />
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
@@ -463,7 +481,6 @@ const PlainToolUseStep = ({
                 data-testid="tool-call-gist-line"
               >
                 <ToolCallGistLine gist={gist} item={lead} phase={linePhase} />
-                {counts !== undefined && named && ":"}
               </span>
             ) : (
               toolName
@@ -483,7 +500,7 @@ const PlainToolUseStep = ({
         titleAfter={
           counts === undefined ? undefined : (
             <>
-              {!named && "· "}
+              {"· "}
               {counts}
               {server}
             </>
@@ -506,13 +523,18 @@ const PlainToolUseStep = ({
         headerSlot={link && <ResultLink link={link} server={serverName} />}
         detailSlot={
           gist && showsDetails ? (
-            <GistRowDetails
-              gist={gist}
-              phase={linePhase}
-              failure={failure}
-              eratoFailure={eratoFailure}
-            />
-          ) : undefined
+            <div className="space-y-1">
+              <GistRowDetails
+                gist={gist}
+                phase={linePhase}
+                failure={failure}
+                eratoFailure={eratoFailure}
+              />
+              {tag}
+            </div>
+          ) : (
+            tag
+          )
         }
         defaultOpen={hasTrace}
         autoExpand={hasTrace}

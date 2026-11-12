@@ -251,18 +251,18 @@ describe("ToolUseStep with a change description", () => {
       />,
     );
     expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
-      "Updated row Tailspin Toys:",
+      /^Updated row Tailspin Toys$/,
     );
     const counts = screen.getByTestId("trace-step-title-after");
-    expect(counts).toHaveTextContent("1 emptied, 1 changed, 10 unchanged");
+    expect(counts).toHaveTextContent("· 1 emptied, 1 changed, 10 unchanged");
     // A long title is cut; the counts after it must not be cut with it.
     expect(counts.closest(".truncate")).toBeNull();
+    // One line: losses first, then values as they are now.
     const details = screen.getByTestId("tool-call-change-row-details");
-    expect(details).toHaveTextContent("Emptied: Owner");
-    expect(details).toHaveTextContent("Stage lead → customer");
+    expect(details).toHaveTextContent("Emptied: Owner · Stage → customer");
   });
 
-  it("puts the counts right after the sentence, with a colon only after a name", () => {
+  it("puts the counts right after the sentence, after a middle dot", () => {
     const row = (itemLabel: object) =>
       render(
         <ToolUseStep
@@ -292,10 +292,10 @@ describe("ToolUseStep with a change description", () => {
       );
     const named = row({});
     expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
-      "Updated row Tailspin Toys:",
+      /^Updated row Tailspin Toys$/,
     );
     expect(screen.getByTestId("trace-step-title-after")).toHaveTextContent(
-      /^1 emptied, 1 changed, 10 unchanged\s*Tracker$/,
+      /^· 1 emptied, 1 changed, 10 unchanged\s*Tracker$/,
     );
     named.unmount();
 
@@ -440,17 +440,21 @@ describe("ToolUseStep decision row", () => {
     );
   const decisionRow = () => screen.queryByTestId("tool-decision-row");
 
-  it("shows an approved call that failed as failed, below who allowed it", () => {
+  it("shows an approved call that failed as failed, closed by where it ran and who allowed it", () => {
     settled({}, "error", { status: "approved", alwaysAllow: false });
 
-    expect(decisionRow()).toHaveTextContent("You allowed this once");
+    expect(decisionRow()).toHaveTextContent(
+      /^Dynamics 365 · You allowed this once$/,
+    );
+    expect(decisionRow()).toHaveClass("text-xs", "text-theme-fg-muted");
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.queryByText("Approved")).not.toBeInTheDocument();
-    expect(
-      decisionRow()?.compareDocumentPosition(
-        screen.getByRole("button", { name: /create_record/ }),
-      ),
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    const title = screen.getByRole("button", { name: /create_record/ });
+    // The server is named once, at the end, not in the title too.
+    expect(title).not.toHaveTextContent("Dynamics 365");
+    expect(title.compareDocumentPosition(decisionRow() as HTMLElement)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("notes a write that ran without asking, but not a read", () => {
@@ -563,7 +567,9 @@ describe("ToolUseStep decision row", () => {
         covers: covers as unknown as "turn",
       });
 
-      expect(decisionRow()).toHaveTextContent(/^You allowed this$/);
+      expect(decisionRow()).toHaveTextContent(
+        /^Dynamics 365 · You allowed this$/,
+      );
     },
   );
 

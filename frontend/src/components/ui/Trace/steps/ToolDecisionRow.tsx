@@ -1,16 +1,16 @@
-import { t } from "@lingui/core/macro";
-
 import {
   ShieldCheckIcon,
   ShieldIcon,
   ShieldXmarkIcon,
 } from "@/components/ui/icons";
+import { toolDecisionLabel } from "@/lib/trace/toolDecisionLabel";
 
 import { TraceConnector } from "../TraceConnector";
 import { TraceStep } from "../TraceStep";
 
 import type { ToolDecision } from "../Trace";
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ToolDecisionTone } from "@/lib/trace/toolDecisionLabel";
 import type { ReactNode } from "react";
 
 const ICON_CLASS = "size-4";
@@ -41,105 +41,22 @@ export const refusedWithoutDecision = (
   );
 };
 
-const scopedApprovalLabel = (covers: unknown): string => {
-  if (covers === "turn") {
-    return t({
-      id: "trace.tool.decision.allowedForTurn",
-      message: "You allowed this for this response",
-    });
-  }
-  if (covers === "document") {
-    return t({
-      id: "trace.tool.decision.allowedForDocument",
-      message: "You allowed this for this document",
-    });
-  }
-  // A scope a later version records.
-  return t({ id: "trace.tool.decision.allowed", message: "You allowed this" });
+const TONE_ICON: Record<ToolDecisionTone, () => ReactNode> = {
+  allowed: () => <ShieldCheckIcon className={ICON_CLASS} />,
+  denied: () => <ShieldXmarkIcon className={ICON_CLASS} />,
+  policy: () => <ShieldIcon className={ICON_CLASS} />,
 };
 
 const decisionLine = (
   part: ToolUse,
   decision: ToolDecision | undefined,
 ): DecisionLine | undefined => {
-  if (decision?.status === "approved") {
-    const icon = <ShieldCheckIcon className={ICON_CLASS} />;
-    if (decision.covers != null) {
-      return { icon, label: scopedApprovalLabel(decision.covers) };
-    }
-    return decision.alwaysAllow
-      ? {
-          icon,
-          label: t({
-            id: "trace.tool.decision.alwaysAllowed",
-            message: "You chose “Always allow”",
-          }),
-        }
-      : {
-          icon,
-          label: t({
-            id: "trace.tool.decision.allowedOnce",
-            message: "You allowed this once",
-          }),
-        };
-  }
-  if (decision?.status === "denied") {
-    const icon = <ShieldXmarkIcon className={ICON_CLASS} />;
-    if (decision.withdrawn) {
-      return {
-        icon,
-        label: t({
-          id: "trace.tool.decision.withdrawn",
-          message: "Not run: you no longer allow this tool",
-        }),
-      };
-    }
-    return decision.neverAllow
-      ? {
-          icon,
-          label: t({
-            id: "trace.tool.decision.neverAllowed",
-            message: "You chose “Never allow”",
-          }),
-        }
-      : {
-          icon,
-          label: t({
-            id: "trace.tool.decision.denied",
-            message: "You denied this",
-          }),
-        };
-  }
-  if (refusedWithoutDecision(part, decision)) {
-    return {
-      icon: <ShieldXmarkIcon className={ICON_CLASS} />,
-      label: t({ id: "trace.tool.decision.notRun", message: "Not run" }),
-    };
-  }
-  if (part.allowed_by === "always_allow") {
-    return {
-      icon: <ShieldCheckIcon className={ICON_CLASS} />,
-      label: t({
-        id: "trace.tool.decision.underAlwaysAllow",
-        message: "Ran under your earlier “Always allow”",
-      }),
-    };
-  }
-  // Said of writes only: a read the policy lets through is the expected case.
-  if (
-    part.allowed_by === "policy" &&
-    part.display != null &&
-    part.display.read_only !== true
-  ) {
-    return {
-      icon: <ShieldIcon className={ICON_CLASS} />,
-      label: t({
-        id: "trace.tool.decision.ranWithoutAsking",
-        message: "Ran without asking",
-      }),
-    };
-  }
-  return undefined;
+  const line = toolDecisionLabel(
+    part,
+    decision,
+    refusedWithoutDecision(part, decision),
+  );
+  return line && { icon: TONE_ICON[line.tone](), label: line.label };
 };
 
 interface ToolDecisionRowProps {

@@ -1,12 +1,12 @@
-import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { useMemo } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { Disclosure } from "@/components/ui/Controls/Disclosure";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import {
+  GistValueText,
   McpToolDescription,
   ToolArgumentView,
   ToolCallChangeBody,
@@ -15,18 +15,18 @@ import {
   ToolCallIdentity,
   ToolCallInput,
 } from "@/components/ui/ToolCall";
-import { toolCallCardOf } from "@/lib/toolCallGist/gist";
-import { gistAskLineSlots } from "@/lib/toolCallGist/gistLabels";
+import {
+  approvalDisplayOf,
+  useToolCallCard,
+} from "@/lib/toolCallGist/approvalCard";
+import { cardSourceOf } from "@/lib/toolCallGist/cardLayout";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
-import { isRecord } from "@/lib/toolCallGist/serverText";
 
 import { ComputerIcon, ResolvedIcon } from "../icons";
 import { ApprovalToolHeading } from "./ApprovalToolHeading";
 
-import type {
-  ToolCallLabel,
-  ToolDisplayMetadata,
-} from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ToolDisplayMetadata } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { CardSource } from "@/lib/toolCallGist/cardLayout";
 import type { ToolCallCard, ToolCallCardNotes } from "@/lib/toolCallGist/gist";
 import type { ReactNode } from "react";
 
@@ -40,26 +40,6 @@ interface ApprovalReferentProps {
   titleClassName?: string;
   className?: string;
 }
-
-/**
- * The descriptor as the cards render it: text fields only when they are
- * text, so a row from another writer cannot put an object into the page.
- */
-const displayOf = (
-  display: unknown,
-  toolName: string,
-): ToolDisplayMetadata | null => {
-  if (!isRecord(display)) return null;
-  const text = (value: unknown) =>
-    typeof value === "string" ? value : undefined;
-  return {
-    title: text(display.title) ?? toolName,
-    description: text(display.description),
-    description_truncated: display.description_truncated === true,
-    server_name: text(display.server_name),
-    label: display.label as ToolCallLabel | undefined,
-  };
-};
 
 const referentIcon = (isClientTool: boolean) =>
   isClientTool ? (
@@ -86,64 +66,153 @@ const showsRawInput = (card: ToolCallCard) =>
   (card.kind === "generic" && card.view === undefined) ||
   (card.kind === "gist" && card.rest.kind === "raw");
 
-const TruncatedArgumentsNote = () => (
-  <Alert type="info" role="none">
-    {t({
-      id: "toolArguments.truncated",
-      message:
-        "Some arguments are not shown here. Technical details has all of them.",
-    })}
-  </Alert>
-);
+const truncatedArgumentsLine = () =>
+  t({
+    id: "toolArguments.truncated",
+    message:
+      "Some arguments are not shown here. Technical details has all of them.",
+  });
+
+/** Where a value the card cannot show as written is a risk: hidden characters. */
+const CardRisk = ({ notes }: { notes: ToolCallCardNotes }) =>
+  notes.hiddenCharacters ? (
+    <Alert type="warning" role="none" data-testid="tool-call-hidden-characters">
+      {t({
+        id: "toolGist.note.hiddenCharacters",
+        message:
+          "Some values in this call contain hidden characters, which are removed here. What the call writes may differ from what you see.",
+      })}
+    </Alert>
+  ) : null;
 
 /**
- * What the card says about values it cannot show as the call wrote them:
- * removed hidden characters, and a consent flag the call set itself.
+ * What the card leaves to Technical details, in the footnote: a consent flag
+ * the call set itself, and arguments the label could not hold.
  */
-const CardNotes = ({ notes }: { notes: ToolCallCardNotes }) => (
+const cardFootnoteLines = (
+  notes: ToolCallCardNotes,
+  truncated: boolean,
+): ReactNode[] => [
+  ...(notes.leavesOutConsent
+    ? [
+        <p key="consent" data-testid="tool-call-consent-left-out">
+          {t({
+            id: "toolGist.note.consentLeftOut",
+            message:
+              "The call set an approval value of its own, which is not shown. Only your decision on this card counts.",
+          })}
+        </p>,
+      ]
+    : []),
+  ...(truncated
+    ? [
+        <p key="truncated" data-testid="tool-call-arguments-truncated">
+          {truncatedArgumentsLine()}
+        </p>,
+      ]
+    : []),
+];
+
+/** The same lines on a card without a footnote of its own. */
+const CardFootnotes = ({
+  notes,
+  truncated = false,
+}: {
+  notes: ToolCallCardNotes;
+  truncated?: boolean;
+}) => {
+  const lines = cardFootnoteLines(notes, truncated);
+  return lines.length === 0 ? null : (
+    <div className="space-y-0.5 text-xs text-theme-fg-muted">{lines}</div>
+  );
+};
+
+/** The place and table the source line names after the server. */
+const SourcePlace = ({ source }: { source: CardSource }) => (
   <>
-    {notes.hiddenCharacters && (
-      <Alert
-        type="warning"
-        role="none"
-        data-testid="tool-call-hidden-characters"
-      >
-        {t({
-          id: "toolGist.note.hiddenCharacters",
-          message:
-            "Some values in this call contain hidden characters, which are removed here. What the call writes may differ from what you see.",
-        })}
-      </Alert>
-    )}
-    {notes.leavesOutConsent && (
-      <Alert type="info" role="none" data-testid="tool-call-consent-left-out">
-        {t({
-          id: "toolGist.note.consentLeftOut",
-          message:
-            "The call set an approval value of its own, which is not shown. Only your decision on this card counts.",
-        })}
-      </Alert>
+    {source.where.map((value, index) => (
+      <Fragment key={index}>
+        {index > 0 ? ", " : " · "}
+        <GistValueText value={value} showWritten wholeId />
+      </Fragment>
+    ))}
+    {source.whereOmitted > 0 && ` +${source.whereOmitted}`}
+    {source.table !== undefined && (
+      <>
+        {" · "}
+        <span dir="auto" className="[unicode-bidi:isolate]">
+          {source.table}
+        </span>
+      </>
     )}
   </>
 );
+
+/**
+ * A source line's text that names a place, bounded: the place can be a long
+ * ID written whole. It is a tab stop and a named group only once it scrolls.
+ */
+const BoundedSourceText = ({ children }: { children: ReactNode }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const check = () => {
+      setOverflows(element.scrollHeight > element.clientHeight + 1);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [children]);
+  return (
+    <span
+      ref={ref}
+      {...(overflows ? scrollBoxProps("line") : {})}
+      className={clsx(
+        SCROLL_BOX_CLASS,
+        "block max-h-24 min-w-0 break-words text-xs text-theme-fg-muted [overflow-wrap:anywhere]",
+      )}
+    >
+      {children}
+    </span>
+  );
+};
 
 const ServerLine = ({
   display,
   serverId,
   isClientTool,
+  source,
 }: {
   display: ToolDisplayMetadata | null;
   serverId: string;
   isClientTool: boolean;
+  source?: CardSource;
 }) => (
-  <div className="flex min-w-0 items-center gap-2">
+  <div
+    className="flex min-w-0 items-center gap-2"
+    data-testid="approval-source-line"
+  >
     {referentIcon(isClientTool)}
-    <span
-      dir="auto"
-      className="min-w-0 break-words text-xs text-theme-fg-muted [unicode-bidi:isolate]"
-    >
-      {referentSource(display, serverId, isClientTool)}
-    </span>
+    {source ? (
+      <BoundedSourceText>
+        <span dir="auto" className="[unicode-bidi:isolate]">
+          {referentSource(display, serverId, isClientTool)}
+        </span>
+        <SourcePlace source={source} />
+      </BoundedSourceText>
+    ) : (
+      <span
+        dir="auto"
+        className="min-w-0 break-words text-xs text-theme-fg-muted [unicode-bidi:isolate]"
+      >
+        {referentSource(display, serverId, isClientTool)}
+      </span>
+    )}
   </div>
 );
 
@@ -189,37 +258,27 @@ const RawReferent = ({
   </>
 );
 
-/** The card for a label, with the values its line names in the language shown. */
-const useToolCallCard = (
-  label: ToolCallLabel | undefined,
-  input: unknown,
-): ToolCallCard => {
-  const locale = i18n.locale;
-  return useMemo(
-    () => toolCallCardOf(label, input, gistAskLineSlots),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the line's words, and so which values it names, follow the locale
-    [label, input, locale],
-  );
-};
-
 const LabelledReferent = (props: ResolvedReferentProps) => {
   const { display, input, serverId, isClientTool, className } = props;
   const card = useToolCallCard(display?.label, input);
 
   if (card.kind === "gist" && card.gist.change) {
     return (
-      <div className={clsx("space-y-2", className)}>
+      <div className={clsx("space-y-1", className)}>
         <ServerLine
           display={display}
           serverId={serverId}
           isClientTool={isClientTool}
+          source={cardSourceOf(card.gist)}
         />
         <ToolCallChangeCard
           gist={card.gist}
           change={card.gist.change}
           phase="ask"
-          notes={<CardNotes notes={card.notes} />}
+          notes={<CardRisk notes={card.notes} />}
+          footnotes={cardFootnoteLines(card.notes, false)}
           toolTitle={display?.title ?? props.toolName}
+          placeInSource
         />
       </div>
     );
@@ -228,21 +287,19 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
   if (card.kind === "gist") {
     const { rest } = card;
     return (
-      <div className={clsx("space-y-2", className)}>
+      <div className={clsx("space-y-1", className)}>
         <ServerLine
           display={display}
           serverId={serverId}
           isClientTool={isClientTool}
+          source={cardSourceOf(card.gist)}
         />
         <ToolCallGist
           gist={card.gist}
           phase="ask"
           notes={
             <>
-              <CardNotes notes={card.notes} />
-              {rest.kind === "view" && rest.truncated && (
-                <TruncatedArgumentsNote />
-              )}
+              <CardRisk notes={card.notes} />
               {(rest.kind === "raw" || rest.view) && (
                 <p
                   className="text-xs text-theme-fg-muted"
@@ -257,6 +314,11 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
               )}
             </>
           }
+          footnotes={cardFootnoteLines(
+            card.notes,
+            rest.kind === "view" && rest.truncated,
+          )}
+          placeInSource
         >
           {rest.kind === "raw" ? (
             <ArgumentsScrollBox>
@@ -302,14 +364,14 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           titleClassName={props.titleClassName}
         />
         <div className="mt-2 space-y-2">
-          <CardNotes notes={card.notes} />
-          {card.truncated && <TruncatedArgumentsNote />}
+          <CardRisk notes={card.notes} />
           {card.change && (
             <ToolCallChangeBody change={card.change} values={false} />
           )}
           <ArgumentsScrollBox>
             <ToolArgumentView view={card.view} values={card.values} />
           </ArgumentsScrollBox>
+          <CardFootnotes notes={card.notes} truncated={card.truncated} />
         </div>
       </>
     );
@@ -320,10 +382,11 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
       notes={
         card.kind === "generic" && (
           <>
-            <CardNotes notes={card.notes} />
+            <CardRisk notes={card.notes} />
             {card.change && (
               <ToolCallChangeBody change={card.change} values={false} />
             )}
+            <CardFootnotes notes={card.notes} />
           </>
         )
       }
@@ -341,7 +404,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
  */
 export const ApprovalReferent = (props: ApprovalReferentProps) => {
   const display = useMemo(
-    () => displayOf(props.display, props.toolName),
+    () => approvalDisplayOf(props.display, props.toolName),
     [props.display, props.toolName],
   );
   return (
@@ -414,7 +477,7 @@ export const ApprovalTechnicalDetails = (
   props: Omit<ApprovalReferentProps, "titleClassName" | "className">,
 ) => {
   const display = useMemo(
-    () => displayOf(props.display, props.toolName),
+    () => approvalDisplayOf(props.display, props.toolName),
     [props.display, props.toolName],
   );
   return (

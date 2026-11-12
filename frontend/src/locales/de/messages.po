@@ -4494,10 +4494,19 @@ msgid "mcp.callback.openSettings"
 msgstr "Einstellungen öffnen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/OwnCallApprovalItem.tsx
-#: src/components/ui/Message/ParkedChildItem.tsx
+#: src/lib/toolCallGist/decisionLabels.ts
 msgid "mcpApproval.alwaysAllowDisabled"
 msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn dieses Tool ausgeführt wird."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/decisionLabels.ts
+msgid "mcpApproval.deny"
+msgstr "Ablehnen"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/decisionLabels.ts
+msgid "mcpApproval.facts.orgMarkedLocked"
+msgstr "Ihre Organisation hat dieses Tool als destruktiv gekennzeichnet und verlangt jedes Mal eine Bestätigung."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/McpToolApprovalCard.tsx
@@ -4505,15 +4514,24 @@ msgstr "Gesperrt: Ihre Organisation verlangt jedes Mal eine Bestätigung, wenn d
 #~ msgstr ""
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/OwnCallApprovalItem.tsx
-#: src/components/ui/Message/ParkedChildItem.tsx
+#: src/lib/toolCallGist/decisionLabels.ts
 msgid "mcpApproval.openWorldWarning"
 msgstr "Dieses Tool kann Daten an einen externen Dienst senden."
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/decisionLabels.ts
+msgid "mcpApproval.question"
+msgstr "{placed, select, placed {Aktion in {name} ausführen?} other {Aktion ausführen?}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/decisionLabels.ts
+msgid "mcpApproval.thisTool"
+msgstr "Dieses Tool:"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/OwnCallApprovalItem.tsx
-msgid "mcpApproval.title"
-msgstr "MCP-Tool-Aufruf erlauben?"
+#~ msgid "mcpApproval.title"
+#~ msgstr "MCP-Tool-Aufruf erlauben?"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
@@ -9076,13 +9094,13 @@ msgstr "Nur hinzugefügt, sagt das Tool"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.list.goes"
-msgstr "{removed, plural, one {# entfällt} other {# entfallen}}"
+#~ msgid "toolChange.list.goes"
+#~ msgstr "{removed, plural, one {# entfällt} other {# entfallen}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.list.ifReplaced"
-msgstr "Falls dies die Liste {name} ersetzt: {parts}"
+#~ msgid "toolChange.list.ifReplaced"
+#~ msgstr "Falls dies die Liste {name} ersetzt: {parts}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9101,8 +9119,8 @@ msgstr "Nur entfernt, sagt das Tool"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.list.replaced"
-msgstr "Die Liste {name} wird ersetzt: {parts}"
+#~ msgid "toolChange.list.replaced"
+#~ msgstr "Die Liste {name} wird ersetzt: {parts}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9111,8 +9129,8 @@ msgstr "{name} gesetzt auf"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.list.stays"
-msgstr "{kept, plural, one {# bleibt} other {# bleiben}}"
+#~ msgid "toolChange.list.stays"
+#~ msgstr "{kept, plural, one {# bleibt} other {# bleiben}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9126,13 +9144,13 @@ msgstr "{name}, die blieben"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.namesOnly"
-msgstr "Diese Felder: {names}"
+#~ msgid "toolChange.namesOnly"
+#~ msgstr "Diese Felder: {names}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.namesOnly.more"
-msgstr "Diese Felder: {names}, +{more} weitere"
+#~ msgid "toolChange.namesOnly.more"
+#~ msgstr "Diese Felder: {names}, +{more} weitere"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9141,8 +9159,18 @@ msgstr "Was sonst noch mit gelöscht wird und ob es wiederhergestellt werden kan
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.dotted"
+msgstr "Gepunktet unterstrichene Werte stammen von früher in diesem Chat und können sich geändert haben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.note.dottedAndOld"
+msgstr "Gepunktet unterstrichene und alte Werte stammen von früher in diesem Chat und können sich geändert haben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.note.instructionOutcomeUnknown"
-msgstr "Ein anderer Assistent entscheidet, was geschieht. Erato kann nicht sagen, was sich ändert."
+msgstr "Der andere Assistent führt dies selbstständig aus. Erato fragt Sie nicht zu seinen einzelnen Schritten und kann nicht sagen, was sich ändert."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9256,6 +9284,11 @@ msgstr "{count, plural, one {# Adresse liegt außerhalb Ihrer Organisation: {nam
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.outsideBadge"
+msgstr "außerhalb Ihrer Organisation"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.recipients.seeAll"
 msgstr "{total, plural, one {Die # Adresse anzeigen} other {Alle # Adressen anzeigen}}"
 
@@ -9269,6 +9302,11 @@ msgstr "{0, plural, one {An # Adresse{groups}} other {An # Adressen{groups}}}"
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.recipients.unchecked"
 msgstr "{unchecked, plural, one {# Empfänger hat keine prüfbare Adresse} other {# Empfänger haben keine prüfbare Adresse}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.recipients.with"
+msgstr "Für"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9317,6 +9355,16 @@ msgstr "{total, plural, one {# weiteres Feld anzeigen: {detail} (keines wird gel
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.named"
+msgstr "{line} · {names}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
+msgid "toolChange.seeMore.namedMore"
+msgstr "{line} · {names} +{more}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.seeMore.part.added"
 msgstr "{added, plural, one {# mit hinzugefügten Einträgen} other {# mit hinzugefügten Einträgen}}"
 
@@ -9357,8 +9405,8 @@ msgstr "{changing, plural, one {# Feld ändert sich} other {# Felder ändern sic
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.summary.fieldsSet"
-msgstr "{changing, plural, one {# Feld wird gesetzt} other {# Felder werden gesetzt}}"
+#~ msgid "toolChange.summary.fieldsSet"
+#~ msgstr "{changing, plural, one {# Feld wird gesetzt} other {# Felder werden gesetzt}}"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: counts.unchanged
@@ -9576,6 +9624,11 @@ msgstr "{count, plural, one {Seite} other {# Seiten}}"
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.kind.paragraph"
 msgstr "{count, plural, one {Absatz} other {# Absätze}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.kind.record"
+msgstr "{count, plural, one {Datensatz} other {# Datensätze}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
@@ -9911,7 +9964,7 @@ msgstr "{changes, plural, one {# Textänderung} other {# Textänderungen}}"
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
 msgid "toolGist.unreadRecord"
-msgstr "{kind, select, page {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} database {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} folder {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} note {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} comment {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} paragraph {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} document {Welches {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} email {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} message {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} event {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} file {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} task {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} row {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} other {Welches {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)}}"
+msgstr "{kind, select, page {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} database {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} folder {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} note {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} comment {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} paragraph {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} document {Welches {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} email {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} message {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} event {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} file {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} task {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} row {Welche {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} record {Welcher {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)} other {Welches {noun}: in diesem Chat nicht gelesen (ID unter „{details}“)}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/gistLabels.ts
@@ -10260,57 +10313,57 @@ msgid "trace.tool.budget_approval"
 msgstr "Budget für Tool-Aufrufe"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowed"
 msgstr "Sie haben das erlaubt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForDocument"
 msgstr "Sie haben das für dieses Dokument erlaubt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedForTurn"
 msgstr "Sie haben das für diese Antwort erlaubt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.allowedOnce"
 msgstr "Sie haben das einmal erlaubt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.alwaysAllowed"
 msgstr "Sie haben „Immer erlauben“ gewählt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.denied"
 msgstr "Sie haben das abgelehnt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.neverAllowed"
 msgstr "Sie haben „Nie erlauben“ gewählt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.notRun"
 msgstr "Nicht ausgeführt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.ranWithoutAsking"
 msgstr "Ohne Nachfrage ausgeführt"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.underAlwaysAllow"
 msgstr "Ausgeführt, weil Sie „Immer erlauben“ gewählt haben"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Trace/steps/ToolDecisionRow.tsx
+#: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.withdrawn"
 msgstr "Nicht ausgeführt: Sie erlauben dieses Tool nicht mehr"
 
