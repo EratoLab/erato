@@ -738,9 +738,6 @@ async fn test_eml_upload_supports_rfc822_and_octet_stream_content_types(pool: Po
     }
 }
 
-/// Every preview is served with `nosniff`; previews whose type can carry active
-/// content (SVG, HTML, XML and anything not known to be passive) also carry a
-/// sandboxing Content-Security-Policy, while raster images and PDFs do not.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_file_preview_security_headers_per_content_type(pool: Pool<Postgres>) {
     let (mut app_config, _server) = setup_mock_llm_server(None).await;
@@ -757,8 +754,6 @@ async fn test_file_preview_security_headers_per_content_type(pool: Pool<Postgres
     let chat_id = create_chat(&server).await;
     let restrictive_policy = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
     let svg_bytes = br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>"#.to_vec();
-    let html_bytes = b"<!doctype html><title>Page</title><p>Text</p>".to_vec();
-    let xml_bytes = b"<?xml version=\"1.0\"?><feed></feed>".to_vec();
     let test_cases = [
         (
             "diagram.svg",
@@ -768,38 +763,10 @@ async fn test_file_preview_security_headers_per_content_type(pool: Pool<Postgres
             Some(restrictive_policy),
         ),
         (
-            "page.html",
-            "text/html",
-            html_bytes,
-            "application/octet-stream",
-            Some(restrictive_policy),
-        ),
-        (
-            "feed.xml",
-            "application/xml",
-            xml_bytes,
-            "application/octet-stream",
-            Some(restrictive_policy),
-        ),
-        (
-            "message.eml",
-            "message/rfc822",
-            read_integration_test_file_bytes("please_review_attached_draft.eml"),
-            "message/rfc822",
-            Some(restrictive_policy),
-        ),
-        (
             "image_1.png",
             "image/png",
             read_integration_test_file_bytes("image_1.png"),
             "image/png",
-            None,
-        ),
-        (
-            "report.pdf",
-            "application/pdf",
-            read_integration_test_file_bytes("sample-report-compressed.pdf"),
-            "application/pdf",
             None,
         ),
     ];

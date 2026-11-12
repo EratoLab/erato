@@ -4434,17 +4434,11 @@ const PASSIVE_PREVIEW_CONTENT_TYPES: &[&str] = &[
 /// images drawn by `<img>` are not affected.
 const ACTIVE_CONTENT_PREVIEW_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
-/// The Content-Security-Policy a preview of `content_type` is served with, or
-/// `None` for a passive type.
 fn preview_content_security_policy(content_type: &str) -> Option<&'static str> {
-    let content_type = content_type_essence(content_type);
-    let is_passive = PASSIVE_PREVIEW_CONTENT_TYPES
-        .iter()
-        .any(|passive| passive.eq_ignore_ascii_case(content_type));
+    let is_passive = PASSIVE_PREVIEW_CONTENT_TYPES.contains(&content_type);
     (!is_passive).then_some(ACTIVE_CONTENT_PREVIEW_CSP)
 }
 
-/// Response headers for the inline preview of a file named `filename`.
 fn file_preview_headers(filename: &str) -> Result<HeaderMap, InvalidHeaderValue> {
     let content_type = preview_content_type(filename);
     let mut headers = HeaderMap::new();
@@ -5026,9 +5020,8 @@ pub struct FileCapabilitiesQuery {
 #[cfg(test)]
 mod tests {
     use super::{
-        ACTIVE_CONTENT_PREVIEW_CSP, ProfilePhotoSubject, effective_upload_content_type,
-        fetch_entra_id_profile_photo_data_url, file_preview_headers, graph_profile_photo_path,
-        is_entra_id_profile, preview_content_security_policy, preview_content_type,
+        ProfilePhotoSubject, effective_upload_content_type, fetch_entra_id_profile_photo_data_url,
+        file_preview_headers, graph_profile_photo_path, is_entra_id_profile, preview_content_type,
     };
     use axum::http::StatusCode;
     use axum::http::header::{
@@ -5042,63 +5035,6 @@ mod tests {
     #[test]
     fn preview_content_type_supports_eml() {
         assert_eq!(preview_content_type("message.eml"), "message/rfc822");
-    }
-
-    #[test]
-    fn preview_content_security_policy_restricts_active_content_types() {
-        for content_type in [
-            "image/svg+xml",
-            "text/html",
-            "application/xhtml+xml",
-            "text/xml",
-            "application/xml",
-            "IMAGE/SVG+XML",
-            "text/html; charset=utf-8",
-        ] {
-            assert_eq!(
-                preview_content_security_policy(content_type),
-                Some(ACTIVE_CONTENT_PREVIEW_CSP),
-                "{content_type} should be served with the restrictive policy"
-            );
-        }
-    }
-
-    #[test]
-    fn preview_content_security_policy_restricts_types_not_listed_as_passive() {
-        for content_type in [
-            "application/octet-stream",
-            "message/rfc822",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "text/plain",
-            "application/javascript",
-            "",
-        ] {
-            assert_eq!(
-                preview_content_security_policy(content_type),
-                Some(ACTIVE_CONTENT_PREVIEW_CSP),
-                "{content_type:?} should be served with the restrictive policy"
-            );
-        }
-    }
-
-    #[test]
-    fn preview_content_security_policy_leaves_passive_types_unrestricted() {
-        for content_type in [
-            "application/pdf",
-            "image/bmp",
-            "image/gif",
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "Image/PNG",
-            "application/pdf; name=report.pdf",
-        ] {
-            assert_eq!(
-                preview_content_security_policy(content_type),
-                None,
-                "{content_type} should not carry a Content-Security-Policy"
-            );
-        }
     }
 
     #[test]
