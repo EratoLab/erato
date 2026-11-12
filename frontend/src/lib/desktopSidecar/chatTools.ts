@@ -33,7 +33,11 @@ import {
   runsAsSidecarJob,
   SidecarReviewEndedError,
 } from "./sidecarJobs";
-import { forgetReview, reviewLinkKey } from "./sidecarReviewLinks";
+import {
+  forgetReview,
+  markTaskReviewEnded,
+  reviewLinkKey,
+} from "./sidecarReviewLinks";
 import {
   cachedSourceDirectory,
   lacks,
@@ -1065,10 +1069,17 @@ export function createSidecarChatTools(
                 error: REVIEW_ENDED.expired,
                 stillWaiting: true,
               };
-            if (context)
-              forgetReview(
-                reviewLinkKey(context.messageId, context.toolCallId),
+            if (context) {
+              const review = reviewLinkKey(
+                context.messageId,
+                context.toolCallId,
               );
+              // A task's review that ran out stays, marked as the task's, so
+              // its own chat and its parent's item say it ended and neither
+              // offers to ask again.
+              if (error.state === "expired") markTaskReviewEnded(review);
+              else forgetReview(review);
+            }
             // A task's review ended before its result arrived: nobody decided
             // in time, or the app no longer has the job (its record ran out,
             // its store dropped the results, or it restarted), also after a

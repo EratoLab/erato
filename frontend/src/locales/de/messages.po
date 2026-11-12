@@ -98,6 +98,21 @@ msgstr "{waitingCount, plural, one {Wartet außerdem auf eine Aufgabe} other {Wa
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReview"
+msgstr "{reviewCount, plural, one {Eine Aufgabe wartet auf deine Prüfung in der Erato-Desktop-App.} other {# Aufgaben warten auf deine Prüfung in der Erato-Desktop-App.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReviewContinues"
+msgstr "{waitingCount, plural, one {Die Antwort geht weiter, sobald die Aufgabe fertig ist.} other {Die Antwort geht weiter, sobald die Aufgaben fertig sind.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReviewContinuesAwaitingCall"
+msgstr "{waitingCount, plural, one {Die Antwort geht weiter, sobald die Aufgabe und die verbundene App fertig sind.} other {Die Antwort geht weiter, sobald die Aufgaben und die verbundene App fertig sind.}}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingTitle"
 msgstr "{waitingCount, plural, one {Diese Antwort wartet auf eine Aufgabe} other {Diese Antwort wartet auf # Aufgaben}}"
 
@@ -8356,6 +8371,11 @@ msgstr "Erneut fragen"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.ended.description"
 msgstr "Es wurde nichts geteilt. Eine Prüfung endet eine Stunde nach dem Start."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.taskDescription"
+msgstr "Es wurde nichts geteilt. Die Aufgabe macht ohne dieses Ergebnis weiter. Eine Prüfung endet eine Stunde nach dem Start."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx

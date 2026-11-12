@@ -2935,6 +2935,42 @@ mod test_cases {
         assert!(system_texts.iter().any(|t| t.contains("OUTLOOK BASELINE")));
         assert!(system_texts.iter().any(|t| t.contains("GLOBAL BASELINE")));
         assert!(!system_texts.iter().any(|t| t.contains("TEAMS BASELINE")));
+
+        // The Teams bot reports its own platform, and a `teams` baseline
+        // still applies to it.
+        let bot_seq = build_abstract_sequence_with_facet_tool_expansions(
+            &message_repo,
+            &prompt_provider,
+            &chat,
+            &msg1_id,
+            vec![],
+            &config,
+            &facets,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            &HashMap::new(),
+            Some(crate::ms_teams_bot::TEAMS_BOT_PLATFORM),
+        )
+        .await
+        .expect("Failed to build abstract sequence");
+        let mut bot_ids: Vec<&str> = bot_seq
+            .parts
+            .iter()
+            .filter_map(|p| match p {
+                AbstractChatSequencePart::FacetAdditionalSystemPrompt { facet_id, .. } => {
+                    Some(facet_id.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        bot_ids.sort();
+        assert_eq!(bot_ids, ["global_baseline", "teams_baseline"]);
     }
 
     #[tokio::test]

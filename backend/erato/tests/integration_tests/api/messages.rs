@@ -6,6 +6,7 @@ mod client_tool_decisions;
 mod client_tool_operations;
 mod mcp_approval_argument;
 mod mcp_file_outputs;
+mod mcp_surface_hints;
 mod model_labels;
 mod preparation_failures;
 mod reminder_tools;
@@ -75,6 +76,7 @@ fn mcp_server_config(
 ) -> McpServerConfig {
     McpServerConfig {
         glossary: Default::default(),
+        surface_hints: false,
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),
@@ -4692,6 +4694,7 @@ async fn continuestream_resumes_a_parked_tool_approval(
         "mock_mcp_approval".to_string(),
         McpServerConfig {
             glossary: Default::default(),
+            surface_hints: false,
             display_name: Some("Approval Probe".into()),
             ..mcp_server_config(
                 &mock_mcp_base_url(),

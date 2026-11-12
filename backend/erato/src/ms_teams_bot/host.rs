@@ -738,7 +738,7 @@ impl Host {
 
 fn teams_request_context() -> GenerationRequestContext {
     GenerationRequestContext {
-        platform: Some(super::TEAMS_PLATFORM.to_string()),
+        platform: Some(super::TEAMS_BOT_PLATFORM.to_string()),
         ..Default::default()
     }
 }

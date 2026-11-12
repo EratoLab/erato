@@ -7,6 +7,7 @@ import { useMessagingStore } from "@/hooks/chat/store/messagingStore";
 import { useTabChatActivity } from "@/hooks/chat/useTabChatActivity";
 import {
   markReviewEnded,
+  markTaskReviewEnded,
   rememberReview,
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -196,6 +197,22 @@ describe("useTabChatActivity", () => {
       });
 
       expect(result.current).toBe("attention");
+    });
+
+    it("asks for attention while one of its tasks waits for a review, and stops once that task's review ran out", () => {
+      const key = reviewLinkKey("task-message", "task-call");
+      rememberReview(key, "handle-1", ["task-chat", "chat-a"]);
+      const { result } = renderHook(() => useTabChatActivity());
+      act(() => {
+        setHidden(true);
+      });
+      expect(result.current).toBe("attention");
+
+      // The task's call ended with its review: nothing is asked any more.
+      act(() => {
+        markTaskReviewEnded(key);
+      });
+      expect(result.current).toBe("idle");
     });
 
     it("carries no marker for a card that only waits", () => {

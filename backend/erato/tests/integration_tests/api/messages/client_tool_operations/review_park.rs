@@ -430,6 +430,7 @@ async fn setup_search_and_paced_task(
             override_tool_annotations: Default::default(),
             tools: Default::default(),
             glossary: Default::default(),
+            surface_hints: false,
         },
     );
     config.mcp_server_permissions.rules.insert(

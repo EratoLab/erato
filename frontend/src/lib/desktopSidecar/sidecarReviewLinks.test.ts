@@ -4,13 +4,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   askForReviewAgain,
   forgetReview,
+  isTaskReview,
   markReviewEnded,
+  markTaskReviewEnded,
   rememberReview,
   reviewHasEnded,
   reviewLink,
   reviewLinkKey,
   useChatsInReview,
   useSidecarReviewLinks,
+  waitsToAskAgain,
 } from "./sidecarReviewLinks";
 
 const STORAGE_KEY = "erato.desktopSidecar.reviewLinks.v1";
@@ -45,6 +48,67 @@ describe("sidecar review links", () => {
     askForReviewAgain(key);
     rerender();
     expect(result.current.size).toBe(0);
+  });
+
+  it("keeps a task's ended review for its parent's item, with no chat waiting on it", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"], {
+      task: true,
+    });
+    const { result, rerender } = renderHook(() => useChatsInReview());
+
+    markTaskReviewEnded(key);
+    rerender();
+    expect(reviewLink(key)).toEqual({
+      state: "ended",
+      task: true,
+      at: expect.any(Number),
+    });
+    expect(isTaskReview(reviewLink(key))).toBe(true);
+    expect(result.current.size).toBe(0);
+  });
+
+  it("keeps a task's review a task's through every way it is marked ended", () => {
+    rememberReview(key, "handle-1", ["task-chat", "origin-chat"], {
+      task: true,
+    });
+    expect(reviewLink(key)).toMatchObject({ state: "open", task: true });
+    expect(isTaskReview(reviewLink(key))).toBe(true);
+    // Open found the review ended before the task's run did.
+    markReviewEnded(key);
+    expect(reviewLink(key)).toEqual({
+      state: "ended",
+      chatIds: ["task-chat", "origin-chat"],
+      task: true,
+      at: expect.any(Number),
+    });
+    // The user's own call is no task's.
+    const own = reviewLinkKey("message-2", "call-2");
+    rememberReview(own, "handle-2", ["chat-1"]);
+    markReviewEnded(own);
+    expect(reviewLink(own)).not.toHaveProperty("task");
+    expect(isTaskReview(reviewLink(own))).toBe(false);
+  });
+
+  it("holds only the user's own call while its review waits to be asked again", () => {
+    const own = {
+      message_id: "message-1",
+      tool_call_id: "call-1",
+    } as const;
+    const task = {
+      ...own,
+      lineage: {
+        owner_chat_id: "origin-chat",
+        owner_message_id: "origin-message",
+        requesting_chat_id: "task-chat",
+        requesting_message_id: "message-1",
+      },
+    };
+    rememberReview(key, "handle-1");
+    expect(waitsToAskAgain(own)).toBe(false);
+    markReviewEnded(key);
+    expect(waitsToAskAgain(own)).toBe(true);
+    // A task's call ends with its review, so its next run says so.
+    expect(waitsToAskAgain(task)).toBe(false);
   });
 
   it("keeps a call's job beyond the page that opened it, with ids only", () => {
@@ -92,8 +156,10 @@ describe("sidecar review links", () => {
       STORAGE_KEY,
       JSON.stringify({
         [key]: { state: "ended", at: Date.now(), chatIds: ["chat-1"] },
+        tasks: { state: "ended", at: Date.now(), task: true },
         broken: { state: "open" },
         badChats: { state: "ended", at: Date.now(), chatIds: "chat-1" },
+        badTask: { state: "open", handle: "h", at: Date.now(), task: "yes" },
       }),
     );
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY }));
@@ -101,8 +167,10 @@ describe("sidecar review links", () => {
       state: "ended",
       chatIds: ["chat-1"],
     });
+    expect(isTaskReview(reviewLink("tasks"))).toBe(true);
     expect(reviewLink("broken")).toBeUndefined();
     expect(reviewLink("badChats")).toBeUndefined();
+    expect(reviewLink("badTask")).toBeUndefined();
   });
 
   it("keeps working for this page where storage is unavailable", () => {

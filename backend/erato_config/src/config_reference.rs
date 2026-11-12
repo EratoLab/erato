@@ -45,6 +45,9 @@ fn map_key_placeholder(path: &[String]) -> String {
         Some(key) if path.len() == 5 && key.starts_with('<') && path[3] == "choice_labels" => {
             "<choice-value>".to_string()
         }
+        Some("surfaces") if path.first().map(String::as_str) == Some("mcp_servers_global") => {
+            "<surface>".to_string()
+        }
         Some("prompt_patterns") => "<pattern-id>".to_string(),
         Some("prompts") => "<prompt-id>".to_string(),
         Some("providers" | "provider") => "<provider-id>".to_string(),
@@ -110,6 +113,8 @@ mod tests {
             &"mcp_servers.<server-id>.override_tool_annotations.destructive_hint".to_string()
         ));
         assert!(keys.contains(&"mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint".to_string()));
+        assert!(keys.contains(&"mcp_servers.<server-id>.surface_hints".to_string()));
+        assert!(keys.contains(&"mcp_servers_global.surfaces.<surface>.accept.[]".to_string()));
         assert!(keys.contains(&"client_tools.tools.<key>.name".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));
         assert!(keys.windows(2).all(|window| window[0] <= window[1]));

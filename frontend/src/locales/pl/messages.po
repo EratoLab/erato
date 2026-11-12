@@ -98,6 +98,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReview"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReviewContinues"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
+msgid "approvalQueue.waitingReviewContinuesAwaitingCall"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ApprovalQueueCard.tsx
 msgid "approvalQueue.waitingTitle"
 msgstr ""
 
@@ -8355,6 +8370,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.ended.description"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/SidecarReviewItem.tsx
+msgid "sidecarReview.ended.taskDescription"
 msgstr ""
 
 #. js-lingui-explicit-id
