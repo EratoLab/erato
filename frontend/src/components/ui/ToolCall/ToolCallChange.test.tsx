@@ -784,6 +784,89 @@ describe("the change card", () => {
     expect(screen.queryByRole("button", { name: /See .* more/ })).toBeNull();
   });
 
+  it("keeps a headline that names the one record a batch of operations edits", () => {
+    const change = readAs({
+      batch: {
+        path: "/patch",
+        name: "Patch",
+        total: 2,
+        same_change: false,
+        rows: [
+          {
+            number: 1,
+            action: "update",
+            effects: [
+              {
+                path: "/patch/0/new_string",
+                name: "New string",
+                raw_name: "new_string",
+                effect: "changed",
+                values: [{ text: "Export hangs" }],
+                old: { text: "Export stalls" },
+              },
+            ],
+          },
+          {
+            number: 2,
+            action: "create",
+            effects: [
+              {
+                path: "/patch/1/text",
+                name: "Text",
+                raw_name: "text",
+                effect: "set",
+                values: [{ text: "See the attached log." }],
+              },
+            ],
+          },
+        ],
+        operations: [
+          { action: "create", count: 1 },
+          { action: "update", count: 1 },
+        ],
+        read_all: true,
+      },
+    });
+    const gist = gistFor(change);
+    render(
+      <I18nProvider i18n={i18n}>
+        <ToolCallChangeCard
+          gist={{
+            ...gist,
+            kind: "task",
+            items: [
+              {
+                ...gist.items[0],
+                names: [
+                  {
+                    text: "Export stalls at 90 percent",
+                    origin: "resolved",
+                    path: "/id",
+                    written: "TASK-12",
+                    writtenId: true,
+                    truncated: false,
+                  },
+                ],
+                hiddenIdPaths: [],
+              },
+            ],
+          }}
+          change={change}
+          phase="ask"
+          placeInSource
+        />
+      </I18nProvider>,
+    );
+    // The operations edit parts of that one record: without its name the card
+    // would not say which record they edit.
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      /Export stalls at 90 percent/,
+    );
+    expect(screen.getByTestId("tool-call-change-batch")).toHaveTextContent(
+      /2 operations in one call: 1 update, 1 create/,
+    );
+  });
+
   it("makes only overflowing boxes tab stops", () => {
     renderCard({ effects: [set(1)], counts: { set: 1 } });
     expect(screen.getByTestId("tool-call-gist-scroll")).not.toHaveAttribute(

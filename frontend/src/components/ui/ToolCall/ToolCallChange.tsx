@@ -1680,13 +1680,17 @@ export const ToolCallChangeCard = ({
     toolTitle !== undefined && toolTitle.length > 0 && namesOnlyAnItem(gist);
   // Operations code counted say more than a verb a mapping picked: a batch
   // that deletes two rows is no "Update". A headline that still names where
-  // the call goes keeps it.
+  // the call goes, or the one record whose parts the operations edit, keeps it.
   const lead = gist.items.at(0);
+  const leadHeadline =
+    lead === undefined ? undefined : headlineItemOf(gist, lead, placeInSource);
+  const namesOneRecord =
+    leadHeadline?.count === 1 && leadHeadline.names.length > 0;
   const operationsHead =
     change.batch &&
     change.batch.operations.length > 1 &&
-    lead !== undefined &&
-    headlineItemOf(gist, lead, placeInSource).where.length === 0
+    leadHeadline?.where.length === 0 &&
+    !namesOneRecord
       ? batchOperationsLine(change.batch)
       : undefined;
   return (
