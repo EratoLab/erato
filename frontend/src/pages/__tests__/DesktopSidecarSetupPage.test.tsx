@@ -82,6 +82,27 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     vi.restoreAllMocks();
   });
 
+  it.each([
+    [0, "0 B"],
+    [512, "512 B"],
+    [1024, "1.0 KB"],
+    [1536, "1.5 KB"],
+    [1024 * 1024, "1.0 MB"],
+    [25.5 * 1024 * 1024, "25.5 MB"],
+  ])("shows the download size for %i bytes as %s", (size, expectedSize) => {
+    const target = macTarget("aarch64");
+    target.files[0].size = size;
+    vi.mocked(useDistribution).mockReturnValue({
+      data: { targets: [target] },
+      error: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDistribution>);
+
+    renderOnMac();
+
+    expect(screen.getByText(expectedSize)).toBeInTheDocument();
+  });
+
   it("offers Apple Silicon first and explains how to check when the chip is unknown", async () => {
     renderOnMac();
 
