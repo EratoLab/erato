@@ -39,10 +39,10 @@ import { JOB_POLL_INTERVAL_MS } from "./sidecarJobs";
 import {
   askForReviewAgain,
   rememberReview,
-  reviewHasEnded,
   reviewLink,
   reviewLinkKey,
   useSidecarReviewLinks,
+  waitsToAskAgain,
 } from "./sidecarReviewLinks";
 import jobEnvelope from "../../../../desktop-sidecar-protocol/conformance/fixtures/job-envelope.json";
 import jobsExample from "../../../../desktop-sidecar-protocol/examples/jobs.json";
@@ -1164,6 +1164,24 @@ describe("desktop sidecar tools in strict mode", () => {
                 { ok: false, error, stillWaiting: true }
               : { ok: false, error },
         );
+        // A review that ran out stays on the slot: the user's own with the
+        // chat that waits to ask again, a task's marked as the task's, for
+        // its own chat and its parent's item, with no chat waiting, since its
+        // call ended with it.
+        const link = reviewLink(reviewLinkKey("message", "call"));
+        if (state !== "expired") expect(link).toBeUndefined();
+        else if (callContext === grantContext)
+          expect(link).toEqual({
+            state: "ended",
+            task: true,
+            at: expect.any(Number),
+          });
+        else
+          expect(link).toEqual({
+            state: "ended",
+            at: expect.any(Number),
+            chatIds: ["chat"],
+          });
         expect(job.options.approveFiles).not.toHaveBeenCalled();
         expect(job.options.uploadAttachment).not.toHaveBeenCalled();
       }
@@ -1373,8 +1391,7 @@ describe("desktop sidecar tools in strict mode", () => {
         () => binding,
         tool.isAvailable,
         () => false,
-        ({ message_id, tool_call_id }) =>
-          reviewHasEnded(message_id, tool_call_id),
+        waitsToAskAgain,
       ),
     );
     const coordinator = new ClientOperationCoordinator(
@@ -1462,8 +1479,14 @@ describe("desktop sidecar tools in strict mode", () => {
             ? ["jobs.status.v1"]
             : ["jobs.start.v1", "jobs.review.v1", "jobs.status.v1"],
         );
-        // The call is over: nothing is left for the chat to open again.
-        expect(reviewLink(key)).toBeUndefined();
+        // The call is over: nothing is left to ask again. Its review stays,
+        // marked as the task's, so its own chat and its parent's item say it
+        // ended.
+        expect(reviewLink(key)).toEqual({
+          state: "ended",
+          task: true,
+          at: expect.any(Number),
+        });
       } finally {
         resetClientToolRegistryForTests();
       }

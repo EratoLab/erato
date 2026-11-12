@@ -2,6 +2,11 @@ import { plural, t } from "@lingui/core/macro";
 import { useCallback, useId, useRef } from "react";
 
 import {
+  reviewLinkKey,
+  useSidecarReviewLinks,
+} from "@/lib/desktopSidecar/sidecarReviewLinks";
+
+import {
   APPROVAL_CARD_SHELL_CLASS,
   ApprovalBulkActions,
   stagedItemPresentation,
@@ -22,6 +27,7 @@ import type {
   ApprovalScopeOffer,
   StagedDecisions,
 } from "./approvalItems";
+import type { SidecarReviewLink } from "@/lib/desktopSidecar/sidecarReviewLinks";
 import type {
   ContentPartToolApprovalRequest,
   ToolApprovalDecision,
@@ -38,7 +44,9 @@ import type {
  * choice comes first. Its Stop answers the whole stop at once and sends the
  * tasks' questions back to their own chats, so that stop offers no bulk
  * answers. Tasks that wait for a call on the device are listed below without
- * decisions: the response goes on once they finish.
+ * decisions: the response goes on once they finish. A task whose call waits
+ * for its review in the Erato desktop app shows that review, so the card says
+ * the task waits for the user, not that it goes on.
  * A stop behind the response's own waiting client tool call says the tasks go
  * on, but the response only continues once that call has finished too.
  *
@@ -95,6 +103,17 @@ export const ApprovalQueueCard = ({
   const ordinal = position + 1;
   const remaining = itemCount - ordinal;
   const waitingCount = waiting.length;
+  // A waiting task whose call is in review waits for the user, not on its own.
+  const reviewCount = useSidecarReviewLinks(
+    ({ links }) =>
+      waiting.filter(({ child }) => {
+        if (!child) return false;
+        const link = links[
+          reviewLinkKey(child.child_message_id, child.child_tool_call_id)
+        ] as SidecarReviewLink | undefined;
+        return link?.state === "open";
+      }).length,
+  );
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement | null>(null);
   const focusCard = useCallback(() => {
@@ -163,22 +182,52 @@ export const ApprovalQueueCard = ({
               })}
             </p>
             <p className="text-sm text-theme-fg-secondary">
-              {awaitsOwnCall
-                ? t({
-                    id: "approvalQueue.waitingDescriptionAwaitingCall",
-                    message: plural(waitingCount, {
-                      one: "It continues on its own once the task and the connected app have finished.",
+              {reviewCount > 0 ? (
+                <>
+                  {t({
+                    id: "approvalQueue.waitingReview",
+                    message: plural(reviewCount, {
+                      one: "A task waits for your review in the Erato desktop app.",
                       other:
-                        "It continues on its own once the tasks and the connected app have finished.",
+                        "# tasks wait for your review in the Erato desktop app.",
                     }),
-                  })
-                : t({
-                    id: "approvalQueue.waitingDescription",
-                    message: plural(waitingCount, {
-                      one: "It continues on its own once the task finishes.",
-                      other: "It continues on its own once they finish.",
-                    }),
-                  })}
+                  })}{" "}
+                  {awaitsOwnCall
+                    ? t({
+                        id: "approvalQueue.waitingReviewContinuesAwaitingCall",
+                        message: plural(waitingCount, {
+                          one: "The response continues once the task and the connected app have finished.",
+                          other:
+                            "The response continues once the tasks and the connected app have finished.",
+                        }),
+                      })
+                    : t({
+                        id: "approvalQueue.waitingReviewContinues",
+                        message: plural(waitingCount, {
+                          one: "The response continues once the task finishes.",
+                          other:
+                            "The response continues once the tasks finish.",
+                        }),
+                      })}
+                </>
+              ) : awaitsOwnCall ? (
+                t({
+                  id: "approvalQueue.waitingDescriptionAwaitingCall",
+                  message: plural(waitingCount, {
+                    one: "It continues on its own once the task and the connected app have finished.",
+                    other:
+                      "It continues on its own once the tasks and the connected app have finished.",
+                  }),
+                })
+              ) : (
+                t({
+                  id: "approvalQueue.waitingDescription",
+                  message: plural(waitingCount, {
+                    one: "It continues on its own once the task finishes.",
+                    other: "It continues on its own once they finish.",
+                  }),
+                })
+              )}
             </p>
           </>
         )}

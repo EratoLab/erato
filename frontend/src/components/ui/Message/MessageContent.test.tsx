@@ -13,6 +13,7 @@ import { useClientToolFileApprovalStore } from "@/hooks/chat/store/clientToolFil
 import {
   askForReviewAgain,
   markReviewEnded,
+  markTaskReviewEnded,
   rememberReview,
   reviewLinkKey,
   useSidecarReviewLinks,
@@ -2715,6 +2716,24 @@ describe("a turn parked on a review in the Erato desktop app", () => {
       "This review has ended",
     );
     expect(screen.getByTestId("sidecar-review-ask-again")).toBeInTheDocument();
+  });
+
+  it("says a task's review ended in the task's own chat, with nothing to ask again", () => {
+    // The task's row still ends in the marker while its continuation runs,
+    // or for good once that continuation failed.
+    rememberReview(key, "handle-1", ["chat", "parent-chat"], { task: true });
+    markTaskReviewEnded(key);
+    renderWithTheme(
+      <MessageContent messageId="message-1" content={[search, pending]} />,
+    );
+    const item = screen.getByTestId("sidecar-review-item");
+    expect(item).toHaveAttribute("data-review-state", "ended");
+    expect(item).toHaveTextContent("This review has ended");
+    expect(item).toHaveTextContent(
+      "Nothing was shared. The task goes on without this result.",
+    );
+    expect(screen.queryByTestId("sidecar-review-ask-again")).toBeNull();
+    expect(screen.queryByTestId("sidecar-review-open")).toBeNull();
   });
 
   it("says on the call's step that its review ended, as the item does", () => {

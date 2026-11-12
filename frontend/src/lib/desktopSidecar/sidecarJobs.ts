@@ -240,6 +240,9 @@ export async function runSidecarJob(
             [chatId, ownerChatId].filter(
               (id): id is string => id !== undefined,
             ),
+            // Only a task's call runs for another chat. Every chat that shows
+            // the review reads this, not where it is shown.
+            { task: ownerChatId !== undefined },
           );
         // The decision is made only in the native window; this opens it.
         if (client.supports("jobs.review.v1"))

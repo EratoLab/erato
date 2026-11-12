@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 
+import type { OperationRequest } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+
 /**
  * Which review each tool call waits on, kept beyond the page that opened it:
  * a review goes on while no page is open, so the next page finds the decision
@@ -14,10 +16,16 @@ export type SidecarReviewLink = { at: number } & (
       handle: string;
       /** The chats that wait for this review: the call's and the one it runs for. */
       chatIds?: string[];
+      /**
+       * The call is a task's. Its call ends with its review, so no chat that
+       * shows the review offers to ask again once it ended.
+       */
+      task?: true;
     }
-  // The job ended without a decision, so the call waits for the user to ask
-  // again, and the same chats wait with it.
-  | { state: "ended"; chatIds?: string[] }
+  // The job ended without a decision, so the user's own call waits for the
+  // user to ask again, and the same chats wait with it. A task's call ends
+  // with its review, so once that call has its answer the link names no chats.
+  | { state: "ended"; chatIds?: string[]; task?: true }
   // The user asked again; the call's next run starts a new review.
   | { state: "asking" }
 );
@@ -39,15 +47,21 @@ const KEEP_MS = 25 * 60 * 60 * 1000;
 
 const isLink = (value: unknown): value is SidecarReviewLink => {
   if (typeof value !== "object" || value === null) return false;
-  const { at, state, handle, chatIds } = value as Record<string, unknown>;
-  const ids = chatIds === undefined || Array.isArray(chatIds);
+  const { at, state, handle, chatIds, task } = value as Record<string, unknown>;
+  const kept =
+    (chatIds === undefined || Array.isArray(chatIds)) &&
+    (task === undefined || task === true);
   return (
     typeof at === "number" &&
     (state === "asking" ||
-      (state === "ended" && ids) ||
-      (state === "open" && typeof handle === "string" && ids))
+      (state === "ended" && kept) ||
+      (state === "open" && typeof handle === "string" && kept))
   );
 };
+
+/** Whether `link` is a task's call, whose call ends with its review. */
+export const isTaskReview = (link: SidecarReviewLink | undefined): boolean =>
+  (link?.state === "open" || link?.state === "ended") && link.task === true;
 
 /** The chats that wait while `link`'s call waits on the user. */
 const waitingChatIds = (link: SidecarReviewLink | undefined): string[] =>
@@ -115,15 +129,20 @@ export const rememberReview = (
   key: string,
   handle: string,
   chatIds?: string[],
+  { task = false }: { task?: boolean } = {},
 ): void =>
   set(key, {
     state: "open",
     handle,
     at: Date.now(),
     ...(chatIds?.length ? { chatIds } : {}),
+    ...(task ? { task } : {}),
   });
 
-/** The chats the review named keep waiting, now for the user to ask again. */
+/**
+ * The chats the review named keep waiting, now for the user to ask again. A
+ * task's link stays a task's, so no chat offers to ask again for it.
+ */
 export const markReviewEnded = (key: string): void =>
   write((links) => {
     const chatIds = waitingChatIds(links[key]);
@@ -133,9 +152,19 @@ export const markReviewEnded = (key: string): void =>
         state: "ended",
         at: Date.now(),
         ...(chatIds.length ? { chatIds } : {}),
+        ...(isTaskReview(links[key]) ? { task: true } : {}),
       },
     };
   });
+
+/**
+ * A task's review ended without a decision. Its call ends with it, so no chat
+ * waits on the user for it any more; the link stays, naming no chats, so the
+ * task's own chat and the item of the response the task runs for can say the
+ * review ended, with nothing to ask again.
+ */
+export const markTaskReviewEnded = (key: string): void =>
+  set(key, { state: "ended", task: true, at: Date.now() });
 
 export const askForReviewAgain = (key: string): void =>
   set(key, { state: "asking", at: Date.now() });
@@ -164,3 +193,17 @@ export const reviewHasEnded = (
   toolCallId: string,
 ): boolean =>
   reviewLink(reviewLinkKey(messageId, toolCallId))?.state === "ended";
+
+/**
+ * Whether a parked call waits for the user to ask again, so no run may claim
+ * it. Only the user's own call does: a task's call ends with its review, so
+ * its next run reports that instead of waiting.
+ */
+export const waitsToAskAgain = ({
+  message_id,
+  tool_call_id,
+  lineage,
+}: Pick<
+  OperationRequest,
+  "message_id" | "tool_call_id" | "lineage"
+>): boolean => !lineage && reviewHasEnded(message_id, tool_call_id);
