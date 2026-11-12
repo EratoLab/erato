@@ -324,6 +324,7 @@ async fn test_approval_continuation_completes_in_teams(pool: Pool<Postgres>) {
         erato::config::McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),

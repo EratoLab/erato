@@ -581,6 +581,7 @@ fn gate_mock_mcp_tools_on_approval(row: &HostRow, config: &mut erato::config::Ap
         McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),

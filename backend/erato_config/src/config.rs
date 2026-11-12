@@ -97,6 +97,7 @@ pub fn validate_mcp_server_ids(
             ));
         }
         server.glossary.validate(id)?;
+        server.mcp_apps.validate(id)?;
     }
 
     Ok(())
@@ -4095,6 +4096,11 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub surface_hints: bool,
+    /// Interactive views (MCP Apps) that this server's tools declare. Off by
+    /// default: the server's tools then work as they always have.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub mcp_apps: McpAppsConfig,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -4110,6 +4116,58 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+/// MCP Apps for one server: the `ui://` view a tool names in
+/// `_meta.ui.resourceUri` is read with `resources/read` when the tool is
+/// called, and the web app shows it beside the call.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpAppsConfig {
+    /// Whether the views this server's tools declare are read and offered to
+    /// the web app. A view never reaches the model.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub enabled: bool,
+    /// The origin the web app loads this server's views from, such as
+    /// `https://mcp-apps.example.com`: `http` or `https`, a host and an
+    /// optional port, nothing else. It must not be Erato's own origin.
+    /// Required when `enabled` is set.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sandbox_origin: Option<String>,
+}
+
+impl McpAppsConfig {
+    /// Called from both config load paths, like `validate_mcp_server_ids`.
+    fn validate(&self, server_id: &str) -> Result<(), Report> {
+        let Some(origin) = &self.sandbox_origin else {
+            return if self.enabled {
+                Err(eyre!(
+                    "MCP server '{server_id}': mcp_apps.sandbox_origin is required when mcp_apps.enabled is set"
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if !is_web_origin(origin) {
+            return Err(eyre!(
+                "MCP server '{server_id}': mcp_apps.sandbox_origin '{}' must be an http or https origin written as the browser does, such as https://mcp-apps.example.com",
+                origin.escape_debug()
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Whether `value` is an `http` or `https` origin exactly as a browser
+/// serializes it: scheme, host and a non-default port, without user info,
+/// path, query or fragment.
+fn is_web_origin(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == value
 }
 
 /// Words for a server's machine names, written by the operator. Used when an

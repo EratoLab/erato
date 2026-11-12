@@ -18,7 +18,8 @@ use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{
         CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListToolsResult,
-        MetaObject, PaginatedRequestParams, ProgressNotificationParam, RequestMetaObject,
+        MetaObject, PaginatedRequestParams, ProgressNotificationParam, ReadResourceRequestParams,
+        ReadResourceResponse, ReadResourceResult, RequestMetaObject, ResourceContents,
         ServerCapabilities, ServerInfo,
     },
     schemars,
@@ -1185,6 +1186,141 @@ impl ServerHandler for UntrustedTextServer {
     }
 }
 
+/// MIME type of an MCP Apps view.
+pub const VIEW_MIME_TYPE: &str = "text/html;profile=mcp-app";
+/// The counter view, a minimal MCP Apps view: it shows the `start` the tool
+/// was called with and counts up on a click.
+pub const COUNTER_VIEW_URI: &str = "ui://mock/counter";
+/// A view served as plain `text/html`, which a host refuses.
+pub const WRONG_TYPE_VIEW_URI: &str = "ui://mock/wrong-type";
+/// A view larger than a host keeps.
+pub const OVERSIZED_VIEW_URI: &str = "ui://mock/oversized";
+/// Size of the oversized view, above the 8 MiB Erato keeps.
+pub const OVERSIZED_VIEW_BYTES: usize = 9 * 1024 * 1024;
+/// A view whose `resources/read` never answers.
+pub const SLOW_VIEW_URI: &str = "ui://mock/slow";
+/// The tool that shows the counter view.
+pub const COUNTER_TOOL_NAME: &str = "show_counter";
+/// Text that only the counter view's document holds.
+pub const COUNTER_VIEW_MARKER: &str = "mock-counter-view";
+pub const COUNTER_VIEW_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>mock-counter-view</title></head>
+<body>
+<p>Count: <output id="count">0</output> <button id="add" type="button">+1</button></p>
+<script>
+const count = document.getElementById("count");
+document.getElementById("add").onclick = () => { count.value = Number(count.value) + 1; };
+window.addEventListener("message", ({ data }) => {
+  if (data?.id === 1 && data.result) parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+  if (data?.method === "ui/notifications/tool-input") count.value = Number(data.params?.arguments?.start ?? 0);
+});
+parent.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {
+  protocolVersion: "2026-01-26", appCapabilities: {}, appInfo: { name: "mock-counter", version: "1.0.0" } } }, "*");
+</script>
+</body>
+</html>
+"#;
+
+/// What the counter view's `_meta.ui` declares: no network, and a border.
+pub fn counter_view_ui_meta() -> serde_json::Value {
+    json!({"csp": {"connectDomains": [], "resourceDomains": []}, "prefersBorder": true})
+}
+
+/// Each tool of the apps server and the view it declares.
+const APP_TOOLS: [(&str, &str); 4] = [
+    (COUNTER_TOOL_NAME, COUNTER_VIEW_URI),
+    ("show_wrong_type_view", WRONG_TYPE_VIEW_URI),
+    ("show_oversized_view", OVERSIZED_VIEW_URI),
+    ("show_slow_view", SLOW_VIEW_URI),
+];
+
+fn app_tool(name: &str, view_uri: &str) -> rmcp::model::Tool {
+    let schema = json!({"type": "object", "properties": {"start": {"type": "integer"}}});
+    let mut tool = rmcp::model::Tool::new(
+        name.to_string(),
+        "Shows a counter that starts at `start`",
+        schema.as_object().unwrap().clone(),
+    );
+    let meta = json!({"ui": {"resourceUri": view_uri}});
+    tool.meta = Some(MetaObject(meta.as_object().unwrap().clone()));
+    tool
+}
+
+/// Tools that declare an MCP Apps view (`_meta.ui.resourceUri`), and the
+/// views, read with `resources/read`: the counter, one of the wrong type, one
+/// too large and one that never answers.
+#[derive(Clone)]
+struct AppsServer;
+
+impl ServerHandler for AppsServer {
+    fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<CallToolResponse, McpError>> + Send + '_ {
+        let start = request
+            .arguments
+            .as_ref()
+            .and_then(|arguments| arguments.get("start"))
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        std::future::ready(Ok(CallToolResult::success(vec![ContentBlock::text(
+            format!("Counter started at {start}."),
+        )])
+        .into()))
+    }
+
+    fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> impl std::future::Future<Output = Result<ListToolsResult, McpError>> + Send + '_ {
+        std::future::ready(Ok(ListToolsResult {
+            tools: APP_TOOLS
+                .iter()
+                .map(|(name, view_uri)| app_tool(name, view_uri))
+                .collect(),
+            ..Default::default()
+        }))
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, McpError> {
+        let (mime_type, text) = match request.uri.as_str() {
+            COUNTER_VIEW_URI => (VIEW_MIME_TYPE, COUNTER_VIEW_HTML.to_string()),
+            WRONG_TYPE_VIEW_URI => ("text/html", COUNTER_VIEW_HTML.to_string()),
+            OVERSIZED_VIEW_URI => (VIEW_MIME_TYPE, "x".repeat(OVERSIZED_VIEW_BYTES)),
+            SLOW_VIEW_URI => std::future::pending().await,
+            _ => {
+                return Err(McpError::resource_not_found(
+                    format!("No view at {}", request.uri),
+                    None,
+                ))
+            }
+        };
+        let mut contents =
+            ResourceContents::text(text, request.uri.clone()).with_mime_type(mime_type);
+        if request.uri == COUNTER_VIEW_URI {
+            let meta = json!({"ui": counter_view_ui_meta()});
+            contents = contents.with_meta(MetaObject(meta.as_object().unwrap().clone()));
+        }
+        Ok(ReadResourceResult::new(vec![contents]).into())
+    }
+
+    fn get_info(&self) -> ServerInfo {
+        let mut info = server_info("Mock MCP apps server");
+        info.capabilities = ServerCapabilities::builder()
+            .enable_tools()
+            .enable_resources()
+            .build();
+        info
+    }
+}
+
 #[derive(Clone)]
 struct EmptyToolServer;
 
@@ -1273,6 +1409,14 @@ impl<S: ServerHandler> ServerHandler for ProtocolServer<S> {
             result.cache_scope = Some(rmcp::model::CacheScope::Private);
         }
         Ok(result)
+    }
+
+    async fn read_resource(
+        &self,
+        request: ReadResourceRequestParams,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ReadResourceResponse, McpError> {
+        self.inner.read_resource(request, context).await
     }
 
     fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
@@ -1559,6 +1703,17 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
             tools: &["read_record", "update_record", "update_gizmo"],
         },
         MechanismSummary {
+            name: "Apps server",
+            description: "Tools that declare MCP Apps views: ui://mock/counter, one served as plain HTML, one too large and one that never answers",
+            endpoint: "Streamable HTTP /mcp/apps",
+            tools: &[
+                COUNTER_TOOL_NAME,
+                "show_wrong_type_view",
+                "show_oversized_view",
+                "show_slow_view",
+            ],
+        },
+        MechanismSummary {
             name: "Untrusted text server",
             description: "Tool text with markup, bidi overrides, invisible and control characters and an oversized body",
             endpoint: "Streamable HTTP /mcp/untrusted-text",
@@ -1658,6 +1813,11 @@ fn log_startup(addr: &str, mechanisms: &[MechanismSummary]) {
         "  {} {}",
         "MCP HTTP".bright_cyan(),
         "/mcp/records".bright_yellow()
+    );
+    println!(
+        "  {} {}",
+        "MCP HTTP".bright_cyan(),
+        "/mcp/apps".bright_yellow()
     );
     println!(
         "  {} {}",
@@ -1778,6 +1938,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
         create_streamable_http_service(mode, || Ok(ApprovalPolicyServer::new()));
     let untrusted_text_service = create_streamable_http_service(mode, || Ok(UntrustedTextServer));
     let records_service = create_streamable_http_service(mode, || Ok(RecordsServer::new()));
+    let apps_service = create_streamable_http_service(mode, || Ok(AppsServer));
 
     let none_auth_service = create_streamable_http_service(mode, || Ok(NoneAuthProbeServer::new()));
     let fixed_auth_service =
@@ -1806,6 +1967,7 @@ pub fn app_with_protocol(mode: MockProtocolMode) -> Router {
         .nest_service("/approval-policy", approval_policy_service)
         .nest_service("/untrusted-text", untrusted_text_service)
         .nest_service("/records", records_service)
+        .nest_service("/apps", apps_service)
         .route(
             "/auth-none",
             any(move |request| {
@@ -1907,6 +2069,14 @@ mod tests {
             .result
             .expect("completed research should have a result")
             .contains("latest battery research"));
+    }
+
+    /// MCP Apps hosts refuse a `ui/initialize` that does not name the view
+    /// in `appInfo`.
+    #[test]
+    fn the_counter_view_names_itself_in_app_info() {
+        assert!(COUNTER_VIEW_HTML.contains(r#"appInfo: { name: "mock-counter""#));
+        assert!(!COUNTER_VIEW_HTML.contains("clientInfo"));
     }
 
     #[test]

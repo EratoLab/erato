@@ -114,6 +114,7 @@ mod tests {
         ));
         assert!(keys.contains(&"mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint".to_string()));
         assert!(keys.contains(&"mcp_servers.<server-id>.surface_hints".to_string()));
+        assert!(keys.contains(&"mcp_servers.<server-id>.mcp_apps.sandbox_origin".to_string()));
         assert!(keys.contains(&"mcp_servers_global.surfaces.<surface>.accept.[]".to_string()));
         assert!(keys.contains(&"client_tools.tools.<key>.name".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));

@@ -1197,6 +1197,10 @@ mod tests {
                 title: Some("SYNTHETIC-LINK-TITLE".to_string()),
             }],
             failure: None,
+            view: Some(crate::models::message::ToolResultView {
+                server_id: "records".to_string(),
+                uri: "ui://records/SYNTHETIC-VIEW".to_string(),
+            }),
         });
 
         let replayed = replay_assistant_content(
@@ -1214,6 +1218,7 @@ mod tests {
         let snapshot = serde_json::to_string(&replayed).unwrap();
         assert!(!snapshot.contains("SYNTHETIC-LINK-TITLE"), "{snapshot}");
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
+        assert!(!snapshot.contains("SYNTHETIC-VIEW"), "{snapshot}");
     }
 
     #[test]

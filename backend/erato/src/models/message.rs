@@ -489,6 +489,11 @@ pub struct ToolResultDetails {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub failure: Option<ToolCallFailure>,
+    /// The interactive view (MCP Apps) the tool declares, set when its server
+    /// enables `mcp_apps` and the view was read and accepted for this call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub view: Option<ToolResultView>,
 }
 
 impl ToolResultDetails {
@@ -496,8 +501,20 @@ impl ToolResultDetails {
         Self {
             links: Vec::new(),
             failure: Some(failure),
+            view: None,
         }
     }
+}
+
+/// Where the web app gets a call's view: `GET
+/// /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
+/// HTML and its `_meta.ui`. The view is shown with the call's `input` and
+/// `output`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolResultView {
+    pub server_id: String,
+    /// The view's `ui://` URI, as the tool declares it.
+    pub uri: String,
 }
 
 /// How a call failed when Erato, not the tool, wrote its error.

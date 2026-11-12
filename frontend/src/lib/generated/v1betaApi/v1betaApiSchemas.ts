@@ -2576,6 +2576,36 @@ export type ListShareGrantsResponse = {
   grants: ShareGrant[];
 };
 
+/**
+ * A tool's interactive view (MCP Apps), for the web app to show in a
+ * sandboxed frame loaded from `sandbox_origin`, with the tool call's
+ * `input` and `output`.
+ */
+export type McpAppViewResponse = {
+  /**
+   * The view document (`text/html;profile=mcp-app`), at most 8 MiB with
+   * `ui`. Only ever shown inside the frame on `sandbox_origin`, never on
+   * Erato's own origin.
+   */
+  html: string;
+  /**
+   * The origin this server's views are loaded from
+   * (`mcp_servers.<id>.mcp_apps.sandbox_origin`).
+   */
+  sandbox_origin: string;
+  /**
+   * The resource's `_meta.ui` as the server declared it: `csp`
+   * (`connectDomains`, `resourceDomains`, `frameDomains`,
+   * `baseUriDomains`), `permissions`, `domain` and `prefersBorder`.
+   * Absent when the server declared none: the view then gets no network.
+   */
+  ui?: Record<string, any>;
+  /**
+   * The view's `ui://` URI.
+   */
+  uri: string;
+};
+
 export type McpServerStatus = {
   authentication_mode: string;
   connection_status: McpServerStatusValue;
@@ -5228,6 +5258,7 @@ export type ToolResultDetails = {
    */
   failure?: ToolCallFailure;
   links?: ToolResultLink[];
+  view?: ToolResultView;
 };
 
 /**
@@ -5248,6 +5279,20 @@ export type ToolResultLink = {
   matches_server_host: boolean;
   name?: string;
   title?: string;
+  uri: string;
+};
+
+/**
+ * Where the web app gets a call's view: `GET
+ * /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
+ * HTML and its `_meta.ui`. The view is shown with the call's `input` and
+ * `output`.
+ */
+export type ToolResultView = {
+  server_id: string;
+  /**
+   * The view's `ui://` URI, as the tool declares it.
+   */
   uri: string;
 };
 

@@ -28,6 +28,71 @@ fn surface_hints_are_opt_in() {
     assert!(parse_global("").unwrap().surfaces.is_empty());
 }
 
+/// Whether a server with these settings passes validation.
+fn validates(settings: &str) -> bool {
+    let server = parse(settings).unwrap();
+    validate_mcp_server_ids(&HashMap::from([("charts".into(), server)])).is_ok()
+}
+
+#[test]
+fn mcp_apps_are_opt_in_and_need_a_sandbox_origin() {
+    let server = parse("").unwrap();
+    assert!(!server.mcp_apps.enabled);
+    assert_eq!(server.mcp_apps.sandbox_origin, None);
+    assert!(validates(""));
+
+    let server =
+        parse("[mcp_apps]\nenabled = true\nsandbox_origin = 'https://mcp-apps.example.com'")
+            .unwrap();
+    assert!(server.mcp_apps.enabled);
+    assert_eq!(
+        server.mcp_apps.sandbox_origin.as_deref(),
+        Some("https://mcp-apps.example.com")
+    );
+    assert!(validates(
+        "[mcp_apps]\nenabled = true\nsandbox_origin = 'https://mcp-apps.example.com'"
+    ));
+    assert!(!validates("[mcp_apps]\nenabled = true"));
+    // An origin set while the switch is off is still checked.
+    assert!(!validates(
+        "[mcp_apps]\nsandbox_origin = 'mcp-apps.example.com'"
+    ));
+    assert!(parse("[mcp_apps]\nenabled = true\norigin = 'https://a.example.com'").is_err());
+}
+
+#[test]
+fn the_sandbox_origin_is_an_http_or_https_origin_as_the_browser_writes_it() {
+    let with_origin = |origin: &str| {
+        validates(&format!(
+            "[mcp_apps]\nenabled = true\nsandbox_origin = '{origin}'"
+        ))
+    };
+    for valid in [
+        "https://mcp-apps.example.com",
+        "https://mcp-apps.example.com:8443",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ] {
+        assert!(with_origin(valid), "{valid}");
+    }
+    for invalid in [
+        "",
+        "mcp-apps.example.com",
+        "https://mcp-apps.example.com/",
+        "https://mcp-apps.example.com/views",
+        "https://mcp-apps.example.com?x=1",
+        "https://mcp-apps.example.com#x",
+        "https://user@mcp-apps.example.com",
+        "https://MCP-Apps.example.com",
+        "https://mcp-apps.example.com:443",
+        "ftp://mcp-apps.example.com",
+        "file:///tmp/views",
+        "data:text/html,x",
+    ] {
+        assert!(!with_origin(invalid), "{invalid}");
+    }
+}
+
 #[test]
 fn configured_surface_lists_keep_their_order_and_are_validated() {
     let global = parse_global(

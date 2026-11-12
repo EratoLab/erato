@@ -287,6 +287,20 @@ A tool call to that server then carries `chat.erato/surface` in its `_meta`, for
 
 Each surface has a built-in list, which `mcp_servers_global.surfaces.<surface>.accept` replaces. See [`surface_hints`](../configuration#mcp_serversserver-idsurface_hints) and [`mcp_servers_global.surfaces`](../configuration#mcp_servers_globalsurfaces) in the Configuration Reference.
 
+### Interactive views (MCP Apps)
+
+A tool can declare an interactive view, following the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) extension: a `ui://` resource named in the tool's `_meta.ui.resourceUri`, served as `text/html;profile=mcp-app`. Enable it per server, with the origin the web app loads that server's views from:
+
+```toml
+[mcp_servers.charts.mcp_apps]
+enabled = true
+sandbox_origin = "https://mcp-apps.example.com"
+```
+
+When such a tool is called, Erato reads its view with `resources/read`, for stateless and legacy servers alike, once per server and URI for as long as the tool list it was read under stays fresh. The call's row then names the view in `result_details.view`, beside the call's input and output, so a reopened chat names it too. The web app fetches the view's HTML and its `_meta.ui`, including the CSP the view asks for, from `GET /api/v1beta/me/mcp_servers/<server-id>/app_view?uri=<ui-uri>`. A view of another MIME type, larger than 8 MiB or not read within 10 seconds is logged and left out, and the call works as before. The model never sees a view: the tool definitions it is offered are unchanged, and nothing of the view is part of the tool result it reads.
+
+The web app does not show views yet, and other surfaces ignore them and keep the static files a tool returns. Servers without `mcp_apps` are unaffected. See [`mcp_apps`](../configuration#mcp_serversserver-idmcp_apps) in the Configuration Reference.
+
 ## Access to MCP servers
 
 Authentication controls how Erato connects to an MCP server. Access control decides which users are allowed to see and use that server in the first place.

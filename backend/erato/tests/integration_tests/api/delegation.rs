@@ -2366,6 +2366,7 @@ async fn delegate_one_probe_call(
         erato::config::McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -7028,6 +7029,7 @@ async fn test_continued_turn_does_not_reoffer_the_delegation_tool(pool: Pool<Pos
         erato::config::McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -7716,6 +7718,7 @@ fn gate_mock_mcp_tools_on_approval(config: &mut erato::config::AppConfig) {
         erato::config::McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -8535,6 +8538,7 @@ fn allow_mcp_server(config: &mut erato::config::AppConfig, id: &str, path: &str)
         erato::config::McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             url: format!("{}{path}", mock_mcp_base_url()),
@@ -9346,6 +9350,7 @@ async fn a_task_that_spends_its_server_budget_finishes_with_a_partial_answer(poo
                 erato::config::McpServerConfig {
                     glossary: Default::default(),
                     surface_hints: false,
+                    mcp_apps: Default::default(),
                     display_name: None,
                     approval_argument: None,
                     protocol_mode: Default::default(),
@@ -10735,6 +10740,7 @@ fn approval_fixture_server() -> erato::config::McpServerConfig {
     erato::config::McpServerConfig {
         glossary: Default::default(),
         surface_hints: false,
+        mcp_apps: Default::default(),
         display_name: None,
         approval_argument: None,
         protocol_mode: Default::default(),
