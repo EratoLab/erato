@@ -9,6 +9,14 @@
       "destination": "index.html"
     },
     {
+      "source": "/excel",
+      "destination": "index.html"
+    },
+    {
+      "source": "/powerpoint",
+      "destination": "index.html"
+    },
+    {
       "source": "/branding-overview",
       "destination": "index.html"
     },
