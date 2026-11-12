@@ -90,13 +90,14 @@ import {
 } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 import {
+  headlineClass,
   NEW_TEXT_CLASS,
   NEW_VALUE_CLASS,
   OLD_TEXT_CLASS,
   OLD_VALUE_CLASS,
 } from "@/lib/toolCallGist/valueStyle";
 
-import { headlineClass, ToolCallGistLine } from "./ToolCallGist";
+import { ToolCallGistLine } from "./ToolCallGist";
 import { Collapse } from "../Controls/Collapse";
 import { DisclosureButton } from "../Controls/Disclosure";
 

@@ -20,6 +20,7 @@ import {
   gistWarningLabel,
 } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
+import { headlineClass } from "@/lib/toolCallGist/valueStyle";
 import {
   NEW_TEXT_CLASS,
   NEW_VALUE_CLASS,
@@ -38,17 +39,6 @@ import type {
 import type { ReactNode } from "react";
 
 const ISOLATED = "[unicode-bidi:isolate]";
-
-/**
- * A card's headline is the one line at this size; under a caller's own
- * heading it reads as that heading's row did before.
- */
-export const headlineClass = (lead: boolean, belowHeading: boolean) =>
-  belowHeading
-    ? "text-sm font-medium"
-    : lead
-      ? "text-base font-semibold"
-      : "text-sm font-semibold";
 
 const cutText = (text: string, truncated: boolean) =>
   truncated ? `${text}…` : text;
