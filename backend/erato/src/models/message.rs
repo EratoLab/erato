@@ -226,9 +226,24 @@ pub struct GenerationRequestContext {
     /// `X-Erato-Additional-Executors`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    /// Those of the bindings above whose page said the app behind them runs
+    /// in strict mode, from `X-Erato-Strict-Mode-Executors`. Never stored: a
+    /// stored turn's word would outlive the app it was said of, so every
+    /// continuation reads its own request's.
+    #[serde(skip)]
+    pub strict_mode_executors: Vec<crate::services::client_operations::ExecutorBinding>,
 }
 
 impl GenerationRequestContext {
+    /// Whether this request's page said the app behind `binding` runs in
+    /// strict mode.
+    pub fn says_strict_mode(
+        &self,
+        binding: &crate::services::client_operations::ExecutorBinding,
+    ) -> bool {
+        self.strict_mode_executors.contains(binding)
+    }
+
     /// Every binding of the turn, the primary first.
     pub fn executors(
         &self,
@@ -3746,5 +3761,22 @@ mod generation_request_context_tests {
         let context: GenerationRequestContext = serde_json::from_value(stored.clone()).unwrap();
         assert!(context.additional_executors.is_empty());
         assert_eq!(serde_json::to_value(&context).unwrap(), stored);
+    }
+
+    #[test]
+    fn the_strict_mode_word_is_never_stored_with_the_turn() {
+        let sidecar = binding(ExecutionRealm::DesktopSidecar, "desktop_sidecar");
+        let context = GenerationRequestContext {
+            additional_executors: vec![sidecar.clone()],
+            strict_mode_executors: vec![sidecar.clone()],
+            ..Default::default()
+        };
+        assert!(context.says_strict_mode(&sidecar));
+        let stored = serde_json::to_value(&context).unwrap();
+        assert!(stored.get("strict_mode_executors").is_none(), "{stored}");
+        let mut forged = stored.clone();
+        forged["strict_mode_executors"] = serde_json::json!([sidecar]);
+        let read: GenerationRequestContext = serde_json::from_value(forged).unwrap();
+        assert!(!read.says_strict_mode(&sidecar));
     }
 }

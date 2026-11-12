@@ -1522,8 +1522,9 @@ export const MessageContent = memo(function MessageContent({
   );
 
   // Tasks of this turn that stopped while nothing here shows them: the turn
-  // was stopped, or it ended on a stop no task can join. Only the last stop
-  // counts, as on the server: an earlier one is settled.
+  // was stopped, also with Stop at the tool-call limit, or it ended on an
+  // error. Only the last stop counts, as on the server: an earlier one is
+  // settled.
   const tasksWaitingElsewhere = React.useMemo(() => {
     if (isStreaming) {
       return [];

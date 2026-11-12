@@ -209,6 +209,8 @@ pub(crate) async fn resolve_grant(
         owner_chat_id: context.origin_chat.id,
         owner_message_id,
         context_ref,
+        // Every granted tool is routed to `binding`, so they agree.
+        strict_mode: granted.iter().all(|tool| tool.executor_strict_mode),
     })
 }
 
@@ -237,14 +239,14 @@ pub fn granted_tool_allowed(
 }
 
 /// A delegated run's granted tools as they may be offered now, with the
-/// grant's binding. `None` for a run without a grant or whose grant no longer
-/// holds; the same answer on a fresh turn and on a continuation.
+/// grant. `None` for a run without a grant or whose grant no longer holds; the
+/// same answer on a fresh turn and on a continuation.
 pub(crate) async fn granted_tools(
     app_state: &AppState,
     chat: &chats::Model,
     executor: Option<&ExecutorBinding>,
     account_id: Option<Uuid>,
-) -> Option<(ExecutorBinding, Vec<(ClientToolConfig, GrantedCall)>)> {
+) -> Option<(ClientToolGrant, Vec<(ClientToolConfig, GrantedCall)>)> {
     let configuration = crate::models::chat::parse_chat_configuration(chat)
         .ok()
         .flatten()?;
@@ -293,7 +295,7 @@ pub(crate) async fn granted_tools(
             ));
         }
     }
-    Some((grant.binding, tools))
+    Some((grant, tools))
 }
 
 /// The approval key a decision on a task's asked call of this tool is made
@@ -531,7 +533,9 @@ pub struct GrantedCallSummary {
     pub freshness: Option<Value>,
     /// Granted calls the user declined.
     pub declined: u32,
-    /// Durable granted calls no client ran before they expired.
+    /// Granted calls that ran out of time: durable ones no client ran before
+    /// they expired, and ones whose review on the device ended before its
+    /// result reached the task.
     pub expired: u32,
     /// Durable granted calls the user stopped waiting for.
     pub cancelled: u32,
@@ -632,7 +636,13 @@ fn contract_freshness(freshness: &Value) -> Option<Value> {
 
 /// The outcome of a granted call the user declined.
 pub const DECLINED: &str = "declined";
-/// The outcome of a durable granted call no client ran in time.
+/// What a client reports for a granted call whose review on the device ended
+/// before its result reached the task: nobody decided in time, or the app no
+/// longer had the job (its record ran out, the store dropped the results, or
+/// a strict app restarted with an empty store), so a Share the user made can
+/// be lost too.
+pub const REVIEW_EXPIRED: &str = "review_expired";
+/// The outcome of a granted call that ran out of time.
 const EXPIRED: &str = "expired";
 /// The outcome of a durable granted call the user stopped waiting for
 /// (`/me/client-operations/{id}/cancel`).
@@ -647,6 +657,28 @@ pub fn declined_output(tool_name: &str) -> Value {
             "The user declined this call, so the task has no result from '{tool_name}'; say in the answer what is missing because of it."
         ),
     })
+}
+
+/// The stored output of a granted call that a prompt on the device ended
+/// without a result, by the code the client reported, on either path. The
+/// text is the server's, never the client's. Nothing for any other code.
+pub fn ended_on_device_output(code: &str, tool_name: &str) -> Option<Value> {
+    match code {
+        DECLINED => Some(declined_output(tool_name)),
+        // Nobody said no, so it counts as expired. The user may have decided,
+        // and the result was lost on the way, so the text says only what
+        // holds either way. The task cannot ask the user, so it is told not to
+        // open another review on its own; whether a task should get a new
+        // review instead is open (ERMAIN-1153).
+        REVIEW_EXPIRED => Some(json!({
+            "status": "cancelled",
+            "reason": EXPIRED,
+            "error": format!(
+                "The review of this call on the user's device ended before its result reached the task, so nothing was shared from it and the task has no result from '{tool_name}'. Do not retry it without the user; say in the answer what is missing because of it."
+            ),
+        })),
+        _ => None,
+    }
 }
 
 /// What a task's model reads for a durable granted call that ended without a
@@ -1486,6 +1518,7 @@ mod tests {
             owner_chat_id: Uuid::new_v4(),
             owner_message_id: Uuid::new_v4(),
             context_ref: Some("token".into()),
+            strict_mode: false,
         }
     }
 
@@ -1805,6 +1838,39 @@ mod tests {
     }
 
     #[test]
+    fn a_review_that_ended_before_its_result_arrived_counts_as_expired_and_says_not_to_retry() {
+        let ended = ended_on_device_output(REVIEW_EXPIRED, READ_NAME).unwrap();
+        assert_eq!(ended["status"], "cancelled");
+        assert_eq!(ended["reason"], "expired");
+        let text = ended["error"].as_str().unwrap();
+        assert!(
+            text.contains("ended before its result reached the task"),
+            "{text}"
+        );
+        // A Share the user made can be lost too, so it never says they did
+        // not decide.
+        assert!(!text.contains("decision"), "{text}");
+        assert!(text.contains("Do not retry it without the user"), "{text}");
+        assert!(!text.contains("declined"), "{text}");
+        assert_eq!(
+            ended_on_device_output(DECLINED, READ_NAME),
+            Some(declined_output(READ_NAME))
+        );
+        assert_eq!(ended_on_device_output("validation_failed", READ_NAME), None);
+        let part = json!({"content_type": "tool_use", "tool_call_id": "c",
+                          "tool_name": READ_NAME, "status": "error", "output": ended});
+        assert_eq!(
+            granted_call_summary(&grant(), &[part]),
+            GrantedCallSummary {
+                freshness: None,
+                declined: 0,
+                expired: 1,
+                cancelled: 0,
+            }
+        );
+    }
+
+    #[test]
     fn a_stopped_wait_tells_the_task_what_is_missing_and_not_to_call_again() {
         let text = unanswered_grant_call_text("cancelled", READ_NAME).unwrap();
         assert!(
@@ -1886,6 +1952,29 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&durable).unwrap()["durable_tools"],
             json!(["word/read_document_blocks"])
+        );
+    }
+
+    #[test]
+    fn a_grant_says_strict_mode_only_when_its_page_did() {
+        let grant = grant();
+        let stored = serde_json::to_value(&grant).unwrap();
+        assert!(stored.get("strict_mode").is_none(), "{stored}");
+        let read: ClientToolGrant = serde_json::from_value(stored).unwrap();
+        assert!(!read.strict_mode, "a grant written before the flag asks");
+        let strict = ClientToolGrant {
+            strict_mode: true,
+            ..grant
+        };
+        let stored = serde_json::to_value(&strict).unwrap();
+        assert_eq!(stored["strict_mode"], json!(true));
+        assert_eq!(
+            stored["binding"],
+            serde_json::to_value(&strict.binding).unwrap()
+        );
+        assert_eq!(
+            serde_json::from_value::<ClientToolGrant>(stored).unwrap(),
+            strict
         );
     }
 

@@ -1390,8 +1390,9 @@ pub struct TaskClientTools {
     /// Granted calls the user declined, so their results are missing.
     #[serde(skip_serializing_if = "is_zero")]
     pub declined: u32,
-    /// Durable granted calls no client ran before they expired, so their
-    /// results are missing.
+    /// Granted calls that ran out of time, so their results are missing:
+    /// durable ones no client ran before they expired, and ones whose review
+    /// on the device ended before its result reached the task.
     #[serde(skip_serializing_if = "is_zero")]
     pub expired: u32,
     /// Durable granted calls the user stopped waiting for, so their results

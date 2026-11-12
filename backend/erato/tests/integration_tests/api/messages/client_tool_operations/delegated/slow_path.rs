@@ -733,12 +733,18 @@ async fn answer_as_pane(
         .assert_status_ok();
 }
 
-fn declined_result(row: &HostRow, request: &OperationRequest) -> OperationResult {
+/// What a pane posts when a prompt on the device ended the call without a
+/// result, with the code it reports for how it ended.
+fn ended_on_device_result(
+    row: &HostRow,
+    request: &OperationRequest,
+    code: &str,
+) -> OperationResult {
     OperationResult {
         outcome: OperationOutcome::Rejected,
         result: None,
         error: Some(erato::services::client_operations::OperationError {
-            code: "declined".into(),
+            code: code.into(),
             validation: None,
             message: None,
         }),
@@ -1216,6 +1222,44 @@ pub(super) async fn a_device_decline_ends_the_durable_call_as_declined(
     pool: Pool<Postgres>,
     row: &HostRow,
 ) {
+    a_device_prompt_ends_the_durable_call(pool, row, "declined", "declined", |child_turn| {
+        assert!(child_turn.contains("The user declined this call"));
+    })
+    .await;
+}
+
+/// A review on the device that ended before its result reached the task
+/// (nobody decided in time, or the app lost its job, also after a Share) is
+/// no decline: the call is expired, the task's model is told not to retry it
+/// without the user, and the task result counts it as expired.
+pub(super) async fn a_review_ended_before_its_result_arrived_ends_the_durable_call_as_expired(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    a_device_prompt_ends_the_durable_call(pool, row, "review_expired", "expired", |child_turn| {
+        assert!(
+            child_turn.contains("ended before its result reached the task"),
+            "{child_turn}"
+        );
+        assert!(
+            child_turn.contains("Do not retry it without the user"),
+            "{child_turn}"
+        );
+        assert!(!child_turn.contains("The user declined this call"));
+    })
+    .await;
+}
+
+/// The pane ends a task's durable call with `code`: the call is stored with
+/// the server's output for `reason`, the task's model reads it, and the task
+/// result counts it under `reason`.
+async fn a_device_prompt_ends_the_durable_call(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+    code: &str,
+    reason: &str,
+    child_reads: impl FnOnce(&str),
+) {
     let mut waiting = park_a_waiting_child(row, pool, false, |_| {}).await;
     let child_turns = after_the_read(
         &mut waiting.llm,
@@ -1227,7 +1271,7 @@ pub(super) async fn a_device_decline_ends_the_durable_call_as_declined(
         row,
         &waiting.state,
         &waiting.request,
-        declined_result(row, &waiting.request),
+        ended_on_device_result(row, &waiting.request, code),
     )
     .await;
     let answered = wait_answered(&waiting.state, waiting.chat_id).await;
@@ -1238,22 +1282,19 @@ pub(super) async fn a_device_decline_ends_the_durable_call_as_declined(
     );
     assert_eq!(read["status"], "error", "{read}");
     assert_eq!(read["output"]["status"], "cancelled");
-    assert_eq!(read["output"]["reason"], "declined");
-    let declined_text = read["output"]["error"].as_str().unwrap();
-    assert!(declined_text.contains(row.read_tool), "{declined_text}");
+    assert_eq!(read["output"]["reason"], reason);
+    let ended_text = read["output"]["error"].as_str().unwrap();
+    assert!(ended_text.contains(row.read_tool), "{ended_text}");
     let child_turn = turn_bodies(&child_turns)[0].to_string();
-    assert!(child_turn.contains("The user declined this call"));
+    child_reads(&child_turn);
     assert!(child_turn.contains("say in the answer what is missing"));
+    let counted = json!({ reason: 1 });
     let slot = part_for(&answered, CLIENT_TASK_CALL);
-    assert_eq!(
-        slot["output"]["client_tools"],
-        json!({"declined": 1}),
-        "{slot}"
-    );
+    assert_eq!(slot["output"]["client_tools"], counted, "{slot}");
     let parent_turns = turn_bodies(&resumed);
     assert_eq!(parent_turns.len(), 1, "one parent continuation");
     let told = task_result_in(&parent_turns[0], CLIENT_TASK_CALL);
-    assert_eq!(told["client_tools"], json!({"declined": 1}), "{told}");
+    assert_eq!(told["client_tools"], counted, "{told}");
     assert!(told.to_string().contains(CHILD_ANSWER), "{told}");
     assert_eq!(attempts_of(&waiting.state, waiting.child.id).await.len(), 1);
     waiting.server.abort();
@@ -1918,6 +1959,69 @@ pub(super) async fn an_approved_child_call_on_a_durable_tool_waits_and_the_paren
         "client_pending"
     );
 
+    answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
+    wait_answered(&launched.state, launched.chat_id).await;
+    assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
+    launched.server.abort();
+}
+
+/// A task's call of a reviewed sidecar tool set to Ask, planned by a turn whose
+/// page said its Erato desktop app runs in strict mode: the grant keeps that
+/// word, so the call waits for the app's review without a chat question
+/// (ERMAIN-1155). Without the word, as in
+/// [`an_approved_child_call_on_a_durable_tool_waits_and_the_parent_shows_it`],
+/// the task asks first.
+pub(super) async fn a_strict_apps_task_call_waits_for_its_review_without_asking(
+    pool: Pool<Postgres>,
+    row: &HostRow,
+) {
+    assert!(row.strict_mode);
+    let mut launched = launch(
+        row,
+        pool,
+        vec![client_task(None)],
+        |mocks| {
+            mock_child(
+                mocks,
+                CLIENT_BRIEF,
+                read_call(row),
+                CHILD_READ_CALL,
+                CHILD_ANSWER,
+            )
+        },
+        |_| {},
+        &[row.qualified()],
+    )
+    .await;
+    let parked = launched.parked().await;
+    assert_row_reads(&parked);
+    let child = child_for(&launched.state, launched.chat_id, CLIENT_TASK_CALL).await;
+    assert_eq!(
+        task_spec(&child)["client_grant"]["strict_mode"],
+        json!(true)
+    );
+    assert_eq!(
+        task_spec(&child)["client_grant"]["binding"],
+        serde_json::to_value(row.binding()).unwrap(),
+        "the word travels beside the binding"
+    );
+    let request = operation_of(&launched.state, child.id, 0).await;
+    let items = parked_part(&parked)["approvals"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(
+        items[0]["child"]["waiting_for"]["attempt_id"],
+        json!(request.attempt_id),
+        "the call waits for the review, never a chat question"
+    );
+    assert_eq!(stops(&parked).len(), 1);
+    assert!(
+        stops(&assistant_row(&launched.state.db, child.id).await).is_empty(),
+        "the task asked nothing"
+    );
+    let resumed = record_parent_resumes(&mut launched.llm);
     answer_as_pane(row, &launched.state, &request, pane_result(row, &request)).await;
     wait_answered(&launched.state, launched.chat_id).await;
     assert_eq!(turn_bodies(&resumed).len(), 1, "one parent continuation");
@@ -3145,9 +3249,8 @@ pub(super) async fn a_chat_that_only_waits_is_reported_as_nothing_to_decide(
     waiting.server.abort();
 }
 
-/// What a turn leaves that ended on a stop no child item can share (the
-/// tool-call limit, its own durable operation): the child's slot waits, and
-/// no stop names the child.
+/// What a turn leaves that the user stopped, while it ran or with Stop at the
+/// tool-call limit: the child's slot waits, and no stop names the child.
 async fn drop_the_stop(waiting: &Waiting) {
     let mut raw = waiting.parent_message.raw_message.clone();
     raw["content"]
