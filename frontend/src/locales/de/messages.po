@@ -3962,6 +3962,11 @@ msgstr "Archiv"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.diskImage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.executable"
 msgstr "Eigenständige ausführbare Datei"
 
@@ -3974,6 +3979,11 @@ msgstr "Installationsprogramm"
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.intunewin"
 msgstr "Microsoft-Intune-Paket"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.macosDeployment"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx

@@ -35,9 +35,13 @@ The current layout is:
     │   ├── erato-desktop-sidecar.exe
     │   └── erato-desktop-sidecar.msi
     ├── macos-x86_64/
-    │   └── erato-desktop-sidecar.app.zip
+    │   ├── erato-desktop-sidecar.app.zip
+    │   ├── erato-desktop-sidecar.dmg
+    │   └── erato-desktop-sidecar.pkg
     ├── macos-aarch64/
-    │   └── erato-desktop-sidecar.app.zip
+    │   ├── erato-desktop-sidecar.app.zip
+    │   ├── erato-desktop-sidecar.dmg
+    │   └── erato-desktop-sidecar.pkg
     ├── linux-x86_64-gnu/
     │   ├── erato-desktop-sidecar
     │   └── erato-desktop-sidecar.tar.gz
@@ -120,6 +124,20 @@ manifest completely describes the five-target filesystem example in Section 1:
           "path": "targets/macos-x86_64/erato-desktop-sidecar.app.zip",
           "download_filename": "erato-desktop-sidecar-macos-x86_64.app.zip",
           "media_type": "application/zip"
+        },
+        {
+          "id": "disk_image",
+          "kind": "disk_image",
+          "path": "targets/macos-x86_64/erato-desktop-sidecar.dmg",
+          "download_filename": "erato-desktop-sidecar-macos-x86_64.dmg",
+          "media_type": "application/x-apple-diskimage"
+        },
+        {
+          "id": "installer",
+          "kind": "installer",
+          "path": "targets/macos-x86_64/erato-desktop-sidecar.pkg",
+          "download_filename": "erato-desktop-sidecar-macos-x86_64.pkg",
+          "media_type": "application/octet-stream"
         }
       ]
     },
@@ -138,6 +156,20 @@ manifest completely describes the five-target filesystem example in Section 1:
           "path": "targets/macos-aarch64/erato-desktop-sidecar.app.zip",
           "download_filename": "erato-desktop-sidecar-macos-aarch64.app.zip",
           "media_type": "application/zip"
+        },
+        {
+          "id": "disk_image",
+          "kind": "disk_image",
+          "path": "targets/macos-aarch64/erato-desktop-sidecar.dmg",
+          "download_filename": "erato-desktop-sidecar-macos-aarch64.dmg",
+          "media_type": "application/x-apple-diskimage"
+        },
+        {
+          "id": "installer",
+          "kind": "installer",
+          "path": "targets/macos-aarch64/erato-desktop-sidecar.pkg",
+          "download_filename": "erato-desktop-sidecar-macos-aarch64.pkg",
+          "media_type": "application/octet-stream"
         }
       ]
     },
@@ -208,7 +240,7 @@ manifest completely describes the five-target filesystem example in Section 1:
 
 - `id` is unique within its target.
 - `kind` is the semantic file kind. Initial values are `executable`,
-  `installer`, `application_archive`, and `archive`.
+  `installer`, `application_archive`, `disk_image`, and `archive`.
 - `path` is a path relative to the configured artifact root.
 - `download_filename` is the filename presented to the client, for example in
   `Content-Disposition`.
@@ -240,6 +272,40 @@ desktop UI package archive the artifact set ships ([Section 8](#8-desktop-ui-pac
 A manifest without `ui` describes an artifact set without a desktop UI
 package; the backend then serves no package and clients send no `ui_package`.
 As for every other field, consumers ignore unknown manifest fields.
+
+### macOS package formats
+
+Both macOS architectures ship all three formats. `application` remains the
+`default_file` and selects `.app.zip`; `disk_image` selects `.dmg` and `installer`
+selects `.pkg`. The manifest example fixes their stable source/download names,
+kinds and media types. The PKG uses `application/octet-stream`.
+
+The DMG is a read-only compressed UDIF image with
+`erato-desktop-sidecar.app` and an `Applications` symlink to `/Applications`.
+Users mount it, quit any running sidecar, copy the app to Applications (replacing
+an existing copy), eject the image, and launch the copied app.
+
+The flat component PKG installs system-wide at
+`/Applications/erato-desktop-sidecar.app` with administrator authorization.
+Its stable package identifier is `com.eratolabs.erato-desktop-sidecar` and its
+version is the Cargo package version. Bundle relocation is disabled; an upgrade
+replaces the complete app bundle at that path, including stale resources. Quit
+the running app before installation. No installer script starts the app or
+removes user data, LaunchAgents, or shared Office components. The installer does
+not prevent downgrades. Users launch the installed app after installation.
+
+DMG and PKG downloads are served byte-for-byte from the deployed artifact set;
+the backend validates their UDIF/XAR container headers but does not inject
+organization policy, TLS identities, branding, or suffixes into them. Organizations
+MUST provision `Contents/Resources/bootstrap.json` in the app through their deployment
+process before production use, or distribute the personalized `.app.zip` instead.
+Replacing the app through DMG/PKG also replaces any bootstrap inside that app;
+provision it again on upgrade. Package receipt identity and installation path are
+shared across these generic packages, so they do not install parallel suffixed
+instances. The download UI MUST distinguish these deployment packages from the
+personalized default. Building these packages MUST NOT perform notarization.
+The distributing organization owns signing/notarization and integrity validation;
+these records remain outside the root manifest.
 
 ## 4. Backend interpretation and validation
 
@@ -414,7 +480,8 @@ new bootstrap data; no enrollment or automatic renewal is defined here.
 
 A `bootstrap.json` beside the executable takes precedence over the embedded
 Windows slot. The backend automatically injects it into Windows MSI and macOS
-application downloads; the macOS file lives inside the downloaded `.app` bundle.
+`.app.zip` downloads; the macOS file lives inside the downloaded `.app` bundle.
+The DMG/PKG deployment packages follow the separate provisioning rule in Section 3.
 Linux installers can supply this file separately.
 
 ### 6.1 Windows executable personalization

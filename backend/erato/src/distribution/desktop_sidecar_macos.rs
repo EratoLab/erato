@@ -122,6 +122,28 @@ pub(super) fn inject(template: &[u8], bootstrap: &[u8]) -> Result<Vec<u8>> {
     Ok(personalized)
 }
 
+// Cache immutable bytes to preserve the validated snapshot and avoid the shared
+// cursor of cloned file descriptors across repeated or concurrent downloads.
+pub(super) fn load_package(source: &File, kind: &str) -> Result<Arc<[u8]>> {
+    ensure!(
+        matches!(kind, "disk_image" | "installer"),
+        "Unsupported macOS artifact kind: {kind}"
+    );
+    let mut reader = source.try_clone()?;
+    reader.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+    let valid = match kind {
+        "disk_image" => {
+            bytes.len() >= 512 && bytes.get(bytes.len() - 512..bytes.len() - 508) == Some(b"koly")
+        }
+        "installer" => bytes.len() >= 28 && bytes.starts_with(b"xar!"),
+        _ => false,
+    };
+    ensure!(valid, "Invalid macOS {kind} container");
+    Ok(bytes.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
