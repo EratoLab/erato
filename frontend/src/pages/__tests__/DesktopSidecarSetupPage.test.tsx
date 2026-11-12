@@ -139,6 +139,51 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers DMG and PKG deployment downloads while keeping ZIP recommended", () => {
+    const target = macTarget("aarch64");
+    target.files.push(
+      {
+        id: "disk_image",
+        kind: "disk_image",
+        size: 2048,
+        download_filename: "erato-desktop-sidecar-macos-aarch64.dmg",
+      },
+      {
+        id: "installer",
+        kind: "installer",
+        size: 4096,
+        download_filename: "erato-desktop-sidecar-macos-aarch64.pkg",
+      },
+    );
+    vi.mocked(useDistribution).mockReturnValue({
+      data: { targets: [target] },
+      error: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDistribution>);
+    renderOnMac();
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(3);
+    expect(within(cards[0]).getByText("Recommended")).toBeInTheDocument();
+    for (const [index, id, label] of [
+      [1, "disk_image", "Disk image"],
+      [2, "installer", "Installer"],
+    ] as const) {
+      expect(within(cards[index]).getByText(label)).toBeInTheDocument();
+      expect(
+        within(cards[index]).getByRole("link", { name: "Download" }),
+      ).toHaveAttribute(
+        "href",
+        `/api/v1beta/desktop-sidecar/distribution/download?target=macos-aarch64&file=${id}`,
+      );
+      expect(
+        within(cards[index]).getByText(/without organization settings/),
+      ).toBeInTheDocument();
+      expect(
+        within(cards[index]).queryByText("Recommended"),
+      ).not.toBeInTheDocument();
+    }
+  });
+
   it("keeps macOS ZIP downloads as a single direct download", () => {
     renderOnMac();
     const directDownload = screen.getByRole("link", { name: "Download" });

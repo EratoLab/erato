@@ -266,6 +266,14 @@ async fn build_download_response(
             })?;
             (Body::from(executable), size)
         }
+        BootstrapTransport::MacosPackage => {
+            let bytes = artifact.macos_package().map_err(|error| {
+                tracing::error!(%error, "Failed to read macOS deployment package");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let size = bytes.len() as u64;
+            (Body::from(axum::body::Bytes::from_owner(bytes)), size)
+        }
         BootstrapTransport::MacosApplication => {
             let bootstrap = personalization_bootstrap(distribution)?;
             let artifact = artifact.clone();
@@ -1083,6 +1091,121 @@ mod tests {
         )
         .await;
         assert!(matches!(missing, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn macos_packages_are_discovered_and_downloaded_without_mutation() {
+        for architecture in ["x86_64", "aarch64"] {
+            let directory = tempfile::tempdir().unwrap();
+            let target = format!("macos-{architecture}");
+            let dmg = [b"image payload".as_slice(), b"koly", &[0; 508]].concat();
+            let pkg = [b"xar!".as_slice(), &[0; 24], b"package payload"].concat();
+            let mut files = Vec::new();
+            for (id, kind, ext, media_type, bytes) in [
+                (
+                    "disk_image",
+                    "disk_image",
+                    "dmg",
+                    "application/x-apple-diskimage",
+                    &dmg,
+                ),
+                (
+                    "installer",
+                    "installer",
+                    "pkg",
+                    "application/octet-stream",
+                    &pkg,
+                ),
+            ] {
+                let name = format!("erato-desktop-sidecar.{ext}");
+                fs::write(directory.path().join(&name), bytes).unwrap();
+                files.push(json!({"id": id, "kind": kind, "path": name,
+                    "download_filename": format!("erato-desktop-sidecar-{target}.{ext}"), "media_type": media_type}));
+            }
+            // Include the existing ZIP and keep it as the default.
+            use zip::write::SimpleFileOptions;
+            let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            for (name, bytes) in [
+                (
+                    "erato-desktop-sidecar.app/Contents/Info.plist",
+                    b"plist".as_slice(),
+                ),
+                (
+                    "erato-desktop-sidecar.app/Contents/MacOS/erato-desktop-sidecar",
+                    &[0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0, 0, 1],
+                ),
+            ] {
+                zip.start_file(name, SimpleFileOptions::default().unix_permissions(0o755))
+                    .unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            fs::write(
+                directory.path().join("app.zip"),
+                zip.finish().unwrap().into_inner(),
+            )
+            .unwrap();
+            files.push(
+                json!({"id":"application", "kind":"application_archive", "path":"app.zip",
+                "download_filename":"sidecar.app.zip", "media_type":"application/zip"}),
+            );
+            fs::write(directory.path().join("manifest.json"), serde_json::to_vec(&json!({"targets":[{
+                "id":target, "platform":{"os":"macos", "architecture":architecture, "abi":"darwin"},
+                "default_file":"application", "files":files
+            }]})).unwrap()).unwrap();
+            let distribution = DesktopSidecarDistribution::load(directory.path()).unwrap();
+            let discovery = DesktopSidecarDistributionResponse::from(&distribution);
+            assert_eq!(discovery.targets[0].files.len(), 3);
+            assert_eq!(discovery.targets[0].default_file, "application");
+            assert_eq!(
+                distribution
+                    .artifact(&target, None)
+                    .unwrap()
+                    .bootstrap_transport(),
+                BootstrapTransport::MacosApplication
+            );
+            for (id, ext, media_type, expected) in [
+                ("disk_image", "dmg", "application/x-apple-diskimage", &dmg),
+                ("installer", "pkg", "application/octet-stream", &pkg),
+            ] {
+                let download = || {
+                    build_download_response(
+                        Some(&distribution),
+                        DesktopSidecarDistributionDownloadQuery {
+                            target: target.clone(),
+                            file: Some(id.into()),
+                            zip: None,
+                        },
+                    )
+                };
+                let (first, second) = tokio::join!(download(), download());
+                for response in [first.unwrap(), second.unwrap(), download().await.unwrap()] {
+                    assert_eq!(response.headers()[CONTENT_TYPE], media_type);
+                    assert_eq!(
+                        response.headers()[CONTENT_LENGTH],
+                        expected.len().to_string()
+                    );
+                    assert!(
+                        response.headers()[CONTENT_DISPOSITION]
+                            .to_str()
+                            .unwrap()
+                            .contains(&format!("erato-desktop-sidecar-{target}.{ext}"))
+                    );
+                    assert_eq!(
+                        to_bytes(response.into_body(), 1_000_000)
+                            .await
+                            .unwrap()
+                            .as_ref(),
+                        expected.as_slice()
+                    );
+                }
+            }
+            fs::write(
+                directory.path().join("erato-desktop-sidecar.pkg"),
+                b"invalid",
+            )
+            .unwrap();
+            assert!(DesktopSidecarDistribution::load(directory.path()).is_err());
+        }
     }
 
     #[tokio::test]

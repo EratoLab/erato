@@ -66,6 +66,7 @@ pub struct DistributionArtifact {
     source: Arc<File>,
     bootstrap_transport: BootstrapTransport,
     macos_template: Option<macos::Template>,
+    macos_package: Option<Arc<[u8]>>,
     msi_template: Option<Arc<[u8]>>,
     intunewin_template: Option<intunewin::Template>,
     msi_identity: windows_msi::Identity,
@@ -78,6 +79,7 @@ pub enum BootstrapTransport {
     WindowsMsi,
     WindowsIntunewin,
     MacosApplication,
+    MacosPackage,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,17 +215,21 @@ impl DesktopSidecarDistribution {
                     .len();
                 // Keep validated macOS ZIP bytes immutable. Concurrent downloads
                 // must not seek/read through cloned descriptors sharing one cursor.
-                let macos_template = if target.platform.os == "macos" {
-                    ensure!(
-                        artifact.kind == "application_archive",
-                        "macOS sidecar downloads must be application archives"
-                    );
-                    Some(macos::Template::load(&source)?)
+                let macos_template =
+                    if target.platform.os == "macos" && artifact.kind == "application_archive" {
+                        Some(macos::Template::load(&source)?)
+                    } else {
+                        None
+                    };
+                let macos_package = if target.platform.os == "macos" && macos_template.is_none() {
+                    Some(macos::load_package(&source, &artifact.kind)?)
                 } else {
                     None
                 };
                 let bootstrap_transport = if macos_template.is_some() {
                     Ok(BootstrapTransport::MacosApplication)
+                } else if macos_package.is_some() {
+                    Ok(BootstrapTransport::MacosPackage)
                 } else {
                     bootstrap_transport(&target.platform.os, &artifact.kind, &source)
                 }
@@ -252,6 +258,7 @@ impl DesktopSidecarDistribution {
                     source: Arc::new(source),
                     bootstrap_transport,
                     macos_template,
+                    macos_package,
                     msi_template,
                     intunewin_template: None,
                     msi_identity: windows_msi::Identity::default(),
@@ -369,6 +376,12 @@ impl DistributionArtifact {
     #[must_use]
     pub fn bootstrap_transport(&self) -> BootstrapTransport {
         self.bootstrap_transport
+    }
+
+    pub fn macos_package(&self) -> Result<Arc<[u8]>> {
+        self.macos_package
+            .clone()
+            .ok_or_else(|| eyre::eyre!("artifact is not a macOS package"))
     }
 
     pub fn personalized_macos_application(&self, bootstrap: &[u8]) -> Result<Vec<u8>> {

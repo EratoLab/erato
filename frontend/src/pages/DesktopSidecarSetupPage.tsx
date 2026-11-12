@@ -105,6 +105,11 @@ function artifactKindLabel(kind: string): string {
         id: "desktopSidecar.setup.artifact.intunewin",
         message: "Microsoft Intune package",
       });
+    case "disk_image":
+      return t({
+        id: "desktopSidecar.setup.artifact.diskImage",
+        message: "Disk image",
+      });
     case "installer":
       return t({
         id: "desktopSidecar.setup.artifact.installer",
@@ -545,6 +550,17 @@ function ArtifactCard({
           </span>
         ) : null}
       </div>
+      {target.platform.os === "macos" &&
+        file.kind !== "application_archive" && (
+          <p className="mt-4 text-sm text-theme-fg-muted">
+            <Trans id="desktopSidecar.setup.artifact.macosDeployment">
+              Deployment package without organization settings. Quit the app
+              before replacing it. Your administrator must provision
+              organization settings after installation and each upgrade. Use the
+              recommended application archive for a configured download.
+            </Trans>
+          </p>
+        )}
     </Card>
   );
 }
