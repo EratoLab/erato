@@ -9976,6 +9976,16 @@ msgid "toolGist.share.failed"
 msgstr "{shape, select, full {Échec du partage : {kind} {title} dans {where}} titled {Échec du partage : {kind} {title}} placed {Échec du partage : {kind} dans {where}} other {Échec du partage : {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.source.rows"
+msgstr "{count, plural, one {# ligne} other {# lignes}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.source.values"
+msgstr "{count, plural, one {# valeur} other {# valeurs}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.textChange"
 msgstr "Modification du texte"

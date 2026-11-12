@@ -5145,6 +5145,136 @@ describe("gist cards", () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe("the source line's places", () => {
+    const labelFor = (label: object) =>
+      renderCard(
+        <McpToolApprovalCard
+          messageId="message-1"
+          resolution={null}
+          request={{
+            ...gistRequest,
+            input: {},
+            display: {
+              ...createRowDisplay,
+              label: {
+                source: "rules",
+                arguments: viewOf({}),
+                ...label,
+              } as typeof createRowLabel,
+            },
+          }}
+        />,
+      );
+    /** Ten rows listed of 500, every one in the same project. */
+    const batchCreate = (field?: object) => ({
+      action: "create",
+      object_kind: "task",
+      items: [
+        {
+          title: {
+            pointer: "/issues/*/summary",
+            values: Array.from({ length: 10 }, (_, index) => ({
+              path: `/issues/${index}/summary`,
+              text: `Check device ${index}`,
+            })),
+            omitted: 490,
+          },
+          target: {
+            pointer: "/issues/*/project_key",
+            values: Array.from({ length: 10 }, (_, index) => ({
+              path: `/issues/${index}/project_key`,
+              text: "OPS",
+            })),
+            omitted: 490,
+          },
+        },
+      ],
+      change: {
+        counts: { set: 1 },
+        complete: true,
+        batch: {
+          path: "/issues",
+          name: "Issues",
+          total: 500,
+          same_change: false,
+          read_all: true,
+          rows: [
+            {
+              number: 1,
+              name: "Check device 0",
+              effects: [
+                {
+                  path: "/issues/0/project_key",
+                  name: "Project key",
+                  raw_name: "project_key",
+                  effect: "set",
+                  values: [{ text: "OPS" }],
+                },
+              ],
+            },
+          ],
+          fields: field
+            ? [
+                {
+                  name: "Project key",
+                  raw_name: "project_key",
+                  rows: 500,
+                  samples: [{ text: "OPS" }],
+                  ...field,
+                },
+              ]
+            : [],
+        },
+      },
+    });
+
+    it("never counts rows that repeat a listed place as more places", () => {
+      const { unmount } = labelFor(batchCreate({ distinct: 1 }));
+      expect(screen.getByTestId("approval-source-line")).toHaveTextContent(
+        /^Records · OPS$/,
+      );
+      unmount();
+
+      labelFor(batchCreate({ distinct: 3 }));
+      expect(screen.getByTestId("approval-source-line")).toHaveTextContent(
+        /^Records · OPS \+2$/,
+      );
+    });
+
+    it("says how many rows the places come from when the distinct ones are not counted", () => {
+      labelFor(batchCreate());
+      const source = screen.getByTestId("approval-source-line");
+      expect(source).toHaveTextContent(/^Records · OPS · 500 rows$/);
+      expect(source).not.toHaveTextContent("+");
+    });
+
+    it("keeps the place of an item it cannot name in a delete's headline", () => {
+      labelFor({
+        action: "delete",
+        object_kind: "other",
+        items: [
+          {
+            title: {
+              pointer: "/repo",
+              values: [{ path: "/repo", text: "uploader-archive" }],
+            },
+            target: {
+              pointer: "/owner",
+              values: [{ path: "/owner", text: "contoso" }],
+            },
+          },
+        ],
+        change: { counts: {}, complete: true },
+      });
+      expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+        /^Delete item uploader-archive from contoso$/,
+      );
+      expect(screen.getByTestId("approval-source-line")).toHaveTextContent(
+        /^Records$/,
+      );
+    });
+  });
 });
 
 describe("tool-call limit with a task's question", () => {

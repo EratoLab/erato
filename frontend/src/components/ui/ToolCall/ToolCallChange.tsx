@@ -621,44 +621,115 @@ const InlineRecipients = ({
   );
 };
 
-/** From four on: the count by To, Cc and Bcc, every outside address named, the rest behind one control. */
+/** To addresses a counted recipients part still names, under its count. */
+const MAX_COUNTED_TO = 3;
+
+/** The first To addresses as written and how many more there are. */
+const firstToAddresses = (
+  recipients: ChangeRecipients,
+): { shown: string[]; more: number } => {
+  const to = recipients.groups.filter((group) => group.kind === "to");
+  const listed = to.flatMap((group) => group.values);
+  const total = to.reduce(
+    (sum, group) =>
+      sum + Math.max(group.count, group.values.length + group.omitted),
+    0,
+  );
+  const shown = listed.slice(0, MAX_COUNTED_TO);
+  return { shown, more: Math.max(total - shown.length, 0) };
+};
+
+/**
+ * From four on: the count by To, Cc and Bcc, the first To addresses with the
+ * outside ones marked, every other outside address named, the rest behind one
+ * control.
+ */
 const CountedRecipients = ({
   recipients,
+  action,
 }: {
   recipients: ChangeRecipients;
-}) => (
-  <div className="space-y-1" data-testid="tool-call-change-recipients">
-    <p className="text-sm font-semibold text-theme-fg-primary">
-      {recipientsLine(recipients)}
-    </p>
-    {recipients.outsideKnown && recipients.outside.length > 0 && (
-      <Alert type="warning" role="none" data-testid="tool-call-change-outside">
-        <span dir="auto" className={ISOLATED}>
-          {outsideLine(recipients)}
-        </span>
-      </Alert>
-    )}
-    {recipients.outsideKnown && recipients.unchecked > 0 && (
-      <p className={MUTED}>{uncheckedLine(recipients.unchecked)}</p>
-    )}
-    {recipients.groups.some((group) => group.values.length > 0) && (
-      <SeeMore label={recipientsSeeAll(recipients.total)}>
-        {recipients.groups.map((group, index) => (
-          <Row key={index} name={recipientKindWord(group.kind)}>
-            <ScrollBox kind="value" className="max-h-24">
-              <span dir="auto" className={ISOLATED}>
-                {group.values.join(", ")}
-              </span>
-              {group.omitted > 0 && (
-                <span className="text-theme-fg-muted"> +{group.omitted}</span>
-              )}
-            </ScrollBox>
-          </Row>
-        ))}
-      </SeeMore>
-    )}
-  </div>
-);
+  action: GistAction | undefined;
+}) => {
+  const to = firstToAddresses(recipients);
+  const outside = new Set(
+    recipients.outsideKnown ? recipients.outside.map(addressKey) : [],
+  );
+  const marked = new Set(
+    to.shown.map(addressKey).filter((key) => outside.has(key)),
+  );
+  // An outside address the To row marks needs no second amber line.
+  const outsideElsewhere =
+    recipients.outsideOmitted > 0 ||
+    recipients.outside.some((address) => !marked.has(addressKey(address)));
+  return (
+    <div className="space-y-1" data-testid="tool-call-change-recipients">
+      <p className="text-sm font-semibold text-theme-fg-primary">
+        {recipientsLine(recipients)}
+      </p>
+      {to.shown.length > 0 && (
+        <Row
+          name={action === "share" ? shareWithLabel() : recipientKindWord("to")}
+        >
+          <ul className="space-y-1" data-testid="tool-call-change-to">
+            {to.shown.map((address, at) => (
+              <li
+                key={at}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1"
+              >
+                <span dir="auto" className={clsx(ISOLATED, "min-w-0")}>
+                  {address}
+                </span>
+                {marked.has(addressKey(address)) && (
+                  <span data-testid="tool-call-change-outside-badge">
+                    <StatusPill tone="warning">
+                      {outsideBadgeLabel()}
+                    </StatusPill>
+                  </span>
+                )}
+                {at === to.shown.length - 1 && to.more > 0 && (
+                  <span className="text-theme-fg-muted"> +{to.more}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Row>
+      )}
+      {recipients.outsideKnown &&
+        recipients.outside.length > 0 &&
+        outsideElsewhere && (
+          <Alert
+            type="warning"
+            role="none"
+            data-testid="tool-call-change-outside"
+          >
+            <span dir="auto" className={ISOLATED}>
+              {outsideLine(recipients)}
+            </span>
+          </Alert>
+        )}
+      {recipients.outsideKnown && recipients.unchecked > 0 && (
+        <p className={MUTED}>{uncheckedLine(recipients.unchecked)}</p>
+      )}
+      {recipients.groups.some((group) => group.values.length > 0) && (
+        <SeeMore label={recipientsSeeAll(recipients.total)}>
+          {recipients.groups.map((group, index) => (
+            <Row key={index} name={recipientKindWord(group.kind)}>
+              <ScrollBox kind="value" className="max-h-24">
+                <span dir="auto" className={ISOLATED}>
+                  {group.values.join(", ")}
+                </span>
+                {group.omitted > 0 && (
+                  <span className="text-theme-fg-muted"> +{group.omitted}</span>
+                )}
+              </ScrollBox>
+            </Row>
+          ))}
+        </SeeMore>
+      )}
+    </div>
+  );
+};
 
 const RecipientsPart = ({
   recipients,
@@ -670,7 +741,7 @@ const RecipientsPart = ({
   listsRecipientsInline(recipients) ? (
     <InlineRecipients recipients={recipients} action={action} />
   ) : (
-    <CountedRecipients recipients={recipients} />
+    <CountedRecipients recipients={recipients} action={action} />
   );
 
 const FilterPart = ({

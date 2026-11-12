@@ -1,6 +1,12 @@
 import { changeLayout } from "./change";
 
-import type { ChangeEffect, ChangeValue, GistChange } from "./change";
+import type {
+  ChangeBatch,
+  ChangeBatchField,
+  ChangeEffect,
+  ChangeValue,
+  GistChange,
+} from "./change";
 import type { Gist, GistAction, GistItem, GistKind, GistValue } from "./gist";
 import type { ToolCallChangeNote } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 
@@ -59,11 +65,20 @@ export const tableGoesToSource = (
   table.length > 0 &&
   (kind === "row" || (kind === "other" && count !== 1));
 
+/**
+ * A delete the card can only call "item" may delete the place's own record,
+ * such as a repository of an owner, so its headline keeps the place: it then
+ * names exactly what goes.
+ */
+const deletesUnnamedKind = (gist: Gist): boolean =>
+  gist.action === "delete" && gist.kind === "other" && !gist.change?.table;
+
 /** Whether the one item's place moves from the headline to the source line. */
 export const movesPlace = (gist: Gist, item: GistItem): boolean =>
   gist.items.length === 1 &&
   gist.items[0] === item &&
   PLACE_ACTIONS.includes(gist.action) &&
+  !deletesUnnamedKind(gist) &&
   item.where.length > 0;
 
 const addressKey = (text: string) => text.trim().toLowerCase();
@@ -103,7 +118,13 @@ export const headlineItemOf = (
 export interface CardSource {
   /** The place the one item lives, each name once. */
   where: GistValue[];
+  /** Places not listed, each counted once: never values that repeat a listed one. */
   whereOmitted: number;
+  /**
+   * How many values the place is read from, where the listed ones repeat and
+   * the unlisted ones cannot be counted as places: rows of a batch, else values.
+   */
+  whereValues?: { count: number; rows: boolean };
   table?: string;
 }
 
@@ -134,6 +155,58 @@ const distinctPlaces = (where: readonly GistValue[]): GistValue[] => {
   );
 };
 
+/**
+ * The batch field a row-by-row place is written to, found by the path of a
+ * listed place, so its distinct count can count the unlisted places.
+ */
+const placeFieldOf = (
+  batch: ChangeBatch | undefined,
+  where: readonly GistValue[],
+): ChangeBatchField | undefined => {
+  if (!batch) return undefined;
+  const paths = new Set(where.flatMap((value) => value.path || []));
+  const effect = batch.rows
+    .flatMap((row) => row.effects)
+    .find((rowEffect) => paths.has(rowEffect.path));
+  return effect
+    ? batch.fields.find(
+        (field) =>
+          field.rawName === effect.rawName && field.name === effect.name,
+      )
+    : undefined;
+};
+
+/**
+ * What the source line says about places it does not list. A count of
+ * unlisted values that repeat listed ones would read as more places, so it
+ * gives way to the distinct places a batch counted, or else to how many
+ * values the place is read from.
+ */
+const unlistedPlaces = (
+  gist: Gist,
+  lead: GistItem,
+  where: readonly GistValue[],
+): Pick<CardSource, "whereOmitted" | "whereValues"> => {
+  if (where.length === 0 || lead.whereOmitted === 0) {
+    return { whereOmitted: 0 };
+  }
+  if (where.length === lead.where.length) {
+    return { whereOmitted: lead.whereOmitted };
+  }
+  const batch = gist.change?.batch;
+  const field = placeFieldOf(batch, lead.where);
+  if (field && !field.distinctCapped) {
+    return { whereOmitted: Math.max(field.distinct - where.length, 0) };
+  }
+  return {
+    whereOmitted: 0,
+    whereValues: {
+      count: lead.where.length + lead.whereOmitted,
+      rows: batch !== undefined,
+    },
+  };
+};
+
 /** What the source line names after the server, or nothing. */
 export const cardSourceOf = (gist: Gist): CardSource | undefined => {
   const lead = gist.items[0] as GistItem | undefined;
@@ -146,7 +219,7 @@ export const cardSourceOf = (gist: Gist): CardSource | undefined => {
   if (where.length === 0 && named === undefined) return undefined;
   return {
     where,
-    whereOmitted: where.length > 0 ? lead.whereOmitted : 0,
+    ...unlistedPlaces(gist, lead, where),
     table: named,
   };
 };

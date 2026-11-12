@@ -531,7 +531,12 @@ export const MAX_FIRST_VIEW_BATCH_FIELDS = 6;
 /** Lines of long text before it collapses. */
 export const TEXT_LINES = 6;
 /** Names a See more line lists before the rest are counted. */
-export const MAX_COLLAPSED_NAMES = 6;
+export const MAX_COLLAPSED_NAMES = 8;
+/**
+ * Up to this many, a See more line names them all: "+1" or "+2" would hide
+ * names the line has room for.
+ */
+export const MAX_COLLAPSED_NAMES_UNCOUNTED = 10;
 
 /* eslint-disable lingui/no-unlocalized-strings -- API enum values */
 const RANKED: readonly ToolCallEffectKind[] = ["changed", "list_added", "set"];
@@ -547,7 +552,8 @@ export interface ChangeLayout {
   unreadable: ChangeEffect[];
   /**
    * At most `MAX_FIRST_VIEW_VALUES`, or all up to the uncollapsed cap:
-   * changed before set, links and coded values first. Never unchanged ones.
+   * changed before set, named links and coded values first. Unchanged ones
+   * only when nothing changes, since they are then all the call holds.
    */
   firstRows: ChangeEffect[];
   collapsed: ChangeEffect[];
@@ -575,19 +581,37 @@ const totalOf = (counts: ChangeCounts): number =>
 export const changeLayout = (change: GistChange): ChangeLayout => {
   const byKind = (kind: ToolCallEffectKind) =>
     change.effects.filter((effect) => effect.effect === kind);
-  // Where a record attaches and what its codes mean come before the rest.
-  const weight = (effect: ChangeEffect) =>
-    effect.link ? 0 : effect.values.some((value) => value.meaning) ? 1 : 2;
-  const ranked = RANKED.flatMap((kind) =>
-    byKind(kind).sort((a, b) => weight(a) - weight(b)),
-  );
+  // Where a record attaches and what its codes mean come before the rest; a
+  // link that names no record says nothing a value does, so it comes last.
+  const weight = (effect: ChangeEffect) => {
+    if (effect.link) {
+      return effect.values.some((value) => !hidesMachineId(value)) ? 0 : 3;
+    }
+    return effect.values.some((value) => value.meaning) ? 1 : 2;
+  };
+  const total = totalOf(change.counts);
+  const nothingChanges =
+    change.effects.length > 0 &&
+    change.texts.length === 0 &&
+    total === change.counts.unchanged &&
+    change.effects.every((effect) => effect.effect === "unchanged");
+  const unchanged = byKind("unchanged");
+  const ranked = [
+    ...RANKED.flatMap((kind) =>
+      byKind(kind).sort((a, b) => weight(a) - weight(b)),
+    ),
+    ...(nothingChanges ? unchanged : []),
+  ];
   const shown =
     ranked.length <= MAX_FIRST_VIEW_VALUES_UNCOLLAPSED
       ? ranked.length
       : MAX_FIRST_VIEW_VALUES;
   const firstRows = ranked.slice(0, shown);
-  const collapsed = [...ranked.slice(shown), ...byKind("unchanged")];
-  const beyondCap = Math.max(totalOf(change.counts) - change.effects.length, 0);
+  const collapsed = [
+    ...ranked.slice(shown),
+    ...(nothingChanges ? [] : unchanged),
+  ];
+  const beyondCap = Math.max(total - change.effects.length, 0);
   return {
     emptied: byKind("emptied"),
     lists: byKind(LIST_REPLACED),
@@ -603,10 +627,13 @@ export const changeLayout = (change: GistChange): ChangeLayout => {
 /** How many collapsed names are spelled out; the rest are counted. */
 export const collapsedNames = (
   names: readonly string[],
-): { shown: string[]; more: number } => ({
-  shown: names.slice(0, MAX_COLLAPSED_NAMES),
-  more: Math.max(names.length - MAX_COLLAPSED_NAMES, 0),
-});
+): { shown: string[]; more: number } =>
+  names.length <= MAX_COLLAPSED_NAMES_UNCOUNTED
+    ? { shown: [...names], more: 0 }
+    : {
+        shown: names.slice(0, MAX_COLLAPSED_NAMES),
+        more: names.length - MAX_COLLAPSED_NAMES,
+      };
 
 /** Whether a value needs the phrase for "no name known" instead of its text. */
 export const hidesMachineId = (value: ChangeValue): boolean =>

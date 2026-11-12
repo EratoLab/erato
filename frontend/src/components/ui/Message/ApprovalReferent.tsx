@@ -21,6 +21,7 @@ import {
   useToolCallCard,
 } from "@/lib/toolCallGist/approvalCard";
 import { cardSourceOf } from "@/lib/toolCallGist/cardLayout";
+import { sourceValuesLabel } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
 
 import { ComputerIcon, ResolvedIcon } from "../icons";
@@ -143,6 +144,8 @@ const SourcePlace = ({ source }: { source: CardSource }) => (
       </Fragment>
     ))}
     {source.whereOmitted > 0 && ` +${source.whereOmitted}`}
+    {source.whereValues !== undefined &&
+      ` · ${sourceValuesLabel(source.whereValues.count, source.whereValues.rows)}`}
     {source.table !== undefined && (
       <>
         {" · "}

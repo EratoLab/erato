@@ -729,6 +729,21 @@ export const gistUnreadRecordLine = (gist: Gist): string => {
 };
 
 /**
+ * After the places a source line lists, how many values they are read from,
+ * where the unlisted ones cannot be counted as places.
+ */
+export const sourceValuesLabel = (count: number, rows: boolean): string =>
+  rows
+    ? t({
+        id: "toolGist.source.rows",
+        message: plural(count, { one: "# row", other: "# rows" }),
+      })
+    : t({
+        id: "toolGist.source.values",
+        message: plural(count, { one: "# value", other: "# values" }),
+      });
+
+/**
  * Whether the card's lines call what the call acts on only an "item": no
  * kind, no table or type and no statement the line names instead. The
  * tool's own name for the call then says what the card cannot.

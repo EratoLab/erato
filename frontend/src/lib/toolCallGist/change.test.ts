@@ -187,7 +187,10 @@ describe("what goes in the first view", () => {
             { text: "8", meaning: { label: "Prospect", source: "tool" } },
           ],
         }),
-        effect("link", "set", { link: true }),
+        effect("link", "set", {
+          link: true,
+          values: [{ text: "Example Holding", machine_id: true }],
+        }),
       ]),
     );
     expect(layout.firstRows.map((row) => row.name)).toEqual([
@@ -195,6 +198,61 @@ describe("what goes in the first view", () => {
       "coded",
       "plain",
     ]);
+  });
+
+  it("puts a link that names no record after the values, so no value goes behind See more for it", () => {
+    const layout = changeLayout(
+      change([
+        effect("parent", "set", {
+          link: true,
+          values: [{ text: "", machine_id: true }],
+        }),
+        ...Array.from({ length: 7 }, (_, index) =>
+          effect(`s${index}`, "set", { values: [{ text: `v${index}` }] }),
+        ),
+      ]),
+    );
+    expect(layout.firstRows.map((row) => row.name)).toEqual([
+      "s0",
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+    ]);
+    expect(layout.collapsed.map((row) => row.name)).toEqual([
+      "s5",
+      "s6",
+      "parent",
+    ]);
+  });
+
+  it("shows unchanged values in the first view when nothing changes, since they are the call", () => {
+    const unchanged = (count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        effect(`u${index}`, "unchanged", { values: [{ text: `v${index}` }] }),
+      );
+    const noop = changeLayout(
+      change(unchanged(4), { notes: ["nothing_changes"] }),
+    );
+    expect(noop.firstRows.map((row) => row.name)).toEqual([
+      "u0",
+      "u1",
+      "u2",
+      "u3",
+    ]);
+    expect(noop.collapsed).toHaveLength(0);
+
+    const many = change(unchanged(9), { notes: ["nothing_changes"] });
+    const manyLayout = changeLayout(many);
+    expect(manyLayout.firstRows).toHaveLength(MAX_FIRST_VIEW_VALUES);
+    expect(changeSeeMoreLine(many, manyLayout)).toBe("See 4 unchanged fields");
+
+    // Once something changes, unchanged values never take its places.
+    const resend = changeLayout(
+      change([effect("c1", "changed"), ...unchanged(4)]),
+    );
+    expect(resend.firstRows.map((row) => row.name)).toEqual(["c1"]);
+    expect(resend.collapsed).toHaveLength(4);
   });
 
   it("keeps every loss in the first view, however many", () => {
@@ -229,12 +287,16 @@ describe("what goes in the first view", () => {
     );
   });
 
-  it("says how many more names there are when not all are listed", () => {
-    const names = Array.from({ length: 12 }, (_, index) => `f${index}`);
-    expect(collapsedNames(names)).toEqual({
-      shown: names.slice(0, MAX_COLLAPSED_NAMES),
-      more: 12 - MAX_COLLAPSED_NAMES,
+  it("names eight before counting the rest, and up to ten all of them", () => {
+    const names = (count: number) =>
+      Array.from({ length: count }, (_, index) => `f${index}`);
+    expect(MAX_COLLAPSED_NAMES).toBe(8);
+    expect(collapsedNames(names(12))).toEqual({
+      shown: names(8),
+      more: 4,
     });
+    expect(collapsedNames(names(11)).more).toBe(3);
+    expect(collapsedNames(names(10))).toEqual({ shown: names(10), more: 0 });
     expect(collapsedNames(["a"]).more).toBe(0);
   });
 });
@@ -666,6 +728,57 @@ describe("the place on the line", () => {
     expect(
       cardSourceOf(named)?.where.map((value) => [value.text, value.origin]),
     ).toEqual([["prj1", "resolved"]]);
+  });
+
+  it("counts a place list's unlisted places only where they are places", () => {
+    const listedOf = (texts: string[], omitted: number, batch?: object) =>
+      gistOf(
+        labelled({
+          action: "create",
+          object_kind: "task",
+          items: [
+            {
+              title: {
+                pointer: "/rows/*/name",
+                values: texts.map((_, index) => ({
+                  path: `/rows/${index}/name`,
+                  text: `Row ${index}`,
+                })),
+                omitted,
+              },
+              target: {
+                pointer: "/rows/*/project",
+                values: texts.map((text, index) => ({
+                  path: `/rows/${index}/project`,
+                  text,
+                })),
+                omitted,
+              },
+            },
+          ],
+          change: {
+            counts: {},
+            complete: true,
+            batch,
+          } as ToolCallLabel["change"],
+        }),
+        {},
+      )!;
+    // Distinct places listed: what is not listed counts as places, as before.
+    expect(cardSourceOf(listedOf(["A", "B"], 5))).toMatchObject({
+      whereOmitted: 5,
+    });
+    // Repeats, all listed: nothing more to count.
+    const allListed = cardSourceOf(listedOf(["A", "A"], 0));
+    expect(allListed?.whereOmitted).toBe(0);
+    expect(allListed?.whereValues).toBeUndefined();
+    // Repeats and no count of distinct places: how many values they come from.
+    const unknown = cardSourceOf(listedOf(["A", "A", "A"], 7));
+    expect(unknown?.where.map((value) => value.text)).toEqual(["A"]);
+    expect(unknown).toMatchObject({
+      whereOmitted: 0,
+      whereValues: { count: 10, rows: false },
+    });
   });
 
   it("lets the place stand for a written target it already repeats", () => {

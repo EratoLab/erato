@@ -91,10 +91,10 @@ describe("the change card", () => {
         /See 25 more fields, all set with the old value unknown/,
       ),
     ).toBeInTheDocument();
-    // Its label names what it holds; past six names the rest are counted.
+    // Its label names what it holds; past eight names the rest are counted.
     const seeMore = screen.getByRole("button", { name: /See 25 more fields/ });
     expect(seeMore).toHaveTextContent(
-      /· Field 5, Field 6, Field 7, Field 8, Field 9, Field 10 \+19$/,
+      /· Field 5, Field 6, Field 7, Field 8, Field 9, Field 10, Field 11, Field 12 \+17$/,
     );
     expect(screen.queryByText(/These fields/)).toBeNull();
     expect(screen.queryByText("ppt_field_6")).not.toBeInTheDocument();
@@ -219,7 +219,7 @@ describe("the change card", () => {
       },
     });
     const part = screen.getByTestId("tool-call-change-recipients");
-    expect(part).toHaveTextContent("To 40 addresses (32 To, 8 Cc)");
+    expect(part).toHaveTextContent("To 40 addresses: 32 To, 8 Cc");
     expect(part).not.toHaveTextContent("copy_to");
     expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
       "1 address is outside your organisation: ana@fabrikam.example",
@@ -914,9 +914,6 @@ describe("old and new values", () => {
       ],
       counts: { unchanged: 1 },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: /See 1 unchanged field · Priority/ }),
-    );
     expect(screen.queryByTestId("tool-call-change-old")).toBeNull();
     expect(screen.getByTestId("tool-call-change-row")).toHaveTextContent(
       "Priority4 (the tool says: Low)",
@@ -1586,7 +1583,70 @@ describe("the card's anatomy", () => {
     expect(within(part).getByText("cy@contoso.example")).toBeInTheDocument();
   });
 
-  it("counts four or more by To, Cc and Bcc, names every outside address and keeps the rest behind See all", () => {
+  it("counts four or more by To, Cc and Bcc, keeps the To addresses in view and the rest behind See all", () => {
+    const bcc = Array.from({ length: 12 }, (_, index) => `b${index}@x.example`);
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients(
+          [
+            { kind: "to", values: ["team@x.example"] },
+            { kind: "bcc", values: bcc },
+          ],
+          [],
+        ),
+      },
+      { action: "send", kind: "email" },
+    );
+    const part = screen.getByTestId("tool-call-change-recipients");
+    expect(part).toHaveTextContent("To 13 addresses: 1 To, 12 Bcc");
+    const to = within(part).getByTestId("tool-call-change-to");
+    expect(
+      to.closest('[data-testid="tool-call-change-row"]'),
+    ).toHaveTextContent(/^Toteam@x\.example$/);
+    expect(to.closest('[data-testid="tool-call-change-see-more"]')).toBeNull();
+    expect(screen.queryByText(/b0@x\.example/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "See all 13 addresses" }),
+    ).toBeInTheDocument();
+  });
+
+  it("names three To addresses as written, counts the rest and names every outside address it does not show", () => {
+    const to = [
+      ...Array.from({ length: 30 }, (_, index) => `p${index}@x.example`),
+      "ana@fabrikam.example",
+      "bert@contoso.example",
+    ];
+    renderAs(
+      {
+        effects: [],
+        counts: {},
+        recipients: recipients(
+          [
+            { kind: "to", values: to },
+            { kind: "cc", values: ["c@x.example", "cleo@northwind.example"] },
+          ],
+          [
+            "ana@fabrikam.example",
+            "bert@contoso.example",
+            "cleo@northwind.example",
+          ],
+        ),
+      },
+      { action: "send", kind: "email" },
+    );
+    const shown = screen.getByTestId("tool-call-change-to");
+    expect(shown).toHaveTextContent(
+      /^p0@x\.examplep1@x\.examplep2@x\.example \+29$/,
+    );
+    expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
+      "3 addresses are outside your organisation: ana@fabrikam.example, bert@contoso.example, cleo@northwind.example",
+    );
+    expect(screen.queryByTestId("tool-call-change-outside-badge")).toBeNull();
+  });
+
+  it("marks an outside To address it shows with the badge and says it once", () => {
     renderAs(
       {
         effects: [],
@@ -1609,14 +1669,13 @@ describe("the card's anatomy", () => {
       { action: "send", kind: "email" },
     );
     const part = screen.getByTestId("tool-call-change-recipients");
-    expect(part).toHaveTextContent("To 4 addresses (3 To, 1 Cc)");
-    expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
-      "1 address is outside your organisation: ana@fabrikam.example",
-    );
+    expect(part).toHaveTextContent("To 4 addresses: 3 To, 1 Cc");
+    const badge = within(part).getByTestId("tool-call-change-outside-badge");
+    expect(badge.parentElement).toHaveTextContent("ana@fabrikam.example");
+    expect(screen.queryByTestId("tool-call-change-outside")).toBeNull();
     expect(
       screen.getByRole("button", { name: "See all 4 addresses" }),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("tool-call-change-outside-badge")).toBeNull();
   });
 
   it("names no address in a mail headline that its recipients list", () => {
@@ -1717,6 +1776,94 @@ describe("the card's anatomy", () => {
       "Field 1",
       "Description",
     ]);
+  });
+
+  it("keeps a real value in view ahead of a link that names no record", () => {
+    renderAs(
+      {
+        effects: [
+          {
+            path: "/parentaccountid",
+            name: "Parent account ID",
+            raw_name: "parentaccountid",
+            effect: "set",
+            values: [{ text: "", machine_id: true }],
+            link: true,
+          },
+          ...Array.from({ length: 7 }, (_, index) => set(index)),
+        ],
+        counts: { set: 8 },
+      },
+      { action: "create" },
+    );
+    const rows = screen.getAllByTestId("tool-call-change-row");
+    expect(rows.map((row) => row.firstChild?.textContent)).toEqual([
+      "Field 0",
+      "Field 1",
+      "Field 2",
+      "Field 3",
+      "Field 4",
+    ]);
+    expect(
+      screen.getByRole("button", { name: /See 3 more fields/ }),
+    ).toHaveTextContent(/· Field 5, Field 6, Parent account ID$/);
+  });
+
+  it("names every field behind See more up to ten", () => {
+    renderAs({
+      effects: [
+        {
+          path: "/stage",
+          name: "Stage",
+          raw_name: "stage",
+          effect: "changed",
+          values: [{ text: "customer" }],
+          old: { text: "lead" },
+        },
+        ...Array.from({ length: 10 }, (_, index) => ({
+          ...set(index),
+          effect: "unchanged",
+        })),
+      ],
+      counts: { changed: 1, unchanged: 10 },
+    });
+    const seeMore = screen.getByRole("button", {
+      name: /See 10 unchanged fields/,
+    });
+    expect(seeMore).toHaveTextContent(
+      /· Field 0, Field 1, Field 2, Field 3, Field 4, Field 5, Field 6, Field 7, Field 8, Field 9$/,
+    );
+  });
+
+  it("shows the values of a call that changes nothing, since they are all it holds", () => {
+    renderAs({
+      effects: [
+        {
+          path: "/title",
+          name: "Title",
+          raw_name: "title",
+          effect: "unchanged",
+          values: [{ text: "Upload fails" }],
+        },
+        {
+          path: "/state",
+          name: "State",
+          raw_name: "state",
+          effect: "unchanged",
+          values: [{ text: "open" }],
+        },
+      ],
+      counts: { unchanged: 2 },
+      notes: ["nothing_changes"],
+    });
+    expect(screen.getByTestId("tool-call-change-qualifier")).toHaveTextContent(
+      /nothing seems to change/,
+    );
+    const rows = within(screen.getByTestId("tool-call-gist-scroll"))
+      .getAllByTestId("tool-call-change-row")
+      .map((row) => row.textContent);
+    expect(rows).toEqual(["TitleUpload fails", "Stateopen"]);
+    expect(screen.queryByTestId("tool-call-change-see-more")).toBeNull();
   });
 
   it("reads an instruction as quoted content, with what Erato does not ask under it in words true of any tool", () => {

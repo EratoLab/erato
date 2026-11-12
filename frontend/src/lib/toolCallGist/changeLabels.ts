@@ -451,11 +451,11 @@ export const recipientKindWord = (kind: ToolCallRecipientKind): string => {
 export const recipientsLine = (recipients: ChangeRecipients): string => {
   const groups =
     recipients.groups.length > 1
-      ? ` (${joinParts(
+      ? `: ${joinParts(
           recipients.groups.map(
             (group) => `${group.count} ${recipientKindWord(group.kind)}`,
           ),
-        )})`
+        )}`
       : "";
   return t({
     id: "toolChange.recipients.total",
