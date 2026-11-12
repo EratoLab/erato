@@ -95,7 +95,7 @@ const FILTER_MEMBERS: [&str; 9] = [
     "labelselector",
     "fieldselector",
 ];
-const BODY_MEMBERS: [&str; 11] = [
+pub(super) const BODY_MEMBERS: [&str; 11] = [
     "body",
     "content",
     "text",
@@ -1610,6 +1610,7 @@ impl<'a> Walk<'a> {
         let mut rows_removing_from_lists = 0u32;
         let mut deletions = 0u32;
         let mut deleted: Vec<usize> = Vec::new();
+        let mut losses_unsure = false;
         for (index, row) in entries.iter().take(read).enumerate() {
             let Value::Object(members) = row else {
                 continue;
@@ -1624,6 +1625,12 @@ impl<'a> Walk<'a> {
             if is_delete {
                 deletions = deletions.saturating_add(1);
                 deleted.push(index);
+            }
+            // A value such as `type: "item_delete"` may name the row's
+            // operation or be data: it counts as neither, yet no card can say
+            // that no row deletes. The rows were read, so they still compare.
+            if rules::row_value_loss_left_out(members, action.or(Some(self.action))) {
+                losses_unsure = true;
             }
             if let Some(action) = action {
                 operations
@@ -1769,7 +1776,7 @@ impl<'a> Walk<'a> {
                 .collect(),
             fields,
             fields_omitted,
-            read_all,
+            read_all: read_all && !losses_unsure,
         });
     }
 
@@ -2498,7 +2505,7 @@ pub(super) enum Unwrapped<'a> {
 }
 
 /// Keys of a wrapper object, best first, that hold what it stands for.
-const VALUE_KEYS: [&str; 10] = [
+pub(super) const VALUE_KEYS: [&str; 10] = [
     "displayName",
     "name",
     "title",

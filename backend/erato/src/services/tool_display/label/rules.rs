@@ -8,7 +8,7 @@
 //! its resolved annotations.
 
 use super::arguments::{MAX_INLINE_CHARS, MAX_LIST_ENTRIES, names_an_id};
-use super::change::is_sql_statement;
+use super::change::{BODY_MEMBERS, VALUE_KEYS, is_sql_statement};
 use super::context::{
     is_id_member, is_link, is_lookup, is_name_member, link_id_member, name_words, text_prefix,
 };
@@ -16,7 +16,7 @@ use super::machine_id::is_machine_id;
 use super::pointer::{self, MAX_POINTER_BYTES, escape};
 use super::recipients::{
     ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, RECIPIENT_NUMBER_WORDS,
-    bare_member, is_contact_number_member, is_phone_shaped,
+    bare_member, is_contact_number_member, is_phone_shaped, is_recipient_member,
 };
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
@@ -26,7 +26,7 @@ use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelSource, ToolCallObjectKind,
 };
 use rmcp::model::{JsonObject, Tool, ToolAnnotations};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::{HashMap, VecDeque};
 
 /// Members whose value names the operation (`command: "update_content"`,
@@ -922,6 +922,75 @@ pub(super) fn hides_a_loss(member: &str, value: &str) -> bool {
 
 fn names_a_kind(member: &str) -> bool {
     member.eq_ignore_ascii_case("kind")
+}
+
+/// Whether a batch row's plain value names a delete or archive by a whole
+/// word part, as `item_delete` or `HardDelete` do, that the row's `action`
+/// leaves out. Such a value may name the row's operation or only hold data,
+/// as a permission named `delete` does, so it never sets what a row does;
+/// it only keeps a batch from saying that no row deletes. A row that deletes
+/// loses all its values name.
+pub(super) fn row_value_loss_left_out(
+    members: &Map<String, Value>,
+    action: Option<ToolCallAction>,
+) -> bool {
+    action != Some(ToolCallAction::Delete)
+        && members
+            .iter()
+            .take(MAX_SEARCH_VALUES)
+            .filter_map(|(member, value)| row_value_words(member, value))
+            .any(|words| {
+                actions_of(&words).into_iter().any(|named| {
+                    named == ToolCallAction::Delete
+                        || (named == ToolCallAction::Archive
+                            && action != Some(ToolCallAction::Archive))
+                })
+            })
+}
+
+/// The words of a row's plain value that reads as an operation's name, such
+/// as `item_delete`, `HardDelete` or `archive_project`. A verb field is read
+/// as one already, and a member that by its name holds an ID, a name, a
+/// text, a place, a table or a recipient holds data, however it reads.
+fn row_value_words(member: &str, value: &Value) -> Option<Vec<String>> {
+    let text = value.as_str()?;
+    (is_operation_name(text)
+        && !is_one_of(member, &VERB_FIELDS)
+        && !holds_data(member)
+        && !is_machine_id(text))
+    .then(|| name_words(text))
+}
+
+/// An operation's name as code writes it, never a sentence, a path or an
+/// address.
+fn is_operation_name(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic())
+        && text.chars().nth(MAX_VERB_VALUE_CHARS).is_none()
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+fn holds_data(member: &str) -> bool {
+    names_an_id(member)
+        || is_recipient_member(member)
+        || is_name_member(member)
+        || member.eq_ignore_ascii_case(CREATED_TEXT_MEMBER)
+        || [
+            ID_MEMBERS.as_slice(),
+            &TITLE_MEMBERS,
+            &BODY_MEMBERS,
+            &AFTER_MEMBERS,
+            &BEFORE_MEMBERS,
+            &VALUE_KEYS,
+            &TARGET_MEMBERS,
+            &PLACE_MEMBERS,
+            &PATH_MEMBERS,
+            &TABLE_MEMBERS,
+        ]
+        .iter()
+        .any(|names| is_one_of(member, names))
 }
 
 /// The actions the words name, in the order of `VERBS`.
