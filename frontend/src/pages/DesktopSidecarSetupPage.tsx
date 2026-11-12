@@ -7,7 +7,6 @@ import {
   NavArrowDown,
   Download,
   Linux,
-  Package,
   Windows,
 } from "iconoir-react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +14,7 @@ import { Link } from "react-router-dom";
 
 import { Card } from "@/components/ui/Container/Card";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { FileIcon, PackageIcon } from "@/components/ui/icons";
 import {
   detectDesktopSidecarArchitecture,
   detectDesktopSidecarClientPlatform,
@@ -128,6 +128,34 @@ function artifactKindLabel(kind: string): string {
     default:
       return kind;
   }
+}
+
+function artifactIcon(file: DistributionFile, os: string) {
+  const props = { width: 38, height: 38, "aria-hidden": true };
+  const filename = file.download_filename.toLowerCase();
+
+  if (file.kind === "intunewin" || filename.endsWith(".intunewin")) {
+    return <img src="/public/common/microsoft-intune.svg" alt="" {...props} />;
+  }
+  if (filename.endsWith(".exe")) {
+    return <FileIcon label=".exe" {...props} />;
+  }
+  const packageExtension = [".msi", ".dmg", ".pkg"].find((extension) =>
+    filename.endsWith(extension),
+  );
+  if (packageExtension) {
+    return <PackageIcon label={packageExtension} {...props} />;
+  }
+  if (os === "macos" && file.kind === "application_archive") {
+    return <PackageIcon label=".app" {...props} />;
+  }
+  if (filename.endsWith(".tar.gz")) {
+    return <PackageIcon label=".tar.gz" {...props} />;
+  }
+  if (file.kind === "executable") {
+    return <FileIcon {...props} />;
+  }
+  return <PackageIcon {...props} />;
 }
 
 function formatFileSize(sizeInBytes: number): string {
@@ -497,8 +525,8 @@ function ArtifactCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="rounded-xl bg-theme-bg-accent p-2.5 text-theme-fg-accent">
-            <Package width={22} height={22} aria-hidden />
+          <div className="shrink-0 rounded-xl bg-theme-bg-accent p-0.5">
+            {artifactIcon(file, target.platform.os)}
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-theme-fg-primary">
