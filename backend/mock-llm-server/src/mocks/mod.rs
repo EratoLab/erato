@@ -2193,6 +2193,22 @@ pub fn get_default_mocks() -> Vec<Mock> {
             }),
         },
         Mock {
+            name: "McpAppsCounterToolCall".to_string(),
+            description:
+                "Returns a tool call to show_counter, whose MCP Apps view shows the call's start"
+                    .to_string(),
+            match_rules: vec![MatchRule::LastMessageIsUserWithPattern(
+                MatchRuleLastMessageIsUserWithPattern {
+                    pattern: "mcp apps counter".to_string(),
+                },
+            )],
+            response: ResponseConfig::ToolCall(ToolCallResponseConfig {
+                tool_name: "show_counter".to_string(),
+                arguments: r#"{"start":41}"#.to_string(),
+                delay_ms: 100,
+            }),
+        },
+        Mock {
             name: "McpApprovalPolicyToolCall".to_string(),
             description:
                 "Returns an open-world MCP call that must be approved under the restrictive preset"

@@ -73,6 +73,8 @@ facet could set `mode = "never"` to switch the shipped dispatch approval off.
 
 Configures a large set of chat models to validate model selector behavior (menu size, scrolling, selection) in the UI.
 
+It also configures the mock MCP server's MCP Apps tools twice, with views for the `mcp-apps` group and without for the `mcp-apps-off` group, for `mcp-apps.many-models.spec.ts`. Their sandbox origin is `https://mcp-apps.erato.internal:8443`, a host name on which the backend serves only the sandbox page (`mcpAppsSandbox` in `values.yaml`); `setup-dev` adds it to `/etc/hosts`.
+
 ### `multi-replica` - Shared Streaming State Testing
 
 **Configuration File:** `config/erato.scenario-multi-replica.toml`

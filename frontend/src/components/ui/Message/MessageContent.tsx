@@ -12,6 +12,7 @@ import "katex/dist/katex.min.css";
 import { Alert } from "@/components/ui/Feedback/Alert";
 import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
 import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
+import { McpAppView } from "@/components/ui/ToolCall/McpAppView";
 import {
   Trace,
   durationFromTraceParts,
@@ -1900,6 +1901,15 @@ export const MessageContent = memo(function MessageContent({
                   />
                 ) : null;
               })}
+              {cluster.parts.map((tracePart, partIndex) =>
+                tracePart.content_type === "tool_use" &&
+                tracePart.result_details?.view ? (
+                  <McpAppView
+                    key={`mcp-app-${tracePart.tool_call_id ?? partIndex}`}
+                    part={tracePart}
+                  />
+                ) : null,
+              )}
             </React.Fragment>
           );
         }

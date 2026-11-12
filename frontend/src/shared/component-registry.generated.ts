@@ -461,6 +461,7 @@ export { TeamsConversationView } from "@/components/ui/Teams/TeamsConversationVi
 export type { TeamsConversationViewProps } from "@/components/ui/Teams/TeamsConversationView";
 export { JsonDisplay } from "@/components/ui/ToolCall/JsonDisplay";
 export type { JsonDisplayProps } from "@/components/ui/ToolCall/JsonDisplay";
+export { McpAppView } from "@/components/ui/ToolCall/McpAppView";
 export { McpToolDescription } from "@/components/ui/ToolCall/McpToolDescription";
 export type { McpToolDescriptionProps } from "@/components/ui/ToolCall/McpToolDescription";
 export { ToolArgumentView } from "@/components/ui/ToolCall/ToolArgumentView";

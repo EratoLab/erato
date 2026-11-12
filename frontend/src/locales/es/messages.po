@@ -10285,6 +10285,11 @@ msgid "trace.tool.approved"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.title"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Trace/Trace.tsx
 msgid "trace.tool.budget_approval"
 msgstr "Presupuesto de llamadas a herramientas"
