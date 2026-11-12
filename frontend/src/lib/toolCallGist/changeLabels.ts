@@ -126,9 +126,10 @@ const changesValuesInPlace = (action: GistAction | undefined): boolean =>
 /**
  * The line that says how many values do what, such as "30 fields change: 3
  * emptied, 5 changed, 22 set", only where it says what the rows below do
- * not: values that stay the same, or changes behind See more. A create's
- * count states what every create does, and the values of a run, a send or a
- * share are no record's fields, so they get none.
+ * not: changes behind See more. Values that stay the same are always behind
+ * See more, whose label counts them. A create's count states what every
+ * create does, and the values of a run, a send or a share are no record's
+ * fields, so they get none.
  */
 export const changeSummaryLine = (
   change: GistChange,
@@ -139,14 +140,11 @@ export const changeSummaryLine = (
   const texts = change.texts.length;
   const changing = changingOf(counts, texts);
   const parts = countParts(counts, texts, listReplaceIsUnknown(change));
-  if (changing === 0 || (changing < 2 && counts.unchanged === 0)) {
-    return undefined;
-  }
-  if (!changesValuesInPlace(action)) return undefined;
+  if (changing < 2 || !changesValuesInPlace(action)) return undefined;
   const hidden =
     layout.collapsed.filter((effect) => effect.effect !== "unchanged").length +
     layout.beyondCap;
-  if (counts.unchanged === 0 && hidden === 0) return undefined;
+  if (hidden === 0) return undefined;
   const head = t({
     id: "toolChange.summary.fields",
     message: plural(changing, {
@@ -154,16 +152,7 @@ export const changeSummaryLine = (
       other: "# fields change",
     }),
   });
-  const line = parts.length > 1 ? `${head}: ${joinParts(parts)}` : head;
-  if (counts.unchanged === 0) return line;
-  const stay = t({
-    id: "toolChange.summary.staySame",
-    message: plural(counts.unchanged, {
-      one: "# stays the same",
-      other: "# stay the same",
-    }),
-  });
-  return `${line}, ${stay}`;
+  return parts.length > 1 ? `${head}: ${joinParts(parts)}` : head;
 };
 
 /** The same counts for a trace row, past tense: "3 changed, 10 unchanged". */
@@ -648,9 +637,11 @@ export const batchLossLines = (
   batch: ChangeBatch,
   listsMaybeReplaced = false,
   toolSaysOnlyAdds = false,
+  /** Every row is in view and says what it empties or removes itself. */
+  rowsInView = false,
 ): string[] => {
   const lines: string[] = [];
-  if (batch.rowsEmptying > 0) {
+  if (batch.rowsEmptying > 0 && !rowsInView) {
     const emptying = batch.rowsEmptying;
     lines.push(
       t({
@@ -682,7 +673,7 @@ export const batchLossLines = (
           }),
     );
   }
-  if (batch.rowsRemovingFromLists > 0) {
+  if (batch.rowsRemovingFromLists > 0 && !rowsInView) {
     const removing = batch.rowsRemovingFromLists;
     lines.push(
       t({
@@ -695,7 +686,9 @@ export const batchLossLines = (
     );
   }
   if (
-    lines.length === 0 &&
+    batch.rowsEmptying === 0 &&
+    batch.rowsReplacingLists === 0 &&
+    batch.rowsRemovingFromLists === 0 &&
     batch.deletions === 0 &&
     batch.readAll &&
     !toolSaysOnlyAdds
@@ -917,9 +910,23 @@ const operationWord = (action: ToolCallAction, count: number): string => {
   }
 };
 
+/**
+ * A batch's operations in the order its rows read: deletes first, as what is
+ * lost, and creates last.
+ */
 export const batchOperationsLine = (batch: ChangeBatch): string => {
+  const rank = (action: ToolCallAction) =>
+    action === "delete" ? 0 : action === "create" ? 2 : 1;
+  const ordered = batch.operations
+    .map((operation, index) => ({ operation, index }))
+    .sort(
+      (a, b) =>
+        rank(a.operation.action) - rank(b.operation.action) ||
+        a.index - b.index,
+    )
+    .map(({ operation }) => operation);
   const parts = joinParts(
-    batch.operations.map(({ action, count }) => operationWord(action, count)),
+    ordered.map(({ action, count }) => operationWord(action, count)),
   );
   return t({
     id: "toolChange.batch.operations",
@@ -1036,7 +1043,7 @@ export const changeNoteLabel = (note: ToolCallChangeNote): string => {
       return t({
         id: "toolChange.note.instructionOutcomeUnknown",
         message:
-          "The other assistant carries this out on its own. Erato does not ask you about its steps and cannot tell what will change.",
+          "Erato does not ask you about the steps the tool takes with this text and cannot tell what will change.",
       });
     case "old_values_from_earlier":
       return t({

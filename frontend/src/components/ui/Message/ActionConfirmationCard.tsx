@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
+import { WarningIcon } from "../icons";
 
 import type { AllowOnceEmphasis } from "@/lib/toolCallGist/decision";
 import type React from "react";
@@ -164,6 +165,8 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   const cardRef = useRef<HTMLElement | null>(null);
   const alwaysAllowReasonId = useId();
   const allowScopeHintId = useId();
+  const lossHintId = useId();
+  const standingLabelId = useId();
   const isPending = status === "pending";
   const [allowedWith, setAllowedWith] = useState<"once" | "scope" | "always">(
     "once",
@@ -240,14 +243,22 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     }
   }, [announcementText]);
 
+  const statesLoss = allowOnceEmphasis === "loss";
   const allowOnceButton = (
     <Button
       variant={allowOnceEmphasis === "filled" ? "primary" : "secondary"}
       size="sm"
       data-emphasis={allowOnceEmphasis}
       // The attribute selector outranks the variant's own border and label
-      // colours, which a plain utility would not reliably do.
-      className="data-[emphasis=loss]:border-theme-error-border data-[emphasis=loss]:text-theme-error-fg"
+      // colours, which a plain utility would not reliably do. The icon and
+      // the description carry the loss for anyone who cannot tell the red.
+      className="data-[emphasis=loss]:border-theme-error-fg data-[emphasis=loss]:text-theme-error-fg"
+      icon={
+        statesLoss && !onceInProgress ? (
+          <WarningIcon className="size-4" />
+        ) : undefined
+      }
+      aria-describedby={statesLoss ? lossHintId : undefined}
       onClick={
         onceInProgress
           ? undefined
@@ -359,6 +370,15 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     </Button>
   );
 
+  const lossHint = statesLoss && (
+    <span id={lossHintId} className="sr-only">
+      {t({
+        id: "actionConfirmation.allowOnceLoss",
+        message: "This card names something this action may remove or empty.",
+      })}
+    </span>
+  );
+
   const scopeHint = onAllowScope && allowScopeHint && (
     <div
       id={allowScopeHintId}
@@ -405,6 +425,7 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
           ) : (
             description
           )}
+          {lossHint}
           {standing ? (
             <>
               <div className="flex flex-wrap gap-2">
@@ -413,11 +434,15 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
                 {denyButton}
               </div>
               {scopeHint}
+              {/* A group named by its scope word, so a screen reader says
+                  whose standing answer each one is. */}
               <div
-                className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-theme-fg-secondary"
+                role="group"
+                aria-labelledby={standingLabelId}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-secondary"
                 data-testid="action-confirmation-standing"
               >
-                <span>{standingLabel}</span>
+                <span id={standingLabelId}>{standingLabel}</span>
                 {alwaysAllowButton}
                 {alwaysAllowButton && neverAllowButton && (
                   <span aria-hidden="true" className="text-theme-fg-muted">

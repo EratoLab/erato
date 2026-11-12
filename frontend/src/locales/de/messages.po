@@ -28,6 +28,11 @@ msgstr "Einmal erlauben"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.allowOnceLoss"
+msgstr "Diese Karte nennt etwas, das diese Aktion entfernen oder leeren kann."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.alwaysAllow"
 msgstr "Immer erlauben"
 
@@ -9190,7 +9195,7 @@ msgstr "Gepunktet unterstrichene und alte Werte stammen von früher in diesem Ch
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.note.instructionOutcomeUnknown"
-msgstr "Der andere Assistent führt dies selbstständig aus. Erato fragt Sie nicht zu seinen einzelnen Schritten und kann nicht sagen, was sich ändert."
+msgstr "Erato fragt Sie nicht zu den Schritten, die das Tool mit diesem Text ausführt, und kann nicht sagen, was sich ändert."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9429,10 +9434,9 @@ msgstr "{changing, plural, one {# Feld ändert sich} other {# Felder ändern sic
 #~ msgstr "{changing, plural, one {# Feld wird gesetzt} other {# Felder werden gesetzt}}"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: counts.unchanged
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.summary.staySame"
-msgstr "{0, plural, one {# bleibt gleich} other {# bleiben gleich}}"
+#~ msgid "toolChange.summary.staySame"
+#~ msgstr "{0, plural, one {# bleibt gleich} other {# bleiben gleich}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

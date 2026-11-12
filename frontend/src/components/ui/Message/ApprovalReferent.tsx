@@ -11,6 +11,7 @@ import {
   ToolArgumentView,
   ToolCallChangeBody,
   ToolCallChangeCard,
+  ToolCallChangeFootnote,
   ToolCallGist,
   ToolCallIdentity,
   ToolCallInput,
@@ -38,6 +39,11 @@ interface ApprovalReferentProps {
   serverId: string;
   isClientTool: boolean;
   titleClassName?: string;
+  /**
+   * The item has a heading of its own above the card, such as a task's brief,
+   * so the card's headline reads at row size below it.
+   */
+  belowHeading?: boolean;
   className?: string;
 }
 
@@ -279,6 +285,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           footnotes={cardFootnoteLines(card.notes, false)}
           toolTitle={display?.title ?? props.toolName}
           placeInSource
+          belowHeading={props.belowHeading}
         />
       </div>
     );
@@ -319,6 +326,7 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
             rest.kind === "view" && rest.truncated,
           )}
           placeInSource
+          belowHeading={props.belowHeading}
         >
           {rest.kind === "raw" ? (
             <ArgumentsScrollBox>
@@ -366,12 +374,23 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
         <div className="mt-2 space-y-2">
           <CardRisk notes={card.notes} />
           {card.change && (
-            <ToolCallChangeBody change={card.change} values={false} />
+            <ToolCallChangeBody
+              change={card.change}
+              values={false}
+              outside={false}
+            />
           )}
           <ArgumentsScrollBox>
             <ToolArgumentView view={card.view} values={card.values} />
           </ArgumentsScrollBox>
-          <CardFootnotes notes={card.notes} truncated={card.truncated} />
+          {card.change ? (
+            <ToolCallChangeFootnote
+              change={card.change}
+              extra={cardFootnoteLines(card.notes, card.truncated)}
+            />
+          ) : (
+            <CardFootnotes notes={card.notes} truncated={card.truncated} />
+          )}
         </div>
       </>
     );
@@ -384,9 +403,20 @@ const LabelledReferent = (props: ResolvedReferentProps) => {
           <>
             <CardRisk notes={card.notes} />
             {card.change && (
-              <ToolCallChangeBody change={card.change} values={false} />
+              <ToolCallChangeBody
+                change={card.change}
+                values={false}
+                outside={false}
+              />
             )}
-            <CardFootnotes notes={card.notes} />
+            {card.change ? (
+              <ToolCallChangeFootnote
+                change={card.change}
+                extra={cardFootnoteLines(card.notes, false)}
+              />
+            ) : (
+              <CardFootnotes notes={card.notes} />
+            )}
           </>
         )
       }

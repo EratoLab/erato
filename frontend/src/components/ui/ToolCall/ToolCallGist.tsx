@@ -39,10 +39,24 @@ import type { ReactNode } from "react";
 
 const ISOLATED = "[unicode-bidi:isolate]";
 
+/**
+ * A card's headline is the one line at this size; under a caller's own
+ * heading it reads as that heading's row did before.
+ */
+export const headlineClass = (lead: boolean, belowHeading: boolean) =>
+  belowHeading
+    ? "text-sm font-medium"
+    : lead
+      ? "text-base font-semibold"
+      : "text-sm font-semibold";
+
 const cutText = (text: string, truncated: boolean) =>
   truncated ? `${text}…` : text;
 
-/** What the call writes where a name stands for it; an ID short unless `wholeId`. */
+/**
+ * What the call writes where a name stands for it, as a muted chip after the
+ * name; an ID short unless `wholeId`.
+ */
 const WrittenBeside = ({
   value,
   wholeId,
@@ -56,20 +70,22 @@ const WrittenBeside = ({
     ? shortId(value.written)
     : cutText(value.written, value.truncated);
   return (
-    <span className="text-theme-fg-muted" data-testid="tool-call-gist-written">
+    <span data-testid="tool-call-gist-written">
       {" "}
       <span className="sr-only">
         {t({ id: "toolGist.value.writtenAs", message: "written as" })}{" "}
       </span>
-      <span aria-hidden="true">&lt;</span>
       <span
         dir="auto"
         title={short ? value.written : undefined}
-        className={clsx(value.writtenId && "font-mono text-[0.9em]", ISOLATED)}
+        className={clsx(
+          "rounded bg-theme-bg-tertiary px-1 font-normal text-theme-fg-muted",
+          value.writtenId && "font-mono",
+          ISOLATED,
+        )}
       >
         {written}
       </span>
-      <span aria-hidden="true">&gt;</span>
     </span>
   );
 };
@@ -475,11 +491,13 @@ const GistHeadline = ({
   phase,
   lead = true,
   placeInSource,
+  belowHeading,
 }: {
   gist: Gist;
   item: GistItem;
   phase: GistPhase;
   placeInSource: boolean;
+  belowHeading: boolean;
   /** Further items' lines are group heads, not a second headline. */
   lead?: boolean;
 }) => (
@@ -487,8 +505,8 @@ const GistHeadline = ({
     {...scrollBoxProps("line")}
     className={clsx(
       SCROLL_BOX_CLASS,
-      "max-h-32 break-words font-semibold text-theme-fg-primary [overflow-wrap:anywhere]",
-      lead ? "text-base" : "text-sm",
+      "max-h-32 break-words text-theme-fg-primary [overflow-wrap:anywhere]",
+      headlineClass(lead, belowHeading),
     )}
     data-testid="tool-call-gist-line"
   >
@@ -516,12 +534,15 @@ export const ToolCallGist = ({
   footnotes = [],
   children,
   placeInSource = false,
+  belowHeading = false,
 }: {
   gist: Gist;
   phase: GistPhase;
   notes?: ReactNode;
   /** The caller's source line names the item's place, so the headline does not. */
   placeInSource?: boolean;
+  /** Under a heading of the caller's own, so the headline is no larger than a row. */
+  belowHeading?: boolean;
   /** Lines the caller adds to the card's footnote. */
   footnotes?: ReactNode[];
   children?: ReactNode;
@@ -537,6 +558,7 @@ export const ToolCallGist = ({
           item={lead}
           phase={phase}
           placeInSource={placeInSource}
+          belowHeading={belowHeading}
         />
       )}
       {gist.warnings.map((warning) => (
@@ -559,6 +581,7 @@ export const ToolCallGist = ({
               phase={phase}
               lead={false}
               placeInSource={placeInSource}
+              belowHeading={belowHeading}
             />
             <ToolCallGistValues item={item} variant="card" />
           </div>

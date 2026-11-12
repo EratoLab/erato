@@ -15,6 +15,7 @@ export {
   changeRowHasDetails,
   ToolCallChangeBody,
   ToolCallChangeCard,
+  ToolCallChangeFootnote,
   ToolCallChangeRowDetails,
 } from "./ToolCallChange";
 

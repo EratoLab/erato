@@ -394,7 +394,7 @@ const parkDetachedChild = async (
 const decideOnChildCard = async (
   page: Page,
   childChatId: string,
-  button: "Allow once" | "Deny once",
+  button: "Allow once" | "Deny",
 ) => {
   await gotoAppPage(page, `/chat/${childChatId}`);
   const childCard = page.getByTestId("mcp-tool-approval");
@@ -505,7 +505,7 @@ test("delivers a denied detached child's second result, reporting the refusal it
 
   const { originChatId, childChatId } = await parkDetachedChild(page);
 
-  const childAnswer = await decideOnChildCard(page, childChatId, "Deny once");
+  const childAnswer = await decideOnChildCard(page, childChatId, "Deny");
   // Deny is not kill, here as on the awaited path: the child was told about the
   // refusal and answered on top of it. Its answer is its own tool trace, so a
   // child that had been killed would have nothing here and one that was never

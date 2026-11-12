@@ -292,21 +292,32 @@ describe("the words of a change", () => {
         ]),
       ),
     ).toBeUndefined();
-    const hidden = change([
+    const hiddenEffects = [
       effect("a", "emptied"),
       ...Array.from({ length: 9 }, (_, index) => effect(`s${index}`, "set")),
-    ]);
+    ];
+    const hidden = change(hiddenEffects);
     expect(summary(hidden)).toBe("10 fields change: 1 emptied, 9 set");
     expect(summary(hidden, "create")).toBeUndefined();
+    // See more counts the fields that stay the same; the head never repeats it.
+    const resent = change([
+      effect("a", "changed"),
+      effect("b", "unchanged"),
+      effect("c", "unchanged"),
+    ]);
+    expect(summary(resent)).toBeUndefined();
+    expect(changeSeeMoreLine(resent, changeLayout(resent))).toBe(
+      "See 2 unchanged fields",
+    );
     expect(
       summary(
         change([
-          effect("a", "changed"),
-          effect("b", "unchanged"),
-          effect("c", "unchanged"),
+          ...hiddenEffects,
+          effect("u1", "unchanged"),
+          effect("u2", "unchanged"),
         ]),
       ),
-    ).toBe("1 field changes, 2 stay the same");
+    ).toBe("10 fields change: 1 emptied, 9 set");
     expect(changeRowCounts(change([effect("a", "changed")]))).toBe("1 changed");
   });
 
@@ -577,6 +588,62 @@ describe("the place on the line", () => {
     );
     const where = gist!.items[0].where.map((value) => value.text);
     expect(where).toEqual(["Q4 pipeline", "contoso / uploader"]);
+  });
+
+  it("names in the source line every distinct place, even two with one name", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/folders/*",
+              values: [
+                { path: "/folders/0", text: "f_1", resolved: "Reports" },
+                { path: "/folders/1", text: "f_2", resolved: "Reports" },
+              ],
+            },
+          },
+        ],
+        change: { counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(
+      cardSourceOf(gist)?.where.map((value) => [value.text, value.written]),
+    ).toEqual([
+      ["Reports", "f_1"],
+      ["Reports", "f_2"],
+    ]);
+
+    const named = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/project",
+              values: [{ path: "/project", text: "p1", resolved: "prj1" }],
+            },
+          },
+        ],
+        change: { place: "prj1", counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(named.items[0].where.map((value) => value.text)).toEqual([
+      "prj1",
+      "prj1",
+    ]);
+    expect(
+      cardSourceOf(named)?.where.map((value) => [value.text, value.origin]),
+    ).toEqual([["prj1", "resolved"]]);
   });
 
   it("lets the place stand for a written target it already repeats", () => {

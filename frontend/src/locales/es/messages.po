@@ -28,6 +28,11 @@ msgstr "Permitir una vez"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ActionConfirmationCard.tsx
+msgid "actionConfirmation.allowOnceLoss"
+msgstr "Esta tarjeta indica algo que esta acción puede eliminar o vaciar."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ActionConfirmationCard.tsx
 msgid "actionConfirmation.alwaysAllow"
 msgstr "Permitir siempre"
 
@@ -9190,7 +9195,7 @@ msgstr "Los valores subrayados con puntos y los valores antiguos son de antes en
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
 msgid "toolChange.note.instructionOutcomeUnknown"
-msgstr "El otro asistente lo lleva a cabo por su cuenta. Erato no te pregunta por sus pasos y no puede saber qué cambiará."
+msgstr "Erato no te pregunta por los pasos que la herramienta realiza con este texto y no puede saber qué cambiará."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts
@@ -9429,10 +9434,9 @@ msgstr "{changing, plural, one {# campo cambia} other {# campos cambian}}"
 #~ msgstr "{changing, plural, one {# campo se define} other {# campos se definen}}"
 
 #. js-lingui-explicit-id
-#. placeholder {0}: counts.unchanged
 #: src/lib/toolCallGist/changeLabels.ts
-msgid "toolChange.summary.staySame"
-msgstr "{0, plural, one {# sigue igual} other {# siguen igual}}"
+#~ msgid "toolChange.summary.staySame"
+#~ msgstr "{0, plural, one {# sigue igual} other {# siguen igual}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/changeLabels.ts

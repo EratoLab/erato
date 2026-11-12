@@ -15,6 +15,8 @@ export type AllowOnceEmphasis = "filled" | "plain" | "loss";
 /** Words found in a statement that remove what is there. */
 const LOSS_WORDS = new Set([
   "delete",
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- a word the backend reports
+  "-delete",
   "drop",
   "truncate",
   "rm",

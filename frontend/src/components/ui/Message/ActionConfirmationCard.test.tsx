@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
@@ -7,9 +7,14 @@ vi.mock("../Controls/Button", () => ({
   Button: ({
     children,
     busy,
+    icon,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) => (
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    busy?: boolean;
+    icon?: React.ReactNode;
+  }) => (
     <button {...props} aria-busy={busy ? true : undefined}>
+      {icon && <span aria-hidden="true">{icon}</span>}
       {children}
     </button>
   ),
@@ -393,6 +398,12 @@ describe("ActionConfirmationCard", () => {
             Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
       }
+      // The scope word names the group, so it is said with each answer.
+      const scoped = screen.getByRole("group", { name: "This tool:" });
+      expect(scoped).toBe(standing);
+      expect(
+        within(scoped).getByRole("button", { name: "Always allow" }),
+      ).toBeInTheDocument();
       fireEvent.click(screen.getByText("Always allow"));
       expect(onAlwaysAllow).toHaveBeenCalledTimes(1);
       fireEvent.click(screen.getByText("Never allow"));
@@ -434,8 +445,19 @@ describe("ActionConfirmationCard", () => {
         expect(allowOnce).toHaveAttribute("variant", variant);
         expect(allowOnce).toHaveAttribute("data-emphasis", emphasis);
         expect(allowOnce.className).toContain(
-          "data-[emphasis=loss]:border-theme-error-border",
+          "data-[emphasis=loss]:border-theme-error-fg",
         );
+        // Not colour alone: a loss also gets an icon and says why.
+        const statesLoss = emphasis === "loss";
+        expect(allowOnce.querySelector("svg") !== null).toBe(statesLoss);
+        if (statesLoss) {
+          expect(allowOnce).toHaveAccessibleDescription(
+            "This card names something this action may remove or empty.",
+          );
+        } else {
+          expect(allowOnce).not.toHaveAttribute("aria-describedby");
+        }
+        expect(allowOnce).toHaveAccessibleName("Allow once");
         fireEvent.click(allowOnce);
         expect(onAllowOnce).toHaveBeenCalledTimes(1);
       },

@@ -107,19 +107,38 @@ export interface CardSource {
   table?: string;
 }
 
+/**
+ * The places once each: two values that read alike but write different IDs
+ * are two places, and only the call's place gives way to a value of the same
+ * name.
+ */
+const distinctPlaces = (where: readonly GistValue[]): GistValue[] => {
+  const seen = new Set<string>();
+  const distinct = where.filter((value) => {
+    const key = JSON.stringify([
+      value.text.trim(),
+      value.written ?? null,
+      value.origin,
+    ]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const named = new Set(
+    distinct
+      .filter((value) => value.origin !== "place")
+      .map((value) => value.text.trim()),
+  );
+  return distinct.filter(
+    (value) => value.origin !== "place" || !named.has(value.text.trim()),
+  );
+};
+
 /** What the source line names after the server, or nothing. */
 export const cardSourceOf = (gist: Gist): CardSource | undefined => {
   const lead = gist.items[0] as GistItem | undefined;
   if (!lead) return undefined;
-  const seen = new Set<string>();
-  const where = movesPlace(gist, lead)
-    ? lead.where.filter((value) => {
-        const key = value.text.trim();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-    : [];
+  const where = movesPlace(gist, lead) ? distinctPlaces(lead.where) : [];
   const table = gist.change?.table;
   const named = tableGoesToSource(gist.kind, lead.count, table)
     ? table

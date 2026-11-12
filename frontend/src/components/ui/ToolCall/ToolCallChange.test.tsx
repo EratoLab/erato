@@ -52,11 +52,16 @@ const readAs = (raw: object): GistChange => {
   return change;
 };
 
-const renderCard = (raw: object) => {
+const renderCard = (raw: object, placeInSource = false) => {
   const change = readAs(raw);
   return render(
     <I18nProvider i18n={i18n}>
-      <ToolCallChangeCard gist={gistFor(change)} change={change} phase="ask" />
+      <ToolCallChangeCard
+        gist={gistFor(change)}
+        change={change}
+        phase="ask"
+        placeInSource={placeInSource}
+      />
     </I18nProvider>,
   );
 };
@@ -681,6 +686,102 @@ describe("the change card", () => {
     expect(screen.getByTestId("tool-call-change-deletions")).toHaveTextContent(
       "2 deletions: /c2, /c3",
     );
+  });
+
+  it("heads a mixed batch with its operations and says each loss once, losses first", () => {
+    const value = (text: string) => ({
+      path: "/value",
+      name: "Value",
+      raw_name: "value",
+      effect: "set",
+      values: [{ text }],
+    });
+    const mixed = {
+      batch: {
+        path: "/ops",
+        name: "Operations",
+        total: 5,
+        same_change: false,
+        rows: [
+          { number: 1, name: "/customers/c2", action: "delete" },
+          { number: 2, name: "/customers/c3", action: "delete" },
+          {
+            number: 3,
+            name: "/customers",
+            action: "create",
+            effects: [value("Contoso Test GmbH")],
+          },
+          {
+            number: 4,
+            name: "/customers/c1",
+            action: "update",
+            effects: [value("gold")],
+          },
+          {
+            number: 5,
+            name: "/customers/c4",
+            action: "update",
+            effects: [
+              {
+                path: "/value",
+                name: "Value",
+                raw_name: "value",
+                effect: "emptied",
+              },
+            ],
+          },
+        ],
+        deletions: 2,
+        rows_emptying: 1,
+        operations: [
+          { action: "create", count: 1 },
+          { action: "update", count: 2 },
+          { action: "delete", count: 2 },
+        ],
+        fields: [
+          {
+            name: "Value",
+            raw_name: "value",
+            rows: 3,
+            emptied: 1,
+            distinct: 2,
+            samples: [{ text: "Contoso Test GmbH" }, { text: "gold" }],
+          },
+        ],
+        read_all: true,
+      },
+    };
+    // A headline that names where the call goes keeps it.
+    const { unmount } = renderCard(mixed);
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      /Verkaufschance/,
+    );
+    unmount();
+
+    renderCard(mixed, true);
+    // The operations code counted are the headline, deletes first: "Update"
+    // alone would hide the two deletes.
+    expect(screen.getByTestId("tool-call-gist-line")).toHaveTextContent(
+      /^5 operations in one call: 2 delete, 2 update, 1 create$/,
+    );
+    expect(screen.getByTestId("tool-call-change-batch")).not.toHaveTextContent(
+      /operations in one call/,
+    );
+    expect(screen.getByTestId("tool-call-change-deletions")).toHaveTextContent(
+      "2 deletions: /customers/c2, /customers/c3",
+    );
+    // Every row is in view, so nothing above them repeats what they show.
+    expect(screen.queryByTestId("tool-call-change-batch-loss")).toBeNull();
+    expect(screen.queryByTestId("tool-call-change-batch-fields")).toBeNull();
+    expect(screen.queryByText("Each row is different.")).toBeNull();
+    // The named deletions are no rows of their own; the emptied row leads.
+    const rows = screen.getAllByTestId("tool-call-change-batch-row");
+    expect(rows.map((row) => row.firstChild?.textContent)).toEqual([
+      "/customers/c4",
+      "/customers/c1",
+      "/customers",
+    ]);
+    expect(screen.queryByRole("button", { name: /See .* more/ })).toBeNull();
   });
 
   it("makes only overflowing boxes tab stops", () => {
@@ -1618,7 +1719,7 @@ describe("the card's anatomy", () => {
     ]);
   });
 
-  it("reads a hand-off's instruction as quoted content, with what Erato does not ask under it", () => {
+  it("reads an instruction as quoted content, with what Erato does not ask under it in words true of any tool", () => {
     renderAs(
       {
         effects: [],
@@ -1641,9 +1742,13 @@ describe("the card's anatomy", () => {
     expect(statement.querySelector("blockquote")).toHaveTextContent(
       "Click the Publish button and confirm the dialog",
     );
-    expect(screen.getByTestId("tool-call-change-opaque")).toHaveTextContent(
-      "The other assistant carries this out on its own. Erato does not ask you about its steps and cannot tell what will change.",
+    const opaque = screen.getByTestId("tool-call-change-opaque");
+    expect(opaque).toHaveTextContent(
+      "Erato does not ask you about the steps the tool takes with this text and cannot tell what will change.",
     );
+    // The note fires on any instruction-like member, such as an image tool's
+    // prompt, so it names no other assistant.
+    expect(opaque).not.toHaveTextContent(/assistant/i);
     expect(screen.queryByTestId("tool-call-change-notes")).toBeNull();
   });
 

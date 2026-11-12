@@ -217,6 +217,21 @@ describe("how Allow once looks", () => {
       },
     ],
     [
+      "find's -delete in a command",
+      { action: "run" },
+      {
+        opaque: [
+          {
+            kind: "shell",
+            path: "/cmd",
+            text: "find /data -name '*.log' -delete",
+            lines: 1,
+            found: ["-delete"],
+          },
+        ],
+      },
+    ],
+    [
       "a batch that deletes",
       {},
       {

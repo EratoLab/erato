@@ -255,8 +255,12 @@ describe("ToolUseStep with a change description", () => {
     );
     const counts = screen.getByTestId("trace-step-title-after");
     expect(counts).toHaveTextContent("· 1 emptied, 1 changed, 10 unchanged");
-    // A long title is cut; the counts after it must not be cut with it.
+    // A long title wraps to a second line rather than losing a verb that
+    // comes last; the counts after it are never cut with it.
     expect(counts.closest(".truncate")).toBeNull();
+    const title = screen.getByTestId("tool-call-gist-line").parentElement!;
+    expect(title).toHaveClass("line-clamp-2");
+    expect(title).not.toHaveClass("truncate");
     // One line: losses first, then values as they are now.
     const details = screen.getByTestId("tool-call-change-row-details");
     expect(details).toHaveTextContent("Emptied: Owner · Stage → customer");

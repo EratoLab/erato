@@ -24,6 +24,11 @@ interface TraceStepProps {
   /** Optional inline node next to the title (e.g. a tool status pill). */
   titleSlot?: ReactNode;
   /**
+   * The title wraps to a second line instead of being cut, for a sentence
+   * whose verb can come last, as in German.
+   */
+  titleWraps?: boolean;
+  /**
    * Optional node trailing the header, outside the toggle. Interactive
    * content belongs here: nested inside the toggle it would be invalid
    * markup, and its clicks would fold the step.
@@ -61,15 +66,35 @@ interface TraceStepProps {
 const TraceStepTitle = ({
   title,
   after,
+  wraps,
 }: {
   title: ReactNode;
   after: ReactNode;
-}) =>
-  after == null ? (
-    <span className="truncate font-medium">{title}</span>
+  wraps: boolean;
+}) => {
+  return after == null ? (
+    <span
+      className={clsx(
+        wraps
+          ? "line-clamp-2 min-w-0 break-words [overflow-wrap:anywhere]"
+          : "truncate",
+        "font-medium",
+      )}
+    >
+      {title}
+    </span>
   ) : (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-      <span className="min-w-0 max-w-full truncate font-medium">{title}</span>
+      <span
+        className={clsx(
+          wraps
+            ? "line-clamp-2 break-words [overflow-wrap:anywhere]"
+            : "truncate",
+          "min-w-0 max-w-full font-medium",
+        )}
+      >
+        {title}
+      </span>
       <span
         className="min-w-0 max-w-full whitespace-normal break-words font-normal text-theme-fg-muted"
         data-testid="trace-step-title-after"
@@ -78,6 +103,7 @@ const TraceStepTitle = ({
       </span>
     </span>
   );
+};
 
 /**
  * Visual primitive for a single trace row: rail (icon + connecting line) +
@@ -95,6 +121,7 @@ export const TraceStep = ({
   title,
   titleAfter,
   titleSlot,
+  titleWraps = false,
   headerSlot,
   detailSlot,
   children,
@@ -131,7 +158,11 @@ export const TraceStep = ({
         <div className="flex min-w-0 items-center gap-1">
           {children == null ? (
             <div className="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2.5 text-left text-sm text-theme-fg-secondary">
-              <TraceStepTitle title={title} after={titleAfter} />
+              <TraceStepTitle
+                title={title}
+                after={titleAfter}
+                wraps={titleWraps}
+              />
               {titleSlot}
             </div>
           ) : (
@@ -145,7 +176,11 @@ export const TraceStep = ({
                 "min-w-0",
               )}
             >
-              <TraceStepTitle title={title} after={titleAfter} />
+              <TraceStepTitle
+                title={title}
+                after={titleAfter}
+                wraps={titleWraps}
+              />
               {titleSlot}
               <ChevronRightIcon
                 aria-hidden="true"

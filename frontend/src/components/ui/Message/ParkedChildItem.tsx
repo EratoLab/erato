@@ -175,6 +175,7 @@ export const ParkedChildItem = ({
             isClientTool={isClientTool}
             // The task brief above is this item's heading.
             titleClassName="font-normal"
+            belowHeading
           />
         </>
       ) : (

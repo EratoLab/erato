@@ -3549,8 +3549,8 @@ describe("gist cards", () => {
       deleteRows("Northwind");
 
       expect(rowTexts()).toEqual([
-        `Northwind written as <${FIRST}>`,
-        `Northwind written as <${SECOND}>`,
+        `Northwind written as ${FIRST}`,
+        `Northwind written as ${SECOND}`,
       ]);
       for (const written of screen.getAllByTestId("tool-call-gist-written")) {
         expect(written.querySelector(".font-mono")).not.toHaveAttribute(
@@ -4014,6 +4014,44 @@ describe("gist cards", () => {
       expect(description).toHaveAttribute("tabindex", "0");
     });
 
+    it("gives a generic card one footnote, after its arguments", () => {
+      const input = { note: "Hello", count: 3 };
+      cardWith(input, {
+        action: "generic",
+        object_kind: "other",
+        source: "generic",
+        arguments: viewOf(input),
+        warnings: ["arguments_truncated"],
+        change: {
+          counts: { emptied: 1 },
+          complete: true,
+          effects: [
+            {
+              path: "/note",
+              name: "Note",
+              raw_name: "note",
+              effect: "emptied",
+              values: [],
+              old: { text: "Before", meaning: undefined },
+            },
+          ],
+          notes: ["old_values_from_earlier"],
+        },
+      });
+
+      const footnotes = screen.getAllByTestId("tool-call-change-notes");
+      expect(footnotes).toHaveLength(1);
+      const [footnote] = footnotes;
+      expect(footnote).toHaveTextContent(
+        "Old values are from earlier in this chat and may have changed.",
+      );
+      expect(footnote).toHaveTextContent(
+        "Some arguments are not shown here. Technical details has all of them.",
+      );
+      const box = screen.getByTestId("tool-argument-view").closest(SCROLL_BOX)!;
+      expect(comesBefore(box, footnote)).toBe(true);
+    });
+
     it("keeps a generic card's notes above raw arguments when it has no readable view", () => {
       const input = { note: "Hello\u200B" };
       cardWith(input, {
@@ -4287,9 +4325,11 @@ describe("gist cards", () => {
 
     const item = screen.getByTestId("delegated-task-approval-item");
     expect(item).toHaveTextContent("Summarize the release notes");
-    expect(
-      item.querySelector('[data-testid="tool-call-gist-line"]'),
-    ).toHaveTextContent(/^Create row Northwind$/);
+    const headline = item.querySelector('[data-testid="tool-call-gist-line"]');
+    expect(headline).toHaveTextContent(/^Create row Northwind$/);
+    // The brief is the item's heading: the child's headline never outranks it.
+    expect(headline).toHaveClass("text-sm", "font-medium");
+    expect(headline).not.toHaveClass("text-base");
     expect(
       item.querySelector('[data-testid="approval-source-line"]'),
     ).toHaveTextContent("Records · Companies");
@@ -4766,10 +4806,17 @@ describe("gist cards", () => {
 
       const line = screen.getByTestId("tool-call-gist-line");
       expect(line).toHaveTextContent(
-        "Send email Salaries to Alice (Finance) written as <attacker@evil.example>",
+        "Send email Salaries to Alice (Finance) written as attacker@evil.example",
       );
       const written = within(line).getByTestId("tool-call-gist-written");
-      expect(written).toHaveTextContent("<attacker@evil.example>");
+      expect(written).toHaveTextContent("attacker@evil.example");
+      // A muted chip after the name, without angle brackets.
+      expect(written).not.toHaveTextContent(/[<>]/);
+      expect(written.querySelector('[dir="auto"]')).toHaveClass(
+        "rounded",
+        "bg-theme-bg-tertiary",
+        "text-theme-fg-muted",
+      );
       expect(written.querySelector('[dir="auto"]')).toHaveClass(
         "[unicode-bidi:isolate]",
       );
@@ -4779,9 +4826,7 @@ describe("gist cards", () => {
       cardFor(createRowInput, createRowLabel);
 
       const line = screen.getByTestId("approval-source-line");
-      expect(line).toHaveTextContent(
-        `Companies written as <${DATA_SOURCE_ID}>`,
-      );
+      expect(line).toHaveTextContent(`Companies written as ${DATA_SOURCE_ID}`);
       const id = within(line)
         .getByTestId("tool-call-gist-written")
         .querySelector(".font-mono");

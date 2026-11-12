@@ -96,7 +96,7 @@ import {
   OLD_VALUE_CLASS,
 } from "@/lib/toolCallGist/valueStyle";
 
-import { ToolCallGistLine } from "./ToolCallGist";
+import { headlineClass, ToolCallGistLine } from "./ToolCallGist";
 import { Collapse } from "../Controls/Collapse";
 import { DisclosureButton } from "../Controls/Disclosure";
 
@@ -205,7 +205,10 @@ const SeeMore = ({
   );
 };
 
-/** Name above value in a narrow pane, side by side where there is room. */
+/**
+ * Name and value side by side where there is room, which on a phone is most
+ * short rows; name above value only in a narrower pane.
+ */
 const Row = ({ name, children }: { name: string; children: ReactNode }) => (
   <div
     className="flex flex-wrap gap-x-3 text-sm"
@@ -214,13 +217,13 @@ const Row = ({ name, children }: { name: string; children: ReactNode }) => (
     <span
       dir="auto"
       className={clsx(
-        "min-w-0 basis-40 break-words text-theme-fg-secondary",
+        "min-w-0 basis-28 break-words text-theme-fg-secondary sm:basis-40",
         ISOLATED,
       )}
     >
       {name}
     </span>
-    <div className="min-w-0 flex-1 basis-56 break-words text-theme-fg-primary [overflow-wrap:anywhere]">
+    <div className="min-w-0 flex-1 basis-40 break-words text-theme-fg-primary [overflow-wrap:anywhere] sm:basis-56">
       {children}
     </div>
   </div>
@@ -760,9 +763,9 @@ const NoteLines = ({
 );
 
 /**
- * A statement the call runs, with what was found in it above it; a hand-off's
- * instruction reads as the quoted content it is, with what Erato can say
- * about the other assistant under it.
+ * A statement the call runs, with what was found in it above it; an
+ * instruction reads as the quoted content it is, with what Erato does not ask
+ * about under it.
  */
 const OpaquePart = ({
   opaque,
@@ -1004,29 +1007,69 @@ const BatchFields = ({
   );
 };
 
+/** Rows that lose something first, then updates, then what is new. */
+const lossRank = (row: ChangeBatchRow): number => {
+  if (row.action === "delete") return 0;
+  if (
+    row.effects.some(
+      (effect) =>
+        effect.effect === "emptied" ||
+        effect.effect === "list_removed" ||
+        effect.effect === "list_replaced",
+    )
+  ) {
+    return 1;
+  }
+  return row.action === "create" ? 3 : 2;
+};
+
+const NAMED_DELETIONS = 3;
+
 const BatchPart = ({
   batch,
   listsMaybeReplaced,
   onlyAdds,
+  operationsInHeadline,
 }: {
   batch: ChangeBatch;
   listsMaybeReplaced: boolean;
   onlyAdds: boolean;
+  /** The card's headline says the operations already. */
+  operationsInHeadline: boolean;
 }) => {
-  const deleted = batch.rows
+  const named = batch.rows
     .filter((row) => row.action === "delete")
-    .slice(0, 3)
-    .map(batchRowLabel);
-  const first = batch.rows.slice(0, MAX_FIRST_VIEW_ROWS);
-  const rest = batch.rows.slice(MAX_FIRST_VIEW_ROWS);
+    .slice(0, NAMED_DELETIONS);
+  const deleted = named.map(batchRowLabel);
+  // A deletion the warning names, with nothing else to say, is no row again.
+  const sayAlready = new Set(
+    named
+      .filter((row) => row.effects.length === 0 && row.effectsOmitted === 0)
+      .map((row) => row.number),
+  );
+  const listed = batch.rows
+    .filter((row) => !sayAlready.has(row.number))
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => lossRank(a.row) - lossRank(b.row) || a.index - b.index)
+    .map(({ row }) => row);
+  const first = listed.slice(0, MAX_FIRST_VIEW_ROWS);
+  const rest = listed.slice(MAX_FIRST_VIEW_ROWS);
   const unstored = batch.total - batch.rows.length;
-  const losses = batchLossLines(batch, listsMaybeReplaced, onlyAdds);
-  const seeMoreCount = batch.sameChange
-    ? batch.total
-    : batch.total - first.length;
+  const rowsInView =
+    !batch.sameChange &&
+    unstored === 0 &&
+    rest.length === 0 &&
+    first.every((row) => row.effectsOmitted === 0);
+  const losses = batchLossLines(
+    batch,
+    listsMaybeReplaced,
+    onlyAdds,
+    rowsInView,
+  );
+  const seeMoreCount = batch.sameChange ? batch.total : rest.length + unstored;
   return (
     <div className="space-y-1" data-testid="tool-call-change-batch">
-      {batch.operations.length > 1 && (
+      {batch.operations.length > 1 && !operationsInHeadline && (
         <p className="text-sm font-semibold text-theme-fg-primary">
           {batchOperationsLine(batch)}
         </p>
@@ -1062,8 +1105,15 @@ const BatchPart = ({
         </>
       ) : (
         <>
-          <BatchFields batch={batch} listsMaybeReplaced={listsMaybeReplaced} />
-          <p className={MUTED}>{batchDifferentLine()}</p>
+          {!rowsInView && (
+            <>
+              <BatchFields
+                batch={batch}
+                listsMaybeReplaced={listsMaybeReplaced}
+              />
+              <p className={MUTED}>{batchDifferentLine()}</p>
+            </>
+          )}
           <ul className="space-y-1">
             {first.map((row) => (
               <BatchRow key={row.number} row={row} />
@@ -1225,6 +1275,28 @@ const ChangeFootnote = ({
         <div className={clsx(MUTED, "space-y-0.5")}>{extra}</div>
       )}
     </div>
+  );
+};
+
+/**
+ * The one footnote of a card that lists a change's values in its own
+ * argument view: the body's notes and the caller's `extra` lines, after the
+ * arguments they are about.
+ */
+export const ToolCallChangeFootnote = ({
+  change,
+  extra = [],
+}: {
+  change: GistChange;
+  extra?: ReactNode[];
+}) => {
+  const places = notePlacesOf(change);
+  return (
+    <ChangeFootnote
+      notes={[...places.qualifier, ...places.lists, ...places.footnote]}
+      earlier={false}
+      extra={extra}
+    />
   );
 };
 
@@ -1403,11 +1475,14 @@ export const ToolCallChangeBody = ({
   values = true,
   outside = true,
   summary,
+  operationsInHeadline = false,
 }: {
   change: GistChange;
   action?: GistAction;
   replacesText?: boolean;
   values?: boolean;
+  /** The card's headline says a batch's operations already. */
+  operationsInHeadline?: boolean;
   /**
    * Whether See more and the notes are part of the body; a card puts them
    * after its scroll box instead, so they never scroll out of sight.
@@ -1442,6 +1517,7 @@ export const ToolCallChangeBody = ({
           batch={change.batch}
           listsMaybeReplaced={listReplaceIsUnknown(change)}
           onlyAdds={toolSaysOnlyAdds(change)}
+          operationsInHeadline={operationsInHeadline}
         />
       )}
       {values && <ValuesPart change={change} />}
@@ -1509,12 +1585,15 @@ export const ToolCallChangeCard = ({
   footnotes,
   toolTitle,
   placeInSource = false,
+  belowHeading = false,
 }: {
   gist: Gist;
   change: GistChange;
   phase: GistPhase;
   /** The caller's source line names the item's place, so the headline does not. */
   placeInSource?: boolean;
+  /** Under a heading of the caller's own, so the headline is no larger than a row. */
+  belowHeading?: boolean;
   /** What the card warns about beyond the call's values, under the headline. */
   notes?: ReactNode;
   /** Lines the caller adds to the card's footnote. */
@@ -1527,6 +1606,17 @@ export const ToolCallChangeCard = ({
   const places = notePlacesOf(change);
   const showsToolTitle =
     toolTitle !== undefined && toolTitle.length > 0 && namesOnlyAnItem(gist);
+  // Operations code counted say more than a verb a mapping picked: a batch
+  // that deletes two rows is no "Update". A headline that still names where
+  // the call goes keeps it.
+  const lead = gist.items.at(0);
+  const operationsHead =
+    change.batch &&
+    change.batch.operations.length > 1 &&
+    lead !== undefined &&
+    headlineItemOf(gist, lead, placeInSource).where.length === 0
+      ? batchOperationsLine(change.batch)
+      : undefined;
   return (
     <div className="space-y-3" data-testid="tool-call-gist">
       <div className="space-y-1" data-testid="tool-call-change-head">
@@ -1536,17 +1626,21 @@ export const ToolCallChangeCard = ({
               kind="line"
               as="p"
               className={clsx(
-                "max-h-32 break-words font-semibold text-theme-fg-primary [overflow-wrap:anywhere]",
-                index === 0 ? "text-base" : "text-sm",
+                "max-h-32 break-words text-theme-fg-primary [overflow-wrap:anywhere]",
+                headlineClass(index === 0, belowHeading),
               )}
               data-testid="tool-call-gist-line"
             >
-              <ToolCallGistLine
-                gist={gist}
-                item={headlineItemOf(gist, item, placeInSource)}
-                phase={phase}
-                variant="card"
-              />
+              {index === 0 && operationsHead !== undefined ? (
+                operationsHead
+              ) : (
+                <ToolCallGistLine
+                  gist={gist}
+                  item={headlineItemOf(gist, item, placeInSource)}
+                  phase={phase}
+                  variant="card"
+                />
+              )}
             </ScrollBox>
             {showsUnreadRecord(gist, item) && (
               <p
@@ -1588,6 +1682,7 @@ export const ToolCallChangeCard = ({
           replacesText={gist.action === "update" || gist.action === "upsert"}
           outside={false}
           summary={summary}
+          operationsInHeadline={operationsHead !== undefined}
         />
       </ScrollBox>
       <SeeMorePart change={change} action={gist.action} bounded />

@@ -469,6 +469,7 @@ const PlainToolUseStep = ({
       <TraceStep
         railIcon={railIconFor(part.content_type, status)}
         hasTrailingRailLine={!isLastStep}
+        titleWraps={!proposalLine && gist !== undefined && lead !== undefined}
         title={
           <>
             {proposalLine ? (
