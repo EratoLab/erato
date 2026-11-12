@@ -1,6 +1,7 @@
 use super::*;
-use crate::config::{AppConfig, McpRuntimeConfig};
+use crate::config::{AppConfig, McpRuntimeConfig, McpSurfaceConfig};
 use crate::services::mcp_session_manager::{McpServerConnectionStatus, McpSessionManager};
+use crate::services::mcp_surface::SURFACE_HINT_KEY;
 use axum::{
     Json, Router,
     extract::State,
@@ -23,6 +24,8 @@ struct Wire {
     discovery_code: AtomicU64,
     paginated: AtomicBool,
     active: AtomicUsize,
+    /// The surface hint in the `_meta` of each `tools/call`, in arrival order.
+    call_hints: std::sync::Mutex<Vec<Option<Value>>>,
 }
 
 async fn wire(
@@ -40,6 +43,18 @@ async fn wire(
         request["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"],
         json!({})
     );
+    let hint = request["params"]["_meta"].get(SURFACE_HINT_KEY).cloned();
+    if request["method"] == "tools/call" {
+        // A surface hint is a `_meta` entry of a tool call, never an argument.
+        assert!(
+            request["params"]["arguments"]
+                .get(SURFACE_HINT_KEY)
+                .is_none()
+        );
+        state.call_hints.lock().unwrap().push(hint);
+    } else {
+        assert_eq!(hint, None);
+    }
     assert!(!headers.contains_key("mcp-session-id"));
     assert!(!headers.contains_key("last-event-id"));
     let result = match request["method"].as_str().unwrap() {
@@ -212,6 +227,7 @@ async fn modern_calls_keep_no_sessions_with_rmcp_startup_progress_limits() {
                 "files",
                 call_params(""),
                 &Default::default(),
+                None,
                 Some(tx),
             )
             .await
@@ -232,6 +248,64 @@ async fn modern_calls_keep_no_sessions_with_rmcp_startup_progress_limits() {
         2,
         "probes must make a live request"
     );
+}
+
+/// A stateless server that opted in finds the surface in the `_meta` of each
+/// tool call; a configured list replaces the built-in one, an unknown or
+/// absent surface sends nothing, and so does a server that did not opt in.
+/// The tool list is fetched once per server whatever the surface; discovery
+/// and listing carry no hint and the client capabilities stay empty
+/// (asserted by `wire`).
+#[tokio::test]
+async fn an_opted_in_stateless_server_finds_the_surface_in_the_call_meta() {
+    let (wire, server, _) = fixture().await;
+    let mut app = AppConfig::default();
+    let mut opted_in = config(&server.url);
+    opted_in.surface_hints = true;
+    app.mcp_servers.insert("files".into(), opted_in);
+    app.mcp_servers.insert("plain".into(), config(&server.url));
+    app.mcp_servers_global.surfaces.insert(
+        "outlook".into(),
+        McpSurfaceConfig {
+            accept: vec!["image/png".into()],
+        },
+    );
+    let manager = McpSessionManager::new(&app);
+    for (server_id, platform) in [
+        ("files", Some("teams-bot")),
+        ("files", Some("teams")),
+        ("files", Some("outlook")),
+        ("files", Some("excel")),
+        ("files", None),
+        ("plain", Some("web")),
+    ] {
+        manager
+            .call_tool_with_progress(
+                Uuid::new_v4(),
+                server_id,
+                call_params(""),
+                &Default::default(),
+                platform,
+                None,
+            )
+            .await
+            .unwrap();
+    }
+    let hint = |surface: &str, accept: &[&str]| Some(json!({"surface": surface, "accept": accept}));
+    assert_eq!(
+        *wire.call_hints.lock().unwrap(),
+        [
+            hint("teams-bot", &["image/png"]),
+            hint("teams", &["image/svg+xml", "image/png"]),
+            hint("outlook", &["image/png"]),
+            None,
+            None,
+            None,
+        ]
+    );
+    assert_eq!(wire.discoveries.load(Ordering::SeqCst), 2);
+    assert_eq!(wire.lists.load(Ordering::SeqCst), 2);
+    assert_eq!(manager.active_session_count("files").await, 0);
 }
 
 #[tokio::test]
@@ -745,6 +819,7 @@ async fn real_mock_authentication_and_sdk_progress_limits_in_both_eras() {
                 "files",
                 params,
                 &Default::default(),
+                None,
                 Some(tx),
             )
             .await

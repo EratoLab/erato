@@ -59,6 +59,9 @@ struct WireServer {
     /// Parks the `tools/list` that a new session issues while connecting.
     list_gate: Arc<Gate>,
     list_disconnected: Arc<tokio::sync::Notify>,
+    /// `_meta` of each `tools/list` and `tools/call`, in arrival order.
+    list_meta: Arc<std::sync::Mutex<Vec<Value>>>,
+    call_meta: Arc<std::sync::Mutex<Vec<Value>>>,
 }
 
 async fn sse_connect(State(state): State<WireServer>) -> Response {
@@ -75,9 +78,19 @@ async fn emit(request: Value, tx: Events, state: WireServer) {
             json!({"protocolVersion": request["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "progress-test", "version": "1"}})
         }
         "tools/list" => {
+            state
+                .list_meta
+                .lock()
+                .unwrap()
+                .push(request["params"]["_meta"].clone());
             json!({"tools": [{"name": "read_file", "inputSchema": {"type": "object"}}]})
         }
         "tools/call" => {
+            state
+                .call_meta
+                .lock()
+                .unwrap()
+                .push(request["params"]["_meta"].clone());
             let marker = request["params"]["arguments"]["marker"].as_str().unwrap();
             let token = request["params"]["_meta"]["progressToken"].clone();
             assert!(!token.is_null(), "SDK must request progress");
@@ -171,7 +184,7 @@ async fn exercise(manager: &McpSessionManager, chat: Uuid, server: &str) {
     let marker = Uuid::new_v4().to_string();
     params.arguments = json!({"marker": marker}).as_object().cloned();
     let auth = McpRequestAuthContext::default();
-    let call = manager.call_tool_with_progress(chat, server, params, &auth, Some(tx));
+    let call = manager.call_tool_with_progress(chat, server, params, &auth, None, Some(tx));
     tokio::pin!(call);
     for step in 1..=3 {
         let update = tokio::select! {
@@ -243,6 +256,7 @@ async fn progress_arrives_before_results_over_both_transports() {
                 "http-b",
                 params,
                 &McpRequestAuthContext::default(),
+                None,
                 Some(tx),
             ),
         )
@@ -282,7 +296,8 @@ async fn existing_progress_mock_delivers_three_updates_before_result() {
     params.name = "read_file".into();
     params.arguments = json!({"path":"docs/readme.txt"}).as_object().cloned();
     let auth = McpRequestAuthContext::default();
-    let call = manager.call_tool_with_progress(Uuid::new_v4(), "progress", params, &auth, Some(tx));
+    let call =
+        manager.call_tool_with_progress(Uuid::new_v4(), "progress", params, &auth, None, Some(tx));
     tokio::pin!(call);
     tokio::time::timeout(Duration::from_secs(30), async {
         for step in 1..=3 {
@@ -338,8 +353,89 @@ async fn call(
             params,
             &McpRequestAuthContext::default(),
             None,
+            None,
         )
         .await
+}
+
+/// A legacy server that opted in finds the surface in each call's `_meta`,
+/// beside the SDK's progress token, and the arguments are left alone. One
+/// cached session serves calls from different surfaces, tool listing carries
+/// no hint, and a server that did not opt in is told nothing.
+#[tokio::test]
+async fn an_opted_in_legacy_server_finds_the_surface_in_each_calls_meta() {
+    use crate::services::mcp_surface::SURFACE_HINT_KEY;
+    let state = WireServer::default();
+    let (address, server) = serve(
+        Router::new()
+            .route("/mcp", post(http_post))
+            .with_state(state.clone()),
+    )
+    .await;
+    let mut config = AppConfig::default();
+    let mut opted_in = streamable(address, "mcp");
+    opted_in.surface_hints = true;
+    config.mcp_servers.insert("opted-in".into(), opted_in);
+    config
+        .mcp_servers
+        .insert("plain".into(), streamable(address, "mcp"));
+    let manager = McpSessionManager::new(&config);
+    let chat = Uuid::new_v4();
+    for (server_id, platform) in [
+        ("opted-in", Some("teams-bot")),
+        ("opted-in", Some("teams")),
+        ("opted-in", Some("excel")),
+        ("opted-in", None),
+        ("plain", Some("teams")),
+    ] {
+        let mut params = CallToolRequestParams::default();
+        params.name = "read_file".into();
+        params.arguments = json!({"marker": "silent"}).as_object().cloned();
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            manager.call_tool_with_progress(
+                chat,
+                server_id,
+                params,
+                &McpRequestAuthContext::default(),
+                platform,
+                None,
+            ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    }
+
+    let calls = state.call_meta.lock().unwrap().clone();
+    let hints = calls
+        .iter()
+        .map(|meta| meta.get(SURFACE_HINT_KEY).cloned())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hints,
+        [
+            Some(json!({"surface": "teams-bot", "accept": ["image/png"]})),
+            Some(json!({"surface": "teams", "accept": ["image/svg+xml", "image/png"]})),
+            None,
+            None,
+            None,
+        ]
+    );
+    assert!(
+        calls.iter().all(|meta| meta.get("progressToken").is_some()),
+        "{calls:?}"
+    );
+    let lists = state.list_meta.lock().unwrap().clone();
+    assert_eq!(lists.len(), 2, "one tool list per cached session");
+    assert!(
+        lists
+            .iter()
+            .all(|meta| meta.get(SURFACE_HINT_KEY).is_none()),
+        "{lists:?}"
+    );
+    assert_eq!(manager.active_session_count("opted-in").await, 1);
+    server.abort();
 }
 
 /// The regression net for bounded fan-out: N children calling MCP tools at

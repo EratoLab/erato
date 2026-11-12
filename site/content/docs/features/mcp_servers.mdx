@@ -264,6 +264,29 @@ Each MCP server can define `allow_tools` and `exclude_tools` wildcard patterns o
 
 Omitting `allow_tools` permits every tool and is equivalent to `allow_tools = ["*"]`. Setting `allow_tools = []` permits none. An omitted or empty `exclude_tools` removes nothing.
 
+### Surface hints
+
+A server can learn where a tool call comes from, so that it returns what the user's surface can show: an SVG for the web app or an Office add-in, a PNG for the Teams bot. Enable `surface_hints` on the server:
+
+```toml
+[mcp_servers.diagrams]
+transport_type = "streamable_http"
+url = "https://diagrams.example.com/mcp"
+surface_hints = true
+```
+
+A tool call to that server then carries `chat.erato/surface` in its `_meta`, for stateless and legacy servers alike:
+
+```json
+"_meta": {
+  "chat.erato/surface": { "surface": "teams-bot", "accept": ["image/png"] }
+}
+```
+
+`surface` is the request's `X-Erato-Platform` value, such as `web`, `outlook`, `teams` for the Teams tab or `teams-bot` for the Teams bot; a request without the header counts as `web`. `accept` lists the MIME types that surface can show, in order of preference. A call carries the hint only when its surface has an accept list: calls from an unknown surface and from delegated tasks carry none. `"accept": []` names the surface and means it shows none of the formats; a surface with no list at all sends no hint. The surface comes from a header the client sends, so a server may use it to choose output formats only, never for access decisions. The hint is never a tool argument, so the model does not see it, and servers without `surface_hints` receive nothing. Tool listing and its cache are unaffected.
+
+Each surface has a built-in list, which `mcp_servers_global.surfaces.<surface>.accept` replaces. See [`surface_hints`](../configuration#mcp_serversserver-idsurface_hints) and [`mcp_servers_global.surfaces`](../configuration#mcp_servers_globalsurfaces) in the Configuration Reference.
+
 ## Access to MCP servers
 
 Authentication controls how Erato connects to an MCP server. Access control decides which users are allowed to see and use that server in the first place.

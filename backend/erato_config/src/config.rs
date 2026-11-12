@@ -4083,6 +4083,18 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub glossary: McpGlossaryConfig,
+    /// Whether this server is told, with a tool call, which surface the call
+    /// comes from (the web app, an Office add-in, the Teams tab or the Teams
+    /// bot) and which output formats that surface accepts, as listed in
+    /// `mcp_servers_global.surfaces`. A call carries the hint only when its
+    /// surface has an accept list: calls from an unknown surface and from
+    /// delegated tasks carry none, and a request without the
+    /// `X-Erato-Platform` header counts as `web`. The hint travels in the
+    /// call's MCP metadata, never as a tool argument, so the model never sees
+    /// it. Off by default: other servers receive nothing.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub surface_hints: bool,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -4389,6 +4401,56 @@ pub struct McpServersGlobalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub approval: McpToolApprovalConfig,
+
+    /// What each surface accepts, keyed by its `X-Erato-Platform` value
+    /// (`web`, `outlook`, `word`, `addin-neutral`, `teams` for the Teams tab,
+    /// `teams-bot` for the Teams bot). Told to servers that enable
+    /// `surface_hints`. An entry replaces the built-in list of that surface;
+    /// a surface with neither is sent no hint.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub surfaces: HashMap<String, McpSurfaceConfig>,
+}
+
+/// What one surface accepts from an MCP tool call.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpSurfaceConfig {
+    /// MIME types the surface can show, most preferred first, such as
+    /// `["image/svg+xml", "image/png"]`. Exact `type/subtype` values only.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub accept: Vec<String>,
+}
+
+/// Longest configured surface name, which keeps configured names in the
+/// shape of the built-in ones.
+const MAX_SURFACE_NAME_BYTES: usize = 32;
+
+/// Whether `name` has the shape of the built-in surface names: lowercase
+/// ASCII letters, digits and `-`, starting with a letter or digit.
+fn is_surface_name(name: &str) -> bool {
+    let is_letter_or_digit = |byte: u8| byte.is_ascii_lowercase() || byte.is_ascii_digit();
+    name.len() <= MAX_SURFACE_NAME_BYTES
+        && name.bytes().next().is_some_and(is_letter_or_digit)
+        && name
+            .bytes()
+            .all(|byte| is_letter_or_digit(byte) || byte == b'-')
+}
+
+/// Whether `value` is a MIME type a surface can list: an exact
+/// `type/subtype`, each part made of RFC 6838 name characters.
+fn is_surface_mime_type(value: &str) -> bool {
+    let Some((major, minor)) = value.split_once('/') else {
+        return false;
+    };
+    let is_token = |part: &str| {
+        !part.is_empty()
+            && part.len() <= 127
+            && part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&byte))
+    };
+    is_token(major) && is_token(minor)
 }
 
 impl Default for McpServersGlobalConfig {
@@ -4404,6 +4466,7 @@ impl Default for McpServersGlobalConfig {
             max_wait_seconds: default_mcp_wait_max_seconds(),
             approval: McpToolApprovalConfig::default(),
             organization_email_domains: Vec::new(),
+            surfaces: HashMap::new(),
         }
     }
 }
@@ -4414,6 +4477,24 @@ impl McpServersGlobalConfig {
             return Err(eyre!(
                 "mcp_servers_global.max_wait_seconds must be greater than 0"
             ));
+        }
+        for (surface, config) in &self.surfaces {
+            if !is_surface_name(surface) {
+                return Err(eyre!(
+                    "mcp_servers_global.surfaces: surface name '{}' must be 1 to {MAX_SURFACE_NAME_BYTES} lowercase ASCII letters, digits or '-', starting with a letter or digit, like 'web' or 'teams-bot'",
+                    surface.escape_debug()
+                ));
+            }
+            if let Some(value) = config
+                .accept
+                .iter()
+                .find(|value| !is_surface_mime_type(value))
+            {
+                return Err(eyre!(
+                    "mcp_servers_global.surfaces.{surface}.accept: '{}' is not an exact MIME type such as image/png",
+                    value.escape_debug()
+                ));
+            }
         }
         Ok(())
     }

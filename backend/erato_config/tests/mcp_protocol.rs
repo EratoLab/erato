@@ -1,6 +1,6 @@
 use erato_config::config::{
-    McpProtocolMode, McpRuntimeConfig, McpServerConfig, has_hidden_chars, is_invisible_format_char,
-    mark_hidden_chars, validate_mcp_server_ids,
+    McpProtocolMode, McpRuntimeConfig, McpServerConfig, McpServersGlobalConfig, has_hidden_chars,
+    is_invisible_format_char, mark_hidden_chars, validate_mcp_server_ids,
 };
 use std::collections::HashMap;
 
@@ -12,6 +12,87 @@ fn parse(mode: &str) -> Result<McpServerConfig, config::ConfigError> {
         ))
         .build()?
         .try_deserialize()
+}
+
+fn parse_global(toml: &str) -> Result<McpServersGlobalConfig, config::ConfigError> {
+    config::Config::builder()
+        .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+        .build()?
+        .try_deserialize()
+}
+
+#[test]
+fn surface_hints_are_opt_in() {
+    assert!(!parse("").unwrap().surface_hints);
+    assert!(parse("surface_hints = true").unwrap().surface_hints);
+    assert!(parse_global("").unwrap().surfaces.is_empty());
+}
+
+#[test]
+fn configured_surface_lists_keep_their_order_and_are_validated() {
+    let global = parse_global(
+        "[surfaces.teams-bot]\naccept = ['image/png']\n\n[surfaces.excel]\naccept = ['image/svg+xml', 'image/png', 'application/pdf']\n\n[surfaces.web]\naccept = []\n",
+    )
+    .unwrap();
+    global.validate().unwrap();
+    assert_eq!(global.surfaces["teams-bot"].accept, ["image/png"]);
+    assert_eq!(
+        global.surfaces["excel"].accept,
+        ["image/svg+xml", "image/png", "application/pdf"]
+    );
+    assert!(global.surfaces["web"].accept.is_empty());
+
+    for invalid in [
+        "[surfaces.web]\naccept = ['png']",
+        "[surfaces.web]\naccept = ['image/png ']",
+        "[surfaces.web]\naccept = ['image/*']",
+        "[surfaces.web]\naccept = ['*/*']",
+        "[surfaces.web]\naccept = ['*/png']",
+        "[surfaces.web]\naccept = ['image/']",
+        "[surfaces.web]\naccept = ['image/png;q=0.5']",
+    ] {
+        assert!(
+            parse_global(invalid).unwrap().validate().is_err(),
+            "{invalid}"
+        );
+    }
+    // A surface entry names its list; anything else is a typo.
+    assert!(parse_global("[surfaces.web]\nformats = ['image/png']").is_err());
+}
+
+#[test]
+fn configured_surface_names_have_the_shape_of_the_built_in_ones() {
+    let is_valid = |name: &str| {
+        parse_global(&format!("[surfaces.'{name}']\naccept = ['image/png']"))
+            .unwrap()
+            .validate()
+            .is_ok()
+    };
+    let longest = "a".repeat(32);
+    for valid in [
+        "web",
+        "outlook",
+        "word",
+        "addin-neutral",
+        "teams",
+        "teams-bot",
+        "kiosk",
+        "2nd-screen",
+        longest.as_str(),
+    ] {
+        assert!(is_valid(valid), "{valid}");
+    }
+    let too_long = "a".repeat(33);
+    for invalid in [
+        "Kiosk",
+        "my_surface",
+        "-x",
+        "two words",
+        "",
+        too_long.as_str(),
+    ] {
+        assert!(!is_valid(invalid), "{invalid}");
+    }
 }
 
 #[test]
