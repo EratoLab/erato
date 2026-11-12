@@ -3,7 +3,6 @@ import { FeatureConfigProvider } from "@erato/frontend/library";
 import { useOffice } from "./OfficeProvider";
 import { SHARED_ADDIN_FEATURE_CONFIG } from "../core/SharedAddinShell";
 
-/** Feature overrides of the document task panes (Word, Excel, PowerPoint). */
 export function OfficeDocumentFeatureConfig({
   children,
 }: {

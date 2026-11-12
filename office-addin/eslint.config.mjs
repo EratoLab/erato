@@ -213,7 +213,9 @@ const eslintConfig = [
                 "**/word/**",
                 "!**/test/mocks/word/**",
                 "**/excel/**",
+                "!**/test/mocks/excel/**",
                 "**/powerpoint/**",
+                "!**/test/mocks/powerpoint/**",
               ],
               message:
                 "The shared ring must not depend on a host module; move shared code out or invert the dependency.",

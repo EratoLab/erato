@@ -154,8 +154,8 @@ FUNNEL_MANIFEST_SPECS = (
             path=MANIFEST_FUNNEL_EXCEL_PATH,
             instructions=(
                 "In Excel, copy manifests/manifest-funnel-excel.xml into",
-                "~/Library/Containers/com.microsoft.Excel/Data/Documents/wef, "
-                "then use",
+                "~/Library/Containers/com.microsoft.Excel/Data/Documents/wef",
+                "(create the folder if it is missing), then use",
                 "Insert → Add-ins → My Add-ins (Excel for the web: "
                 "Upload My Add-in)",
             ),
@@ -167,8 +167,8 @@ FUNNEL_MANIFEST_SPECS = (
             path=MANIFEST_FUNNEL_POWERPOINT_PATH,
             instructions=(
                 "In PowerPoint, copy manifests/manifest-funnel-powerpoint.xml into",
-                "~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef, "
-                "then use",
+                "~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef",
+                "(create the folder if it is missing), then use",
                 "Insert → Add-ins → My Add-ins (PowerPoint for the web: "
                 "Upload My Add-in)",
             ),

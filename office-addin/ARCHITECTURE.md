@@ -33,7 +33,7 @@ implement the seams listed below, and never modify the core itself.
   `auth/isTeamsNestedAppAuthSupported.ts`. `@microsoft/teams-js` is imported
   here and nowhere else.
 - `src/word` — the Word task pane at `/office-addin/word`. `WordApp.tsx`
-  composes the shared Office.js providers with Word auth, session, document
+  composes the shared Office.js providers and sign-in with Word session, document
   capture, review and write components. Document protocols and OOXML
   compilation stay under `src/word/utils`; shared UI comes from the frontend library.
 - `src/excel`, `src/powerpoint` — the Excel and PowerPoint task panes at
@@ -129,8 +129,9 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    `web` (shared-frontend default), `outlook`, `teams`, `word`, `excel`,
    `powerpoint`, `addin-neutral` (`NeutralAddinChatPage` default). The Teams
    bot, which runs in the backend, reports `teams-bot`. The backend does not
-   know `excel` and `powerpoint` yet: it logs a warning and records their chats
-   as created on the web.
+   know `excel` and `powerpoint` yet: it logs a warning until an action facet
+   declares the platform, records their chats as created on the web, and sends
+   MCP servers no surface hint unless `mcp_servers_global.surfaces` names them.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 
@@ -321,8 +322,8 @@ there, so "Sent as before" keeps its room; the detail holds the passage.
 
 ## The Word host
 
-`WordApp` composes the shared shell and Office.js providers with Word auth
-without a mailbox dependency. The manifest uses a distinct document add-in
+`WordApp` composes the shared shell, Office.js providers and document sign-in
+(`OfficeDocumentAuthProvider`), which has no mailbox dependency. The manifest uses a distinct document add-in
 identity and inherits deployment branding from the mail configuration.
 
 Each document gets its own chat: `WordAddinSessionController` keeps the open

@@ -2,7 +2,7 @@
  * Host-agnostic Nested App Auth (NAA) probe. Reasons ONLY about whether NAA is
  * available in the current Office host — it deliberately knows nothing about the
  * mailbox, Exchange, or Graph so the seam stays reusable across Office hosts
- * (Outlook today, Excel/Word later).
+ * (Outlook, Word, Excel and PowerPoint).
  *
  * NAA is no longer the only Entra path: a NAA-less host that still has an Entra
  * identity (Exchange SE OWA) authenticates via the oauth2-proxy redirect login
@@ -12,9 +12,9 @@
  * verdict.
  *
  * The requirement set is necessary but not sufficient: Word, Excel and
- * PowerPoint on the web report it without providing the NAA bridge. Word
- * therefore also requires the bridge (`createEntraNaaAuthSource`'s
- * `requireBridge`).
+ * PowerPoint on the web report it without providing the NAA bridge. Their
+ * shared sign-in therefore also requires the bridge
+ * (`createEntraNaaAuthSource`'s `requireBridge`).
  */
 export function isNestedAppAuthSupported(): boolean {
   try {

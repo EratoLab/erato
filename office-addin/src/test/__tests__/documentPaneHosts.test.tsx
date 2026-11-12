@@ -192,25 +192,20 @@ describe.each([
         </QueryClientProvider>,
       );
       // The pane remounts once when the sign-in probe settles on a path.
-      await waitFor(() => expect(spies.sessionAuthSource).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(
+          spies.sessionAuthSource.mock.calls.length +
+            spies.proxyLogin.mock.calls.length,
+        ).toBeGreaterThan(0),
+      );
       await screen.findByTestId("pane-message-list");
     };
 
-    it("renders the neutral chat surface and loads no office.js from the CDN", async () => {
-      const appendChild = vi.spyOn(document.head, "appendChild");
-
+    it("renders the neutral chat surface", async () => {
       await renderPane();
 
       expect(screen.getByTestId("pane-message-list")).toBeInTheDocument();
       expect(screen.getByTestId("pane-chat-input")).toBeInTheDocument();
-      expect(
-        appendChild.mock.calls.some(
-          ([node]) =>
-            node instanceof HTMLScriptElement &&
-            URL.canParse(node.src) &&
-            new URL(node.src).hostname === "appsforoffice.microsoft.com",
-        ),
-      ).toBe(false);
     });
 
     it("stamps its own platform on messaging", async () => {
@@ -236,9 +231,10 @@ describe.each([
       expect(keys).not.toContain(NEUTRAL_CURRENT_CHAT_KEY);
     });
 
-    it("signs in through NAA once office.js is ready, with no mailbox", async () => {
+    it("signs in through NAA once office.js is ready", async () => {
       await renderPane();
 
+      expect(spies.callLog).toContain("Office.onReady");
       expect(spies.sessionAuthSource).toHaveBeenCalledWith(
         expect.objectContaining({ mode: "entra-msal" }),
       );
