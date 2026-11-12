@@ -20,8 +20,8 @@ import {
   gistWarningLabel,
 } from "@/lib/toolCallGist/gistLabels";
 import { SCROLL_BOX_CLASS, scrollBoxProps } from "@/lib/toolCallGist/scrollBox";
-import { headlineClass } from "@/lib/toolCallGist/valueStyle";
 import {
+  headlineClass,
   NEW_TEXT_CLASS,
   NEW_VALUE_CLASS,
   OLD_TEXT_CLASS,
