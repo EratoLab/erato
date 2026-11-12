@@ -43,6 +43,10 @@ fi
 
 rm -f "$LOG_FILE"
 
+# Build before the ready wait, so a cold build cache cannot use up the startup timeout.
+echo "Building mock-mcp-server..."
+cargo build --bin mock-mcp-server
+
 echo "Starting mock-mcp-server..."
 nohup env HOST="$HOST" PORT="$PORT" cargo run --bin mock-mcp-server >"$LOG_FILE" 2>&1 </dev/null &
 SERVER_PID=$!

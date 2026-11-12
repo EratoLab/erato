@@ -118,7 +118,8 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:
    `web` (shared-frontend default), `outlook`, `teams`, `word`, `addin-neutral`
-   (`NeutralAddinChatPage` default), future `excel`.
+   (`NeutralAddinChatPage` default), future `excel`. The Teams bot, which runs
+   in the backend, reports `teams-bot`.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 

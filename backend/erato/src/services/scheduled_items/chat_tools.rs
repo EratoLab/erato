@@ -493,7 +493,8 @@ async fn list(app_state: &AppState, call: CallContext<'_>) -> Result<CallResult,
         "max_upcoming": MAX_ACTIVE_ITEMS,
         "reminders": reminders,
     });
-    if any && call.platform == Some(crate::ms_teams_bot::TEAMS_PLATFORM) {
+    // The bot shows the list as a card; the Teams tab shows no such card.
+    if any && call.platform == Some(crate::ms_teams_bot::TEAMS_BOT_PLATFORM) {
         output["shown_to_user"] = json!(
             "When you only show these reminders, the user sees them after your answer as a card with a Cancel button for each, so answer briefly without repeating every reminder."
         );

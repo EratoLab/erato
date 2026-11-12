@@ -205,7 +205,9 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             .filter(
                 |(_, facet)| match &facet.hidden_always_active_for_platform {
                     None => true,
-                    Some(required) => platform == Some(required.as_str()),
+                    Some(required) => platform.is_some_and(|platform| {
+                        crate::ms_teams_bot::platform_in_scope(required, platform)
+                    }),
                 },
             )
             .map(|(facet_id, _)| facet_id)
