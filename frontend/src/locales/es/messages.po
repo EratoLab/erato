@@ -8341,6 +8341,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "sidecarReview.ended.title"
 msgstr ""
 
@@ -8367,6 +8368,26 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.action"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.done"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.failed"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -8694,27 +8715,32 @@ msgid "toolCall.technicalDetails.tool"
 msgstr "Herramienta"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.answer"
 msgstr "Generar respuesta ahora"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.continue"
 msgstr "Continuar llamadas a herramientas"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.description"
 msgstr "Continuar con el doble de llamadas a herramientas permitidas, generar una respuesta con la información recopilada hasta ahora o detener esta respuesta."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.stop"
 msgstr "Detener"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
+msgid "toolCallLimit.tasksAsk"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.title"
 msgstr "Se alcanzó el límite de llamadas a herramientas"
 
@@ -10017,6 +10043,11 @@ msgstr "Necesitaba una herramienta sobre la que no pudo consultarte"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Detenida en su límite de llamadas a herramientas; la respuesta puede ser parcial"
 
@@ -10080,6 +10111,11 @@ msgstr "Delegando a {name}"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.running.unnamed"
 msgstr "Delegando a un asistente"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.archived"
+msgstr "Archivado"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -10358,6 +10394,11 @@ msgstr "Preparando"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "En ejecución"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx

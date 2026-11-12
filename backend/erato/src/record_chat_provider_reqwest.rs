@@ -383,10 +383,9 @@ fn parse_reqwest_verbose_message(message: &str) -> Option<(String, Direction, Ve
         (Direction::Read, payload)
     } else if let Some(payload) = rest.strip_prefix("write: ") {
         (Direction::Write, payload)
-    } else if let Some(payload) = rest.strip_prefix("write (vectored): ") {
-        (Direction::Write, payload)
     } else {
-        return None;
+        let payload = rest.strip_prefix("write (vectored): ")?;
+        (Direction::Write, payload)
     };
 
     let bytes = parse_debug_byte_strings(payload)?;

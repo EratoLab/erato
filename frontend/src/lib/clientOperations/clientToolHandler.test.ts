@@ -186,6 +186,26 @@ describe("toOperationResult", () => {
     });
   });
 
+  it("reports a review on the device that ended before its result arrived only for a task's call, never as a decline", () => {
+    const ended: ClientToolExecutionResult = {
+      ok: false,
+      error: "The review ended",
+      validationErrors: [
+        { code: "review_expired", path: "", message: "Ended" },
+      ],
+    };
+    expect(toOperationResult(grantRequest, ended)).toEqual({
+      ...identity,
+      outcome: "rejected",
+      error: { code: "review_expired" },
+    });
+    expect(toOperationResult(request, ended)).toEqual({
+      ...identity,
+      outcome: "rejected",
+      error: { code: "validation_failed" },
+    });
+  });
+
   it("sends a result without files exactly as before", () => {
     expect(
       JSON.stringify(toOperationResult(request, { ok: true, result: [1] })),

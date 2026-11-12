@@ -179,3 +179,78 @@ describe("additional executors", () => {
     expect(operationExecutorBinding("search_sidecar_index")).toEqual(desktop);
   });
 });
+
+describe("strict mode", () => {
+  function registerReviewing(
+    name: string,
+    binding: ExecutorBinding | undefined,
+    strictMode: () => boolean,
+    additional = true,
+  ) {
+    cleanups.push(
+      registerOperationExecutor(name, () => binding, {
+        additional,
+        strictMode,
+      }),
+    );
+  }
+
+  it("lists a sent binding whose app runs in strict mode beside the bindings", () => {
+    const before = headersWithout(() => {
+      register("fetch_availability", mailbox, true);
+      SIDECAR_TOOLS.forEach((name) => registerAdditional(name, desktop));
+    });
+    register("fetch_availability", mailbox, true);
+    SIDECAR_TOOLS.forEach((name) =>
+      registerReviewing(name, desktop, () => true),
+    );
+    const { "X-Erato-Strict-Mode-Executors": strict, ...rest } =
+      operationExecutorHeaders();
+    expect(rest).toEqual(before);
+    expect(JSON.parse(strict ?? "[]")).toEqual([desktop]);
+  });
+
+  it("names a strict primary binding too", () => {
+    registerReviewing("exclusive_read", sidecar, () => true, false);
+    expect(
+      JSON.parse(operationExecutorHeaders()["X-Erato-Strict-Mode-Executors"]!),
+    ).toEqual([sidecar]);
+  });
+
+  it("follows the app: says nothing once it no longer runs in strict mode", () => {
+    let strict = true;
+    SIDECAR_TOOLS.forEach((name) =>
+      registerReviewing(name, desktop, () => strict),
+    );
+    expect(operationExecutorHeaders()).toHaveProperty(
+      "X-Erato-Strict-Mode-Executors",
+    );
+    strict = false;
+    expect(operationExecutorHeaders()).not.toHaveProperty(
+      "X-Erato-Strict-Mode-Executors",
+    );
+  });
+
+  it("says nothing of a binding one of its executors does not vouch for", () => {
+    registerReviewing("search_sidecar_index", desktop, () => true);
+    registerAdditional("read_sidecar_conversation", desktop);
+    expect(operationExecutorHeaders()).not.toHaveProperty(
+      "X-Erato-Strict-Mode-Executors",
+    );
+  });
+
+  it("never names a binding it does not send", () => {
+    registerReviewing("search_sidecar_index", undefined, () => true);
+    registerAdditional("other_sidecar_tool", desktop);
+    registerReviewing(
+      "dropped_sidecar_tool",
+      { ...desktop, device_id: "other-device-000000" },
+      () => true,
+    );
+    const headers = operationExecutorHeaders();
+    expect(JSON.parse(headers["X-Erato-Additional-Executors"]!)).toEqual([
+      desktop,
+    ]);
+    expect(headers).not.toHaveProperty("X-Erato-Strict-Mode-Executors");
+  });
+});

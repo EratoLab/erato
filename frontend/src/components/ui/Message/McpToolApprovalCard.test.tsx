@@ -16,6 +16,7 @@ import {
 } from "@/hooks/chat/clientToolExecutors";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
+import { clientOperationHandlerRegistry } from "@/lib/clientOperations/handlers";
 import { registerOperationExecutor } from "@/lib/clientOperations/registration";
 import {
   listMcpServerToolsQuery,
@@ -561,6 +562,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "reject_always",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1017,6 +1019,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "tool-call-2", decision: "approve" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1060,6 +1063,7 @@ describe("McpToolApprovalCard", () => {
             message_id: "message-1",
             decision: "approve",
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1257,6 +1261,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "reject" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -1350,6 +1355,7 @@ describe("McpToolApprovalCard", () => {
               { approval_id: "plan:0:1", decision: "withdraw" },
             ],
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
           }),
         }),
       );
@@ -2586,6 +2592,365 @@ describe("tasks waiting on the device", () => {
       expect(screen.queryByText(new RegExp(code))).toBeNull();
     },
   );
+
+  describe("stopping a task's wait (ERMAIN-1165)", () => {
+    const waitingCard = (
+      overrides: Partial<ChatContextValue> = {},
+      props: {
+        openItems?: (typeof asking)[];
+        waitingItems?: (typeof waits)[];
+      } = {},
+    ) =>
+      withChatContext(
+        <McpToolApprovalCard
+          messageId="message-1"
+          request={props.openItems ? mixedStop : waitingStop}
+          openItems={props.openItems ?? []}
+          waitingItems={props.waitingItems ?? [waits]}
+          resolution={null}
+        />,
+        "chat-1",
+        overrides,
+      );
+    const posted = (fetchMock: ReturnType<typeof vi.fn>) =>
+      fetchMock.mock.calls.map(([url, init]) => [
+        String(url),
+        (init as RequestInit | undefined)?.method,
+      ]);
+    const stopsAndContinues = () =>
+      vi.fn().mockImplementation(async (url: string) =>
+        url.endsWith("/cancel")
+          ? new Response(JSON.stringify({ state: "ready" }), { status: 200 })
+          : new Response(JSON.stringify({ state: "continuing" }), {
+              status: 200,
+            }),
+      );
+    const stoppedLine =
+      "You stopped waiting. The task answers without this result.";
+
+    it("ends the call's wait and continues the task at once", async () => {
+      const fetchMock = stopsAndContinues();
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(waitingCard());
+
+      const item = screen.getByTestId("waiting-task-item");
+      // The live region is on the page before it has anything to say, so the
+      // line is announced as a change.
+      const status = within(item).getByRole("status");
+      expect(status).toBeEmptyDOMElement();
+      const button = within(item).getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+
+      expect(await within(item).findByText(stoppedLine)).toBe(status);
+      expect(posted(fetchMock)).toEqual([
+        ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
+        ["/api/v1beta/me/client-operations/attempt/continue", "POST"],
+      ]);
+      expect(
+        within(item).queryByRole("button", { name: "Stop waiting" }),
+      ).toBeNull();
+      // It no longer says it waits for the host.
+      expect(item).not.toHaveTextContent("Waiting for Outlook on this device");
+      // The button that had focus is gone: the item, named by its task, has it.
+      expect(item).toHaveFocus();
+      expect(screen.getByRole("group", { name: "Check the calendar" })).toBe(
+        item,
+      );
+    });
+
+    it("keeps the button focused and inert while the stop runs", async () => {
+      let answerCancel: (response: Response) => void = () => undefined;
+      const fetchMock = vi.fn().mockImplementation((url: string) =>
+        url.endsWith("/cancel")
+          ? new Promise<Response>((resolve) => {
+              answerCancel = resolve;
+            })
+          : Promise.resolve(new Response("{}", { status: 200 })),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      renderCard(waitingCard());
+
+      const button = screen.getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+      expect(button).toHaveAttribute("aria-busy", "true");
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toBeDisabled();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+
+      await act(async () => {
+        answerCancel(
+          new Response(JSON.stringify({ state: "ready" }), { status: 200 }),
+        );
+      });
+      expect(await screen.findByText(stoppedLine)).toBeInTheDocument();
+      expect(
+        posted(fetchMock).filter(([url]) => url?.endsWith("/cancel")),
+      ).toHaveLength(1);
+    });
+
+    it("moves focus the stopped item held to the card when the row read again drops it", async () => {
+      vi.stubGlobal("fetch", stopsAndContinues());
+      const { rerender, queryClient } = renderCard(
+        waitingCard({}, { openItems: [asking] }),
+      );
+
+      const item = screen.getByTestId("waiting-task-item");
+      const button = within(item).getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+      await within(item).findByText(stoppedLine);
+      expect(item).toHaveFocus();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { openItems: [asking], waitingItems: [] })}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      const card = screen.getByTestId("approval-queue");
+      expect(card).toHaveFocus();
+      expect(
+        screen.getByRole("group", {
+          name: "This response is waiting on your decision",
+        }),
+      ).toBe(card);
+    });
+
+    it("moves focus to the card when the row read after a settled wait drops the item", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValue(
+            new Response("Operation already settled", { status: 409 }),
+          ),
+      );
+      let rerenderCard: (ui: ReactNode) => void = () => undefined;
+      const refetchMessages = vi.fn(async () => {
+        rerenderCard(
+          waitingCard(
+            { refetchMessages },
+            { openItems: [asking], waitingItems: [] },
+          ),
+        );
+      });
+      const { rerender, queryClient } = renderCard(
+        waitingCard({ refetchMessages }, { openItems: [asking] }),
+      );
+      rerenderCard = (ui) =>
+        rerender(
+          <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+        );
+
+      const button = screen.getByRole("button", { name: "Stop waiting" });
+      button.focus();
+      fireEvent.click(button);
+
+      await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(screen.queryByTestId("waiting-task-item")).toBeNull(),
+      );
+      expect(screen.getByTestId("approval-queue")).toHaveFocus();
+    });
+
+    it("leaves focus elsewhere alone when the row read again drops an item", () => {
+      const { rerender, queryClient } = renderCard(
+        waitingCard({}, { openItems: [asking] }),
+      );
+      const elsewhere = screen.getByRole("button", { name: "Allow once" });
+      elsewhere.focus();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { openItems: [asking], waitingItems: [] })}
+        </QueryClientProvider>,
+      );
+
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      expect(elsewhere).toHaveFocus();
+    });
+
+    it("says the wait had already ended, reads the row again and asks for a sweep", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const swept = vi.fn();
+      const unsubscribe = clientOperationHandlerRegistry.subscribe(swept);
+      try {
+        const refetchMessages = vi.fn(async () => undefined);
+        renderCard(waitingCard({ refetchMessages }));
+
+        const item = screen.getByTestId("waiting-task-item");
+        const button = within(item).getByRole("button", {
+          name: "Stop waiting",
+        });
+        button.focus();
+        fireEvent.click(button);
+
+        await waitFor(() => expect(refetchMessages).toHaveBeenCalledOnce());
+        expect(
+          await within(item).findByText("This wait has already ended."),
+        ).toBe(within(item).getByRole("status"));
+        expect(swept).toHaveBeenCalledOnce();
+        expect(posted(fetchMock)).toEqual([
+          ["/api/v1beta/me/client-operations/attempt/cancel", "POST"],
+        ]);
+        expect(screen.queryByText(/You stopped waiting/)).toBeNull();
+        expect(screen.queryByRole("alert")).toBeNull();
+        expect(item).not.toHaveTextContent(
+          "Waiting for Outlook on this device",
+        );
+        expect(item).toHaveFocus();
+      } finally {
+        unsubscribe();
+      }
+    });
+
+    it("keeps the stop away while the row still lists an ended wait, and offers it for the next one", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Operation already settled", { status: 409 }),
+        );
+      vi.stubGlobal("fetch", fetchMock);
+      const { rerender, queryClient } = renderCard(waitingCard());
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+      await screen.findByText("This wait has already ended.");
+
+      // The device's result is being continued: the row read again still
+      // lists the same wait.
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { waitingItems: [{ ...waits }] })}
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+      expect(screen.getByText("This wait has already ended.")).toBeVisible();
+      expect(fetchMock).toHaveBeenCalledOnce();
+
+      // The task went on to wait for another call.
+      const next = {
+        ...waits,
+        child: {
+          ...waits.child,
+          waiting_for: { ...waits.child.waiting_for, attempt_id: "attempt-2" },
+        },
+      };
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          {waitingCard({}, { waitingItems: [next] })}
+        </QueryClientProvider>,
+      );
+      expect(
+        screen.getByRole("button", { name: "Stop waiting" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("This wait has already ended.")).toBeNull();
+      expect(screen.getByTestId("waiting-task-item")).toHaveTextContent(
+        "Waiting for Outlook on this device",
+      );
+    });
+
+    it("says so when the wait could not be stopped, and lets the user try again", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(new Response("", { status: 500 })),
+      );
+      renderCard(waitingCard());
+
+      fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Waiting could not be stopped. Try again.",
+      );
+      expect(
+        screen.getByRole("button", { name: "Stop waiting" }),
+      ).not.toBeDisabled();
+    });
+
+    it("offers no stop in an archived chat", () => {
+      archived.value = true;
+      renderCard(waitingCard());
+
+      expect(screen.getByTestId("waiting-task-item")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Stop waiting" })).toBeNull();
+    });
+
+    it("no longer waits or holds the queue once a later turn moved the chat on", () => {
+      vi.useFakeTimers();
+      try {
+        const refetchMessages = vi.fn(async () => undefined);
+        const { container } = renderCard(
+          waitingCard({
+            refetchMessages,
+            messageOrder: ["message-1", "user-2", "message-2"],
+            messages: {
+              "message-1": { id: "message-1", role: "assistant" },
+              "user-2": { id: "user-2", role: "user" },
+              "message-2": { id: "message-2", role: "assistant" },
+            } as unknown as ChatContextValue["messages"],
+          }),
+        );
+
+        expect(container).toBeEmptyDOMElement();
+        expect(
+          useConfirmationRegistryStore.getState().pendingIdsByChatId["chat-1"],
+        ).toBeUndefined();
+        act(() => {
+          vi.advanceTimersByTime(10_000);
+        });
+        expect(refetchMessages).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps waiting while the same turn streams on, and keeps a later turn's open questions", () => {
+      const { rerender } = renderCard(
+        waitingCard({
+          messageOrder: ["user-1", "message-1", "streaming"],
+          messages: {
+            "user-1": { id: "user-1", role: "user" },
+            "message-1": { id: "message-1", role: "assistant" },
+            streaming: { id: "streaming", role: "assistant" },
+          } as unknown as ChatContextValue["messages"],
+        }),
+      );
+      expect(screen.getByTestId("waiting-task-item")).toBeInTheDocument();
+
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          {waitingCard(
+            {
+              messageOrder: ["message-1", "user-2"],
+              messages: {
+                "message-1": { id: "message-1", role: "assistant" },
+                "user-2": { id: "user-2", role: "user" },
+              } as unknown as ChatContextValue["messages"],
+            },
+            { openItems: [asking] },
+          )}
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId("approval-queue")).toBeInTheDocument();
+      expect(screen.queryByTestId("waiting-task-item")).toBeNull();
+      const ids =
+        useConfirmationRegistryStore.getState().pendingIdsByChatId["chat-1"];
+      expect(ids).toHaveLength(1);
+      expect(
+        useConfirmationRegistryStore.getState().waitingOnlyIds[ids?.[0] ?? ""],
+      ).toBeUndefined();
+    });
+  });
 });
 
 describe("document and response approvals", () => {
@@ -4711,5 +5076,139 @@ describe("gist cards", () => {
         screen.getByRole("button", { name: "Allow once" }),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("tool-call limit with a task's question", () => {
+  // The task asked before the limit was reached, yet the limit's choice comes
+  // first: its Stop answers the whole stop at once.
+  const limitRequest = {
+    ...approvalRequest,
+    kind: "tool_call_limit" as const,
+    tool_call_id: "tool-budget:1",
+    tool_name: "Tool-call budget",
+    mcp_server_id: "",
+    allow_always: false,
+    input: { budget: 15 },
+    requested_at: "2026-08-06T00:00:05Z",
+    approvals: [
+      {
+        approval_id: "tool-budget:1",
+        tool_call_id: "tool-budget:1",
+        tool_name: "Tool-call budget",
+        input: { budget: 15 },
+        child: null,
+      },
+      {
+        approval_id: "task-a",
+        tool_call_id: "task-a",
+        tool_name: "delegate_task",
+        input: { task: "Summarize the release notes" },
+        child: {
+          ...childApprovalRef,
+          child_chat_id: "child-a",
+          requested_at: "2026-08-06T00:00:01Z",
+          allow_always: false,
+        },
+      },
+    ],
+  };
+
+  const okResponse = () =>
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response("event: done\\ndata: {}\\n\\n", { status: 200 }),
+      );
+
+  const sentDecisions = (fetchMock: ReturnType<typeof vi.fn>) =>
+    (
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+        decisions: unknown[];
+      }
+    ).decisions;
+
+  it("asks the limit's choice first, then the task's question, and sends both", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={limitRequest}
+        resolution={null}
+      />,
+    );
+
+    const queue = screen.getByTestId("approval-queue");
+    expect(queue).toHaveAttribute("data-approval-kind", "tool_call_limit");
+    expect(queue).toHaveAttribute("data-item-count", "2");
+    expect(
+      screen.getByRole("group", { name: "Tool-call limit reached" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/If you stop, each task waits for your decision/),
+    ).toBeInTheDocument();
+    // Allow all would pick the limit's choice without asking it.
+    expect(screen.queryByTestId("approval-queue-bulk")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate answer now" }),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Summarize the release notes")).toBeInTheDocument();
+    expect(screen.getByTestId("delegated-task-approval-item")).toHaveAttribute(
+      "data-child-chat-id",
+      "child-a",
+    );
+
+    fireEvent.click(screen.getByText("Allow once"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-budget:1", decision: "reject" },
+      { approval_id: "task-a", decision: "approve" },
+    ]);
+    // Without saying it shows the task's question here, the server refuses
+    // the decision as one from a client that shows the limit's choice alone.
+    expect(
+      JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body),
+    ).toMatchObject({
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    });
+  });
+
+  it("sends Stop at once and withdraws the task's question with it", async () => {
+    const fetchMock = okResponse();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={limitRequest}
+        resolution={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(sentDecisions(fetchMock)).toEqual([
+      { approval_id: "tool-budget:1", decision: "withdraw" },
+      { approval_id: "task-a", decision: "withdraw" },
+    ]);
+  });
+
+  it("keeps the single card for a limit no task asks on", () => {
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={{ ...limitRequest, approvals: [limitRequest.approvals[0]] }}
+        resolution={null}
+      />,
+    );
+
+    expect(screen.getByTestId("tool-call-limit-approval")).toBeInTheDocument();
+    expect(screen.queryByTestId("approval-queue")).toBeNull();
+    expect(
+      screen.queryByText(/If you stop, each task waits for your decision/),
+    ).toBeNull();
   });
 });

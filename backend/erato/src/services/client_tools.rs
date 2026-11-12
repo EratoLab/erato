@@ -34,7 +34,22 @@ pub struct OfferedClientTool {
     pub submission: Option<SubmissionPolicy>,
     /// Set only when a delegated run is offered the tool under its grant.
     pub grant: Option<GrantedCall>,
+    /// The page said the app behind `executor` runs in strict mode: in the
+    /// request that offers the tool, or, for a delegated run, in the one that
+    /// launched it (the grant's `strict_mode`).
+    pub executor_strict_mode: bool,
 }
+
+/// The desktop sidecar tools whose results the Erato desktop app shows for
+/// review on the device under strict mode before anything leaves it: those
+/// whose provider entry selects items (`desktop-sidecar-protocol/providers/
+/// sidecar.json`). Mailboxes and search fields are not reviewed.
+pub const STRICT_REVIEWED_SIDECAR_TOOLS: [&str; 4] = [
+    "get_sidecar_folder_hierarchy",
+    "search_sidecar_index",
+    "get_sidecar_document",
+    "read_sidecar_conversation",
+];
 
 /// What a granted call carries to the executor besides the model's input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -103,7 +118,28 @@ impl OfferedClientTool {
             timeout_ms: config.timeout_ms,
             submission,
             grant: None,
+            executor_strict_mode: false,
         })
+    }
+
+    /// Whether the Erato desktop app will ask the user about this tool's
+    /// calls itself: a reviewed sidecar tool, routed to a desktop sidecar
+    /// binding the page said runs in strict mode. A chat question before it
+    /// would ask twice for the same thing (ERMAIN-1155).
+    pub fn reviewed_on_device(&self) -> bool {
+        use crate::config::ClientToolHostContext;
+        use crate::services::client_operations::ExecutionRealm;
+        let host = ClientToolHostContext::DesktopSidecar;
+        self.executor_strict_mode
+            && self.config.host_context == Some(host)
+            && STRICT_REVIEWED_SIDECAR_TOOLS.contains(&self.config.name.as_str())
+            && self.executor.as_ref().is_some_and(|binding| {
+                binding.realm == ExecutionRealm::DesktopSidecar
+                    && binding
+                        .host_context
+                        .as_ref()
+                        .is_some_and(|context| context.kind == host.as_str())
+            })
     }
 }
 
@@ -972,5 +1008,82 @@ mod tests {
         let selection = select_client_tools(vec![&reserved], &[], |_| false);
         assert!(selection.offered.is_empty());
         assert_eq!(selection.skipped[0].1, ClientToolSkip::ReservedName);
+    }
+
+    /// The reviewed tools are exactly those the protocol's provider table
+    /// gives a `selection`.
+    #[test]
+    fn the_reviewed_sidecar_tools_are_those_the_provider_table_selects_items_of() {
+        let table: Value = serde_json::from_str(include_str!(
+            "../../../../desktop-sidecar-protocol/providers/sidecar.json"
+        ))
+        .unwrap();
+        let mut selecting: Vec<&str> = table["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|tool| !tool["selection"].is_null())
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect();
+        selecting.sort_unstable();
+        let mut reviewed = STRICT_REVIEWED_SIDECAR_TOOLS.to_vec();
+        reviewed.sort_unstable();
+        assert_eq!(selecting, reviewed);
+    }
+
+    #[test]
+    fn only_a_reviewed_tool_on_a_strict_sidecar_binding_is_reviewed_on_the_device() {
+        use crate::config::ClientToolHostContext;
+        use crate::services::client_operations::{ExecutionRealm, ExecutorBinding, HostContext};
+        let sidecar = ExecutorBinding {
+            device_id: "installation".into(),
+            realm: ExecutionRealm::DesktopSidecar,
+            host_context: Some(HostContext {
+                kind: "desktop_sidecar".into(),
+                identity: "local".into(),
+            }),
+        };
+        let offered = |name: &str, binding: &ExecutorBinding, strict: bool| {
+            let config = ClientToolConfig {
+                host_context: Some(ClientToolHostContext::DesktopSidecar),
+                ..tool("desktop", name)
+            };
+            OfferedClientTool {
+                executor: Some(binding.clone()),
+                executor_strict_mode: strict,
+                ..OfferedClientTool::prepare(&config, &json!({ "type": "object" })).unwrap()
+            }
+        };
+        for name in STRICT_REVIEWED_SIDECAR_TOOLS {
+            assert!(offered(name, &sidecar, true).reviewed_on_device(), "{name}");
+            assert!(
+                !offered(name, &sidecar, false).reviewed_on_device(),
+                "{name}"
+            );
+        }
+        for name in ["list_sidecar_mailboxes", "get_sidecar_search_fields"] {
+            assert!(
+                !offered(name, &sidecar, true).reviewed_on_device(),
+                "{name}"
+            );
+        }
+        let office = ExecutorBinding {
+            realm: ExecutionRealm::OfficeAddin,
+            host_context: Some(HostContext {
+                kind: "outlook_mailbox".into(),
+                identity: "mailbox".into(),
+            }),
+            ..sidecar.clone()
+        };
+        assert!(
+            !offered("search_sidecar_index", &office, true).reviewed_on_device(),
+            "a call routed to another host's binding"
+        );
+        let mut elsewhere = offered("search_sidecar_index", &sidecar, true);
+        elsewhere.config.host_context = Some(ClientToolHostContext::OutlookMailbox);
+        assert!(!elsewhere.reviewed_on_device(), "a tool of another host");
+        let mut unbound = offered("search_sidecar_index", &sidecar, true);
+        unbound.executor = None;
+        assert!(!unbound.reviewed_on_device());
     }
 }

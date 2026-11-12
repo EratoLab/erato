@@ -27,16 +27,27 @@ export const useIsCurrentChatBusy = (): boolean =>
  * wherever it sits: several may be in flight at once and only one of them
  * can be last. Reasoning has no such marker — it is only ever the tail of
  * the timeline that is still being written, so there position is the signal.
+ *
+ * `waitingToolCallId` is the call the message's own last `client_tool_pending`
+ * part names (`waitingCallOf`). The turn is parked on that call, so it waits
+ * whatever the chat-wide flag says: the flag is the page's, and it can read
+ * busy (a check) or idle (Interrupted) while the call has not returned.
  */
 export const stepStatus = (
   step: LogicalStep,
   isLastStep: boolean,
   isTraceActive: boolean,
   isChatBusy = false,
+  waitingToolCallId?: string,
 ): TraceStepStatus => {
   if (step.kind === "tool_use") {
     if (step.part.status === "error") return "error";
     if (step.part.status === "success") return "done";
+    if (
+      waitingToolCallId !== undefined &&
+      step.part.tool_call_id === waitingToolCallId
+    )
+      return "waiting";
     if (isTraceActive) return "running";
     // Unfinished on a trace that is no longer being written. Only a chat that
     // still owes an outcome can be trusted to settle the part later; with no

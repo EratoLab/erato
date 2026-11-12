@@ -8341,6 +8341,7 @@ msgstr "Es wurde nichts geteilt. Eine Prüfung endet eine Stunde nach dem Start.
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/SidecarReviewItem.tsx
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
 msgid "sidecarReview.ended.title"
 msgstr "Diese Prüfung ist beendet"
 
@@ -8368,6 +8369,26 @@ msgstr "Wartet auf deine Prüfung in der Erato-Desktop-App"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr "Starte die Erato-Desktop-App, um diese Prüfung fortzusetzen."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.action"
+msgstr "Nicht mehr warten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.alreadyEnded"
+msgstr "Dieses Warten ist schon beendet."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.done"
+msgstr "Du wartest nicht mehr. Die Aufgabe antwortet ohne dieses Ergebnis."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/StopWaitingAction.tsx
+msgid "stopWaiting.failed"
+msgstr "Das Warten konnte nicht beendet werden. Versuche es erneut."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/TaskPlanApprovalCard.tsx
@@ -8694,27 +8715,32 @@ msgid "toolCall.technicalDetails.tool"
 msgstr "Tool"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.answer"
 msgstr "Jetzt Antwort erstellen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.continue"
 msgstr "Tool-Aufrufe fortsetzen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.description"
 msgstr "Mit dem doppelten Budget für Tool-Aufrufe fortfahren, eine Antwort anhand der bisher gesammelten Informationen erstellen oder diese Antwort stoppen."
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.stop"
 msgstr "Stoppen"
 
 #. js-lingui-explicit-id
-#: src/components/ui/Message/McpToolApprovalCard.tsx
+#: src/components/ui/Message/ToolCallLimitItem.tsx
+msgid "toolCallLimit.tasksAsk"
+msgstr "Die Fragen Ihrer Aufgaben folgen als Nächstes. Wenn Sie stoppen, wartet jede Aufgabe in ihrem eigenen Chat auf Ihre Entscheidung."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ToolCallLimitItem.tsx
 msgid "toolCallLimit.title"
 msgstr "Limit für Tool-Aufrufe erreicht"
 
@@ -10017,6 +10043,11 @@ msgstr "Benötigte ein Tool, zu dem keine Rückfrage möglich war"
 
 #. js-lingui-explicit-id
 #: src/lib/delegation/delegationLabels.ts
+msgid "trace.delegation.reason.archived"
+msgstr "Der Lauf wurde archiviert, bevor er fertig war"
+
+#. js-lingui-explicit-id
+#: src/lib/delegation/delegationLabels.ts
 msgid "trace.delegation.reason.capExceeded"
 msgstr "Am Budget für Tool-Aufrufe gestoppt; die Antwort kann unvollständig sein"
 
@@ -10080,6 +10111,11 @@ msgstr "Delegiert an {name}"
 #: src/components/ui/Trace/steps/DelegationStep.tsx
 msgid "trace.delegation.running.unnamed"
 msgstr "Delegiert an einen Assistenten"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/DelegationStep.tsx
+msgid "trace.delegation.status.archived"
+msgstr "Archiviert"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/DelegationStep.tsx
@@ -10358,6 +10394,11 @@ msgstr "Wird vorbereitet"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.running"
 msgstr "Wird ausgeführt"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Trace/steps/ToolUseStep.tsx
+msgid "trace.tool.waiting.review"
+msgstr "In der Erato-Desktop-App prüfen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/ImageLightbox.tsx

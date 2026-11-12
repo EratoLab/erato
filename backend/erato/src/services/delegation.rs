@@ -1123,6 +1123,11 @@ pub enum DelegationRunReason {
     /// report, or it was cut off before it could, so nothing is lost by
     /// saying so plainly.
     Interrupted,
+    /// The run's chat was archived while the run was still parked, so
+    /// nothing will answer it. Rides a `failed` that the retry route refuses,
+    /// because the parked run has no outcome. A run archived after it errored
+    /// or finished settles with its own outcome instead.
+    Archived,
 }
 
 impl DelegationRunStatus {
@@ -1152,6 +1157,7 @@ impl DelegationRunReason {
             DelegationRunReason::ApprovalUnavailable => "approval_unavailable",
             DelegationRunReason::ResultMissing => "result_missing",
             DelegationRunReason::Interrupted => "interrupted",
+            DelegationRunReason::Archived => "archived",
         }
     }
 }
@@ -1384,10 +1390,15 @@ pub struct TaskClientTools {
     /// Granted calls the user declined, so their results are missing.
     #[serde(skip_serializing_if = "is_zero")]
     pub declined: u32,
-    /// Durable granted calls no client ran before they expired, so their
-    /// results are missing.
+    /// Granted calls that ran out of time, so their results are missing:
+    /// durable ones no client ran before they expired, and ones whose review
+    /// on the device ended before its result reached the task.
     #[serde(skip_serializing_if = "is_zero")]
     pub expired: u32,
+    /// Durable granted calls the user stopped waiting for, so their results
+    /// are missing.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub cancelled: u32,
 }
 
 fn is_zero(count: &u32) -> bool {
@@ -1405,12 +1416,14 @@ impl TaskClientTools {
             freshness: calls.freshness,
             declined: calls.declined,
             expired: calls.expired,
+            cancelled: calls.cancelled,
         };
         (tools.run_mode.is_some()
             || tools.unavailable.is_some()
             || tools.freshness.is_some()
             || tools.declined > 0
-            || tools.expired > 0)
+            || tools.expired > 0
+            || tools.cancelled > 0)
             .then_some(tools)
     }
 }

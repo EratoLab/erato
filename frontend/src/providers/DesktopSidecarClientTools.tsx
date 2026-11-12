@@ -74,7 +74,13 @@ export function DesktopSidecarClientTools() {
       registerClientToolExecutor(tool.name, tool.execute, tool.isAvailable, {
         acceptsGrantCalls: true,
       }),
-      registerOperationExecutor(tool.name, binding, { additional: true }),
+      registerOperationExecutor(tool.name, binding, {
+        additional: true,
+        // The running app's own word from discovery: in strict mode it
+        // reviews a reviewed tool's results itself, so the server does not
+        // ask in the chat first (ERMAIN-1155).
+        strictMode: () => client.getSnapshot().strict === true,
+      }),
       registerClientOperationHandler(
         new ClientToolOperationHandler(
           tool.name,

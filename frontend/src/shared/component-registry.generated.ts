@@ -430,11 +430,13 @@ export { OwnCallApprovalItem } from "@/components/ui/Message/OwnCallApprovalItem
 export { ParkedChildItem } from "@/components/ui/Message/ParkedChildItem";
 export { ParkedTaskNotice } from "@/components/ui/Message/ParkedTaskNotice";
 export { SidecarReviewItem } from "@/components/ui/Message/SidecarReviewItem";
+export { StopWaitingAction } from "@/components/ui/Message/StopWaitingAction";
 export { SyntaxHighlightedCode } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { useCodeBlockSurfaceStyle } from "@/components/ui/Message/SyntaxHighlightedCode";
 export type { SyntaxHighlightedCodeProps } from "@/components/ui/Message/SyntaxHighlightedCode";
 export { TaskChatLink } from "@/components/ui/Message/TaskChatLink";
 export { TaskPlanApprovalCard } from "@/components/ui/Message/TaskPlanApprovalCard";
+export { ToolCallLimitItem } from "@/components/ui/Message/ToolCallLimitItem";
 export { toolNameOfCall } from "@/components/ui/Message/waitingCall";
 export { waitingCallOf } from "@/components/ui/Message/waitingCall";
 export type { WaitingCallPart } from "@/components/ui/Message/waitingCall";

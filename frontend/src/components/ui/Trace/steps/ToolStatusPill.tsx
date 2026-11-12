@@ -1,21 +1,28 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
 
+import { waitingForHostLabel } from "@/lib/delegation/delegationLabels";
+
 import type { ToolApprovalStatus } from "../Trace";
 import type { TraceStepStatus } from "../types";
 
 // Pills are only shown for states that need extra emphasis beyond the rail
-// icon: in-flight (animated), failed (red attention) and abandoned (warning —
+// icon: in-flight (animated), waiting on the device (calm, nothing on this
+// page is working on it), failed (red attention) and abandoned (warning —
 // the one state a reader would otherwise mistake for success). The success
 // state is already conveyed by the rail's checkmark — no pill needed.
 const STATUS_PILL_CLASS = {
   running: "bg-theme-info-bg text-theme-info-fg animate-pulse",
+  waiting: "bg-theme-info-bg text-theme-info-fg",
   error: "bg-theme-error-bg text-theme-error-fg",
   interrupted: "bg-theme-warning-bg text-theme-warning-fg",
 } as const;
 
 const STATUS_LABEL = {
   running: () => t({ id: "trace.tool.running", message: "Running" }),
+  // What a task's slot says while its call waits on the device, so the two
+  // read alike.
+  waiting: () => waitingForHostLabel(undefined),
   error: () => t({ id: "trace.tool.failed", message: "Failed" }),
   interrupted: () =>
     t({ id: "trace.tool.interrupted", message: "Interrupted" }),
@@ -34,7 +41,10 @@ const APPROVAL_PILL = {
 
 type StatusWithPill = keyof typeof STATUS_PILL_CLASS;
 const hasPill = (status: TraceStepStatus): status is StatusWithPill =>
-  status === "running" || status === "error" || status === "interrupted";
+  status === "running" ||
+  status === "waiting" ||
+  status === "error" ||
+  status === "interrupted";
 
 interface ToolStatusPillProps {
   status: TraceStepStatus;
