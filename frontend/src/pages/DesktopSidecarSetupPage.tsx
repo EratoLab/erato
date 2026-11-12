@@ -130,25 +130,25 @@ function artifactKindLabel(kind: string): string {
   }
 }
 
-function formatFileSize(size: number): string {
-  if (size < 1024) {
+function formatFileSize(sizeInBytes: number): string {
+  if (sizeInBytes < 1024) {
+    const size = sizeInBytes;
     return t({
       id: "desktopSidecar.setup.fileSize.bytes",
-      message: "{size} B",
-      values: { size },
+      message: `${size} B`,
     });
   }
-  if (size < 1024 * 1024) {
+  if (sizeInBytes < 1024 * 1024) {
+    const size = (sizeInBytes / 1024).toFixed(1);
     return t({
       id: "desktopSidecar.setup.fileSize.kilobytes",
-      message: "{size} KB",
-      values: { size: (size / 1024).toFixed(1) },
+      message: `${size} KB`,
     });
   }
+  const size = (sizeInBytes / (1024 * 1024)).toFixed(1);
   return t({
     id: "desktopSidecar.setup.fileSize.megabytes",
-    message: "{size} MB",
-    values: { size: (size / (1024 * 1024)).toFixed(1) },
+    message: `${size} MB`,
   });
 }
 
