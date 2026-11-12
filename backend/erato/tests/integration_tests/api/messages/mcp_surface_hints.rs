@@ -1,6 +1,7 @@
-//! A server that opted in to surface hints is told on every tool call which
-//! surface the call comes from and what that surface accepts, in the call's
-//! MCP metadata. The model sees none of it, and other servers get nothing.
+//! A server that opted in to surface hints is told, with a tool call from a
+//! known surface, which surface the call comes from and what that surface
+//! accepts, in the call's `_meta`. The model sees none of it, and other
+//! servers get nothing.
 use super::*;
 use axum::{
     Json,
@@ -15,7 +16,6 @@ use std::sync::{Arc, Mutex};
 
 const MARKER: &str = "SURFACE-RESULT";
 const HINT_KEY: &str = "chat.erato/surface";
-const CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
 
 #[derive(Clone, Default)]
 struct Fixture {
@@ -88,15 +88,8 @@ fn surface(surface: &str, accept: &[&str]) -> Value {
     json!({"surface": surface, "accept": accept})
 }
 
-/// The hint a stateless server found among the call's client capabilities.
-fn stateless_hint(call: &Value) -> Option<Value> {
-    call["_meta"][CAPABILITIES]["extensions"]
-        .get(HINT_KEY)
-        .cloned()
-}
-
-/// The hint a legacy server found in the call's `_meta`.
-fn legacy_hint(call: &Value) -> Option<Value> {
+/// The hint a server found in the call's `_meta`, in either protocol era.
+fn hint(call: &Value) -> Option<Value> {
     call["_meta"].get(HINT_KEY).cloned()
 }
 
@@ -225,9 +218,9 @@ async fn stored_platform(state: &erato::state::AppState, message_id: Uuid) -> Va
     )
 }
 
-/// From the Teams tab, the stateless server finds the hint among the call's
-/// client capabilities and the legacy server in the call's `_meta`, both
-/// with the tab's built-in list; the server that did not opt in gets nothing.
+/// From the Teams tab, the stateless and the legacy server both find the hint
+/// in the call's `_meta`, with the tab's built-in list, again when the answer
+/// is regenerated; the server that did not opt in gets nothing.
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn opted_in_servers_are_told_the_surface_in_both_protocol_eras(pool: Pool<Postgres>) {
     let setup = setup(&["render_stateless", "render_legacy", "render_plain"]).await;
@@ -250,20 +243,30 @@ async fn opted_in_servers_are_told_the_surface_in_both_protocol_eras(pool: Pool<
     let tab = surface("teams", &["image/svg+xml", "image/png"]);
     let stateless = setup.fixture.calls("stateless");
     assert_eq!(stateless.len(), 1, "{stateless:?}");
-    assert_eq!(stateless_hint(&stateless[0]), Some(tab.clone()));
-    assert_eq!(legacy_hint(&stateless[0]), None, "{}", stateless[0]);
+    assert_eq!(hint(&stateless[0]), Some(tab.clone()));
 
     let legacy = setup.fixture.calls("legacy");
     assert_eq!(legacy.len(), 1, "{legacy:?}");
-    assert_eq!(legacy_hint(&legacy[0]), Some(tab));
+    assert_eq!(hint(&legacy[0]), Some(tab.clone()));
 
     let plain = setup.fixture.calls("plain");
     assert_eq!(plain.len(), 1, "{plain:?}");
-    assert_eq!(plain[0]["_meta"][CAPABILITIES], json!({}), "{}", plain[0]);
-    assert_eq!(legacy_hint(&plain[0]), None, "{}", plain[0]);
+    assert_eq!(hint(&plain[0]), None, "{}", plain[0]);
 
     assert_hint_only_in_call_metadata(&setup);
     assert_eq!(stored_platform(&state, message_id).await, json!("teams"));
+
+    server
+        .post("/api/v1beta/me/messages/regeneratestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .add_header("X-Erato-Platform", "teams")
+        .json(&json!({"current_message_id": message_id}))
+        .await
+        .assert_status_ok();
+    let legacy = setup.fixture.calls("legacy");
+    assert_eq!(legacy.len(), 2, "{legacy:?}");
+    assert_eq!(hint(&legacy[1]), Some(tab));
+    assert_hint_only_in_call_metadata(&setup);
 }
 
 fn identity() -> GraphIdentity {
@@ -316,13 +319,13 @@ async fn the_teams_bot_is_told_apart_from_the_tab(pool: Pool<Postgres>) {
     let bot = surface("teams-bot", &["image/png"]);
     let stateless = setup.fixture.calls("stateless");
     assert_eq!(stateless.len(), 1, "{stateless:?}");
-    assert_eq!(stateless_hint(&stateless[0]), Some(bot.clone()));
+    assert_eq!(hint(&stateless[0]), Some(bot.clone()));
     let legacy = setup.fixture.calls("legacy");
     assert_eq!(legacy.len(), 1, "{legacy:?}");
-    assert_eq!(legacy_hint(&legacy[0]), Some(bot));
+    assert_eq!(hint(&legacy[0]), Some(bot));
     let plain = setup.fixture.calls("plain");
     assert_eq!(plain.len(), 1, "{plain:?}");
-    assert_eq!(plain[0]["_meta"][CAPABILITIES], json!({}), "{}", plain[0]);
+    assert_eq!(hint(&plain[0]), None, "{}", plain[0]);
     assert_hint_only_in_call_metadata(&setup);
 
     let answer = Messages::find()
@@ -381,9 +384,6 @@ async fn an_approved_call_keeps_the_surface_of_the_turn_that_asked(pool: Pool<Po
         .assert_status_ok();
     let legacy = setup.fixture.calls("legacy");
     assert_eq!(legacy.len(), 1, "{legacy:?}");
-    assert_eq!(
-        legacy_hint(&legacy[0]),
-        Some(surface("outlook", &["image/png"]))
-    );
+    assert_eq!(hint(&legacy[0]), Some(surface("outlook", &["image/png"])));
     assert_hint_only_in_call_metadata(&setup);
 }

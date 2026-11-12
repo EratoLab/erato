@@ -1,15 +1,16 @@
 //! Which surface an MCP tool call comes from and which output formats that
 //! surface accepts, told to servers that opt in with
-//! `mcp_servers.<id>.surface_hints`. The hint rides in the request's MCP
-//! metadata, never in the tool's arguments, so the model never sees it.
+//! `mcp_servers.<id>.surface_hints`. The hint rides in the tool call's
+//! `_meta` for servers of both protocol eras, never in the tool's arguments,
+//! so the model never sees it.
 use crate::config::McpSurfaceConfig;
 use crate::ms_teams_bot::{TEAMS_BOT_PLATFORM, TEAMS_PLATFORM};
 use rmcp::model::CallToolRequestParams;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
-/// Key of the surface hint: an extension in `clientCapabilities` for a
-/// stateless server, an entry of the tool call's `_meta` for a legacy one.
+/// Key of the surface hint in the tool call's `_meta`, for stateless and
+/// legacy servers alike.
 pub const SURFACE_HINT_KEY: &str = "chat.erato/surface";
 
 const SVG_THEN_PNG: &[&str] = &["image/svg+xml", "image/png"];
@@ -62,14 +63,7 @@ impl SurfaceHint {
         json!({"surface": self.surface, "accept": self.accept})
     }
 
-    /// The `clientCapabilities` of a stateless tool call that carries it.
-    pub fn client_capabilities(&self) -> Value {
-        let mut extensions = Map::new();
-        extensions.insert(SURFACE_HINT_KEY.to_string(), self.to_value());
-        json!({"extensions": extensions})
-    }
-
-    /// Put the hint into a legacy tool call's `_meta`.
+    /// Put the hint into a tool call's `_meta`.
     pub fn add_to_call(&self, params: &mut CallToolRequestParams) {
         params
             .meta
@@ -148,20 +142,5 @@ mod tests {
         assert_eq!(SurfaceHint::resolve("excel", &HashMap::new()), None);
         assert_eq!(SurfaceHint::resolve("Teams", &HashMap::new()), None);
         assert_eq!(SurfaceHint::resolve("", &HashMap::new()), None);
-    }
-
-    #[test]
-    fn the_hint_goes_under_one_key_in_both_places() {
-        let hint = SurfaceHint::resolve("teams", &HashMap::new()).unwrap();
-        assert_eq!(
-            hint.client_capabilities(),
-            json!({"extensions": {"chat.erato/surface": hint.to_value()}}),
-        );
-        let mut params = CallToolRequestParams::new("render");
-        params.arguments = json!({"diagram": "a -> b"}).as_object().cloned();
-        hint.add_to_call(&mut params);
-        let sent = serde_json::to_value(&params).unwrap();
-        assert_eq!(sent["_meta"]["chat.erato/surface"], hint.to_value());
-        assert_eq!(sent["arguments"], json!({"diagram": "a -> b"}));
     }
 }

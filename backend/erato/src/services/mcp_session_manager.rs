@@ -967,7 +967,9 @@ impl McpSessionManager {
             tokio::sync::mpsc::UnboundedSender<rmcp::model::ProgressNotificationParam>,
         >,
     ) -> Result<CallToolResult, Report> {
-        let surface = self.surface_hint(server_id, platform).await;
+        if let Some(surface) = self.surface_hint(server_id, platform).await {
+            surface.add_to_call(&mut params);
+        }
         if let Some(request) = self.stateless_request(server_id, auth_context).await? {
             let config = self.server_config(server_id).await?;
             if !is_tool_allowed_by_server_config(&params.name, &config) {
@@ -976,10 +978,7 @@ impl McpSessionManager {
                     "MCP tool is excluded by server configuration",
                 ));
             }
-            return request.call_tool(params, surface.as_ref(), progress).await;
-        }
-        if let Some(surface) = &surface {
-            surface.add_to_call(&mut params);
+            return request.call_tool(params, progress).await;
         }
         // Try calling the tool with the current legacy session
         match self

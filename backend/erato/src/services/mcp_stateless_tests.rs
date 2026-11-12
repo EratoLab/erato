@@ -24,8 +24,8 @@ struct Wire {
     discovery_code: AtomicU64,
     paginated: AtomicBool,
     active: AtomicUsize,
-    /// `clientCapabilities` of each `tools/call`, in arrival order.
-    call_capabilities: std::sync::Mutex<Vec<Value>>,
+    /// The surface hint in the `_meta` of each `tools/call`, in arrival order.
+    call_hints: std::sync::Mutex<Vec<Option<Value>>>,
 }
 
 async fn wire(
@@ -39,20 +39,21 @@ async fn wire(
         request["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
         VERSION
     );
-    let capabilities =
-        request["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"].clone();
+    assert_eq!(
+        request["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"],
+        json!({})
+    );
+    let hint = request["params"]["_meta"].get(SURFACE_HINT_KEY).cloned();
     if request["method"] == "tools/call" {
-        // A surface hint is a client capability, never a bare `_meta` entry
-        // or an argument.
-        assert!(request["params"]["_meta"].get(SURFACE_HINT_KEY).is_none());
+        // A surface hint is a `_meta` entry of a tool call, never an argument.
         assert!(
             request["params"]["arguments"]
                 .get(SURFACE_HINT_KEY)
                 .is_none()
         );
-        state.call_capabilities.lock().unwrap().push(capabilities);
+        state.call_hints.lock().unwrap().push(hint);
     } else {
-        assert_eq!(capabilities, json!({}));
+        assert_eq!(hint, None);
     }
     assert!(!headers.contains_key("mcp-session-id"));
     assert!(!headers.contains_key("last-event-id"));
@@ -249,13 +250,14 @@ async fn modern_calls_keep_no_sessions_with_rmcp_startup_progress_limits() {
     );
 }
 
-/// A stateless server that opted in finds the surface among the client
-/// capabilities of each tool call; a configured list replaces the built-in
-/// one, an unknown or absent surface sends nothing, and so does a server that
-/// did not opt in. The tool list is fetched once per server whatever the
-/// surface, and discovery and listing carry no hint (asserted by `wire`).
+/// A stateless server that opted in finds the surface in the `_meta` of each
+/// tool call; a configured list replaces the built-in one, an unknown or
+/// absent surface sends nothing, and so does a server that did not opt in.
+/// The tool list is fetched once per server whatever the surface; discovery
+/// and listing carry no hint and the client capabilities stay empty
+/// (asserted by `wire`).
 #[tokio::test]
-async fn an_opted_in_stateless_server_finds_the_surface_in_call_capabilities() {
+async fn an_opted_in_stateless_server_finds_the_surface_in_the_call_meta() {
     let (wire, server, _) = fixture().await;
     let mut app = AppConfig::default();
     let mut opted_in = config(&server.url);
@@ -289,16 +291,16 @@ async fn an_opted_in_stateless_server_finds_the_surface_in_call_capabilities() {
             .await
             .unwrap();
     }
-    let hint = |surface: &str, accept: &[&str]| json!({"extensions": {"chat.erato/surface": {"surface": surface, "accept": accept}}});
+    let hint = |surface: &str, accept: &[&str]| Some(json!({"surface": surface, "accept": accept}));
     assert_eq!(
-        *wire.call_capabilities.lock().unwrap(),
+        *wire.call_hints.lock().unwrap(),
         [
             hint("teams-bot", &["image/png"]),
             hint("teams", &["image/svg+xml", "image/png"]),
             hint("outlook", &["image/png"]),
-            json!({}),
-            json!({}),
-            json!({}),
+            None,
+            None,
+            None,
         ]
     );
     assert_eq!(wire.discoveries.load(Ordering::SeqCst), 2);
@@ -569,14 +571,13 @@ async fn broken_tool_stream_is_not_replayed_and_cancellation_closes_only_its_req
     let request = context(&runtime, "").await;
     assert!(
         request
-            .call_tool(call_params("broken"), None, None)
+            .call_tool(call_params("broken"), None)
             .await
             .is_err()
     );
     assert_eq!(wire.calls.load(Ordering::SeqCst), 1);
     let request = context(&runtime, "").await;
-    let task =
-        tokio::spawn(async move { request.call_tool(call_params("pending"), None, None).await });
+    let task = tokio::spawn(async move { request.call_tool(call_params("pending"), None).await });
     tokio::time::timeout(Duration::from_secs(2), async {
         while wire.active.load(Ordering::SeqCst) == 0 {
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -585,7 +586,7 @@ async fn broken_tool_stream_is_not_replayed_and_cancellation_closes_only_its_req
     .await
     .unwrap();
     let other = context(&runtime, "").await;
-    other.call_tool(call_params(""), None, None).await.unwrap();
+    other.call_tool(call_params(""), None).await.unwrap();
     task.abort();
     let _ = task.await;
     tokio::time::timeout(Duration::from_secs(2), async {
@@ -1055,7 +1056,7 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
     for status in [400, 404, 409, 422, 429] {
         let error = context(&runtime, "")
             .await
-            .call_tool(call_params(&format!("status_{status}")), None, None)
+            .call_tool(call_params(&format!("status_{status}")), None)
             .await
             .unwrap_err();
         let (output, details) = failed_call_row(&error);
@@ -1068,7 +1069,7 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
     for status in [500, 502, 503, 504, 524] {
         let error = context(&runtime, "")
             .await
-            .call_tool(call_params(&format!("status_{status}")), None, None)
+            .call_tool(call_params(&format!("status_{status}")), None)
             .await
             .unwrap_err();
         assert_eq!(
@@ -1081,7 +1082,7 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
     // An error the server sends in its event stream is its answer too.
     let error = context(&runtime, "")
         .await
-        .call_tool(call_params("sse_error"), None, None)
+        .call_tool(call_params("sse_error"), None)
         .await
         .unwrap_err();
     let (output, details) = failed_call_row(&error);
@@ -1102,7 +1103,7 @@ async fn a_failed_call_says_whether_the_server_answered_it_or_never_got_it() {
 
     let error = context(&runtime, "")
         .await
-        .call_tool(call_params("broken"), None, None)
+        .call_tool(call_params("broken"), None)
         .await
         .unwrap_err();
     assert_eq!(

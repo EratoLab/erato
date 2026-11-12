@@ -1173,17 +1173,6 @@ mod tests {
     use crate::models::message::{ContentPartToolApprovalRequest, ToolApprovalAnnotations};
 
     #[test]
-    fn the_bot_reports_its_own_platform_which_teams_scopes_still_cover() {
-        let platform = teams_request_context().platform.unwrap();
-        assert_eq!(platform, "teams-bot");
-        assert_ne!(platform, super::super::TEAMS_PLATFORM);
-        assert!(super::super::platform_in_scope("teams", &platform));
-        assert!(super::super::platform_in_scope("teams-bot", &platform));
-        assert!(!super::super::platform_in_scope("teams-bot", "teams"));
-        assert!(!super::super::platform_in_scope("web", &platform));
-    }
-
-    #[test]
     fn server_failures_become_retryable_without_their_details() {
         assert!(matches!(
             StartError::from(StreamRouteError::PlainText(

@@ -4083,12 +4083,15 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub glossary: McpGlossaryConfig,
-    /// Whether this server is told, on every tool call, which surface the
-    /// call comes from (the web app, an Office add-in, the Teams tab or the
-    /// Teams bot) and which output formats that surface accepts, as listed in
-    /// `mcp_servers_global.surfaces`. The hint travels in the call's MCP
-    /// metadata, never as a tool argument, so the model never sees it.
-    /// Off by default: other servers receive nothing.
+    /// Whether this server is told, with a tool call, which surface the call
+    /// comes from (the web app, an Office add-in, the Teams tab or the Teams
+    /// bot) and which output formats that surface accepts, as listed in
+    /// `mcp_servers_global.surfaces`. A call carries the hint only when its
+    /// surface has an accept list: calls from an unknown surface and from
+    /// delegated tasks carry none, and a request without the
+    /// `X-Erato-Platform` header counts as `web`. The hint travels in the
+    /// call's MCP metadata, never as a tool argument, so the model never sees
+    /// it. Off by default: other servers receive nothing.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub surface_hints: bool,
@@ -4414,16 +4417,28 @@ pub struct McpServersGlobalConfig {
 #[serde(deny_unknown_fields)]
 pub struct McpSurfaceConfig {
     /// MIME types the surface can show, most preferred first, such as
-    /// `["image/svg+xml", "image/png"]`. Exact types, `type/*` or `*/*`.
+    /// `["image/svg+xml", "image/png"]`. Exact `type/subtype` values only.
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub accept: Vec<String>,
 }
 
-/// A surface name longer than this is no `X-Erato-Platform` value.
-const MAX_SURFACE_NAME_BYTES: usize = 64;
+/// Longest configured surface name, which keeps configured names in the
+/// shape of the built-in ones.
+const MAX_SURFACE_NAME_BYTES: usize = 32;
 
-/// Whether `value` is a MIME type a surface can list: `type/subtype`,
-/// `type/*` or `*/*`, each part made of RFC 6838 name characters.
+/// Whether `name` has the shape of the built-in surface names: lowercase
+/// ASCII letters, digits and `-`, starting with a letter or digit.
+fn is_surface_name(name: &str) -> bool {
+    let is_letter_or_digit = |byte: u8| byte.is_ascii_lowercase() || byte.is_ascii_digit();
+    name.len() <= MAX_SURFACE_NAME_BYTES
+        && name.bytes().next().is_some_and(is_letter_or_digit)
+        && name
+            .bytes()
+            .all(|byte| is_letter_or_digit(byte) || byte == b'-')
+}
+
+/// Whether `value` is a MIME type a surface can list: an exact
+/// `type/subtype`, each part made of RFC 6838 name characters.
 fn is_surface_mime_type(value: &str) -> bool {
     let Some((major, minor)) = value.split_once('/') else {
         return false;
@@ -4435,7 +4450,7 @@ fn is_surface_mime_type(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&byte))
     };
-    (is_token(major) && (is_token(minor) || minor == "*")) || (major == "*" && minor == "*")
+    is_token(major) && is_token(minor)
 }
 
 impl Default for McpServersGlobalConfig {
@@ -4464,13 +4479,9 @@ impl McpServersGlobalConfig {
             ));
         }
         for (surface, config) in &self.surfaces {
-            // Matched against the request header, which holds visible ASCII only.
-            if surface.is_empty()
-                || surface.len() > MAX_SURFACE_NAME_BYTES
-                || !surface.bytes().all(|byte| byte.is_ascii_graphic())
-            {
+            if !is_surface_name(surface) {
                 return Err(eyre!(
-                    "mcp_servers_global.surfaces: surface name '{}' must be 1 to {MAX_SURFACE_NAME_BYTES} visible ASCII characters without spaces",
+                    "mcp_servers_global.surfaces: surface name '{}' must be 1 to {MAX_SURFACE_NAME_BYTES} lowercase ASCII letters, digits or '-', starting with a letter or digit, like 'web' or 'teams-bot'",
                     surface.escape_debug()
                 ));
             }
@@ -4480,7 +4491,7 @@ impl McpServersGlobalConfig {
                 .find(|value| !is_surface_mime_type(value))
             {
                 return Err(eyre!(
-                    "mcp_servers_global.surfaces.{surface}.accept: '{}' is not a MIME type such as image/png, image/* or */*",
+                    "mcp_servers_global.surfaces.{surface}.accept: '{}' is not an exact MIME type such as image/png",
                     value.escape_debug()
                 ));
             }

@@ -4320,7 +4320,7 @@ To show chat connectors while hiding preferences, set `show_frontend_tab = false
 {/* erato_toml_config_key: mcp_servers_global.surfaces.<surface>.accept */}
 {/* erato_toml_config_key: mcp_servers_global.surfaces.<surface>.accept.[] */}
 
-What each surface accepts, keyed by its `X-Erato-Platform` value, as told to MCP servers that enable [`surface_hints`](#mcp_serversserver-idsurface_hints). `accept` lists MIME types in order of preference: exact types such as `image/png`, `type/*` or `*/*`, sent in lower case. An entry replaces the built-in list of its surface, and an entry for another value, such as a future `excel`, adds a surface. An empty list still names the surface, with no accepted formats. Surface names are matched exactly and must be 1 to 64 visible ASCII characters without spaces.
+What each surface accepts, keyed by its `X-Erato-Platform` value, as told to MCP servers that enable [`surface_hints`](#mcp_serversserver-idsurface_hints). `accept` lists exact MIME types such as `image/png` in order of preference, sent in lower case. An entry replaces the built-in list of its surface, and an entry for another value, such as a future `excel`, adds a surface. An empty list still names the surface, with no accepted formats. Surface names are matched exactly and have the shape of the built-in ones: 1 to 32 lowercase ASCII letters, digits or `-`, starting with a letter or digit.
 
 | Surface | Built-in `accept` |
 | --- | --- |
@@ -4477,29 +4477,19 @@ approval_argument = "hasUserApproved"
 
 {/* erato_toml_config_key: mcp_servers.<server-id>.surface_hints */}
 
-Whether this server is told, with every tool call, which surface the call comes from and which output formats that surface accepts, so that it can choose what to return, for example an SVG for the web app and a PNG for the Teams bot. The hint travels in the call's MCP metadata, never as a tool argument, so the model never sees it. Servers without this setting receive nothing.
+Whether this server is told, with a tool call, which surface the call comes from and which output formats that surface accepts, so that it can choose what to return, for example an SVG for the web app and a PNG for the Teams bot. The hint travels in the call's `_meta`, never as a tool argument, so the model never sees it. Servers without this setting receive nothing.
 
-For a server on the stateless protocol, the hint is a client capability extension of the `tools/call` request:
-
-```json
-"_meta": {
-  "io.modelcontextprotocol/clientCapabilities": {
-    "extensions": {
-      "chat.erato/surface": { "surface": "teams-bot", "accept": ["image/png"] }
-    }
-  }
-}
-```
-
-For a legacy server, it is an entry of the tool call's `_meta`:
+The hint is an entry of the `tools/call` request's `_meta`, for stateless and legacy servers alike:
 
 ```json
 "_meta": {
-  "chat.erato/surface": { "surface": "web", "accept": ["image/svg+xml", "image/png"] }
+  "chat.erato/surface": { "surface": "teams-bot", "accept": ["image/png"] }
 }
 ```
 
-`surface` is the request's `X-Erato-Platform` value: `web`, `outlook`, `word`, `addin-neutral`, `teams` (the Erato tab in Teams) or `teams-bot` (the Teams bot). `accept` lists MIME types in order of preference, as set in [`mcp_servers_global.surfaces`](#mcp_servers_globalsurfaces). A call the user approves on an approval card carries the surface of the turn that asked, wherever the card was answered. A call from a surface that has no list, such as an unrecognized platform value, and a call from a run without a surface, such as a delegated task, carry no hint.
+`surface` is the request's `X-Erato-Platform` value: `web`, `outlook`, `word`, `addin-neutral`, `teams` (the Erato tab in Teams) or `teams-bot` (the Teams bot). A request without the header counts as `web`. The surface comes from a header the client sends, so a server may use it to choose output formats only, never for access decisions. `accept` lists MIME types in order of preference, as set in [`mcp_servers_global.surfaces`](#mcp_servers_globalsurfaces). `"accept": []` names the surface and means it shows none of the formats; a surface with no list at all sends no hint.
+
+A call carries the hint only when its surface has an accept list: a call from an unknown surface, such as an unrecognized platform value, and a call from a delegated task carry none. A call the user approves on an approval card carries the surface of the turn that asked, wherever the card was answered.
 
 Only tool calls carry the hint: initialization, discovery and tool listing are unchanged, and so is the cache of tool lists.
 
