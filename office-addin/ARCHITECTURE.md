@@ -1,7 +1,7 @@
 # Office add-in architecture
 
 One host-neutral core drives the whole add-in chat experience; each Microsoft
-host (Outlook, Teams and Word today; Excel and PowerPoint later) is a thin
+host (Outlook, Teams, Word, Excel and PowerPoint) is a thin
 composition root that injects host behavior through a fixed set of seams.
 Adding a host is meant to be mechanical: compose the core with host providers,
 implement the seams listed below, and never modify the core itself.
@@ -36,8 +36,15 @@ implement the seams listed below, and never modify the core itself.
   composes the shared Office.js providers with Word auth, session, document
   capture, review and write components. Document protocols and OOXML
   compilation stay under `src/word/utils`; shared UI comes from the frontend library.
+- `src/excel`, `src/powerpoint` — the Excel and PowerPoint task panes at
+  `/office-addin/excel` and `/office-addin/powerpoint`: the shared Office.js
+  providers around `NeutralAddinChatPage`, with no document context yet. They
+  are sideloaded from `manifests/manifest-local-excel.xml` and
+  `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
-  `src/utils`: `OfficeProvider`, `OfficeThemeProvider`, `useOfficeTheme`,
+  `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,
+  `OfficeDocumentAuthProvider` and `OfficeDocumentFeatureConfig` (sign-in and
+  feature overrides of the three document panes), `useOfficeTheme`,
   `utils/officeTheme/`, `officeAsync.ts`, the drag-drop broker
   (`officeDragAndDropBroker.ts` + `useOfficeDragAndDrop.ts`), and
   `detectExchangeOnPrem.ts`. This ring is office.js-generic and is planned to
@@ -88,7 +95,9 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    `OutlookAddinSessionController` (mail-item anchor + session policy); Teams
    supplies `createNeutralAddinSessionController` bound to
    `erato.addin.teams.currentChat.v1`; Word supplies
-   `WordAddinSessionController` (one chat per document, see the Word host).
+   `WordAddinSessionController` (one chat per document, see the Word host);
+   Excel and PowerPoint bind the neutral controller to
+   `erato.addin.excel.currentChat.v1` and `erato.addin.powerpoint.currentChat.v1`.
    Each host keeps an independent selection.
 3. **Auth** — a host auth provider mounts `SessionAuthProvider`
    (`src/core/SessionAuthProvider.tsx`) with an `AuthSource`; `AuthGate` reads
@@ -117,9 +126,11 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
 6. **Platform identifier** — stamped explicitly per host, never inferred from
    a host SDK: the `platform` prop on `AddinChatProviderCore` flows into
    messaging and is sent as the `X-Erato-Platform` request header. Values:
-   `web` (shared-frontend default), `outlook`, `teams`, `word`, `addin-neutral`
-   (`NeutralAddinChatPage` default), future `excel`. The Teams bot, which runs
-   in the backend, reports `teams-bot`.
+   `web` (shared-frontend default), `outlook`, `teams`, `word`, `excel`,
+   `powerpoint`, `addin-neutral` (`NeutralAddinChatPage` default). The Teams
+   bot, which runs in the backend, reports `teams-bot`. The backend does not
+   know `excel` and `powerpoint` yet: it logs a warning and records their chats
+   as created on the web.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 
@@ -128,12 +139,14 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
   `no-restricted-globals` for `Office`/`OfficeRuntime` and a name-based
   `no-restricted-imports` denylist (`**/OfficeProvider`, `**/Outlook*`,
   `**/outlook/**`, `**/sessionPolicy/**`, `**/useOutlook*`, `**/Teams*`,
-  `**/teams/**`, `@microsoft/teams-js`, `**/Word*`, `**/word/**`).
-- Host peer fence — `src/outlook/**`, `src/teams/**` and `src/word/**` may not
-  import each other: one host SDK and one set of registry overrides per document. The
+  `**/teams/**`, `@microsoft/teams-js`, `**/Word*`, `**/word/**`,
+  `**/Excel*`, `**/excel/**`, `**/PowerPoint*`, `**/powerpoint/**`).
+- Host peer fence — `src/outlook/**`, `src/teams/**`, `src/word/**`,
+  `src/excel/**` and `src/powerpoint/**` may not import each other: one host SDK and one set of registry overrides per document. The
   Teams block also carries the `Office`/`OfficeRuntime` global ban.
 - Residue-ring guard — `src/hooks`, `src/providers`, `src/utils`, `src/auth`
-  may not import `**/outlook/**`, `**/teams/**` or `**/word/**` (test mocks excepted):
+  may not import `**/outlook/**`, `**/teams/**`, `**/word/**`, `**/excel/**`
+  or `**/powerpoint/**` (test mocks excepted):
   shared code must not depend on a host module; move it out or invert the
   dependency.
 - Characterization tests —

@@ -3,6 +3,8 @@
 /manifests/manifest-funnel.xml
 /manifests/manifest-funnel-onprem.xml
 /manifests/manifest-funnel-document.xml
+/manifests/manifest-funnel-excel.xml
+/manifests/manifest-funnel-powerpoint.xml
 /manifests/manifest-funnel.json
 /manifests/manifest-funnel.zip
 src/locales/**/*.json

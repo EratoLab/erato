@@ -18,7 +18,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { injectFrontendEnv } from "./app/env";
 import { AddinSetupRoute } from "./pages/AddinSetupPage";
 
+const ExcelApp = lazy(() => import("./excel/ExcelApp"));
 const OutlookApp = lazy(() => import("./outlook/OutlookApp"));
+const PowerPointApp = lazy(() => import("./powerpoint/PowerPointApp"));
 const TeamsApp = lazy(() => import("./teams/TeamsApp"));
 const WordApp = lazy(() => import("./word/WordApp"));
 
@@ -59,6 +61,22 @@ ReactDOM.createRoot(rootElement).render(
           element={
             <Suspense fallback={null}>
               <WordApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/excel"
+          element={
+            <Suspense fallback={null}>
+              <ExcelApp />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/powerpoint"
+          element={
+            <Suspense fallback={null}>
+              <PowerPointApp />
             </Suspense>
           }
         />

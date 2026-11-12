@@ -165,6 +165,10 @@ const eslintConfig = [
                 "@microsoft/teams-js",
                 "**/Word*",
                 "**/word/**",
+                "**/Excel*",
+                "**/excel/**",
+                "**/PowerPoint*",
+                "**/powerpoint/**",
               ],
               message:
                 "Host-neutral core files must receive host behavior through explicit components or props.",
@@ -208,6 +212,8 @@ const eslintConfig = [
                 "!**/test/mocks/teams/**",
                 "**/word/**",
                 "!**/test/mocks/word/**",
+                "**/excel/**",
+                "**/powerpoint/**",
               ],
               message:
                 "The shared ring must not depend on a host module; move shared code out or invert the dependency.",
@@ -235,9 +241,13 @@ const eslintConfig = [
                 "**/useOutlook*",
                 "**/Word*",
                 "**/word/**",
+                "**/Excel*",
+                "**/excel/**",
+                "**/PowerPoint*",
+                "**/powerpoint/**",
               ],
               message:
-                "The Teams composition is a peer of the Outlook and Word ones: only one host SDK and one set of registry overrides per document.",
+                "The Teams composition is a peer of the other host compositions: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },
@@ -269,9 +279,13 @@ const eslintConfig = [
                 "@microsoft/teams-js",
                 "**/Word*",
                 "**/word/**",
+                "**/Excel*",
+                "**/excel/**",
+                "**/PowerPoint*",
+                "**/powerpoint/**",
               ],
               message:
-                "The Outlook composition is a peer of the Teams and Word ones: only one host SDK and one set of registry overrides per document.",
+                "The Outlook composition is a peer of the other host compositions: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },
@@ -294,9 +308,71 @@ const eslintConfig = [
                 "**/Teams*",
                 "**/teams/**",
                 "@microsoft/teams-js",
+                "**/Excel*",
+                "**/excel/**",
+                "**/PowerPoint*",
+                "**/powerpoint/**",
               ],
               message:
-                "The Word composition is a peer of the Outlook and Teams ones: only one host SDK and one set of registry overrides per document.",
+                "The Word composition is a peer of the other host compositions: only one host SDK and one set of registry overrides per document.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/excel/**/*.ts", "src/excel/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOutlook*",
+                "**/Teams*",
+                "**/teams/**",
+                "@microsoft/teams-js",
+                "**/Word*",
+                "**/word/**",
+                "**/PowerPoint*",
+                "**/powerpoint/**",
+              ],
+              message:
+                "The Excel composition is a peer of the other host compositions: only one host SDK and one set of registry overrides per document.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/powerpoint/**/*.ts", "src/powerpoint/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/Outlook*",
+                "**/outlook/**",
+                "**/sessionPolicy/**",
+                "**/useOutlook*",
+                "**/Teams*",
+                "**/teams/**",
+                "@microsoft/teams-js",
+                "**/Word*",
+                "**/word/**",
+                "**/Excel*",
+                "**/excel/**",
+              ],
+              message:
+                "The PowerPoint composition is a peer of the other host compositions: only one host SDK and one set of registry overrides per document.",
             },
           ],
         },
