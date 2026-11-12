@@ -1663,6 +1663,16 @@ export type ContinueStreamRequest = {
    * own call and would answer the children unseen.
    */
   shows_child_items?: boolean;
+  /**
+   * Whether the client also shows each task child a `tool_call_limit` or
+   * `builtin_tool` part carries as an item of its own. Those parts carry
+   * children since later than `shows_child_items` says, and a client that
+   * predates them sends that flag while it shows the limit's choice, or a
+   * generic card for a kind it does not know, alone and answers every open
+   * item with it. Decisions on such a part are refused without both flags
+   * while a child is open.
+   */
+  shows_limit_and_builtin_child_items?: boolean;
 };
 
 export type Coverage = "complete" | "partial" | "unavailable";
@@ -4538,6 +4548,13 @@ export type ToolCallBatch = {
    */
   rows_emptying?: number;
   /**
+   * Rows that remove items from a list, on the tool's word.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  rows_removing_from_lists?: number;
+  /**
    * @format int32
    * @minimum 0
    */
@@ -4577,6 +4594,20 @@ export type ToolCallBatchField = {
    * @minimum 0
    */
   emptied?: number;
+  /**
+   * Rows whose list the tool says has its items added.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  lists_added?: number;
+  /**
+   * Rows whose list the tool says has its items removed.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  lists_removed?: number;
   /**
    * @format int32
    * @minimum 0
@@ -4799,6 +4830,16 @@ export type ToolCallEffectCounts = {
    * @format int32
    * @minimum 0
    */
+  list_added?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  list_removed?: number;
+  /**
+   * @format int32
+   * @minimum 0
+   */
   list_replaced?: number;
   /**
    * @format int32
@@ -4823,6 +4864,8 @@ export type ToolCallEffectCounts = {
 export type ToolCallEffectKind =
   | "emptied"
   | "list_replaced"
+  | "list_removed"
+  | "list_added"
   | "changed"
   | "set"
   | "unchanged"
@@ -4844,6 +4887,15 @@ export type ToolCallEffectValue = {
   text?: string;
   truncated?: boolean;
 };
+
+/**
+ * How a call failed when Erato, not the tool, wrote its error.
+ */
+export type ToolCallFailure =
+  | "no_answer"
+  | "answer_unreadable"
+  | "not_run"
+  | "other";
 
 /**
  * What a filter selects, in words.
@@ -5169,6 +5221,12 @@ export type ToolDisplayMetadata = {
  * links. Its structured content and embedded resources are not kept.
  */
 export type ToolResultDetails = {
+  /**
+   * Set by Erato when a call failed without an answer from the tool that
+   * Erato could read: the row's error text is then Erato's, never the
+   * tool's.
+   */
+  failure?: ToolCallFailure;
   links?: ToolResultLink[];
 };
 

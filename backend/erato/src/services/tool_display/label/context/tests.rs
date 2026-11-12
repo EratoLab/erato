@@ -371,6 +371,327 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
     );
 }
 
+/// A call labelled as `action`, as every MCP call's row is once it ran.
+fn labelled_as(action: ToolCallAction, tool: ToolUse) -> ToolUse {
+    let mut label = generic_label(&json!({}));
+    label.action = action;
+    ToolUse {
+        display: Some(ToolDisplayMetadata {
+            label: Some(label),
+            ..on(Some(SERVER)).unwrap()
+        }),
+        ..tool
+    }
+}
+
+#[test]
+fn a_record_renamed_in_this_chat_is_named_by_its_new_name_and_never_its_old_one() {
+    let read = read_query(
+        "read",
+        "SELECT subject, opportunityid FROM opportunity",
+        json!([{ "subject": "Card check task", "opportunityid": OPPORTUNITY }]),
+    );
+    let update = |id: &str, status, item: Value| ToolUse {
+        status,
+        ..labelled_as(
+            ToolCallAction::Update,
+            call(
+                id,
+                "update_record",
+                json!({ "tablename": "task", "recordId": OPPORTUNITY, "item": item }),
+                json!("Record updated successfully."),
+            ),
+        )
+    };
+    let renamed = update(
+        "rename",
+        ToolCallStatus::Success,
+        json!({ "subject": "Card check task v2", "description": "Updated" }),
+    );
+    let context = after(vec![read.clone(), renamed.clone()]);
+    assert_eq!(
+        name(&context, json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v2")
+    );
+    let mut running = ToolResultContext::default();
+    running.observe(&[
+        ContentPart::ToolUse(read.clone()),
+        ContentPart::ToolUse(renamed),
+    ]);
+    assert_eq!(
+        name(&running, json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v2")
+    );
+    let new_member = update(
+        "rename",
+        ToolCallStatus::Success,
+        json!({ "newSubject": "Card check task v3" }),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), new_member]), json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task v3")
+    );
+
+    // A failed or denied write changes nothing, and neither does one that
+    // leaves the name's member alone.
+    let failed = update(
+        "failed",
+        ToolCallStatus::Error,
+        json!({ "subject": "Card check task v2" }),
+    );
+    let denied = ToolUse {
+        output: Some(json!({ "status": "rejected", "error": "The user denied this tool call." })),
+        ..update(
+            "denied",
+            ToolCallStatus::Error,
+            json!({ "subject": "Card check task v2" }),
+        )
+    };
+    let other_field = update(
+        "other",
+        ToolCallStatus::Success,
+        json!({ "description": "Card check task v2" }),
+    );
+    for write in [failed, denied, other_field] {
+        assert_eq!(
+            name(&after(vec![read.clone(), write]), json!(OPPORTUNITY)).as_deref(),
+            Some("Card check task"),
+        );
+    }
+
+    // When it is not certain what the record is called now, it has no name.
+    for item in [
+        json!({ "subject": null }),
+        json!({ "subject": "ana@example.com" }),
+        json!({ "subject": "One", "newSubject": "Two" }),
+    ] {
+        let write = update("unsure", ToolCallStatus::Success, item.clone());
+        assert_eq!(
+            name(&after(vec![read.clone(), write]), json!(OPPORTUNITY)),
+            None,
+            "{item}"
+        );
+    }
+    let batch = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "batch",
+            "update_records",
+            json!({ "records": [
+                { "opportunityid": OPPORTUNITY, "subject": "One", "risklevel": 1 },
+                { "opportunityid": "5f0c2a10-0000-4000-8000-00000000a002", "subject": "Two", "risklevel": 2 },
+            ] }),
+            json!("Updated 2 records."),
+        ),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), batch]), json!(OPPORTUNITY)),
+        None
+    );
+}
+
+/// What the context calls the record a call names by `id: <id>`.
+fn name_by_id(context: &ToolResultContext, id: &str) -> Option<String> {
+    let arguments = json!({ "id": id });
+    let mapping = ToolCallLabelItemMapping {
+        id: Some("/id".into()),
+        ..Default::default()
+    };
+    let item = item(context, ToolCallAction::Delete, mapping, &arguments);
+    item.id?.values.first()?.resolved.clone()
+}
+
+#[test]
+fn a_rename_reaches_the_record_under_every_id_one_read_kept_it_by() {
+    let read = call(
+        "read",
+        "get_issue",
+        json!({ "id": "ENG-12" }),
+        json!({ "id": TASK, "identifier": "ENG-12", "title": "Plan" }),
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), "ENG-12").as_deref(),
+        Some("Plan")
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), TASK).as_deref(),
+        Some("Plan")
+    );
+    let update = |id: &str| {
+        labelled_as(
+            ToolCallAction::Update,
+            call(
+                "rename",
+                "update_issue",
+                json!({ "id": id, "title": "Plan v2" }),
+                json!("Issue updated"),
+            ),
+        )
+    };
+    for by in ["ENG-12", TASK] {
+        let context = after(vec![read.clone(), update(by)]);
+        assert_eq!(
+            name_by_id(&context, TASK).as_deref(),
+            Some("Plan v2"),
+            "{by}"
+        );
+        assert_eq!(
+            name_by_id(&context, "ENG-12").as_deref(),
+            Some("Plan v2"),
+            "{by}"
+        );
+    }
+
+    // Another record that only shares the old name may be any record: it
+    // loses the name rather than keep one that may be the renamed record's.
+    let list = call(
+        "list",
+        "list_issues",
+        json!({}),
+        json!([
+            { "id": TASK, "title": "Plan" },
+            { "id": OTHER_CONTACT, "title": "Plan" },
+        ]),
+    );
+    let context = after(vec![list, update(TASK)]);
+    assert_eq!(name_by_id(&context, TASK).as_deref(), Some("Plan v2"));
+    assert_eq!(name_by_id(&context, OTHER_CONTACT), None);
+}
+
+#[test]
+fn a_rename_never_gives_its_new_name_to_another_record_of_the_same_read() {
+    let read = call(
+        "read",
+        "get_task",
+        json!({ "id": "T1" }),
+        json!({ "id": "T1", "subject": "Weekly sync", "parent": { "id": "T0", "subject": "Weekly sync" } }),
+    );
+    let update = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "rename",
+            "update_task",
+            json!({ "id": "T1", "subject": "Weekly sync (moved)" }),
+            json!("Task updated"),
+        ),
+    );
+    // Each context keeps its records in another order.
+    for _ in 0..32 {
+        let context = after(vec![read.clone(), update.clone()]);
+        assert_eq!(
+            name_by_id(&context, "T1").as_deref(),
+            Some("Weekly sync (moved)")
+        );
+        assert_eq!(name_by_id(&context, "T0"), None);
+    }
+}
+
+#[test]
+fn a_rename_by_the_id_a_read_named_never_reaches_a_record_the_read_linked_to() {
+    // The read's object echoes the key it was named by but gives no ID of
+    // its own; only its parent has one.
+    let read = call(
+        "read",
+        "get_issue",
+        json!({ "issue_key": "ENG-12" }),
+        json!({ "key": "ENG-12", "title": "Weekly sync", "parent": { "id": "ENG-3", "title": "Weekly sync" } }),
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), "ENG-3").as_deref(),
+        Some("Weekly sync")
+    );
+    let update = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "rename",
+            "update_issue",
+            json!({ "issue_key": "ENG-12", "title": "Weekly sync (moved)" }),
+            json!("Issue updated"),
+        ),
+    );
+    for _ in 0..32 {
+        let context = after(vec![read.clone(), update.clone()]);
+        assert_eq!(name_by_id(&context, "ENG-3"), None);
+    }
+}
+
+#[test]
+fn a_name_set_in_an_object_shaped_like_a_link_leaves_its_record_unnamed() {
+    let read = call(
+        "read",
+        "get_item",
+        json!({ "id": "X1" }),
+        json!({ "id": "X1", "name": "Q3 deck" }),
+    );
+    assert_eq!(
+        name_by_id(&after(vec![read.clone()]), "X1").as_deref(),
+        Some("Q3 deck")
+    );
+    let write = labelled_as(
+        ToolCallAction::Update,
+        call(
+            "write",
+            "update_item",
+            json!({ "item": { "id": "X1", "name": "Q3 deck v2" } }),
+            json!("Item updated"),
+        ),
+    );
+    assert_eq!(name_by_id(&after(vec![read, write]), "X1"), None);
+}
+
+#[test]
+fn a_write_that_sets_a_name_but_is_no_plain_update_leaves_the_record_unnamed() {
+    let read = read_query(
+        "read",
+        "SELECT subject, opportunityid FROM opportunity",
+        json!([{ "subject": "Card check task", "opportunityid": OPPORTUNITY }]),
+    );
+    let write = |action, input: Value| {
+        labelled_as(
+            action,
+            call("write", "change_record", input, json!("Done.")),
+        )
+    };
+    for (action, input) in [
+        (
+            ToolCallAction::Move,
+            json!({ "recordId": OPPORTUNITY, "new_parent_id": ACCOUNT, "new_name": "Card check task v2" }),
+        ),
+        (
+            ToolCallAction::Other,
+            json!({ "recordId": OPPORTUNITY, "subject": "Card check task v2" }),
+        ),
+        (
+            ToolCallAction::Update,
+            json!({ "recordId": OPPORTUNITY, "task": { "subject": "Card check task v2", "status": "open" } }),
+        ),
+    ] {
+        let context = after(vec![read.clone(), write(action, input.clone())]);
+        assert_eq!(name(&context, json!(OPPORTUNITY)), None, "{input}");
+    }
+    // A label without a verb is no read either.
+    let unlabelled = call(
+        "write",
+        "change_record",
+        json!({ "recordId": OPPORTUNITY, "subject": "Card check task v2" }),
+        json!("Done."),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), unlabelled]), json!(OPPORTUNITY)),
+        None
+    );
+
+    // A field's own value deeper down renames nothing.
+    let status = write(
+        ToolCallAction::Update,
+        json!({ "recordId": OPPORTUNITY, "properties": { "Status": { "status": { "name": "Done" } } } }),
+    );
+    assert_eq!(
+        name(&after(vec![read.clone(), status]), json!(OPPORTUNITY)).as_deref(),
+        Some("Card check task"),
+    );
+}
+
 #[test]
 fn old_values_are_read_by_the_items_one_id_and_only_on_updates() {
     let read = read_query(
@@ -629,9 +950,11 @@ fn a_write_carrying_the_records_data_or_naming_it_in_text_retires_its_old_values
             None,
             "{case}"
         );
+        // Past the cap a name may have been written as well.
+        let kept = (case == "deep").then_some("Line 4 retrofit");
         assert_eq!(
             name(&context, json!(OPPORTUNITY)).as_deref(),
-            Some("Line 4 retrofit"),
+            kept,
             "{case}"
         );
     }

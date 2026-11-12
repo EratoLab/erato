@@ -48,6 +48,9 @@ pub struct PendingApprovalItem {
     /// One of Erato's own tools: the card asks about what the call does, and
     /// `display.title` names what it acts on.
     pub own_tool: bool,
+    /// The tool-call limit's own choice, which the card's buttons give. The
+    /// tasks' items on the same stop are asked about one by one.
+    pub budget: bool,
 }
 
 /// Display-only projection of the backend's descriptor snapshot.
@@ -204,15 +207,23 @@ fn build_approval_card(
     let mut body = vec![json!({
         "type": "TextBlock", "text": heading, "weight": "Bolder", "size": "Medium", "wrap": true,
     })];
-    if set.kind == ApprovalKind::ToolCallLimit {
+    let limit = set.kind == ApprovalKind::ToolCallLimit;
+    if limit {
         body.push(json!({"type": "TextBlock", "wrap": true,
             "text": Msg::ToolCallLimitChoice.text(lang)}));
     }
+    // The limit's own choice is the buttons; its tasks' questions are asked
+    // like any other item's.
+    let budget_index = set
+        .items
+        .iter()
+        .position(|item| item.budget)
+        .filter(|_| limit);
     for (index, item) in set
         .items
         .iter()
         .enumerate()
-        .filter(|_| set.kind != ApprovalKind::ToolCallLimit)
+        .filter(|(index, _)| !limit || budget_index.is_some_and(|budget| budget != *index))
     {
         let question = if item.own_tool {
             bounded_text(&asks[index].0, MAX_NAME_BYTES / count.max(1))
@@ -314,15 +325,24 @@ fn build_approval_card(
             "data": data(all),
         })
     };
-    let actions = if set.kind == ApprovalKind::ToolCallLimit {
+    let actions = if limit {
+        // With tasks asking too, Continue and Answer now carry the budget's
+        // choice beside the tasks' own answers. Stop withdraws everything: the
+        // tasks' questions go back to their own chats.
+        let choose = |title: Msg, style: &str, choice: ApprovalChoice| match budget_index
+            .filter(|_| count > 1 && choice != ApprovalChoice::Withdraw)
+        {
+            Some(index) => {
+                let mut action = button(title, style, None);
+                action["data"][input_id(index)] = json!(choice);
+                action
+            }
+            None => button(title, style, Some(choice)),
+        };
         vec![
-            button(
-                Msg::ContinueToolCalls,
-                "positive",
-                Some(ApprovalChoice::Approve),
-            ),
-            button(Msg::AnswerNow, "default", Some(ApprovalChoice::Reject)),
-            button(Msg::Stop, "destructive", Some(ApprovalChoice::Withdraw)),
+            choose(Msg::ContinueToolCalls, "positive", ApprovalChoice::Approve),
+            choose(Msg::AnswerNow, "default", ApprovalChoice::Reject),
+            choose(Msg::Stop, "destructive", ApprovalChoice::Withdraw),
         ]
     } else if count > 1 {
         vec![
@@ -535,6 +555,7 @@ mod tests {
                     source: None,
                     input: json!({"n": index}),
                     own_tool: false,
+                    budget: false,
                 })
                 .collect(),
         }
@@ -575,6 +596,7 @@ mod tests {
                 source: None,
                 input: json!({"reminder_id": "0b9f3c1e-0000-4000-8000-000000000001"}),
                 own_tool: true,
+                budget: false,
             }],
         }
     }
@@ -780,6 +802,106 @@ mod tests {
             "an unanswered item is never filled in"
         );
         assert_eq!(approve_all.display_names, vec!["tool_0", "tool_1"]);
+    }
+
+    /// The tool-call limit's stop alone asks only its own choice. A task that
+    /// asks on the same stop is a question of its own, and Continue or Answer
+    /// now sends the budget's choice beside the task's answer, while Stop
+    /// withdraws both.
+    #[test]
+    fn a_tool_call_limit_card_asks_its_tasks_questions_too() {
+        let budget = PendingApprovalItem {
+            approval_id: "tool-budget:1".into(),
+            tool_name: "Tool-call budget".into(),
+            display: None,
+            source: None,
+            input: json!({"budget": 4}),
+            own_tool: false,
+            budget: true,
+        };
+        let alone = PendingApprovalSet {
+            message_id: "m-1".into(),
+            kind: ApprovalKind::ToolCallLimit,
+            items: vec![budget.clone()],
+        };
+        let card = approval_card(&alone, "Erato", Lang::En);
+        assert_eq!(
+            texts(&card),
+            [
+                "Tool-call limit reached",
+                Msg::ToolCallLimitChoice.text(Lang::En)
+            ]
+        );
+        assert_eq!(
+            action_titles(&card),
+            ["Continue tool calls", "Generate answer now", "Stop"]
+        );
+        let submit = ApprovalSubmit::from_value(&submitted(&card, 1, json!({}))).unwrap();
+        assert_eq!(
+            submit.decisions(),
+            Some(vec![("tool-budget:1".to_string(), ApprovalChoice::Reject)])
+        );
+
+        let mut with_task = alone.clone();
+        with_task.items.push(PendingApprovalItem {
+            approval_id: "task-call".into(),
+            tool_name: "publish_approval_probe".into(),
+            display: None,
+            source: Some("Approvals".into()),
+            input: json!({}),
+            own_tool: false,
+            budget: false,
+        });
+        let card = approval_card(&with_task, "Erato", Lang::En);
+        let all = texts(&card);
+        assert!(
+            all.contains(&"Run publish_approval_probe?".to_string()),
+            "{all:?}"
+        );
+        assert!(
+            !all.contains(&"Run Tool-call budget?".to_string()),
+            "{all:?}"
+        );
+        let choice_sets: Vec<&Value> = card["content"]["body"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|block| block["type"] == "Input.ChoiceSet")
+            .collect();
+        assert_eq!(choice_sets.len(), 1, "only the task asks: {card}");
+        assert_eq!(choice_sets[0]["id"], "d1");
+        assert_eq!(
+            action_titles(&card),
+            ["Continue tool calls", "Generate answer now", "Stop"]
+        );
+
+        let cont =
+            ApprovalSubmit::from_value(&submitted(&card, 0, json!({"d1": "approve"}))).unwrap();
+        assert_eq!(
+            cont.decisions(),
+            Some(vec![
+                ("tool-budget:1".to_string(), ApprovalChoice::Approve),
+                ("task-call".to_string(), ApprovalChoice::Approve),
+            ])
+        );
+        let answer =
+            ApprovalSubmit::from_value(&submitted(&card, 1, json!({"d1": "reject"}))).unwrap();
+        assert_eq!(
+            answer.decisions(),
+            Some(vec![
+                ("tool-budget:1".to_string(), ApprovalChoice::Reject),
+                ("task-call".to_string(), ApprovalChoice::Reject),
+            ])
+        );
+        assert_eq!(card["content"]["actions"][2]["associatedInputs"], "none");
+        let stop = ApprovalSubmit::from_value(&submitted(&card, 2, json!({}))).unwrap();
+        assert_eq!(
+            stop.decisions(),
+            Some(vec![
+                ("tool-budget:1".to_string(), ApprovalChoice::Withdraw),
+                ("task-call".to_string(), ApprovalChoice::Withdraw),
+            ])
+        );
     }
 
     #[test]

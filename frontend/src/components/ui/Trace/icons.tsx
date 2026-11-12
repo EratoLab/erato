@@ -14,8 +14,9 @@ const ICON_CLASS = "size-4";
 
 /**
  * Pick the rail icon for a step, given its content type and current status.
- * `done`, `error` and `interrupted` render generic terminal icons; the
- * running state shows the type-specific glyph.
+ * `done`, `error` and `interrupted` render generic terminal icons, and a
+ * waiting call the hourglass the local trace uses for waiting; the running
+ * state shows the type-specific glyph.
  */
 export const railIconFor = (
   contentType: ContentPart["content_type"],
@@ -23,6 +24,9 @@ export const railIconFor = (
 ): React.ReactNode => {
   if (status === "error") {
     return <ErrorIcon className={ICON_CLASS} />;
+  }
+  if (status === "waiting") {
+    return <HourglassIcon className={ICON_CLASS} />;
   }
   // Deliberately not the error glyph: an abandoned call did not fail.
   if (status === "interrupted") {

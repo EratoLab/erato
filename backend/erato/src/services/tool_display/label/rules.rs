@@ -342,6 +342,9 @@ pub enum CrossCheckFlag {
     NameVerb,
     /// A verb field in the arguments names another verb than the label's.
     FieldVerb,
+    /// The tool's name or a verb field's words delete or archive, and the
+    /// label's verb does neither.
+    LossLeftOut,
 }
 
 impl CrossCheckFlag {
@@ -351,6 +354,7 @@ impl CrossCheckFlag {
             Self::ReadName => "read_name",
             Self::NameVerb => "name_verb",
             Self::FieldVerb => "field_verb",
+            Self::LossLeftOut => "loss_left_out",
         }
     }
 }
@@ -421,10 +425,7 @@ pub fn rules_label(
     }
     if item.id.is_none()
         && item.title.is_none()
-        && matches!(
-            action,
-            ToolCallAction::Delete | ToolCallAction::Archive | ToolCallAction::Update
-        )
+        && matches!(action, ToolCallAction::Delete | ToolCallAction::Archive)
         && let Some(place) = place_the_name_ends_in(&name, arguments)
     {
         if item.target.as_deref() == Some(place.as_str()) {
@@ -520,6 +521,26 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other && !name_loses {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
     }
+    // A delete or archive that the name or a verb field's words state,
+    // wherever the field sits, is never hidden behind another verb.
+    let fields = verb_fields(arguments);
+    let field_loses = fields.iter().any(|(member, value)| {
+        matches!(
+            field_action(member, value),
+            Some(ToolCallAction::Delete | ToolCallAction::Archive)
+        )
+    });
+    let loss_left_out = !matches!(
+        action,
+        ToolCallAction::Delete | ToolCallAction::Archive | ToolCallAction::Other
+    ) && (fields
+        .iter()
+        .any(|(member, value)| hides_a_loss(member, value))
+        || loss_out_of_reach(arguments)
+        || (verb.source == VerbSource::Field && name_sounds_like_a_loss(&name) && !field_loses));
+    if loss_left_out {
+        flags.push(CrossCheckFlag::LossLeftOut);
+    }
     let upsert_agrees = verb.action == ToolCallAction::Upsert
         && matches!(action, ToolCallAction::Create | ToolCallAction::Update);
     if verb.source == VerbSource::Field && verb.action != action && !upsert_agrees {
@@ -527,8 +548,8 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     }
     // A member the schema does not declare may be one the model made up.
     let declared = verb.source == VerbSource::Field
-        && verb_fields(arguments)
-            .into_iter()
+        && fields
+            .iter()
             .all(|(member, _)| declares(&tool.input_schema, member));
     // "query" also names what a run runs.
     let names_a_run = action == ToolCallAction::Run
@@ -606,6 +627,57 @@ pub fn verb_fields(arguments: &Value) -> Vec<(&str, &str)> {
     out
 }
 
+/// Whether a verb field whose words delete or archive sits where
+/// [`verb_fields`] does not read it, deeper or past its cap, as the last of
+/// many rows or an operation inside an edit inside the call does: the verb
+/// was chosen without it.
+fn loss_out_of_reach(arguments: &Value) -> bool {
+    fn walk(value: &Value, depth: usize, budget: &mut usize, read: &mut usize) -> bool {
+        if depth > MAX_SEARCH_DEPTH || *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+        match value {
+            Value::Object(members) => {
+                let mut scanned = 0;
+                for (member, value) in members {
+                    if *budget == 0 {
+                        break;
+                    }
+                    *budget -= 1;
+                    scanned += 1;
+                    let Some(text) = value
+                        .as_str()
+                        .filter(|text| is_one_of(member, &VERB_FIELDS) && is_identifier(text))
+                    else {
+                        continue;
+                    };
+                    // The same walk as `verb_fields`, so this counts what it read.
+                    if depth <= VERB_FIELD_DEPTH && *read < MAX_VERB_FIELDS {
+                        *read += 1;
+                    } else if name_sounds_like_a_loss(&name_words(text_prefix(
+                        text,
+                        MAX_NAME_BYTES,
+                    ))) {
+                        return true;
+                    }
+                }
+                members
+                    .values()
+                    .take(scanned)
+                    .filter(|child| is_container(child))
+                    .any(|child| walk(child, depth + 1, budget, read))
+            }
+            Value::Array(entries) => entries
+                .iter()
+                .any(|entry| walk(entry, depth + 1, budget, read)),
+            _ => false,
+        }
+    }
+    let mut budget = MAX_SEARCH_VALUES;
+    walk(arguments, 0, &mut budget, &mut 0)
+}
+
 fn is_identifier(text: &str) -> bool {
     !text.chars().any(char::is_whitespace) && text.chars().nth(MAX_VERB_VALUE_CHARS).is_none()
 }
@@ -664,10 +736,11 @@ struct Verb {
 
 fn verb(name: &[String], arguments: Option<&Value>) -> Verb {
     let fields: Vec<String> = arguments
-        .map(verb_field_values)
+        .map(verb_fields)
         .unwrap_or_default()
         .into_iter()
-        .flat_map(name_words)
+        .filter(|(member, _)| !names_a_kind(member))
+        .flat_map(|(_, value)| name_words(value))
         .collect();
     let found = |action, source| Verb { action, source };
     let field_actions = actions_of(&fields);
@@ -802,12 +875,53 @@ fn name_verbs(name: &[String]) -> Vec<ToolCallAction> {
     named
 }
 
-/// What a verb field's value says a row does, if it names one verb.
+/// What an operation's value says it does, if it names one verb, by any of
+/// its words: `delete_remote`, `mail.reply`, `deleteRow`, `bulkDelete` and
+/// `HardDelete` each name one.
 pub(super) fn action_of(value: &str) -> Option<ToolCallAction> {
     match actions_of(&name_words(text_prefix(value, MAX_NAME_BYTES))).as_slice() {
         [action] => Some(*action),
         _ => None,
     }
+}
+
+/// What a verb field says a row does, if it names one verb. A `kind` says
+/// what something is, as `StatefulSet` or `PullRequest` does, never what the
+/// call does to it.
+pub(super) fn field_action(member: &str, value: &str) -> Option<ToolCallAction> {
+    if names_a_kind(member) {
+        return None;
+    }
+    action_of(value)
+}
+
+/// What a batch row's verb field says the row does. A `kind` still names no
+/// verb, but one that is a single lower-case word that deletes or archives,
+/// as in `{kind: "delete"}`, states a loss a batch never leaves uncounted.
+pub(super) fn row_field_action(member: &str, value: &str) -> Option<ToolCallAction> {
+    if !names_a_kind(member) {
+        return field_action(member, value);
+    }
+    if value.is_empty() || !value.chars().all(|c| c.is_ascii_lowercase()) {
+        return None;
+    }
+    action_of(value)
+        .filter(|action| matches!(action, ToolCallAction::Delete | ToolCallAction::Archive))
+}
+
+/// Whether a verb field's value has a word that deletes or archives while
+/// the verb its field gives does neither: `kind: "HardDelete"` gives none,
+/// `op: "createOrDelete"` names two.
+pub(super) fn hides_a_loss(member: &str, value: &str) -> bool {
+    name_sounds_like_a_loss(&name_words(text_prefix(value, MAX_NAME_BYTES)))
+        && !matches!(
+            field_action(member, value),
+            Some(ToolCallAction::Delete | ToolCallAction::Archive)
+        )
+}
+
+fn names_a_kind(member: &str) -> bool {
+    member.eq_ignore_ascii_case("kind")
 }
 
 /// The actions the words name, in the order of `VERBS`.
@@ -1094,24 +1208,40 @@ fn place_pointer(
     })
 }
 
-/// The place member a call acts on itself, when it names nothing inside it:
-/// the tool's name ends in what that member names, as `delete_repository`
-/// does with `repo` or `delete_branch` with `branch`. A name that goes on
-/// past it, as `clear_repository_cache`, or names a preposition, as
-/// `remove_bot_from_repo`, acts on something inside.
+/// Words that join a tool name's nouns, as in `delete_pods_by_namespace`:
+/// what follows one is where the call acts, not what it acts on.
+const CONNECTING_WORDS: [&str; 15] = [
+    "by", "with", "at", "within", "under", "across", "via", "per", "to", "from", "in", "into",
+    "for", "on", "of",
+];
+/// Verbs that remove or archive a place itself, rather than empty it.
+const PLACE_REMOVING_VERBS: [&str; 5] = ["delete", "remove", "destroy", "drop", "archive"];
+/// Place members that name the same place.
+const SAME_PLACE: [(&str, &str); 1] = [("repo", "repository")];
+
+/// The place member a delete or archive acts on itself, when it names
+/// nothing inside it: the tool's name is a verb that removes or archives a
+/// place, as `delete` or `archive` but not `purge` or `clear`, followed
+/// only by what that member names, as `delete_repository` with `repo` or
+/// `delete_branch` with `branch`. A name that goes on past the place, as
+/// `delete_repository_upload`, names another noun before it, as
+/// `delete_feature_branch`, or joins words, as `delete_pods_by_namespace`,
+/// acts on something inside.
 fn place_the_name_ends_in(name: &[String], arguments: &Value) -> Option<String> {
-    const MIN_STEM_CHARS: usize = 4;
-    // `remove_bot_from_repo` acts on what comes before its preposition.
     if name
         .iter()
-        .any(|word| PREPOSITIONS.contains(&word.as_str()))
+        .any(|word| CONNECTING_WORDS.contains(&word.as_str()))
     {
         return None;
     }
-    let head = name
-        .iter()
-        .rev()
-        .find(|word| actions_of(std::slice::from_ref(*word)).is_empty())?;
+    let [.., verb, head] = name else {
+        return None;
+    };
+    // `purge_repository` or `clear_namespace` empties the place; only these
+    // remove it.
+    if !PLACE_REMOVING_VERBS.contains(&verb.as_str()) {
+        return None;
+    }
     let top = arguments.as_object()?;
     top.iter().find_map(|(member, value)| {
         if !is_one_of(member, &PLACE_MEMBERS) || !is_text_or_number(value) {
@@ -1123,15 +1253,35 @@ fn place_the_name_ends_in(name: &[String], arguments: &Value) -> Option<String> 
             [stem] => stem,
             _ => return None,
         };
-        let (short, long) = if stem.len() <= head.len() {
-            (stem.as_str(), head.as_str())
-        } else {
-            (head.as_str(), stem.as_str())
-        };
-        let names_it =
-            short == long || (short.chars().count() >= MIN_STEM_CHARS && long.starts_with(short));
-        names_it.then(|| child_pointer("", member)).flatten()
+        let spellings = SAME_PLACE
+            .iter()
+            .filter(|(short, long)| stem == short || stem == long)
+            .flat_map(|(short, long)| [*short, *long])
+            .chain([stem.as_str()]);
+        spellings
+            .into_iter()
+            .any(|spelling| head == spelling || *head == plural(spelling))
+            .then(|| child_pointer("", member))
+            .flatten()
     })
+}
+
+/// The plural of a place's name: `repos`, `repositories`, `branches`.
+fn plural(word: &str) -> String {
+    let consonant_y = word
+        .strip_suffix('y')
+        .and_then(|stem| stem.chars().last())
+        .is_some_and(|last| !"aeiou".contains(last));
+    if consonant_y {
+        format!("{}ies", &word[..word.len() - 1])
+    } else if ["s", "x", "z", "ch", "sh"]
+        .iter()
+        .any(|end| word.ends_with(end))
+    {
+        format!("{word}es")
+    } else {
+        format!("{word}s")
+    }
 }
 
 /// A link points at its ID member, a list of links at theirs; anything else

@@ -72,3 +72,56 @@ describe("stepStatus", () => {
     expect(stepStatus(reasoningStep(), true, false)).toBe("done");
   });
 });
+
+describe("stepStatus for a call the turn is parked on", () => {
+  const WAITING = "call-a";
+
+  it("waits with the chat busy, where the flag alone drew a check", () => {
+    // `action_required` is what a parked call reads as on this page.
+    expect(
+      stepStatus(toolStep("in_progress"), true, false, true, WAITING),
+    ).toBe("waiting");
+    expect(
+      stepStatus(toolStep("in_progress"), false, false, true, WAITING),
+    ).toBe("waiting");
+  });
+
+  it("waits with the chat not busy, where the flag alone said Interrupted", () => {
+    // A poll that read the chat as ended, or a page with no status for it.
+    expect(
+      stepStatus(toolStep("in_progress"), true, false, false, WAITING),
+    ).toBe("waiting");
+    expect(stepStatus(toolStep("preparing"), true, false, false, WAITING)).toBe(
+      "waiting",
+    );
+  });
+
+  it("waits while its trace is still the page's writer", () => {
+    expect(
+      stepStatus(toolStep("in_progress"), true, true, false, WAITING),
+    ).toBe("waiting");
+  });
+
+  it("takes a returned call's own outcome, so Share ends on done", () => {
+    expect(stepStatus(toolStep("success"), true, false, false, WAITING)).toBe(
+      "done",
+    );
+    expect(stepStatus(toolStep("error"), true, false, true, WAITING)).toBe(
+      "error",
+    );
+  });
+
+  it("leaves every call the turn is not parked on as it was", () => {
+    const other = toolStep("in_progress", "call-b");
+    expect(stepStatus(other, true, true, false, WAITING)).toBe("running");
+    expect(stepStatus(other, true, false, true, WAITING)).toBe("done");
+    // Nothing can finish an unfinished call the row does not wait on.
+    expect(stepStatus(other, true, false, false, WAITING)).toBe("interrupted");
+  });
+
+  it("never makes reasoning wait", () => {
+    expect(
+      stepStatus(reasoningStep(WAITING), true, false, false, WAITING),
+    ).toBe("done");
+  });
+});

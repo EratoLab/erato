@@ -37,7 +37,10 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  *
  * `shows_child_items` tells the server this client shows each parked child as
  * an item of its own; without it, a stop that carries children beside the
- * turn's own call is refused.
+ * turn's own call is refused. `shows_limit_and_builtin_child_items` says the
+ * same of the tool-call limit's stop and a built-in call's: a client that
+ * predates those shows the limit's choice, or a generic card, alone, so the
+ * server refuses such a stop with a child open without it.
  *
  * `enumerate` names even a single item: a stop with tasks still waiting can
  * gain a question while the card is open, and only an enumerated body comes
@@ -77,7 +80,12 @@ export const buildContinueStreamBody = ({
             >,
           }),
     }));
-    return { message_id: messageId, decisions, shows_child_items: true };
+    return {
+      message_id: messageId,
+      decisions,
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+    };
   }
   // A single open item needs no enumeration, but it still has to be answered
   // with its own decision rather than the caller's default: a one-row plan is
@@ -86,5 +94,6 @@ export const buildContinueStreamBody = ({
     message_id: messageId,
     decision: decided[0]?.decision ?? decision,
     shows_child_items: true,
+    shows_limit_and_builtin_child_items: true,
   };
 };

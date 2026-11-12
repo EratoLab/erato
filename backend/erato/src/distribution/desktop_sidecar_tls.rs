@@ -60,9 +60,11 @@ impl BootstrapTls {
                     validity_days,
                 }
             }
-            _ => bail!(
-                "Desktop sidecar TLS requires either certificate_pem/private_key_pem or intermediate_certificate_pem/intermediate_private_key_pem; validity_days is only valid with an intermediate"
-            ),
+            _ => {
+                bail!(
+                    "Desktop sidecar TLS requires either certificate_pem/private_key_pem or intermediate_certificate_pem/intermediate_private_key_pem; validity_days is only valid with an intermediate"
+                );
+            }
         };
         Ok(Some(identity))
     }

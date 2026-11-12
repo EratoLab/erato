@@ -93,7 +93,7 @@ impl BrandingAssets {
                 return Ok(path);
             }
         }
-        eyre::bail!("branding source is missing or outside its public root: {source}")
+        eyre::bail!("branding source is missing or outside its public root: {source}");
     }
 
     pub fn icon_source(&self, source: Option<&str>, bundle_relative: &str) -> Result<PathBuf> {

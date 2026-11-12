@@ -143,7 +143,9 @@ fn select<T: PartialEq>(
     property: &str,
 ) -> Result<()> {
     let specificity = match under {
-        Some("") => bail!("Config key '{key}' has an empty {property} scope"),
+        Some("") => {
+            bail!("Config key '{key}' has an empty {property} scope");
+        }
         Some(prefix) if matches_path(prefix, key) => prefix.split('.').count(),
         Some(_) => return Ok(()),
         None => 0,

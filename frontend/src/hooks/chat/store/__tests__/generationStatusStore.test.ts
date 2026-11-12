@@ -7,6 +7,7 @@ import {
   selectPollDriverCount,
   selectRunningCount,
   useGenerationStatusStore,
+  waitsOnly,
 } from "../generationStatusStore";
 
 import type { GeneratingChat } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
@@ -556,6 +557,19 @@ describe("generationStatusStore", () => {
         { ...pendingEntry("chat-1"), waiting_only: true },
       ]);
       expect(statusOf("chat-1")).toMatchObject({ waitingOnly: true });
+    });
+
+    it("reads a park as waiting only from its entry alone", () => {
+      store().applyPollSnapshot([
+        { ...pendingEntry("waits"), waiting_only: true },
+        pendingEntry("asks"),
+        runningEntry("runs"),
+      ]);
+      expect(waitsOnly(statusOf("waits"))).toBe(true);
+      // Not a park that asks, a running chat or a chat the store does not know.
+      expect(waitsOnly(statusOf("asks"))).toBe(false);
+      expect(waitsOnly(statusOf("runs"))).toBe(false);
+      expect(waitsOnly(statusOf("unknown"))).toBe(false);
     });
 
     it("seeds a durable action-required entry", () => {

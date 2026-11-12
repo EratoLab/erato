@@ -15,8 +15,8 @@ use crate::models::message::{
     ContentPartToolApproval, ContentPartToolApprovalRequest, ContentPartToolRejection,
     DelegationRunMode, GenerationErrorType, GenerationInputMessages, GenerationMetadata,
     GenerationParameters, GenerationRequestContext, MessageRole, MessageSchema, ToolAllowedBy,
-    ToolApprovalKind, ToolCallStatus as MessageToolCallStatus, ToolUse,
-    get_generation_chat_provider_id_for_replaced_user_message,
+    ToolApprovalKind, ToolCallFailure, ToolCallStatus as MessageToolCallStatus, ToolResultDetails,
+    ToolUse, get_generation_chat_provider_id_for_replaced_user_message,
     get_generation_chat_provider_id_from_message, get_message_by_id, submit_message,
     update_message_content, update_message_generation_metadata,
 };
@@ -45,6 +45,7 @@ use crate::services::genai_langfuse::{
     langfuse_model_tag, langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
+use crate::services::mcp_call_error::failed_call_row;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
 use crate::services::mcp_tool_approval::{
@@ -369,7 +370,7 @@ mod generation_tool_call_id_tests {
             }
             let mut request = ChatRequest::new(replay);
             restore_provider_tool_call_ids(&mut request);
-            for pair in request.messages.chunks_exact(2) {
+            for pair in request.messages.as_chunks::<2>().0 {
                 let call = pair[0].content.tool_calls()[0];
                 let parts = pair[1].content.clone().into_parts();
                 let GenAiContentPart::ToolResponse(response) = &parts[0] else {
@@ -693,6 +694,7 @@ fn scope_changed_request(
         namespace,
         tool_call,
         Some(crate::models::user_preference::ClientToolDecision::Ask),
+        false,
     ) else {
         return None;
     };
@@ -714,15 +716,23 @@ fn scope_changed_request(
 ///
 /// Asking parks the same durable stop an MCP approval does, so the user's time
 /// to decide never counts against the tool's result timeout.
+///
+/// `reviewed_on_device` (see [`OfferedClientTool::reviewed_on_device`]): the
+/// Erato desktop app asks about the call itself, so Ask is answered there
+/// alone. Never still refuses here.
+///
+/// [`OfferedClientTool::reviewed_on_device`]: crate::services::client_tools::OfferedClientTool::reviewed_on_device
 fn gate_client_tool_call(
     namespace: &str,
     tool_call: &genai::chat::ToolCall,
     decision: Option<crate::models::user_preference::ClientToolDecision>,
+    reviewed_on_device: bool,
 ) -> ToolCallGate {
     use crate::models::user_preference::ClientToolDecision;
     match decision {
         None | Some(ClientToolDecision::AlwaysAllow) => ToolCallGate::Run(None),
         Some(ClientToolDecision::NeverAllow) => refuse_denied_tool_call(tool_call),
+        Some(ClientToolDecision::Ask) if reviewed_on_device => ToolCallGate::Run(None),
         Some(ClientToolDecision::Ask) => ask_for_tool_call(
             tool_call,
             ToolApprovalKind::ClientTool,
@@ -1532,6 +1542,7 @@ pub struct MessageSubmitRequest {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum MessageSubmitStreamingResponseMessage {
     #[serde(rename = "audio_delta")]
     AudioDelta {
@@ -2613,6 +2624,15 @@ pub struct ContinueStreamRequest {
     /// own call and would answer the children unseen.
     #[serde(default)]
     shows_child_items: bool,
+    /// Whether the client also shows each task child a `tool_call_limit` or
+    /// `builtin_tool` part carries as an item of its own. Those parts carry
+    /// children since later than `shows_child_items` says, and a client that
+    /// predates them sends that flag while it shows the limit's choice, or a
+    /// generic card for a kind it does not know, alone and answers every open
+    /// item with it. Decisions on such a part are refused without both flags
+    /// while a child is open.
+    #[serde(default)]
+    shows_limit_and_builtin_child_items: bool,
     /// The `X-Erato-Client-Tools` of the device answering, when it sent one.
     #[serde(skip)]
     registered_client_tools: Option<Vec<String>>,
@@ -2622,6 +2642,10 @@ pub struct ContinueStreamRequest {
     /// The `X-Erato-Additional-Executors` of the device answering.
     #[serde(skip)]
     additional_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    /// Those of the answering device's bindings whose app it says runs in
+    /// strict mode (`X-Erato-Strict-Mode-Executors`).
+    #[serde(skip)]
+    strict_mode_executors: Vec<crate::services::client_operations::ExecutorBinding>,
     /// The validated `approve_context` decisions, by approval id.
     #[serde(skip)]
     context: HashMap<String, crate::services::approval_scope::ContextDecision>,
@@ -2651,9 +2675,11 @@ impl ContinueStreamRequest {
                 .collect(),
             decision: None,
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -2886,7 +2912,7 @@ async fn acquire_user_generation_lease(
             .await);
     }
 
-    app_state
+    let started = app_state
         .background_tasks
         .try_start_task(
             chat_id,
@@ -2897,7 +2923,30 @@ async fn acquire_user_generation_lease(
             app_state.config.generation_status.stale_after_secs,
         )
         .await
-        .map_err(|held| lease_held_error(chat_id, held))
+        .map_err(|held| lease_held_error(chat_id, held))?;
+    withdraw_task_calls(app_state, chat_id, Some(message_id)).await;
+    Ok(started)
+}
+
+/// Ends the waits of the tasks this chat's turns started, but those of
+/// `kept_turn` (all of them when `None`), once the lease went to another turn or
+/// the user stopped the turn (ERMAIN-1165). Their calls are withdrawn at once,
+/// so a device stops asking and the old card stops waiting, instead of at their
+/// next claim, renewal or result; each task then answers without the result
+/// once a client continues it. A failure leaves them to that later withdrawal.
+async fn withdraw_task_calls(app_state: &AppState, chat_id: Uuid, kept_turn: Option<Uuid>) {
+    if !app_state.config.client_tools.durable_operations_enabled {
+        return;
+    }
+    if let Err(error) = crate::services::client_operations::store::withdraw_task_calls(
+        &app_state.db,
+        chat_id,
+        kept_turn,
+    )
+    .await
+    {
+        tracing::warn!(%error, %chat_id, "Could not withdraw the open calls of a chat's tasks");
+    }
 }
 
 /// The typed 409 for a refused lease claim.
@@ -3044,6 +3093,7 @@ pub struct ClientToolParkResponse {
 
 #[derive(Serialize, ToSchema)]
 #[serde(tag = "message_type")]
+#[allow(clippy::large_enum_variant)]
 pub enum EditMessageStreamingResponseMessage {
     #[serde(rename = "assistant_message_started")]
     /// Sent when the assistant message entry has been created, before generation starts.
@@ -3501,10 +3551,9 @@ async fn reconcile_orphaned_parent_slot(
     // `DELIVERY_REASON_ORIGIN_ARCHIVED`: that one appends a row and runs a
     // reaction turn, this rewrites a slot already in the row. An archived
     // origin is one route that reaches here. The others are a child the origin
-    // never carried up: one that parked before the user stopped the turn, or
-    // on a turn that ended on the tool-call limit, a stop no child item can
-    // share. A withdrawal or a settlement closes
-    // the child's own copy, so those never run again.
+    // no longer carries: one that parked before the user stopped the turn, or
+    // whose item a Stop at the tool-call limit took off the stop. A withdrawal
+    // or a settlement closes the child's own copy, so those never run again.
     //
     // A running lease on this message means the dispatching turn may yet write
     // the slot itself. A newer turn the user started writes another row, and
@@ -4171,7 +4220,7 @@ pub(crate) fn generation_request_context_from_headers(
     headers: &HeaderMap,
 ) -> GenerationRequestContext {
     let executor = crate::services::client_operations::ExecutorBinding::from_headers(headers);
-    GenerationRequestContext {
+    let mut context = GenerationRequestContext {
         platform: Some(platform_from_headers(headers)),
         registered_client_tools: crate::services::client_tools::registered_client_tools(headers),
         additional_executors:
@@ -4180,7 +4229,14 @@ pub(crate) fn generation_request_context_from_headers(
                 executor.as_ref(),
             ),
         executor,
-    }
+        strict_mode_executors: Vec::new(),
+    };
+    context.strict_mode_executors =
+        crate::services::client_operations::ExecutorBinding::strict_mode_from_headers(
+            headers,
+            context.executors(),
+        );
+    context
 }
 
 /// Returns whether the given platform string is a known platform value.
@@ -5158,6 +5214,10 @@ async fn prepare_chat_request_with_adapters_memory_inner(
             policy.executor = generation_request_context
                 .executor_for_tool(client_tool)
                 .cloned();
+            policy.executor_strict_mode = policy
+                .executor
+                .as_ref()
+                .is_some_and(|binding| generation_request_context.says_strict_mode(binding));
             offered_client_tools.insert(name.to_string(), policy);
             chat_request_tools.push(crate::services::client_tools::build_client_tool(
                 name,
@@ -6083,14 +6143,15 @@ fn delegated_task_approval_part(
     }
 }
 
-/// Carry parked children up on the stop the turn's own gated call already
-/// owns, so the user answers the turn and its tasks in one place. A turn whose
-/// own durable call waits ends on the same part of its own, right behind that
-/// call's part: see the park below the join.
+/// Carry parked children up on the stop the turn's own gated call, or its
+/// tool-call limit, already owns, so the user answers the turn and its tasks in
+/// one place. A turn whose own durable call waits ends on the same part of its
+/// own, right behind that call's part: see the park below the join.
 ///
-/// The part keeps its kind and flat fields: they still describe its own call,
-/// which stays the first item. Only children launched before that call can be
-/// here - a child that parks first ends the batch before the call is popped.
+/// The part keeps its kind and flat fields: they still describe its own call or
+/// budget choice, which stays the first item. Only children launched before
+/// that call can be here - a child that parks first ends the batch before the
+/// call is popped.
 fn fold_parked_children(part: &mut ContentPartToolApprovalRequest, parked: &[ParkedChild]) {
     if part.approvals.is_empty() {
         part.approvals = part.approval_items();
@@ -6740,6 +6801,7 @@ mod generation_event_wire_format_tests {
                                     name: Some("row-1".into()),
                                     title: None,
                                 }],
+                                failure: None,
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -8650,6 +8712,7 @@ async fn stream_generate_chat_completion<'a>(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
                             decision,
+                            policy.reviewed_on_device(),
                         );
                         let gate = match (gate, scope_key) {
                             (ToolCallGate::Ask(request), Some((grant, key)))
@@ -8763,7 +8826,9 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(json!({ "status": status, "error": response_text })),
-                            result_details: None,
+                            result_details: Some(ToolResultDetails::failed(
+                                ToolCallFailure::NotRun,
+                            )),
                             allowed_by: None,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -9406,17 +9471,21 @@ async fn stream_generate_chat_completion<'a>(
                     output_value = output;
                     response_text = output_value.to_string();
                 }
-                // A device prompt the user declined ends a task's live call as
-                // the durable path and the server's own Ask end it, so the
-                // task result counts it.
+                // A device prompt that ended a task's live call without a
+                // result, a decline or a review that ended before its result
+                // reached the task, ends it as the durable path does (a
+                // decline also as the server's own Ask does), so the task
+                // result counts it.
                 if live_grant.is_some()
-                    && matches!(&outcome, ClientToolOutcome::ValidationFailed(issues, _)
-                    if issues.iter().any(|issue| {
-                        issue.code == crate::services::delegated_client_tools::DECLINED
-                    }))
+                    && let ClientToolOutcome::ValidationFailed(issues, _) = &outcome
+                    && let Some(output) = issues.iter().find_map(|issue| {
+                        crate::services::delegated_client_tools::ended_on_device_output(
+                            &issue.code,
+                            &tool_name,
+                        )
+                    })
                 {
-                    output_value =
-                        crate::services::delegated_client_tools::declined_output(&tool_name);
+                    output_value = output;
                     response_text = output_value.to_string();
                 }
                 if tool_charges
@@ -9957,7 +10026,9 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(ToolResultDetails::failed(
+                                    ToolCallFailure::AnswerUnreadable,
+                                )),
                                 allowed_by,
                             };
                             if let Some(task) = streaming_task {
@@ -9975,7 +10046,9 @@ async fn stream_generate_chat_completion<'a>(
                                         progress: None,
                                         total: None,
                                         output: Some(output_value.clone()),
-                                        result_details: None,
+                                        result_details: Some(ToolResultDetails::failed(
+                                            ToolCallFailure::AnswerUnreadable,
+                                        )),
                                         allowed_by,
                                     },
                                     "broadcast failed MCP tool output processing",
@@ -9999,7 +10072,9 @@ async fn stream_generate_chat_completion<'a>(
                                     progress: None,
                                     total: None,
                                     output: Some(output_value),
-                                    result_details: None,
+                                    result_details: Some(ToolResultDetails::failed(
+                                        ToolCallFailure::AnswerUnreadable,
+                                    )),
                                     allowed_by,
                                     started_at: Some(tool_call_started),
                                     ended_at: Some(now_timestamp()),
@@ -10125,10 +10200,7 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(err) => {
                     let tool_error = format!("Failed to call MCP tool: {err}");
-                    let output_value = json!({
-                        "status": "error",
-                        "error": tool_error,
-                    });
+                    let (output_value, failure_details) = failed_call_row(&err);
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
                         &unfinished_tool_call,
@@ -10153,7 +10225,7 @@ async fn stream_generate_chat_completion<'a>(
                         progress: None,
                         total: None,
                         output: Some(output_value.clone()),
-                        result_details: None,
+                        result_details: Some(failure_details.clone()),
                         allowed_by,
                     };
                     if let Some(task) = streaming_task {
@@ -10171,7 +10243,7 @@ async fn stream_generate_chat_completion<'a>(
                                 progress: None,
                                 total: None,
                                 output: Some(output_value.clone()),
-                                result_details: None,
+                                result_details: Some(failure_details.clone()),
                                 allowed_by,
                             },
                             "broadcast failed MCP tool call",
@@ -10195,7 +10267,7 @@ async fn stream_generate_chat_completion<'a>(
                             progress: None,
                             total: None,
                             output: Some(output_value),
-                            result_details: None,
+                            result_details: Some(failure_details.clone()),
                             allowed_by,
                             started_at: Some(tool_call_started),
                             ended_at: Some(now_timestamp()),
@@ -10390,13 +10462,12 @@ async fn stream_generate_chat_completion<'a>(
         //
         // A gated call of this turn's own already owns that part, so the
         // children join it as items with `child` set: one stop, decided per
-        // item. A durable client operation of its own leaves the turn waiting
-        // without a part to join, so the children's part is written right
-        // behind the call's own: the person answers them while the call waits.
-        // Any other exit keeps them out. An abort means the user withdrew the
-        // question. The tool-call limit's stop takes no child items for now,
-        // and CT-10 allows no exception besides the abort, so that is an open
-        // question rather than settled design. There the child keeps its
+        // item. The tool-call limit's stop is joined the same way. A durable
+        // client operation of its own leaves the turn waiting without a part
+        // to join, so the children's part is written right behind the call's
+        // own: the person answers them while the call waits. Any other exit
+        // keeps them out. An abort means the user withdrew the question, the
+        // one exception CT-10 allows: there the child keeps its
         // `input_required` slot and stays answerable from its own chat.
         let aborted = streaming_task.is_some_and(|task| task.is_abort_requested());
         // A Stop while the batch settled withdraws the turn's own question as
@@ -10416,15 +10487,16 @@ async fn stream_generate_chat_completion<'a>(
             );
         }
         if !parked_children.is_empty() {
-            let own_gated_call = pending_approval_part.as_ref().is_some_and(|part| {
+            let own_stop = pending_approval_part.as_ref().is_some_and(|part| {
                 matches!(
                     part.kind,
                     ToolApprovalKind::McpTool
                         | ToolApprovalKind::ClientTool
                         | ToolApprovalKind::BuiltinTool
+                        | ToolApprovalKind::ToolCallLimit
                 )
             });
-            if own_gated_call && exit_error.is_none() && !aborted {
+            if own_stop && exit_error.is_none() && !aborted {
                 if let Some(part) = pending_approval_part.as_mut() {
                     fold_parked_children(part, &parked_children);
                 }
@@ -14107,9 +14179,11 @@ mod tests {
             decisions: Vec::new(),
             decision: Some(decision),
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -14128,9 +14202,11 @@ mod tests {
                 .collect(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         }
@@ -14315,9 +14391,118 @@ mod tests {
         assert!(plan.is_empty());
         assert_eq!(child, decided, "row order is kept");
 
-        let (mcp, child, plan) =
-            super::split_decisions_by_lane(ToolApprovalKind::ToolCallLimit, &open, submitted);
-        assert!(mcp.is_empty() && child.is_empty() && plan.is_empty());
+        // The limit's budget choice is read before the lanes; a task's item on
+        // its stop settles in the child lane as on any other stop.
+        let (mcp, child, plan) = super::split_decisions_by_lane(
+            ToolApprovalKind::ToolCallLimit,
+            &open,
+            submitted.clone(),
+        );
+        assert!(mcp.is_empty() && plan.is_empty());
+        assert_eq!(child, vec![submitted[1].clone()]);
+    }
+
+    /// The tool-call limit's stop carries the tasks' questions as the turn's
+    /// own gated call does: its budget choice stays first and keeps its flat
+    /// fields, and a Stop takes the tasks' items back off.
+    #[test]
+    fn the_tool_call_limit_carries_and_on_stop_releases_its_tasks_questions() {
+        let mut part = crate::services::tool_call_budget::request(4, Vec::new());
+        let before = part.clone();
+        let children = [parked_child("task-a", "2026-10-20T10:00:02Z")];
+        super::fold_parked_children(&mut part, &children);
+        assert_eq!(part.kind, ToolApprovalKind::ToolCallLimit);
+        assert_eq!(part.tool_call_id, before.tool_call_id);
+        assert_eq!(part.input, before.input);
+        let ids: Vec<&str> = part
+            .approvals
+            .iter()
+            .map(|item| item.approval_id.as_str())
+            .collect();
+        assert_eq!(ids, [before.tool_call_id.as_str(), "task-a"]);
+
+        let mut content = vec![super::ContentPart::ToolApprovalRequest(part.clone())];
+        super::release_task_items(&mut content, 0);
+        let super::ContentPart::ToolApprovalRequest(released) = &content[0] else {
+            unreachable!()
+        };
+        assert_eq!(released.approval_items().len(), 1);
+        assert_eq!(
+            released.approval_items()[0].approval_id,
+            before.tool_call_id
+        );
+        assert!(
+            crate::services::tool_call_budget::choices(&content)
+                .next()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_stop_at_the_tool_call_limit_withdraws_its_tasks_questions_too() {
+        let mut part = crate::services::tool_call_budget::request(4, Vec::new());
+        super::fold_parked_children(&mut part, &[parked_child("task-a", "2026-10-20T10:00:02Z")]);
+        let open = part.approval_items();
+        let budget = part.tool_call_id.clone();
+        let refused = |budget_decision, task_decision| {
+            super::budget_decision_refused(
+                &part,
+                &open,
+                &[
+                    (budget.clone(), budget_decision),
+                    ("task-a".to_string(), task_decision),
+                ],
+            )
+        };
+        assert!(
+            refused(
+                ToolApprovalDecision::Withdraw,
+                ToolApprovalDecision::Withdraw
+            )
+            .is_none()
+        );
+        assert!(
+            refused(
+                ToolApprovalDecision::Withdraw,
+                ToolApprovalDecision::Approve
+            )
+            .is_some()
+        );
+        assert!(refused(ToolApprovalDecision::Approve, ToolApprovalDecision::Reject).is_none());
+        assert!(refused(ToolApprovalDecision::Reject, ToolApprovalDecision::Withdraw).is_none());
+        // A task's standing answer is the task's; the budget has none.
+        assert!(
+            refused(
+                ToolApprovalDecision::Approve,
+                ToolApprovalDecision::ApproveAlways
+            )
+            .is_none()
+        );
+        assert!(
+            refused(
+                ToolApprovalDecision::ApproveAlways,
+                ToolApprovalDecision::Approve
+            )
+            .is_some()
+        );
+
+        let mut gated = gated_request("own", "2026-10-20T10:00:01Z");
+        super::fold_parked_children(
+            &mut gated,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        assert!(
+            super::budget_decision_refused(
+                &gated,
+                &gated.approval_items(),
+                &[
+                    ("own".to_string(), ToolApprovalDecision::Withdraw),
+                    ("task-a".to_string(), ToolApprovalDecision::Approve),
+                ],
+            )
+            .is_none(),
+            "only the limit's stop has a budget"
+        );
     }
 
     /// A cancel asks under both presets and a create only under the
@@ -14610,9 +14795,11 @@ mod tests {
             decisions,
             decision: None,
             shows_child_items: true,
+            shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         };
@@ -14657,8 +14844,29 @@ mod tests {
             &[parked_child("task-a", "2026-10-20T10:00:02Z")],
         );
         assert!(super::decision_needs_child_items(&state(mixed.clone())));
+        assert!(!super::decision_needs_limit_and_builtin_child_items(
+            &state(mixed.clone())
+        ));
+        mixed.kind = ToolApprovalKind::BuiltinTool;
+        assert!(
+            super::decision_needs_limit_and_builtin_child_items(&state(mixed.clone())),
+            "a client that predates built-in calls shows a generic card alone"
+        );
         mixed.kind = ToolApprovalKind::ClientTool;
         assert!(super::decision_needs_child_items(&state(mixed)));
+
+        let mut limit = crate::services::tool_call_budget::request(4, Vec::new());
+        assert!(!super::decision_needs_limit_and_builtin_child_items(
+            &state(limit.clone())
+        ));
+        super::fold_parked_children(
+            &mut limit,
+            &[parked_child("task-a", "2026-10-20T10:00:02Z")],
+        );
+        assert!(
+            super::decision_needs_limit_and_builtin_child_items(&state(limit)),
+            "a client that predates the limit's tasks shows its budget choice alone"
+        );
 
         assert!(!super::decision_needs_child_items(&state(gated_request(
             "own",
@@ -15264,9 +15472,11 @@ mod tests {
             decisions: Vec::new(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval: None,
         };
@@ -18309,6 +18519,7 @@ async fn acquire_revision_generation_lease(
         return Err(error);
     }
     lease_guard.disarm();
+    withdraw_task_calls(app_state, chat_id, Some(task.message_id())).await;
     Ok((events, task))
 }
 
@@ -19694,6 +19905,10 @@ pub async fn abort_message_stream(
             "No active generation task found for this chat".to_string(),
         ));
     }
+    // The stopped turn's tasks stop waiting for their calls too. A parked turn
+    // that only waits for its tasks has nothing to stop and answers 404 above;
+    // its waits end one by one from the card.
+    withdraw_task_calls(&app_state, request.chat_id, None).await;
 
     Ok(Json(AbortStreamResponse {
         abort_requested: true,
@@ -20966,17 +21181,73 @@ fn resolve_submitted_decisions(
 }
 
 /// Whether deciding this stop needs a client that shows a parked child as an
-/// item of its own.
+/// item of its own (`shows_child_items`).
 ///
-/// A `delegated_task` part has always been read per item. An `mcp_tool` or
-/// `client_tool` part only carries children since the turn's own gated call
-/// shares its part with them, and a client that predates that renders the own
-/// call alone while it answers every open item.
+/// A `delegated_task` part has always been read per item. An `mcp_tool`,
+/// `client_tool`, `builtin_tool` or `tool_call_limit` part only carries
+/// children since the turn's own stop shares its part with them, and a client
+/// that predates that renders the own call or budget choice alone while it
+/// answers every open item.
 fn decision_needs_child_items(state: &ParkedApprovalState) -> bool {
     matches!(
         state.request.kind,
-        ToolApprovalKind::McpTool | ToolApprovalKind::ClientTool | ToolApprovalKind::BuiltinTool
+        ToolApprovalKind::McpTool
+            | ToolApprovalKind::ClientTool
+            | ToolApprovalKind::BuiltinTool
+            | ToolApprovalKind::ToolCallLimit
     ) && state.decidable().iter().any(|item| item.child.is_some())
+}
+
+/// Whether deciding this stop also needs a client that shows the children of a
+/// `tool_call_limit` or `builtin_tool` part (`shows_limit_and_builtin_child_items`).
+///
+/// Clients sent `shows_child_items` before either part carried children: one
+/// that predates the limit's tasks shows its budget choice alone, and one that
+/// predates built-in calls a generic card, each answering every open item with
+/// one click. The approval a task gets that way is one nobody saw.
+fn decision_needs_limit_and_builtin_child_items(state: &ParkedApprovalState) -> bool {
+    matches!(
+        state.request.kind,
+        ToolApprovalKind::BuiltinTool | ToolApprovalKind::ToolCallLimit
+    ) && decision_needs_child_items(state)
+}
+
+/// Why a set of decisions cannot answer a tool-call limit's stop, if it cannot.
+///
+/// The budget choice is never a standing answer. Stop ends the response as the
+/// user's own Stop does, so it takes the tasks' questions off the stop and each
+/// is answered in its own chat: it has to withdraw them too, or an answer the
+/// user gave on one would be dropped unseen.
+fn budget_decision_refused(
+    request: &ContentPartToolApprovalRequest,
+    open: &[ApprovalItem],
+    decisions: &[(String, ToolApprovalDecision)],
+) -> Option<&'static str> {
+    if request.kind != ToolApprovalKind::ToolCallLimit {
+        return None;
+    }
+    let is_child = |approval_id: &str| names_child(open, approval_id);
+    let budget = decisions
+        .iter()
+        .filter(|(approval_id, _)| !is_child(approval_id))
+        .map(|(_, decision)| *decision);
+    let mut stops = false;
+    for decision in budget {
+        match decision {
+            ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways => {
+                return Some("Tool budget decisions cannot be saved as standing permissions");
+            }
+            ToolApprovalDecision::Withdraw => stops = true,
+            _ => {}
+        }
+    }
+    (stops
+        && decisions.iter().any(|(approval_id, decision)| {
+            is_child(approval_id) && *decision != ToolApprovalDecision::Withdraw
+        }))
+    .then_some(
+        "Stop also withdraws the tasks' questions, which are then answered in their own chats",
+    )
 }
 
 /// Whether a set of decisions asks for an "always allow" the MCP policy
@@ -21341,6 +21612,8 @@ pub(crate) async fn start_continuation(
         if names_waiting
             || (request.decision.is_some() && decidable.is_empty())
             || (!request.shows_child_items && decision_needs_child_items(&state))
+            || (!request.shows_limit_and_builtin_child_items
+                && decision_needs_limit_and_builtin_child_items(&state))
         {
             return Err((
                 axum::http::StatusCode::CONFLICT,
@@ -21365,19 +21638,10 @@ pub(crate) async fn start_continuation(
             // Validated here as well as in the worker: a body that does not answer
             // the turn should be an HTTP status, not a stream that opens and dies.
             let submitted_decisions = resolve_submitted_decisions(&request, &decidable)?;
-            if state.request.kind == ToolApprovalKind::ToolCallLimit
-                && submitted_decisions.iter().any(|(_, decision)| {
-                    matches!(
-                        decision,
-                        ToolApprovalDecision::ApproveAlways | ToolApprovalDecision::RejectAlways
-                    )
-                })
+            if let Some(refusal) =
+                budget_decision_refused(&state.request, &decidable, &submitted_decisions)
             {
-                return Err((
-                    axum::http::StatusCode::BAD_REQUEST,
-                    "Tool budget decisions cannot be saved as standing permissions".to_string(),
-                )
-                    .into());
+                return Err((axum::http::StatusCode::BAD_REQUEST, refusal.to_string()).into());
             }
             if builtin_standing_refused(&state.request, &decidable, &submitted_decisions) {
                 return Err((
@@ -21515,7 +21779,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items`, names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -21540,6 +21804,11 @@ pub async fn continue_message_sse(
         crate::services::client_operations::ExecutorBinding::additional_from_headers(
             &headers,
             request.executor.as_ref(),
+        );
+    request.strict_mode_executors =
+        crate::services::client_operations::ExecutorBinding::strict_mode_from_headers(
+            &headers,
+            request.executor.iter().chain(&request.additional_executors),
         );
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Event, Report>>(100);
     let started = start_continuation(&app_state, &policy, &me_user, request, tx).await?;
@@ -21805,11 +22074,13 @@ async fn resume_parked_child(
                 .collect(),
             decision: None,
             shows_child_items: false,
+            shows_limit_and_builtin_child_items: false,
             // None on purpose: the child goes on with the binding it was
             // launched on, which its grant names, not the deciding client's.
             registered_client_tools: None,
             executor: None,
             additional_executors: Vec::new(),
+            strict_mode_executors: Vec::new(),
             context: Default::default(),
             scope_approval,
         };
@@ -22408,8 +22679,9 @@ fn context_approved_calls(content: &[ContentPart]) -> HashMap<String, Uuid> {
 /// a child item a child whose own continuation makes the call, and a plan,
 /// client-tool or built-in item a call that never reached its executor,
 /// re-seeded on approval and refused on denial. An item with `child` set is a child's
-/// whatever the part's kind, because a turn's own gated call carries its parked
-/// children on its own part.
+/// whatever the part's kind, because a turn's own gated call, and its tool-call
+/// limit, carry its parked children on its own part. The limit's own budget
+/// choice is in no lane: `run_continuation` reads it before the lanes run.
 fn split_decisions_by_lane(
     kind: ToolApprovalKind,
     open: &[ApprovalItem],
@@ -22420,8 +22692,8 @@ fn split_decisions_by_lane(
     let mut plan = Vec::new();
     for (approval_id, decision) in submitted {
         let lane = match kind {
-            ToolApprovalKind::ToolCallLimit => continue,
             _ if names_child(open, &approval_id) => &mut child,
+            ToolApprovalKind::ToolCallLimit => continue,
             ToolApprovalKind::McpTool => &mut mcp,
             // An item that lost its child still settles there, as a failure.
             ToolApprovalKind::DelegatedTask => &mut child,
@@ -22438,6 +22710,96 @@ fn split_decisions_by_lane(
 fn names_child(open: &[ApprovalItem], approval_id: &str) -> bool {
     open.iter()
         .any(|item| item.approval_id == approval_id && item.child.is_some())
+}
+
+/// Take the tasks' items off the tool-call limit's stop when the user chose
+/// Stop there, which stops the response as the user's own Stop does, the one
+/// exception CT-10 allows. As after that Stop, each task keeps its
+/// `input_required` slot and is answered in its own chat, whose card the stop
+/// no longer covers. Every other choice settles the tasks' items on the stop,
+/// as any stop does.
+fn release_task_items(content: &mut [ContentPart], request_index: usize) {
+    if let Some(ContentPart::ToolApprovalRequest(request)) = content.get_mut(request_index) {
+        request.approvals.retain(|item| item.child.is_none());
+    }
+}
+
+/// Whether the response's last tool-call limit choice was Generate answer now
+/// while a client submission of the turn still waits for its correction.
+fn answers_now_with_a_pending_correction(
+    content: &[ContentPart],
+    generation_parameters: &GenerationParameters,
+) -> bool {
+    crate::services::tool_call_budget::choices(content)
+        .last()
+        .is_some_and(|(_, choice)| {
+            choice == crate::services::tool_call_budget::BudgetChoice::Answer
+        })
+        && generation_parameters
+            .turn_consumption
+            .submission_correction
+            .as_ref()
+            .is_some_and(|correction| correction.pending())
+}
+
+/// End a continuation at the tool-call limit's choice without asking the model
+/// again: on Stop (`stopped`), and on Generate answer now while a client
+/// submission still waits for its correction, which the choice leaves
+/// unresolved for the reason it gives.
+#[allow(clippy::too_many_arguments)]
+async fn end_at_budget_choice(
+    task: &Arc<StreamingTask>,
+    tx: Sender<Result<Event, Report>>,
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    message: &messages::Model,
+    generation_parameters: &GenerationParameters,
+    content: Vec<ContentPart>,
+    stopped: bool,
+) -> Result<(), Report> {
+    let mut metadata = message
+        .generation_metadata
+        .as_ref()
+        .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
+        .unwrap_or_default();
+    metadata.continuation_in_flight = None;
+    metadata.was_aborted = stopped.then_some(true);
+    if let Some(correction) = generation_parameters
+        .turn_consumption
+        .submission_correction
+        .as_ref()
+        .filter(|correction| correction.pending())
+    {
+        let mut correction = correction.clone();
+        correction.stop(if stopped {
+            crate::services::submission_correction::SubmissionReason::UserStopped
+        } else {
+            crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
+        });
+        metadata.submission_outcome = Some(correction.outcome.clone());
+        let mut consumption = generation_parameters.turn_consumption.clone();
+        consumption.submission_correction = Some(correction);
+        crate::services::client_operations::store::save_consumption(
+            &app_state.db,
+            message.id,
+            task.generation_id,
+            &consumption,
+        )
+        .await?;
+    }
+    update_message_generation_metadata(
+        &app_state.db,
+        policy,
+        &me_user.to_subject(),
+        &message.id,
+        metadata,
+    )
+    .await?;
+    stream_update_assistant_message_completion::<MessageSubmitStreamingResponseMessage>(
+        tx, task, app_state, policy, content, me_user, message.id,
+    )
+    .await
 }
 
 /// Apply a user's approval decisions to a parked turn and finish it.
@@ -22559,6 +22921,10 @@ pub(crate) async fn run_continuation(
     )?;
     if approval_request.kind == ToolApprovalKind::ToolCallLimit {
         for (approval_id, decision) in &submitted_decisions {
+            // A task's item settles in its own lane below, as on any stop.
+            if names_child(&state.open, approval_id) {
+                continue;
+            }
             let item = state
                 .open
                 .iter()
@@ -22598,6 +22964,19 @@ pub(crate) async fn run_continuation(
                 }
             }
         }
+        // Stop ends the response here. Every other choice settles the tasks'
+        // items in their lane below first, Generate answer now while a client
+        // submission waits for its correction included: that one ends without
+        // asking the model only once nothing is left open (see below the
+        // lanes), so an answer the user gave a task is never dropped.
+        let stopped = crate::services::tool_call_budget::choices(&parsed.content)
+            .last()
+            .is_some_and(|(_, choice)| {
+                choice == crate::services::tool_call_budget::BudgetChoice::Stop
+            });
+        if stopped {
+            release_task_items(&mut parsed.content, state.request_index);
+        }
         update_message_content(
             &app_state.db,
             policy,
@@ -22606,63 +22985,17 @@ pub(crate) async fn run_continuation(
             parsed.content.clone(),
         )
         .await?;
-        let budget_choice = crate::services::tool_call_budget::choices(&parsed.content)
-            .last()
-            .map(|(_, choice)| choice);
-        let pending_correction = generation_parameters
-            .turn_consumption
-            .submission_correction
-            .as_ref()
-            .filter(|correction| correction.pending());
-        if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop)
-            || (budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Answer)
-                && pending_correction.is_some())
-        {
-            let mut metadata = message
-                .generation_metadata
-                .as_ref()
-                .and_then(|value| serde_json::from_value::<GenerationMetadata>(value.clone()).ok())
-                .unwrap_or_default();
-            metadata.continuation_in_flight = None;
-            metadata.was_aborted = (budget_choice
-                == Some(crate::services::tool_call_budget::BudgetChoice::Stop))
-            .then_some(true);
-            if let Some(correction) = pending_correction {
-                let mut correction = correction.clone();
-                correction.stop(if budget_choice == Some(crate::services::tool_call_budget::BudgetChoice::Stop) {
-                    crate::services::submission_correction::SubmissionReason::UserStopped
-                } else {
-                    crate::services::submission_correction::SubmissionReason::UserRequestedAnswer
-                });
-                metadata.submission_outcome = Some(correction.outcome.clone());
-                let mut consumption = generation_parameters.turn_consumption.clone();
-                consumption.submission_correction = Some(correction);
-                crate::services::client_operations::store::save_consumption(
-                    &app_state.db,
-                    message.id,
-                    task.generation_id,
-                    &consumption,
-                )
-                .await?;
-            }
-            update_message_generation_metadata(
-                &app_state.db,
-                policy,
-                &me_user.to_subject(),
-                &message.id,
-                metadata,
-            )
-            .await?;
-            return stream_update_assistant_message_completion::<
-                MessageSubmitStreamingResponseMessage,
-            >(
-                tx,
+        if stopped {
+            return end_at_budget_choice(
                 task,
+                tx,
                 app_state,
                 policy,
-                parsed.content,
                 me_user,
-                message.id,
+                &message,
+                &generation_parameters,
+                parsed.content,
+                true,
             )
             .await;
         }
@@ -22988,7 +23321,7 @@ pub(crate) async fn run_continuation(
                                     &result,
                                     &format!("Failed to process MCP tool output: {error}"),
                                 )),
-                                None,
+                                Some(ToolResultDetails::failed(ToolCallFailure::AnswerUnreadable)),
                             ),
                         }
                     };
@@ -23008,24 +23341,24 @@ pub(crate) async fn run_continuation(
                         ended_at: Some(now_timestamp()),
                     }
                 }
-                Err(error) => ToolUse {
-                    tool_call_id: item.tool_call_id.clone(),
-                    status: MessageToolCallStatus::Error,
-                    tool_name: item.tool_name.clone(),
-                    display: item.display.as_ref().map(tool_row_display),
-                    input: Some(item.input.clone()),
-                    progress_message: None,
-                    progress: None,
-                    total: None,
-                    output: Some(json!({
-                        "status": "error",
-                        "error": format!("Failed to call MCP tool: {error}"),
-                    })),
-                    result_details: None,
-                    allowed_by: None,
-                    started_at: Some(now_timestamp()),
-                    ended_at: Some(now_timestamp()),
-                },
+                Err(error) => {
+                    let (output, details) = failed_call_row(&error);
+                    ToolUse {
+                        tool_call_id: item.tool_call_id.clone(),
+                        status: MessageToolCallStatus::Error,
+                        tool_name: item.tool_name.clone(),
+                        display: item.display.as_ref().map(tool_row_display),
+                        input: Some(item.input.clone()),
+                        progress_message: None,
+                        progress: None,
+                        total: None,
+                        output: Some(output),
+                        result_details: Some(details),
+                        allowed_by: None,
+                        started_at: Some(now_timestamp()),
+                        ended_at: Some(now_timestamp()),
+                    }
+                }
             }
         } else {
             // A server that dropped out between the check above and this item is
@@ -23525,6 +23858,25 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
+    // Generate answer now while a client submission still waits for its
+    // correction asks the model nothing: the submission stays unresolved. It
+    // ends here once the tasks answered on the limit's stop have settled, on
+    // that stop's continuation or on the one after a task that asked again.
+    if answers_now_with_a_pending_correction(&parsed.content, &generation_parameters) {
+        return end_at_budget_choice(
+            task,
+            tx,
+            app_state,
+            policy,
+            me_user,
+            &message,
+            &generation_parameters,
+            parsed.content,
+            false,
+        )
+        .await;
+    }
+
     resume_parked_generation(
         task,
         tx,
@@ -23556,6 +23908,7 @@ pub(crate) async fn run_continuation(
             .chain(&request.additional_executors)
             .cloned()
             .collect(),
+        &request.strict_mode_executors,
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
@@ -23576,7 +23929,7 @@ async fn append_granted_client_tools(
     tools: &mut Vec<genai::chat::Tool>,
     policies: &mut HashMap<String, crate::services::client_tools::OfferedClientTool>,
 ) -> Result<(), Report> {
-    let Some((binding, granted)) = crate::services::delegated_client_tools::granted_tools(
+    let Some((grant, granted)) = crate::services::delegated_client_tools::granted_tools(
         app_state, chat, executor, account_id,
     )
     .await
@@ -23613,7 +23966,10 @@ async fn append_granted_client_tools(
         };
         let mut policy = crate::services::client_tools::OfferedClientTool::prepare(config, &schema)
             .map_err(|error| eyre!(error))?;
-        policy.executor = Some(binding.clone());
+        policy.executor = Some(grant.binding.clone());
+        // The launching page's word, the only one a task has: a later
+        // request may come from a device without the app.
+        policy.executor_strict_mode = grant.strict_mode;
         policy.grant = granted
             .iter()
             .find(|(granted, _)| granted.qualified_name() == config.qualified_name())
@@ -23731,6 +24087,9 @@ async fn resume_parked_generation(
     operation_attempt: Option<Uuid>,
     continuing_client_tools: Option<Vec<String>>,
     continuing_executors: Vec<crate::services::client_operations::ExecutorBinding>,
+    // The continuing request's own word, never the stored turn's: the app
+    // may have changed since the turn began.
+    continuing_strict_mode_executors: &[crate::services::client_operations::ExecutorBinding],
     assistant_mcp_server_ids: Option<Vec<String>>,
 ) -> Result<(), Report> {
     let mcp = app_state.mcp_state().await;
@@ -23922,6 +24281,10 @@ async fn resume_parked_generation(
                 .request_context
                 .as_ref()
                 .and_then(|context| context.executor_for_tool(&current).cloned());
+            policy.executor_strict_mode = policy
+                .executor
+                .as_ref()
+                .is_some_and(|binding| continuing_strict_mode_executors.contains(binding));
             let strict = crate::services::client_tools::native_strict_for_submission(
                 &current,
                 &schema,
@@ -24593,8 +24956,13 @@ pub(crate) async fn run_client_operation_continuation(
             .as_ref()
             .map(|context| context.registered_client_tools.clone()),
         context
+            .as_ref()
             .map(|context| context.executors().cloned().collect())
             .unwrap_or_default(),
+        // A result posted with no page attached says nothing about the app.
+        context
+            .as_ref()
+            .map_or(&[], |context| context.strict_mode_executors.as_slice()),
         assistant.and_then(|assistant| assistant.mcp_server_ids),
     )
     .await
