@@ -967,7 +967,8 @@ pub enum ChatCreatedVia {
     Outlook,
     /// The Word add-in.
     Word,
-    /// The host-neutral Office add-in page.
+    /// An Office add-in pane without a value of its own: the host-neutral
+    /// page, Excel and PowerPoint.
     OfficeAddin,
     /// The Erato tab in Microsoft Teams.
     MsTeamsTab,
@@ -1011,7 +1012,7 @@ impl ChatCreatedVia {
         match platform {
             "outlook" => ChatCreatedVia::Outlook,
             "word" => ChatCreatedVia::Word,
-            "addin-neutral" => ChatCreatedVia::OfficeAddin,
+            "addin-neutral" | "excel" | "powerpoint" => ChatCreatedVia::OfficeAddin,
             "teams" => ChatCreatedVia::MsTeamsTab,
             _ => ChatCreatedVia::Web,
         }
@@ -2947,6 +2948,21 @@ pub async fn get_chat_assistant_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn office_panes_without_their_own_value_count_as_the_office_addin() {
+        for platform in ["addin-neutral", "excel", "powerpoint"] {
+            assert_eq!(
+                ChatCreatedVia::from_platform(platform),
+                ChatCreatedVia::OfficeAddin
+            );
+        }
+        assert_eq!(ChatCreatedVia::from_platform("word"), ChatCreatedVia::Word);
+        assert_eq!(
+            ChatCreatedVia::from_platform("onenote"),
+            ChatCreatedVia::Web
+        );
+    }
 
     #[test]
     fn new_id_to_json_is_byte_identical() {

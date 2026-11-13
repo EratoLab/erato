@@ -128,10 +128,11 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    messaging and is sent as the `X-Erato-Platform` request header. Values:
    `web` (shared-frontend default), `outlook`, `teams`, `word`, `excel`,
    `powerpoint`, `addin-neutral` (`NeutralAddinChatPage` default). The Teams
-   bot, which runs in the backend, reports `teams-bot`. The backend does not
-   know `excel` and `powerpoint` yet: it logs a warning until an action facet
-   declares the platform, records their chats as created on the web, and sends
-   MCP servers no surface hint unless `mcp_servers_global.surfaces` names them.
+   bot, which runs in the backend, reports `teams-bot`. The backend
+   records `excel` and `powerpoint` chats as Office add-in chats
+   (`created_via = office_addin`, shared with `addin-neutral`) and gives both a
+   built-in MCP surface hint. Like every add-in platform, they log an
+   unknown-platform warning until an action facet declares them.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 

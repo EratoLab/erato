@@ -384,7 +384,7 @@ async fn an_opted_in_legacy_server_finds_the_surface_in_each_calls_meta() {
     for (server_id, platform) in [
         ("opted-in", Some("teams-bot")),
         ("opted-in", Some("teams")),
-        ("opted-in", Some("excel")),
+        ("opted-in", Some("onenote")),
         ("opted-in", None),
         ("plain", Some("teams")),
     ] {
