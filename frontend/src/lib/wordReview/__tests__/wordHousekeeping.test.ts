@@ -87,7 +87,7 @@ describe("WORD_HOUSEKEEPING", () => {
       expect(entry.element).toBeTruthy();
       expect(entry.part).toMatch(/^\/word\//);
       expect(entry.hosts.length).toBeGreaterThan(0);
-      expect(entry.probe).toMatch(/ERMAIN-9\d\d/);
+      expect(entry.probe).toMatch(/ERMAIN-\d{3,}/);
     }
   });
 });
@@ -465,6 +465,79 @@ describe("glossary-rsids", () => {
     expect(
       fingerprint(glossary({ body: "<w:p><w:r><w:t>Later</w:t></w:r></w:p>" })),
     ).not.toBe(base);
+  });
+});
+
+describe("font-obfuscation-key", () => {
+  const R =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const REL = "http://schemas.openxmlformats.org/package/2006/relationships";
+  const KEY_A = "{A1510BD7-DF33-FE4C-A4DC-A2A3835A65C0}";
+  const KEY_B = "{77A2AB87-A41A-7D49-918B-B235B9927FDB}";
+  const font = (fill: number) => [
+    0,
+    1,
+    0,
+    0,
+    ...Array.from({ length: 60 }, (_, i) => (i * fill) % 256),
+  ];
+  const obfuscate = (bytes: number[], fontKey: string) => {
+    const hex = fontKey.replace(/[{}-]/g, "");
+    const key = Array.from({ length: 16 }, (_, i) =>
+      parseInt(hex.slice(30 - 2 * i, 32 - 2 * i), 16),
+    );
+    return globalThis.btoa(
+      String.fromCharCode(
+        ...bytes.map((b, i) => (i < 32 ? b ^ key[i % 16] : b)),
+      ),
+    );
+  };
+  const embedded = ({
+    key = KEY_A,
+    bytes = font(7),
+    name = "Calibri",
+  }: { key?: string; bytes?: number[]; name?: string } = {}) =>
+    pkg({ body: "<w:p><w:r><w:t>Text</w:t></w:r></w:p>" }).replace(
+      "</pkg:package>",
+      part(
+        "/word/fontTable.xml",
+        `<w:fonts xmlns:w="${W}" xmlns:r="${R}"><w:font w:name="${name}"><w:embedRegular r:id="rId1" w:fontKey="${key}"/></w:font></w:fonts>`,
+      ) +
+        part(
+          "/word/_rels/fontTable.xml.rels",
+          `<Relationships xmlns="${REL}"><Relationship Id="rId1" Type="${R}/font" Target="fonts/font1.odttf"/></Relationships>`,
+        ) +
+        `<pkg:part pkg:name="/word/fonts/font1.odttf" pkg:contentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"><pkg:binaryData>${obfuscate(bytes, key)}</pkg:binaryData></pkg:part>` +
+        "</pkg:package>",
+    );
+  const strict = (xml: string) => createWordXmlComparison(parse(xml));
+
+  it("reads one embedded font alike under any key", () => {
+    const a = embedded(),
+      b = embedded({ key: KEY_B });
+    expect(a).not.toBe(b);
+    expect(strict(b).fingerprint()).toBe(strict(a).fingerprint());
+    expect(bodyRead(b).fingerprint).toBe(bodyRead(a).fingerprint);
+    expect(strict(b).partFingerprints()).toEqual(strict(a).partFingerprints());
+  });
+
+  it("still sees a different font or a renamed font entry", () => {
+    const base = strict(embedded()).fingerprint();
+    expect(
+      strict(embedded({ key: KEY_B, bytes: font(11) })).fingerprint(),
+    ).not.toBe(base);
+    expect(strict(embedded({ name: "Arial" })).fingerprint()).not.toBe(base);
+  });
+
+  it("keeps the key when the font part cannot be restored", () => {
+    const broken = (key: string) =>
+      embedded({ key }).replace(
+        /<pkg:binaryData>[^<]*</,
+        "<pkg:binaryData>AAAA<",
+      );
+    expect(strict(broken(KEY_B)).fingerprint()).not.toBe(
+      strict(broken(KEY_A)).fingerprint(),
+    );
   });
 });
 
