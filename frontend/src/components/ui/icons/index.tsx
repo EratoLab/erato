@@ -15,6 +15,7 @@ import {
   HalfMoon,
   Computer,
   ChatBubbleEmpty,
+  ChatBubbleQuestion,
   Plus,
   CandlestickChart,
   Check,
@@ -418,6 +419,10 @@ export const LockIcon = ({ className, ...props }: IconProps) => (
 
 export const QuoteIcon = ({ className, ...props }: IconProps) => (
   <Quote className={className} {...props} />
+);
+
+export const ChatBubbleQuestionIcon = ({ className, ...props }: IconProps) => (
+  <ChatBubbleQuestion className={className} {...props} />
 );
 
 export const ChatLinesIcon = ({ className, ...props }: IconProps) => (

@@ -5281,6 +5281,73 @@ chat_provider_id = "gpt-4o-mini"
 prompt = { source = "static", prompt = "Rewrite the user's prompt to be clearer, more specific, and action-oriented. Return only the improved prompt." }
 ```
 
+### `message_text_actions`
+
+{/* erato_toml_config_key: message_text_actions */}
+
+Actions offered in a small toolbar when the user marks text inside a chat message. Both actions are off by default.
+
+#### `message_text_actions.quote_enabled`
+
+{/* erato_toml_config_key: message_text_actions.quote_enabled */}
+
+Offer "Quote", which appends the marked text to the composer as a markdown quote. Needs no model call.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+#### `message_text_actions.explain`
+
+{/* erato_toml_config_key: message_text_actions.explain */}
+
+"Explain" opens a small chat at the marked passage of an assistant message and explains it in simple words. The small chat is never saved: it lives in the browser only, and the backend's `POST /api/v1beta/me/messages/{message_id}/explain` endpoint writes nothing. The marked text and the text of the message it comes from are sent to the configured chat provider (and to tracing where tracing is enabled). Usage is not metered; the marked text is limited to 4,000 characters and a small chat to 10 follow-up questions.
+
+#### `message_text_actions.explain.enabled`
+
+{/* erato_toml_config_key: message_text_actions.explain.enabled */}
+
+Whether to offer "Explain" and expose its endpoint.
+
+**Default value:** `false`
+
+**Type:** `boolean`
+
+#### `message_text_actions.explain.chat_provider_id`
+
+{/* erato_toml_config_key: message_text_actions.explain.chat_provider_id */}
+
+The chat provider that writes the explanations. Required when Explain is enabled, and must match a provider configured in `chat_providers`.
+
+**Type:** `string`
+
+#### `message_text_actions.explain.prompt`
+
+{/* erato_toml_config_key: message_text_actions.explain.prompt */}
+
+The instruction for explanations. If omitted, a built-in instruction is used (explain briefly, in simple words, for a non-expert). The answer language follows the user interface. Uses the common [`prompt`](#prompt) format.
+
+{/* erato_toml_config_key: message_text_actions.explain.prompt.fallback */}
+{/* erato_toml_config_key: message_text_actions.explain.prompt.label */}
+{/* erato_toml_config_key: message_text_actions.explain.prompt.prompt */}
+{/* erato_toml_config_key: message_text_actions.explain.prompt.prompt_name */}
+{/* erato_toml_config_key: message_text_actions.explain.prompt.source */}
+
+**Type:** `string | object | None`
+
+**Example:**
+
+```toml
+[message_text_actions]
+quote_enabled = true
+
+[message_text_actions.explain]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+# Optional override:
+# prompt = { source = "langfuse", prompt_name = "message-explain", label = "production", fallback = "Explain the passage briefly, in simple words." }
+```
+
 ### `user_preferences`
 
 {/* erato_toml_config_key: user_preferences */}

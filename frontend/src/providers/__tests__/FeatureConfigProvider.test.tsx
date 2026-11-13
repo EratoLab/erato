@@ -50,6 +50,17 @@ describe("FeatureConfigProvider", () => {
     expect(result.current.keepToolsDropdownOpen).toBe(true);
   });
 
+  it("maps the actions on marked message text, each on its own flag", () => {
+    mockEnv.mockReturnValue({ ...env(), messageTextExplainEnabled: true });
+    const { result } = renderHook(() => useFeatureConfig(), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.messageTextActions).toEqual({
+      quoteEnabled: false,
+      explainEnabled: true,
+    });
+  });
+
   it("maps deployment UI controls independently from message feedback", () => {
     mockEnv.mockReturnValue({
       ...vi.mocked(env)(),
@@ -225,6 +236,7 @@ describe("FeatureConfigProvider", () => {
           sharepointFileSearchEnabled: true,
         },
         messageActions: { editingEnabled: true, regenerationEnabled: true },
+        messageTextActions: { quoteEnabled: false, explainEnabled: false },
         messageFeedback: {
           enabled: false,
           commentsEnabled: false,

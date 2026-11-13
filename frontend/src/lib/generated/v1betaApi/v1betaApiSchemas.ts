@@ -2701,6 +2701,55 @@ export type Message = {
   id: string;
 };
 
+export type MessageExplainCompleted = Record<string, any>;
+
+export type MessageExplainFailed = Record<string, any>;
+
+/**
+ * Request to explain a passage of a message. The server keeps nothing, so a
+ * follow-up question carries the whole small chat so far.
+ */
+export type MessageExplainRequest = {
+  /**
+   * Language of the user interface, as a language tag such as `de`.
+   */
+  language?: string;
+  /**
+   * The text the user marked in the message.
+   */
+  selected_text: string;
+  /**
+   * Empty for the first explanation; otherwise the explanations and
+   * follow-up questions so far, ending with the question to answer.
+   */
+  turns?: MessageExplainTurn[];
+};
+
+export type MessageExplainStreamingResponseMessage =
+  | (MessageExplainTextDelta & {
+      message_type: "text_delta";
+    })
+  | (MessageExplainCompleted & {
+      message_type: "completed";
+    })
+  | (MessageExplainFailed & {
+      message_type: "failed";
+    });
+
+export type MessageExplainTextDelta = {
+  text: string;
+};
+
+/**
+ * One entry of the small chat an explanation opened.
+ */
+export type MessageExplainTurn = {
+  role: MessageExplainTurnRole;
+  text: string;
+};
+
+export type MessageExplainTurnRole = "user" | "assistant";
+
 /**
  * Message feedback response
  */

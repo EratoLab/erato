@@ -877,6 +877,31 @@ describe("ChatInput", () => {
       expect(textarea).toHaveValue("Typed");
     });
 
+    it("appends a block after the typed text, with the caret behind it and the composer focused", async () => {
+      const controls = createRef<ChatInputControlsHandle>();
+      await renderChatInput(null, controls);
+      const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+
+      act(() => {
+        controls.current?.appendToDraft?.("> first quote");
+      });
+      expect(textarea).toHaveValue("> first quote\n\n");
+      expect(textarea).toHaveFocus();
+      expect(textarea.selectionStart).toBe(textarea.value.length);
+
+      fireEvent.change(textarea, {
+        target: { value: "> first quote\n\nI have a question:" },
+      });
+      act(() => {
+        controls.current?.appendToDraft?.("> one paragraph\n>\n> another");
+      });
+      const expected =
+        "> first quote\n\nI have a question:\n\n> one paragraph\n>\n> another\n\n";
+      expect(textarea).toHaveValue(expected);
+      expect(textarea.selectionStart).toBe(expected.length);
+      expect(textarea.selectionEnd).toBe(expected.length);
+    });
+
     it("re-initializes facets on a genuine chat switch", async () => {
       const { rerender } = await renderChatInput("chat-a");
 

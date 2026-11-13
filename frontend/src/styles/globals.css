@@ -223,6 +223,7 @@
     black 6%
   );
   --theme-message-controls: var(--theme-bg-secondary);
+  --theme-highlight-mark: #e2e8f0;
   --theme-code-inline-bg: #f3f4f6;
   --theme-code-inline-fg: #1f2937;
   --theme-code-inline-border: #e5e7eb;
@@ -462,6 +463,7 @@
       white 8%
     );
     --theme-message-controls: var(--theme-bg-secondary);
+    --theme-highlight-mark: rgba(255, 255, 255, 0.16);
     --theme-code-inline-bg: #374151;
     --theme-code-inline-fg: #f3f4f6;
     --theme-code-inline-border: #4b5563;
@@ -644,6 +646,12 @@ body {
     position: absolute;
   }
 
+  /* After the `fixed` rule and at its specificity, so it only lifts the floor
+     that rule sets. */
+  [data-popover-floor="none"] {
+    min-width: 0;
+  }
+
   /* The card family. A card is a frame carrying .card-geometry and one inset,
      wrapping a body that carries .card-body-geometry. The body — not the frame
      — publishes what a card nested inside derives from: a frame that both read
@@ -784,6 +792,12 @@ body {
     border: 0;
     background: transparent;
     color: inherit;
+  }
+
+  /* The passage an open Explain card belongs to. Painted through the CSS
+     Custom Highlight API, so the rendered markdown stays untouched. */
+  ::highlight(erato-explain-passage) {
+    background-color: var(--theme-highlight-mark);
   }
 
   pre.message-content-raw-block {

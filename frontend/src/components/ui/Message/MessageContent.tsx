@@ -30,6 +30,7 @@ import {
   componentRegistry,
   resolveComponentOverride,
 } from "@/config/componentRegistry";
+import { useMessageExplainStore } from "@/hooks/chat/store/messageExplainStore";
 import { useChatCanEdit } from "@/hooks/chat/useChatCanEdit";
 import { useOptionalTranslation } from "@/hooks/i18n";
 import {
@@ -56,7 +57,10 @@ import {
 } from "@/lib/wordReview/wordHistoryNames";
 import { isAcceptedWordSubmission } from "@/lib/wordReview/wordHistoryParts";
 import { ChatContext } from "@/providers/ChatProvider";
-import { useTraceFeature } from "@/providers/FeatureConfigProvider";
+import {
+  useMessageTextActionsFeature,
+  useTraceFeature,
+} from "@/providers/FeatureConfigProvider";
 import { findMentionRanges } from "@/utils/chat/assistantMentions";
 import { isDelegatedRun } from "@/utils/chat/recentChatSession";
 import { FileTypeUtil } from "@/utils/fileTypes";
@@ -70,6 +74,7 @@ import { ImageContentDisplay } from "./ImageContentDisplay";
 import { LocalSearchCoverageNotice } from "./LocalSearchCoverageNotice";
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 import { MermaidBlock } from "./MermaidBlock";
+import { MessageExplainCard } from "./MessageExplainCard";
 import { ParkedTaskNotice } from "./ParkedTaskNotice";
 import { SidecarReviewItem } from "./SidecarReviewItem";
 import { StopWaitingAction } from "./StopWaitingAction";
@@ -78,8 +83,15 @@ import {
   useCodeBlockSurfaceStyle,
 } from "./SyntaxHighlightedCode";
 import { approvalStopState } from "./approvalItems";
+import {
+  EXPLAIN_SLOT_TAG,
+  MESSAGE_CONTENT_DATA_UI,
+  rehypeMessageTextBlocks,
+} from "./messageTextBlocks";
+import { useExplainPassageHighlight } from "./useExplainPassageHighlight";
 import { toolNameOfCall, waitingCallOf } from "./waitingCall";
 
+import type { RenderExplainAnswer } from "./MessageExplainCard";
 import type { ApprovalStopState } from "./approvalItems";
 import type { ToolDecision } from "../Trace/Trace";
 import type { WordHistoryMessage } from "@/components/ui/WordReview/useWordHistoryMessage";
@@ -93,7 +105,7 @@ import type {
 import type { HostArtifact } from "@/types/chat";
 import type { UiImagePart } from "@/utils/adapters/contentPartAdapter";
 import type { AssistantMention } from "@/utils/chat/assistantMentions";
-import type { Components } from "react-markdown";
+import type { Components, Options as MarkdownOptions } from "react-markdown";
 
 // Sanitize author HTML before KaTeX generates its trusted markup. Keep only
 // the math classes and internal link protocols needed by our renderers.
@@ -1218,7 +1230,37 @@ function MarkdownParagraph({
   );
 }
 
+function ExplainAnswer({
+  text,
+  isStreaming,
+}: {
+  text: string;
+  isStreaming: boolean;
+}) {
+  const content = React.useMemo<ContentPart[]>(
+    () => [{ content_type: "text", text }],
+    [text],
+  );
+  return <MessageContent content={content} isStreaming={isStreaming} />;
+}
+
+const renderExplainAnswer: RenderExplainAnswer = (text, isStreaming) => (
+  <ExplainAnswer text={text} isStreaming={isStreaming} />
+);
+
+/** Where `rehypeMessageTextBlocks` put the Explain card of this message. */
+function MarkdownExplainSlot() {
+  const { messageId } = React.useContext(MarkdownMessageContext);
+  return messageId ? (
+    <MessageExplainCard
+      messageId={messageId}
+      renderAnswer={renderExplainAnswer}
+    />
+  ) : null;
+}
+
 const MARKDOWN_COMPONENTS: Partial<Components> = {
+  ...({ [EXPLAIN_SLOT_TAG]: MarkdownExplainSlot } as Partial<Components>),
   pre: MarkdownPre,
   code: MarkdownCode,
   a: MarkdownLink,
@@ -1432,6 +1474,27 @@ export const MessageContent = memo(function MessageContent({
   );
   const imageAdvisory = useOptionalTranslation("chat.message.image_advisory");
   const { maskReasoningText } = useTraceFeature();
+  const textActions = useMessageTextActionsFeature();
+  // The markers are what the toolbar on marked text recognises as the text of
+  // a finished message, so a streaming answer and a shared view carry none.
+  const marksTextBlocks =
+    !!messageId &&
+    !isStreaming &&
+    !readOnly &&
+    (textActions.quoteEnabled || textActions.explainEnabled);
+  const explainAnchor = useMessageExplainStore((state) =>
+    messageId !== undefined && state.card?.messageId === messageId
+      ? state.card.anchor
+      : null,
+  );
+  const closeExplain = useMessageExplainStore((state) => state.close);
+  const rootRef = React.useRef<HTMLElement>(null);
+  useExplainPassageHighlight(rootRef, showRaw ? null : explainAnchor);
+  React.useEffect(() => {
+    if (showRaw && explainAnchor) {
+      closeExplain();
+    }
+  }, [showRaw, explainAnchor, closeExplain]);
   const toolDecisions = React.useMemo<Record<string, ToolDecision>>(
     () =>
       content.reduce<Record<string, ToolDecision>>((decisions, part) => {
@@ -1692,7 +1755,7 @@ export const MessageContent = memo(function MessageContent({
     ],
   );
 
-  const renderMarkdown = (text: string) => {
+  const renderMarkdown = (text: string, textBlockPrefix?: string) => {
     const mentionLinkedText =
       mentionedAssistants && mentionedAssistants.length > 0
         ? linkAssistantMentions(text, mentionedAssistants)
@@ -1710,6 +1773,19 @@ export const MessageContent = memo(function MessageContent({
                   rehypeRaw,
                   [rehypeSanitize, markdownSanitizeSchema],
                   rehypeKatex,
+                  ...(textBlockPrefix === undefined
+                    ? []
+                    : [
+                        [
+                          rehypeMessageTextBlocks,
+                          {
+                            prefix: textBlockPrefix,
+                            slotAfter: explainAnchor?.endBlock,
+                          },
+                        ] as NonNullable<
+                          MarkdownOptions["rehypePlugins"]
+                        >[number],
+                      ]),
                 ]}
                 components={MARKDOWN_COMPONENTS}
                 urlTransform={(url, key, node) => {
@@ -1836,7 +1912,10 @@ export const MessageContent = memo(function MessageContent({
       .join("\n\n");
 
     return (
-      <article className="max-w-none font-sans text-base">
+      <article
+        className="max-w-none font-sans text-base"
+        data-ui={MESSAGE_CONTENT_DATA_UI}
+      >
         {taskResult && <TaskResultStep part={taskResult} hasReply />}
         <pre className="message-content-raw-block whitespace-pre-wrap">
           <code>{rawText}</code>
@@ -1855,10 +1934,12 @@ export const MessageContent = memo(function MessageContent({
 
   return (
     <article
+      ref={rootRef}
       className={clsx(
-        "max-w-none font-sans text-base",
+        "max-w-none font-sans text-base focus:outline-none",
         preserveSoftLineBreaks && "whitespace-pre-wrap",
       )}
+      data-ui={MESSAGE_CONTENT_DATA_UI}
     >
       {taskResult && <TaskResultStep part={taskResult} hasReply />}
       {clusters.map((cluster) => {
@@ -1988,7 +2069,10 @@ export const MessageContent = memo(function MessageContent({
 
           return (
             <React.Fragment key={`text-${index}`}>
-              {renderMarkdown(displayText)}
+              {renderMarkdown(
+                displayText,
+                marksTextBlocks ? String(index) : undefined,
+              )}
             </React.Fragment>
           );
         }

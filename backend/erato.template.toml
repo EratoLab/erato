@@ -95,6 +95,20 @@ chat_provider_ids = ["test-token-limit"]
 # # prompt = { source = "langfuse", prompt_name = "prompt-optimizer", label = "production", fallback = "Optional fallback" }
 # # prompt = { source = "static", prompt = "Explicit static prompt content" }
 
+# Actions on text the user marks in a chat message (both off by default).
+# "Quote" puts the marked text into the composer as a quote. "Explain" opens a
+# small chat at the passage; it sends the marked text and the message it comes
+# from to the chosen provider and is never saved.
+# [message_text_actions]
+# quote_enabled = false
+#
+# [message_text_actions.explain]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+# # prompt can be a string or an object, as for the prompt optimizer:
+# # prompt = "Optional override. If omitted, a built-in instruction is used."
+# # prompt = { source = "langfuse", prompt_name = "message-explain", label = "production", fallback = "Optional fallback" }
+
 # Tool-call labels. Generic rules label every MCP call; a configured model can name the
 # verb and kind for calls the rules have none for (off by default). A skeleton of the
 # call (member names, text lengths, verb fields and values the tool's schema lists) goes

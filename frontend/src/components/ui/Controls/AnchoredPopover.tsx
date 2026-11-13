@@ -23,8 +23,17 @@ import type { PopoverWidth } from "./PopoverPanel";
 
 type Orientation = {
   vertical: "top" | "bottom";
-  horizontal: "left" | "right";
+  /** `center` centres the panel on the anchor and needs no side to have room. */
+  horizontal: "left" | "right" | "center";
 };
+
+/** A rectangle in viewport coordinates, as `getBoundingClientRect` reports it. */
+export interface AnchoredPopoverRect {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
 
 export interface AnchoredPopoverTriggerProps {
   ref: RefObject<HTMLButtonElement | null>;
@@ -40,7 +49,16 @@ export interface AnchoredPopoverTriggerProps {
 export interface AnchoredPopoverProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  trigger: (props: AnchoredPopoverTriggerProps) => ReactNode;
+  /** Omitted when the panel is anchored to `anchorRect`. */
+  trigger?: (props: AnchoredPopoverTriggerProps) => ReactNode;
+  /**
+   * Anchor the panel to this rectangle instead of a trigger: marked text has
+   * no element of its own. The owner opens and closes the panel, so such a
+   * popover also sets `manageFocus={false}` and names itself with `ariaLabel`.
+   */
+  anchorRect?: AnchoredPopoverRect | null;
+  /** Pixels between the anchor and the panel. */
+  anchorGap?: number;
   children: ReactNode;
   className?: string;
   panelClassName?: string;
@@ -48,6 +66,8 @@ export interface AnchoredPopoverProps {
   panelRef?: RefObject<HTMLDivElement | null>;
   /** Panel width dialect; see PopoverPanel. */
   width?: PopoverWidth;
+  /** See PopoverPanel; off lets the panel be narrower than a menu. */
+  widthFloor?: boolean;
   viewportPadding?: string;
   id?: string;
   role?: React.AriaRole;
@@ -74,12 +94,15 @@ export function AnchoredPopover({
   isOpen,
   onOpenChange,
   trigger,
+  anchorRect,
+  anchorGap = 0,
   children,
   className,
   panelClassName,
   panelStyle,
   panelRef,
   width = "min",
+  widthFloor = true,
   viewportPadding = "var(--theme-layout-dropdown-viewport-margin)",
   id,
   role,
@@ -122,28 +145,25 @@ export function AnchoredPopover({
   );
 
   const updatePosition = useCallback(() => {
-    if (!isOpen || !triggerRef.current || !getPanelElement()) {
-      return;
-    }
-
     const panelElement = getPanelElement();
-    if (!panelElement) {
+    const triggerRect =
+      anchorRect ?? triggerRef.current?.getBoundingClientRect();
+    if (!isOpen || !triggerRect || !panelElement) {
       return;
     }
 
     const panelRect = panelElement.getBoundingClientRect();
-    const triggerRect = triggerRef.current.getBoundingClientRect();
     const viewport = {
       width: window.innerWidth,
       height: window.innerHeight,
       padding: resolvePopoverViewportPadding(
         viewportPadding,
-        triggerRef.current,
+        triggerRef.current ?? panelElement,
       ),
     };
 
     const requiredSpace = {
-      vertical: panelRect.height + viewport.padding,
+      vertical: panelRect.height + anchorGap + viewport.padding,
       horizontal: panelRect.width + viewport.padding,
     };
 
@@ -171,20 +191,26 @@ export function AnchoredPopover({
         ? "bottom"
         : "top";
 
-    const horizontal = preferredOrientation?.horizontal
-      ? hasSpace[preferredOrientation.horizontal]
-        ? preferredOrientation.horizontal
-        : space.left > space.right
-          ? "right"
-          : "left"
-      : space.right > space.left
-        ? "left"
-        : "right";
+    const preferredHorizontal = preferredOrientation?.horizontal;
+    const horizontal =
+      preferredHorizontal === "center"
+        ? "center"
+        : preferredHorizontal
+          ? hasSpace[preferredHorizontal]
+            ? preferredHorizontal
+            : space.left > space.right
+              ? "right"
+              : "left"
+          : space.right > space.left
+            ? "left"
+            : "right";
 
     const desiredLeft =
-      horizontal === "left"
-        ? triggerRect.left
-        : triggerRect.right - panelRect.width;
+      horizontal === "center"
+        ? (triggerRect.left + triggerRect.right - panelRect.width) / 2
+        : horizontal === "left"
+          ? triggerRect.left
+          : triggerRect.right - panelRect.width;
     const maxLeft = Math.max(
       viewport.padding,
       viewport.width - panelRect.width - viewport.padding,
@@ -193,17 +219,26 @@ export function AnchoredPopover({
     const maxHeight = Math.max(
       0,
       vertical === "bottom"
-        ? viewport.height - triggerRect.bottom - viewport.padding
-        : triggerRect.top - viewport.padding,
+        ? viewport.height - triggerRect.bottom - anchorGap - viewport.padding
+        : triggerRect.top - anchorGap - viewport.padding,
     );
 
     panelElement.style.top =
-      vertical === "bottom" ? `${triggerRect.bottom}px` : "auto";
+      vertical === "bottom" ? `${triggerRect.bottom + anchorGap}px` : "auto";
     panelElement.style.bottom =
-      vertical === "top" ? `${viewport.height - triggerRect.top}px` : "auto";
+      vertical === "top"
+        ? `${viewport.height - triggerRect.top + anchorGap}px`
+        : "auto";
     panelElement.style.left = `${left}px`;
     panelElement.style.maxHeight = `${maxHeight}px`;
-  }, [getPanelElement, isOpen, preferredOrientation, viewportPadding]);
+  }, [
+    anchorGap,
+    anchorRect,
+    getPanelElement,
+    isOpen,
+    preferredOrientation,
+    viewportPadding,
+  ]);
 
   // Position before paint (not in a post-paint useEffect): a bottom-anchored
   // panel would otherwise paint one frame at unclamped height past the viewport
@@ -341,6 +376,7 @@ export function AnchoredPopover({
       ref={setPanelElement}
       positioned="fixed"
       width={width}
+      widthFloor={widthFloor}
       dataUi={dataUi}
       id={panelId}
       // The flex column is the panel's own contract, not a caller's: the
@@ -362,11 +398,15 @@ export function AnchoredPopover({
       }}
       role={role}
       aria-label={ariaLabel}
-      aria-labelledby={ariaLabel ? undefined : triggerId}
+      aria-labelledby={ariaLabel || !trigger ? undefined : triggerId}
     >
       {children}
     </PopoverPanel>
   ) : null;
+
+  if (!trigger) {
+    return panel ? createPortal(panel, document.body) : null;
+  }
 
   return (
     <div className={clsx("relative inline-block", className)}>

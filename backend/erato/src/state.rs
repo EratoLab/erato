@@ -530,6 +530,22 @@ impl AppState {
         })
     }
 
+    pub fn chat_provider_for_message_explain(&self) -> Result<ChatProviderConfigWithId, Report> {
+        let chat_provider_id = self
+            .config
+            .message_text_actions
+            .explain
+            .chat_provider_id
+            .as_deref()
+            .ok_or_eyre("Explain chat provider is not configured")?;
+        let chat_provider_id = self.config.resolve_chat_provider_id(chat_provider_id)?;
+
+        Ok(ChatProviderConfigWithId {
+            chat_provider_id: chat_provider_id.to_string(),
+            chat_provider_config: self.config.get_chat_provider(chat_provider_id).clone(),
+        })
+    }
+
     pub fn chat_provider_for_compaction(&self) -> Result<ChatProviderConfigWithId, Report> {
         self.config.validate_chat_history_compaction()?;
         let id = self

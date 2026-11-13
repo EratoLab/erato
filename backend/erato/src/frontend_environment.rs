@@ -59,6 +59,8 @@ const FRONTEND_ENV_KEY_STARTER_PROMPTS_ENABLED: &str = "STARTER_PROMPTS_ENABLED"
 const FRONTEND_ENV_KEY_SCHEDULED_ENABLED: &str = "SCHEDULED_ENABLED";
 const FRONTEND_ENV_KEY_TEAMS_APP_NAME: &str = "TEAMS_APP_NAME";
 const FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED: &str = "PROMPT_OPTIMIZER_ENABLED";
+const FRONTEND_ENV_KEY_MESSAGE_TEXT_QUOTE_ENABLED: &str = "MESSAGE_TEXT_QUOTE_ENABLED";
+const FRONTEND_ENV_KEY_MESSAGE_TEXT_EXPLAIN_ENABLED: &str = "MESSAGE_TEXT_EXPLAIN_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_ENABLED: &str = "USER_PREFERENCES_ENABLED";
 const FRONTEND_ENV_KEY_USER_PREFERENCES_DATA_TAB_ENABLED: &str =
     "USER_PREFERENCES_DATA_TAB_ENABLED";
@@ -501,6 +503,14 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_PROMPT_OPTIMIZER_ENABLED.to_string(),
         Value::Bool(config.prompt_optimizer.enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MESSAGE_TEXT_QUOTE_ENABLED.to_string(),
+        Value::Bool(config.message_text_actions.quote_enabled),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_MESSAGE_TEXT_EXPLAIN_ENABLED.to_string(),
+        Value::Bool(config.message_text_actions.explain.enabled),
     );
     env.additional_environment.insert(
         "CHAT_HISTORY_COMPACTION_ENABLED".into(),

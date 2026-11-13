@@ -82,6 +82,7 @@ import {
   resolveMentionedAssistantIds,
   resolveMentionedAssistants,
 } from "@/utils/chat/assistantMentions";
+import { appendBlockToDraft } from "@/utils/chat/markdownQuote";
 import { resolveChatSendErrorMessage } from "@/utils/chatSendErrorMessage";
 import { createLogger } from "@/utils/debugLogger";
 import { disambiguatePastedImageFileNames } from "@/utils/file/disambiguatePastedImageFileNames";
@@ -1149,6 +1150,13 @@ export const ChatInput = ({
     textareaRef.current?.focus();
   }, []);
 
+  // The handle is built above the pending-caret hook, whose layout effect has
+  // to stay behind the auto-resize one, so the method reaches it through a ref.
+  const appendToDraftRef = useRef<(block: string) => void>(() => {});
+  const appendToDraft = useCallback((block: string) => {
+    appendToDraftRef.current(block);
+  }, []);
+
   const applySelectedChatProviderId = useCallback(
     (chatProviderId: string) => {
       pendingSelectedChatProviderIdRef.current = chatProviderId;
@@ -1199,6 +1207,7 @@ export const ChatInput = ({
     ref,
     () => ({
       setDraftMessage,
+      appendToDraft,
       focusInput,
       // Like a pick in the menu, so the selection outlives the new chat
       // getting its id.
@@ -1219,6 +1228,7 @@ export const ChatInput = ({
       removeUploadedFiles,
       applySelectedChatProviderId,
       applySelectedFacetIds,
+      appendToDraft,
       focusInput,
       setDraftMessage,
       toggleFacetId,
@@ -1724,6 +1734,15 @@ export const ChatInput = ({
   }, [message]);
 
   const placeCaret = usePendingCaret(textareaRef);
+
+  useEffect(() => {
+    appendToDraftRef.current = (block: string) => {
+      const next = appendBlockToDraft(textareaRef.current?.value ?? "", block);
+      scrollTextareaToEndRef.current = true;
+      setMessage(next);
+      placeCaret(next, next.length);
+    };
+  }, [placeCaret]);
 
   useEffect(() => {
     const wasPendingResponse = wasPendingResponseRef.current;

@@ -124,6 +124,8 @@ export type ThemeColors = {
     assistant: string;
     hover: string;
     controls: string;
+    /** The mark kept on a passage while its Explain card is open. */
+    highlight: string;
   };
   code: {
     inline: {
@@ -461,6 +463,7 @@ export const defaultTheme: Theme = {
       assistant: colors.neutral[100],
       hover: colors.neutral[200],
       controls: colors.neutral[100],
+      highlight: "#e2e8f0",
     },
     code: {
       inline: {
@@ -688,6 +691,7 @@ export const darkTheme: Theme = {
       assistant: colors.neutral[800],
       hover: colors.neutral[700],
       controls: colors.neutral[800],
+      highlight: "rgba(255, 255, 255, 0.16)",
     },
     code: {
       inline: {

@@ -3515,6 +3515,69 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/explain": {
+      "post": {
+        "tags": [
+          "message_text_actions"
+        ],
+        "summary": "Explain a passage of a message in simple words.",
+        "description": "Streams the explanation, or the answer to the last follow-up question in\n`turns`. Nothing is stored: no chat, message or title is written.",
+        "operationId": "explain_message_text",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The message the marked text belongs to",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageExplainStreamingResponseMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid message ID, or the marked text or the turns exceed the limits"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "When the user may not read the chat of the message"
+          },
+          "404": {
+            "description": "When the Explain action is not enabled, or the message does not exist"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/models": {
       "get": {
         "tags": [],
@@ -10191,6 +10254,139 @@
             "type": "string"
           }
         }
+      },
+      "MessageExplainCompleted": {
+        "type": "object"
+      },
+      "MessageExplainFailed": {
+        "type": "object"
+      },
+      "MessageExplainRequest": {
+        "type": "object",
+        "description": "Request to explain a passage of a message. The server keeps nothing, so a\nfollow-up question carries the whole small chat so far.",
+        "required": [
+          "selected_text"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "Language of the user interface, as a language tag such as `de`."
+          },
+          "selected_text": {
+            "type": "string",
+            "description": "The text the user marked in the message."
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MessageExplainTurn"
+            },
+            "description": "Empty for the first explanation; otherwise the explanations and\nfollow-up questions so far, ending with the question to answer."
+          }
+        }
+      },
+      "MessageExplainStreamingResponseMessage": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageExplainTextDelta"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "text_delta"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageExplainCompleted"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "completed"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MessageExplainFailed",
+                "description": "The model call failed after the stream had opened."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "message_type"
+                ],
+                "properties": {
+                  "message_type": {
+                    "type": "string",
+                    "enum": [
+                      "failed"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "The model call failed after the stream had opened."
+          }
+        ]
+      },
+      "MessageExplainTextDelta": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageExplainTurn": {
+        "type": "object",
+        "description": "One entry of the small chat an explanation opened.",
+        "required": [
+          "role",
+          "text"
+        ],
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/MessageExplainTurnRole"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageExplainTurnRole": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ]
       },
       "MessageFeedback": {
         "type": "object",

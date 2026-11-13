@@ -400,7 +400,7 @@ pub(crate) async fn user_profile_middleware(
 
 const SUPPORTED_LANGUAGES: [&str; 5] = ["en", "de", "fr", "pl", "es"];
 
-fn normalize_supported_language(raw_language: Option<&str>) -> Option<&str> {
+pub(super) fn normalize_supported_language(raw_language: Option<&str>) -> Option<&str> {
     let raw_language = raw_language?;
 
     for candidate in parse_language_candidates(raw_language) {
