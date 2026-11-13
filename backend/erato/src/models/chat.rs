@@ -967,6 +967,11 @@ pub enum ChatCreatedVia {
     Outlook,
     /// The Word add-in.
     Word,
+    /// The Excel add-in.
+    Excel,
+    /// The PowerPoint add-in.
+    #[serde(rename = "powerpoint")]
+    PowerPoint,
     /// The host-neutral Office add-in page.
     OfficeAddin,
     /// The Erato tab in Microsoft Teams.
@@ -976,11 +981,13 @@ pub enum ChatCreatedVia {
 }
 
 impl ChatCreatedVia {
-    pub const ALL: [ChatCreatedVia; 7] = [
+    pub const ALL: [ChatCreatedVia; 9] = [
         ChatCreatedVia::Legacy,
         ChatCreatedVia::Web,
         ChatCreatedVia::Outlook,
         ChatCreatedVia::Word,
+        ChatCreatedVia::Excel,
+        ChatCreatedVia::PowerPoint,
         ChatCreatedVia::OfficeAddin,
         ChatCreatedVia::MsTeamsTab,
         ChatCreatedVia::MsTeamsBot,
@@ -993,6 +1000,8 @@ impl ChatCreatedVia {
             ChatCreatedVia::Web => "web",
             ChatCreatedVia::Outlook => "outlook",
             ChatCreatedVia::Word => "word",
+            ChatCreatedVia::Excel => "excel",
+            ChatCreatedVia::PowerPoint => "powerpoint",
             ChatCreatedVia::OfficeAddin => "office_addin",
             ChatCreatedVia::MsTeamsTab => "ms_teams_tab",
             ChatCreatedVia::MsTeamsBot => "ms_teams_bot",
@@ -1011,6 +1020,8 @@ impl ChatCreatedVia {
         match platform {
             "outlook" => ChatCreatedVia::Outlook,
             "word" => ChatCreatedVia::Word,
+            "excel" => ChatCreatedVia::Excel,
+            "powerpoint" => ChatCreatedVia::PowerPoint,
             "addin-neutral" => ChatCreatedVia::OfficeAddin,
             "teams" => ChatCreatedVia::MsTeamsTab,
             _ => ChatCreatedVia::Web,
@@ -2947,6 +2958,27 @@ pub async fn get_chat_assistant_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_office_pane_records_its_own_surface() {
+        for (platform, expected) in [
+            ("outlook", ChatCreatedVia::Outlook),
+            ("word", ChatCreatedVia::Word),
+            ("excel", ChatCreatedVia::Excel),
+            ("powerpoint", ChatCreatedVia::PowerPoint),
+            ("addin-neutral", ChatCreatedVia::OfficeAddin),
+            ("onenote", ChatCreatedVia::Web),
+        ] {
+            assert_eq!(ChatCreatedVia::from_platform(platform), expected);
+        }
+    }
+
+    #[test]
+    fn the_api_value_of_every_surface_is_its_column_value() {
+        for via in ChatCreatedVia::ALL {
+            assert_eq!(serde_json::json!(via), serde_json::json!(via.as_str()));
+        }
+    }
 
     #[test]
     fn new_id_to_json_is_byte_identical() {

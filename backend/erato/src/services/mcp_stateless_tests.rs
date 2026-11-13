@@ -275,7 +275,7 @@ async fn an_opted_in_stateless_server_finds_the_surface_in_the_call_meta() {
         ("files", Some("teams-bot")),
         ("files", Some("teams")),
         ("files", Some("outlook")),
-        ("files", Some("excel")),
+        ("files", Some("onenote")),
         ("files", None),
         ("plain", Some("web")),
     ] {

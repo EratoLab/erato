@@ -35,10 +35,10 @@ import type {
  *     provider are mounted on this path.
  *   - The residual no-mailbox case: {@link UnsupportedAuthSource}.
  *
- * All the Outlook coupling stays here. A future host (Excel/Word) writes its own
- * `<Host>AuthProvider` that wires its host-scoped probes into the same shared
- * sources and mounts the same `SessionAuthProvider` — typically with a
- * mailbox-less source and no Graph provider.
+ * All the Outlook coupling stays here. Other hosts wire their own probes into
+ * the same shared sources and mount the same `SessionAuthProvider` with a
+ * mailbox-less source and no Graph provider (`OfficeDocumentAuthProvider`,
+ * `TeamsAuthProvider`).
  */
 export function OutlookAuthProvider({
   children,

@@ -805,6 +805,8 @@ fn build_frontend_environment(
 fn chat_created_via_sources(config: &AppConfig) -> Vec<ChatCreatedVia> {
     let ms_office = &config.integrations.ms_office;
     let mut sources = vec![ChatCreatedVia::Web];
+    // Excel and PowerPoint are left out until a deployment can roll their
+    // panes out: the filter would offer sources no user can create chats from.
     if ms_office.addin.enabled {
         sources.extend([
             ChatCreatedVia::Outlook,

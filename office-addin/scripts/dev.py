@@ -76,6 +76,16 @@ MANIFEST_LOCAL_DOCUMENT_PATH = (
 MANIFEST_FUNNEL_DOCUMENT_PATH = (
     OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-document.xml"
 )
+MANIFEST_LOCAL_EXCEL_PATH = OFFICE_ADDIN_DIR / "manifests" / "manifest-local-excel.xml"
+MANIFEST_FUNNEL_EXCEL_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-excel.xml"
+)
+MANIFEST_LOCAL_POWERPOINT_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-local-powerpoint.xml"
+)
+MANIFEST_FUNNEL_POWERPOINT_PATH = (
+    OFFICE_ADDIN_DIR / "manifests" / "manifest-funnel-powerpoint.xml"
+)
 # Fixed identity distinct from manifest-local.xml so the on-prem variant can
 # be installed alongside the EXO add-in without colliding in OWA.
 MANIFEST_ONPREM_ID = "b11bda8b-6dda-46ae-ad77-c920658262fd"
@@ -103,7 +113,8 @@ class FunnelManifestSpec(NamedTuple):
     onprem: FunnelManifestVariant | None = None
 
 
-# Each entry is a separate catalog identity; additional hosts belong in its manifest.
+# Each entry is a separate catalog identity. Excel and PowerPoint have their own
+# because the Word manifest's WordApi floor applies to every host it lists.
 FUNNEL_MANIFEST_SPECS = (
     FunnelManifestSpec(
         source_path=MANIFEST_LOCAL_PATH,
@@ -133,6 +144,32 @@ FUNNEL_MANIFEST_SPECS = (
                 "~/Library/Containers/com.microsoft.Word/Data/Documents/wef, "
                 "then use",
                 "Insert → Add-ins → My Add-ins (Word for the web: "
+                "Upload My Add-in)",
+            ),
+        ),
+    ),
+    FunnelManifestSpec(
+        source_path=MANIFEST_LOCAL_EXCEL_PATH,
+        funnel=FunnelManifestVariant(
+            path=MANIFEST_FUNNEL_EXCEL_PATH,
+            instructions=(
+                "In Excel, copy manifests/manifest-funnel-excel.xml into",
+                "~/Library/Containers/com.microsoft.Excel/Data/Documents/wef",
+                "(create the folder if it is missing), then use",
+                "Insert → Add-ins → My Add-ins (Excel for the web: "
+                "Upload My Add-in)",
+            ),
+        ),
+    ),
+    FunnelManifestSpec(
+        source_path=MANIFEST_LOCAL_POWERPOINT_PATH,
+        funnel=FunnelManifestVariant(
+            path=MANIFEST_FUNNEL_POWERPOINT_PATH,
+            instructions=(
+                "In PowerPoint, copy manifests/manifest-funnel-powerpoint.xml into",
+                "~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef",
+                "(create the folder if it is missing), then use",
+                "Insert → Add-ins → My Add-ins (PowerPoint for the web: "
                 "Upload My Add-in)",
             ),
         ),

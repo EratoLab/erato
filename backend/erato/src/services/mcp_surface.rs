@@ -17,10 +17,12 @@ const SVG_THEN_PNG: &[&str] = &["image/svg+xml", "image/png"];
 
 /// What each surface accepts unless `mcp_servers_global.surfaces` names it,
 /// keyed by its `X-Erato-Platform` value.
-const DEFAULT_SURFACES: [(&str, &[&str]); 6] = [
+const DEFAULT_SURFACES: [(&str, &[&str]); 8] = [
     ("web", SVG_THEN_PNG),
     ("outlook", SVG_THEN_PNG),
     ("word", SVG_THEN_PNG),
+    ("excel", SVG_THEN_PNG),
+    ("powerpoint", SVG_THEN_PNG),
     ("addin-neutral", SVG_THEN_PNG),
     (TEAMS_PLATFORM, SVG_THEN_PNG),
     (TEAMS_BOT_PLATFORM, &["image/png"]),
@@ -92,7 +94,15 @@ mod tests {
 
     #[test]
     fn every_surface_has_a_built_in_list_and_the_bot_takes_no_svg() {
-        for surface in ["web", "outlook", "word", "addin-neutral", "teams"] {
+        for surface in [
+            "web",
+            "outlook",
+            "word",
+            "excel",
+            "powerpoint",
+            "addin-neutral",
+            "teams",
+        ] {
             assert_eq!(
                 SurfaceHint::resolve(surface, &HashMap::new())
                     .unwrap()
@@ -112,7 +122,7 @@ mod tests {
     fn a_configured_list_replaces_the_built_in_one_and_names_new_surfaces() {
         let configured = configured(&[
             ("teams-bot", &["image/jpeg", "Image/PNG"]),
-            ("excel", &["image/png"]),
+            ("onenote", &["image/png"]),
             ("word", &[]),
         ]);
         assert_eq!(
@@ -122,10 +132,10 @@ mod tests {
             json!({"surface": "teams-bot", "accept": ["image/jpeg", "image/png"]}),
         );
         assert_eq!(
-            SurfaceHint::resolve("excel", &configured)
+            SurfaceHint::resolve("onenote", &configured)
                 .unwrap()
                 .to_value(),
-            json!({"surface": "excel", "accept": ["image/png"]}),
+            json!({"surface": "onenote", "accept": ["image/png"]}),
         );
         assert_eq!(
             SurfaceHint::resolve("word", &configured)
@@ -139,7 +149,7 @@ mod tests {
 
     #[test]
     fn an_unknown_surface_gets_no_hint() {
-        assert_eq!(SurfaceHint::resolve("excel", &HashMap::new()), None);
+        assert_eq!(SurfaceHint::resolve("onenote", &HashMap::new()), None);
         assert_eq!(SurfaceHint::resolve("Teams", &HashMap::new()), None);
         assert_eq!(SurfaceHint::resolve("", &HashMap::new()), None);
     }

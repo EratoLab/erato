@@ -70,3 +70,4 @@
 0067_add_teams_nudge_opt_out [0066_add_scheduled_deliveries] 2026-11-05T14:00:00Z bdart <dfiebig@bdart.de> # Add the Teams nudge opt-out to user preferences
 0068_add_user_time_zone_and_language [0067_add_teams_nudge_opt_out] 2026-11-07T14:00:00Z bdart <dfiebig@bdart.de> # Add the time zone and language the user's client reported to user preferences
 0069_add_scheduled_items [0068_add_user_time_zone_and_language] 2026-11-07T15:00:00Z bdart <dfiebig@bdart.de> # Add scheduled items: what a user scheduled, with its trigger and zone
+0070_add_excel_and_powerpoint_created_via [0069_add_scheduled_items] 2026-11-13T10:46:19Z bdart <dfiebig@bdart.de> # Let chats record Excel and PowerPoint as the surface that created them

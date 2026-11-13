@@ -86,6 +86,8 @@ async fn test_new_chats_record_created_via_from_the_platform_header(pool: Pool<P
         (Some("web"), "web"),
         (Some("outlook"), "outlook"),
         (Some("word"), "word"),
+        (Some("excel"), "excel"),
+        (Some("powerpoint"), "powerpoint"),
         (Some("addin-neutral"), "office_addin"),
         (Some("teams"), "ms_teams_tab"),
         (Some("PC"), "web"),
