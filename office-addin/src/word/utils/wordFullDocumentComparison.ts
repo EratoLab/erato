@@ -1523,7 +1523,7 @@ function packageSignatures(v: PackageView): Map<string, string> {
     }
     const content = root
       ? comparison.signature(root, path)
-      : (all(part, PKG, "binaryData")[0]?.textContent ?? "").replace(/\s/g, "");
+      : comparison.binary(path);
     result.set(
       path,
       (part.getAttributeNS(PKG, "contentType") ?? "") + ":" + content,

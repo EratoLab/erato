@@ -11,7 +11,8 @@ export type WordHousekeepingId =
   | "revision-id"
   | "people-list"
   | "glossary-rsids"
-  | "placeholder-entries";
+  | "placeholder-entries"
+  | "font-obfuscation-key";
 
 export interface WordHousekeepingEntry {
   id: WordHousekeepingId;
@@ -107,6 +108,16 @@ export const WORD_HOUSEKEEPING: readonly WordHousekeepingEntry[] = [
     probe:
       "ERMAIN-980 dump-*, p4-*, p7-* (Word for Mac 16.114, Word PC 16.0.20430, 2026-10-20): every import gives every placeholder entry, Word's defaults included, a new name and guid, re-points its controls (shared entries stay shared), orders the entries by their first control and adds one entry-named style; placeholder text and rendering unchanged",
     scope: "written",
+  },
+  {
+    id: "font-obfuscation-key",
+    element:
+      "w:fontKey of each embedded font (w:embedRegular, w:embedBold, w:embedItalic, w:embedBoldItalic) and the first 32 bytes of the font part it obfuscates (ECMA-376 Part 1, 17.8.1)",
+    part: "/word/fontTable.xml",
+    hosts: ["Word for Mac"],
+    probe:
+      'ERMAIN-1189 field report, Word for Mac 16.115, 2026-11-13: an Apply preflight went stale on a document with "Embed fonts in the file" on, with only /word/fonts/*.odttf, /word/fontTable.xml and /word/settings.xml differing; not yet measured natively',
+    scope: "any",
   },
 ];
 
@@ -226,6 +237,44 @@ export function isWordGlossaryRsids(element: Element, part: string): boolean {
     element.namespaceURI === W &&
     element.localName === "rsids"
   );
+}
+
+/** font-obfuscation-key: an element that embeds a font part under a w:fontKey. */
+export function isWordEmbeddedFont(element: Element): boolean {
+  return (
+    element.namespaceURI === W &&
+    ["embedRegular", "embedBold", "embedItalic", "embedBoldItalic"].includes(
+      element.localName,
+    )
+  );
+}
+
+/** font-obfuscation-key: the base64 content of an obfuscated font part with its first 32 bytes
+ * restored, so the same font compares alike under any key; undefined when it cannot be decoded. */
+export function wordDeobfuscatedFont(
+  base64: string,
+  fontKey: string,
+): string | undefined {
+  const hex = fontKey.replace(/[{}-]/g, "");
+  if (!/^[0-9A-Fa-f]{32}$/.test(hex)) return undefined;
+  const key = Array.from({ length: 16 }, (_, i) =>
+    parseInt(hex.slice(30 - 2 * i, 32 - 2 * i), 16),
+  );
+  // 44 base64 characters are exactly 33 bytes, which covers the 32 obfuscated ones.
+  const head = base64.slice(0, 44);
+  let bytes: string;
+  try {
+    bytes = globalThis.atob(head);
+  } catch {
+    return undefined;
+  }
+  if (bytes.length < 32) return undefined;
+  let restored = "";
+  for (let i = 0; i < bytes.length; i++)
+    restored += String.fromCharCode(
+      i < 32 ? bytes.charCodeAt(i) ^ key[i % 16] : bytes.charCodeAt(i),
+    );
+  return globalThis.btoa(restored) + base64.slice(44);
 }
 
 /** theme-font-language: a language tag without its region; anything else stays as written. */
