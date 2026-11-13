@@ -307,7 +307,7 @@ CREATE TABLE public.chats (
     disabled_mcp_server_ids text[] DEFAULT '{}'::text[] NOT NULL,
     disabled_mcp_tools text[] DEFAULT '{}'::text[] NOT NULL,
     created_via text DEFAULT 'legacy'::text NOT NULL,
-    CONSTRAINT chats_created_via_check CHECK ((created_via = ANY (ARRAY['legacy'::text, 'web'::text, 'outlook'::text, 'word'::text, 'office_addin'::text, 'ms_teams_tab'::text, 'ms_teams_bot'::text])))
+    CONSTRAINT chats_created_via_check CHECK ((created_via = ANY (ARRAY['legacy'::text, 'web'::text, 'outlook'::text, 'word'::text, 'excel'::text, 'powerpoint'::text, 'office_addin'::text, 'ms_teams_tab'::text, 'ms_teams_bot'::text])))
 );
 
 

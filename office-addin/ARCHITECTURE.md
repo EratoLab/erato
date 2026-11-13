@@ -129,9 +129,9 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    `web` (shared-frontend default), `outlook`, `teams`, `word`, `excel`,
    `powerpoint`, `addin-neutral` (`NeutralAddinChatPage` default). The Teams
    bot, which runs in the backend, reports `teams-bot`. The backend
-   records `excel` and `powerpoint` chats as Office add-in chats
-   (`created_via = office_addin`, shared with `addin-neutral`) and gives both a
-   built-in MCP surface hint. Like every add-in platform, they log an
+   records `excel` and `powerpoint` chats under their own `created_via` value
+   and gives both a built-in MCP surface hint. The chat list's source filter
+   does not offer them yet. Like every add-in platform, they log an
    unknown-platform warning until an action facet declares them.
 
 ## Boundary enforcement (`eslint.config.mjs`)

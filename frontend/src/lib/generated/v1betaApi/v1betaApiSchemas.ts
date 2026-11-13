@@ -795,6 +795,8 @@ export type ChatCreatedVia =
   | "web"
   | "outlook"
   | "word"
+  | "excel"
+  | "powerpoint"
   | "office_addin"
   | "ms_teams_tab"
   | "ms_teams_bot";

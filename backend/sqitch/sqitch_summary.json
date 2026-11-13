@@ -68,7 +68,8 @@
     "deploy/0066_add_scheduled_deliveries.sql",
     "deploy/0067_add_teams_nudge_opt_out.sql",
     "deploy/0068_add_user_time_zone_and_language.sql",
-    "deploy/0069_add_scheduled_items.sql"
+    "deploy/0069_add_scheduled_items.sql",
+    "deploy/0070_add_excel_and_powerpoint_created_via.sql"
   ],
-  "latest_change": "5c6db87480af1d5158cfb80e58dec30f59e95fa4"
+  "latest_change": "a397e56c9dc410f821f6c1186dadabbe059b12c0"
 }
