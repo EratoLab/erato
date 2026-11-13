@@ -252,6 +252,9 @@ export const Chat = ({
       setDraftMessage: (message: string, options?: DraftMessageOptions) => {
         chatInputControlsRef.current?.setDraftMessage(message, options);
       },
+      appendToDraft: (block: string) => {
+        chatInputControlsRef.current?.appendToDraft?.(block);
+      },
       focusInput: () => {
         chatInputControlsRef.current?.focusInput();
       },

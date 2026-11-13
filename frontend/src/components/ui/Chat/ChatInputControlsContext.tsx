@@ -10,6 +10,13 @@ export type DraftMessageOptions = {
 
 export interface ChatInputControls {
   setDraftMessage: (message: string, options?: DraftMessageOptions) => void;
+  /**
+   * Adds a block after what the user typed: an empty line before it when
+   * there is text, an empty line after it, the caret at the end and the
+   * composer focused. Optional, so a provider value built before shared
+   * surface 1.28 still satisfies the type; callers use `?.()`.
+   */
+  appendToDraft?: (block: string) => void;
   focusInput: () => void;
   setSelectedFacetIds: (facetIds: string[]) => void;
   setSelectedChatProviderId: (chatProviderId: string) => void;
@@ -27,6 +34,7 @@ const noop = () => {};
 
 const defaultControls: ChatInputControls = {
   setDraftMessage: noop,
+  appendToDraft: noop,
   focusInput: noop,
   setSelectedFacetIds: noop,
   setSelectedChatProviderId: noop,

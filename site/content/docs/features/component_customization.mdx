@@ -546,6 +546,31 @@ space empty so the text stays aligned, drops the gap above, and marks the root
 own message. A renderer that ignores the prop still draws every message with
 its header; the list tightens the spacing between them either way.
 
+### Actions on marked text
+
+With `message_text_actions` enabled, marking text in a finished message shows a
+small toolbar (Quote, Explain). The host mounts it in the message list and
+finds the text through the DOM alone, so a `ChatMessageRenderer` override needs
+no code for it. It relies on three things:
+
+- the message root carries `data-message-id` (and `data-ui="chat-message"`);
+- the text is drawn by `hostComponents.MessageContent`, which marks its root
+  with `data-ui="message-content"` and renders the Explain card below the
+  marked passage;
+- `messageId` reaches `MessageContent`, as it does when the renderer passes
+  `useChatMessageRenderer().contentProps`.
+
+A renderer that draws message text itself, without the host's
+`MessageContent`, gets no toolbar on that text. That is the intended failure:
+nothing breaks, the actions are simply absent. `data-ui="message-body"` is not
+part of the contract.
+
+Quote writes into the composer through `useChatInputControls().appendToDraft`,
+added with shared surface **1.28**. The method is optional on
+`ChatInputControls`: a kit that builds its own value for
+`ChatInputControlsProvider` keeps compiling, and Quote is not offered until
+the value has the method.
+
 ### What the Example Demonstrates
 
 The bundled example (`ChatMessageBubble.example.tsx`) creates a hybrid layout:

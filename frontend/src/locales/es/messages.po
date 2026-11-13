@@ -4689,6 +4689,67 @@ msgid "messageList.scrollToBottom.newMessageCount"
 msgstr "{newMessageCount, plural, one {# mensaje nuevo} other {# mensajes nuevos}}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.close"
+msgstr "Cerrar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.error"
+msgstr "No se pudo cargar la explicación."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.followUpError"
+msgstr "No se pudo cargar la respuesta."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.followUpLimit"
+msgstr "Aquí no se pueden hacer más preguntas"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.followUpPlaceholder"
+msgstr "Haz otra pregunta"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.notSaved"
+msgstr "No guardado"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.retry"
+msgstr "Reintentar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+msgid "messageTextActions.explain.send"
+msgstr "Enviar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/MessageExplainCard.tsx
+#: src/components/ui/MessageList/MessageTextActionsToolbar.tsx
+msgid "messageTextActions.explain.title"
+msgstr "Explicar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageTextActionsToolbar.tsx
+msgid "messageTextActions.explain.tooLong"
+msgstr "Marca un pasaje más corto para que se explique"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageTextActionsToolbar.tsx
+msgid "messageTextActions.quote"
+msgstr "Citar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/MessageList/MessageTextActionsToolbar.tsx
+msgid "messageTextActions.toolbarLabel"
+msgstr "Acciones para el texto marcado"
+
+#. js-lingui-explicit-id
 #: src/App.tsx
 msgid "navigation.goHome"
 msgstr "Ir al inicio"

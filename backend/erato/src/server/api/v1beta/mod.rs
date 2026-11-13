@@ -14,6 +14,7 @@ pub mod mcp_servers;
 pub mod me_profile_middleware;
 pub mod message_streaming;
 mod message_streaming_file_extraction;
+pub mod message_text_actions;
 pub mod ms_office;
 pub mod policy_engine_middleware;
 pub mod read_aloud;
@@ -177,6 +178,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/messages/continuestream", post(continue_message_sse))
         .route("/messages/clienttoolresult", post(client_tool_result))
         .route("/messages/clienttoolpark", post(client_tool_park))
+        .route(
+            "/messages/{message_id}/explain",
+            post(message_text_actions::explain_message_text),
+        )
         .route("/client-operations", get(list_client_operations))
         .route("/client-operations/stream", get(executor_stream))
         .route(
@@ -532,6 +537,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::token_usage_estimate,
         prompt_optimizer,
         read_aloud::read_message_aloud,
+        message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
         available_models,
         mcp_servers::list_mcp_servers,
@@ -707,6 +713,13 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::TokenUsageResponse,
         PromptOptimizerRequest,
         PromptOptimizerResponse,
+        message_text_actions::MessageExplainRequest,
+        message_text_actions::MessageExplainTurn,
+        message_text_actions::MessageExplainTurnRole,
+        message_text_actions::MessageExplainStreamingResponseMessage,
+        message_text_actions::MessageExplainTextDelta,
+        message_text_actions::MessageExplainCompleted,
+        message_text_actions::MessageExplainFailed,
         budget::BudgetStatusResponse,
         crate::config::DesktopSidecarOrganizationConfigurationResponse,
         desktop_sidecar::DesktopSidecarDistributionResponse,

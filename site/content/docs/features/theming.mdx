@@ -194,7 +194,7 @@ The `theme.json` file defines the color scheme for both light and dark modes:
 The typed theme contract is grouped semantically so starter themes can express shell styling without immediately falling back to `theme.css` or custom components.
 
 - `colors.shell` covers app, page, sidebar, chat shell, modal, and dropdown surfaces
-- `colors.message` covers user and assistant message surfaces plus shared hover and controls surfaces
+- `colors.message` covers user and assistant message surfaces plus shared hover and controls surfaces, and `colors.message.highlight` (`--theme-highlight-mark`), the mark kept on a passage while its Explain card is open
 - `colors.overlay` covers backdrops such as the modal overlay
 - `radius` covers base, shell, input, control, message, modal, dropdown, card, and pill radii
 - `spacing` covers shell, message, controls, sidebar density, chat input, and dropdown spacing
@@ -244,6 +244,8 @@ For shell-level overrides in `theme.css`, prefer the app-owned `data-ui` and `da
 - `data-ui="message-body"`
 - `data-ui="message-attachments"`
 - `data-ui="message-controls"`
+- `data-ui="message-content"` (the root of a message's text, which is also what the toolbar on marked text recognises as message text)
+- `data-ui="message-text-actions"` (the toolbar on marked text, a popover panel) and `data-ui="message-explain"` (the Explain card inside a message, a `card` under its own name; each turn in it is `message-explain-turn` and a follow-up question `message-explain-question`)
 - `data-ui="modal-overlay"`
 - `data-ui="modal-shell"`
 - `data-ui="dropdown-panel"` (the panel `DropdownMenu` draws — an instance name rather than a family hook: a caller renames it through the `dataUi` prop, as the model selector does with `model-selector-menu`)

@@ -28,6 +28,7 @@ import { FileTypeUtil } from "@/utils/fileTypes";
 
 import { MessageListHeader } from "./MessageListHeader";
 import { useMessageClassNameHelper } from "./MessageListUtils";
+import { MessageTextActionsToolbar } from "./MessageTextActionsToolbar";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
@@ -1139,6 +1140,11 @@ export const MessageList = memo<MessageListProps>(
             newMessageCount={newMessageCount}
           />
         )}
+        <MessageTextActionsToolbar
+          containerRef={containerRef}
+          messages={messages}
+          messageOrder={messageOrder}
+        />
       </div>
     );
   },

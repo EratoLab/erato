@@ -212,6 +212,12 @@ interface MessageActionsFeatureConfig {
   readAloudEnabled: boolean;
 }
 
+/** Actions offered on text the user marks in a chat message. */
+export interface MessageTextActionsFeatureConfig {
+  quoteEnabled: boolean;
+  explainEnabled: boolean;
+}
+
 /** Configuration for the sidebar feature. */
 interface SidebarFeatureConfig {
   /** Whether filtering and grouping are available in chat history */
@@ -286,6 +292,7 @@ export interface FeatureConfig {
   messageFeedback: MessageFeedbackFeatureConfig;
   /** Presentation controls; these do not change API permissions */
   messageActions: MessageActionsFeatureConfig;
+  messageTextActions: MessageTextActionsFeatureConfig;
   /** Error report display flags */
   errorReport: ErrorReportFeatureConfig;
   /** Sidebar feature flags */
@@ -370,6 +377,10 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
     editingEnabled: true,
     regenerationEnabled: true,
     readAloudEnabled: false,
+  },
+  messageTextActions: {
+    quoteEnabled: false,
+    explainEnabled: false,
   },
   messageFeedback: {
     enabled: false,
@@ -516,6 +527,10 @@ function createFeatureConfig(
       regenerationEnabled: environment.messageRegenerationEnabled,
       readAloudEnabled: environment.readAloudEnabled ?? false,
     },
+    messageTextActions: {
+      quoteEnabled: environment.messageTextQuoteEnabled ?? false,
+      explainEnabled: environment.messageTextExplainEnabled ?? false,
+    },
     messageFeedback: {
       enabled: environment.messageFeedbackEnabled,
       commentsEnabled: environment.messageFeedbackCommentsEnabled,
@@ -601,6 +616,10 @@ function mergeFeatureConfig(
     messageActions: {
       ...baseConfig.messageActions,
       ...overrides.messageActions,
+    },
+    messageTextActions: {
+      ...baseConfig.messageTextActions,
+      ...overrides.messageTextActions,
     },
     messageFeedback: {
       ...baseConfig.messageFeedback,
@@ -915,6 +934,11 @@ export function useChatSharingFeature(): ChatSharingFeatureConfig {
 export function useTraceFeature(): TraceFeatureConfig {
   const config = useFeatureConfig();
   return config.trace;
+}
+
+export function useMessageTextActionsFeature(): MessageTextActionsFeatureConfig {
+  const config = useFeatureConfig();
+  return config.messageTextActions;
 }
 
 export function useScheduledFeature(): ScheduledFeatureConfig {

@@ -60,6 +60,8 @@ export type Env = {
   assistantsMaxFiles?: number;
   starterPromptsEnabled: boolean;
   promptOptimizerEnabled: boolean;
+  messageTextQuoteEnabled?: boolean;
+  messageTextExplainEnabled?: boolean;
   chatHistoryCompactionEnabled?: boolean;
   chatHistoryCompactionThresholdPercentage?: number;
   userPreferencesEnabled: boolean;
@@ -150,6 +152,8 @@ declare global {
     ASSISTANTS_MAX_FILES?: number;
     STARTER_PROMPTS_ENABLED?: boolean;
     PROMPT_OPTIMIZER_ENABLED?: boolean;
+    MESSAGE_TEXT_QUOTE_ENABLED?: boolean;
+    MESSAGE_TEXT_EXPLAIN_ENABLED?: boolean;
     CHAT_HISTORY_COMPACTION_ENABLED?: boolean;
     CHAT_HISTORY_COMPACTION_THRESHOLD_PERCENTAGE?: number;
     USER_PREFERENCES_ENABLED?: boolean;
@@ -605,6 +609,14 @@ export const env = (): Env => {
     assistantsMaxFiles,
     starterPromptsEnabled,
     promptOptimizerEnabled,
+    messageTextQuoteEnabled:
+      import.meta.env.VITE_MESSAGE_TEXT_QUOTE_ENABLED === "true"
+        ? true
+        : (window.MESSAGE_TEXT_QUOTE_ENABLED ?? false),
+    messageTextExplainEnabled:
+      import.meta.env.VITE_MESSAGE_TEXT_EXPLAIN_ENABLED === "true"
+        ? true
+        : (window.MESSAGE_TEXT_EXPLAIN_ENABLED ?? false),
     chatHistoryCompactionEnabled:
       import.meta.env.VITE_CHAT_HISTORY_COMPACTION_ENABLED === "true"
         ? true

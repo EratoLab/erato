@@ -17,6 +17,11 @@ export interface PopoverPanelProps extends ComponentPropsWithoutRef<"div"> {
   width?: PopoverWidth;
   /** Inset the panel's own children, for panels that render no PopoverChrome. */
   padded?: boolean;
+  /**
+   * The minimum width a fixed panel takes. Off for a panel that holds a few
+   * controls and has to be as narrow as they are.
+   */
+  widthFloor?: boolean;
   dataUi: string;
 }
 
@@ -35,6 +40,7 @@ export const PopoverPanel = forwardRef<HTMLDivElement, PopoverPanelProps>(
       positioned,
       width = "min",
       padded = false,
+      widthFloor = true,
       dataUi,
       className,
       children,
@@ -59,6 +65,7 @@ export const PopoverPanel = forwardRef<HTMLDivElement, PopoverPanelProps>(
         data-ui={dataUi}
         data-popover-width={width}
         data-popover-position={positioned}
+        data-popover-floor={widthFloor ? undefined : "none"}
       >
         {children}
       </div>

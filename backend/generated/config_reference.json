@@ -4370,6 +4370,60 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "message_text_actions.explain.chat_provider_id": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt.fallback": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt.label": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt.prompt": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt.prompt_name": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.explain.prompt.source": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "message_text_actions.quote_enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "model_permissions.rules.<rule-name>.chat_provider_ids.[]": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

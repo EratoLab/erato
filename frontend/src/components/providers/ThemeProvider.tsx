@@ -298,6 +298,7 @@ const getThemeVariableEntries = (theme: Theme): Array<[string, string]> => {
     ["--theme-message-assistant", theme.colors.message.assistant],
     ["--theme-message-hover", theme.colors.message.hover],
     ["--theme-message-controls", theme.colors.message.controls],
+    ["--theme-highlight-mark", theme.colors.message.highlight],
     ["--theme-messageItem-hover", theme.colors.message.hover],
     ["--theme-code-inline-bg", theme.colors.code.inline.background],
     ["--theme-code-inline-fg", theme.colors.code.inline.foreground],

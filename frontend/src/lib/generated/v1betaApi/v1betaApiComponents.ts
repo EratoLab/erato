@@ -6269,6 +6269,68 @@ export const useMessageSubmitSse = (
   });
 };
 
+export type ExplainMessageTextPathParams = {
+  /**
+   * The message the marked text belongs to
+   */
+  messageId: string;
+};
+
+export type ExplainMessageTextError = Fetcher.ErrorWrapper<undefined>;
+
+export type ExplainMessageTextVariables = {
+  body: Schemas.MessageExplainRequest;
+  pathParams: ExplainMessageTextPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Streams the explanation, or the answer to the last follow-up question in
+ * `turns`. Nothing is stored: no chat, message or title is written.
+ */
+export const fetchExplainMessageText = (
+  variables: ExplainMessageTextVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ExplainMessageTextError,
+    Schemas.MessageExplainRequest,
+    {},
+    {},
+    ExplainMessageTextPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/explain",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Streams the explanation, or the answer to the last follow-up question in
+ * `turns`. Nothing is stored: no chat, message or title is written.
+ */
+export const useExplainMessageText = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ExplainMessageTextError,
+      ExplainMessageTextVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ExplainMessageTextError,
+    ExplainMessageTextVariables
+  >({
+    mutationFn: (variables: ExplainMessageTextVariables) =>
+      fetchExplainMessageText(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ReadMessageAloudPathParams = {
   /**
    * The assistant message to read aloud

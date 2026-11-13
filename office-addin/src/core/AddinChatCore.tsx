@@ -126,6 +126,7 @@ export interface AddinChatController {
   chatInputControlsRef: MutableRefObject<ChatInputControlsHandle | null>;
   chatInputControls: {
     setDraftMessage: (message: string, options?: { focus?: boolean }) => void;
+    appendToDraft: (block: string) => void;
     focusInput: () => void;
     setSelectedFacetIds: (facetIds: string[]) => void;
     toggleFacetId: (facetId: string) => void;
@@ -227,6 +228,8 @@ function useAddinChatController({
     () => ({
       setDraftMessage: (message: string, options?: { focus?: boolean }) =>
         chatInputControlsRef.current?.setDraftMessage(message, options),
+      appendToDraft: (block: string) =>
+        chatInputControlsRef.current?.appendToDraft?.(block),
       focusInput: () => chatInputControlsRef.current?.focusInput(),
       setSelectedFacetIds: (facetIds: string[]) =>
         chatInputControlsRef.current?.setSelectedFacetIds(facetIds),
