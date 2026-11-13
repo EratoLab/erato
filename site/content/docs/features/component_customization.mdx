@@ -348,8 +348,27 @@ interface MessageControlsProps {
 
   // Message metadata
   hasToolCalls?: boolean;
+
+  // Read aloud: what the host knows about the message, for ReadAloudButton
+  readAloud?: MessageReadAloudFacts;
 }
 ```
+
+#### Read aloud in custom controls
+
+The default controls show a read aloud button when `audio_read_aloud` is enabled. Custom controls show it only if they render the host's `ReadAloudButton`. It decides by itself when to appear (feature switch, finished assistant message, no audio mode active) and plays and stops on its own, so pass three props through and nothing else:
+
+```tsx
+import { ReadAloudButton } from "@erato/frontend/shared"; // "@/components/ui/Message/ReadAloudButton" in a fork
+
+<ReadAloudButton
+  messageId={messageId}
+  showOnHover={showOnHover}
+  readAloud={readAloud}
+/>;
+```
+
+`ReadAloudButton` is on the shared surface from minor 27. Play and stop do not go through `onAction`. Themes can target the button with `[data-ui="message-read-aloud"]`; `data-state` is `idle`, `loading`, `playing` or `failed`.
 
 The `onAction` callback handles standard actions. Call it with a `MessageAction` and it returns a `Promise<boolean>` indicating success:
 

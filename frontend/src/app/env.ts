@@ -87,6 +87,7 @@ export type Env = {
   audioDictationMaxRecordingDurationSeconds: number;
   audioConversationalEnabled: boolean;
   speechEnabled?: boolean;
+  readAloudEnabled?: boolean;
   audioConversationalMaxRecordingDurationSeconds: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
@@ -178,6 +179,7 @@ declare global {
     AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_ENABLED?: boolean;
     SPEECH_ENABLED?: boolean;
+    READ_ALOUD_ENABLED?: boolean;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
@@ -634,6 +636,10 @@ export const env = (): Env => {
     audioDictationMaxRecordingDurationSeconds,
     audioConversationalEnabled,
     speechEnabled: window.SPEECH_ENABLED ?? false,
+    readAloudEnabled:
+      import.meta.env.VITE_READ_ALOUD_ENABLED !== undefined
+        ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
+        : (window.READ_ALOUD_ENABLED ?? false),
     audioConversationalMaxRecordingDurationSeconds,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",

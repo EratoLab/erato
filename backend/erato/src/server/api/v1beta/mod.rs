@@ -16,6 +16,7 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod ms_office;
 pub mod policy_engine_middleware;
+pub mod read_aloud;
 pub mod scheduled_items;
 pub mod share_grants;
 pub mod share_links;
@@ -243,6 +244,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             post(delegated_run_retry::retry_delegated_run),
         )
         .route("/chats/archive_all", post(archive_all_chats_endpoint))
+        .route(
+            "/messages/{message_id}/speech",
+            post(read_aloud::read_message_aloud),
+        )
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route(
@@ -526,6 +531,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         unarchive_chat_endpoint,
         token_usage::token_usage_estimate,
         prompt_optimizer,
+        read_aloud::read_message_aloud,
         chat_history_compaction::compact_chat,
         available_models,
         mcp_servers::list_mcp_servers,
@@ -582,6 +588,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         Message,
         chat_history_compaction::CompactChatRequest,
         chat_history_compaction::CompactChatResponse,
+        read_aloud::ReadAloudStreamEvent,
         Chat,
         RecentChat,
         FacetInfo,

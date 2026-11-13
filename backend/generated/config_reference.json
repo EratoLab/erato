@@ -527,6 +527,18 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_read_aloud.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_read_aloud.speech_provider": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_transcription.chat_provider_id": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

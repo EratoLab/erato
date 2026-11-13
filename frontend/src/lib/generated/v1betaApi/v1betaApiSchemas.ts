@@ -3413,6 +3413,31 @@ export type ReactToTaskResultRequest = {
   task_result_message_id: string;
 };
 
+/**
+ * One event of a read aloud stream. The stream ends after `done` or `error`.
+ */
+export type ReadAloudStreamEvent =
+  | {
+      audio: string;
+      message_type: "audio_delta";
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      sample_rate: number;
+      /**
+       * @format int64
+       * @minimum 0
+       */
+      sequence: number;
+    }
+  | {
+      message_type: "done";
+    }
+  | {
+      message_type: "error";
+    };
+
 export type RecentChat = {
   /**
    * Start time of the chat's generation, present only while it is running

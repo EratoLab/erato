@@ -208,6 +208,8 @@ interface ErrorReportFeatureConfig {
 interface MessageActionsFeatureConfig {
   editingEnabled: boolean;
   regenerationEnabled: boolean;
+  /** Whether finished assistant messages offer a read aloud button. */
+  readAloudEnabled: boolean;
 }
 
 /** Configuration for the sidebar feature. */
@@ -367,6 +369,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   messageActions: {
     editingEnabled: true,
     regenerationEnabled: true,
+    readAloudEnabled: false,
   },
   messageFeedback: {
     enabled: false,
@@ -511,6 +514,7 @@ function createFeatureConfig(
     messageActions: {
       editingEnabled: environment.messageEditingEnabled,
       regenerationEnabled: environment.messageRegenerationEnabled,
+      readAloudEnabled: environment.readAloudEnabled ?? false,
     },
     messageFeedback: {
       enabled: environment.messageFeedbackEnabled,

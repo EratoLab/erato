@@ -1,5 +1,11 @@
 import { create } from "zustand";
 
+import {
+  createPcmQueue,
+  playbackContext,
+  resumePlaybackContext,
+} from "./pcmPlayback";
+
 const SPEECH_ENABLED_STORAGE_KEY = "erato.audioConversational.audioBackEnabled";
 
 function readSpeechEnabledPreference(): boolean {
@@ -24,9 +30,9 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   blocked: false,
   failed: false,
 }));
-let context: AudioContext | undefined;
-let nextTime = 0;
-const sources = new Set<AudioBufferSourceNode>();
+const queue = createPcmQueue(() =>
+  useSpeechPlayback.setState({ playing: false }),
+);
 const sequences = new Map<string, number>();
 let activeMessage: string | undefined;
 let accepting = false;
@@ -44,8 +50,7 @@ export async function enableSpeechPlayback(enabled: boolean) {
     return;
   }
   try {
-    context ??= new AudioContext();
-    await context.resume();
+    const context = await resumePlaybackContext();
     useSpeechPlayback.setState({ blocked: context.state !== "running" });
   } catch {
     useSpeechPlayback.setState({ blocked: true });
@@ -54,9 +59,7 @@ export async function enableSpeechPlayback(enabled: boolean) {
 export function stopSpeechPlayback(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
   accepting = false;
-  for (const source of sources) source.stop();
-  sources.clear();
-  nextTime = 0;
+  queue.stop();
   useSpeechPlayback.setState({ playing: false });
 }
 export function beginSpeechResponse(streamKey?: string) {
@@ -99,37 +102,14 @@ export function playSpeechChunk(
     if (oldest !== undefined) sequences.delete(oldest);
   }
   activeMessage = messageId;
+  const context = playbackContext();
   if (context?.state !== "running") {
     useSpeechPlayback.setState({ blocked: true });
     return; // The completed response remains available for explicit replay.
   }
-  const raw = globalThis.atob(audio);
-  const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
-  if (
-    !bytes.length ||
-    bytes.length % 2 !== 0 ||
-    sampleRate < 8000 ||
-    sampleRate > 192000
-  ) {
+  if (!queue.enqueue(context, audio, sampleRate)) {
     speechFailed();
     return;
   }
-  const view = new DataView(bytes.buffer);
-  const buffer = context.createBuffer(1, bytes.length / 2, sampleRate);
-  const samples = buffer.getChannelData(0);
-  for (let i = 0; i < samples.length; i++)
-    samples[i] = view.getInt16(i * 2, true) / 32768;
-  const source = context.createBufferSource();
-  source.buffer = buffer;
-  source.connect(context.destination);
-  const start = Math.max(context.currentTime + 0.03, nextTime);
-  nextTime = start + buffer.duration;
-  sources.add(source);
   useSpeechPlayback.setState({ playing: true });
-  source.onended = () => {
-    sources.delete(source);
-    source.disconnect();
-    if (!sources.size) useSpeechPlayback.setState({ playing: false });
-  };
-  source.start(start);
 }

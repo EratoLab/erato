@@ -4584,6 +4584,21 @@ msgid "message.edit.aria"
 msgstr "Edytuj wiadomość"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.aria"
+msgstr "Czytaj na głos"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.failed"
+msgstr "Nie udało się przeczytać tej wiadomości na głos. Spróbuj ponownie"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.stop.aria"
+msgstr "Zatrzymaj czytanie"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.regenerate.aria"
 msgstr "Wygeneruj odpowiedź ponownie"

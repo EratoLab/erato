@@ -89,6 +89,7 @@ const componentKit: ComponentKitRegistration = {
       extensionPoint: "MessageControls",
       component: ExampleMessageControls,
       priority: 50,
+      builtAgainstSharedSurfaceMinor: 27,
     },
     {
       extensionPoint: "ChatMessageRenderer",

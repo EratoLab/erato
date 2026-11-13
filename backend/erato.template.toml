@@ -445,6 +445,13 @@ chat_provider_ids = ["test-token-limit"]
 # min_output_tokens = 32
 # max_output_tokens = 2048
 
+# Read aloud button on finished assistant messages
+# One click speaks the answer with the configured voice; nothing is stored.
+# Independent of the audio modes above: works with audio_conversational disabled.
+# [audio_read_aloud]
+# enabled = false
+# speech_provider = "assistant_voice" # ID from speech_providers.provider; required when enabled
+
 # Assistants feature configuration
 # [assistants]
 # # Whether to enable the assistants feature in the frontend (default: false)
@@ -1078,7 +1085,8 @@ bounded_text_preview = true
 # Provider credentials remain on the backend. The sidecar decides what it trusts.
 
 # Speech output is independent of the chat/transcription provider.
-# Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI.
+# Select this ID with audio_conversational.speech_provider, then enable Audio-back in the UI,
+# and/or with audio_read_aloud.speech_provider for the read aloud button.
 # [speech_providers.provider.assistant_voice]
 # provider_kind = "openai" # openai, openai_realtime, audio_cpp, gemini, gemini_live
 # model_name = "gpt-4o-mini-tts"

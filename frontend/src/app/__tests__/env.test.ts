@@ -23,6 +23,27 @@ describe("env keepToolsDropdownOpen", () => {
   );
 });
 
+describe("env readAloudEnabled", () => {
+  afterEach(() => {
+    delete window.READ_ALOUD_ENABLED;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to off", () => {
+    expect(env().readAloudEnabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.READ_ALOUD_ENABLED = value;
+      expect(env().readAloudEnabled).toBe(value);
+      vi.stubEnv("VITE_READ_ALOUD_ENABLED", String(!value));
+      expect(env().readAloudEnabled).toBe(!value);
+    },
+  );
+});
+
 describe("env faviconPath", () => {
   afterEach(() => {
     delete window.FAVICON_PATH;

@@ -78,6 +78,8 @@ export {
 export type { HostArtifact, OutlookArtifact } from "@/types/chat";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
 export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageControls";
+export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
+export type { ReadAloudButtonProps } from "@/components/ui/Message/ReadAloudButton";
 export {
   DefaultEratoEmailCodeBlock,
   EratoEmailSuggestion,
@@ -739,6 +741,7 @@ export type {
   MessageAction,
   MessageControlsComponent,
   MessageControlsContext,
+  MessageReadAloudFacts,
 } from "@/types/message-controls";
 export type { ChatInputControlsHandle } from "@/components/ui/Chat/ChatInputControlsContext";
 export type { SendMessagePreparation } from "@/hooks/chat/sendMessagePreparation";

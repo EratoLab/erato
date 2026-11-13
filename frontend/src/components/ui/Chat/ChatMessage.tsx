@@ -257,6 +257,19 @@ export const useChatMessageRenderer = ({
       showFeedbackComments: messageFeedbackConfig.commentsEnabled,
       initialFeedback: message.feedback,
       onViewFeedback,
+      readAloud:
+        isUser || controlsContext.isSharedDialog
+          ? undefined
+          : {
+              isFinished: !message.loading || message.loading.state === "done",
+              hasText: message.content.some(
+                (part) =>
+                  part.content_type === "text" && part.text.trim() !== "",
+              ),
+              hasSpokenAudio: message.content.some(
+                (part) => part.content_type === "audio_file_pointer",
+              ),
+            },
     },
     lightbox,
     sentWith: sentWithChipsFor(message),
