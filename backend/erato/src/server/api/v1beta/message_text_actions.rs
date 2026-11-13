@@ -204,8 +204,7 @@ fn build_chat_request(
         (status = OK, content_type = "text/event-stream", body = MessageExplainStreamingResponseMessage),
         (status = BAD_REQUEST, description = "Invalid message ID, or the marked text or the turns exceed the limits"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
-        (status = FORBIDDEN, description = "When the user may not read the chat of the message"),
-        (status = NOT_FOUND, description = "When the Explain action is not enabled, or the message does not exist"),
+        (status = NOT_FOUND, description = "When the Explain action is not enabled, or the message does not exist or is not readable by the user"),
         (status = INTERNAL_SERVER_ERROR, description = "Server error")
     ),
     security(
@@ -236,13 +235,13 @@ pub async fn explain_message_text(
         &message_id,
     )
     .await
+    // A message the user may not read answers like one that does not exist,
+    // so the response never confirms a message id.
     .map_err(|error| {
-        if error.to_string().to_lowercase().contains("not found") {
-            StatusCode::NOT_FOUND
-        } else {
+        if !error.to_string().to_lowercase().contains("not found") {
             tracing::warn!("Explain was refused for message {message_id}: {error}");
-            StatusCode::FORBIDDEN
         }
+        StatusCode::NOT_FOUND
     })?;
     let source = MessageSchema::validate(&message.raw_message).map_err(|error| {
         tracing::error!("Explain could not read message {message_id}: {error}");

@@ -173,18 +173,24 @@ async fn explain_needs_read_access_to_the_chat(pool: Pool<Postgres>) {
         .build();
     let calls_before = recorder.bodies().len();
 
-    server
+    // No read access answers exactly like an unknown message.
+    let no_access = server
         .post(&explain_path(&message_id))
         .with_bearer_token(&other_user_token)
         .json(&json!({"selected_text": "committed-use discount"}))
-        .await
-        .assert_status(StatusCode::FORBIDDEN);
-    server
+        .await;
+    let unknown = server
         .post(&explain_path("7f1c5a50-0a5e-4d0c-9a53-0d6b3d1f6f11"))
-        .with_bearer_token(TEST_JWT_TOKEN)
+        .with_bearer_token(&other_user_token)
         .json(&json!({"selected_text": "committed-use discount"}))
-        .await
-        .assert_status(StatusCode::NOT_FOUND);
+        .await;
+    no_access.assert_status(StatusCode::NOT_FOUND);
+    unknown.assert_status(StatusCode::NOT_FOUND);
+    assert_eq!(no_access.as_bytes(), unknown.as_bytes());
+    assert_eq!(
+        no_access.maybe_header("content-type"),
+        unknown.maybe_header("content-type")
+    );
     server
         .post(&explain_path(&message_id))
         .json(&json!({"selected_text": "committed-use discount"}))

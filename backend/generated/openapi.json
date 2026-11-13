@@ -3561,11 +3561,8 @@
           "401": {
             "description": "When no valid JWT token is provided"
           },
-          "403": {
-            "description": "When the user may not read the chat of the message"
-          },
           "404": {
-            "description": "When the Explain action is not enabled, or the message does not exist"
+            "description": "When the Explain action is not enabled, or the message does not exist or is not readable by the user"
           },
           "500": {
             "description": "Server error"
