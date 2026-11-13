@@ -1245,6 +1245,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "zip",
+            "in": "query",
+            "description": "Wrap the personalized artifact in a ZIP archive.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {

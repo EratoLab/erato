@@ -4,15 +4,17 @@ import {
   AppleMac,
   ArrowLeft,
   Computer,
+  NavArrowDown,
   Download,
   Linux,
-  Package,
   Windows,
 } from "iconoir-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Card } from "@/components/ui/Container/Card";
+import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
+import { FileIcon, PackageIcon } from "@/components/ui/icons";
 import {
   detectDesktopSidecarArchitecture,
   detectDesktopSidecarClientPlatform,
@@ -103,6 +105,11 @@ function artifactKindLabel(kind: string): string {
         id: "desktopSidecar.setup.artifact.intunewin",
         message: "Microsoft Intune package",
       });
+    case "disk_image":
+      return t({
+        id: "desktopSidecar.setup.artifact.diskImage",
+        message: "Disk image",
+      });
     case "installer":
       return t({
         id: "desktopSidecar.setup.artifact.installer",
@@ -128,30 +135,59 @@ function artifactKindLabel(kind: string): string {
   }
 }
 
-function formatFileSize(size: number): string {
-  if (size < 1024) {
+function artifactIcon(file: DistributionFile, os: string) {
+  const props = { width: 38, height: 38, "aria-hidden": true };
+  const filename = file.download_filename.toLowerCase();
+
+  if (file.kind === "intunewin" || filename.endsWith(".intunewin")) {
+    return <img src="/public/common/microsoft-intune.svg" alt="" {...props} />;
+  }
+  if (filename.endsWith(".exe")) {
+    return <FileIcon label=".exe" {...props} />;
+  }
+  const packageExtension = [".msi", ".dmg", ".pkg"].find((extension) =>
+    filename.endsWith(extension),
+  );
+  if (packageExtension) {
+    return <PackageIcon label={packageExtension} {...props} />;
+  }
+  if (os === "macos" && file.kind === "application_archive") {
+    return <PackageIcon label=".app" {...props} />;
+  }
+  if (filename.endsWith(".tar.gz")) {
+    return <PackageIcon label=".tar.gz" {...props} />;
+  }
+  if (file.kind === "executable") {
+    return <FileIcon {...props} />;
+  }
+  return <PackageIcon {...props} />;
+}
+
+function formatFileSize(sizeInBytes: number): string {
+  if (sizeInBytes < 1024) {
+    const size = sizeInBytes;
     return t({
       id: "desktopSidecar.setup.fileSize.bytes",
-      message: "{size} B",
-      values: { size },
+      message: `${size} B`,
     });
   }
-  if (size < 1024 * 1024) {
+  if (sizeInBytes < 1024 * 1024) {
+    const size = (sizeInBytes / 1024).toFixed(1);
     return t({
       id: "desktopSidecar.setup.fileSize.kilobytes",
-      message: "{size} KB",
-      values: { size: (size / 1024).toFixed(1) },
+      message: `${size} KB`,
     });
   }
+  const size = (sizeInBytes / (1024 * 1024)).toFixed(1);
   return t({
     id: "desktopSidecar.setup.fileSize.megabytes",
-    message: "{size} MB",
-    values: { size: (size / (1024 * 1024)).toFixed(1) },
+    message: `${size} MB`,
   });
 }
 
-function downloadUrl(targetId: string, fileId: string): string {
+function downloadUrl(targetId: string, fileId: string, zip = false): string {
   const query = new URLSearchParams({ target: targetId, file: fileId });
+  if (zip) query.set("zip", "true");
   // API route, not user-facing copy.
   // eslint-disable-next-line lingui/no-unlocalized-strings
   return `/api/v1beta/desktop-sidecar/distribution/download?${query.toString()}`;
@@ -439,6 +475,7 @@ function ArtifactCard({
   target: DistributionTarget;
 }) {
   const isDefault = target.default_file === file.id;
+  const showZipOption = target.platform.os !== "macos";
 
   return (
     <Card
@@ -451,20 +488,50 @@ function ArtifactCard({
           <span className="text-sm text-theme-fg-muted">
             {formatFileSize(file.size)}
           </span>
-          <a
-            href={downloadUrl(target.id, file.id)}
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus"
-          >
-            <Download width={18} height={18} aria-hidden />
-            <Trans id="desktopSidecar.setup.download.button">Download</Trans>
-          </a>
+          <div className="inline-flex items-stretch">
+            <a
+              href={downloadUrl(target.id, file.id)}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 ${showZipOption ? "rounded-l-lg" : "rounded-lg"} bg-theme-action-primary-bg px-4 text-sm font-semibold text-theme-action-primary-fg transition-colors hover:bg-theme-action-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-border-focus`}
+            >
+              <Download width={18} height={18} aria-hidden />
+              <Trans id="desktopSidecar.setup.download.button">Download</Trans>
+            </a>
+            {showZipOption && (
+              <DropdownMenu
+                triggerIcon={
+                  <NavArrowDown width={18} height={18} aria-hidden />
+                }
+                triggerButtonVariant="primary"
+                triggerButtonGeometry="icon"
+                triggerButtonClassName="h-full min-h-10 rounded-l-none rounded-r-lg border-l border-theme-border-primary"
+                triggerAriaLabel={t({
+                  id: "desktopSidecar.setup.download.options",
+                  message: "Download options",
+                })}
+                items={[
+                  {
+                    label: t({
+                      id: "desktopSidecar.setup.download.zip",
+                      message: "Download as .zip",
+                    }),
+                    icon: <Download width={16} height={16} aria-hidden />,
+                    onClick: () =>
+                      window.location.assign(
+                        downloadUrl(target.id, file.id, true),
+                      ),
+                    closesImmediately: true,
+                  },
+                ]}
+              />
+            )}
+          </div>
         </div>
       }
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="rounded-xl bg-theme-bg-accent p-2.5 text-theme-fg-accent">
-            <Package width={22} height={22} aria-hidden />
+          <div className="shrink-0 rounded-xl bg-theme-bg-accent p-0.5">
+            {artifactIcon(file, target.platform.os)}
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-theme-fg-primary">
@@ -483,6 +550,17 @@ function ArtifactCard({
           </span>
         ) : null}
       </div>
+      {target.platform.os === "macos" &&
+        file.kind !== "application_archive" && (
+          <p className="mt-4 text-sm text-theme-fg-muted">
+            <Trans id="desktopSidecar.setup.artifact.macosDeployment">
+              Deployment package without organization settings. Quit the app
+              before replacing it. Your administrator must provision
+              organization settings after installation and each upgrade. Use the
+              recommended application archive for a configured download.
+            </Trans>
+          </p>
+        )}
     </Card>
   );
 }

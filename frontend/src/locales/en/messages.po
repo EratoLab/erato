@@ -3962,6 +3962,11 @@ msgstr "Archive"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.diskImage"
+msgstr "Disk image"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.executable"
 msgstr "Standalone executable"
 
@@ -3974,6 +3979,11 @@ msgstr "Installer"
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.intunewin"
 msgstr "Microsoft Intune package"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.macosDeployment"
+msgstr "Deployment package without organization settings. Quit the app before replacing it. Your administrator must provision organization settings after installation and each upgrade. Use the recommended application archive for a configured download."
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
@@ -4004,6 +4014,16 @@ msgstr "Download"
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.download.heading"
 msgstr "3. Download"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.options"
+msgstr "Download options"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.zip"
+msgstr "Download as .zip"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx

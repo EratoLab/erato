@@ -3962,6 +3962,11 @@ msgstr "Archive"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.diskImage"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.executable"
 msgstr "Exécutable autonome"
 
@@ -3974,6 +3979,11 @@ msgstr "Programme d’installation"
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.artifact.intunewin"
 msgstr "Paquet Microsoft Intune"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.artifact.macosDeployment"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx
@@ -4004,6 +4014,16 @@ msgstr "Télécharger"
 #: src/pages/DesktopSidecarSetupPage.tsx
 msgid "desktopSidecar.setup.download.heading"
 msgstr "3. Télécharger"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.options"
+msgstr "Options de téléchargement"
+
+#. js-lingui-explicit-id
+#: src/pages/DesktopSidecarSetupPage.tsx
+msgid "desktopSidecar.setup.download.zip"
+msgstr "Télécharger au format .zip"
 
 #. js-lingui-explicit-id
 #: src/pages/DesktopSidecarSetupPage.tsx

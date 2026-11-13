@@ -1,6 +1,12 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,6 +82,27 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     vi.restoreAllMocks();
   });
 
+  it.each([
+    [0, "0 B"],
+    [512, "512 B"],
+    [1024, "1.0 KB"],
+    [1536, "1.5 KB"],
+    [1024 * 1024, "1.0 MB"],
+    [25.5 * 1024 * 1024, "25.5 MB"],
+  ])("shows the download size for %i bytes as %s", (size, expectedSize) => {
+    const target = macTarget("aarch64");
+    target.files[0].size = size;
+    vi.mocked(useDistribution).mockReturnValue({
+      data: { targets: [target] },
+      error: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDistribution>);
+
+    renderOnMac();
+
+    expect(screen.getByText(expectedSize)).toBeInTheDocument();
+  });
+
   it("offers Apple Silicon first and explains how to check when the chip is unknown", async () => {
     renderOnMac();
 
@@ -112,7 +139,66 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("offers the derived Intune package with its own download URL", () => {
+  it("offers DMG and PKG deployment downloads while keeping ZIP recommended", () => {
+    const target = macTarget("aarch64");
+    target.files.push(
+      {
+        id: "disk_image",
+        kind: "disk_image",
+        size: 2048,
+        download_filename: "erato-desktop-sidecar-macos-aarch64.dmg",
+      },
+      {
+        id: "installer",
+        kind: "installer",
+        size: 4096,
+        download_filename: "erato-desktop-sidecar-macos-aarch64.pkg",
+      },
+    );
+    vi.mocked(useDistribution).mockReturnValue({
+      data: { targets: [target] },
+      error: null,
+      isLoading: false,
+    } as unknown as ReturnType<typeof useDistribution>);
+    renderOnMac();
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(3);
+    expect(within(cards[0]).getByText("Recommended")).toBeInTheDocument();
+    for (const [index, id, label] of [
+      [1, "disk_image", "Disk image"],
+      [2, "installer", "Installer"],
+    ] as const) {
+      expect(within(cards[index]).getByText(label)).toBeInTheDocument();
+      expect(
+        within(cards[index]).getByRole("link", { name: "Download" }),
+      ).toHaveAttribute(
+        "href",
+        `/api/v1beta/desktop-sidecar/distribution/download?target=macos-aarch64&file=${id}`,
+      );
+      expect(
+        within(cards[index]).getByText(/without organization settings/),
+      ).toBeInTheDocument();
+      expect(
+        within(cards[index]).queryByText("Recommended"),
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("keeps macOS ZIP downloads as a single direct download", () => {
+    renderOnMac();
+    const directDownload = screen.getByRole("link", { name: "Download" });
+    expect(directDownload).toHaveAttribute(
+      "href",
+      "/api/v1beta/desktop-sidecar/distribution/download?target=macos-aarch64&file=application",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Download options" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Download as .zip")).not.toBeInTheDocument();
+    expect(directDownload).toHaveClass("rounded-lg");
+  });
+
+  it("offers the derived Intune package with direct and ZIP downloads", async () => {
     vi.mocked(useDistribution).mockReturnValue({
       data: {
         targets: [
@@ -148,6 +234,18 @@ describe("DesktopSidecarSetupPage on a Mac", () => {
     expect(within(card).getByRole("link")).toHaveAttribute(
       "href",
       "/api/v1beta/desktop-sidecar/distribution/download?target=windows-x86_64&file=installer.intunewin",
+    );
+    const options = within(card).getByRole("button", {
+      name: "Download options",
+    });
+    expect(options).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(options);
+    expect(
+      await screen.findByRole("menuitem", { name: "Download as .zip" }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() =>
+      expect(options).toHaveAttribute("aria-expanded", "false"),
     );
   });
 });

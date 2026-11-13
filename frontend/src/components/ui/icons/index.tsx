@@ -509,3 +509,5 @@ export {
 export type { IconProps };
 
 export { ResolvedIcon } from "./ResolvedIcon";
+export { FileIcon, PackageIcon } from "./LabeledFileIcons";
+export type { LabeledFileIconProps } from "./LabeledFileIcons";

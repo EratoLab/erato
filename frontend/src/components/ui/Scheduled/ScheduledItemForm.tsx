@@ -248,7 +248,12 @@ export function ScheduledItemForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     setShowErrors(true);
-    const found = validateScheduledForm(values, new Date(), timeZone, loaded);
+    const found = validateScheduledForm(
+      values,
+      now ?? new Date(),
+      timeZone,
+      loaded,
+    );
     if (Object.keys(found).length > 0) return;
     onSubmit(values);
   };

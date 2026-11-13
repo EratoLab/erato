@@ -20,7 +20,7 @@ use axum::response::Response;
 use axum::{Extension, Json};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use tokio_util::io::ReaderStream;
 use utoipa::{IntoParams, ToSchema};
@@ -81,6 +81,9 @@ pub struct DesktopSidecarDistributionDownloadQuery {
     /// Manifest file identifier. The target's default is used when omitted.
     #[param(nullable = false)]
     file: Option<String>,
+    /// Wrap the personalized artifact in a ZIP archive.
+    #[param(nullable = false)]
+    zip: Option<bool>,
 }
 
 impl From<&DesktopSidecarDistribution> for DesktopSidecarDistributionResponse {
@@ -263,6 +266,14 @@ async fn build_download_response(
             })?;
             (Body::from(executable), size)
         }
+        BootstrapTransport::MacosPackage => {
+            let bytes = artifact.macos_package().map_err(|error| {
+                tracing::error!(%error, "Failed to read macOS deployment package");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+            let size = bytes.len() as u64;
+            (Body::from(axum::body::Bytes::from_owner(bytes)), size)
+        }
         BootstrapTransport::MacosApplication => {
             let bootstrap = personalization_bootstrap(distribution)?;
             let artifact = artifact.clone();
@@ -309,7 +320,47 @@ async fn build_download_response(
         }
     };
 
-    let content_type = HeaderValue::from_str(&artifact.media_type).map_err(|error| {
+    // Package the final payload so ZIP downloads retain all personalization.
+    let (body, size, filename, media_type) = if query.zip.unwrap_or(false) {
+        let bytes = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "Failed to read sidecar ZIP payload");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        let filename = artifact.download_filename.clone();
+        let archive = tokio::task::spawn_blocking(move || -> eyre::Result<Vec<u8>> {
+            let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            archive.start_file(filename, zip::write::SimpleFileOptions::default())?;
+            archive.write_all(&bytes)?;
+            Ok(archive.finish()?.into_inner())
+        })
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "Desktop sidecar ZIP task failed");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map_err(|error| {
+            tracing::error!(%error, "Failed to ZIP desktop sidecar artifact");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+        let size = archive.len() as u64;
+        (
+            Body::from(archive),
+            size,
+            format!("{}.zip", artifact.download_filename),
+            "application/zip",
+        )
+    } else {
+        (
+            body,
+            size,
+            artifact.download_filename.clone(),
+            artifact.media_type.as_str(),
+        )
+    };
+
+    let content_type = HeaderValue::from_str(media_type).map_err(|error| {
         tracing::error!(%error, "Validated desktop sidecar media type became invalid");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
@@ -319,7 +370,7 @@ async fn build_download_response(
     })?;
     let content_disposition = HeaderValue::from_str(&build_content_disposition(
         ContentDispositionKind::Attachment,
-        Some(&artifact.download_filename),
+        Some(&filename),
     ))
     .map_err(|error| {
         tracing::error!(%error, "Desktop sidecar download filename could not be encoded");
@@ -779,6 +830,7 @@ mod tests {
                 DesktopSidecarDistributionDownloadQuery {
                     target: "windows-x86_64".into(),
                     file: Some("installer.intunewin".into()),
+                    zip: None,
                 },
             )
         });
@@ -892,6 +944,7 @@ mod tests {
             DesktopSidecarDistributionDownloadQuery {
                 target: "windows-x86_64".to_owned(),
                 file: None,
+                zip: None,
             },
         )
         .await
@@ -929,6 +982,40 @@ mod tests {
             expected
         );
 
+        let zipped = build_download_response(
+            Some(&distribution),
+            DesktopSidecarDistributionDownloadQuery {
+                target: "windows-x86_64".into(),
+                file: Some("executable".into()),
+                zip: Some(true),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(zipped.headers()[CONTENT_TYPE], "application/zip");
+        assert_eq!(zipped.headers()[CACHE_CONTROL], "private, no-store");
+        assert!(
+            zipped.headers()[CONTENT_DISPOSITION]
+                .to_str()
+                .unwrap()
+                .contains("erato-desktop-sidecar-windows-x86_64.exe.zip")
+        );
+        let length: usize = zipped.headers()[CONTENT_LENGTH]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let bytes = to_bytes(zipped.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(bytes.len(), length);
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+        assert_eq!(archive.len(), 1);
+        let mut entry = archive
+            .by_name("erato-desktop-sidecar-windows-x86_64.exe")
+            .unwrap();
+        let mut executable = Vec::new();
+        entry.read_to_end(&mut executable).unwrap();
+        assert_eq!(executable, expected);
+
         // Download-time issuance must use a fresh identity for each response.
         let key = rcgen::KeyPair::generate().unwrap();
         let mut params = rcgen::CertificateParams::default();
@@ -952,6 +1039,7 @@ mod tests {
                 DesktopSidecarDistributionDownloadQuery {
                     target: "windows-x86_64".into(),
                     file: None,
+                    zip: None,
                 },
             )
             .await
@@ -998,10 +1086,126 @@ mod tests {
             DesktopSidecarDistributionDownloadQuery {
                 target: "unknown".to_owned(),
                 file: None,
+                zip: None,
             },
         )
         .await;
         assert!(matches!(missing, Err(StatusCode::NOT_FOUND)));
+    }
+
+    #[tokio::test]
+    async fn macos_packages_are_discovered_and_downloaded_without_mutation() {
+        for architecture in ["x86_64", "aarch64"] {
+            let directory = tempfile::tempdir().unwrap();
+            let target = format!("macos-{architecture}");
+            let dmg = [b"image payload".as_slice(), b"koly", &[0; 508]].concat();
+            let pkg = [b"xar!".as_slice(), &[0; 24], b"package payload"].concat();
+            let mut files = Vec::new();
+            for (id, kind, ext, media_type, bytes) in [
+                (
+                    "disk_image",
+                    "disk_image",
+                    "dmg",
+                    "application/x-apple-diskimage",
+                    &dmg,
+                ),
+                (
+                    "installer",
+                    "installer",
+                    "pkg",
+                    "application/octet-stream",
+                    &pkg,
+                ),
+            ] {
+                let name = format!("erato-desktop-sidecar.{ext}");
+                fs::write(directory.path().join(&name), bytes).unwrap();
+                files.push(json!({"id": id, "kind": kind, "path": name,
+                    "download_filename": format!("erato-desktop-sidecar-{target}.{ext}"), "media_type": media_type}));
+            }
+            // Include the existing ZIP and keep it as the default.
+            use zip::write::SimpleFileOptions;
+            let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+            for (name, bytes) in [
+                (
+                    "erato-desktop-sidecar.app/Contents/Info.plist",
+                    b"plist".as_slice(),
+                ),
+                (
+                    "erato-desktop-sidecar.app/Contents/MacOS/erato-desktop-sidecar",
+                    &[0xcf, 0xfa, 0xed, 0xfe, 0x0c, 0, 0, 1],
+                ),
+            ] {
+                zip.start_file(name, SimpleFileOptions::default().unix_permissions(0o755))
+                    .unwrap();
+                zip.write_all(bytes).unwrap();
+            }
+            fs::write(
+                directory.path().join("app.zip"),
+                zip.finish().unwrap().into_inner(),
+            )
+            .unwrap();
+            files.push(
+                json!({"id":"application", "kind":"application_archive", "path":"app.zip",
+                "download_filename":"sidecar.app.zip", "media_type":"application/zip"}),
+            );
+            fs::write(directory.path().join("manifest.json"), serde_json::to_vec(&json!({"targets":[{
+                "id":target, "platform":{"os":"macos", "architecture":architecture, "abi":"darwin"},
+                "default_file":"application", "files":files
+            }]})).unwrap()).unwrap();
+            let distribution = DesktopSidecarDistribution::load(directory.path()).unwrap();
+            let discovery = DesktopSidecarDistributionResponse::from(&distribution);
+            assert_eq!(discovery.targets[0].files.len(), 3);
+            assert_eq!(discovery.targets[0].default_file, "application");
+            assert_eq!(
+                distribution
+                    .artifact(&target, None)
+                    .unwrap()
+                    .bootstrap_transport(),
+                BootstrapTransport::MacosApplication
+            );
+            for (id, ext, media_type, expected) in [
+                ("disk_image", "dmg", "application/x-apple-diskimage", &dmg),
+                ("installer", "pkg", "application/octet-stream", &pkg),
+            ] {
+                let download = || {
+                    build_download_response(
+                        Some(&distribution),
+                        DesktopSidecarDistributionDownloadQuery {
+                            target: target.clone(),
+                            file: Some(id.into()),
+                            zip: None,
+                        },
+                    )
+                };
+                let (first, second) = tokio::join!(download(), download());
+                for response in [first.unwrap(), second.unwrap(), download().await.unwrap()] {
+                    assert_eq!(response.headers()[CONTENT_TYPE], media_type);
+                    assert_eq!(
+                        response.headers()[CONTENT_LENGTH],
+                        expected.len().to_string()
+                    );
+                    assert!(
+                        response.headers()[CONTENT_DISPOSITION]
+                            .to_str()
+                            .unwrap()
+                            .contains(&format!("erato-desktop-sidecar-{target}.{ext}"))
+                    );
+                    assert_eq!(
+                        to_bytes(response.into_body(), 1_000_000)
+                            .await
+                            .unwrap()
+                            .as_ref(),
+                        expected.as_slice()
+                    );
+                }
+            }
+            fs::write(
+                directory.path().join("erato-desktop-sidecar.pkg"),
+                b"invalid",
+            )
+            .unwrap();
+            assert!(DesktopSidecarDistribution::load(directory.path()).is_err());
+        }
     }
 
     #[tokio::test]
@@ -1077,6 +1281,7 @@ mod tests {
                         DesktopSidecarDistributionDownloadQuery {
                             target: target.clone(),
                             file: None,
+                            zip: None,
                         },
                     )
                 };
