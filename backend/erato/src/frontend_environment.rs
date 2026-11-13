@@ -649,6 +649,10 @@ fn build_frontend_environment(
                     .is_some_and(|id| config.resolve_speech_provider_id(id).is_ok()),
         ),
     );
+    env.additional_environment.insert(
+        "READ_ALOUD_ENABLED".to_string(),
+        Value::Bool(config.read_aloud_speech_provider().is_some()),
+    );
     // Always inject max upload size (use configured value or default)
     let max_upload_size = config
         .max_upload_size_bytes()

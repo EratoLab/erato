@@ -126,6 +126,10 @@ export { DefaultMessageControls } from "@/components/ui/Message/DefaultMessageCo
 export { ImageLightbox } from "@/components/ui/Message/ImageLightbox";
 export { MessageContent } from "@/components/ui/Message/MessageContent";
 export { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+// For a kit that replaces the message controls: the host's own controls
+// already render it, an override has to add it to show the button.
+export { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
+export type { ReadAloudButtonProps } from "@/components/ui/Message/ReadAloudButton";
 export { ModalBase } from "@/components/ui/Modal/ModalBase";
 export { ResolvedIcon } from "@/components/ui/icons/ResolvedIcon";
 export {
@@ -444,6 +448,8 @@ export const ERATO_KIT_SURFACE_EXPORTS = [
   "ProgressBarTone",
   "RadioCard",
   "RadioCardProps",
+  "ReadAloudButton",
+  "ReadAloudButtonProps",
   "ResolvedIcon",
   "Row",
   "RowProps",

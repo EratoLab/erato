@@ -31,6 +31,20 @@ export interface MessageControlsContext {
 }
 
 /**
+ * What the host knows about reading one message aloud. Built by
+ * `useChatMessageRenderer`; message controls pass it to `ReadAloudButton`
+ * unchanged.
+ */
+export interface MessageReadAloudFacts {
+  /** The message is no longer being generated. */
+  isFinished: boolean;
+  /** The message has text that can be spoken. */
+  hasText: boolean;
+  /** Conversational mode already stored a spoken reply on the message. */
+  hasSpokenAudio: boolean;
+}
+
+/**
  * Props for message controls component.
  *
  * All feature props are optional - custom implementations use what they need.
@@ -63,6 +77,14 @@ export interface MessageControlsProps {
 
   // Message metadata
   hasToolCalls?: boolean;
+
+  /**
+   * Set on assistant messages the user may have read aloud. Missing on user
+   * messages, in the read-only view of a shared chat, and from a renderer
+   * that does not build these props with `useChatMessageRenderer`; the read
+   * aloud button then stays hidden.
+   */
+  readAloud?: MessageReadAloudFacts;
 }
 
 /**

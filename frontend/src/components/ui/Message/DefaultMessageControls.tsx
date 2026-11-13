@@ -6,6 +6,7 @@ import { memo, useState, useEffect, useCallback } from "react";
 
 import { Button } from "@/components/ui/Controls/Button";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
 import { useMessageActionsFeature } from "@/providers/FeatureConfigProvider";
 import { createLogger } from "@/utils/debugLogger";
 
@@ -40,6 +41,7 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
   initialFeedback,
   hasToolCalls = false,
   onViewFeedback,
+  readAloud,
 }: MessageControlsProps) {
   const { editingEnabled, regenerationEnabled } = useMessageActionsFeature();
   const [isCopied, setIsCopied] = useState(false);
@@ -246,6 +248,12 @@ export const DefaultMessageControls = memo(function DefaultMessageControls({
               className={controlsButtonClassName}
             />
           )}
+
+        <ReadAloudButton
+          messageId={messageId}
+          showOnHover={showOnHover}
+          readAloud={readAloud}
+        />
 
         {!isUser && showFeedbackButtons && (
           <>

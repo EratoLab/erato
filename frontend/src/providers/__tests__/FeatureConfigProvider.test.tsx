@@ -66,6 +66,7 @@ describe("FeatureConfigProvider", () => {
       ...vi.mocked(env)(),
       messageEditingEnabled: false,
       messageRegenerationEnabled: false,
+      readAloudEnabled: true,
       chatHistoryFiltersEnabled: false,
       messageFeedbackEnabled: true,
     });
@@ -75,6 +76,7 @@ describe("FeatureConfigProvider", () => {
     expect(result.current.messageActions).toEqual({
       editingEnabled: false,
       regenerationEnabled: false,
+      readAloudEnabled: true,
     });
     expect(result.current.sidebar.chatHistoryFiltersEnabled).toBe(false);
     expect(result.current.messageFeedback.enabled).toBe(true);
@@ -235,7 +237,11 @@ describe("FeatureConfigProvider", () => {
           sharepointShowDisclaimer: false,
           sharepointFileSearchEnabled: true,
         },
-        messageActions: { editingEnabled: true, regenerationEnabled: true },
+        messageActions: {
+          editingEnabled: true,
+          regenerationEnabled: true,
+          readAloudEnabled: false,
+        },
         messageTextActions: { quoteEnabled: false, explainEnabled: false },
         messageFeedback: {
           enabled: false,

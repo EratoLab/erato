@@ -67,10 +67,19 @@ mod tests {
     use super::{generate_config_reference, validate_config_reference};
 
     #[test]
-    fn only_conversational_audio_exposes_speech_provider() {
+    fn only_conversational_audio_and_read_aloud_expose_speech_provider() {
         let reference = generate_config_reference().unwrap();
         let keys = reference.as_object().unwrap();
         assert!(keys.contains_key("audio_conversational.speech_provider"));
+        assert_eq!(
+            keys.keys()
+                .filter(|key| key.starts_with("audio_read_aloud."))
+                .collect::<Vec<_>>(),
+            [
+                "audio_read_aloud.enabled",
+                "audio_read_aloud.speech_provider"
+            ]
+        );
         assert!(!keys.contains_key("audio_dictation.speech_provider"));
         assert!(!keys.contains_key("audio_transcription.speech_provider"));
         for key in keys

@@ -1,5 +1,6 @@
 import { plural, select, t } from "@lingui/core/macro";
 
+import { movesPlace, tableGoesToSource } from "./cardLayout";
 import { listedValues, namesInLine } from "./gist";
 
 import type {
@@ -95,15 +96,25 @@ const tableKindLabel = (kind: GistKind, count: number, table: string): string =>
     }),
   });
 
+/** A table's record, named after its table in the source line instead. */
+const recordLabel = (count: number): string =>
+  t({
+    id: "toolGist.kind.record",
+    message: plural(count, { one: "record", other: "# records" }),
+  });
+
 /**
  * The kind as a noun; more than one reads as a count, e.g. "3 rows". A
- * `table` the record is one of qualifies the kind: "account row".
+ * `table` the record is one of qualifies the kind, "account page", except a
+ * table's rows, which read as records with the table named in the source
+ * line: a table's key is no word a person reads.
  */
 export const gistKindLabel = (
   kind: GistKind,
   count: number,
   table?: string,
 ): string => {
+  if (tableGoesToSource(kind, count, table)) return recordLabel(count);
   if (table !== undefined && table.length > 0) {
     // A type the call names, such as "Namespace", is the noun itself.
     if (kind === "other" && count === 1) return table;
@@ -700,8 +711,11 @@ export const gistLineSentence = (
  * record it is stays unknown here, and the ID is in the card's details.
  */
 export const gistUnreadRecordLine = (gist: Gist): string => {
-  const kind = gist.kind;
-  const noun = gistKindLabel(kind, 1, gist.change?.table);
+  const table = gist.change?.table;
+  // A language that inflects for the noun reads "record" apart from the kind.
+
+  const kind = tableGoesToSource(gist.kind, 1, table) ? "record" : gist.kind;
+  const noun = gistKindLabel(gist.kind, 1, table);
   const details = t({
     id: "toolCall.technicalDetails",
     message: "Technical details",
@@ -713,6 +727,21 @@ export const gistUnreadRecordLine = (gist: Gist): string => {
     }),
   });
 };
+
+/**
+ * After the places a source line lists, how many values they are read from,
+ * where the unlisted ones cannot be counted as places.
+ */
+export const sourceValuesLabel = (count: number, rows: boolean): string =>
+  rows
+    ? t({
+        id: "toolGist.source.rows",
+        message: plural(count, { one: "# row", other: "# rows" }),
+      })
+    : t({
+        id: "toolGist.source.values",
+        message: plural(count, { one: "# value", other: "# values" }),
+      });
 
 /**
  * Whether the card's lines call what the call acts on only an "item": no
@@ -750,7 +779,8 @@ export const gistAskLineSlots: GistLineSlots = (gist, item) => {
   const sentence = gistLineSentence(gist, item, "ask");
   return {
     title: sentence.includes(GIST_TITLE_SLOT),
-    where: sentence.includes(GIST_WHERE_SLOT),
+    // A place the source line names is shown there.
+    where: movesPlace(gist, item) || sentence.includes(GIST_WHERE_SLOT),
   };
 };
 

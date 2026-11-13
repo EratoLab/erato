@@ -198,7 +198,7 @@ test("denies a parked child, which finishes in prose, and the origin turn comple
     timeout: PARK_TIMEOUT_MS,
   });
 
-  await item.getByRole("button", { name: "Deny once", exact: true }).click();
+  await item.getByRole("button", { name: "Deny", exact: true }).click();
 
   // Answered, so gone: the card renders only while the stop is open.
   await expect(approval).toHaveCount(0, { timeout: RESUME_TIMEOUT_MS });

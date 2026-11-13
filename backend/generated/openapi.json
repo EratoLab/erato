@@ -3575,6 +3575,57 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/speech": {
+      "post": {
+        "tags": [
+          "read_aloud"
+        ],
+        "summary": "Read one finished assistant message aloud.",
+        "description": "Streams the audio while it is synthesised. Nothing is stored and the message is not changed;\nclosing the stream stops the speech provider request.",
+        "operationId": "read_message_aloud",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message to read aloud",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an assistant message, or it has no text to read"
+          },
+          "404": {
+            "description": "Read aloud is disabled, or the message does not exist or is not readable by the user"
+          },
+          "409": {
+            "description": "The message is still being generated"
+          },
+          "413": {
+            "description": "The message text exceeds 1 MiB"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/models": {
       "get": {
         "tags": [],
@@ -11793,6 +11844,72 @@
             "example": "00000000-0000-0000-0000-000000000000"
           }
         }
+      },
+      "ReadAloudStreamEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Base64 of signed 16-bit little-endian mono PCM.",
+            "required": [
+              "sequence",
+              "audio",
+              "sample_rate",
+              "message_type"
+            ],
+            "properties": {
+              "audio": {
+                "type": "string"
+              },
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "audio_delta"
+                ]
+              },
+              "sample_rate": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "sequence": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every passage of the message was spoken.",
+            "required": [
+              "message_type"
+            ],
+            "properties": {
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "done"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Speech synthesis failed; no further audio follows.",
+            "required": [
+              "message_type"
+            ],
+            "properties": {
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "error"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "One event of a read aloud stream. The stream ends after `done` or `error`."
       },
       "RecentChat": {
         "type": "object",

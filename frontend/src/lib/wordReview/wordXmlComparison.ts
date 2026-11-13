@@ -1,9 +1,11 @@
 import {
   createWordConditionalTableStyles,
   isWordDetectedLanguage,
+  isWordEmbeddedFont,
   isWordGlossaryRsids,
   isWordInertTableLook,
   isWordListInstanceId,
+  wordDeobfuscatedFont,
   wordThemeFontLanguage,
 } from "./wordHousekeeping";
 
@@ -198,6 +200,8 @@ export interface WordXmlComparison {
   /** Per-part strict signatures of a package; empty for a bare body fragment. */
   partFingerprints: () => Map<string, string>;
   signature: (node: Node, owner?: string) => string;
+  /** A binary part's content as compared; empty when the part is missing or not binary. */
+  binary: (path: string) => string;
 }
 
 export interface WordXmlComparisonOptions {
@@ -234,6 +238,44 @@ export function createWordXmlComparison(
         ),
       );
   }
+  const fontKeys = new Map<string, string | null>();
+  const fontTable = roots.get("/word/fontTable.xml");
+  for (const embed of fontTable ? wordXmlElements(fontTable, W, "*") : []) {
+    if (!isWordEmbeddedFont(embed)) continue;
+    const rel = relationships
+      .get("/word/fontTable.xml")
+      ?.get(embed.getAttributeNS(R, "id") ?? "");
+    const key = embed.getAttributeNS(W, "fontKey");
+    if (!rel || !key || rel.getAttribute("TargetMode") === "External") continue;
+    const path = targetPath(
+      "/word/fontTable.xml",
+      rel.getAttribute("Target") ?? "",
+    );
+    // A part shared under two keys cannot be restored for both; it stays strict.
+    fontKeys.set(
+      path,
+      fontKeys.has(path) && fontKeys.get(path) !== key ? null : key,
+    );
+  }
+  const rawBinary = (path: string) =>
+    (
+      (parts.get(path) &&
+        wordXmlElements(parts.get(path)!, PKG, "binaryData")[0]?.textContent) ??
+      ""
+    ).replace(/\s/g, "");
+  const restoredFonts = new Map<string, string | undefined>();
+  const restoredFont = (path: string): string | undefined => {
+    if (!restoredFonts.has(path)) {
+      const key = fontKeys.get(path);
+      const raw = rawBinary(path);
+      restoredFonts.set(
+        path,
+        key && raw ? wordDeobfuscatedFont(raw, key) : undefined,
+      );
+    }
+    return restoredFonts.get(path);
+  };
+  const binary = (path: string) => restoredFont(path) ?? rawBinary(path);
   const commentTargets = new Set(
     [...(relationships.get("/word/document.xml")?.values() ?? [])]
       .filter((rel) => rel.getAttribute("Type") === R + "/comments")
@@ -405,6 +447,20 @@ export function createWordXmlComparison(
             !unknownReferences.has(value)
           )
             return [];
+        }
+        if (
+          ns === W &&
+          name === "fontKey" &&
+          owner === "/word/fontTable.xml" &&
+          isWordEmbeddedFont(element)
+        ) {
+          const rel = relationships
+            .get(owner)
+            ?.get(element.getAttributeNS(R, "id") ?? "");
+          const path = rel
+            ? targetPath(owner, rel.getAttribute("Target") ?? "")
+            : undefined;
+          if (path && restoredFont(path) !== undefined) return [];
         }
         if (commentReference(element, attribute))
           value = paragraphReference(commentsOwner, value);
@@ -585,16 +641,12 @@ export function createWordXmlComparison(
     const part = parts.get(path);
     if (!part) return "missing-part";
     activeParts.add(path);
-    const binary = wordXmlElements(part, PKG, "binaryData")[0];
+    const isBinary = !!wordXmlElements(part, PKG, "binaryData")[0];
     const root = roots.get(path);
     const result =
       (part.getAttributeNS(PKG, "contentType") ?? "") +
       ":" +
-      (binary
-        ? (binary.textContent ?? "").replace(/\s/g, "")
-        : root
-          ? canonical(root, path, true)
-          : "");
+      (isBinary ? binary(path) : root ? canonical(root, path, true) : "");
     activeParts.delete(path);
     partCache.set(path, result);
     return result;
@@ -606,13 +658,10 @@ export function createWordXmlComparison(
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([path, part]) => {
           const root = roots.get(path);
-          const binary = wordXmlElements(part, PKG, "binaryData")[0];
           return [
             path,
             JSON.stringify([path, part.getAttributeNS(PKG, "contentType")]) +
-              (root
-                ? canonical(root, path, false)
-                : (binary?.textContent ?? "").replace(/\s/g, "")),
+              (root ? canonical(root, path, false) : binary(path)),
           ];
         }),
     );
@@ -625,6 +674,7 @@ export function createWordXmlComparison(
     partFingerprints,
     signature: (node, owner = "/word/document.xml") =>
       canonical(node, owner, true),
+    binary,
   };
 }
 

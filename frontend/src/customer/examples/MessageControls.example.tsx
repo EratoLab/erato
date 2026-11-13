@@ -7,6 +7,7 @@
  * Features:
  * - Emoji reactions (👍 ❤️ 🎉 💡) with counters
  * - Copy, edit, regenerate actions
+ * - Read aloud (the host's ready-made button)
  * - Raw markdown toggle
  * - Dropdown menu (share, branch, delete)
  * - Metadata badges (model, tokens, processing time)
@@ -30,6 +31,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Controls/Button";
 import { DropdownMenu } from "@/components/ui/Controls/DropdownMenu";
 import { MessageTimestamp } from "@/components/ui/Message/MessageTimestamp";
+import { ReadAloudButton } from "@/components/ui/Message/ReadAloudButton";
 import {
   CopyIcon,
   EditIcon,
@@ -108,6 +110,8 @@ export const MessageControls = ({
   className,
   showRawMarkdown = false,
   onToggleRawMarkdown,
+  showOnHover,
+  readAloud,
 }: MessageControlsProps) => {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -372,6 +376,15 @@ export const MessageControls = ({
             title="Regenerate response"
           />
         )}
+
+        {/* Custom controls show read aloud only if they render the host's
+            button. It decides by itself when to appear (feature switch,
+            finished assistant message, no audio mode); pass the props through. */}
+        <ReadAloudButton
+          messageId={messageId}
+          showOnHover={showOnHover}
+          readAloud={readAloud}
+        />
 
         {/* More Actions Dropdown */}
         <DropdownMenu

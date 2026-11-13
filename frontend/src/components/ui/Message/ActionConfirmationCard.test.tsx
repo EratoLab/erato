@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
@@ -7,9 +7,14 @@ vi.mock("../Controls/Button", () => ({
   Button: ({
     children,
     busy,
+    icon,
     ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean }) => (
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    busy?: boolean;
+    icon?: React.ReactNode;
+  }) => (
     <button {...props} aria-busy={busy ? true : undefined}>
+      {icon && <span aria-hidden="true">{icon}</span>}
       {children}
     </button>
   ),
@@ -325,5 +330,157 @@ describe("ActionConfirmationCard", () => {
       />,
     );
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  describe("with the standing answers in a row of their own", () => {
+    const toolCard = (
+      props: Partial<React.ComponentProps<typeof ActionConfirmationCard>> = {},
+    ) => (
+      <ActionConfirmationCard
+        title="Run this action in Example Server?"
+        onAllowOnce={vi.fn()}
+        onAlwaysAllow={vi.fn()}
+        onDeny={vi.fn()}
+        onNeverAllow={vi.fn()}
+        denyLabel="Deny"
+        standingLabel="This tool:"
+        data-testid="tool-card"
+        {...props}
+      />
+    );
+    const frameClasses = (element: HTMLElement) =>
+      Array.from(element.classList)
+        .filter((name) => !name.startsWith("mt-"))
+        .sort();
+
+    it("keeps the decision area's box exactly as the other cards have it", () => {
+      const { unmount } = render(
+        <ActionConfirmationCard
+          title="t"
+          onAllowOnce={vi.fn()}
+          onDeny={vi.fn()}
+          data-testid="plain-card"
+        />,
+      );
+      const plain = frameClasses(screen.getByTestId("plain-card"));
+      unmount();
+      render(toolCard());
+      const card = screen.getByTestId("tool-card");
+      expect(frameClasses(card)).toEqual(plain);
+      expect(card).toHaveAttribute("data-layout", "standing");
+    });
+
+    it("asks the question, then offers Allow once and Deny, then the tool's standing answers smaller", () => {
+      const onAlwaysAllow = vi.fn();
+      const onNeverAllow = vi.fn();
+      render(toolCard({ onAlwaysAllow, onNeverAllow }));
+      const question = screen.getByTestId("action-confirmation-question");
+      expect(question).toHaveTextContent("Run this action in Example Server?");
+      expect(question).toHaveClass("text-sm", "font-semibold");
+
+      const standing = screen.getByTestId("action-confirmation-standing");
+      expect(standing).toHaveClass("text-xs");
+      expect(standing).toHaveTextContent(
+        /^This tool:Always allow·Never allow$/,
+      );
+      const allowOnce = screen.getByText("Allow once");
+      const deny = screen.getByText("Deny");
+      expect(standing).not.toContainElement(allowOnce);
+      expect(standing).not.toContainElement(deny);
+      expect(allowOnce.parentElement).toBe(deny.parentElement);
+      for (const label of ["Always allow", "Never allow"]) {
+        expect(screen.getByText(label)).toHaveAttribute("variant", "link");
+      }
+      const order = [question, allowOnce, deny, standing];
+      for (const [index, element] of order.slice(1).entries()) {
+        expect(
+          order[index].compareDocumentPosition(element) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+      }
+      // The scope word names the group, so it is said with each answer.
+      const scoped = screen.getByRole("group", { name: "This tool:" });
+      expect(scoped).toBe(standing);
+      expect(
+        within(scoped).getByRole("button", { name: "Always allow" }),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Always allow"));
+      expect(onAlwaysAllow).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByText("Never allow"));
+      expect(onNeverAllow).toHaveBeenCalledTimes(1);
+    });
+
+    it("says what is known about the tool in one quiet line that also explains the lock", () => {
+      const onAlwaysAllow = vi.fn();
+      const facts =
+        "Your organisation has marked this tool as destructive and requires confirmation each time it runs.";
+      render(
+        toolCard({
+          onAlwaysAllow,
+          alwaysAllowDisabledReason: "Locked.",
+          standingNote: facts,
+        }),
+      );
+      const line = screen.getByTestId("action-confirmation-tool-facts");
+      expect(line).toHaveTextContent(facts);
+      expect(line).toHaveClass("text-xs", "text-theme-fg-muted");
+      expect(screen.queryByText("Locked.")).toBeNull();
+      const alwaysAllow = screen.getByText("Always allow");
+      expect(alwaysAllow).toHaveAttribute("aria-disabled", "true");
+      expect(alwaysAllow).toHaveAccessibleDescription(facts);
+      fireEvent.click(alwaysAllow);
+      expect(onAlwaysAllow).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["filled", "primary"],
+      ["plain", "secondary"],
+      ["loss", "secondary"],
+    ] as const)(
+      "styles Allow once as %s without changing what it does",
+      (emphasis, variant) => {
+        const onAllowOnce = vi.fn();
+        render(toolCard({ onAllowOnce, allowOnceEmphasis: emphasis }));
+        const allowOnce = screen.getByText("Allow once");
+        expect(allowOnce).toHaveAttribute("variant", variant);
+        expect(allowOnce).toHaveAttribute("data-emphasis", emphasis);
+        expect(allowOnce.className).toContain(
+          "data-[emphasis=loss]:border-theme-error-fg",
+        );
+        // Not colour alone: a loss also gets an icon and says why.
+        const statesLoss = emphasis === "loss";
+        expect(allowOnce.querySelector("svg") !== null).toBe(statesLoss);
+        if (statesLoss) {
+          expect(allowOnce).toHaveAccessibleDescription(
+            "This card names something this action may remove or empty.",
+          );
+        } else {
+          expect(allowOnce).not.toHaveAttribute("aria-describedby");
+        }
+        expect(allowOnce).toHaveAccessibleName("Allow once");
+        fireEvent.click(allowOnce);
+        expect(onAllowOnce).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("leaves every other card's layout as it was", () => {
+      render(
+        <ActionConfirmationCard
+          title="t"
+          onAllowOnce={vi.fn()}
+          onAlwaysAllow={vi.fn()}
+          onDeny={vi.fn()}
+          onNeverAllow={vi.fn()}
+        />,
+      );
+      expect(screen.queryByTestId("action-confirmation-standing")).toBeNull();
+      expect(screen.getByText("Allow once")).toHaveAttribute(
+        "variant",
+        "primary",
+      );
+      expect(screen.getByText("Deny once").parentElement).toBe(
+        screen.getByText("Always allow").parentElement,
+      );
+    });
   });
 });

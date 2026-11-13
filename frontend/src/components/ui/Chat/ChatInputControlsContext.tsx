@@ -14,7 +14,7 @@ export interface ChatInputControls {
    * Adds a block after what the user typed: an empty line before it when
    * there is text, an empty line after it, the caret at the end and the
    * composer focused. Optional, so a provider value built before shared
-   * surface 1.27 still satisfies the type; callers use `?.()`.
+   * surface 1.28 still satisfies the type; callers use `?.()`.
    */
   appendToDraft?: (block: string) => void;
   focusInput: () => void;

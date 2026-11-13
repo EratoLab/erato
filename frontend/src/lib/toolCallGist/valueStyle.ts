@@ -10,3 +10,14 @@ export const NEW_VALUE_CLASS =
 export const OLD_TEXT_CLASS =
   "text-[var(--theme-diff-removed-fg)] line-through";
 export const NEW_TEXT_CLASS = "text-[var(--theme-diff-added-fg)]";
+
+/**
+ * A card's headline is the one line at this size; under a caller's own
+ * heading it reads as that heading's row did before.
+ */
+export const headlineClass = (lead: boolean, belowHeading: boolean) =>
+  belowHeading
+    ? "text-sm font-medium"
+    : lead
+      ? "text-base font-semibold"
+      : "text-sm font-semibold";

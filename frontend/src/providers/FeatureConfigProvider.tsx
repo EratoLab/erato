@@ -208,6 +208,8 @@ interface ErrorReportFeatureConfig {
 interface MessageActionsFeatureConfig {
   editingEnabled: boolean;
   regenerationEnabled: boolean;
+  /** Whether finished assistant messages offer a read aloud button. */
+  readAloudEnabled: boolean;
 }
 
 /** Actions offered on text the user marks in a chat message. */
@@ -374,6 +376,7 @@ export const defaultStaticFeatureConfig: FeatureConfig = {
   messageActions: {
     editingEnabled: true,
     regenerationEnabled: true,
+    readAloudEnabled: false,
   },
   messageTextActions: {
     quoteEnabled: false,
@@ -522,6 +525,7 @@ function createFeatureConfig(
     messageActions: {
       editingEnabled: environment.messageEditingEnabled,
       regenerationEnabled: environment.messageRegenerationEnabled,
+      readAloudEnabled: environment.readAloudEnabled ?? false,
     },
     messageTextActions: {
       quoteEnabled: environment.messageTextQuoteEnabled ?? false,

@@ -18,6 +18,7 @@ pub mod mcp_servers;
 pub mod message_feedback;
 pub mod message_text_actions;
 pub mod messages;
+pub mod read_aloud;
 pub mod scheduled_items;
 pub mod sharepoint;
 pub mod sharing;

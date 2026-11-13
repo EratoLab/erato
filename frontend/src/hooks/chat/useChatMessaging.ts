@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/Scheduled/reminderConfirmation";
 import { SCHEDULED_ITEMS_QUERY_KEY } from "@/components/ui/Scheduled/scheduledApi";
 import { useChatHistory } from "@/hooks";
+import { stopReadAloud } from "@/hooks/audio/readAloud";
 import {
   beginSpeechResponse,
   moveSpeechStream,
@@ -1029,8 +1030,10 @@ export function useChatMessaging(
   const speechChatIdRef = useRef(chatId);
   useEffect(() => {
     // The null -> saved-chat transition belongs to the same conversational turn.
-    if (speechChatIdRef.current && speechChatIdRef.current !== chatId)
+    if (speechChatIdRef.current && speechChatIdRef.current !== chatId) {
       stopSpeechPlayback();
+      stopReadAloud();
+    }
     speechChatIdRef.current = chatId;
   }, [chatId]);
 
@@ -1846,6 +1849,7 @@ export function useChatMessaging(
       disabledMcpTools?: string[],
       prepare?: SendMessagePreparation,
     ): Promise<string | undefined> => {
+      stopReadAloud();
       if (chatId && useCompactionStore.getState().pending[chatId]) {
         prepare?.onAbandoned?.();
         return undefined;
@@ -2357,6 +2361,7 @@ export function useChatMessaging(
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
+      stopReadAloud();
       if (isSubmittingForKey(streamKey)) {
         logger.warn("[DEBUG_STREAMING] Preventing duplicate edit submission");
         return;
@@ -2519,6 +2524,7 @@ export function useChatMessaging(
       selectedFacetIds?: string[],
       actionFacet?: ActionFacetRequest,
     ): Promise<void> => {
+      stopReadAloud();
       if (isSubmittingForKey(streamKey)) {
         logger.warn(
           "[DEBUG_STREAMING] Preventing duplicate regenerate submission",
