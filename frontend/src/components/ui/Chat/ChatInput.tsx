@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
+import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
   stopSpeechPlayback,
@@ -774,6 +775,14 @@ export const ChatInput = ({
     vadAutoStopEnabled: audioConversationalEnabled && isAudioMode,
     onVadAutoStop: handleConversationVadAutoStop,
   });
+
+  const ownsAudio =
+    isAudioMode || isDictating || isDictationStarting || isRecording;
+  useEffect(() => {
+    if (!ownsAudio) return;
+    setReadAloudAudioModeActive(true);
+    return () => setReadAloudAudioModeActive(false);
+  }, [ownsAudio]);
 
   const toggleDictationForCurrentTarget = useCallback(() => {
     if (!isDictating) {

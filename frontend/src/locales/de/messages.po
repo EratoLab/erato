@@ -4561,6 +4561,21 @@ msgid "message.edit.aria"
 msgstr "Nachricht bearbeiten"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.aria"
+msgstr "Vorlesen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.failed"
+msgstr "Die Nachricht konnte nicht vorgelesen werden. Erneut versuchen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/ReadAloudButton.tsx
+msgid "message.readAloud.stop.aria"
+msgstr "Vorlesen beenden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/DefaultMessageControls.tsx
 msgid "message.regenerate.aria"
 msgstr "Antwort neu generieren"

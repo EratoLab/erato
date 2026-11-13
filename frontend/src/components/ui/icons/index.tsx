@@ -73,6 +73,7 @@ import {
   Bell,
   Clock,
   Play,
+  SoundHigh,
 } from "iconoir-react";
 
 // Define our own IconProps interface based on common SVG props
@@ -442,6 +443,10 @@ export const ClockIcon = ({ className, ...props }: IconProps) => (
 
 export const PlayIcon = ({ className, ...props }: IconProps) => (
   <Play className={className} {...props} />
+);
+
+export const SpeakerIcon = ({ className, ...props }: IconProps) => (
+  <SoundHigh className={className} {...props} />
 );
 
 export const PinIcon = ({ className, ...props }: IconProps) => (

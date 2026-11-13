@@ -1267,7 +1267,8 @@ model_name = "new-model"
 ```
 
 For speech synthesis, use the same mapping under `speech_providers` and update
-the configured `audio_conversational.speech_provider` only if desired:
+the configured `audio_conversational.speech_provider` and
+`audio_read_aloud.speech_provider` only if desired:
 
 ```toml
 [speech_providers]
@@ -2646,6 +2647,35 @@ The synthesis response is limited to 64 MiB of PCM per assistant message.
 Speech queuing does not block text streaming. Speech input is limited to 1 MiB
 per assistant message; exceeding this limit stops speech synthesis and discards
 the incomplete replay while preserving the text response.
+
+### Read aloud
+
+{/* erato_toml_config_key: audio_read_aloud */}
+{/* erato_toml_config_key: audio_read_aloud.enabled */}
+{/* erato_toml_config_key: audio_read_aloud.speech_provider */}
+
+`[audio_read_aloud]` adds a speaker button to the button row of finished assistant
+messages. One click reads the answer aloud with the configured voice; while it
+plays, the button stops it. It is off by default and independent of the audio
+modes: it works with `audio_conversational` disabled, and may use the same or a
+different speech provider.
+
+- `enabled`: whether the button is offered. Defaults to `false`.
+- `speech_provider`: ID from `speech_providers.provider`. Required while `enabled`
+  is `true`.
+
+```toml
+[audio_read_aloud]
+enabled = true
+speech_provider = "voice"
+```
+
+Code blocks, HTML and images are not read. Audio starts with the first passage
+of a long answer and is not stored: each click synthesises again and the message
+is not changed. Stopping playback, sending a message or leaving the chat ends
+the provider request. Usage is not metered. The button is not shown while an
+audio mode is active, on a message that already carries a spoken reply from
+conversational mode, or in the read-only view of a shared chat.
 
 ### Audio modes
 

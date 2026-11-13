@@ -88,6 +88,9 @@ type FeatureConfigOverrides = NonNullable<
  */
 export const SHARED_ADDIN_FEATURE_CONFIG = {
   chatInput: { showUsageAdvisory: false },
+  // Read aloud stays off in the task panes until audio output is verified
+  // there (Word and Outlook for Windows); remove this line to offer it.
+  messageActions: { readAloudEnabled: false },
 } satisfies FeatureConfigOverrides;
 
 /**

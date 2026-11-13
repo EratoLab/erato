@@ -6269,6 +6269,69 @@ export const useMessageSubmitSse = (
   });
 };
 
+export type ReadMessageAloudPathParams = {
+  /**
+   * The assistant message to read aloud
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type ReadMessageAloudError = Fetcher.ErrorWrapper<undefined>;
+
+export type ReadMessageAloudVariables = {
+  pathParams: ReadMessageAloudPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * Streams the audio while it is synthesised. Nothing is stored and the message is not changed;
+ * closing the stream stops the speech provider request.
+ */
+export const fetchReadMessageAloud = (
+  variables: ReadMessageAloudVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    ReadMessageAloudError,
+    undefined,
+    {},
+    {},
+    ReadMessageAloudPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/speech",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * Streams the audio while it is synthesised. Nothing is stored and the message is not changed;
+ * closing the stream stops the speech provider request.
+ */
+export const useReadMessageAloud = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      ReadMessageAloudError,
+      ReadMessageAloudVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    ReadMessageAloudError,
+    ReadMessageAloudVariables
+  >({
+    mutationFn: (variables: ReadMessageAloudVariables) =>
+      fetchReadMessageAloud(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type AvailableModelsError = Fetcher.ErrorWrapper<undefined>;
 
 export type AvailableModelsResponse = Schemas.ChatModel[];

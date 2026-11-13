@@ -1,4 +1,4 @@
-use super::{provider, sentences::Sentences, wav};
+use super::{AudioStream, SpeechProvider, provider, sentences::Sentences, wav};
 use crate::policy::prelude::*;
 use crate::{
     config::SpeechProviderConfig,
@@ -70,6 +70,115 @@ async fn next_passage(
     Some(text)
 }
 
+pub const MAX_INPUT_BYTES: usize = 1024 * 1024;
+const MAX_AUDIO_BYTES: usize = 64 * 1024 * 1024;
+
+/// PCM in whole 16-bit samples, numbered across the passages of one response.
+pub struct SpeechChunk {
+    pub sequence: u64,
+    pub sample_rate: u32,
+    pub pcm: Vec<u8>,
+}
+
+/// Speaks queued text passage by passage and yields the audio as it arrives.
+/// Shared by live audio-back and read aloud; dropping it stops the provider request.
+pub struct PassageSpeaker {
+    provider: Box<dyn SpeechProvider>,
+    receiver: mpsc::UnboundedReceiver<String>,
+    pending: Option<String>,
+    audio: Option<AudioStream>,
+    carry: Vec<u8>,
+    passage_bytes: usize,
+    total_bytes: usize,
+    sequence: u64,
+    sample_rate: u32,
+    segments: Vec<String>,
+    finished: bool,
+}
+impl PassageSpeaker {
+    pub fn new(
+        config: &SpeechProviderConfig,
+        receiver: mpsc::UnboundedReceiver<String>,
+    ) -> Result<Self, Report> {
+        Ok(Self {
+            provider: provider(config)?,
+            receiver,
+            pending: None,
+            audio: None,
+            carry: Vec::new(),
+            passage_bytes: 0,
+            total_bytes: 0,
+            sequence: 0,
+            sample_rate: 0,
+            segments: Vec::new(),
+            finished: false,
+        })
+    }
+
+    /// A speaker for text that is already complete, split into the same passages as live speech.
+    pub fn for_text(config: &SpeechProviderConfig, text: &str) -> Result<Self, Report> {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let mut sentences = Sentences::default();
+        for sentence in sentences.push(text).into_iter().chain(sentences.finish()) {
+            let _ = sender.send(sentence);
+        }
+        Self::new(config, receiver)
+    }
+
+    /// The next audio chunk, or `None` once every passage is spoken.
+    pub async fn next_chunk(&mut self) -> Result<Option<SpeechChunk>, Report> {
+        loop {
+            if let Some(audio) = &mut self.audio {
+                let Some(chunk) = audio.next().await else {
+                    if !self.carry.is_empty() || self.passage_bytes == 0 {
+                        return Err(eyre!("Incomplete or empty speech response"));
+                    }
+                    self.audio = None;
+                    continue;
+                };
+                self.carry.extend(chunk?);
+                let length = self.carry.len() / 2 * 2;
+                if length == 0 {
+                    continue;
+                }
+                let pcm: Vec<_> = self.carry.drain(..length).collect();
+                if self.total_bytes + pcm.len() > MAX_AUDIO_BYTES {
+                    return Err(eyre!("Speech response exceeds 64 MiB"));
+                }
+                self.total_bytes += pcm.len();
+                self.passage_bytes += pcm.len();
+                let sequence = self.sequence;
+                self.sequence += 1;
+                return Ok(Some(SpeechChunk {
+                    sequence,
+                    sample_rate: self.sample_rate,
+                    pcm,
+                }));
+            }
+            if self.finished {
+                return Ok(None);
+            }
+            let Some(text) = next_passage(&mut self.receiver, &mut self.pending).await else {
+                self.provider.finish().await?;
+                self.finished = true;
+                return Ok(None);
+            };
+            let text = super::sentences::speakable(&text);
+            if text.trim().is_empty() {
+                continue;
+            }
+            let audio = self.provider.stream(&text).await?;
+            if self.sample_rate != 0 && self.sample_rate != audio.sample_rate {
+                return Err(eyre!("Speech sample rate changed between sentences"));
+            }
+            self.sample_rate = audio.sample_rate;
+            self.segments.push(text);
+            self.passage_bytes = 0;
+            self.audio = Some(audio.chunks);
+        }
+    }
+}
+
 pub struct SpeechSession {
     sentences: Sentences,
     sender: Option<mpsc::UnboundedSender<String>>,
@@ -93,66 +202,35 @@ impl SpeechSession {
         tx: mpsc::Sender<Result<Event, Report>>,
         message_id: Uuid,
     ) -> Self {
-        let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
+        let (sender, receiver) = mpsc::unbounded_channel::<String>();
         let settings = config.clone();
         let worker_task = task.clone();
         let worker = tokio::spawn(async move {
             let task = worker_task;
-            let provider = provider(&settings)?;
+            let mut speaker = PassageSpeaker::new(&settings, receiver)?;
             let mut pcm = Vec::new();
-            let mut segments = Vec::new();
-            let mut rate = 0;
-            let mut sequence = 0;
-            let mut pending = None;
             let run = async {
-                while let Some(text) = next_passage(&mut receiver, &mut pending).await {
-                    let text = super::sentences::speakable(&text);
-                    if text.trim().is_empty() {
-                        continue;
-                    }
-                    let mut audio = provider.stream(&text).await?;
-                    if rate != 0 && rate != audio.sample_rate {
-                        return Err(eyre!("Speech sample rate changed between sentences"));
-                    }
-                    rate = audio.sample_rate;
-                    segments.push(text);
-                    let before = pcm.len();
-                    let mut carry = Vec::new();
-                    while let Some(chunk) = audio.chunks.next().await {
-                        carry.extend(chunk?);
-                        let length = carry.len() / 2 * 2;
-                        if length == 0 {
-                            continue;
-                        }
-                        let bytes: Vec<_> = carry.drain(..length).collect();
-                        if pcm.len() + bytes.len() > 64 * 1024 * 1024 {
-                            return Err(eyre!("Speech response exceeds 64 MiB"));
-                        }
-                        pcm.extend(&bytes);
-                        let event = StreamingEvent::AudioDelta {
-                            message_id,
-                            sequence,
-                            audio: STANDARD.encode(&bytes),
-                            sample_rate: rate,
-                        };
-                        let json = serde_json::to_string(&event)?;
-                        task.send_event(event).await.map_err(Report::msg)?;
-                        let _ = tx
-                            .send(Ok(Event::default().event("audio_delta").data(json)))
-                            .await;
-                        sequence += 1;
-                    }
-                    if !carry.is_empty() || pcm.len() == before {
-                        return Err(eyre!("Incomplete or empty speech response"));
-                    }
+                while let Some(chunk) = speaker.next_chunk().await? {
+                    let event = StreamingEvent::AudioDelta {
+                        message_id,
+                        sequence: chunk.sequence,
+                        audio: STANDARD.encode(&chunk.pcm),
+                        sample_rate: chunk.sample_rate,
+                    };
+                    pcm.extend(chunk.pcm);
+                    let json = serde_json::to_string(&event)?;
+                    task.send_event(event).await.map_err(Report::msg)?;
+                    let _ = tx
+                        .send(Ok(Event::default().event("audio_delta").data(json)))
+                        .await;
                 }
-                provider.finish().await?;
-                Ok((pcm, segments, rate))
+                Ok::<_, Report>(())
             };
             tokio::select! {
-                result = run => result,
-                _ = task.wait_for_abort() => Err(eyre!("Speech cancelled")),
+                result = run => result?,
+                _ = task.wait_for_abort() => return Err(eyre!("Speech cancelled")),
             }
+            Ok((pcm, speaker.segments, speaker.sample_rate))
         });
         Self {
             sentences: Sentences::default(),
@@ -168,7 +246,6 @@ impl SpeechSession {
     // Never await speech capacity on the LLM text-stream path. Bound total input
     // instead: on overflow disable audio for this response, preserving its text.
     pub fn push(&mut self, text: &str) {
-        const MAX_INPUT_BYTES: usize = 1024 * 1024;
         self.input_bytes = self.input_bytes.saturating_add(text.len());
         if self.input_bytes > MAX_INPUT_BYTES {
             self.input_limit_exceeded = true;
@@ -324,6 +401,90 @@ mod tests {
         assert!(session.input_limit_exceeded);
         assert!(session.sender.is_none());
         assert!((&mut session.worker).await.unwrap_err().is_cancelled());
+        server.abort();
+    }
+
+    // Read aloud: the whole text is known up front, yet the first passage must be audible
+    // while a later one is still being synthesised, and dropping the speaker must end that
+    // provider request.
+    #[tokio::test]
+    async fn complete_text_yields_first_passage_audio_while_the_next_is_synthesised() {
+        struct Dropped(Option<tokio::sync::oneshot::Sender<()>>);
+        impl Drop for Dropped {
+            fn drop(&mut self) {
+                if let Some(sender) = self.0.take() {
+                    let _ = sender.send(());
+                }
+            }
+        }
+        let inputs = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
+        let dropped_tx = Arc::new(std::sync::Mutex::new(Some(dropped_tx)));
+        let recorded = inputs.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new().route(
+                    "/audio/speech",
+                    post(move |axum::Json(request): axum::Json<serde_json::Value>| {
+                        let recorded = recorded.clone();
+                        let dropped_tx = dropped_tx.clone();
+                        async move {
+                            let first = {
+                                let mut inputs = recorded.lock().unwrap();
+                                inputs.push(request["input"].as_str().unwrap().to_string());
+                                inputs.len() == 1
+                            };
+                            if !first {
+                                let _guard = Dropped(dropped_tx.lock().unwrap().take());
+                                std::future::pending::<()>().await;
+                            }
+                            Response::builder()
+                                .header("content-type", "audio/pcm")
+                                .body(Body::from(vec![1, 2, 3, 4]))
+                                .unwrap()
+                        }
+                    }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let config: SpeechProviderConfig = serde_json::from_value(serde_json::json!({
+            "provider_kind":"audio_cpp", "model_name":"local", "voice":"voice", "base_url":format!("http://{address}")
+        })).unwrap();
+        let text = format!(
+            "Intro sentence.\n\n```rs\nlet secret = 1;\n```\n\n{}",
+            "A long answer keeps going. ".repeat(200)
+        );
+        let mut speaker = PassageSpeaker::for_text(&config, &text).unwrap();
+        let chunk = tokio::time::timeout(std::time::Duration::from_secs(3), speaker.next_chunk())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!((chunk.sequence, chunk.sample_rate), (0, 24000));
+        assert_eq!(chunk.pcm, [1, 2, 3, 4]);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(300), speaker.next_chunk())
+                .await
+                .is_err(),
+            "the second passage is still being synthesised"
+        );
+        {
+            let inputs = inputs.lock().unwrap();
+            assert_eq!(inputs.len(), 2);
+            assert!(inputs[0].starts_with("Intro sentence."));
+            assert!(inputs.iter().all(|input| !input.contains("secret")));
+            assert!(inputs.iter().all(|input| input.chars().count() <= 2000));
+        }
+        drop(speaker);
+        tokio::time::timeout(std::time::Duration::from_secs(3), dropped_rx)
+            .await
+            .expect("dropping the speaker cancels the provider request")
+            .unwrap();
         server.abort();
     }
 

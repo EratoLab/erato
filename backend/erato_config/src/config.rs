@@ -909,6 +909,12 @@ pub struct AppConfig {
     #[serde(default)]
     pub audio_conversational: AudioConversationalConfig,
 
+    // Read aloud button on finished assistant messages. Independent of the
+    // audio modes above: it works with `audio_conversational` disabled.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub audio_read_aloud: AudioReadAloudConfig,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -2353,6 +2359,16 @@ impl AppConfig {
                 "Unknown audio_conversational.speech_provider: {id}"
             );
         }
+        if let Some(id) = &config.audio_read_aloud.speech_provider {
+            assert!(
+                config.resolve_speech_provider_id(id).is_ok(),
+                "Unknown audio_read_aloud.speech_provider: {id}"
+            );
+        }
+        assert!(
+            !config.audio_read_aloud.enabled || config.audio_read_aloud.speech_provider.is_some(),
+            "audio_read_aloud.enabled requires audio_read_aloud.speech_provider"
+        );
         validate_audio_feature_config(&config, "audio_transcription", &config.audio_transcription);
         validate_audio_feature_config(&config, "audio_dictation", &config.audio_dictation);
         validate_audio_feature_config(
@@ -2876,6 +2892,16 @@ impl AppConfig {
         }
     }
 
+    /// The speech provider read aloud uses, or `None` while the feature is off.
+    pub fn read_aloud_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
+        if !self.audio_read_aloud.enabled {
+            return None;
+        }
+        let id = self.audio_read_aloud.speech_provider.as_deref()?;
+        let id = self.resolve_speech_provider_id(id).ok()?;
+        Some((id, self.speech_providers.provider.get(id)?))
+    }
+
     pub fn resolve_speech_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
         resolve_provider_id(id, &self.speech_providers.replacement_providers, |id| {
             self.speech_providers
@@ -3171,6 +3197,33 @@ mod audio_config_tests {
         let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
         assert_eq!(conversational.transcription, shared);
         assert_eq!(conversational.speech_provider, None);
+    }
+
+    #[test]
+    fn read_aloud_resolves_its_own_speech_provider_only_while_enabled() {
+        let voice: SpeechProviderConfig = serde_json::from_value(serde_json::json!({
+            "provider_kind": "openai", "model_name": "tts", "voice": "alloy"
+        }))
+        .unwrap();
+        let mut config = AppConfig {
+            speech_providers: SpeechProvidersConfig {
+                provider: HashMap::from([("voice".into(), voice)]),
+                replacement_providers: Vec::new(),
+            },
+            audio_read_aloud: AudioReadAloudConfig {
+                enabled: false,
+                speech_provider: Some("voice".into()),
+            },
+            ..Default::default()
+        };
+        assert!(config.read_aloud_speech_provider().is_none());
+        config.audio_read_aloud.enabled = true;
+        assert_eq!(config.read_aloud_speech_provider().unwrap().0, "voice");
+        // Conversational mode stays off: read aloud does not depend on it.
+        assert!(!config.audio_conversational.transcription.enabled);
+        assert_eq!(config.audio_conversational.speech_provider, None);
+        config.audio_read_aloud.speech_provider = Some("missing".into());
+        assert!(config.read_aloud_speech_provider().is_none());
     }
 
     #[test]
@@ -7938,6 +7991,18 @@ pub struct AudioConversationalConfig {
     /// Speech provider used for audio-back in conversational mode only.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
+    pub speech_provider: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+pub struct AudioReadAloudConfig {
+    // Whether finished assistant messages offer a read aloud button.
+    // Defaults to `false`.
+    #[serde(default)]
+    pub enabled: bool,
+    /// ID from `speech_providers.provider` whose voice reads messages aloud.
+    /// Required while `enabled` is true.
+    #[serde(default)]
     pub speech_provider: Option<String>,
 }
 

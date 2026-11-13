@@ -1122,6 +1122,89 @@ describe("ChatMessage", () => {
     });
   });
 
+  // The read aloud button takes these from the controls props alone, so a
+  // renderer override that draws the host's controls gets the button without
+  // passing anything by hand.
+  describe("read aloud facts in the controls props", () => {
+    const assistant = (
+      overrides: Partial<UiChatMessage> = {},
+    ): UiChatMessage => ({
+      id: "msg_assistant",
+      content: [{ content_type: "text", text: "An answer." }],
+      role: "assistant",
+      sender: "assistant",
+      authorId: "assistant",
+      createdAt: new Date("2025-01-01T12:00:00Z").toISOString(),
+      status: "complete",
+      ...overrides,
+    });
+    const factsFor = async (message: UiChatMessage, isSharedDialog = false) => {
+      let seen: unknown = "not rendered";
+      const Probe = () => {
+        seen = useChatMessageRenderer({
+          message,
+          controlsContext: { isSharedDialog },
+          onMessageAction: async () => true,
+        }).controlsProps.readAloud;
+        return null;
+      };
+      const { i18n } = await import("@lingui/core");
+      i18n.load("en", enMessages as unknown as Messages);
+      i18n.activate("en");
+      render(
+        <I18nProvider i18n={i18n}>
+          <Probe />
+        </I18nProvider>,
+      );
+      return seen;
+    };
+
+    it("marks a finished assistant message with text as readable", async () => {
+      expect(await factsFor(assistant())).toEqual({
+        isFinished: true,
+        hasText: true,
+        hasSpokenAudio: false,
+      });
+    });
+
+    it("reports a message that is still streaming as unfinished", async () => {
+      expect(
+        await factsFor(assistant({ loading: { state: "typing" } })),
+      ).toMatchObject({ isFinished: false });
+      expect(
+        await factsFor(assistant({ loading: { state: "done" } })),
+      ).toMatchObject({ isFinished: true });
+    });
+
+    it("reports a stored spoken reply and a message without text", async () => {
+      expect(
+        await factsFor(
+          assistant({
+            content: [
+              { content_type: "text", text: "An answer." },
+              {
+                content_type: "audio_file_pointer",
+                file_upload_id: "file_1",
+              },
+            ],
+          }),
+        ),
+      ).toMatchObject({ hasSpokenAudio: true });
+      expect(
+        await factsFor(
+          assistant({ content: [{ content_type: "text", text: "  " }] }),
+        ),
+      ).toMatchObject({ hasText: false });
+    });
+
+    it("leaves the facts out for user messages and in a read-only shared chat", async () => {
+      expect(
+        await factsFor(assistant({ role: "user", sender: "user" })),
+      ).toBeUndefined();
+      expect(await factsFor(assistant(), true)).toBeUndefined();
+    });
+  });
+
   // A kit renders in its own bundle and can only receive these by reference,
   // so a placeholder in the bag is indistinguishable from the real thing at
   // the call site — it has to be caught here.
