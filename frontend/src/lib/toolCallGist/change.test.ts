@@ -7,6 +7,7 @@ import { messages as esMessages } from "@/locales/es/messages.json";
 import { messages as frMessages } from "@/locales/fr/messages.json";
 import { messages as plMessages } from "@/locales/pl/messages.json";
 
+import { cardSourceOf, effectDisplayName } from "./cardLayout";
 import {
   MAX_COLLAPSED_NAMES,
   MAX_FIRST_VIEW_VALUES,
@@ -34,6 +35,7 @@ import {
 } from "./gistLabels";
 
 import type { ChangeBatch, GistChange } from "./change";
+import type { GistAction } from "./gist";
 import type {
   ToolArgumentNode,
   ToolCallEffect,
@@ -120,7 +122,7 @@ describe("reading a change description", () => {
 });
 
 describe("what goes in the first view", () => {
-  it("ranks by what happens to the value, never by name, up to five", () => {
+  it("ranks by what happens to the value, never by name, up to five, and leaves unchanged values behind See more", () => {
     const layout = changeLayout(
       change([
         effect("s1", "set"),
@@ -133,6 +135,7 @@ describe("what goes in the first view", () => {
         effect("s3", "set"),
         effect("s4", "set"),
         effect("s5", "set"),
+        effect("s6", "set"),
         effect("r1", "unreadable"),
       ]),
     );
@@ -147,8 +150,109 @@ describe("what goes in the first view", () => {
       "s3",
     ]);
     expect(layout.firstRows).toHaveLength(MAX_FIRST_VIEW_VALUES);
-    expect(layout.collapsed.map((row) => row.name)).toEqual(["s4", "s5", "u1"]);
+    expect(layout.collapsed.map((row) => row.name)).toEqual([
+      "s4",
+      "s5",
+      "s6",
+      "u1",
+    ]);
     expect(layout.opensByDefault).toBe(false);
+  });
+
+  it("shows up to seven values where See more would hide only one or two", () => {
+    const sevenSet = change(
+      Array.from({ length: 7 }, (_, index) => effect(`s${index}`, "set")),
+    );
+    expect(changeLayout(sevenSet).firstRows).toHaveLength(7);
+    expect(changeLayout(sevenSet).collapsed).toHaveLength(0);
+    const eightSet = change(
+      Array.from({ length: 8 }, (_, index) => effect(`s${index}`, "set")),
+    );
+    expect(changeLayout(eightSet).firstRows).toHaveLength(
+      MAX_FIRST_VIEW_VALUES,
+    );
+    const oneUnchanged = changeLayout(
+      change([effect("s1", "set"), effect("u1", "unchanged")]),
+    );
+    expect(oneUnchanged.firstRows.map((row) => row.name)).toEqual(["s1"]);
+    expect(oneUnchanged.collapsed.map((row) => row.name)).toEqual(["u1"]);
+  });
+
+  it("puts links and coded values first within what a value does", () => {
+    const layout = changeLayout(
+      change([
+        effect("plain", "set"),
+        effect("coded", "set", {
+          values: [
+            { text: "8", meaning: { label: "Prospect", source: "tool" } },
+          ],
+        }),
+        effect("link", "set", {
+          link: true,
+          values: [{ text: "Example Holding", machine_id: true }],
+        }),
+      ]),
+    );
+    expect(layout.firstRows.map((row) => row.name)).toEqual([
+      "link",
+      "coded",
+      "plain",
+    ]);
+  });
+
+  it("puts a link that names no record after the values, so no value goes behind See more for it", () => {
+    const layout = changeLayout(
+      change([
+        effect("parent", "set", {
+          link: true,
+          values: [{ text: "", machine_id: true }],
+        }),
+        ...Array.from({ length: 7 }, (_, index) =>
+          effect(`s${index}`, "set", { values: [{ text: `v${index}` }] }),
+        ),
+      ]),
+    );
+    expect(layout.firstRows.map((row) => row.name)).toEqual([
+      "s0",
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+    ]);
+    expect(layout.collapsed.map((row) => row.name)).toEqual([
+      "s5",
+      "s6",
+      "parent",
+    ]);
+  });
+
+  it("shows unchanged values in the first view when nothing changes, since they are the call", () => {
+    const unchanged = (count: number) =>
+      Array.from({ length: count }, (_, index) =>
+        effect(`u${index}`, "unchanged", { values: [{ text: `v${index}` }] }),
+      );
+    const noop = changeLayout(
+      change(unchanged(4), { notes: ["nothing_changes"] }),
+    );
+    expect(noop.firstRows.map((row) => row.name)).toEqual([
+      "u0",
+      "u1",
+      "u2",
+      "u3",
+    ]);
+    expect(noop.collapsed).toHaveLength(0);
+
+    const many = change(unchanged(9), { notes: ["nothing_changes"] });
+    const manyLayout = changeLayout(many);
+    expect(manyLayout.firstRows).toHaveLength(MAX_FIRST_VIEW_VALUES);
+    expect(changeSeeMoreLine(many, manyLayout)).toBe("See 4 unchanged fields");
+
+    // Once something changes, unchanged values never take its places.
+    const resend = changeLayout(
+      change([effect("c1", "changed"), ...unchanged(4)]),
+    );
+    expect(resend.firstRows.map((row) => row.name)).toEqual(["c1"]);
+    expect(resend.collapsed).toHaveLength(4);
   });
 
   it("keeps every loss in the first view, however many", () => {
@@ -183,12 +287,16 @@ describe("what goes in the first view", () => {
     );
   });
 
-  it("says how many more names there are when not all are listed", () => {
-    const names = Array.from({ length: 12 }, (_, index) => `f${index}`);
-    expect(collapsedNames(names)).toEqual({
-      shown: names.slice(0, MAX_COLLAPSED_NAMES),
-      more: 12 - MAX_COLLAPSED_NAMES,
+  it("names eight before counting the rest, and up to ten all of them", () => {
+    const names = (count: number) =>
+      Array.from({ length: count }, (_, index) => `f${index}`);
+    expect(MAX_COLLAPSED_NAMES).toBe(8);
+    expect(collapsedNames(names(12))).toEqual({
+      shown: names(8),
+      more: 4,
     });
+    expect(collapsedNames(names(11)).more).toBe(3);
+    expect(collapsedNames(names(10))).toEqual({ shown: names(10), more: 0 });
     expect(collapsedNames(["a"]).more).toBe(0);
   });
 });
@@ -232,26 +340,46 @@ describe("the words of a change", () => {
     ).toBe("See 5 more fields: 3 emptied or replaced, 2 set");
   });
 
-  it("summarises the counts and leaves one value to its row", () => {
-    expect(changeSummaryLine(change([effect("a", "set")]))).toBeUndefined();
+  it("counts only what the rows do not show, and never on a create", () => {
+    const summary = (read: GistChange, action?: GistAction) =>
+      changeSummaryLine(read, changeLayout(read), action);
+    expect(summary(change([effect("a", "set")]))).toBeUndefined();
+    // Every change is a row below: a count would repeat them.
     expect(
-      changeSummaryLine(
+      summary(
         change([
           effect("a", "emptied"),
           effect("b", "changed"),
           effect("c", "set"),
         ]),
       ),
-    ).toBe("3 fields change: 1 emptied, 1 changed, 1 set");
+    ).toBeUndefined();
+    const hiddenEffects = [
+      effect("a", "emptied"),
+      ...Array.from({ length: 9 }, (_, index) => effect(`s${index}`, "set")),
+    ];
+    const hidden = change(hiddenEffects);
+    expect(summary(hidden)).toBe("10 fields change: 1 emptied, 9 set");
+    expect(summary(hidden, "create")).toBeUndefined();
+    // See more counts the fields that stay the same; the head never repeats it.
+    const resent = change([
+      effect("a", "changed"),
+      effect("b", "unchanged"),
+      effect("c", "unchanged"),
+    ]);
+    expect(summary(resent)).toBeUndefined();
+    expect(changeSeeMoreLine(resent, changeLayout(resent))).toBe(
+      "See 2 unchanged fields",
+    );
     expect(
-      changeSummaryLine(
+      summary(
         change([
-          effect("a", "changed"),
-          effect("b", "unchanged"),
-          effect("c", "unchanged"),
+          ...hiddenEffects,
+          effect("u1", "unchanged"),
+          effect("u2", "unchanged"),
         ]),
       ),
-    ).toBe("1 field changes, 2 stay the same");
+    ).toBe("10 fields change: 1 emptied, 9 set");
     expect(changeRowCounts(change([effect("a", "changed")]))).toBe("1 changed");
   });
 
@@ -524,6 +652,135 @@ describe("the place on the line", () => {
     expect(where).toEqual(["Q4 pipeline", "contoso / uploader"]);
   });
 
+  it("drops a trailing ID from a link that shows a name", () => {
+    const link = (name: string) =>
+      readChange({
+        complete: true,
+        counts: { set: 1 },
+        effects: [
+          {
+            path: "/parent",
+            name,
+            raw_name: "parent",
+            effect: "set",
+            link: true,
+            values: [{ text: "Example Ltd", machine_id: true }],
+          },
+        ],
+      })!.effects[0];
+    expect(effectDisplayName(link("Parent account ID"))).toBe("Parent account");
+    expect(effectDisplayName(link("Parent account Id"))).toBe("Parent account");
+    expect(effectDisplayName(link("Valid"))).toBe("Valid");
+    expect(effectDisplayName(link("Owner  id"))).toBe("Owner");
+  });
+
+  it("names in the source line every distinct place, even two with one name", () => {
+    const gist = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/folders/*",
+              values: [
+                { path: "/folders/0", text: "f_1", resolved: "Reports" },
+                { path: "/folders/1", text: "f_2", resolved: "Reports" },
+              ],
+            },
+          },
+        ],
+        change: { counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(
+      cardSourceOf(gist)?.where.map((value) => [value.text, value.written]),
+    ).toEqual([
+      ["Reports", "f_1"],
+      ["Reports", "f_2"],
+    ]);
+
+    const named = gistOf(
+      labelled({
+        items: [
+          {
+            id: {
+              pointer: "/id",
+              values: [{ path: "/id", text: "r1" }],
+            },
+            target: {
+              pointer: "/project",
+              values: [{ path: "/project", text: "p1", resolved: "prj1" }],
+            },
+          },
+        ],
+        change: { place: "prj1", counts: {}, complete: true },
+      }),
+      {},
+    )!;
+    expect(named.items[0].where.map((value) => value.text)).toEqual([
+      "prj1",
+      "prj1",
+    ]);
+    expect(
+      cardSourceOf(named)?.where.map((value) => [value.text, value.origin]),
+    ).toEqual([["prj1", "resolved"]]);
+  });
+
+  it("counts a place list's unlisted places only where they are places", () => {
+    const listedOf = (texts: string[], omitted: number, batch?: object) =>
+      gistOf(
+        labelled({
+          action: "create",
+          object_kind: "task",
+          items: [
+            {
+              title: {
+                pointer: "/rows/*/name",
+                values: texts.map((_, index) => ({
+                  path: `/rows/${index}/name`,
+                  text: `Row ${index}`,
+                })),
+                omitted,
+              },
+              target: {
+                pointer: "/rows/*/project",
+                values: texts.map((text, index) => ({
+                  path: `/rows/${index}/project`,
+                  text,
+                })),
+                omitted,
+              },
+            },
+          ],
+          change: {
+            counts: {},
+            complete: true,
+            batch,
+          } as ToolCallLabel["change"],
+        }),
+        {},
+      )!;
+    // Distinct places listed: what is not listed counts as places, as before.
+    expect(cardSourceOf(listedOf(["A", "B"], 5))).toMatchObject({
+      whereOmitted: 5,
+    });
+    // Repeats, all listed: nothing more to count.
+    const allListed = cardSourceOf(listedOf(["A", "A"], 0));
+    expect(allListed?.whereOmitted).toBe(0);
+    expect(allListed?.whereValues).toBeUndefined();
+    // Repeats and no count of distinct places: how many values they come from.
+    const unknown = cardSourceOf(listedOf(["A", "A", "A"], 7));
+    expect(unknown?.where.map((value) => value.text)).toEqual(["A"]);
+    expect(unknown).toMatchObject({
+      whereOmitted: 0,
+      whereValues: { count: 10, rows: false },
+    });
+  });
+
   it("lets the place stand for a written target it already repeats", () => {
     const gist = gistOf(
       labelled({
@@ -618,9 +875,7 @@ describe("the table a record is one of", () => {
     const gist = gistOf(byHiddenId({ table: "account" }), {})!;
     expect(gist.change?.table).toBe("account");
     expect(gist.items[0].where).toEqual([]);
-    expect(gistPlainLine(gist, gist.items[0], "ask")).toBe(
-      "Update account row",
-    );
+    expect(gistPlainLine(gist, gist.items[0], "ask")).toBe("Update record");
     const created = gistOf(
       labelled({
         action: "create",
@@ -637,7 +892,7 @@ describe("the table a record is one of", () => {
       {},
     )!;
     expect(gistPlainLine(created, created.items[0], "ask")).toBe(
-      "Create account row “Example Ltd”",
+      "Create record “Example Ltd”",
     );
     const batch = gistOf(
       labelled({
@@ -658,12 +913,20 @@ describe("the table a record is one of", () => {
       {},
     )!;
     expect(gistPlainLine(batch, batch.items[0], "ask")).toBe(
-      "Delete 3 account rows",
+      "Delete 3 records",
     );
+    expect(cardSourceOf(created)).toEqual({
+      where: [],
+      whereOmitted: 0,
+      table: "account",
+    });
     i18n.load("de", deMessages as unknown as Messages);
     i18n.activate("de");
     expect(gistPlainLine(created, created.items[0], "ask")).toBe(
-      "account-Zeile “Example Ltd” erstellen",
+      "Datensatz “Example Ltd” erstellen",
+    );
+    expect(gistPlainLine(batch, batch.items[0], "ask")).toBe(
+      "3 Datensätze löschen",
     );
   });
 });
@@ -681,12 +944,12 @@ describe("a record no result in the chat named", () => {
     )!;
     expect(showsUnreadRecord(gist, gist.items[0])).toBe(true);
     expect(gistUnreadRecordLine(gist)).toBe(
-      "Which account row: not read in this chat (its ID is in Technical details)",
+      "Which record: not read in this chat (its ID is in Technical details)",
     );
     i18n.load("de", deMessages as unknown as Messages);
     i18n.activate("de");
     expect(gistUnreadRecordLine(gist)).toBe(
-      "Welche account-Zeile: in diesem Chat nicht gelesen (ID unter „Technische Details“)",
+      "Welcher Datensatz: in diesem Chat nicht gelesen (ID unter „Technische Details“)",
     );
     const page = gistOf(
       byHiddenId({ record_unread: true }, { object_kind: "document" }),
@@ -698,12 +961,12 @@ describe("a record no result in the chat named", () => {
     i18n.load("fr", frMessages as unknown as Messages);
     i18n.activate("fr");
     expect(gistUnreadRecordLine(gist)).toBe(
-      "Quelle ligne account : non lue dans ce chat (son identifiant est dans Détails techniques)",
+      "Quel enregistrement : non lu dans ce chat (son identifiant est dans Détails techniques)",
     );
     i18n.load("es", esMessages as unknown as Messages);
     i18n.activate("es");
     expect(gistUnreadRecordLine(gist)).toBe(
-      "¿Qué fila account? No se leyó en este chat (su identificador está en «Detalles técnicos»)",
+      "¿Qué registro? No se leyó en este chat (su identificador está en «Detalles técnicos»)",
     );
     i18n.load("pl", plMessages as unknown as Messages);
     i18n.activate("pl");

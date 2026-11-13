@@ -127,7 +127,7 @@ describe("ApprovalReferent", () => {
     });
 
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Deny once" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(onDecide).toHaveBeenCalledWith("reject");
   });
 
@@ -162,9 +162,9 @@ describe("ApprovalReferent", () => {
           : never,
       },
     });
-    expect(screen.getByTestId("tool-call-change-outside")).toHaveTextContent(
-      "1 address is outside your organisation",
-    );
+    expect(
+      screen.getByTestId("tool-call-change-outside-badge"),
+    ).toHaveTextContent("outside your organisation");
     expect(screen.getByTestId("tool-argument-view")).toBeInTheDocument();
     expect(screen.queryByTestId("tool-call-change-emptied")).toBeNull();
   });

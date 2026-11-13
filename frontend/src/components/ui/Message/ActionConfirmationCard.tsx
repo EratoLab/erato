@@ -1,9 +1,12 @@
 import { t } from "@lingui/core/macro";
+import clsx from "clsx";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { Card } from "../Container/Card";
 import { Button } from "../Controls/Button";
+import { WarningIcon } from "../icons";
 
+import type { AllowOnceEmphasis } from "@/lib/toolCallGist/decision";
 import type React from "react";
 import type { ReactNode } from "react";
 
@@ -51,6 +54,24 @@ interface ActionConfirmationCardProps {
    */
   onNeverAllow?: () => void;
   allowOnceLabel?: string;
+  /**
+   * How Allow once looks: `plain` gives it no fill, for a card that asks the
+   * person to check something first; `loss` outlines it in red, for a card
+   * that states a loss. Defaults to `filled`; it never changes what the
+   * button does.
+   */
+  allowOnceEmphasis?: AllowOnceEmphasis;
+  /**
+   * Shows Always allow and Never allow as a smaller row under the other
+   * buttons, after this label, for standing answers that cover a whole tool.
+   */
+  standingLabel?: string;
+  /**
+   * With `standingLabel`: one quiet line under the buttons about the tool. A
+   * locked Always allow's reason then belongs in it, and gets no line of its
+   * own.
+   */
+  standingNote?: string;
   alwaysAllowLabel?: string;
   denyLabel?: string;
   neverAllowLabel?: string;
@@ -127,6 +148,9 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   onDeny,
   onNeverAllow,
   allowOnceLabel,
+  allowOnceEmphasis = "filled",
+  standingLabel,
+  standingNote,
   alwaysAllowLabel,
   denyLabel,
   neverAllowLabel,
@@ -141,6 +165,8 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
   const cardRef = useRef<HTMLElement | null>(null);
   const alwaysAllowReasonId = useId();
   const allowScopeHintId = useId();
+  const lossHintId = useId();
+  const standingLabelId = useId();
   const isPending = status === "pending";
   const [allowedWith, setAllowedWith] = useState<"once" | "scope" | "always">(
     "once",
@@ -150,6 +176,12 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     progressLabel !== undefined && allowedWith === "scope";
   const alwaysInProgress =
     progressLabel !== undefined && allowedWith === "always";
+  const standing =
+    standingLabel !== undefined &&
+    (onAlwaysAllow ?? onNeverAllow) !== undefined;
+  const reasonLine = standing
+    ? (standingNote ?? alwaysAllowDisabledReason)
+    : alwaysAllowDisabledReason;
 
   useEffect(() => {
     if (scrollIntoViewOnMount) {
@@ -211,6 +243,151 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
     }
   }, [announcementText]);
 
+  const statesLoss = allowOnceEmphasis === "loss";
+  const allowOnceButton = (
+    <Button
+      variant={allowOnceEmphasis === "filled" ? "primary" : "secondary"}
+      size="sm"
+      data-emphasis={allowOnceEmphasis}
+      // The attribute selector outranks the variant's own border and label
+      // colours, which a plain utility would not reliably do. The icon and
+      // the description carry the loss for anyone who cannot tell the red.
+      className="data-[emphasis=loss]:border-theme-error-fg data-[emphasis=loss]:text-theme-error-fg"
+      icon={
+        statesLoss && !onceInProgress ? (
+          <WarningIcon className="size-4" />
+        ) : undefined
+      }
+      aria-describedby={statesLoss ? lossHintId : undefined}
+      onClick={
+        onceInProgress
+          ? undefined
+          : () => {
+              setAllowedWith("once");
+              onAllowOnce();
+            }
+      }
+      disabled={isBusy && !onceInProgress}
+      busy={onceInProgress}
+      aria-disabled={onceInProgress || undefined}
+    >
+      {onceInProgress
+        ? progressLabel
+        : (allowOnceLabel ??
+          t({
+            id: "actionConfirmation.allowOnce",
+            message: "Allow once",
+          }))}
+    </Button>
+  );
+
+  const allowScopeButton = onAllowScope && (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={
+        scopeInProgress
+          ? undefined
+          : () => {
+              setAllowedWith("scope");
+              onAllowScope();
+            }
+      }
+      disabled={isBusy && !scopeInProgress}
+      busy={scopeInProgress}
+      aria-disabled={scopeInProgress || undefined}
+      aria-describedby={allowScopeHint ? allowScopeHintId : undefined}
+    >
+      {scopeInProgress ? progressLabel : allowScopeLabel}
+    </Button>
+  );
+
+  // A standing answer is a quieter link in its own row; inline, a button.
+  const standingClass = standing ? "underline underline-offset-2" : undefined;
+
+  const alwaysAllowButton = onAlwaysAllow && (
+    <Button
+      variant={standing ? "link" : "secondary"}
+      size="sm"
+      // aria-disabled instead of disabled keeps the button in the
+      // tab order so keyboard/SR users can discover the option and
+      // the reason; the click guard makes it inert.
+      onClick={
+        alwaysAllowDisabledReason || alwaysInProgress
+          ? undefined
+          : () => {
+              setAllowedWith("always");
+              onAlwaysAllow();
+            }
+      }
+      disabled={isBusy && !alwaysInProgress}
+      busy={alwaysInProgress}
+      aria-disabled={
+        alwaysAllowDisabledReason || alwaysInProgress ? true : undefined
+      }
+      aria-describedby={
+        alwaysAllowDisabledReason ? alwaysAllowReasonId : undefined
+      }
+      className={clsx(
+        standingClass,
+        alwaysAllowDisabledReason &&
+          "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+      )}
+    >
+      {alwaysInProgress
+        ? progressLabel
+        : (alwaysAllowLabel ??
+          t({
+            id: "actionConfirmation.alwaysAllow",
+            message: "Always allow",
+          }))}
+    </Button>
+  );
+
+  const denyButton = (
+    <Button variant="secondary" size="sm" onClick={onDeny} disabled={isBusy}>
+      {denyLabel ??
+        t({
+          id: "actionConfirmation.deny",
+          message: "Deny once",
+        })}
+    </Button>
+  );
+
+  const neverAllowButton = onNeverAllow && (
+    <Button
+      variant={standing ? "link" : "secondary"}
+      size="sm"
+      onClick={onNeverAllow}
+      disabled={isBusy}
+      className={standingClass}
+    >
+      {neverAllowLabel ??
+        t({
+          id: "actionConfirmation.neverAllow",
+          message: "Never allow",
+        })}
+    </Button>
+  );
+
+  const lossHint = statesLoss && (
+    <span id={lossHintId} className="sr-only">
+      {t({
+        id: "actionConfirmation.allowOnceLoss",
+        message: "This card names something this action may remove or empty.",
+      })}
+    </span>
+  );
+
+  const scopeHint = onAllowScope && allowScopeHint && (
+    <div
+      id={allowScopeHintId}
+      className="space-y-1 text-xs text-theme-fg-muted"
+    >
+      {allowScopeHint}
+    </div>
+  );
+
   return (
     <Card
       ref={cardRef}
@@ -221,13 +398,26 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
       tabIndex={-1}
       role={isPending ? "group" : undefined}
       aria-label={isPending ? resolvedTitle : undefined}
-      className={`focus-ring-tight mt-2 min-w-0 ${className}`}
-      bodyClassName={isPending ? "space-y-3" : "text-xs text-theme-fg-muted"}
+      className={`focus-ring-tight ${standing ? "mt-4" : "mt-2"} min-w-0 ${className}`}
+      bodyClassName={
+        isPending
+          ? standing
+            ? "space-y-2"
+            : "space-y-3"
+          : "text-xs text-theme-fg-muted"
+      }
       data-testid={dataTestId}
+      data-layout={standing ? "standing" : undefined}
     >
       {isPending ? (
         <>
-          <p className="text-sm font-medium text-theme-fg-primary">
+          <p
+            className={clsx(
+              "text-sm text-theme-fg-primary",
+              standing ? "font-semibold" : "font-medium",
+            )}
+            data-testid="action-confirmation-question"
+          >
             {resolvedTitle}
           </p>
           {typeof description === "string" ? (
@@ -235,128 +425,52 @@ export const ActionConfirmationCard: React.FC<ActionConfirmationCardProps> = ({
           ) : (
             description
           )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={
-                onceInProgress
-                  ? undefined
-                  : () => {
-                      setAllowedWith("once");
-                      onAllowOnce();
-                    }
-              }
-              disabled={isBusy && !onceInProgress}
-              busy={onceInProgress}
-              aria-disabled={onceInProgress || undefined}
-            >
-              {onceInProgress
-                ? progressLabel
-                : (allowOnceLabel ??
-                  t({
-                    id: "actionConfirmation.allowOnce",
-                    message: "Allow once",
-                  }))}
-            </Button>
-            {onAllowScope && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={
-                  scopeInProgress
-                    ? undefined
-                    : () => {
-                        setAllowedWith("scope");
-                        onAllowScope();
-                      }
-                }
-                disabled={isBusy && !scopeInProgress}
-                busy={scopeInProgress}
-                aria-disabled={scopeInProgress || undefined}
-                aria-describedby={allowScopeHint ? allowScopeHintId : undefined}
+          {lossHint}
+          {standing ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {allowOnceButton}
+                {allowScopeButton}
+                {denyButton}
+              </div>
+              {scopeHint}
+              {/* A group named by its scope word, so a screen reader says
+                  whose standing answer each one is. */}
+              <div
+                role="group"
+                aria-labelledby={standingLabelId}
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-theme-fg-secondary"
+                data-testid="action-confirmation-standing"
               >
-                {scopeInProgress ? progressLabel : allowScopeLabel}
-              </Button>
-            )}
-            {onAlwaysAllow && (
-              <Button
-                variant="secondary"
-                size="sm"
-                // aria-disabled instead of disabled keeps the button in the
-                // tab order so keyboard/SR users can discover the option and
-                // the reason; the click guard makes it inert.
-                onClick={
-                  alwaysAllowDisabledReason || alwaysInProgress
-                    ? undefined
-                    : () => {
-                        setAllowedWith("always");
-                        onAlwaysAllow();
-                      }
-                }
-                disabled={isBusy && !alwaysInProgress}
-                busy={alwaysInProgress}
-                aria-disabled={
-                  alwaysAllowDisabledReason || alwaysInProgress
-                    ? true
-                    : undefined
-                }
-                aria-describedby={
-                  alwaysAllowDisabledReason ? alwaysAllowReasonId : undefined
-                }
-                className={
-                  alwaysAllowDisabledReason
-                    ? "aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                    : undefined
-                }
-              >
-                {alwaysInProgress
-                  ? progressLabel
-                  : (alwaysAllowLabel ??
-                    t({
-                      id: "actionConfirmation.alwaysAllow",
-                      message: "Always allow",
-                    }))}
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onDeny}
-              disabled={isBusy}
-            >
-              {denyLabel ??
-                t({
-                  id: "actionConfirmation.deny",
-                  message: "Deny once",
-                })}
-            </Button>
-            {onNeverAllow && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onNeverAllow}
-                disabled={isBusy}
-              >
-                {neverAllowLabel ??
-                  t({
-                    id: "actionConfirmation.neverAllow",
-                    message: "Never allow",
-                  })}
-              </Button>
-            )}
-          </div>
-          {onAllowScope && allowScopeHint && (
-            <div
-              id={allowScopeHintId}
-              className="space-y-1 text-xs text-theme-fg-muted"
-            >
-              {allowScopeHint}
-            </div>
+                <span id={standingLabelId}>{standingLabel}</span>
+                {alwaysAllowButton}
+                {alwaysAllowButton && neverAllowButton && (
+                  <span aria-hidden="true" className="text-theme-fg-muted">
+                    ·
+                  </span>
+                )}
+                {neverAllowButton}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {allowOnceButton}
+                {allowScopeButton}
+                {alwaysAllowButton}
+                {denyButton}
+                {neverAllowButton}
+              </div>
+              {scopeHint}
+            </>
           )}
-          {alwaysAllowDisabledReason && (
-            <p id={alwaysAllowReasonId} className="text-xs text-theme-fg-muted">
-              {alwaysAllowDisabledReason}
+          {reasonLine && (
+            <p
+              id={alwaysAllowReasonId}
+              className="text-xs text-theme-fg-muted"
+              data-testid="action-confirmation-tool-facts"
+            >
+              {reasonLine}
             </p>
           )}
         </>

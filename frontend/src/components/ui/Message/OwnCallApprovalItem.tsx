@@ -1,5 +1,15 @@
 import { t } from "@lingui/core/macro";
 
+import { useApprovalCard } from "@/lib/toolCallGist/approvalCard";
+import { allowOnceEmphasisOf, toolMarksOf } from "@/lib/toolCallGist/decision";
+import {
+  alwaysAllowLockedLine,
+  thisToolLabel,
+  toolDenyLabel,
+  toolFactsLine,
+  toolQuestion,
+} from "@/lib/toolCallGist/decisionLabels";
+
 import { ActionConfirmationCard } from "./ActionConfirmationCard";
 import { ApprovalReferent, ApprovalTechnicalDetails } from "./ApprovalReferent";
 
@@ -41,67 +51,61 @@ export const OwnCallApprovalItem = ({
   isBusy: boolean;
   scrollIntoViewOnMount: boolean;
   onDecide: (decision: ToolApprovalDecision) => void;
-}) => (
-  <>
-    <ApprovalReferent
-      toolName={toolName}
-      display={display}
-      input={input}
-      serverId={serverId}
-      isClientTool={isClientTool}
-    />
-    <ActionConfirmationCard
-      title={
-        isClientTool
-          ? t({
-              id: "clientToolApproval.title",
-              message: "Allow this tool to run on your device?",
-            })
-          : t({
-              id: "mcpApproval.title",
-              message: "Allow MCP tool call?",
-            })
-      }
-      // A client tool declares no annotations of its own; the defaults it
-      // carries describe nothing about what it does.
-      description={
-        !isClientTool && openWorld
-          ? t({
-              id: "mcpApproval.openWorldWarning",
-              message: "This tool may send data to an external service.",
-            })
-          : undefined
-      }
-      onAllowOnce={() => onDecide("approve")}
-      // Keep "Always allow" discoverable when the deployment enforces
-      // per-use confirmation: greyed out with the reason, like the add-in's
-      // locked client-action decisions, instead of silently missing.
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-      onAlwaysAllow={() => onDecide("approve_always")}
-      alwaysAllowDisabledReason={
-        allowAlways
-          ? undefined
-          : t({
-              id: "mcpApproval.alwaysAllowDisabled",
-              message:
-                "Locked: your organization requires confirmation each time this tool runs.",
-            })
-      }
-      onDeny={() => onDecide("reject")}
-      // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
-      onNeverAllow={() => onDecide("reject_always")}
-      status={status}
-      resolvedLabel={resolvedLabel}
-      isBusy={isBusy}
-      scrollIntoViewOnMount={scrollIntoViewOnMount}
-      data-testid="mcp-tool-approval-card"
-    />
-    <ApprovalTechnicalDetails
-      toolName={toolName}
-      display={display}
-      input={input}
-      serverId={serverId}
-      isClientTool={isClientTool}
-    />
-  </>
-);
+}) => {
+  const { display: shown, card } = useApprovalCard(display, toolName, input);
+  return (
+    <>
+      <ApprovalReferent
+        toolName={toolName}
+        display={display}
+        input={input}
+        serverId={serverId}
+        isClientTool={isClientTool}
+      />
+      <ActionConfirmationCard
+        title={
+          isClientTool
+            ? t({
+                id: "clientToolApproval.title",
+                message: "Allow this tool to run on your device?",
+              })
+            : toolQuestion(shown?.server_name ?? serverId)
+        }
+        allowOnceEmphasis={allowOnceEmphasisOf(card)}
+        standingLabel={thisToolLabel()}
+        standingNote={toolFactsLine({
+          ...toolMarksOf(card),
+          locked: !allowAlways,
+          // A client tool declares no annotations of its own; the defaults it
+          // carries describe nothing about what it does.
+          openWorld: !isClientTool && openWorld,
+        })}
+        onAllowOnce={() => onDecide("approve")}
+        // Keep "Always allow" discoverable when the deployment enforces
+        // per-use confirmation: greyed out with the reason, like the add-in's
+        // locked client-action decisions, instead of silently missing.
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+        onAlwaysAllow={() => onDecide("approve_always")}
+        alwaysAllowDisabledReason={
+          allowAlways ? undefined : alwaysAllowLockedLine()
+        }
+        onDeny={() => onDecide("reject")}
+        denyLabel={toolDenyLabel()}
+        // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+        onNeverAllow={() => onDecide("reject_always")}
+        status={status}
+        resolvedLabel={resolvedLabel}
+        isBusy={isBusy}
+        scrollIntoViewOnMount={scrollIntoViewOnMount}
+        data-testid="mcp-tool-approval-card"
+      />
+      <ApprovalTechnicalDetails
+        toolName={toolName}
+        display={display}
+        input={input}
+        serverId={serverId}
+        isClientTool={isClientTool}
+      />
+    </>
+  );
+};

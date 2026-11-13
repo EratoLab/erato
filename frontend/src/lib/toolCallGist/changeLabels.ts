@@ -124,60 +124,35 @@ const changesValuesInPlace = (action: GistAction | undefined): boolean =>
   action === undefined || action === "update" || action === "upsert";
 
 /**
- * A verb whose values are a new record's fields. A run, a send or a share
- * passes values that are not fields of anything, so they are not counted.
- */
-const setsNewFields = (action: GistAction | undefined): boolean =>
-  action === "create" || action === "upload";
-
-/**
  * The line that says how many values do what, such as "30 fields change: 3
- * emptied, 5 changed, 22 set". A create only sets values, so it says that;
- * the values of any other verb are no record's fields, so it gets none.
- * One value needs no such line: its row says it.
+ * emptied, 5 changed, 22 set", only where it says what the rows below do
+ * not: changes behind See more. Values that stay the same are always behind
+ * See more, whose label counts them. A create's count states what every
+ * create does, and the values of a run, a send or a share are no record's
+ * fields, so they get none.
  */
 export const changeSummaryLine = (
   change: GistChange,
+  layout: ChangeLayout,
   action?: GistAction,
 ): string | undefined => {
   const { counts } = change;
   const texts = change.texts.length;
   const changing = changingOf(counts, texts);
   const parts = countParts(counts, texts, listReplaceIsUnknown(change));
-  if (changing === 0 || (changing < 2 && counts.unchanged === 0)) {
-    return undefined;
-  }
-  if (!changesValuesInPlace(action) && !setsNewFields(action)) {
-    return undefined;
-  }
-  const head = changesValuesInPlace(action)
-    ? t({
-        id: "toolChange.summary.fields",
-        message: plural(changing, {
-          one: "# field changes",
-          other: "# fields change",
-        }),
-      })
-    : t({
-        id: "toolChange.summary.fieldsSet",
-        message: plural(changing, {
-          one: "# field is set",
-          other: "# fields are set",
-        }),
-      });
-  const line =
-    changesValuesInPlace(action) && parts.length > 1
-      ? `${head}: ${joinParts(parts)}`
-      : head;
-  if (counts.unchanged === 0) return line;
-  const stay = t({
-    id: "toolChange.summary.staySame",
-    message: plural(counts.unchanged, {
-      one: "# stays the same",
-      other: "# stay the same",
+  if (changing < 2 || !changesValuesInPlace(action)) return undefined;
+  const hidden =
+    layout.collapsed.filter((effect) => effect.effect !== "unchanged").length +
+    layout.beyondCap;
+  if (hidden === 0) return undefined;
+  const head = t({
+    id: "toolChange.summary.fields",
+    message: plural(changing, {
+      one: "# field changes",
+      other: "# fields change",
     }),
   });
-  return `${line}, ${stay}`;
+  return parts.length > 1 ? `${head}: ${joinParts(parts)}` : head;
 };
 
 /** The same counts for a trace row, past tense: "3 changed, 10 unchanged". */
@@ -380,14 +355,20 @@ export const incompleteLines = (change: GistChange): string[] => {
   ];
 };
 
-/** Under a closed See more, which fields it holds. */
-export const changeNamesOnly = (names: string, more: number): string =>
-  more > 0
-    ? t({
-        id: "toolChange.namesOnly.more",
-        message: `These fields: ${names}, +${more} more`,
-      })
-    : t({ id: "toolChange.namesOnly", message: `These fields: ${names}` });
+/** A See more line with the names of the fields it holds, so its label says what is inside. */
+export const seeMoreWithNames = (
+  line: string,
+  names: string,
+  more: number,
+): string =>
+  names.length === 0
+    ? line
+    : more > 0
+      ? t({
+          id: "toolChange.seeMore.namedMore",
+          message: `${line} · ${names} +${more}`,
+        })
+      : t({ id: "toolChange.seeMore.named", message: `${line} · ${names}` });
 
 export const machineIdPhrase = (): string =>
   t({ id: "toolChange.value.anId", message: "an ID (see Technical details)" });
@@ -421,46 +402,6 @@ export const emptiedWasLabel = (name: string, was: string): string =>
 
 export const beingEmptiedLabel = (name: string): string =>
   t({ id: "toolChange.row.beingEmptied", message: `${name} is emptied` });
-
-const goesAndStays = (removed: number, kept: number): string => {
-  const goes = t({
-    id: "toolChange.list.goes",
-    message: plural(removed, { one: "# goes", other: "# go" }),
-  });
-  const stays =
-    kept > 0
-      ? t({
-          id: "toolChange.list.stays",
-          message: plural(kept, { one: "# stays", other: "# stay" }),
-        })
-      : undefined;
-  return stays === undefined ? goes : `${goes}, ${stays}`;
-};
-
-export const listReplacedLine = (
-  name: string,
-  removed: number,
-  kept: number,
-): string => {
-  const parts = goesAndStays(removed, kept);
-  return t({
-    id: "toolChange.list.replaced",
-    message: `The list ${name} is replaced: ${parts}`,
-  });
-};
-
-/** A list that may be replaced or added to: nothing is stated as a fact. */
-export const listMaybeReplacedLine = (
-  name: string,
-  removed: number,
-  kept: number,
-): string => {
-  const parts = goesAndStays(removed, kept);
-  return t({
-    id: "toolChange.list.ifReplaced",
-    message: `If this replaces the list ${name}: ${parts}`,
-  });
-};
 
 export const listRemovedLabel = (name: string): string =>
   t({ id: "toolChange.list.removed", message: `${name} removed` });
@@ -510,11 +451,11 @@ export const recipientKindWord = (kind: ToolCallRecipientKind): string => {
 export const recipientsLine = (recipients: ChangeRecipients): string => {
   const groups =
     recipients.groups.length > 1
-      ? ` (${joinParts(
+      ? `: ${joinParts(
           recipients.groups.map(
             (group) => `${group.count} ${recipientKindWord(group.kind)}`,
           ),
-        )})`
+        )}`
       : "";
   return t({
     id: "toolChange.recipients.total",
@@ -524,6 +465,17 @@ export const recipientsLine = (recipients: ChangeRecipients): string => {
     }),
   });
 };
+
+/** Beside an address the organisation does not own. */
+export const outsideBadgeLabel = (): string =>
+  t({
+    id: "toolChange.recipients.outsideBadge",
+    message: "outside your organisation",
+  });
+
+/** Before the people a share gives access to. */
+export const shareWithLabel = (): string =>
+  t({ id: "toolChange.recipients.with", message: "With" });
 
 export const recipientsSeeAll = (total: number): string =>
   t({
@@ -685,9 +637,11 @@ export const batchLossLines = (
   batch: ChangeBatch,
   listsMaybeReplaced = false,
   toolSaysOnlyAdds = false,
+  /** Every row is in view and says what it empties or removes itself. */
+  rowsInView = false,
 ): string[] => {
   const lines: string[] = [];
-  if (batch.rowsEmptying > 0) {
+  if (batch.rowsEmptying > 0 && !rowsInView) {
     const emptying = batch.rowsEmptying;
     lines.push(
       t({
@@ -719,7 +673,7 @@ export const batchLossLines = (
           }),
     );
   }
-  if (batch.rowsRemovingFromLists > 0) {
+  if (batch.rowsRemovingFromLists > 0 && !rowsInView) {
     const removing = batch.rowsRemovingFromLists;
     lines.push(
       t({
@@ -732,7 +686,9 @@ export const batchLossLines = (
     );
   }
   if (
-    lines.length === 0 &&
+    batch.rowsEmptying === 0 &&
+    batch.rowsReplacingLists === 0 &&
+    batch.rowsRemovingFromLists === 0 &&
     batch.deletions === 0 &&
     batch.readAll &&
     !toolSaysOnlyAdds
@@ -954,9 +910,23 @@ const operationWord = (action: ToolCallAction, count: number): string => {
   }
 };
 
+/**
+ * A batch's operations in the order its rows read: deletes first, as what is
+ * lost, and creates last.
+ */
 export const batchOperationsLine = (batch: ChangeBatch): string => {
+  const rank = (action: ToolCallAction) =>
+    action === "delete" ? 0 : action === "create" ? 2 : 1;
+  const ordered = batch.operations
+    .map((operation, index) => ({ operation, index }))
+    .sort(
+      (a, b) =>
+        rank(a.operation.action) - rank(b.operation.action) ||
+        a.index - b.index,
+    )
+    .map(({ operation }) => operation);
   const parts = joinParts(
-    batch.operations.map(({ action, count }) => operationWord(action, count)),
+    ordered.map(({ action, count }) => operationWord(action, count)),
   );
   return t({
     id: "toolChange.batch.operations",
@@ -1073,7 +1043,7 @@ export const changeNoteLabel = (note: ToolCallChangeNote): string => {
       return t({
         id: "toolChange.note.instructionOutcomeUnknown",
         message:
-          "Another assistant decides what to do. Erato cannot tell what will change.",
+          "Erato does not ask you about the steps the tool takes with this text and cannot tell what will change.",
       });
     case "old_values_from_earlier":
       return t({
@@ -1091,6 +1061,50 @@ export const changeNoteLabel = (note: ToolCallChangeNote): string => {
       return "";
   }
 };
+
+/**
+ * The footnote that says where underlined and old values come from, or
+ * nothing when the card shows neither.
+ */
+export const earlierValuesFootnote = (
+  dotted: boolean,
+  old: boolean,
+): string | undefined => {
+  if (dotted && old) {
+    return t({
+      id: "toolChange.note.dottedAndOld",
+      message:
+        "Dotted and old values are from earlier in this chat and may have changed.",
+    });
+  }
+  if (dotted) {
+    return t({
+      id: "toolChange.note.dotted",
+      message:
+        "Dotted values are from earlier in this chat and may have changed.",
+    });
+  }
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
+  return old ? changeNoteLabel("old_values_from_earlier") : undefined;
+};
+
+/** Stand-ins a coded value's frame is split at, so each part gets its own colour. */
+export const CODE_SLOT = "\uE003";
+export const MEANING_SLOT = "\uE004";
+export const CODED_SLOTS = /([\uE003\uE004])/;
+
+/**
+ * The words around a coded value and the tool's meaning, with the two in
+ * slots, as `codedValueText` reads in the language shown.
+ */
+export const codedValueFrame = (value: ChangeValue): string | undefined =>
+  value.meaning === undefined
+    ? undefined
+    : codedValueText({
+        ...value,
+        text: CODE_SLOT,
+        meaning: { ...value.meaning, label: MEANING_SLOT },
+      });
 
 /**
  * A coded value with its meaning: for the operator's glossary the label first
