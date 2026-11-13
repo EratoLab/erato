@@ -50,7 +50,16 @@
   }
   // The embedding app's origin: messages are taken from it and sent to it only.
   const HOST_ORIGIN = new URL(document.referrer).origin;
+  const HOST_NAME = new URL(HOST_ORIGIN).hostname;
   const OWN_ORIGIN = window.location.origin;
+
+  // The sandbox origin is never the app's, so an embedder on this page's own
+  // origin is a view, and a view must not get a policy of its choosing.
+  if (HOST_ORIGIN === OWN_ORIGIN) {
+    throw new Error(
+      "This page only runs in the frame of the app it belongs to.",
+    );
+  }
 
   // Reading the app's document must fail. If it does not, this page shares the
   // app's origin and must not run a view.
@@ -67,17 +76,38 @@
   const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
   const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 
+  // Whether a declared domain covers the app's host, whatever its scheme or
+  // port: the host itself, a wildcard over it, or a network scheme on its own.
+  // On a sandbox origin on the same site as the app, the browser sends the
+  // app's cookies with the view's requests to it.
+  const coversHost = (domain) => {
+    const source = domain.toLowerCase();
+    if (/^(https?|wss?):$/.test(source)) return true;
+    const [host] = source
+      .replace(/^(?:[a-z][a-z0-9+.-]*:)?\/\//, "")
+      .match(/^(?:\[[^\]]*\]|[^/:]*)/);
+    return (
+      host === "*" ||
+      host === HOST_NAME ||
+      (host.startsWith("*.") && HOST_NAME.endsWith(host.slice(1)))
+    );
+  };
+
   // Declared domains, without anything that could end a source list or add a
-  // keyword such as 'unsafe-eval'.
+  // keyword such as 'unsafe-eval', and without any that cover the app's host.
   const domains = (list) =>
     (Array.isArray(list) ? list : []).filter(
-      (domain) => typeof domain === "string" && /^[^\s;,'"]+$/.test(domain),
+      (domain) =>
+        typeof domain === "string" &&
+        /^[^\s;,'"]+$/.test(domain) &&
+        !coversHost(domain),
     );
 
   // The view's CSP as the spec builds it from `_meta.ui.csp`. Without declared
-  // domains the view fetches and loads nothing from other origins. A CSP does
-  // not stop a view from navigating its own frame, and browsers do not apply
-  // it to WebRTC, so it is no barrier against sending data out.
+  // domains the view fetches and loads nothing from other origins, and no
+  // declared domain lets it reach the app's host. A CSP does not stop a view
+  // from navigating its own frame, and browsers do not apply it to WebRTC, so
+  // it is no barrier against sending data out.
   const policyFor = (csp) => {
     const declared = csp && typeof csp === "object" ? csp : {};
     const resources = domains(declared.resourceDomains).join(" ");

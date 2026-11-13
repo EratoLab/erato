@@ -169,7 +169,8 @@ mockMcpServer:
 
 # The sandbox origin for MCP Apps views (`mcp_servers.<id>.mcp_apps.sandbox_origin`):
 # a host name of its own on which the backend serves the web app's sandbox page
-# and nothing else.
+# and nothing else. It is on the app's site, which suits the local cluster and
+# its mock server only: in production, use an origin on another site.
 mcpAppsSandbox:
   enabled: true
   host: mcp-apps.erato.internal

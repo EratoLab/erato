@@ -67,6 +67,78 @@ const viewCount = (message: Locator) =>
     .frameLocator("iframe")
     .locator("#count");
 
+/** A domain a view may declare; the test answers its requests itself. */
+const THIRD_PARTY = "https://third-party.example.net";
+
+/**
+ * A view that fetches the user's profile from the app, with the user's
+ * cookies, and a file from the third-party domain, and writes what each fetch
+ * got onto its root element.
+ */
+const probeView = (appOrigin: string) => `<!doctype html><script>
+  const record = (name, url, credentials) =>
+    fetch(url, { credentials })
+      .then((response) => {
+        document.documentElement.dataset[name] = String(response.status);
+      })
+      .catch(() => {
+        document.documentElement.dataset[name] = "failed";
+      });
+  record("app", "${appOrigin}/api/v1beta/me/profile", "include");
+  record("thirdParty", "${THIRD_PARTY}/data.json", "omit");
+</script>`;
+
+/**
+ * A view that nests the sandbox page from its own origin and, as the app
+ * would, asks it to show a view that may connect to the app and fetches the
+ * user's profile from there. Its root element says "silent" if the nested
+ * page has not answered within five seconds, or else what the fetch got.
+ */
+const nestingView = (appOrigin: string) => {
+  const inner = `<script>
+    fetch("${appOrigin}/api/v1beta/me/profile", { credentials: "include" })
+      .then((response) => String(response.status), () => "failed")
+      .then((app) => parent.postMessage({ app }, "*"));
+  </script>`;
+  // The query string sets the nested page's URL apart from the view's own,
+  // which Firefox would take for a frame that loads itself and not load.
+  return `<!doctype html><script>
+  const root = document.documentElement;
+  const nested = document.createElement("iframe");
+  nested.src = "${SANDBOX_PAGE}?nested";
+  window.addEventListener("message", ({ source, data }) => {
+    if (source !== nested.contentWindow) return;
+    if (data?.method === "ui/notifications/sandbox-proxy-ready") {
+      root.dataset.nested = "ready";
+      nested.contentWindow.postMessage({
+        jsonrpc: "2.0",
+        method: "ui/notifications/sandbox-resource-ready",
+        params: {
+          html: ${JSON.stringify(inner).replace(/<\//g, "<\\/")},
+          csp: { connectDomains: ["${appOrigin}"] },
+        },
+      }, "*");
+    } else if (typeof data?.app === "string") {
+      root.dataset.nested = data.app;
+    }
+  });
+  root.appendChild(nested);
+  // A timer, not the frame's load event, which Firefox does not fire for a
+  // frame the policy blocks.
+  setTimeout(() => {
+    if (!root.dataset.nested) root.dataset.nested = "silent";
+  }, 5000);
+</script>`;
+};
+
+/** Has the app get `html` with `csp` as the view of the next tool call. */
+const replaceView = (page: Page, html: string, csp: Record<string, string[]>) =>
+  page.route("**/api/v1beta/me/mcp_servers/*/app_view*", async (route) => {
+    const response = await route.fetch();
+    const view = (await response.json()) as Record<string, unknown>;
+    await route.fulfill({ json: { ...view, html, ui: { csp } } });
+  });
+
 test(
   "An MCP Apps view renders in a sandboxed frame from the sandbox origin with the tool input, and again when the chat is reopened",
   { tag: TAG_CI },
@@ -94,6 +166,104 @@ test(
         timeout: 15000,
       });
       await expect(viewCount(reopened)).toHaveText("41", { timeout: 15000 });
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "A view's policy drops every declared domain on the app's host, so the view cannot fetch from the app, and keeps a declared third-party domain",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const appOrigin = new URL(page.url()).origin;
+      const appHost = new URL(appOrigin).hostname;
+      // The app's host with any scheme or port, a wildcard over it and a
+      // network scheme on its own, beside the third party, in every list.
+      const declared = [
+        appOrigin,
+        `http://${appHost}`,
+        `wss://${appHost}:9443`,
+        `${appHost}:*`,
+        appHost.replace(/^[^.]+/, "*"),
+        "*",
+        "https:",
+        THIRD_PARTY,
+      ];
+      await replaceView(page, probeView(appOrigin), {
+        connectDomains: declared,
+        resourceDomains: declared,
+        frameDomains: declared,
+        baseUriDomains: declared,
+      });
+      await page.route(`${THIRD_PARTY}/**`, (route) =>
+        route.fulfill({
+          json: {},
+          headers: { "access-control-allow-origin": "*" },
+        }),
+      );
+
+      const message = await callCounterTool(page);
+
+      const sandbox = message.frameLocator('[data-testid="mcp-app-view"]');
+      await expect(
+        sandbox.locator('meta[http-equiv="Content-Security-Policy"]'),
+      ).toHaveAttribute(
+        "content",
+        [
+          "default-src 'none'",
+          `script-src 'self' 'unsafe-inline' ${THIRD_PARTY}`,
+          `style-src 'self' 'unsafe-inline' ${THIRD_PARTY}`,
+          `img-src 'self' data: ${THIRD_PARTY}`,
+          `font-src 'self' ${THIRD_PARTY}`,
+          `media-src 'self' data: ${THIRD_PARTY}`,
+          `connect-src ${THIRD_PARTY}`,
+          `frame-src ${THIRD_PARTY}`,
+          "object-src 'none'",
+          `base-uri ${THIRD_PARTY}`,
+          "form-action 'none'",
+        ].join("; "),
+        { timeout: 15000 },
+      );
+      const view = sandbox.frameLocator("iframe").locator("html");
+      await expect(view).toHaveAttribute("data-third-party", "200", {
+        timeout: 15000,
+      });
+      await expect(view).toHaveAttribute("data-app", "failed");
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "The sandbox page does not run when embedded from its own origin, so a view cannot get a policy that lets it fetch from the app",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const appOrigin = new URL(page.url()).origin;
+      await replaceView(page, nestingView(appOrigin), {
+        frameDomains: [new URL(SANDBOX_PAGE).origin],
+      });
+
+      const message = await callCounterTool(page);
+
+      const view = message
+        .frameLocator('[data-testid="mcp-app-view"]')
+        .frameLocator("iframe")
+        .locator("html");
+      await expect(view).toHaveAttribute("data-nested", "silent", {
+        timeout: 15000,
+      });
     } finally {
       await context.close();
     }

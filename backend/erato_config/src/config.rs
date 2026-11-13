@@ -4130,8 +4130,10 @@ pub struct McpAppsConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub enabled: bool,
     /// The origin the web app loads this server's views from, such as
-    /// `https://mcp-apps.example.com`: `http` or `https`, a host and an
-    /// optional port, nothing else. It must not be Erato's own origin.
+    /// `https://mcp-apps.example.net`: `http` or `https`, a host and an
+    /// optional port, nothing else. It must not be Erato's own origin, and in
+    /// production it must be on another site than Erato's, since the browser
+    /// sends Erato's cookies with requests from the same site.
     /// Required when `enabled` is set.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
@@ -4152,7 +4154,7 @@ impl McpAppsConfig {
         };
         if !is_web_origin(origin) {
             return Err(eyre!(
-                "MCP server '{server_id}': mcp_apps.sandbox_origin '{}' must be an http or https origin written as the browser does, such as https://mcp-apps.example.com",
+                "MCP server '{server_id}': mcp_apps.sandbox_origin '{}' must be an http or https origin written as the browser does, such as https://mcp-apps.example.net",
                 origin.escape_debug()
             ));
         }
