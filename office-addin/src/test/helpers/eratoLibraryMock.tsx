@@ -289,6 +289,7 @@ export const DEFAULT_STUBS = {
   PopoverSeparator: StubNothing,
   ProgressBar: StubNothing,
   RadioCard: StubNothing,
+  ReadAloudButton: StubNothing,
   ResolvedIcon: StubNothing,
   Row: StubPassthrough,
   // Mirrored, like the other string stubs: a consumer queries the DOM with it.
