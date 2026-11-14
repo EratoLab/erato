@@ -1467,6 +1467,7 @@ impl AppConfig {
 
     pub fn new_for_app(config_file_paths: Option<Vec<String>>) -> Result<Self, ConfigError> {
         let schema = Self::config_schema(config_file_paths, true)?;
+        warn_unknown_turn_instruction_keys(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1483,6 +1484,7 @@ impl AppConfig {
         let config_files_to_load = Self::resolve_config_file_paths(config_file_paths, true);
         let schema =
             Self::config_schema_builder_for_resolved_paths(&config_files_to_load)?.build()?;
+        warn_unknown_turn_instruction_keys(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -8084,10 +8086,10 @@ pub struct AudioConversationalConfig {
     pub speech_provider: Option<String>,
 }
 
-/// `[turn_instructions]`: one table per instruction type. A type name the
-/// backend does not know fails the config load instead of being ignored.
+/// `[turn_instructions]`: one table per instruction type. A type or setting
+/// the backend does not know is ignored with a warning, not rejected: the
+/// content package that sets it may be newer than the backend.
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
-#[serde(deny_unknown_fields)]
 pub struct TurnInstructionsConfig {
     /// On a turn whose reply is read back in conversational audio mode.
     #[serde(default)]
@@ -8112,7 +8114,6 @@ impl TurnInstructionsConfig {
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
-#[serde(deny_unknown_fields)]
 pub struct TurnInstructionConfig {
     /// Instruction text, placed right before the user's message on a turn the
     /// type applies to. Unset or blank adds nothing.
@@ -8128,6 +8129,40 @@ pub struct TurnInstructionConfig {
 #[serde(rename_all = "snake_case")]
 pub enum TurnInstructionKind {
     SpokenReply,
+}
+
+const TURN_INSTRUCTION_SETTINGS: &[&str] = &["prompt"];
+
+/// Keys under `[turn_instructions]` this backend does not know, sorted.
+fn unknown_turn_instruction_keys(schema: &Config) -> Vec<String> {
+    let Ok(types) = schema.get_table("turn_instructions") else {
+        return Vec::new();
+    };
+    let mut unknown = Vec::new();
+    for (name, settings) in types {
+        let known_type =
+            serde_json::from_value::<TurnInstructionKind>(serde_json::json!(name)).is_ok();
+        if !known_type {
+            unknown.push(format!("turn_instructions.{name}"));
+        } else if let Ok(settings) = settings.into_table() {
+            unknown.extend(
+                settings
+                    .into_keys()
+                    .filter(|setting| !TURN_INSTRUCTION_SETTINGS.contains(&setting.as_str()))
+                    .map(|setting| format!("turn_instructions.{name}.{setting}")),
+            );
+        }
+    }
+    unknown.sort();
+    unknown
+}
+
+fn warn_unknown_turn_instruction_keys(schema: &Config) {
+    for key in unknown_turn_instruction_keys(schema) {
+        tracing::warn!(
+            "Config key `{key}` is not known to this Erato version and is ignored. It may come from a newer content package."
+        );
+    }
 }
 
 #[cfg(test)]
@@ -8159,9 +8194,32 @@ mod turn_instructions_tests {
     }
 
     #[test]
-    fn an_unknown_type_or_setting_fails_the_load() {
-        assert!(load("[spoken_replies]\nprompt = \"x\"").is_err());
-        assert!(load("[spoken_reply]\ntext = \"x\"").is_err());
+    fn an_unknown_type_or_setting_is_reported_and_ignored() {
+        let toml = r#"
+            [turn_instructions.spoken_reply]
+            prompt = "Say it."
+            history_mark = true
+            [turn_instructions.in_car]
+            prompt = "x"
+        "#;
+        let schema = Config::builder()
+            .add_source(File::from_str(toml, FileFormat::Toml))
+            .build()
+            .unwrap();
+        assert_eq!(
+            unknown_turn_instruction_keys(&schema),
+            [
+                "turn_instructions.in_car",
+                "turn_instructions.spoken_reply.history_mark"
+            ]
+        );
+        let config: TurnInstructionsConfig = schema.get("turn_instructions").unwrap();
+        assert_eq!(
+            config.prompt(TurnInstructionKind::SpokenReply),
+            Some("Say it.")
+        );
+        let none = Config::builder().build().unwrap();
+        assert!(unknown_turn_instruction_keys(&none).is_empty());
     }
 }
 

@@ -7166,8 +7166,9 @@ backend decides on every turn which types apply. A type's instruction is placed
 right before the user's message, after any facet and action facet directives,
 and applies to that turn only: it is not replayed on later turns. When several
 types apply to one turn, they are placed in the order of the list below.
-Regenerating or editing a message adds none. A type name the backend does not
-know fails the config load.
+Regenerating or editing a message adds none. A type or setting the backend does
+not know is ignored and logged as a warning at startup, so a content package
+that is newer than the backend does not stop it from starting.
 
 | Type           | Applies when                                                                                                                            |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
