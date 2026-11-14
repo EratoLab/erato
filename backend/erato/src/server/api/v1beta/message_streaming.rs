@@ -12548,6 +12548,7 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::Image(_)
                 | ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
+                | ContentPart::SpokenReplyMarker
                 | ContentPart::TaskResult(_)
                 | ContentPart::CompactionMarker(_) => None,
             }
@@ -18135,16 +18136,15 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
-    task.speech_enabled.store(
-        request.conversational_audio_back
-            && app_state.config.audio_conversational.transcription.enabled
-            && app_state
-                .config
-                .audio_conversational
-                .speech_provider
-                .is_some(),
-        std::sync::atomic::Ordering::Relaxed,
-    );
+    let reply_is_read_back = request.conversational_audio_back
+        && app_state.config.audio_conversational.transcription.enabled
+        && app_state
+            .config
+            .audio_conversational
+            .speech_provider
+            .is_some();
+    task.speech_enabled
+        .store(reply_is_read_back, std::sync::atomic::Ordering::Relaxed);
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -18165,6 +18165,12 @@ async fn run_generation_after_user_message_memory_inner(
                 args: af.args.clone(),
             }
         }),
+        spoken_reply: reply_is_read_back
+            && app_state
+                .config
+                .audio_conversational
+                .spoken_reply_prompt()
+                .is_some(),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
         // LD-A9: a reaction turn may not plan tasks of its own. The offer is
@@ -18960,6 +18966,7 @@ pub(crate) async fn start_regeneration(
                             args: af.args.clone(),
                         },
                     ),
+                spoken_reply: false,
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
                 // A user turn may plan tasks; only a task-result reaction may not.
@@ -19592,6 +19599,7 @@ pub(crate) async fn start_edit(
                         args: af.args.clone(),
                     }
                 }),
+                spoken_reply: false,
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
                 // A user turn may plan tasks; only a task-result reaction may not.

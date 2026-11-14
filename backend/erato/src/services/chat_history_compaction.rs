@@ -128,7 +128,9 @@ pub fn replacement(
         .filter(|m| {
             !matches!(
                 m.content,
-                ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_)
+                ContentPart::ActionFacetMarker(_)
+                    | ContentPart::DelegationPreambleMarker(_)
+                    | ContentPart::SpokenReplyMarker
             )
         })
         .filter(|m| {

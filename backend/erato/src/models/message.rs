@@ -1615,6 +1615,12 @@ pub enum ContentPart {
     /// only in the request about to be sent, dropped when the snapshot is
     /// replayed as prior-turn history.
     DelegationPreambleMarker(ContentPartDelegationPreambleMarker),
+    /// Marks a turn whose reply is read back in conversational audio mode.
+    /// Resolved like `ActionFacetMarker`: the instruction text comes from
+    /// `audio_conversational.spoken_reply_prompt` when the request is built,
+    /// and the marker is dropped when the snapshot replays as prior-turn
+    /// history, so a later typed turn is not told to answer as speech.
+    SpokenReplyMarker,
     /// The result of an `async` delegated task, delivered back into the chat
     /// the task was started from as a user-role row.
     ///
@@ -1954,6 +1960,7 @@ impl MessageSchema {
                 // would let a delegated run write the chat's title.
                 ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
+                | ContentPart::SpokenReplyMarker
                 | ContentPart::TaskResult(_)
                 | ContentPart::CompactionMarker(_) => None,
             })
@@ -2820,6 +2827,7 @@ impl InputMessage {
             // template and inside the untrusted-data frame.
             ContentPart::ActionFacetMarker(_)
             | ContentPart::DelegationPreambleMarker(_)
+            | ContentPart::SpokenReplyMarker
             | ContentPart::TaskResult(_)
             | ContentPart::CompactionMarker(_) => String::new(),
         }

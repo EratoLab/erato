@@ -21,6 +21,9 @@
 //! U3 + associated content
 //! ```
 //!
+//! A turn whose reply is read back adds the spoken-reply directive after the
+//! action directive, with the action's lifetime (ERMAIN-1190).
+//!
 //! Normal facets are emitted in facet-ID order, template before additional
 //! prompt; the action follows them. Both use User-role reminders so adapters
 //! that collect System messages into a head cannot hoist these new directives.
@@ -149,6 +152,7 @@ pub async fn compose_prompt_messages(
         user_input.action_facet.as_ref(),
         action_facet_configs,
         platform,
+        user_input.spoken_reply,
     )
     .await?;
 

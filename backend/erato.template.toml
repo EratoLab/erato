@@ -445,6 +445,9 @@ chat_provider_ids = ["test-token-limit"]
 # [audio_conversational]
 # enabled = false
 # speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
+# Optional instruction for the model on turns whose reply is read back (Audio-back on).
+# Added right before the user's message, for that turn only; typed turns do not get it.
+# spoken_reply_prompt = "Your reply is read aloud. Answer in a few short sentences, without lists or headings."
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30

@@ -2648,6 +2648,34 @@ Speech queuing does not block text streaming. Speech input is limited to 1 MiB
 per assistant message; exceeding this limit stops speech synthesis and discards
 the incomplete replay while preserving the text response.
 
+### Spoken-reply instruction
+
+{/* erato_toml_config_key: audio_conversational.spoken_reply_prompt */}
+
+Without further instruction the model answers a spoken turn the way it answers a
+typed one: long, structured text, which is then read aloud.
+`audio_conversational.spoken_reply_prompt` holds an instruction for the model
+that the backend adds to every turn whose reply is read back, that is, a turn
+sent in conversational mode with **Audio-back** on and a `speech_provider`
+configured.
+
+```toml
+[audio_conversational]
+enabled = true
+speech_provider = "voice"
+spoken_reply_prompt = """
+Your reply to this message is read aloud. Answer the way people talk: a few
+short sentences, no lists, no headings, no tables.
+"""
+```
+
+The instruction is placed right before the user's message and applies to that
+turn only. A typed turn in the same chat does not get it, and it is not replayed
+on later turns, so the user can switch between speaking and typing. A turn that
+is spoken but not read back (Audio-back off) does not get it either. Unset or
+blank, no instruction is added. Regenerating or editing a message produces a
+written reply and no instruction.
+
 ### Read aloud
 
 {/* erato_toml_config_key: audio_read_aloud */}

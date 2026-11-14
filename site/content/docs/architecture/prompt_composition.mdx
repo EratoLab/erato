@@ -19,6 +19,8 @@ current action-facet directive
 U3 + task-result content and/or attached files
 ```
 
+A turn whose reply is read back in conversational audio mode adds one more directive at the same boundary, after the action facet and directly before the current user message: the spoken-reply directive from `audio_conversational.spoken_reply_prompt` ([ERMAIN-1190](https://linear.app/erato-labs/issue/ERMAIN-1190)). It has the lifetime of an action facet: a metadata-only marker, rendered immediately before provider conversion as a User-role reminder, and stripped when replayed on later turns, so a typed turn that follows a spoken one is not told to answer as speech.
+
 Branches, edits and regeneration use the selected message's ancestry and the current request's facet context. A descendant's directive must not appear before shared ancestors. Injection is additive: normal and action facets must never suppress the historical baseline.
 
 ## Role, chronology and lifetime

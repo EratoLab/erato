@@ -558,7 +558,8 @@ const DIRECTIVE_SENTINEL_OPEN: &str = "<system-reminder>";
 const DIRECTIVE_SENTINEL_CLOSE: &str = "</system-reminder>";
 
 /// Resolve the directive markers — `ContentPart::ActionFacetMarker`,
-/// `ContentPart::DelegationPreambleMarker` and `ContentPart::TaskResult` — by
+/// `ContentPart::DelegationPreambleMarker`, `ContentPart::SpokenReplyMarker`
+/// and `ContentPart::TaskResult` — by
 /// rendering their templates against the current `AppConfig`, using the
 /// arguments captured on the marker at composition time.
 ///
@@ -566,7 +567,7 @@ const DIRECTIVE_SENTINEL_CLOSE: &str = "</system-reminder>";
 /// `generation_input_messages` carries metadata-only markers; rendering
 /// happens lazily here, immediately before the chat-request hits the LLM.
 ///
-/// The two per-turn markers are stripped earlier in `compose_prompt_messages`'s
+/// The per-turn markers are stripped earlier in `compose_prompt_messages`'s
 /// historical-replay step, so one that reaches this resolver belongs to the
 /// current turn. `TaskResult` is the exception and is deliberately
 /// history-resident: `transforms.rs` pushes it for every prior user row,
@@ -575,7 +576,7 @@ const DIRECTIVE_SENTINEL_CLOSE: &str = "</system-reminder>";
 /// gone missing (a renamed or deleted facet) is dropped with a warning rather
 /// than rendered as empty text.
 ///
-/// Output of the two per-turn markers is wrapped in a `<system-reminder>`
+/// Output of the per-turn markers is wrapped in a `<system-reminder>`
 /// sentinel in the user turn (both carry `MessageRole::User`); see that
 /// comment for reasoning. `TaskResult` returns unwrapped — it carries its own
 /// untrusted-data frame instead, for the lifetime reason above.
@@ -615,6 +616,11 @@ pub(crate) fn resolve_directive_markers_with_config(
                         marker.run_mode.unwrap_or_default(),
                     )
                 }
+                ContentPart::SpokenReplyMarker => config
+                    .audio_conversational
+                    .spoken_reply_prompt()
+                    .unwrap_or_default()
+                    .to_string(),
                 ContentPart::TaskResult(part) => {
                     // Deliberately NOT wrapped in the directive sentinel below.
                     // That sentinel marks platform instruction; a task result

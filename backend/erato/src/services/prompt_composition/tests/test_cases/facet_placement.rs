@@ -48,6 +48,17 @@ async fn compose_with_files(
     action: Option<&str>,
     files: &[Uuid],
 ) -> (AbstractChatSequence, GenerationInputMessages) {
+    compose_turn(repo, tip, selected, action, files, false).await
+}
+
+async fn compose_turn(
+    repo: &MockMessageRepository,
+    tip: Uuid,
+    selected: &[&str],
+    action: Option<&str>,
+    files: &[Uuid],
+    spoken_reply: bool,
+) -> (AbstractChatSequence, GenerationInputMessages) {
     let config = config();
     let action = action.map(|value| ActionFacetUserInput {
         id: "action".into(),
@@ -76,6 +87,7 @@ async fn compose_with_files(
         action.as_ref(),
         &config.action_facets.facets,
         None,
+        spoken_reply,
     )
     .await
     .unwrap();
@@ -95,6 +107,7 @@ fn labels(messages: &GenerationInputMessages) -> Vec<String> {
         .iter()
         .map(|m| match &m.content {
             ContentPart::ActionFacetMarker(marker) => format!("action:{}", marker.args["value"]),
+            ContentPart::SpokenReplyMarker => "spoken".into(),
             _ => m.full_text(),
         })
         .collect()
@@ -668,4 +681,94 @@ async fn context_rebase_replaces_baseline_including_hidden_only_head() {
             .concat()
         );
     }
+}
+
+#[tokio::test]
+async fn spoken_reply_directive_is_last_before_the_user_message_and_never_replays() {
+    let mut repo = MockMessageRepository::new();
+    let u1 = Uuid::new_v4();
+    repo.add_message(u1, None, MessageRole::User, "U1");
+    let (_, first) = compose_turn(&repo, u1, &["alpha"], Some("first"), &[], true).await;
+    assert_eq!(
+        labels(&first),
+        [
+            baseline(),
+            vec![
+                reminder("Enable alpha"),
+                reminder("alpha instructions"),
+                "action:first".into(),
+                "spoken".into(),
+                "U1".into(),
+            ],
+        ]
+        .concat()
+    );
+    let spoken = first
+        .messages
+        .iter()
+        .find(|m| matches!(m.content, ContentPart::SpokenReplyMarker))
+        .unwrap();
+    assert_eq!(spoken.role, MessageRole::User);
+    let reloaded =
+        GenerationInputMessages::validate(&serde_json::to_value(&first).unwrap()).unwrap();
+    assert_eq!(labels(&reloaded), labels(&first));
+
+    let r1 = Uuid::new_v4();
+    repo.add_message(r1, Some(u1), MessageRole::Assistant, "R1");
+    repo.update_generation_input_messages(r1, &first);
+    repo.set_generation_parameters(r1, serde_json::json!({"selected_facets": {"alpha": true}}));
+    let u2 = Uuid::new_v4();
+    repo.add_message(u2, Some(r1), MessageRole::User, "U2");
+    let (_, typed) = compose(&repo, u2, &["alpha"], None).await;
+    let history = [
+        baseline(),
+        vec![
+            reminder("Enable alpha"),
+            reminder("alpha instructions"),
+            "U1".into(),
+            "R1".into(),
+        ],
+    ]
+    .concat();
+    assert_eq!(
+        labels(&typed),
+        [history.clone(), vec!["U2".into()]].concat()
+    );
+
+    let (_, spoken_again) = compose_turn(&repo, u2, &["alpha"], None, &[], true).await;
+    assert_eq!(
+        labels(&spoken_again),
+        [history, vec!["spoken".into(), "U2".into()]].concat()
+    );
+}
+
+#[test]
+fn spoken_reply_marker_renders_the_configured_prompt_or_nothing() {
+    let turn = || GenerationInputMessages {
+        messages: vec![
+            InputMessage {
+                role: MessageRole::User,
+                content: ContentPart::SpokenReplyMarker,
+            },
+            InputMessage {
+                role: MessageRole::User,
+                content: ContentPart::Text(ContentPartText { text: "U1".into() }),
+            },
+        ],
+    };
+    let mut config = config();
+    for unset in [None, Some("  \n".to_string())] {
+        config.audio_conversational.spoken_reply_prompt = unset;
+        assert_eq!(
+            labels(&resolve_directive_markers_with_config(&config, turn())),
+            ["U1"]
+        );
+    }
+    config.audio_conversational.spoken_reply_prompt = Some("Answer as speech.\n".into());
+    let resolved = resolve_directive_markers_with_config(&config, turn());
+    assert_eq!(
+        labels(&resolved),
+        [reminder("Answer as speech."), "U1".into()]
+    );
+    assert_eq!(resolved.messages[0].role, MessageRole::User);
 }

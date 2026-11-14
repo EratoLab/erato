@@ -136,6 +136,7 @@ impl From<ContentPart> for GenAiMessageContent {
             }
             ContentPart::ActionFacetMarker(_)
             | ContentPart::DelegationPreambleMarker(_)
+            | ContentPart::SpokenReplyMarker
             | ContentPart::TaskResult(_)
             | ContentPart::CompactionMarker(_) => {
                 // Should never reach here after resolve_directive_markers_in_generation_input.

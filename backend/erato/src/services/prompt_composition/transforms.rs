@@ -63,6 +63,7 @@ pub async fn build_abstract_sequence(
         None,
         &HashMap::new(),
         None,
+        false,
     )
     .await
 }
@@ -89,6 +90,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     action_facet_configs: &HashMap<String, ActionFacetConfig>,
     // Request platform (from `X-Erato-Platform`). Used to scope hidden facets.
     platform: Option<&str>,
+    spoken_reply: bool,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
     sequence.replay_policy = prompt_provider.tool_replay_policy();
@@ -326,6 +328,13 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
             facet_id: af.id.clone(),
             args: af.args.clone(),
         });
+    }
+
+    // 9.65 Inject the spoken-reply directive (request-scoped, like the action
+    // facet). It follows the facet and action directives so the instruction
+    // on how to say the reply is the last thing before the user's words.
+    if spoken_reply {
+        tip_directives.push(AbstractChatSequencePart::SpokenReplyPrompt);
     }
 
     // 9.7 Inject the delegated run's directive, derived from the chat row on
@@ -632,6 +641,13 @@ pub async fn resolve_sequence(
                 });
             }
 
+            AbstractChatSequencePart::SpokenReplyPrompt => {
+                input_messages.push(InputMessage {
+                    role: MessageRole::User,
+                    content: ContentPart::SpokenReplyMarker,
+                });
+            }
+
             AbstractChatSequencePart::DelegationPreamble {
                 expected_output,
                 constraints,
@@ -834,7 +850,7 @@ fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
 }
 
 /// True when an `InputMessage` carries a per-turn directive emitted by a
-/// prior turn. Both directive kinds are request-scoped and both are re-derived
+/// prior turn. These directive kinds are request-scoped and are re-derived
 /// for the current turn, so a replayed copy is at best duplication and at
 /// worst a contradiction: action facets ("FOR THIS MESSAGE ONLY") turn into
 /// conflicting format instructions the model drifts between, and a delegation
@@ -842,9 +858,13 @@ fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
 /// emitting it once the run is adopted, and a replayed one would keep telling
 /// a delegate not to address the user who is now writing to it.
 ///
-/// Three shapes need stripping:
+/// A spoken-reply marker belongs to a turn that was read back; replayed, it
+/// would tell a later typed turn to answer as speech.
+///
+/// Four shapes need stripping:
 ///   * `ContentPart::ActionFacetMarker` (any role).
 ///   * `ContentPart::DelegationPreambleMarker` (any role).
+///   * `ContentPart::SpokenReplyMarker` (any role).
 ///   * Legacy action-facet format: `System` messages whose text starts with
 ///     the literal `"FOR THIS MESSAGE ONLY:"` prefix from the rendered
 ///     template — for `generation_input_messages` rows persisted before the
@@ -856,7 +876,9 @@ fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
 /// they are left as they are rather than pattern-matched on prompt text.
 fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
     match &input_msg.content {
-        ContentPart::ActionFacetMarker(_) | ContentPart::DelegationPreambleMarker(_) => true,
+        ContentPart::ActionFacetMarker(_)
+        | ContentPart::DelegationPreambleMarker(_)
+        | ContentPart::SpokenReplyMarker => true,
         ContentPart::Text(ContentPartText { text }) => {
             matches!(input_msg.role, MessageRole::System)
                 && text.trim_start().starts_with("FOR THIS MESSAGE ONLY:")

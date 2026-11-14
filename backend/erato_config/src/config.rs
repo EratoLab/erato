@@ -3259,6 +3259,7 @@ mod audio_config_tests {
         let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
         assert_eq!(conversational.transcription, shared);
         assert_eq!(conversational.speech_provider, None);
+        assert_eq!(conversational.spoken_reply_prompt(), None);
     }
 
     #[test]
@@ -8077,6 +8078,22 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_provider: Option<String>,
+    /// Instruction the model gets on a turn whose reply is read back, placed
+    /// right before the user's message. Not sent on typed turns. Unset or
+    /// blank sends none.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub spoken_reply_prompt: Option<String>,
+}
+
+impl AudioConversationalConfig {
+    /// The instruction for a read-back turn, when one is configured.
+    pub fn spoken_reply_prompt(&self) -> Option<&str> {
+        self.spoken_reply_prompt
+            .as_deref()
+            .map(str::trim)
+            .filter(|prompt| !prompt.is_empty())
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]

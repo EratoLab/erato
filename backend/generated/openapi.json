@@ -7826,6 +7826,21 @@
             "description": "Reference to the run directive of a delegated chat, resolved the same\nway as `ActionFacetMarker`: metadata in the persisted snapshot, text\nonly in the request about to be sent, dropped when the snapshot is\nreplayed as prior-turn history."
           },
           {
+            "type": "object",
+            "description": "Marks a turn whose reply is read back in conversational audio mode.\nResolved like `ActionFacetMarker`: the instruction text comes from\n`audio_conversational.spoken_reply_prompt` when the request is built,\nand the marker is dropped when the snapshot replays as prior-turn\nhistory, so a later typed turn is not told to answer as speech.",
+            "required": [
+              "content_type"
+            ],
+            "properties": {
+              "content_type": {
+                "type": "string",
+                "enum": [
+                  "spoken_reply_marker"
+                ]
+              }
+            }
+          },
+          {
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContentPartTaskResult",

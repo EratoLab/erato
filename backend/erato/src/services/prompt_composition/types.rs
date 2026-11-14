@@ -31,6 +31,10 @@ pub struct PromptCompositionUserInput {
     /// Optional action facet requested by the user for this generation.
     pub action_facet: Option<ActionFacetUserInput>,
 
+    /// The reply to this turn is read back and a spoken-reply instruction is
+    /// configured, so the turn carries that instruction.
+    pub spoken_reply: bool,
+
     /// Validated delegation targets from the user's assistant mentions.
     /// Non-empty only on mention-carrying turns; drives the request-scoped
     /// `delegate_to_assistant` tool offer.
@@ -106,6 +110,11 @@ pub enum AbstractChatSequencePart {
         facet_id: String,
         args: HashMap<String, String>,
     },
+
+    /// Spoken-reply directive of a turn that is read back (request-scoped).
+    /// A marker like `ActionFacetPrompt`: the text is rendered in the
+    /// resolver step from `audio_conversational.spoken_reply_prompt`.
+    SpokenReplyPrompt,
 
     /// Run directive of a delegated chat, carrying the structured-brief fields
     /// and the run mode off the chat's provenance envelope. Rendered in the

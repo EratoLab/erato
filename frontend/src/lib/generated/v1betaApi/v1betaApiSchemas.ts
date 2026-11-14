@@ -1389,6 +1389,9 @@ export type ContentPart =
   | (ContentPartDelegationPreambleMarker & {
       content_type: "delegation_preamble_marker";
     })
+  | {
+      content_type: "spoken_reply_marker";
+    }
   | (ContentPartTaskResult & {
       content_type: "task_result";
     });

@@ -22,6 +22,7 @@ pub mod read_aloud;
 pub mod scheduled_items;
 pub mod sharepoint;
 pub mod sharing;
+pub mod spoken_reply;
 pub mod starter_prompts;
 pub mod starting_assistant;
 pub mod user_tool_approval_settings;
