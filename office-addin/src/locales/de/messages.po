@@ -1391,6 +1391,56 @@ msgid "officeAddin.pinHint.title"
 msgstr "Anheften, um deinen E-Mails zu folgen"
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.exclude"
+msgstr "Diese Präsentation nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.include"
+msgstr "Diese Präsentation einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.onDemand"
+msgstr "Wird bei Bedarf gelesen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.spokenLabel"
+msgstr "Präsentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basic"
+msgstr "Mit dieser PowerPoint-Version kann Erato nur Textfelder und ihre Positionen lesen. Titel, Tabellen und Formen in Gruppen bleiben ungelesen."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.full"
+msgstr "Erato liest Folientitel, Text mit Aufzählungsebenen, Tabellen, Formen in Gruppen und Alternativtext."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.never"
+msgstr "Notizen, Kommentare, Diagrammdaten und SmartArt-Text können nicht gelesen werden."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.off"
+msgstr "Nicht einbezogen: Erato liest diese Präsentation in diesem Chat nicht."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemand"
+msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht, und sieht, welche Folien und Formen Sie ausgewählt haben."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht. Diese PowerPoint-Version teilt Erato nicht mit, was Sie ausgewählt haben."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "„{excerpt}“"

@@ -1391,6 +1391,56 @@ msgid "officeAddin.pinHint.title"
 msgstr "Przypnij, aby śledzić pocztę"
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.exclude"
+msgstr "Nie dołączaj tej prezentacji"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.include"
+msgstr "Dołącz tę prezentację"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.onDemand"
+msgstr "Odczytywana w razie potrzeby"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.spokenLabel"
+msgstr "Prezentacja"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basic"
+msgstr "W tej wersji PowerPointa Erato może odczytać tylko pola tekstowe i ich położenie. Tytuły, tabele i kształty w grupach pozostają nieodczytane."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.full"
+msgstr "Odczytuje tytuły slajdów, tekst z poziomami punktorów, tabele, kształty w grupach i tekst alternatywny."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.never"
+msgstr "Notatek prelegenta, komentarzy, danych wykresów i tekstu SmartArt nie da się odczytać."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.off"
+msgstr "Pominięta: Erato nie odczytuje tej prezentacji w tym czacie."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemand"
+msgstr "Erato odczytuje slajdy pojedynczo, tylko gdy Twoja prośba ich wymaga, i widzi, które slajdy i kształty zaznaczono."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato odczytuje slajdy pojedynczo, tylko gdy Twoja prośba ich wymaga. Ta wersja PowerPointa nie przekazuje, co zaznaczono."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "„{excerpt}”"
