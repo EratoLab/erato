@@ -21,6 +21,11 @@ pub const VIEW_READ_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a view that was refused or could not be read is left alone, so
 /// that a broken view costs one call the wait and not every call.
 pub const VIEW_FAILURE_RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
+/// The most view bytes kept at once, all servers together. Past it the least
+/// used views are dropped and read again when their tool is next called.
+pub const VIEW_CACHE_BYTES: u64 = 128 * 1024 * 1024;
+/// How many refused or unreadable views are remembered at once.
+pub const MAX_REMEMBERED_VIEW_FAILURES: u64 = 10_000;
 /// The most of a call's `structuredContent` kept with the call for its view.
 pub const MAX_VIEW_STRUCTURED_CONTENT_BYTES: usize = 1024 * 1024;
 /// Longest `ui://` URI a tool may name as its view.

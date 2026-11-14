@@ -7,7 +7,8 @@ use crate::config::{
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::models::message::ToolResultView;
 use crate::services::mcp_apps::{
-    McpAppView, VIEW_FAILURE_RETRY_AFTER, VIEW_READ_TIMEOUT, view_uri,
+    MAX_REMEMBERED_VIEW_FAILURES, McpAppView, VIEW_CACHE_BYTES, VIEW_FAILURE_RETRY_AFTER,
+    VIEW_READ_TIMEOUT, view_uri,
 };
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
@@ -16,6 +17,7 @@ use crate::services::mcp_tool_annotations::{ResolvedMcpTool, resolve_tool_annota
 use crate::services::mcp_transports::{ProgressClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
+use moka::{Expiry, future::Cache};
 use rmcp::model::{CallToolRequestParams, CallToolResult, ReadResourceRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use sea_orm::prelude::Uuid;
@@ -302,20 +304,60 @@ pub struct McpSessionManager {
         tokio::sync::Mutex<HashMap<SessionKey, std::sync::Weak<tokio::sync::Mutex<()>>>>,
     generation: std::sync::Mutex<HashMap<String, u64>>,
     /// Accepted MCP Apps views by server and URI, each kept until the tool
-    /// list it was read under goes stale, and dropped with the server's
-    /// sessions.
-    app_views: tokio::sync::Mutex<AppViews>,
-    /// Views that were refused or could not be read, with why and until when
-    /// they are left alone. Kept per credentials, unlike accepted views: one
-    /// user's failed read must not hide the view from the others.
-    app_view_failures: tokio::sync::Mutex<AppViewFailures>,
+    /// list it was read under goes stale, within `VIEW_CACHE_BYTES` in all.
+    app_views: Cache<AppViewKey, CachedAppView>,
+    /// Why a view was refused or could not be read, kept for
+    /// `VIEW_FAILURE_RETRY_AFTER`. Kept per credentials, unlike accepted
+    /// views: one user's failed read must not hide the view from the others.
+    app_view_failures: Cache<AppViewFailureKey, String>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
 }
 
-type AppViews = HashMap<(String, String), (tokio::time::Instant, Arc<McpAppView>)>;
-/// Keyed by server, URI and a digest of the session auth key.
-type AppViewFailures = HashMap<(String, String, Option<u64>), (tokio::time::Instant, String)>;
+/// Server and view URI.
+type AppViewKey = (String, String);
+/// Server, view URI and a digest of the session auth key.
+type AppViewFailureKey = (String, String, Option<u64>);
+
+#[derive(Debug, Clone)]
+struct CachedAppView {
+    view: Arc<McpAppView>,
+    /// How long the tool list the view was read under stays fresh.
+    fresh_for: Duration,
+}
+
+struct AppViewExpiry;
+
+impl Expiry<AppViewKey, CachedAppView> for AppViewExpiry {
+    fn expire_after_create(
+        &self,
+        _key: &AppViewKey,
+        cached: &CachedAppView,
+        _created_at: std::time::Instant,
+    ) -> Option<Duration> {
+        Some(cached.fresh_for)
+    }
+}
+
+fn app_view_cache() -> Cache<AppViewKey, CachedAppView> {
+    Cache::builder()
+        .max_capacity(VIEW_CACHE_BYTES)
+        .weigher(|(server_id, uri): &AppViewKey, cached: &CachedAppView| {
+            let ui = cached.view.ui.as_ref().map_or(0, |ui| ui.to_string().len());
+            (server_id.len() + uri.len() + cached.view.html.len() + ui)
+                .try_into()
+                .unwrap_or(u32::MAX)
+        })
+        .expire_after(AppViewExpiry)
+        .build()
+}
+
+fn app_view_failure_cache() -> Cache<AppViewFailureKey, String> {
+    Cache::builder()
+        .max_capacity(MAX_REMEMBERED_VIEW_FAILURES)
+        .time_to_live(VIEW_FAILURE_RETRY_AFTER)
+        .build()
+}
 
 impl Drop for McpSessionManager {
     fn drop(&mut self) {
@@ -464,8 +506,8 @@ impl McpSessionManager {
             http_servers: Default::default(),
             creation_gates: Default::default(),
             generation: Default::default(),
-            app_views: Default::default(),
-            app_view_failures: Default::default(),
+            app_views: app_view_cache(),
+            app_view_failures: app_view_failure_cache(),
         }
     }
 
@@ -521,14 +563,8 @@ impl McpSessionManager {
             .lock()
             .await
             .retain(|id, _| !changed_server_ids.contains(id));
-        self.app_views
-            .lock()
-            .await
-            .retain(|(id, _), _| !changed_server_ids.contains(id));
-        self.app_view_failures
-            .lock()
-            .await
-            .retain(|(id, _, _), _| !changed_server_ids.contains(id));
+        self.forget_app_views(|id| changed_server_ids.contains(id))
+            .await;
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
         Self::update_active_session_metrics(
@@ -692,14 +728,7 @@ impl McpSessionManager {
             .or_default() += 1;
         // Detached runtimes cannot republish into the replacement caches.
         self.http_servers.lock().await.remove(server_id);
-        self.app_views
-            .lock()
-            .await
-            .retain(|(id, _), _| id != server_id);
-        self.app_view_failures
-            .lock()
-            .await
-            .retain(|(id, _, _), _| id != server_id);
+        self.forget_app_views(|id| id == server_id).await;
         let session_auth_key = format!("oauth2:{access_token}");
         let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
@@ -821,10 +850,8 @@ impl McpSessionManager {
             return Err(eyre!("No tool of this server declares this view"));
         }
         let key = (server_id.to_owned(), uri.to_owned());
-        if let Some((expires, view)) = self.app_views.lock().await.get(&key)
-            && *expires > tokio::time::Instant::now()
-        {
-            return Ok(view.clone());
+        if let Some(cached) = self.app_views.get(&key).await {
+            return Ok(cached.view);
         }
         let failure_key = {
             let auth_key = Self::session_auth_key(server_id, &config, auth).await?;
@@ -835,9 +862,7 @@ impl McpSessionManager {
             });
             (server_id.to_owned(), uri.to_owned(), digest)
         };
-        if let Some((retry_at, reason)) = self.app_view_failures.lock().await.get(&failure_key)
-            && *retry_at > tokio::time::Instant::now()
-        {
+        if let Some(reason) = self.app_view_failures.get(&failure_key).await {
             return Err(eyre!(
                 "{reason} (from an earlier read, not repeated for {VIEW_FAILURE_RETRY_AFTER:?})"
             ));
@@ -862,35 +887,51 @@ impl McpSessionManager {
                 }
             }
         };
-        let outcome = match tokio::time::timeout(VIEW_READ_TIMEOUT, read).await {
-            Ok(Ok(result)) => McpAppView::from_read_result(uri, result),
-            Ok(Err(error)) => Err(error),
-            Err(_) => Err(eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}")),
-        };
+        // Calls that ask for the same view at once share one read.
+        let outcome = self
+            .app_views
+            .try_get_with(key.clone(), async {
+                let result = tokio::time::timeout(VIEW_READ_TIMEOUT, read)
+                    .await
+                    .map_err(|_| eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}"))??;
+                Ok::<_, Report>(CachedAppView {
+                    view: Arc::new(McpAppView::from_read_result(uri, result)?),
+                    fresh_for: tools_expire.saturating_duration_since(tokio::time::Instant::now()),
+                })
+            })
+            .await;
         // Nothing read across a reload or a credential change is kept.
         let still_current =
-            || *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) == generation;
+            *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) == generation;
         match outcome {
-            Ok(view) => {
-                let view = Arc::new(view);
-                let mut views = self.app_views.lock().await;
-                if still_current() {
-                    views.insert(key, (tools_expire, view.clone()));
+            Ok(cached) => {
+                if !still_current {
+                    self.app_views.invalidate(&key).await;
                 }
-                Ok(view)
+                Ok(cached.view)
             }
             Err(error) => {
-                let now = tokio::time::Instant::now();
-                let mut failures = self.app_view_failures.lock().await;
-                if still_current() {
-                    failures.retain(|_, (retry_at, _)| *retry_at > now);
-                    failures.insert(
-                        failure_key,
-                        (now + VIEW_FAILURE_RETRY_AFTER, format!("{error:#}")),
-                    );
+                let reason = format!("{error:#}");
+                if still_current {
+                    self.app_view_failures
+                        .insert(failure_key, reason.clone())
+                        .await;
                 }
-                Err(error)
+                Err(eyre!(reason))
             }
+        }
+    }
+
+    /// Drops the kept views and remembered failures of the servers
+    /// `is_affected` names.
+    async fn forget_app_views(&self, is_affected: impl Fn(&String) -> bool) {
+        let views: Vec<_> = self.app_views.iter().map(|(key, _)| key).collect();
+        for key in views.iter().filter(|key| is_affected(&key.0)) {
+            self.app_views.invalidate(key.as_ref()).await;
+        }
+        let failures: Vec<_> = self.app_view_failures.iter().map(|(key, _)| key).collect();
+        for key in failures.iter().filter(|key| is_affected(&key.0)) {
+            self.app_view_failures.invalidate(key.as_ref()).await;
         }
     }
 
@@ -1595,8 +1636,14 @@ impl erato_memory::HeapSize for McpSessionManager {
         c.measure(&self.http_servers);
         c.measure(&self.creation_gates);
         c.measure(&self.generation);
-        c.measure(&self.app_views);
-        c.measure(&self.app_view_failures);
+        for (key, cached) in self.app_views.iter() {
+            c.measure(&*key);
+            c.measure(&cached.view);
+        }
+        for (key, reason) in self.app_view_failures.iter() {
+            c.measure(&*key);
+            c.measure(&reason);
+        }
         c.opaque(&self._cleanup_task);
     }
 }

@@ -106,16 +106,24 @@ async fn a_view_is_read_once_per_server_and_uri_in_both_protocol_eras() {
             .unwrap();
         assert_eq!(view_uri(&counter.tool), Some(COUNTER_VIEW_URI), "{era}");
 
-        for chat in [chat, chat, Uuid::new_v4()] {
+        let named = Some(ToolResultView {
+            server_id: era.to_string(),
+            uri: COUNTER_VIEW_URI.to_string(),
+            structured_content: None,
+        });
+        // Calls that ask at once share one read, and later ones find it kept.
+        let at_once = join_all(
+            [chat, chat, Uuid::new_v4()]
+                .map(|chat| manager.app_view_for_call(chat, era, COUNTER_VIEW_URI, &auth)),
+        )
+        .await;
+        assert_eq!(at_once, vec![named.clone(); 3], "{era}");
+        for chat in [chat, Uuid::new_v4()] {
             assert_eq!(
                 manager
                     .app_view_for_call(chat, era, COUNTER_VIEW_URI, &auth)
                     .await,
-                Some(ToolResultView {
-                    server_id: era.to_string(),
-                    uri: COUNTER_VIEW_URI.to_string(),
-                    structured_content: None,
-                }),
+                named,
                 "{era}"
             );
         }
@@ -163,9 +171,8 @@ async fn a_view_of_the_wrong_type_or_too_large_is_refused_with_a_log_line() {
             }
         }
         assert_eq!(reads_of(&reads, era), 2, "{era}");
-        for (retry_at, _) in manager.app_view_failures.lock().await.values_mut() {
-            *retry_at = tokio::time::Instant::now();
-        }
+        // As if `VIEW_FAILURE_RETRY_AFTER` had passed.
+        manager.app_view_failures.invalidate_all();
         assert_eq!(
             manager
                 .app_view_for_call(chat, era, WRONG_TYPE_VIEW_URI, &auth)
@@ -173,14 +180,7 @@ async fn a_view_of_the_wrong_type_or_too_large_is_refused_with_a_log_line() {
             None
         );
         assert_eq!(reads_of(&reads, era), 3, "{era}");
-        assert!(
-            !manager
-                .app_views
-                .lock()
-                .await
-                .keys()
-                .any(|(server, _)| server == era)
-        );
+        assert!(!manager.app_views.iter().any(|(key, _)| key.0 == era));
         // A URI no tool declares is never read.
         assert!(
             manager
@@ -241,7 +241,7 @@ async fn a_view_that_never_answers_is_given_up_with_a_log_line() {
     for era in ERAS {
         assert_eq!(reads_of(&reads, era), 1, "{era}");
     }
-    assert!(manager.app_views.lock().await.is_empty());
+    assert!(manager.app_views.iter().next().is_none());
 }
 
 /// With MCP Apps off, no view is read and none is offered.
