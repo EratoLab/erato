@@ -217,6 +217,10 @@ async fn async_main(worker_threads: usize) -> Result<(), Report> {
                     }),
                 )
                 .fallback_service(serve_files_with_script.into_service())
+                .layer(axum::middleware::from_fn_with_state(
+                    state.clone(),
+                    server::mcp_apps_sandbox_page::on_sandbox_hosts_only,
+                ))
                 .layer(Extension(frontend_registry))
                 .layer(Extension(DeploymentVersion::from_env()))
                 .layer(CorsLayer::very_permissive())

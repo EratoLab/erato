@@ -28,7 +28,7 @@ use crate::server::api::v1beta::file_resolution::resolve_directive_markers_in_ge
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
     mcp_tool_processing_error_output, parse_content_filter_error_from_mcp_tool_result,
-    post_process_mcp_tool_result,
+    post_process_mcp_tool_result, structured_content_for_view,
 };
 use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, LeaseHeld, StreamingEvent, StreamingTask, Takeover,
@@ -10118,6 +10118,11 @@ async fn stream_generate_chat_completion<'a>(
                             app_view_uri.as_deref().filter(|_| !tool_failed),
                             &mcp_auth_context,
                             post_processed.result_details,
+                            structured_content_for_view(
+                                &tool_call_result,
+                                &file_content_parts,
+                                output_value.as_ref(),
+                            ),
                         )
                         .await;
 
@@ -23394,6 +23399,11 @@ pub(crate) async fn run_continuation(
                                         app_view_uri.as_deref().filter(|_| !failed),
                                         &mcp_auth_context,
                                         processed.result_details,
+                                        structured_content_for_view(
+                                            &result,
+                                            &file_content_parts,
+                                            processed.output_value.as_ref(),
+                                        ),
                                     )
                                     .await;
                                 (status, processed.output_value, result_details)

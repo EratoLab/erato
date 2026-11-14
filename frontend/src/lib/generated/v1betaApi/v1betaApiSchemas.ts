@@ -5285,11 +5285,16 @@ export type ToolResultLink = {
 /**
  * Where the web app gets a call's view: `GET
  * /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
- * HTML and its `_meta.ui`. The view is shown with the call's `input` and
- * `output`.
+ * HTML and its `_meta.ui`. The view is shown with the call's `input`, its
+ * `output` and `structured_content`.
  */
 export type ToolResultView = {
   server_id: string;
+  /**
+   * The call's `structuredContent`, which a view takes its data from. Kept
+   * only here, for the view: the model reads the call's `output`.
+   */
+  structured_content?: Record<string, any>;
   /**
    * The view's `ui://` URI, as the tool declares it.
    */

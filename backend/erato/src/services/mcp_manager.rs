@@ -172,8 +172,9 @@ impl McpServers {
     }
 
     /// A call's details with the view its tool declares (`view_uri`, see
-    /// `mcp_apps::view_uri`), when the server enables MCP Apps and the view
-    /// is accepted; otherwise `details` as they are.
+    /// `mcp_apps::view_uri`) and the result's `structuredContent` for it, when
+    /// the server enables MCP Apps and the view is accepted; otherwise
+    /// `details` as they are.
     pub async fn with_app_view(
         &self,
         chat_id: Uuid,
@@ -181,17 +182,20 @@ impl McpServers {
         view_uri: Option<&str>,
         auth_context: &McpRequestAuthContext<'_>,
         details: Option<ToolResultDetails>,
+        structured_content: Option<&serde_json::Value>,
     ) -> Option<ToolResultDetails> {
         let Some(uri) = view_uri else {
             return details;
         };
-        let Some(view) = self
+        let Some(mut view) = self
             .session_manager
             .app_view_for_call(chat_id, server_id, uri, auth_context)
             .await
         else {
             return details;
         };
+        view.structured_content =
+            crate::services::mcp_apps::structured_content_for_view(structured_content);
         let mut details = details.unwrap_or_default();
         details.view = Some(view);
         Some(details)

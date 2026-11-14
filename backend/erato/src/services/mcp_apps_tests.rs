@@ -114,6 +114,7 @@ async fn a_view_is_read_once_per_server_and_uri_in_both_protocol_eras() {
                 Some(ToolResultView {
                     server_id: era.to_string(),
                     uri: COUNTER_VIEW_URI.to_string(),
+                    structured_content: None,
                 }),
                 "{era}"
             );
@@ -140,8 +141,9 @@ async fn a_view_is_read_once_per_server_and_uri_in_both_protocol_eras() {
     assert_eq!(reads_of(&reads, "stateless"), 1);
 }
 
-/// A view of the wrong type or too large is refused with a log line, and
-/// nothing is kept: the call is shown without a view.
+/// A view of the wrong type or too large is refused with a log line and the
+/// call is shown without a view. The refusal is remembered, so later calls do
+/// not read the view again until `VIEW_FAILURE_RETRY_AFTER` has passed.
 #[tokio::test]
 async fn a_view_of_the_wrong_type_or_too_large_is_refused_with_a_log_line() {
     let (url, reads) = serve_counting_reads().await;
@@ -149,15 +151,28 @@ async fn a_view_of_the_wrong_type_or_too_large_is_refused_with_a_log_line() {
     let auth = McpRequestAuthContext::default();
     let chat = Uuid::new_v4();
     for era in ERAS {
-        for (uri, reason) in [
-            (WRONG_TYPE_VIEW_URI, "MIME type"),
-            (OVERSIZED_VIEW_URI, "more than the 8388608 kept"),
-        ] {
-            let (view, log) = logged(manager.app_view_for_call(chat, era, uri, &auth)).await;
-            assert_eq!(view, None, "{era} {uri}");
-            assert!(log.contains("MCP Apps view refused"), "{era} {uri}: {log}");
-            assert!(log.contains(uri) && log.contains(reason), "{era}: {log}");
+        for _call in 0..2 {
+            for (uri, reason) in [
+                (WRONG_TYPE_VIEW_URI, "MIME type"),
+                (OVERSIZED_VIEW_URI, "more than the 8388608 kept"),
+            ] {
+                let (view, log) = logged(manager.app_view_for_call(chat, era, uri, &auth)).await;
+                assert_eq!(view, None, "{era} {uri}");
+                assert!(log.contains("MCP Apps view refused"), "{era} {uri}: {log}");
+                assert!(log.contains(uri) && log.contains(reason), "{era}: {log}");
+            }
         }
+        assert_eq!(reads_of(&reads, era), 2, "{era}");
+        for (retry_at, _) in manager.app_view_failures.lock().await.values_mut() {
+            *retry_at = tokio::time::Instant::now();
+        }
+        assert_eq!(
+            manager
+                .app_view_for_call(chat, era, WRONG_TYPE_VIEW_URI, &auth)
+                .await,
+            None
+        );
+        assert_eq!(reads_of(&reads, era), 3, "{era}");
         assert!(
             !manager
                 .app_views
@@ -173,12 +188,13 @@ async fn a_view_of_the_wrong_type_or_too_large_is_refused_with_a_log_line() {
                 .await
                 .is_err()
         );
-        assert_eq!(reads_of(&reads, era), 2, "{era}");
+        assert_eq!(reads_of(&reads, era), 3, "{era}");
     }
 }
 
 /// A view whose read never answers is given up after `VIEW_READ_TIMEOUT`
-/// with a log line, so the call settles without a view, in both eras.
+/// with a log line, so the call settles without a view, in both eras. Only
+/// the first call waits: the next ones are told at once.
 #[tokio::test]
 async fn a_view_that_never_answers_is_given_up_with_a_log_line() {
     let (url, reads) = serve_counting_reads().await;
@@ -201,6 +217,26 @@ async fn a_view_that_never_answers_is_given_up_with_a_log_line() {
     assert!(
         log.contains(SLOW_VIEW_URI) && log.contains("not read within"),
         "{log}"
+    );
+    let again = tokio::time::Instant::now();
+    for era in ERAS {
+        assert_eq!(
+            manager
+                .app_view_for_call(Uuid::new_v4(), era, SLOW_VIEW_URI, &auth)
+                .await,
+            None
+        );
+        assert!(
+            manager
+                .read_app_view(ENUMERATION_CHAT_ID, era, SLOW_VIEW_URI, &auth)
+                .await
+                .is_err()
+        );
+    }
+    assert!(
+        again.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        again.elapsed()
     );
     for era in ERAS {
         assert_eq!(reads_of(&reads, era), 1, "{era}");

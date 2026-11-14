@@ -6,7 +6,9 @@ use crate::config::{
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
 use crate::models::message::ToolResultView;
-use crate::services::mcp_apps::{McpAppView, VIEW_READ_TIMEOUT, view_uri};
+use crate::services::mcp_apps::{
+    McpAppView, VIEW_FAILURE_RETRY_AFTER, VIEW_READ_TIMEOUT, view_uri,
+};
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
 use crate::services::mcp_surface::SurfaceHint;
@@ -303,11 +305,17 @@ pub struct McpSessionManager {
     /// list it was read under goes stale, and dropped with the server's
     /// sessions.
     app_views: tokio::sync::Mutex<AppViews>,
+    /// Views that were refused or could not be read, with why and until when
+    /// they are left alone. Kept per credentials, unlike accepted views: one
+    /// user's failed read must not hide the view from the others.
+    app_view_failures: tokio::sync::Mutex<AppViewFailures>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
 }
 
 type AppViews = HashMap<(String, String), (tokio::time::Instant, Arc<McpAppView>)>;
+/// Keyed by server, URI and a digest of the session auth key.
+type AppViewFailures = HashMap<(String, String, Option<u64>), (tokio::time::Instant, String)>;
 
 impl Drop for McpSessionManager {
     fn drop(&mut self) {
@@ -457,6 +465,7 @@ impl McpSessionManager {
             creation_gates: Default::default(),
             generation: Default::default(),
             app_views: Default::default(),
+            app_view_failures: Default::default(),
         }
     }
 
@@ -516,6 +525,10 @@ impl McpSessionManager {
             .lock()
             .await
             .retain(|(id, _), _| !changed_server_ids.contains(id));
+        self.app_view_failures
+            .lock()
+            .await
+            .retain(|(id, _, _), _| !changed_server_ids.contains(id));
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
         Self::update_active_session_metrics(
@@ -683,6 +696,10 @@ impl McpSessionManager {
             .lock()
             .await
             .retain(|(id, _), _| id != server_id);
+        self.app_view_failures
+            .lock()
+            .await
+            .retain(|(id, _, _), _| id != server_id);
         let session_auth_key = format!("oauth2:{access_token}");
         let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
@@ -786,7 +803,8 @@ impl McpSessionManager {
     /// The view at `uri` that a tool of `server_id` declares, for a server
     /// that enables MCP Apps. Read with `resources/read` in either protocol
     /// era, within `VIEW_READ_TIMEOUT`, and kept per server and URI until the
-    /// tool list it was read under goes stale.
+    /// tool list it was read under goes stale. A view that is refused or
+    /// cannot be read is not read again for `VIEW_FAILURE_RETRY_AFTER`.
     pub async fn read_app_view(
         &self,
         chat_id: Uuid,
@@ -794,7 +812,8 @@ impl McpSessionManager {
         uri: &str,
         auth: &McpRequestAuthContext<'_>,
     ) -> Result<Arc<McpAppView>, Report> {
-        if !self.server_config(server_id).await?.mcp_apps.enabled {
+        let config = self.server_config(server_id).await?;
+        if !config.mcp_apps.enabled {
             return Err(eyre!("MCP Apps are off for this server"));
         }
         let (tools, tools_expire) = self.tool_list(chat_id, server_id, auth).await?;
@@ -806,6 +825,22 @@ impl McpSessionManager {
             && *expires > tokio::time::Instant::now()
         {
             return Ok(view.clone());
+        }
+        let failure_key = {
+            let auth_key = Self::session_auth_key(server_id, &config, auth).await?;
+            let digest = auth_key.map(|auth_key| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                std::hash::Hash::hash(&auth_key, &mut hasher);
+                std::hash::Hasher::finish(&hasher)
+            });
+            (server_id.to_owned(), uri.to_owned(), digest)
+        };
+        if let Some((retry_at, reason)) = self.app_view_failures.lock().await.get(&failure_key)
+            && *retry_at > tokio::time::Instant::now()
+        {
+            return Err(eyre!(
+                "{reason} (from an earlier read, not repeated for {VIEW_FAILURE_RETRY_AFTER:?})"
+            ));
         }
         let generation = *self.generation.lock().unwrap().get(server_id).unwrap_or(&0);
         let read = async {
@@ -827,16 +862,36 @@ impl McpSessionManager {
                 }
             }
         };
-        let result = tokio::time::timeout(VIEW_READ_TIMEOUT, read)
-            .await
-            .map_err(|_| eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}"))??;
-        let view = Arc::new(McpAppView::from_read_result(uri, result)?);
-        let mut views = self.app_views.lock().await;
-        // A view read across a reload or a credential change is not kept.
-        if *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) == generation {
-            views.insert(key, (tools_expire, view.clone()));
+        let outcome = match tokio::time::timeout(VIEW_READ_TIMEOUT, read).await {
+            Ok(Ok(result)) => McpAppView::from_read_result(uri, result),
+            Ok(Err(error)) => Err(error),
+            Err(_) => Err(eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}")),
+        };
+        // Nothing read across a reload or a credential change is kept.
+        let still_current =
+            || *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) == generation;
+        match outcome {
+            Ok(view) => {
+                let view = Arc::new(view);
+                let mut views = self.app_views.lock().await;
+                if still_current() {
+                    views.insert(key, (tools_expire, view.clone()));
+                }
+                Ok(view)
+            }
+            Err(error) => {
+                let now = tokio::time::Instant::now();
+                let mut failures = self.app_view_failures.lock().await;
+                if still_current() {
+                    failures.retain(|_, (retry_at, _)| *retry_at > now);
+                    failures.insert(
+                        failure_key,
+                        (now + VIEW_FAILURE_RETRY_AFTER, format!("{error:#}")),
+                    );
+                }
+                Err(error)
+            }
         }
-        Ok(view)
     }
 
     /// The view a call of a tool declaring `uri` on `server_id` is shown
@@ -860,6 +915,7 @@ impl McpSessionManager {
             Ok(_) => Some(ToolResultView {
                 server_id: server_id.to_owned(),
                 uri: uri.to_owned(),
+                structured_content: None,
             }),
             Err(error) => {
                 warn!(
@@ -1540,6 +1596,7 @@ impl erato_memory::HeapSize for McpSessionManager {
         c.measure(&self.creation_gates);
         c.measure(&self.generation);
         c.measure(&self.app_views);
+        c.measure(&self.app_view_failures);
         c.opaque(&self._cleanup_task);
     }
 }

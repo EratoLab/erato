@@ -18,6 +18,11 @@ pub const MAX_VIEW_BYTES: usize = 8 * 1024 * 1024;
 /// tool call waits for its view, so a server that never answers must not
 /// hold the call.
 pub const VIEW_READ_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a view that was refused or could not be read is left alone, so
+/// that a broken view costs one call the wait and not every call.
+pub const VIEW_FAILURE_RETRY_AFTER: Duration = Duration::from_secs(5 * 60);
+/// The most of a call's `structuredContent` kept with the call for its view.
+pub const MAX_VIEW_STRUCTURED_CONTENT_BYTES: usize = 1024 * 1024;
 /// Longest `ui://` URI a tool may name as its view.
 const MAX_VIEW_URI_BYTES: usize = 512;
 
@@ -102,6 +107,21 @@ impl McpAppView {
             ui,
         })
     }
+}
+
+/// A call's `structuredContent` as its view gets it: an object of at most
+/// `MAX_VIEW_STRUCTURED_CONTENT_BYTES`, or nothing.
+pub fn structured_content_for_view(structured_content: Option<&Value>) -> Option<Value> {
+    let value = structured_content.filter(|value| value.is_object())?;
+    let size = value.to_string().len();
+    if size > MAX_VIEW_STRUCTURED_CONTENT_BYTES {
+        tracing::warn!(
+            size,
+            "structuredContent is larger than the {MAX_VIEW_STRUCTURED_CONTENT_BYTES} bytes kept for a view; the view gets the result's text only"
+        );
+        return None;
+    }
+    Some(value.clone())
 }
 
 fn too_large(size: usize) -> Report {
@@ -228,5 +248,18 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_view_gets_structured_content_only_as_an_object_within_the_limit() {
+        let object = json!({"series": [1, 2, 3]});
+        assert_eq!(
+            structured_content_for_view(Some(&object)),
+            Some(object.clone())
+        );
+        assert_eq!(structured_content_for_view(None), None);
+        assert_eq!(structured_content_for_view(Some(&json!([1, 2, 3]))), None);
+        let large = json!({"text": "x".repeat(MAX_VIEW_STRUCTURED_CONTENT_BYTES)});
+        assert_eq!(structured_content_for_view(Some(&large)), None);
     }
 }

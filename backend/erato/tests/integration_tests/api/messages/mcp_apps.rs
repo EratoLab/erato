@@ -161,10 +161,15 @@ async fn submit(setup: &Setup) -> (TestServer, Vec<crate::test_utils::Event>, Uu
 async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
     let setup = setup(pool, era, true).await;
     let (server, events, message_id) = submit(&setup).await;
-    let view = json!({"server_id": "charts", "uri": COUNTER_VIEW_URI});
+    let view = json!({
+        "server_id": "charts",
+        "uri": COUNTER_VIEW_URI,
+        "structured_content": {"start": 3},
+    });
 
-    // The stream and the stored row name the view beside the call's input
-    // and output; the calls whose views are refused still succeed, without.
+    // The stream and the stored row name the view, with the result's
+    // structuredContent for it, beside the call's input and output; the
+    // calls whose views are refused still succeed, without.
     let updates = final_updates(&events);
     assert_eq!(updates["call_counter"]["status"], "success", "{era}");
     assert_eq!(updates["call_counter"]["result_details"]["view"], view);
@@ -250,6 +255,8 @@ async fn shows_the_counter_view_in(era: &str, pool: Pool<Postgres>) {
             .await
             .assert_status(http::StatusCode::BAD_GATEWAY);
     }
+    // The refusal is remembered: the route did not read the view again.
+    assert_eq!(setup.reads.lock().unwrap().len(), 3, "{era}");
     server
         .get("/api/v1beta/me/mcp_servers/charts/app_view")
         .add_query_param("uri", COUNTER_VIEW_URI)
@@ -319,4 +326,43 @@ async fn with_mcp_apps_off_nothing_changes(pool: Pool<Postgres>) {
             .as_array()
             .is_some_and(|tools| tools.len() == 4)
     );
+}
+
+/// The backend serves the sandbox page only on the host of a sandbox origin
+/// whose server enables views, never on the app's own host.
+///
+/// # Test Categories
+/// - `uses-db`
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_sandbox_page_is_served_on_an_enabled_sandbox_origin_host_only(pool: Pool<Postgres>) {
+    const PAGE: &str = "/public/common/mcp-apps-sandbox.html";
+    const APP_HOST: &str = "erato.example.com";
+    for (enabled, on_sandbox_host) in [
+        (true, http::StatusCode::OK),
+        (false, http::StatusCode::NOT_FOUND),
+    ] {
+        let setup = setup(pool.clone(), "stateless", enabled).await;
+        let app: Router = Router::new().fallback(|| async { "served" }).layer(
+            axum::middleware::from_fn_with_state(
+                setup.state.clone(),
+                erato::server::mcp_apps_sandbox_page::on_sandbox_hosts_only,
+            ),
+        );
+        let server = TestServer::new(app.into_make_service()).unwrap();
+        let status = async |path: &str, host: &str| {
+            server
+                .get(path)
+                .add_header("x-forwarded-host", host)
+                .await
+                .status_code()
+        };
+
+        assert_eq!(status(PAGE, "mcp-apps.example.com").await, on_sandbox_host);
+        assert_eq!(status(PAGE, APP_HOST).await, http::StatusCode::NOT_FOUND);
+        assert_eq!(
+            status("/public/common/MCP-Apps-Sandbox%2Ehtml", APP_HOST).await,
+            http::StatusCode::NOT_FOUND
+        );
+        assert_eq!(status("/", APP_HOST).await, http::StatusCode::OK);
+    }
 }

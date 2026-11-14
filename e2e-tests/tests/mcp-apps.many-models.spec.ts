@@ -92,7 +92,9 @@ const probeView = (appOrigin: string) => `<!doctype html><script>
  * A view that nests the sandbox page from its own origin and, as the app
  * would, asks it to show a view that may connect to the app and fetches the
  * user's profile from there. Its root element says "silent" if the nested
- * page has not answered within five seconds, or else what the fetch got.
+ * page has not answered within five seconds, or else what the fetch got. It
+ * then fetches the profile through the nested frame's window, which the
+ * view's policy would not cover if the frame had loaded, and says what it got.
  */
 const nestingView = (appOrigin: string) => {
   const inner = `<script>
@@ -127,6 +129,17 @@ const nestingView = (appOrigin: string) => {
   // frame the policy blocks.
   setTimeout(() => {
     if (!root.dataset.nested) root.dataset.nested = "silent";
+    let through;
+    try {
+      through = nested.contentWindow
+        .fetch("${appOrigin}/api/v1beta/me/profile", { credentials: "include" })
+        .then((response) => String(response.status), () => "failed");
+    } catch {
+      through = Promise.resolve("failed");
+    }
+    through.then((status) => {
+      root.dataset.through = status;
+    });
   }, 5000);
 </script>`;
 };
@@ -242,7 +255,7 @@ test(
 );
 
 test(
-  "The sandbox page does not run when embedded from its own origin, so a view cannot get a policy that lets it fetch from the app",
+  "A view cannot frame its own sandbox origin, so it gets neither a policy of its making nor a page outside its policy to fetch from the app",
   { tag: TAG_CI },
   async ({ browser }) => {
     const { context, page } = await createDexAuthenticatedContext(
@@ -264,6 +277,7 @@ test(
       await expect(view).toHaveAttribute("data-nested", "silent", {
         timeout: 15000,
       });
+      await expect(view).toHaveAttribute("data-through", "failed");
     } finally {
       await context.close();
     }

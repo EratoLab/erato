@@ -13,7 +13,7 @@ The server exposes several MCP servers on different streamable HTTP endpoints:
 - `streamable HTTP /mcp/content-filter` - content-filter simulation server (`trigger_content_filter`, returns `is_error: true`)
 - `streamable HTTP /mcp/image-generation` - image generation server (`generate_image`, returns the shared cat image fixture)
 - `streamable HTTP /mcp/deep-research` - deep-research simulation (`deep_research_dispatch`, `deep_research_poll`); the first poll is pending and the next poll completes
-- `streamable HTTP /mcp/apps` - MCP Apps views: `show_counter` declares `ui://mock/counter` in `_meta.ui.resourceUri`, a few lines of HTML served as `text/html;profile=mcp-app` that shows the call's `start` and counts up; `show_wrong_type_view` and `show_oversized_view` declare a view served as plain `text/html` and one of 9 MiB, and `show_slow_view` declares `ui://mock/slow`, whose `resources/read` never answers
+- `streamable HTTP /mcp/apps` - MCP Apps views: `show_counter` declares `ui://mock/counter` in `_meta.ui.resourceUri`, a few lines of HTML served as `text/html;profile=mcp-app` that shows the call's `start` and counts up, and its result carries `structuredContent` (`{"start": …}`) beside its text; `show_wrong_type_view` and `show_oversized_view` declare a view served as plain `text/html` and one of 9 MiB, and `show_slow_view` declares `ui://mock/slow`, whose `resources/read` never answers
 
 All tool/auth fixtures are also exposed under `/mcp/legacy/`, `/mcp/stateless/`,
 and `/mcp/dual/` (for example `/mcp/stateless/progress`). Legacy fixtures require

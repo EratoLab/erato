@@ -52,6 +52,7 @@
   const HOST_ORIGIN = new URL(document.referrer).origin;
   const HOST_NAME = new URL(HOST_ORIGIN).hostname;
   const OWN_ORIGIN = window.location.origin;
+  const OWN_NAME = window.location.hostname;
 
   // The sandbox origin is never the app's, so an embedder on this page's own
   // origin is a view, and a view must not get a policy of its choosing.
@@ -76,11 +77,9 @@
   const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
   const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
 
-  // Whether a declared domain covers the app's host, whatever its scheme or
-  // port: the host itself, a wildcard over it, or a network scheme on its own.
-  // On a sandbox origin on the same site as the app, the browser sends the
-  // app's cookies with the view's requests to it.
-  const coversHost = (domain) => {
+  // Whether a declared domain covers `name`, whatever its scheme or port: the
+  // host itself, a wildcard over it, or a network scheme on its own.
+  const covers = (domain, name) => {
     const source = domain.toLowerCase();
     if (/^(https?|wss?):$/.test(source)) return true;
     const [host] = source
@@ -88,19 +87,21 @@
       .match(/^(?:\[[^\]]*\]|[^/:]*)/);
     return (
       host === "*" ||
-      host === HOST_NAME ||
-      (host.startsWith("*.") && HOST_NAME.endsWith(host.slice(1)))
+      host === name ||
+      (host.startsWith("*.") && name.endsWith(host.slice(1)))
     );
   };
 
   // Declared domains, without anything that could end a source list or add a
-  // keyword such as 'unsafe-eval', and without any that cover the app's host.
-  const domains = (list) =>
+  // keyword such as 'unsafe-eval', and without any that cover one of `names`.
+  // The app's host is always left out: on a sandbox origin on the same site as
+  // the app, the browser sends the app's cookies with the view's requests to it.
+  const domains = (list, ...names) =>
     (Array.isArray(list) ? list : []).filter(
       (domain) =>
         typeof domain === "string" &&
         /^[^\s;,'"]+$/.test(domain) &&
-        !coversHost(domain),
+        !names.some((name) => covers(domain, name)),
     );
 
   // The view's CSP as the spec builds it from `_meta.ui.csp`. Without declared
@@ -110,10 +111,14 @@
   // it is no barrier against sending data out.
   const policyFor = (csp) => {
     const declared = csp && typeof csp === "object" ? csp : {};
-    const resources = domains(declared.resourceDomains).join(" ");
-    const connect = domains(declared.connectDomains).join(" ");
-    const frames = domains(declared.frameDomains).join(" ");
-    const baseUris = domains(declared.baseUriDomains).join(" ");
+    const resources = domains(declared.resourceDomains, HOST_NAME).join(" ");
+    const connect = domains(declared.connectDomains, HOST_NAME).join(" ");
+    // Nor a frame on this page's own host: a page loaded from it is not under
+    // this policy, and the view, sharing its origin, could fetch through it.
+    const frames = domains(declared.frameDomains, HOST_NAME, OWN_NAME).join(
+      " ",
+    );
+    const baseUris = domains(declared.baseUriDomains, HOST_NAME).join(" ");
     return [
       "default-src 'none'",
       `script-src 'self' 'unsafe-inline' ${resources}`,

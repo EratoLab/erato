@@ -28,7 +28,10 @@ const SANDBOX_PAGE = `${SANDBOX_ORIGIN}/public/common/mcp-apps-sandbox.html`;
 const VIEW_HTML = "<!doctype html><p>counter</p>";
 const CSP = { connectDomains: [], resourceDomains: [] };
 
-const call = (withView = true): ToolUse =>
+const call = (
+  withView = true,
+  structuredContent?: Record<string, unknown>,
+): ToolUse =>
   ({
     tool_call_id: "call-1",
     tool_name: "show_counter",
@@ -36,7 +39,13 @@ const call = (withView = true): ToolUse =>
     input: { start: 41 },
     output: "Counter started at 41.",
     result_details: withView
-      ? { view: { server_id: "apps", uri: "ui://mock/counter" } }
+      ? {
+          view: {
+            server_id: "apps",
+            uri: "ui://mock/counter",
+            structured_content: structuredContent,
+          },
+        }
       : undefined,
   }) as unknown as ToolUse;
 
@@ -247,6 +256,26 @@ describe("McpAppView", () => {
     expect(new Set(posted.mock.calls.map(([, origin]) => origin))).toEqual(
       new Set([SANDBOX_ORIGIN]),
     );
+  });
+
+  it("hands the view the result's structuredContent beside its text", async () => {
+    renderView(call(true, { start: 41 }));
+    const { sent, fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+
+    await waitFor(() => {
+      expect(sent()).toContainEqual(
+        expect.objectContaining({
+          method: "ui/notifications/tool-result",
+          params: {
+            content: [{ type: "text", text: "Counter started at 41." }],
+            structuredContent: { start: 41 },
+          },
+        }),
+      );
+    });
   });
 
   it("refuses every request the view makes", async () => {

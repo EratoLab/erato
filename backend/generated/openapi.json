@@ -14558,7 +14558,7 @@
       },
       "ToolResultView": {
         "type": "object",
-        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input` and\n`output`.",
+        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output` and `structured_content`.",
         "required": [
           "server_id",
           "uri"
@@ -14566,6 +14566,10 @@
         "properties": {
           "server_id": {
             "type": "string"
+          },
+          "structured_content": {
+            "type": "object",
+            "description": "The call's `structuredContent`, which a view takes its data from. Kept\nonly here, for the view: the model reads the call's `output`."
           },
           "uri": {
             "type": "string",

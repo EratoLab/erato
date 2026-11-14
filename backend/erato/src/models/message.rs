@@ -508,13 +508,18 @@ impl ToolResultDetails {
 
 /// Where the web app gets a call's view: `GET
 /// /api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its
-/// HTML and its `_meta.ui`. The view is shown with the call's `input` and
-/// `output`.
+/// HTML and its `_meta.ui`. The view is shown with the call's `input`, its
+/// `output` and `structured_content`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolResultView {
     pub server_id: String,
     /// The view's `ui://` URI, as the tool declares it.
     pub uri: String,
+    /// The call's `structuredContent`, which a view takes its data from. Kept
+    /// only here, for the view: the model reads the call's `output`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false, value_type = Object)]
+    pub structured_content: Option<serde_json::Value>,
 }
 
 /// How a call failed when Erato, not the tool, wrote its error.

@@ -1200,6 +1200,7 @@ mod tests {
             view: Some(crate::models::message::ToolResultView {
                 server_id: "records".to_string(),
                 uri: "ui://records/SYNTHETIC-VIEW".to_string(),
+                structured_content: Some(serde_json::json!({"rows": "SYNTHETIC-STRUCTURED"})),
             }),
         });
 
@@ -1219,6 +1220,7 @@ mod tests {
         assert!(!snapshot.contains("SYNTHETIC-LINK-TITLE"), "{snapshot}");
         assert!(!snapshot.contains("records.example.test"), "{snapshot}");
         assert!(!snapshot.contains("SYNTHETIC-VIEW"), "{snapshot}");
+        assert!(!snapshot.contains("SYNTHETIC-STRUCTURED"), "{snapshot}");
     }
 
     #[test]

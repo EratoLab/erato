@@ -43,6 +43,22 @@ pub struct McpToolPostProcessResult {
     pub result_details: Option<ToolResultDetails>,
 }
 
+/// The result's `structuredContent` for the call's view. Once files were
+/// taken out of it, that is the stored output, which names them instead of
+/// carrying their bytes.
+pub(super) fn structured_content_for_view<'a>(
+    result: &'a rmcp::model::CallToolResult,
+    file_content_parts: &[ContentPart],
+    output_value: Option<&'a JsonValue>,
+) -> Option<&'a JsonValue> {
+    let returned = result.structured_content.as_ref()?;
+    if file_content_parts.is_empty() {
+        Some(returned)
+    } else {
+        output_value
+    }
+}
+
 /// Links kept per result.
 const MAX_RESULT_LINKS: usize = 10;
 /// Link blocks read per result, kept or not, so thousands of them cost a
@@ -498,8 +514,9 @@ fn mcp_result_to_text(result: &rmcp::model::CallToolResult) -> String {
 }
 
 /// The result's `https` links, bounded. Structured content and embedded
-/// resources are not kept: nothing reads them, and a shared chat would hand
-/// them to its viewers.
+/// resources are not kept here: a shared chat would hand them to its
+/// viewers, and only a call's view reads structured content, which
+/// `ToolResultView` keeps for it.
 fn mcp_result_details(
     content: &[rmcp::model::ContentBlock],
     server_url: Option<&str>,

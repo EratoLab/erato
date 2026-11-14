@@ -1265,10 +1265,11 @@ impl ServerHandler for AppsServer {
             .and_then(|arguments| arguments.get("start"))
             .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
-        std::future::ready(Ok(CallToolResult::success(vec![ContentBlock::text(
-            format!("Counter started at {start}."),
-        )])
-        .into()))
+        let mut result = CallToolResult::success(vec![ContentBlock::text(format!(
+            "Counter started at {start}."
+        ))]);
+        result.structured_content = Some(json!({"start": start}));
+        std::future::ready(Ok(result.into()))
     }
 
     fn list_tools(

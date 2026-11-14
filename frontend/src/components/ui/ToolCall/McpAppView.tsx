@@ -35,8 +35,14 @@ const sandboxPageUrl = (origin: string): string | undefined => {
   }
 };
 
-/** The call's result as a view receives it: the tool's text, as stored. */
-const toolResultOf = (output: unknown): CallToolResult => ({
+/**
+ * The call's result as a view receives it: the tool's text, as stored, and
+ * its `structuredContent`, which views take their data from.
+ */
+const toolResultOf = (
+  output: unknown,
+  structuredContent: unknown,
+): CallToolResult => ({
   content:
     output == null
       ? []
@@ -46,6 +52,7 @@ const toolResultOf = (output: unknown): CallToolResult => ({
             text: typeof output === "string" ? output : JSON.stringify(output),
           },
         ],
+  ...(isRecord(structuredContent) ? { structuredContent } : {}),
 });
 
 interface McpAppFrameProps {
@@ -68,8 +75,19 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
   const pageUrl = data ? sandboxPageUrl(data.sandbox_origin) : undefined;
   // The call has settled by the time it names a view; what it was called
   // with and returned is read once, when the view connects.
-  const call = useRef({ input: part.input, output: part.output, theme });
-  call.current = { input: part.input, output: part.output, theme };
+  const structuredContent = part.result_details?.view?.structured_content;
+  const call = useRef({
+    input: part.input,
+    output: part.output,
+    structuredContent,
+    theme,
+  });
+  call.current = {
+    input: part.input,
+    output: part.output,
+    structuredContent,
+    theme,
+  };
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -81,7 +99,7 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
     import("@/lib/mcpApps/viewHost")
       .then(({ connectView, MAX_VIEW_HEIGHT }) => {
         if (cancelled) return;
-        const { input, output, theme } = call.current;
+        const { input, output, structuredContent, theme } = call.current;
         const csp: unknown = data.ui?.csp;
         disconnect = connectView(
           frame,
@@ -90,7 +108,7 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
             html: data.html,
             csp: isRecord(csp) ? csp : undefined,
             input: isRecord(input) ? input : {},
-            result: toolResultOf(output),
+            result: toolResultOf(output, structuredContent),
           },
           {
             theme,
