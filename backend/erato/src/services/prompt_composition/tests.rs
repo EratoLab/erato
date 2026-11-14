@@ -2788,7 +2788,7 @@ mod test_cases {
             Some(&action_facet),
             &action_facet_configs,
             None,
-            false,
+            &Default::default(),
         )
         .await
         .expect("Failed to build abstract sequence");
@@ -2902,7 +2902,7 @@ mod test_cases {
             None,
             &HashMap::new(),
             Some("outlook"),
-            false,
+            &Default::default(),
         )
         .await
         .expect("Failed to build abstract sequence");
@@ -2958,7 +2958,7 @@ mod test_cases {
             None,
             &HashMap::new(),
             Some(crate::ms_teams_bot::TEAMS_BOT_PLATFORM),
-            false,
+            &Default::default(),
         )
         .await
         .expect("Failed to build abstract sequence");
@@ -3063,7 +3063,7 @@ mod test_cases {
             Some(&action_facet),
             &action_facet_configs,
             None,
-            false,
+            &Default::default(),
         )
         .await
         .expect("Failed to build second abstract sequence");

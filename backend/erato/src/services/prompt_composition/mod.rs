@@ -21,8 +21,8 @@
 //! U3 + associated content
 //! ```
 //!
-//! A turn whose reply is read back adds the spoken-reply directive after the
-//! action directive, with the action's lifetime (ERMAIN-1190).
+//! Turn instructions (`turn_instructions.<type>`, ERMAIN-1190) follow the
+//! action directive in a fixed type order, with the action's lifetime.
 //!
 //! Normal facets are emitted in facet-ID order, template before additional
 //! prompt; the action follows them. Both use User-role reminders so adapters
@@ -77,11 +77,13 @@
 //! ).await?;
 //! ```
 
-use crate::config::{ActionFacetConfig, ChatProviderConfig};
+use crate::config::{
+    ActionFacetConfig, ChatProviderConfig, TurnInstructionKind, TurnInstructionsConfig,
+};
 use crate::db::entity::chats;
 use crate::models::message::GenerationInputMessages;
 use eyre::Report;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 pub mod adapters;
 pub mod allowlist;
@@ -105,6 +107,19 @@ pub use types::{
     AbstractChatSequence, AbstractChatSequencePart, ConcreteChatRequest,
     PromptCompositionUserInput, PromptSpec, ResolvedChatSequence,
 };
+
+/// The turn instruction types that apply to a turn and have text configured.
+/// Each type says here when it applies.
+pub fn turn_instructions_for_turn(
+    config: &TurnInstructionsConfig,
+    reply_is_read_back: bool,
+) -> BTreeSet<TurnInstructionKind> {
+    [(TurnInstructionKind::SpokenReply, reply_is_read_back)]
+        .into_iter()
+        .filter(|&(kind, applies)| applies && config.prompt(kind).is_some())
+        .map(|(kind, _)| kind)
+        .collect()
+}
 
 /// Convenience function that orchestrates all three phases of prompt composition.
 ///
@@ -152,7 +167,7 @@ pub async fn compose_prompt_messages(
         user_input.action_facet.as_ref(),
         action_facet_configs,
         platform,
-        user_input.spoken_reply,
+        &user_input.turn_instructions,
     )
     .await?;
 

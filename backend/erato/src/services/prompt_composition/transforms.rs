@@ -12,16 +12,18 @@ use super::types::{
 use crate::config::ActionFacetConfig;
 use crate::config::ChatProviderConfig;
 use crate::config::FacetsConfig;
+use crate::config::TurnInstructionKind;
 use crate::db::entity::chats;
 use crate::db::entity::messages;
 use crate::models::message::{
     ContentPart, ContentPartActionFacetMarker, ContentPartDelegationPreambleMarker,
     ContentPartImageFilePointer, ContentPartText, ContentPartTextFilePointer,
-    GenerationInputMessages, GenerationParameters, InputMessage, MessageRole, MessageSchema,
+    ContentPartTurnInstructionMarker, GenerationInputMessages, GenerationParameters, InputMessage,
+    MessageRole, MessageSchema, StoredTurnInstructionKind,
 };
 use eyre::Report;
 use sea_orm::prelude::Uuid;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 const DEFAULT_FACET_PROMPT_TEMPLATE: &str = "The user has requested the use of the \"{{facet_display_name}}\" feature.\n\nPrioritize the use of the following tools:\n{{facet_tools_list}}";
 
@@ -63,7 +65,7 @@ pub async fn build_abstract_sequence(
         None,
         &HashMap::new(),
         None,
-        false,
+        &BTreeSet::new(),
     )
     .await
 }
@@ -90,7 +92,7 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
     action_facet_configs: &HashMap<String, ActionFacetConfig>,
     // Request platform (from `X-Erato-Platform`). Used to scope hidden facets.
     platform: Option<&str>,
-    spoken_reply: bool,
+    turn_instructions: &BTreeSet<TurnInstructionKind>,
 ) -> Result<AbstractChatSequence, Report> {
     let mut sequence = AbstractChatSequence::new();
     sequence.replay_policy = prompt_provider.tool_replay_policy();
@@ -330,12 +332,14 @@ pub async fn build_abstract_sequence_with_facet_tool_expansions(
         });
     }
 
-    // 9.65 Inject the spoken-reply directive (request-scoped, like the action
-    // facet). It follows the facet and action directives so the instruction
-    // on how to say the reply is the last thing before the user's words.
-    if spoken_reply {
-        tip_directives.push(AbstractChatSequencePart::SpokenReplyPrompt);
-    }
+    // 9.65 Inject the turn instructions (request-scoped, like the action
+    // facet). They follow the facet and action directives so an instruction
+    // about this reply is the last thing before the user's words.
+    tip_directives.extend(
+        turn_instructions
+            .iter()
+            .map(|&kind| AbstractChatSequencePart::TurnInstruction { kind }),
+    );
 
     // 9.7 Inject the delegated run's directive, derived from the chat row on
     // every turn rather than persisted into the child's first user message —
@@ -641,10 +645,12 @@ pub async fn resolve_sequence(
                 });
             }
 
-            AbstractChatSequencePart::SpokenReplyPrompt => {
+            AbstractChatSequencePart::TurnInstruction { kind } => {
                 input_messages.push(InputMessage {
                     role: MessageRole::User,
-                    content: ContentPart::SpokenReplyMarker,
+                    content: ContentPart::TurnInstructionMarker(ContentPartTurnInstructionMarker {
+                        kind: StoredTurnInstructionKind::Known(kind),
+                    }),
                 });
             }
 
@@ -858,13 +864,14 @@ fn normalize_historical_input_message(input_msg: InputMessage) -> InputMessage {
 /// emitting it once the run is adopted, and a replayed one would keep telling
 /// a delegate not to address the user who is now writing to it.
 ///
-/// A spoken-reply marker belongs to a turn that was read back; replayed, it
-/// would tell a later typed turn to answer as speech.
+/// A turn instruction describes the turn it was sent with (for example a
+/// reply that is read back); replayed, it would apply to a later turn it
+/// does not describe.
 ///
 /// Four shapes need stripping:
 ///   * `ContentPart::ActionFacetMarker` (any role).
 ///   * `ContentPart::DelegationPreambleMarker` (any role).
-///   * `ContentPart::SpokenReplyMarker` (any role).
+///   * `ContentPart::TurnInstructionMarker` (any role).
 ///   * Legacy action-facet format: `System` messages whose text starts with
 ///     the literal `"FOR THIS MESSAGE ONLY:"` prefix from the rendered
 ///     template — for `generation_input_messages` rows persisted before the
@@ -878,7 +885,7 @@ fn is_prior_turn_directive_message(input_msg: &InputMessage) -> bool {
     match &input_msg.content {
         ContentPart::ActionFacetMarker(_)
         | ContentPart::DelegationPreambleMarker(_)
-        | ContentPart::SpokenReplyMarker => true,
+        | ContentPart::TurnInstructionMarker(_) => true,
         ContentPart::Text(ContentPartText { text }) => {
             matches!(input_msg.role, MessageRole::System)
                 && text.trim_start().starts_with("FOR THIS MESSAGE ONLY:")

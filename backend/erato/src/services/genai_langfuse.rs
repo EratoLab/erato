@@ -183,8 +183,11 @@ pub fn convert_content_parts_to_json(content_parts: &[ContentPart]) -> Result<Js
                     "run_mode": marker.run_mode,
                 }));
             }
-            ContentPart::SpokenReplyMarker => {
-                output_parts.push(json!({ "type": "spoken_reply_marker" }));
+            ContentPart::TurnInstructionMarker(marker) => {
+                output_parts.push(json!({
+                    "type": "turn_instruction_marker",
+                    "kind": marker.kind,
+                }));
             }
             ContentPart::CompactionMarker(marker) => {
                 output_parts.push(serde_json::to_value(marker)?);

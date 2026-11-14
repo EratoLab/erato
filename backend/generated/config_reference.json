@@ -431,12 +431,6 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
-  "audio_conversational.spoken_reply_prompt": {
-    "default_value_security": "unknown",
-    "introduced_in": "unreleased",
-    "security_relevance": "unknown",
-    "stability": "unstable"
-  },
   "audio_conversational.tokens_per_word": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
@@ -4843,6 +4837,12 @@
     "introduced_in": "unreleased",
     "security_relevance": "medium",
     "stability": "alpha"
+  },
+  "turn_instructions.spoken_reply.prompt": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
   },
   "user_preferences.data_tab_enabled": {
     "default_value_security": "unknown",

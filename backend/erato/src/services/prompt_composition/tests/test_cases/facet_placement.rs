@@ -1,7 +1,7 @@
 use super::*;
-use crate::config::{ActionFacetConfig, AppConfig};
+use crate::config::{ActionFacetConfig, AppConfig, TurnInstructionKind};
 use crate::server::api::v1beta::file_resolution::resolve_directive_markers_with_config;
-use crate::services::prompt_composition::AbstractChatSequence;
+use crate::services::prompt_composition::{AbstractChatSequence, turn_instructions_for_turn};
 
 fn config() -> AppConfig {
     let mut config = AppConfig::default();
@@ -48,7 +48,7 @@ async fn compose_with_files(
     action: Option<&str>,
     files: &[Uuid],
 ) -> (AbstractChatSequence, GenerationInputMessages) {
-    compose_turn(repo, tip, selected, action, files, false).await
+    compose_turn(repo, tip, selected, action, files, &[]).await
 }
 
 async fn compose_turn(
@@ -57,7 +57,7 @@ async fn compose_turn(
     selected: &[&str],
     action: Option<&str>,
     files: &[Uuid],
-    spoken_reply: bool,
+    turn_instructions: &[TurnInstructionKind],
 ) -> (AbstractChatSequence, GenerationInputMessages) {
     let config = config();
     let action = action.map(|value| ActionFacetUserInput {
@@ -87,7 +87,7 @@ async fn compose_turn(
         action.as_ref(),
         &config.action_facets.facets,
         None,
-        spoken_reply,
+        &turn_instructions.iter().copied().collect(),
     )
     .await
     .unwrap();
@@ -107,7 +107,9 @@ fn labels(messages: &GenerationInputMessages) -> Vec<String> {
         .iter()
         .map(|m| match &m.content {
             ContentPart::ActionFacetMarker(marker) => format!("action:{}", marker.args["value"]),
-            ContentPart::SpokenReplyMarker => "spoken".into(),
+            ContentPart::TurnInstructionMarker(marker) => {
+                format!("turn:{}", serde_json::to_value(&marker.kind).unwrap())
+            }
             _ => m.full_text(),
         })
         .collect()
@@ -683,12 +685,15 @@ async fn context_rebase_replaces_baseline_including_hidden_only_head() {
     }
 }
 
+const SPOKEN: &str = "turn:\"spoken_reply\"";
+
 #[tokio::test]
-async fn spoken_reply_directive_is_last_before_the_user_message_and_never_replays() {
+async fn turn_instruction_is_last_before_the_user_message_and_never_replays() {
     let mut repo = MockMessageRepository::new();
     let u1 = Uuid::new_v4();
     repo.add_message(u1, None, MessageRole::User, "U1");
-    let (_, first) = compose_turn(&repo, u1, &["alpha"], Some("first"), &[], true).await;
+    let spoken = [TurnInstructionKind::SpokenReply];
+    let (_, first) = compose_turn(&repo, u1, &["alpha"], Some("first"), &[], &spoken).await;
     assert_eq!(
         labels(&first),
         [
@@ -697,18 +702,18 @@ async fn spoken_reply_directive_is_last_before_the_user_message_and_never_replay
                 reminder("Enable alpha"),
                 reminder("alpha instructions"),
                 "action:first".into(),
-                "spoken".into(),
+                SPOKEN.into(),
                 "U1".into(),
             ],
         ]
         .concat()
     );
-    let spoken = first
+    let marker = first
         .messages
         .iter()
-        .find(|m| matches!(m.content, ContentPart::SpokenReplyMarker))
+        .find(|m| matches!(m.content, ContentPart::TurnInstructionMarker(_)))
         .unwrap();
-    assert_eq!(spoken.role, MessageRole::User);
+    assert_eq!(marker.role, MessageRole::User);
     let reloaded =
         GenerationInputMessages::validate(&serde_json::to_value(&first).unwrap()).unwrap();
     assert_eq!(labels(&reloaded), labels(&first));
@@ -735,40 +740,65 @@ async fn spoken_reply_directive_is_last_before_the_user_message_and_never_replay
         [history.clone(), vec!["U2".into()]].concat()
     );
 
-    let (_, spoken_again) = compose_turn(&repo, u2, &["alpha"], None, &[], true).await;
+    let (_, spoken_again) = compose_turn(&repo, u2, &["alpha"], None, &[], &spoken).await;
     assert_eq!(
         labels(&spoken_again),
-        [history, vec!["spoken".into(), "U2".into()]].concat()
+        [history, vec![SPOKEN.into(), "U2".into()]].concat()
     );
 }
 
 #[test]
-fn spoken_reply_marker_renders_the_configured_prompt_or_nothing() {
-    let turn = || GenerationInputMessages {
+fn turn_instruction_renders_its_configured_prompt_or_nothing() {
+    let turn = |kind: serde_json::Value| GenerationInputMessages {
         messages: vec![
-            InputMessage {
-                role: MessageRole::User,
-                content: ContentPart::SpokenReplyMarker,
-            },
+            serde_json::from_value(serde_json::json!({
+                "role": "user",
+                "content": { "content_type": "turn_instruction_marker", "kind": kind },
+            }))
+            .unwrap(),
             InputMessage {
                 role: MessageRole::User,
                 content: ContentPart::Text(ContentPartText { text: "U1".into() }),
             },
         ],
     };
+    let spoken = || turn("spoken_reply".into());
     let mut config = config();
     for unset in [None, Some("  \n".to_string())] {
-        config.audio_conversational.spoken_reply_prompt = unset;
+        config.turn_instructions.spoken_reply.prompt = unset;
         assert_eq!(
-            labels(&resolve_directive_markers_with_config(&config, turn())),
+            labels(&resolve_directive_markers_with_config(&config, spoken())),
             ["U1"]
         );
     }
-    config.audio_conversational.spoken_reply_prompt = Some("Answer as speech.\n".into());
-    let resolved = resolve_directive_markers_with_config(&config, turn());
+    config.turn_instructions.spoken_reply.prompt = Some("Answer as speech.\n".into());
+    let resolved = resolve_directive_markers_with_config(&config, spoken());
     assert_eq!(
         labels(&resolved),
         [reminder("Answer as speech."), "U1".into()]
     );
     assert_eq!(resolved.messages[0].role, MessageRole::User);
+
+    // A type removed after the snapshot was stored still loads and adds nothing.
+    let retired = turn("retired_type".into());
+    let reloaded =
+        GenerationInputMessages::validate(&serde_json::to_value(&retired).unwrap()).unwrap();
+    assert_eq!(
+        labels(&resolve_directive_markers_with_config(&config, reloaded)),
+        ["U1"]
+    );
+}
+
+#[test]
+fn a_turn_instruction_applies_only_when_its_condition_holds_and_text_is_set() {
+    let mut config = config().turn_instructions;
+    assert!(turn_instructions_for_turn(&config, true).is_empty());
+    config.spoken_reply.prompt = Some("Answer as speech.".into());
+    assert!(turn_instructions_for_turn(&config, false).is_empty());
+    assert_eq!(
+        turn_instructions_for_turn(&config, true)
+            .into_iter()
+            .collect::<Vec<_>>(),
+        [TurnInstructionKind::SpokenReply]
+    );
 }

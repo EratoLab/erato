@@ -130,7 +130,7 @@ pub fn replacement(
                 m.content,
                 ContentPart::ActionFacetMarker(_)
                     | ContentPart::DelegationPreambleMarker(_)
-                    | ContentPart::SpokenReplyMarker
+                    | ContentPart::TurnInstructionMarker(_)
             )
         })
         .filter(|m| {

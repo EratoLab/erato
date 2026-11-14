@@ -12548,7 +12548,7 @@ fn summary_user_message_text_from_generation_input(
                 | ContentPart::Image(_)
                 | ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
-                | ContentPart::SpokenReplyMarker
+                | ContentPart::TurnInstructionMarker(_)
                 | ContentPart::TaskResult(_)
                 | ContentPart::CompactionMarker(_) => None,
             }
@@ -18165,12 +18165,10 @@ async fn run_generation_after_user_message_memory_inner(
                 args: af.args.clone(),
             }
         }),
-        spoken_reply: reply_is_read_back
-            && app_state
-                .config
-                .audio_conversational
-                .spoken_reply_prompt()
-                .is_some(),
+        turn_instructions: crate::services::prompt_composition::turn_instructions_for_turn(
+            &app_state.config.turn_instructions,
+            reply_is_read_back,
+        ),
         delegation_targets,
         delegation_run_mode: effective_delegation_run_mode,
         // LD-A9: a reaction turn may not plan tasks of its own. The offer is
@@ -18966,7 +18964,7 @@ pub(crate) async fn start_regeneration(
                             args: af.args.clone(),
                         },
                     ),
-                spoken_reply: false,
+                turn_instructions: Default::default(),
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
                 // A user turn may plan tasks; only a task-result reaction may not.
@@ -19599,7 +19597,7 @@ pub(crate) async fn start_edit(
                         args: af.args.clone(),
                     }
                 }),
-                spoken_reply: false,
+                turn_instructions: Default::default(),
                 delegation_targets: delegation_targets_for_offer,
                 delegation_run_mode: effective_delegation_run_mode,
                 // A user turn may plan tasks; only a task-result reaction may not.

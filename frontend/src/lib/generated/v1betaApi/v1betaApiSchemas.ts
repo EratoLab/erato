@@ -1389,9 +1389,9 @@ export type ContentPart =
   | (ContentPartDelegationPreambleMarker & {
       content_type: "delegation_preamble_marker";
     })
-  | {
-      content_type: "spoken_reply_marker";
-    }
+  | (ContentPartTurnInstructionMarker & {
+      content_type: "turn_instruction_marker";
+    })
   | (ContentPartTaskResult & {
       content_type: "task_result";
     });
@@ -1642,6 +1642,13 @@ export type ContentPartToolRejection = {
    * @format uuid
    */
   user_tool_approval_setting_id?: null | undefined;
+};
+
+export type ContentPartTurnInstructionMarker = {
+  /**
+   * The instruction type, e.g. `spoken_reply`.
+   */
+  kind: string;
 };
 
 /**

@@ -1,5 +1,5 @@
-//! Spoken-reply instruction on turns that are read back
-//! (`audio_conversational.spoken_reply_prompt`).
+//! Turn instructions (`turn_instructions.<type>`): the `spoken_reply` type on
+//! turns whose reply is read back.
 
 use axum::http::StatusCode;
 use axum::{Router, body::Body, response::Response, routing::post};
@@ -54,9 +54,7 @@ async fn submit(server: &TestServer, body: Value) -> String {
 }
 
 #[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn only_a_turn_that_is_read_back_reaches_the_model_with_the_instruction(
-    pool: Pool<Postgres>,
-) {
+async fn spoken_reply_reaches_the_model_only_on_a_turn_that_is_read_back(pool: Pool<Postgres>) {
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
     let recorded = recorder.clone();
@@ -78,7 +76,7 @@ async fn only_a_turn_that_is_read_back_reaches_the_model_with_the_instruction(
     );
     config.audio_conversational.transcription.enabled = true;
     config.audio_conversational.speech_provider = Some("voice".into());
-    config.audio_conversational.spoken_reply_prompt = Some(INSTRUCTION.into());
+    config.turn_instructions.spoken_reply.prompt = Some(INSTRUCTION.into());
     let server = create_test_server(test_app_state(config, pool).await);
 
     let first = submit(&server, json!({ "user_message": "Typed first" })).await;

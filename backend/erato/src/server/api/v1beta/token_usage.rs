@@ -548,7 +548,7 @@ pub async fn token_usage_estimate(
                     args: af.args.clone(),
                 }
             }),
-            spoken_reply: false,
+            turn_instructions: Default::default(),
             delegation_targets: Vec::new(),
             delegation_run_mode: Default::default(),
             // An estimate mirrors a user turn, which may plan tasks.

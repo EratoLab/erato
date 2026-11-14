@@ -930,6 +930,11 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub audio_read_aloud: AudioReadAloudConfig,
 
+    /// Instructions the model gets on a single turn, by type.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub turn_instructions: TurnInstructionsConfig,
+
     /// Named text-to-speech providers, independent of chat/transcription providers.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
@@ -3259,7 +3264,6 @@ mod audio_config_tests {
         let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
         assert_eq!(conversational.transcription, shared);
         assert_eq!(conversational.speech_provider, None);
-        assert_eq!(conversational.spoken_reply_prompt(), None);
     }
 
     #[test]
@@ -8078,21 +8082,86 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_provider: Option<String>,
-    /// Instruction the model gets on a turn whose reply is read back, placed
-    /// right before the user's message. Not sent on typed turns. Unset or
-    /// blank sends none.
-    #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub spoken_reply_prompt: Option<String>,
 }
 
-impl AudioConversationalConfig {
-    /// The instruction for a read-back turn, when one is configured.
-    pub fn spoken_reply_prompt(&self) -> Option<&str> {
-        self.spoken_reply_prompt
+/// `[turn_instructions]`: one table per instruction type. A type name the
+/// backend does not know fails the config load instead of being ignored.
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct TurnInstructionsConfig {
+    /// On a turn whose reply is read back in conversational audio mode.
+    #[serde(default)]
+    pub spoken_reply: TurnInstructionConfig,
+}
+
+impl TurnInstructionsConfig {
+    pub fn get(&self, kind: TurnInstructionKind) -> &TurnInstructionConfig {
+        match kind {
+            TurnInstructionKind::SpokenReply => &self.spoken_reply,
+        }
+    }
+
+    /// The instruction text of `kind`, when it is set and not blank.
+    pub fn prompt(&self, kind: TurnInstructionKind) -> Option<&str> {
+        self.get(kind)
+            .prompt
             .as_deref()
             .map(str::trim)
             .filter(|prompt| !prompt.is_empty())
+    }
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct TurnInstructionConfig {
+    /// Instruction text, placed right before the user's message on a turn the
+    /// type applies to. Unset or blank adds nothing.
+    #[serde(default)]
+    pub prompt: Option<String>,
+}
+
+/// The closed list of turn instruction types. When several apply to one
+/// turn, they are placed in this order.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnInstructionKind {
+    SpokenReply,
+}
+
+#[cfg(test)]
+mod turn_instructions_tests {
+    use super::*;
+
+    fn load(toml: &str) -> Result<TurnInstructionsConfig, ConfigError> {
+        Config::builder()
+            .add_source(File::from_str(toml, FileFormat::Toml))
+            .build()?
+            .try_deserialize()
+    }
+
+    #[test]
+    fn a_type_reads_its_trimmed_prompt_and_blank_adds_nothing() {
+        let config = load("[spoken_reply]\nprompt = \"\"\"\nSay it.\n\"\"\"").unwrap();
+        assert_eq!(
+            config.prompt(TurnInstructionKind::SpokenReply),
+            Some("Say it.")
+        );
+        for unset in ["", "[spoken_reply]", "[spoken_reply]\nprompt = \" \\n \""] {
+            assert_eq!(
+                load(unset)
+                    .unwrap()
+                    .prompt(TurnInstructionKind::SpokenReply),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_type_or_setting_fails_the_load() {
+        assert!(load("[spoken_replies]\nprompt = \"x\"").is_err());
+        assert!(load("[spoken_reply]\ntext = \"x\"").is_err());
     }
 }
 

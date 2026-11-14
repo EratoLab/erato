@@ -1615,12 +1615,11 @@ pub enum ContentPart {
     /// only in the request about to be sent, dropped when the snapshot is
     /// replayed as prior-turn history.
     DelegationPreambleMarker(ContentPartDelegationPreambleMarker),
-    /// Marks a turn whose reply is read back in conversational audio mode.
-    /// Resolved like `ActionFacetMarker`: the instruction text comes from
-    /// `audio_conversational.spoken_reply_prompt` when the request is built,
-    /// and the marker is dropped when the snapshot replays as prior-turn
-    /// history, so a later typed turn is not told to answer as speech.
-    SpokenReplyMarker,
+    /// Reference to a turn instruction of one type. Resolved like
+    /// `ActionFacetMarker`: the text comes from `turn_instructions.<type>`
+    /// when the request is built, and the marker is dropped when the snapshot
+    /// replays as prior-turn history.
+    TurnInstructionMarker(ContentPartTurnInstructionMarker),
     /// The result of an `async` delegated task, delivered back into the chat
     /// the task was started from as a user-role row.
     ///
@@ -1787,6 +1786,22 @@ pub struct ContentPartActionFacetMarker {
     /// selected text for `outlook_rewrite_selection`, the compose body for
     /// `outlook_review_draft`).
     pub args: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ContentPartTurnInstructionMarker {
+    /// The instruction type, e.g. `spoken_reply`.
+    #[schema(value_type = String)]
+    pub kind: StoredTurnInstructionKind,
+}
+
+/// A type name stored in a snapshot. One the backend no longer knows still
+/// reads, so the chat history loads, and resolves to nothing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, erato_memory::HeapSize)]
+#[serde(untagged)]
+pub enum StoredTurnInstructionKind {
+    Known(erato_config::config::TurnInstructionKind),
+    Unknown(String),
 }
 
 /// The structured-brief fields of a delegated run, copied from the chat's
@@ -1960,7 +1975,7 @@ impl MessageSchema {
                 // would let a delegated run write the chat's title.
                 ContentPart::ActionFacetMarker(_)
                 | ContentPart::DelegationPreambleMarker(_)
-                | ContentPart::SpokenReplyMarker
+                | ContentPart::TurnInstructionMarker(_)
                 | ContentPart::TaskResult(_)
                 | ContentPart::CompactionMarker(_) => None,
             })
@@ -2827,7 +2842,7 @@ impl InputMessage {
             // template and inside the untrusted-data frame.
             ContentPart::ActionFacetMarker(_)
             | ContentPart::DelegationPreambleMarker(_)
-            | ContentPart::SpokenReplyMarker
+            | ContentPart::TurnInstructionMarker(_)
             | ContentPart::TaskResult(_)
             | ContentPart::CompactionMarker(_) => String::new(),
         }
