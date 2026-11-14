@@ -1,9 +1,10 @@
 use super::replay_policy::ToolReplayPolicy;
+use crate::config::TurnInstructionKind;
 use crate::models::message::{GenerationInputMessages, InputMessage};
 use genai::chat::ChatRequest;
 use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 /// Contains the latest user input data for prompt composition.
 ///
@@ -30,6 +31,10 @@ pub struct PromptCompositionUserInput {
 
     /// Optional action facet requested by the user for this generation.
     pub action_facet: Option<ActionFacetUserInput>,
+
+    /// Turn instruction types that apply to this turn and have text
+    /// configured. The set's order is the order they are placed in.
+    pub turn_instructions: BTreeSet<TurnInstructionKind>,
 
     /// Validated delegation targets from the user's assistant mentions.
     /// Non-empty only on mention-carrying turns; drives the request-scoped
@@ -106,6 +111,11 @@ pub enum AbstractChatSequencePart {
         facet_id: String,
         args: HashMap<String, String>,
     },
+
+    /// Turn instruction of one type (request-scoped). A marker like
+    /// `ActionFacetPrompt`: the text is rendered in the resolver step from
+    /// `turn_instructions.<type>`.
+    TurnInstruction { kind: TurnInstructionKind },
 
     /// Run directive of a delegated chat, carrying the structured-brief fields
     /// and the run mode off the chat's provenance envelope. Rendered in the

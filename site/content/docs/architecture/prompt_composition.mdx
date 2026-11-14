@@ -19,6 +19,8 @@ current action-facet directive
 U3 + task-result content and/or attached files
 ```
 
+Turn instructions add one more directive per applying type at the same boundary, after the action facet and directly before the current user message, in a fixed type order: the text of `turn_instructions.<type>.prompt` for each type that applies to the turn, for example `spoken_reply` when the reply is read back ([ERMAIN-1190](https://linear.app/erato-labs/issue/ERMAIN-1190)). They have the lifetime of an action facet: a metadata-only marker carrying the type, rendered immediately before provider conversion as a User-role reminder, and stripped when replayed on later turns, so an instruction never reaches a turn it does not describe. A stored marker whose type the backend no longer knows is dropped with a warning.
+
 Branches, edits and regeneration use the selected message's ancestry and the current request's facet context. A descendant's directive must not appear before shared ancestors. Injection is additive: normal and action facets must never suppress the historical baseline.
 
 ## Role, chronology and lifetime

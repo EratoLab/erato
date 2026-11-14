@@ -466,6 +466,12 @@ chat_provider_ids = ["test-token-limit"]
 # enabled = false
 # speech_provider = "assistant_voice" # ID from speech_providers.provider; required when enabled
 
+# Turn instructions: one table per type, added right before the user's message
+# on a turn the type applies to, for that turn only. Unset or blank adds nothing.
+# spoken_reply applies when the reply is read back (conversational mode, Audio-back on).
+# [turn_instructions.spoken_reply]
+# prompt = "Your reply is read aloud. Answer in a few short sentences, without lists or headings."
+
 # Assistants feature configuration
 # [assistants]
 # # Whether to enable the assistants feature in the frontend (default: false)

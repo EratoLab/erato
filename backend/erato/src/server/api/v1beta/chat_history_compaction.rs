@@ -254,6 +254,7 @@ async fn prepare(
         new_input_file_ids: vec![],
         selected_facet_ids: request.selected_facet_ids.clone(),
         action_facet: None,
+        turn_instructions: Default::default(),
         delegation_targets: vec![],
         delegation_run_mode: Default::default(),
         suppress_task_offer: false,

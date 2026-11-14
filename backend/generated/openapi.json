@@ -7828,6 +7828,29 @@
           {
             "allOf": [
               {
+                "$ref": "#/components/schemas/ContentPartTurnInstructionMarker",
+                "description": "Reference to a turn instruction of one type. Resolved like\n`ActionFacetMarker`: the text comes from `turn_instructions.<type>`\nwhen the request is built, and the marker is dropped when the snapshot\nreplays as prior-turn history."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "content_type"
+                ],
+                "properties": {
+                  "content_type": {
+                    "type": "string",
+                    "enum": [
+                      "turn_instruction_marker"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Reference to a turn instruction of one type. Resolved like\n`ActionFacetMarker`: the text comes from `turn_instructions.<type>`\nwhen the request is built, and the marker is dropped when the snapshot\nreplays as prior-turn history."
+          },
+          {
+            "allOf": [
+              {
                 "$ref": "#/components/schemas/ContentPartTaskResult",
                 "description": "The result of an `async` delegated task, delivered back into the chat\nthe task was started from as a user-role row.\n\nA user row rather than an assistant one because the model has to react\nto it: it is material that arrived, not something the assistant said.\nThe history walk keeps it (unlike the directive markers above, which\nare request-scoped) so later turns can still see what came back."
               },
@@ -8306,6 +8329,18 @@
               "null"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ContentPartTurnInstructionMarker": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "The instruction type, e.g. `spoken_reply`."
           }
         }
       },
