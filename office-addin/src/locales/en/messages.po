@@ -1436,6 +1436,11 @@ msgid "officeAddin.powerpoint.context.onDemand"
 msgstr "Erato reads slides one at a time, only when your request needs them, and sees which slides and shapes you selected."
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato reads slides one at a time, only when your request needs them. This PowerPoint version doesn't tell it what you selected."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "“{excerpt}”"

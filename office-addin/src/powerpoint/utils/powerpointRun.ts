@@ -1,6 +1,9 @@
 let queue: Promise<unknown> = Promise.resolve();
 
-/** PowerPoint on the web fails overlapping PowerPoint.run batches, so every read waits its turn. */
+/**
+ * Every read waits its turn. Reported by the office-agents add-in for PowerPoint on the web, not
+ * measured here; serialising costs little either way.
+ */
 export function runPowerPoint<T>(
   batch: (context: PowerPoint.RequestContext) => Promise<T>,
 ): Promise<T> {

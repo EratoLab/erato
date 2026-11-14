@@ -6,6 +6,7 @@ export interface PowerPointShapeOut {
   name: string;
   type: string;
   box: { left: number; top: number; width: number; height: number };
+  /** Absent when `paragraphs` carries the text. */
   text?: string;
   /** Placeholder role (title, body…); full tier only. */
   role?: string;
@@ -25,9 +26,27 @@ export interface PowerPointShapeOut {
 
 export interface PowerPointParagraphOut {
   text: string;
-  level: number;
+  /** Absent past MAX_PARAGRAPHS_PER_SHAPE, where levels are not read. */
+  level?: number;
   bullet?: string;
 }
+
+/**
+ * The switches whose absence this host's results report, each with how a gap reads to the model.
+ * Results, unread notes and the chip all derive from the same switches.
+ */
+export const POWERPOINT_HOST_LIMITS = {
+  placeholderRole: "placeholder roles (which shape is the title)",
+  tables: "table contents",
+  groups: "shapes inside groups",
+  zOrder: "z-order",
+  shapeDetails: "alt text, rotation and visibility",
+  bulletLevels: "bullets and indent levels",
+  slideSize: "slide size",
+} as const satisfies Partial<Record<keyof PowerPointReadSupport, string>>;
+
+export const hostCannot = (feature: keyof typeof POWERPOINT_HOST_LIMITS) =>
+  `${POWERPOINT_HOST_LIMITS[feature]}: this PowerPoint version cannot read them (needs PowerPointApi 1.10)`;
 
 /** Shape types whose content no PowerPoint API exposes. */
 const OPAQUE_CONTENT: Record<string, string> = {
@@ -44,11 +63,11 @@ const OPAQUE_CONTENT: Record<string, string> = {
 };
 
 /**
- * Below 1.10 `.textFrame` makes the whole batch fail on tables, pictures, charts and groups, so the
- * basic tier asks only these types for text. A placeholder can still hold a table or a picture;
- * that one falls back to its own batch.
+ * Below 1.10 `.textFrame` fails the whole batch on tables, pictures, charts and groups, so only
+ * these types are asked for text. A placeholder can still hold a table or a picture; readEach
+ * isolates that one.
  */
-const BASIC_TEXT_TYPES = new Set([
+const TEXT_TYPES = new Set([
   "GeometricShape",
   "TextBox",
   "Placeholder",
@@ -60,6 +79,9 @@ const TITLE_ROLES = new Set(["Title", "CenterTitle", "VerticalTitle"]);
 export const isTitleRole = (role: string | undefined) =>
   !!role && TITLE_ROLES.has(role);
 
+/** Assumed until measured natively: the top level is 1 and deeper paragraphs count up. */
+export const TOP_INDENT_LEVEL = 1;
+
 export const MAX_GROUP_DEPTH = 3;
 const MAX_PARAGRAPHS_PER_SHAPE = 60;
 const MAX_TEXT_CHARACTERS = 4000;
@@ -68,9 +90,12 @@ const MAX_TABLE_CELLS = 400;
 const FAILED = Symbol("failed");
 type Read<R> = R | typeof FAILED;
 
+export const failed = <R>(value: Read<R>): value is typeof FAILED =>
+  value === FAILED;
+
 /**
- * Queues one read per item and syncs once. If the batch fails, each item is read again in a batch
- * of its own, so one shape PowerPoint refuses does not lose the others.
+ * Queues one read per item and syncs once. A failed batch is split in halves and each half tried
+ * again, so k refused items cost about 2k·log2(n) syncs instead of one per item.
  */
 export async function readEach<T, R>(
   context: PowerPoint.RequestContext,
@@ -85,32 +110,25 @@ export async function readEach<T, R>(
       return FAILED;
     }
   };
-  const readers = items.map(queue);
-  try {
-    await context.sync();
-    return readers.map(take);
-  } catch {
-    if (items.length === 1) return [FAILED];
-  }
-  const results: Read<R>[] = [];
-  for (const item of items) {
-    const reader = queue(item);
+  const attempt = async (batch: readonly T[]): Promise<Read<R>[]> => {
+    const readers = batch.map(queue);
     try {
       await context.sync();
-      results.push(take(reader));
+      return readers.map(take);
     } catch {
-      results.push(FAILED);
+      if (batch.length === 1) return [FAILED];
     }
-  }
-  return results;
+    const middle = Math.ceil(batch.length / 2);
+    return [
+      ...(await attempt(batch.slice(0, middle))),
+      ...(await attempt(batch.slice(middle))),
+    ];
+  };
+  return attempt(items);
 }
 
-export const failed = <R>(value: Read<R>): value is typeof FAILED =>
-  value === FAILED;
-
 const BASE_FIELDS = ["id", "name", "type", "left", "top", "width", "height"];
-const FULL_FIELDS = [
-  "zOrderPosition",
+const DETAIL_FIELDS = [
   "rotation",
   "visible",
   "altTextTitle",
@@ -122,14 +140,17 @@ export function shapeLoadPaths(support: PowerPointReadSupport): string {
   const fields = [
     ...BASE_FIELDS,
     ...(support.zOrder ? ["zOrderPosition"] : []),
-    ...(support.shapeDetails ? FULL_FIELDS.slice(1) : []),
+    ...(support.shapeDetails ? DETAIL_FIELDS : []),
   ];
   return fields.map((field) => `items/${field}`).join(",");
 }
 
 const points = (value: number) => Math.round(value * 10) / 10;
 
-/** Paragraphs end in \r on desktop and \n on the web; a soft line break inside one is \v. */
+/**
+ * Assumed, not measured: paragraphs end in \r on desktop and \n on the web, a soft line break is
+ * \v, and string offsets match the host's character positions for getSubstring.
+ */
 export function powerpointParagraphSpans(
   raw: string,
 ): { start: number; length: number }[] {
@@ -148,20 +169,9 @@ export function normalizePowerPointText(raw: string): string {
   return raw.replace(/\r\n|\r/g, "\n").replace(/\v/g, "\n");
 }
 
-export function capText(text: string): string {
-  if (text.length <= MAX_TEXT_CHARACTERS) return text;
-  return `${text.slice(0, MAX_TEXT_CHARACTERS)}…[cut: ${text.length - MAX_TEXT_CHARACTERS} more characters]`;
-}
-
-function capTable(values: string[][]): string[][] {
-  let cells = 0;
-  const rows: string[][] = [];
-  for (const row of values) {
-    if (cells + row.length > MAX_TABLE_CELLS) break;
-    cells += row.length;
-    rows.push(row.map((cell) => capText(normalizePowerPointText(cell))));
-  }
-  return rows;
+export function capText(text: string, max = MAX_TEXT_CHARACTERS): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}…[cut: ${text.length - max} more characters]`;
 }
 
 /** Top-then-left, the order a reader most likely takes; PowerPoint keeps no reading order. */
@@ -185,9 +195,16 @@ interface Pending {
   raw?: string;
 }
 
+function markUnread(out: PowerPointShapeOut, what: string) {
+  out.unread = [...(out.unread ?? []), what];
+}
+
+const contentType = (p: Pending) => p.out.holds ?? p.out.type;
+
 /**
  * Reads a loaded shape collection's content. The shapes' own fields (shapeLoadPaths) must already
- * be loaded and synced.
+ * be loaded and synced. Each step is one batch for all shapes, and groups are read level by level,
+ * so the number of syncs does not grow with the number of shapes.
  */
 export async function readShapeContent(
   context: PowerPoint.RequestContext,
@@ -199,7 +216,6 @@ export async function readShapeContent(
     proxy,
     out: baseShape(proxy, support),
   }));
-  const full = support.tier === "full";
 
   if (support.placeholderRole) {
     const placeholders = pending.filter((p) => p.out.type === "Placeholder");
@@ -211,36 +227,60 @@ export async function readShapeContent(
       const role = roles[i];
       if (failed(role)) return;
       p.out.role = role.type;
-      if (role.holds && role.holds !== "Placeholder") p.out.holds = role.holds;
+      if (role.holds && !TEXT_TYPES.has(role.holds)) p.out.holds = role.holds;
     });
   }
 
-  const contentType = (p: Pending) => p.out.holds ?? p.out.type;
-  let textCandidates = pending.filter((p) =>
-    full
-      ? contentType(p) !== "Table" && contentType(p) !== "Group"
-      : BASIC_TEXT_TYPES.has(p.out.type),
+  await readTexts(context, pending, support);
+  await readTables(context, pending, support);
+  if (support.bulletLevels) await readParagraphs(context, pending);
+
+  for (const p of pending) {
+    const opaque = OPAQUE_CONTENT[contentType(p)];
+    if (opaque) markUnread(p.out, opaque);
+    else if (contentType(p) === "Unsupported" && p.out.text === undefined)
+      markUnread(
+        p.out,
+        "content: PowerPoint does not describe this shape type",
+      );
+  }
+
+  await readGroups(context, pending, support, depth);
+  return pending.map((p) => p.out);
+}
+
+async function readTexts(
+  context: PowerPoint.RequestContext,
+  pending: readonly Pending[],
+  support: PowerPointReadSupport,
+) {
+  const safe = support.safeTextFrame;
+  let candidates = pending.filter((p) =>
+    safe
+      ? TEXT_TYPES.has(contentType(p)) || contentType(p) === "Unsupported"
+      : TEXT_TYPES.has(p.out.type),
   );
-  if (full) {
-    const hasText = await readEach(context, textCandidates, ({ proxy }) => {
+  if (safe) {
+    const hasText = await readEach(context, candidates, ({ proxy }) => {
       const frame = proxy.getTextFrameOrNullObject().load("hasText");
       return () => !frame.isNullObject && frame.hasText;
     });
-    textCandidates = textCandidates.filter((_, i) => hasText[i] !== false);
+    candidates = candidates.filter((_, i) => hasText[i] !== false);
   }
-  const texts = await readEach(context, textCandidates, ({ proxy }) => {
-    const frame = full ? proxy.getTextFrameOrNullObject() : proxy.textFrame;
+  const texts = await readEach(context, candidates, ({ proxy }) => {
+    const frame = safe ? proxy.getTextFrameOrNullObject() : proxy.textFrame;
     const range = frame.textRange.load("text");
     return () => range.text;
   });
-  textCandidates.forEach((p, i) => {
+  candidates.forEach((p, i) => {
     const raw = texts[i];
-    if (failed(raw)) {
-      if (!full && p.out.type === "Placeholder")
-        p.out.unread = [
-          "placeholder content: this host reads only text placeholders",
-        ];
-      else markUnread(p.out, "text: PowerPoint refused to read it");
+    if (failed(raw) || typeof raw !== "string") {
+      markUnread(
+        p.out,
+        !safe && p.out.type === "Placeholder"
+          ? "placeholder content: it holds something other than text, which this PowerPoint version cannot tell apart"
+          : "text: PowerPoint refused to read it",
+      );
       return;
     }
     if (raw) {
@@ -248,76 +288,97 @@ export async function readShapeContent(
       p.out.text = capText(normalizePowerPointText(raw));
     }
   });
-
-  const tableShapes = pending.filter((p) => contentType(p) === "Table");
-  if (support.tables) {
-    const tables = await readEach(context, tableShapes, ({ proxy }) => {
-      const table = proxy.getTable().load("rowCount,columnCount,values");
-      return () => ({
-        rows: table.rowCount,
-        columns: table.columnCount,
-        values: table.values,
-      });
-    });
-    tableShapes.forEach((p, i) => {
-      const table = tables[i];
-      if (failed(table)) {
-        markUnread(p.out, "table contents: PowerPoint refused to read them");
-        return;
-      }
-      const values = capTable(table.values);
-      p.out.table = { rows: table.rows, columns: table.columns, values };
-      if (values.length < table.values.length)
-        markUnread(
-          p.out,
-          `table rows ${values.length + 1}-${table.values.length}: cut to keep the result small`,
-        );
-    });
-  } else {
-    tableShapes.forEach((p) =>
-      markUnread(
-        p.out,
-        "table contents: this PowerPoint version cannot read tables (needs PowerPointApi 1.8)",
-      ),
-    );
-  }
-
-  if (support.bulletLevels) await readParagraphs(context, pending);
-
-  for (const p of pending) {
-    const opaque = OPAQUE_CONTENT[contentType(p)];
-    if (opaque) markUnread(p.out, opaque);
-  }
-
-  const groups = pending.filter((p) => p.out.type === "Group");
-  for (const p of groups) {
-    if (!support.groups) {
-      markUnread(
-        p.out,
-        "group children: this PowerPoint version cannot read inside groups (needs PowerPointApi 1.8)",
-      );
-      continue;
-    }
-    if (depth + 1 >= MAX_GROUP_DEPTH) {
-      markUnread(p.out, "group children: nested too deep to read");
-      continue;
-    }
-    try {
-      const children = p.proxy.group.shapes.load(shapeLoadPaths(support));
-      await context.sync();
-      p.out.children = readingOrder(
-        await readShapeContent(context, children.items, support, depth + 1),
-      );
-    } catch {
-      markUnread(p.out, "group children: PowerPoint refused to read them");
-    }
-  }
-
-  return pending.map((p) => p.out);
 }
 
-function markUnread(out: PowerPointShapeOut, what: string) {
-  out.unread = [...(out.unread ?? []), what];
+function capTable(values: string[][]): string[][] {
+  let cells = 0;
+  const rows: string[][] = [];
+  for (const row of values) {
+    if (cells + row.length > MAX_TABLE_CELLS) break;
+    cells += row.length;
+    rows.push(row.map((cell) => capText(normalizePowerPointText(cell), 500)));
+  }
+  return rows;
+}
+
+async function readTables(
+  context: PowerPoint.RequestContext,
+  pending: readonly Pending[],
+  support: PowerPointReadSupport,
+) {
+  const tableShapes = pending.filter((p) => contentType(p) === "Table");
+  if (!support.tables) {
+    tableShapes.forEach((p) => markUnread(p.out, hostCannot("tables")));
+    return;
+  }
+  const tables = await readEach(context, tableShapes, ({ proxy }) => {
+    const table = proxy.getTable().load("rowCount,columnCount,values");
+    return () => ({
+      rows: table.rowCount,
+      columns: table.columnCount,
+      values: table.values,
+    });
+  });
+  tableShapes.forEach((p, i) => {
+    const table = tables[i];
+    if (failed(table)) {
+      markUnread(p.out, "table contents: PowerPoint refused to read them");
+      return;
+    }
+    const values = capTable(table.values);
+    p.out.table = { rows: table.rows, columns: table.columns, values };
+    if (values.length < table.values.length)
+      markUnread(
+        p.out,
+        `table rows ${values.length + 1}-${table.values.length}: cut to keep the result small`,
+      );
+  });
+}
+
+async function readGroups(
+  context: PowerPoint.RequestContext,
+  pending: readonly Pending[],
+  support: PowerPointReadSupport,
+  depth: number,
+) {
+  const groups = pending.filter((p) => p.out.type === "Group");
+  if (!support.groups) {
+    groups.forEach((p) => markUnread(p.out, hostCannot("groups")));
+    return;
+  }
+  if (depth + 1 >= MAX_GROUP_DEPTH) {
+    groups.forEach((p) =>
+      markUnread(p.out, "group children: nested too deep to read"),
+    );
+    return;
+  }
+  const lists = await readEach(context, groups, ({ proxy }) => {
+    const children = proxy.group.shapes.load(shapeLoadPaths(support));
+    return () => children.items;
+  });
+  const owners: Pending[] = [];
+  const children: PowerPoint.Shape[] = [];
+  groups.forEach((p, i) => {
+    const list = lists[i];
+    if (failed(list)) {
+      markUnread(p.out, "group children: PowerPoint refused to read them");
+      return;
+    }
+    for (const child of list) {
+      owners.push(p);
+      children.push(child);
+    }
+  });
+  const read = await readShapeContent(context, children, support, depth + 1);
+  const byOwner = new Map<Pending, PowerPointShapeOut[]>();
+  read.forEach((child, i) => {
+    const list = byOwner.get(owners[i]) ?? [];
+    list.push(child);
+    byOwner.set(owners[i], list);
+  });
+  for (const p of groups)
+    if (!p.out.unread?.some((note) => note.startsWith("group children")))
+      p.out.children = readingOrder(byOwner.get(p) ?? []);
 }
 
 function baseShape(
@@ -344,14 +405,17 @@ function baseShape(
     const description = proxy.altTextDescription || undefined;
     if (title || description)
       out.altText = {
-        ...(title ? { title: capText(title) } : {}),
-        ...(description ? { description: capText(description) } : {}),
+        ...(title ? { title: capText(title, 1000) } : {}),
+        ...(description ? { description: capText(description, 1000) } : {}),
       };
   }
   return out;
 }
 
-/** Per paragraph indent level and bullet; a shape whose paragraphs are all plain level 1 gets none. */
+/**
+ * Per paragraph indent level and bullet. A shape whose paragraphs are all plain top-level text
+ * keeps its `text`; otherwise `paragraphs` replaces it, so the text goes once.
+ */
 async function readParagraphs(
   context: PowerPoint.RequestContext,
   pending: readonly Pending[],
@@ -360,11 +424,11 @@ async function readParagraphs(
     p.raw
       ? powerpointParagraphSpans(p.raw)
           .slice(0, MAX_PARAGRAPHS_PER_SHAPE)
+          .filter((span) => span.length > 0)
           .map((span) => ({ p, span }))
       : [],
   );
   const formats = await readEach(context, items, ({ p, span }) => {
-    if (span.length === 0) return () => null;
     const range = p.proxy
       .getTextFrameOrNullObject()
       .textRange.getSubstring(span.start, span.length);
@@ -379,30 +443,155 @@ async function readParagraphs(
         : undefined,
     });
   });
-  const byShape = new Map<Pending, PowerPointParagraphOut[]>();
-  items.forEach(({ p, span }, i) => {
-    const format = formats[i];
-    const raw = p.raw ?? "";
-    const text = normalizePowerPointText(
-      raw.slice(span.start, span.start + span.length),
+  const formatOf = new Map<string, (typeof formats)[number]>();
+  items.forEach(({ p, span }, i) =>
+    formatOf.set(`${p.out.id}:${span.start}`, formats[i]),
+  );
+
+  for (const p of pending) {
+    if (!p.raw) continue;
+    const spans = powerpointParagraphSpans(p.raw);
+    const paragraphs: PowerPointParagraphOut[] = spans.map((span, index) => {
+      const text = normalizePowerPointText(
+        p.raw!.slice(span.start, span.start + span.length),
+      );
+      if (index >= MAX_PARAGRAPHS_PER_SHAPE) return { text };
+      const format = formatOf.get(`${p.out.id}:${span.start}`);
+      if (format === undefined || failed(format))
+        return { text, level: TOP_INDENT_LEVEL };
+      return {
+        text,
+        level: format.level,
+        ...(format.bullet ? { bullet: format.bullet } : {}),
+      };
+    });
+    const structured = paragraphs.some(
+      (paragraph) =>
+        paragraph.bullet ||
+        (paragraph.level !== undefined && paragraph.level > TOP_INDENT_LEVEL),
     );
-    const list = byShape.get(p) ?? [];
-    list.push(
-      failed(format) || format === null
-        ? { text, level: 1 }
-        : {
-            text,
-            level: format.level,
-            ...(format.bullet ? { bullet: format.bullet } : {}),
-          },
-    );
-    byShape.set(p, list);
-  });
-  for (const [p, paragraphs] of byShape) {
-    if (paragraphs.some((paragraph) => paragraph.bullet || paragraph.level > 1))
-      p.out.paragraphs = paragraphs.map((paragraph) => ({
-        ...paragraph,
-        text: capText(paragraph.text),
-      }));
+    if (!structured) continue;
+    p.out.paragraphs = capParagraphs(p.out, paragraphs);
+    delete p.out.text;
+    if (spans.length > MAX_PARAGRAPHS_PER_SHAPE)
+      markUnread(
+        p.out,
+        `bullet levels of paragraphs ${MAX_PARAGRAPHS_PER_SHAPE + 1}-${spans.length}: not read`,
+      );
   }
+}
+
+/** The same character budget as a shape's text, spent over its paragraphs in order. */
+function capParagraphs(
+  out: PowerPointShapeOut,
+  paragraphs: PowerPointParagraphOut[],
+): PowerPointParagraphOut[] {
+  let left = MAX_TEXT_CHARACTERS;
+  const kept: PowerPointParagraphOut[] = [];
+  for (const paragraph of paragraphs) {
+    if (left <= 0) break;
+    kept.push({ ...paragraph, text: capText(paragraph.text, left) });
+    left -= paragraph.text.length;
+  }
+  if (kept.length < paragraphs.length)
+    markUnread(
+      out,
+      `paragraphs ${kept.length + 1}-${paragraphs.length}: cut to keep the result small`,
+    );
+  return kept;
+}
+
+const encoder = new TextEncoder();
+export const jsonBytes = (value: unknown) =>
+  encoder.encode(JSON.stringify(value)).length;
+
+/** Keeps the longest prefix of `items` whose JSON fits in `room`. */
+function prefixThatFits<T>(items: readonly T[], room: number): T[] {
+  const kept: T[] = [];
+  let used = 2;
+  for (const item of items) {
+    const size = jsonBytes(item) + 1;
+    if (used + size > room) break;
+    kept.push(item);
+    used += size;
+  }
+  return kept;
+}
+
+const CUT = "cut to keep the result small";
+const CUT_MARK = /…\[cut: \d+ more characters\]$/;
+
+/**
+ * One shape within `maxBytes` of JSON: group children, table rows, paragraphs, then text and alt
+ * text are cut in that order, each cut named in `unread`.
+ */
+export function capShape(
+  shape: PowerPointShapeOut,
+  maxBytes: number,
+): PowerPointShapeOut {
+  if (jsonBytes(shape) <= maxBytes) return shape;
+  const out: PowerPointShapeOut = {
+    ...shape,
+    unread: [...(shape.unread ?? [])],
+  };
+  // Room for the notes this function adds.
+  const budget = maxBytes - 400;
+  const others = () =>
+    jsonBytes({ ...out, children: [], table: undefined, paragraphs: [] });
+
+  if (out.children) {
+    const all = out.children;
+    const room = budget - others();
+    const kept: PowerPointShapeOut[] = [];
+    let used = 2;
+    for (const child of all) {
+      const left = room - used;
+      if (left < 300) break;
+      const capped = capShape(child, left);
+      const size = jsonBytes(capped) + 1;
+      if (used + size > room) break;
+      kept.push(capped);
+      used += size;
+    }
+    out.children = kept;
+    if (kept.length < all.length)
+      out.unread!.push(
+        `group children ${kept.length + 1}-${all.length} of ${all.length}: ${CUT}`,
+      );
+  }
+  if (out.table && jsonBytes(out) > budget) {
+    const rows = prefixThatFits(out.table.values, budget - others());
+    if (rows.length < out.table.values.length)
+      out.unread!.push(
+        `table rows ${rows.length + 1}-${out.table.values.length}: ${CUT}`,
+      );
+    out.table = { ...out.table, values: rows };
+  }
+  if (out.paragraphs && jsonBytes(out) > budget) {
+    const kept = prefixThatFits(out.paragraphs, budget - others());
+    if (kept.length < out.paragraphs.length)
+      out.unread!.push(
+        `paragraphs ${kept.length + 1}-${out.paragraphs.length}: ${CUT}`,
+      );
+    out.paragraphs = kept;
+  }
+  // Characters can take up to 4 bytes, so cut by the overshoot until it fits.
+  for (let pass = 0; out.text && jsonBytes(out) > budget && pass < 8; pass++) {
+    const over = jsonBytes(out) - budget;
+    const kept = out.text.replace(CUT_MARK, "");
+    out.text = capText(
+      (shape.text ?? "").replace(CUT_MARK, ""),
+      Math.max(0, kept.length - Math.ceil(over / 2) - 60),
+    );
+  }
+  if (out.altText && jsonBytes(out) > budget) {
+    out.altText = {
+      ...(out.altText.title ? { title: capText(out.altText.title, 200) } : {}),
+      ...(out.altText.description
+        ? { description: capText(out.altText.description, 200) }
+        : {}),
+    };
+  }
+  if (out.unread!.length === 0) delete out.unread;
+  return out;
 }

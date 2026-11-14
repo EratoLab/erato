@@ -19,30 +19,34 @@ export type PowerPointApiVersion = (typeof POWERPOINT_API_VERSIONS)[number];
  */
 export type PowerPointReadTier = "full" | "basic" | "none";
 
-/** Each read feature has its own switch, so a host never gets offered a read it cannot do. */
+/**
+ * Each read feature has its own switch, so a host never gets offered a read it cannot do. The 1.8
+ * features also wait for 1.10: hosts at 1.8 or 1.9 (Microsoft 365 builds before Version 2601) are
+ * outside Microsoft's support, and two tiers leave two host states to describe and test, not three.
+ */
 export interface PowerPointReadSupport {
   tier: PowerPointReadTier;
   /** The highest of POWERPOINT_API_VERSIONS the host reports, or null below 1.3. */
   highestVersion: PowerPointApiVersion | null;
-  /** Slides in order with id, layout and master names, shapes with id, name, type, box and text. */
+  /** Slides in order with id, layout and master names; shapes with id, name, type, box and text. */
   slides: boolean;
-  /** getSelectedSlides, getSelectedShapes, getSelectedTextRange. */
+  /** getSelectedSlides, getSelectedShapes, getSelectedTextRange (1.5). */
   selection: boolean;
   /** placeholderFormat.type and containedType: title, body, subtitle… */
   placeholderRole: boolean;
   /** shape.getTable().values. */
   tables: boolean;
-  /** shape.group.shapes, parentGroup and level. */
+  /** shape.group.shapes. */
   groups: boolean;
-  /** shape.zOrderPosition and slide.index. */
+  /** shape.zOrderPosition. */
   zOrder: boolean;
-  /** altTextTitle, altTextDescription, isDecorative, rotation, visible. */
+  /** altTextTitle, altTextDescription, isDecorative, rotation, visible (1.10). */
   shapeDetails: boolean;
-  /** getTextFrameOrNullObject, so shapes of any type can be asked for text safely. */
+  /** getTextFrameOrNullObject, so shapes of any type can be asked for text safely (1.10). */
   safeTextFrame: boolean;
-  /** Per paragraph indentLevel and bullet type and style. */
+  /** Per paragraph indentLevel and bullet type and style (1.10). */
   bulletLevels: boolean;
-  /** presentation.pageSetup.slideWidth and slideHeight. */
+  /** presentation.pageSetup.slideWidth and slideHeight (1.10). */
   slideSize: boolean;
 }
 
@@ -68,21 +72,24 @@ export function powerpointReadSupport(
     null;
   // TextFrame and shape types arrived in 1.4; slides with layout names in 1.3.
   const slides = supported.has("1.3") && supported.has("1.4");
-  const v18 = slides && supported.has("1.8");
-  const v110 = v18 && supported.has("1.10");
+  const full =
+    slides &&
+    supported.has("1.5") &&
+    supported.has("1.8") &&
+    supported.has("1.10");
   return {
-    tier: v110 ? "full" : slides ? "basic" : "none",
+    tier: full ? "full" : slides ? "basic" : "none",
     highestVersion,
     slides,
     selection: slides && supported.has("1.5"),
-    placeholderRole: v18,
-    tables: v18,
-    groups: v18,
-    zOrder: v18,
-    shapeDetails: v110,
-    safeTextFrame: v110,
-    bulletLevels: v110,
-    slideSize: v110,
+    placeholderRole: full,
+    tables: full,
+    groups: full,
+    zOrder: full,
+    shapeDetails: full,
+    safeTextFrame: full,
+    bulletLevels: full,
+    slideSize: full,
   };
 }
 

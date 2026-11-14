@@ -21,6 +21,12 @@ import type { ComposerContextItem } from "@erato/frontend/library";
 const mocks = vi.hoisted(() => ({
   composer: null as AddinChatInputCoreProps | null,
   available: new Map<string, () => boolean>(),
+  facets: [
+    {
+      id: "powerpoint_presentation",
+      allowed_args: ["presentation_name", "read_tier", "selection_summary"],
+    },
+  ] as { id: string; allowed_args: string[] }[],
 }));
 
 vi.mock("../../../core/AddinChatInputCore", () => ({
@@ -33,20 +39,7 @@ vi.mock("../../../core/AddinChatInputCore", () => ({
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
   return mock.createEratoLibraryMock({
-    useFacets: () => ({
-      data: {
-        action_facets: [
-          {
-            id: "powerpoint_presentation",
-            allowed_args: [
-              "presentation_name",
-              "read_tier",
-              "selection_summary",
-            ],
-          },
-        ],
-      },
-    }),
+    useFacets: () => ({ data: { action_facets: mocks.facets } }),
     registerClientToolExecutor: (
       name: string,
       _executor: unknown,
@@ -73,6 +66,12 @@ afterEach(() => {
   powerpointInclusionStore.resetForTests();
   mocks.composer = null;
   mocks.available.clear();
+  mocks.facets = [
+    {
+      id: "powerpoint_presentation",
+      allowed_args: ["presentation_name", "read_tier", "selection_summary"],
+    },
+  ];
 });
 
 function renderInput(set = "1.10") {
@@ -107,7 +106,7 @@ describe("PowerPoint composer", () => {
       actionFacet: {
         id: "powerpoint_presentation",
         args: {
-          presentation_name: "Presentation",
+          presentation_name: "Untitled presentation",
           read_tier: "full (PowerPointApi 1.10)",
           selection_summary: "Selected slides: 1 (id 256#).",
         },
@@ -139,6 +138,29 @@ describe("PowerPoint composer", () => {
     expect(
       [...mocks.available.values()].every((isAvailable) => isAvailable()),
     ).toBe(true);
+  });
+
+  it("shows no chip, lists no tools and reads nothing when the server offers no PowerPoint facet", () => {
+    mocks.facets = [];
+    const host = installFakePowerPoint({ slides: [] });
+    const { onSendMessage } = renderInput();
+    expect(mocks.composer?.contextItems).toEqual([]);
+    expect(
+      [...mocks.available.values()].some((isAvailable) => isAvailable()),
+    ).toBe(false);
+    send();
+    expect(onSendMessage.mock.calls[0][11]).toBeUndefined();
+    expect(host.runs).toBe(0);
+  });
+
+  it("describes a basic host's reads in the chip from the same switches", () => {
+    renderInput("1.9");
+    const detail = render(
+      <>{chip().detail?.render({ locked: false, runAction: () => {} })}</>,
+    );
+    expect(detail.container.textContent).toContain(
+      "text boxes and their positions only",
+    );
   });
 
   it("offers no selection read and no chip on a host that cannot read slides", () => {

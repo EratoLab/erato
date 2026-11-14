@@ -1,5 +1,6 @@
 import { powerpointHostLimits } from "./powerpointReads";
 import { powerpointErrorText, runPowerPoint } from "./powerpointRun";
+import { capText } from "./powerpointShapeRead";
 import { advertisedFacetArgs } from "../../core/clientActions/actionFacetArgs";
 
 import type { PowerPointReadSupport } from "./powerpointReadSupport";
@@ -8,9 +9,10 @@ import type { ActionFacetRequest } from "@erato/frontend/library";
 export const POWERPOINT_PRESENTATION_FACET_ID = "powerpoint_presentation";
 
 const SELECTION_SUMMARY_TIMEOUT_MS = 1500;
-const MAX_LISTED_SHAPES = 12;
+const MAX_LISTED = 12;
+const MAX_NAME_CHARACTERS = 60;
 
-/** The file name without its folder or extension, as the user knows the deck. */
+/** The file name without its folder or extension; empty for a deck that was never saved. */
 export function powerpointPresentationName(url: string | undefined): string {
   const file = (url ?? "").split(/[\\/]/).pop()?.split("?")[0] ?? "";
   let name = file;
@@ -19,7 +21,7 @@ export function powerpointPresentationName(url: string | undefined): string {
   } catch {
     // Keep the raw name.
   }
-  return name.replace(/\.(pptx|pptm|ppt|potx|ppsx)$/i, "") || "Presentation";
+  return name.replace(/\.(pptx|pptm|ppt|potx|ppsx)$/i, "");
 }
 
 export function currentPowerPointPresentationName(): string {
@@ -41,15 +43,21 @@ export async function readPowerPointSelectionSummary(
     const shapes = presentation.getSelectedShapes().load("items/id,items/name");
     await context.sync();
     const order = new Map(all.items.map((slide, i) => [slide.id, i + 1]));
-    const slideText = slides.items
-      .map((slide) => `${order.get(slide.id) ?? "?"} (id ${slide.id})`)
-      .join(", ");
-    const listed = shapes.items
-      .slice(0, MAX_LISTED_SHAPES)
-      .map((shape) => `"${shape.name}" (id ${shape.id})`);
-    const more = shapes.items.length - listed.length;
-    const shapeText = listed.length
-      ? `; selected shapes: ${listed.join(", ")}${more > 0 ? ` and ${more} more` : ""}`
+    const listed = <T>(items: readonly T[], show: (item: T) => string) => {
+      const shown = items.slice(0, MAX_LISTED).map(show).join(", ");
+      const more = items.length - MAX_LISTED;
+      return more > 0 ? `${shown} and ${more} more` : shown;
+    };
+    const slideText = listed(
+      slides.items,
+      (slide) => `${order.get(slide.id) ?? "?"} (id ${slide.id})`,
+    );
+    const shapeText = shapes.items.length
+      ? `; selected shapes: ${listed(
+          shapes.items,
+          (shape) =>
+            `"${capText(shape.name, MAX_NAME_CHARACTERS)}" (id ${shape.id})`,
+        )}`
       : "";
     return slideText
       ? `Selected slides: ${slideText}${shapeText}.`
@@ -94,7 +102,7 @@ export function resolvePowerPointFacet(input: {
     id: POWERPOINT_PRESENTATION_FACET_ID,
     args: advertisedFacetArgs(
       {
-        presentation_name: input.presentationName,
+        presentation_name: input.presentationName || "Untitled presentation",
         read_tier: powerpointTierText(input.support),
         selection_summary: input.selectionSummary,
       },

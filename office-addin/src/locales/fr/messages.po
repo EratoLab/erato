@@ -1436,6 +1436,11 @@ msgid "officeAddin.powerpoint.context.onDemand"
 msgstr "Erato lit les diapositives une à une, uniquement quand votre demande en a besoin, et voit les diapositives et formes que vous avez sélectionnées."
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato lit les diapositives une à une, uniquement quand votre demande en a besoin. Cette version de PowerPoint ne lui indique pas ce que vous avez sélectionné."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "« {excerpt} »"

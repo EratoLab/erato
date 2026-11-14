@@ -185,6 +185,31 @@ describe("PowerPoint facet", () => {
     );
   });
 
+  it("names an unsaved presentation for the model without a file name", () => {
+    expect(
+      resolvePowerPointFacet({
+        support: FULL,
+        presentationName: "",
+        selectionSummary: "",
+        availableFacetIds: available,
+        availableFacetArgs: args,
+      })?.args?.presentation_name,
+    ).toBe("Untitled presentation");
+  });
+
+  it("names 500 selected slides by count past the first 12", async () => {
+    installFakePowerPoint({
+      slides: Array.from({ length: 500 }, (_, i) => ({
+        id: `${256 + i}#`,
+        shapes: [],
+      })),
+      selectedSlideIds: Array.from({ length: 500 }, (_, i) => `${256 + i}#`),
+    });
+    const summary = await readPowerPointSelectionSummary(FULL);
+    expect(summary).toMatch(/and 488 more\.$/);
+    expect(summary.length).toBeLessThan(300);
+  });
+
   it("names the presentation after its file", () => {
     expect(
       powerpointPresentationName(
@@ -192,7 +217,7 @@ describe("PowerPoint facet", () => {
       ),
     ).toBe("Q3 Review");
     expect(powerpointPresentationName("C:\\Decks\\Plan.pptm")).toBe("Plan");
-    expect(powerpointPresentationName(undefined)).toBe("Presentation");
+    expect(powerpointPresentationName(undefined)).toBe("");
   });
 });
 

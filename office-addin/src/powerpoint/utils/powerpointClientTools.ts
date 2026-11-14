@@ -17,12 +17,6 @@ export const POWERPOINT_READ_PRESENTATION_TOOL = "powerpoint_read_presentation";
 export const POWERPOINT_READ_SLIDE_TOOL = "powerpoint_read_slide";
 export const POWERPOINT_READ_SELECTION_TOOL = "powerpoint_read_selection";
 
-export const POWERPOINT_READ_TOOLS = [
-  POWERPOINT_READ_PRESENTATION_TOOL,
-  POWERPOINT_READ_SLIDE_TOOL,
-  POWERPOINT_READ_SELECTION_TOOL,
-] as const;
-
 const inclusionOff = (): Promise<ClientToolExecutionResult> =>
   Promise.resolve({ ok: false, error: "Presentation inclusion is off." });
 

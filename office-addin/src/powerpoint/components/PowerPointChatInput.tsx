@@ -11,6 +11,7 @@ import { powerpointInclusionStore } from "../hooks/powerpointInclusionStore";
 import { registerPowerPointClientTools } from "../utils/powerpointClientTools";
 import {
   currentPowerPointPresentationName,
+  POWERPOINT_PRESENTATION_FACET_ID,
   readPowerPointSelectionSummary,
   resolvePowerPointFacet,
 } from "../utils/powerpointFacet";
@@ -40,13 +41,20 @@ export function PowerPointChatInput({
   const [support] = useState(
     () => supportOverride ?? currentPowerPointReadSupport(),
   );
-  const [presentationName] = useState(currentPowerPointPresentationName);
+  // Read on every render: Save As renames the deck while the pane stays open.
+  const presentationName = currentPowerPointPresentationName();
   useEffect(() => logPowerPointReadSupport(support), [support]);
 
   const { chatId } = chatInputProps;
   const conversationKey = useConversationKey(chatId, PRESENTATION_IDENTITY);
   const included = powerpointInclusionStore.useIncluded(conversationKey);
-  const readable = support.slides;
+  const availableFacetIds = useAvailableActionFacetIds();
+  const availableFacetArgs = useAvailableActionFacetArgs();
+  const facetsRef = useRef({ availableFacetIds, availableFacetArgs });
+  facetsRef.current = { availableFacetIds, availableFacetArgs };
+  // Like Word's chip: without the facet the model learns nothing of the deck and gets no tools.
+  const readable =
+    support.slides && availableFacetIds.has(POWERPOINT_PRESENTATION_FACET_ID);
 
   const readEnabledRef = useRef(included && readable);
   readEnabledRef.current = included && readable;
@@ -90,11 +98,6 @@ export function PowerPointChatInput({
     [readable, presentationName, included, support, locked, include, exclude],
   );
 
-  const availableFacetIds = useAvailableActionFacetIds();
-  const availableFacetArgs = useAvailableActionFacetArgs();
-  const facetsRef = useRef({ availableFacetIds, availableFacetArgs });
-  facetsRef.current = { availableFacetIds, availableFacetArgs };
-
   const { onSendMessage } = chatInputProps;
   const handleSendMessage = useCallback<
     AddinChatInputCoreProps["onSendMessage"]
@@ -120,7 +123,7 @@ export function PowerPointChatInput({
               return {
                 actionFacet: resolvePowerPointFacet({
                   support,
-                  presentationName,
+                  presentationName: currentPowerPointPresentationName(),
                   selectionSummary,
                   ...facetsRef.current,
                 }),
@@ -144,7 +147,7 @@ export function PowerPointChatInput({
         prepare,
       );
     },
-    [onSendMessage, support, presentationName],
+    [onSendMessage, support],
   );
 
   return (

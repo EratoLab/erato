@@ -1436,6 +1436,11 @@ msgid "officeAddin.powerpoint.context.onDemand"
 msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht, und sieht, welche Folien und Formen Sie ausgewählt haben."
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht. Diese PowerPoint-Version teilt Erato nicht mit, was Sie ausgewählt haben."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "„{excerpt}“"

@@ -19,9 +19,6 @@ const getSnapshot = () => overrides;
 export const POWERPOINT_INCLUDE_BY_DEFAULT = true;
 
 export const powerpointInclusionStore = {
-  isIncluded(conversationKey: string): boolean {
-    return overrides.get(conversationKey) ?? POWERPOINT_INCLUDE_BY_DEFAULT;
-  },
   useIncluded(conversationKey: string): boolean {
     return (
       useSyncExternalStore(subscribe, getSnapshot).get(conversationKey) ??

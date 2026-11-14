@@ -10,11 +10,18 @@ export function powerpointReadScopeLines(
   support: PowerPointReadSupport,
 ): string[] {
   return [
-    t({
-      id: "officeAddin.powerpoint.context.onDemand",
-      message:
-        "Erato reads slides one at a time, only when your request needs them, and sees which slides and shapes you selected.",
-    }),
+    support.selection
+      ? t({
+          id: "officeAddin.powerpoint.context.onDemand",
+          message:
+            "Erato reads slides one at a time, only when your request needs them, and sees which slides and shapes you selected.",
+        })
+      : t({
+          id: "officeAddin.powerpoint.context.onDemandNoSelection",
+          message:
+            "Erato reads slides one at a time, only when your request needs them. This PowerPoint version doesn't tell it what you selected.",
+        }),
+    // Every 1.10 switch is on exactly at the full tier, so this line cannot disagree with them.
     support.tier === "full"
       ? t({
           id: "officeAddin.powerpoint.context.full",
@@ -42,17 +49,18 @@ export function powerpointPresentationChip(input: {
   onInclude: () => void;
   onExclude: () => void;
 }): ComposerContextItem {
+  const spokenLabel = t({
+    id: "officeAddin.powerpoint.chip.spokenLabel",
+    message: "Presentation",
+  });
   return {
     id: POWERPOINT_PRESENTATION_CHIP_ID,
     kind: POWERPOINT_PRESENTATION_CHIP_ID,
     origin: "ambient",
     dismissScope: "chat",
     state: input.included ? "included" : "suggested",
-    label: input.name,
-    spokenLabel: t({
-      id: "officeAddin.powerpoint.chip.spokenLabel",
-      message: "Presentation",
-    }),
+    label: input.name || spokenLabel,
+    spokenLabel,
     icon: "document",
     ...(input.included
       ? {
@@ -74,7 +82,7 @@ export function powerpointPresentationChip(input: {
       message: "Include this presentation",
     }),
     detail: {
-      title: input.name,
+      title: input.name || spokenLabel,
       render: () => (
         <div className="space-y-2 text-sm">
           {(input.included
