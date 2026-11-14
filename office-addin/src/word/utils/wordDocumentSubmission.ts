@@ -175,6 +175,7 @@ function createSubmissionExecutor(
         value,
         context,
         session,
+        kind === "scoped_edit",
       );
       // The read session may have been cleared while preparation was pending.
       if (
@@ -204,7 +205,13 @@ function createSubmissionExecutor(
             ...prepared,
             result: { ...(prepared.result as object), plan: value },
           };
-      } else if (!scoped && prepared.validationErrors?.length) {
+      } else if (
+        !scoped &&
+        kind !== "scoped_edit" &&
+        prepared.validationErrors?.length
+      ) {
+        // A sparse change is corrected by resubmitting it, never by patching the
+        // expanded plan the model never saw.
         const feedback = session.drafts.reject(
           value as unknown as Record<string, unknown>,
           prepared.validationErrors,
@@ -260,6 +267,7 @@ async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,
+  sparse = false,
 ): Promise<ClientToolExecutionResult> {
   if (!context || context.signal?.aborted)
     return {
@@ -341,7 +349,12 @@ async function prepareWordDocumentSubmission(
           ],
         };
     }
-    const wholeDocument = scopedWholeDocumentReasons(plan, snapshot, prepared);
+    const wholeDocument = scopedWholeDocumentReasons(
+      plan,
+      snapshot,
+      prepared,
+      sparse,
+    );
     if (wholeDocument)
       return scopedWholeDocumentRefusal(wholeDocument, snapshot);
   } catch (error) {
@@ -396,22 +409,25 @@ interface WordScopedWholeDocument {
   reasons: string[];
   /** In-place writing is off for the host or session, so no edit could be written in place. */
   hostWide: boolean;
+  /** The plan came from a target read rather than a complete one. */
+  scoped: boolean;
 }
 
 /**
  * Apply never lets a plan from a scoped read replace the whole document unless the host's policy
  * allows that outright, so such a plan the in-place writer cannot take is refused here, where the
- * model can still resubmit, rather than on the card.
+ * model can still resubmit, rather than on the card. A sparse change after a complete read has a
+ * full plan's rights, so it is refused here only where the host never replaces the whole document.
  */
 function scopedWholeDocumentReasons(
   plan: WordDocumentPlan,
   snapshot: WordAuthoringSnapshot,
   prepared: WordAuthoringSnapshot,
+  sparse: boolean,
 ): WordScopedWholeDocument | undefined {
-  if (
-    !wordPlanReadScope(plan, snapshot) ||
-    wordApplyPolicy().wholeDocumentImport === "allowed"
-  )
+  const policy = wordApplyPolicy().wholeDocumentImport;
+  const scoped = !!wordPlanReadScope(plan, snapshot);
+  if (policy === "allowed" || (!scoped && !(sparse && policy === "off")))
     return undefined;
   const availability = wordInPlaceAvailability();
   const caps = wordInPlaceCapabilitiesUnder(snapshot.trackingMode);
@@ -424,9 +440,9 @@ function scopedWholeDocumentReasons(
   );
   if (route.route === "in-place") return undefined;
   if (route.route === "body")
-    return { reasons: ["no-package"], hostWide: true };
+    return { reasons: ["no-package"], hostWide: true, scoped };
   if (!availability.enabled)
-    return { reasons: [availability.reason], hostWide: true };
+    return { reasons: [availability.reason], hostWide: true, scoped };
   let reasons: string[] = [];
   try {
     reasons = wordInPlaceFallbacks(plan, snapshot, caps, prepared);
@@ -436,13 +452,14 @@ function scopedWholeDocumentReasons(
   return {
     reasons: reasons.length ? reasons : [route.reason],
     hostWide: false,
+    scoped,
   };
 }
 
 /** Where nothing can be written in place, a smaller scoped edit cannot help; under `confirm` a full
  * plan still reaches the card's confirmation. */
 function scopedWholeDocumentRefusal(
-  { reasons, hostWide }: WordScopedWholeDocument,
+  { reasons, hostWide, scoped }: WordScopedWholeDocument,
   snapshot: WordAuthoringSnapshot,
 ): ClientToolExecutionResult {
   const web = wordApplyHost(wordHostPlatform()) === "web";
@@ -453,8 +470,8 @@ function scopedWholeDocumentRefusal(
     wordApplyPolicy().wholeDocumentImport === "confirm" &&
     !snapshot.completeReadIssue;
   const message = !hostWide
-    ? `${host} writes edits from a scoped read only in place, and this edit needs a full-document rewrite ${because} Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`
-    : `${host} can't write any edit in place right now ${because} An edit from a scoped read never replaces the whole document, so ${
+    ? `${host} writes ${scoped ? "edits from a scoped read" : "edits"} only in place, and this edit needs a full-document rewrite ${because} Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`
+    : `${host} can't write any edit in place right now ${because} ${scoped ? "An edit from a scoped read" : "This host"} never replaces the whole document, so ${
         fullPlan
           ? "complete the full read and submit a full-document plan instead; the user is asked to confirm before it replaces the whole document."
           : web

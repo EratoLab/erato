@@ -4,14 +4,18 @@ import {
   MAX_WORD_SCOPE_BYTES,
   canonicalWordPlan,
   wordReadScope,
+  wordSourceReadRefs,
   WordTableCellSubmissionError,
 } from "@erato/frontend/word-review";
+
+import { wordTargetInventory } from "./wordTargetRead";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
   WordPlanEntry,
+  WordScopeTarget,
   WordSectionPlan,
   WordStoryChange,
 } from "@erato/frontend/word-review";
@@ -28,15 +32,36 @@ const fail = (message: string): never => {
   );
 };
 
+/** The final token of a finished complete read covers everything that read returned. */
+function completeReadTargets(
+  snapshot: WordAuthoringSnapshot,
+  token: unknown,
+): WordScopeTarget[] | undefined {
+  return typeof token === "string" &&
+    token === snapshot.readToken &&
+    !snapshot.revoked &&
+    !snapshot.used &&
+    !snapshot.issue &&
+    wordSourceReadRefs(snapshot).every((ref) => snapshot.read.has(ref))
+    ? wordTargetInventory(snapshot)
+    : undefined;
+}
+
 /** Materialize a sparse change set. The caller never supplies keep entries or a
  * complete output document. Source ownership and all non-target keeps are host-owned. */
 export function expandWordScopedSubmission(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
 ): WordDocumentPlan {
-  const scope = wordReadScope(snapshot, input.readToken);
-  if (input.snapshot !== snapshot.token || scope?.kind !== "objects")
-    return fail("Use an active object-scoped readToken from this request.");
+  const read = wordReadScope(snapshot, input.readToken);
+  const scope = read?.kind === "objects" ? read : undefined;
+  const targets =
+    scope?.targets ??
+    (read ? undefined : completeReadTargets(snapshot, input.readToken));
+  if (input.snapshot !== snapshot.token || !targets)
+    return fail(
+      "Use an active readToken from this request: a target read's token or the final token of a complete read.",
+    );
   if (
     new TextEncoder().encode(JSON.stringify(input)).length >
     MAX_WORD_SCOPE_BYTES
@@ -56,20 +81,16 @@ export function expandWordScopedSubmission(
     if (!Array.isArray(edit[key]) || (edit[key] as unknown[]).length > 16)
       return fail("Each change collection must contain at most 16 changes.");
   const bodyRefs = new Set(
-    scope.targets
-      .filter((t) => t.bodyRef && !t.objectTarget)
-      .map((t) => t.bodyRef!),
+    targets.filter((t) => t.bodyRef && !t.objectTarget).map((t) => t.bodyRef!),
   );
   const storyIds = new Set(
-    scope.targets
-      .filter((t) => t.storyId && !t.objectTarget)
-      .map((t) => t.storyId!),
+    targets.filter((t) => t.storyId && !t.objectTarget).map((t) => t.storyId!),
   );
   const sectionIds = new Set(
-    scope.targets.filter((t) => t.sectionId).map((t) => t.sectionId!),
+    targets.filter((t) => t.sectionId).map((t) => t.sectionId!),
   );
   const readableSources = new Set(
-    scope.targets
+    targets
       .flatMap((t) => [
         t.objectTarget ? undefined : t.bodyRef,
         !t.objectTarget && t.storyId ? `story_${t.storyId}` : undefined,
@@ -215,9 +236,7 @@ export function expandWordScopedSubmission(
       !object(raw.edit)
     )
       return fail("Object change requires ref and edit.");
-    const target = scope.targets.find(
-      (t) => t.ref === raw.ref && t.objectTarget,
-    );
+    const target = targets.find((t) => t.ref === raw.ref && t.objectTarget);
     if (
       !target ||
       seenObjects.has(target.ref) ||
@@ -404,7 +423,7 @@ export function expandWordScopedSubmission(
             !stories.some(
               (s) => s.id === id && s.type === type && s.kind === "upsert",
             ) &&
-            !scope.targets.some(
+            !targets.some(
               (t) => t.storyId === id && !t.objectTarget && t.kind === type,
             )
           )
@@ -481,6 +500,8 @@ export function expandWordScopedSubmission(
   if (!parsed)
     return fail("The scoped change does not satisfy the document contract.");
   const plan = normalizeWordDocumentPlan(parsed, snapshot);
+  // After a complete read the expanded plan has a full plan's rights and budget.
+  if (!scope) return plan;
   if (scope.plans.size >= 3 && !scope.plans.has(canonicalWordPlan(plan)))
     return fail("Scoped proposal budget exhausted.");
   scope.plans.add(canonicalWordPlan(plan));
