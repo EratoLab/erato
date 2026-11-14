@@ -287,6 +287,44 @@ A tool call to that server then carries `chat.erato/surface` in its `_meta`, for
 
 Each surface has a built-in list, which `mcp_servers_global.surfaces.<surface>.accept` replaces. See [`surface_hints`](../configuration#mcp_serversserver-idsurface_hints) and [`mcp_servers_global.surfaces`](../configuration#mcp_servers_globalsurfaces) in the Configuration Reference.
 
+### Interactive views (MCP Apps)
+
+A tool can declare an interactive view, following the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) extension: a `ui://` resource named in the tool's `_meta.ui.resourceUri`, served as `text/html;profile=mcp-app`. Enable it per server, with the origin the web app loads that server's views from:
+
+```toml
+[mcp_servers.charts.mcp_apps]
+enabled = true
+sandbox_origin = "https://mcp-apps.example.net"
+```
+
+When such a tool is called, Erato reads its view with `resources/read`, for stateless and legacy servers alike, once per server and URI for as long as the tool list it was read under stays fresh. The call's row then names the view in `result_details.view`, beside the call's input and output, so a reopened chat names it too. The row also keeps the result's `structuredContent` there for the view, when it is an object of at most 1 MiB; like the call's output, anyone who can open the chat gets it. The web app fetches the view's HTML and its `_meta.ui`, including the CSP the view asks for, from `GET /api/v1beta/me/mcp_servers/<server-id>/app_view?uri=<ui-uri>`. A view of another MIME type, larger than 8 MiB or not read within 10 seconds is logged and left out, and the call works as before. Such a view is not read again for five minutes, so only the first call waits for a view that does not answer. The model never sees a view: the tool definitions it is offered are unchanged, and nothing of the view is part of the tool result it reads.
+
+The web app shows the view below the call's steps, in a sandboxed frame loaded from `sandbox_origin`, and passes it the call's input and result: the result's text and, when the tool returned one, its `structuredContent`. A reopened chat shows it again from the stored call. When the view cannot be fetched or does not start, nothing shows in its place and the call's files show as before. The Office add-in, the Teams tab and the Teams bot show no views and keep the static files a tool returns. Servers without `mcp_apps` are unaffected. See [`mcp_apps`](../configuration#mcp_serversserver-idmcp_apps) in the Configuration Reference.
+
+#### The sandbox origin
+
+A view runs code from the MCP server, so the web app never runs it on Erato's own origin. It loads the sandbox page `/public/common/mcp-apps-sandbox.html` from `sandbox_origin` in a frame sandboxed with `allow-scripts allow-same-origin`, and that page shows the view in a frame of its own. The page is a static file the frontend build ships, so the sandbox origin has to serve only this one file, as `text/html`:
+
+- From Erato's backend on a host name of its own on another site, such as `https://mcp-apps.example.net` for Erato on `https://erato.example.com`, routed to the same backend as the app. Route only `/public/common/mcp-apps-sandbox.html` there. The backend lets only Erato's own pages frame the pages it serves, so add the app's origin to [`frontend.extra_frame_ancestors`](../configuration#frontendextra_frame_ancestors). The backend serves the sandbox page only on a host that is some server's enabled `sandbox_origin`. On every other host, Erato's own included, it answers 404: the page runs what its embedder sends it, so it must not be reachable on Erato's origin.
+- From any static web server or CDN that serves the file at that path.
+
+In production, the sandbox origin must be on another site than Erato: another registrable domain, such as `example.net` for Erato on `erato.example.com`, not a subdomain of Erato's domain such as `mcp-apps.example.com`. The browser sends Erato's cookies, the user's login among them, with requests from a page on the same site, and lets a page on Erato's host or domain read those of Erato's cookies that are not `HttpOnly`.
+
+Give each MCP server its own `sandbox_origin`, for example a subdomain per server such as `https://charts.mcp-apps.example.net`. Views that share an origin can read and script one another, so with one origin for several servers, one server's view could read another server's call input and result.
+
+For local development, `just dev` in `frontend` serves the app on `http://localhost:4180` and the development server on `http://localhost:3000`, which serves the sandbox page too, so `sandbox_origin = "http://localhost:3000"` works without anything else. Another port on `localhost` is the same site as the app, so the browser sends the app's cookies with the view's requests and lets the view read the app's cookies that are not `HttpOnly`: use it only with MCP servers you trust.
+
+#### What a view can and cannot do
+
+Views are render-only:
+
+- A view receives the call's input and result and the theme, and its frame follows the height the view asks for.
+- It runs under the Content-Security-Policy that the MCP Apps spec builds from its `_meta.ui.csp`. Without declared domains the policy blocks `fetch`, XHR, WebSockets, beacons, nested frames, form posts, `eval` and loading scripts, styles, images, fonts or media from other origins; loads from the sandbox origin itself are allowed. With declared domains the view can also load from and connect to those domains, except Erato's own host: the policy leaves out a declared domain on Erato's host whatever its scheme or port, a wildcard that covers that host, and `http:`, `https:`, `ws:` or `wss:` on their own. A declared frame domain on the sandbox origin's own host is left out too, and the sandbox page does not run when it is embedded from its own origin: a page loaded from the view's own origin would be outside the view's policy, and the view could fetch through it or give itself another policy. On a sandbox origin on the same site as Erato, a view can still reach Erato by other means, so use such an origin only with servers you trust (see [the sandbox origin](#the-sandbox-origin)).
+- The policy is no barrier against sending data out. A view can still navigate its own frame to another URL, and browsers do not apply the policy to WebRTC, so a view can send what it holds, the call's input and result and the theme, to a server of its choosing. Enable views only for servers you trust with the data their tools handle.
+- It runs on the sandbox origin, so it cannot read the app's page or the app's local storage, and the web app takes messages only from the view's frame on that origin. Cookies are not kept apart by origin, though: with a sandbox origin on the same site as Erato, the browser sends Erato's cookies with the requests the view makes, and the view can read those of Erato's cookies that are not `HttpOnly` and that its host gets (all of them on Erato's host with another port, those set for a parent domain on a subdomain). On a sandbox origin on another site, the view reads none of Erato's cookies, and its requests do not carry Erato's `SameSite=Lax` or `Strict` cookies (see [the sandbox origin](#the-sandbox-origin)).
+- Views on the same sandbox origin can read one another, so give each server its own (see above).
+- Every request a view makes is refused with an error: tool calls, chat messages, opening links, changing its display mode, `ping`, updating the model's context and anything else. It cannot open windows or navigate the app.
+
 ## Access to MCP servers
 
 Authentication controls how Erato connects to an MCP server. Access control decides which users are allowed to see and use that server in the first place.

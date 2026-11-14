@@ -42,6 +42,8 @@ class ClusterConfig(BaseModel):
     chart_path: Path = Path("./k3d/erato-local")
     app_host: str = "app.erato.internal"
     dex_host: str = "dex.erato.internal"
+    # The sandbox origin for MCP Apps views (values.yaml: mcpAppsSandbox.host)
+    mcp_apps_sandbox_host: str = "mcp-apps.erato.internal"
 
 
 class ClusterStatus(BaseModel):
@@ -693,6 +695,7 @@ def ensure_hosts_entries(cluster_config: ClusterConfig):
     hosts = [
         cluster_config.app_host,
         cluster_config.dex_host,
+        cluster_config.mcp_apps_sandbox_host,
         "k3d-registry.localhost"
     ]
     

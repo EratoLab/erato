@@ -8,7 +8,9 @@ use crate::services::mcp_oauth::{
     CompleteOauthAuthorizationParams, complete_oauth_authorization, disconnect_oauth_authorization,
     start_oauth_authorization,
 };
-use crate::services::mcp_session_manager::{McpServerConnectionStatus, is_tool_allowed_to_wait};
+use crate::services::mcp_session_manager::{
+    ENUMERATION_CHAT_ID, McpServerConnectionStatus, is_tool_allowed_to_wait,
+};
 use crate::services::mcp_tool_annotations::{McpToolAnnotationSources, ResolvedMcpTool};
 use crate::services::mcp_tool_approval::{
     McpToolEffectiveState, effective_mcp_tool_state, evaluate_mcp_tool_approval,
@@ -147,6 +149,34 @@ pub struct ListMcpServerToolsResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct McpAppViewQuery {
+    pub uri: String,
+}
+
+/// A tool's interactive view (MCP Apps), for the web app to show in a
+/// sandboxed frame loaded from `sandbox_origin`, with the tool call's
+/// `input` and `output`.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct McpAppViewResponse {
+    /// The view's `ui://` URI.
+    pub uri: String,
+    /// The view document (`text/html;profile=mcp-app`), at most 8 MiB with
+    /// `ui`. Only ever shown inside the frame on `sandbox_origin`, never on
+    /// Erato's own origin.
+    pub html: String,
+    /// The resource's `_meta.ui` as the server declared it: `csp`
+    /// (`connectDomains`, `resourceDomains`, `frameDomains`,
+    /// `baseUriDomains`), `permissions`, `domain` and `prefersBorder`.
+    /// Absent when the server declared none: the view then gets no network.
+    #[schema(nullable = false, value_type = Object)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui: Option<serde_json::Value>,
+    /// The origin this server's views are loaded from
+    /// (`mcp_servers.<id>.mcp_apps.sandbox_origin`).
+    pub sandbox_origin: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct McpOauthCallbackQuery {
     pub code: String,
     pub state: String,
@@ -263,6 +293,60 @@ pub async fn list_mcp_server_tools(
         allow_always: global.approval.allow_always,
         ask_available: global.approval.enabled,
         tools,
+    }))
+}
+
+#[utoipa::path(
+    get,
+    path = "/me/mcp_servers/{server_id}/app_view",
+    params(
+        ("server_id" = String, Path, description = "Configured MCP server ID"),
+        ("uri" = String, Query, description = "The view's ui:// URI, as a tool call's result_details.view names it")
+    ),
+    responses(
+        (status = OK, body = McpAppViewResponse),
+        (status = FORBIDDEN, description = "The user is not authorized to access the MCP server"),
+        (status = NOT_FOUND, description = "The server is not configured or does not enable MCP Apps"),
+        (status = BAD_GATEWAY, description = "No tool of the server declares the view, or the view could not be read or was refused"),
+        (status = UNAUTHORIZED, description = "When no valid JWT token is provided")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+pub async fn get_mcp_server_app_view(
+    State(app_state): State<AppState>,
+    Path(server_id): Path<String>,
+    Query(query): Query<McpAppViewQuery>,
+    Extension(me_user): Extension<MeProfile>,
+    Extension(policy): Extension<PolicyEngine>,
+) -> Result<Json<McpAppViewResponse>, StatusCode> {
+    let mcp = app_state.mcp_state().await;
+    let user_id = parse_user_id(&me_user)?;
+    let config = authorized_server_config(&mcp, &me_user, &policy, &server_id).await?;
+    let Some(sandbox_origin) = config
+        .mcp_apps
+        .sandbox_origin
+        .filter(|_| config.mcp_apps.enabled)
+    else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    let auth_context = auth_context(&app_state, &me_user, user_id);
+    // Read outside any chat, like the server's tool listing; the view itself
+    // is kept per server and URI.
+    let view = mcp
+        .servers
+        .read_app_view(ENUMERATION_CHAT_ID, &server_id, &query.uri, &auth_context)
+        .await
+        .map_err(|error| {
+            tracing::warn!(server_id, uri = %query.uri, error = %error, "MCP Apps view not available");
+            StatusCode::BAD_GATEWAY
+        })?;
+    Ok(Json(McpAppViewResponse {
+        uri: view.uri.clone(),
+        html: view.html.clone(),
+        ui: view.ui.clone(),
+        sandbox_origin,
     }))
 }
 

@@ -30,6 +30,7 @@ pub mod genai;
 pub mod genai_langfuse;
 pub mod interrupted_parts;
 pub mod langfuse;
+pub mod mcp_apps;
 pub mod mcp_call_error;
 pub mod mcp_manager;
 pub mod mcp_oauth;
