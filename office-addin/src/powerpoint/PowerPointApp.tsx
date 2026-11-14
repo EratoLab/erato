@@ -1,5 +1,6 @@
 import { createBrowserClientInfo } from "@erato/frontend/library";
 
+import { PowerPointAddinChatHost } from "./PowerPointAddinChatHost";
 import { PowerPointAddinSessionController } from "./powerpointSession";
 import { NeutralAddinChatPage } from "../core/NeutralAddinChatPage";
 import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
@@ -26,6 +27,7 @@ export default function PowerPointApp() {
                   <NeutralAddinChatPage
                     platform="powerpoint"
                     SessionController={PowerPointAddinSessionController}
+                    Host={PowerPointAddinChatHost}
                   />
                 </div>
               </AuthGate>

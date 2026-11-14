@@ -1391,6 +1391,51 @@ msgid "officeAddin.pinHint.title"
 msgstr "Pin to follow your mail"
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.exclude"
+msgstr "Don't include this presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.include"
+msgstr "Include this presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.onDemand"
+msgstr "Read when needed"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.spokenLabel"
+msgstr "Presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basic"
+msgstr "This PowerPoint version lets Erato read text boxes and their positions only. Titles, tables and shapes inside groups stay unread."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.full"
+msgstr "It reads slide titles, text with bullet levels, tables, shapes inside groups and alt text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.never"
+msgstr "Speaker notes, comments, chart data and SmartArt text can't be read."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.off"
+msgstr "Left out: Erato doesn't read this presentation in this chat."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemand"
+msgstr "Erato reads slides one at a time, only when your request needs them, and sees which slides and shapes you selected."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "“{excerpt}”"

@@ -36,6 +36,7 @@ const eslintConfig = [
         Office: "readonly",
         OfficeRuntime: "readonly",
         Word: "readonly",
+        PowerPoint: "readonly",
         React: "readonly",
         JSX: "readonly",
         URL: "readonly",
