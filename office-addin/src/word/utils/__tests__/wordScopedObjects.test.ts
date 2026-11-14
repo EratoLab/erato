@@ -768,6 +768,52 @@ describe("scoped object editing", () => {
       "After",
     ]);
   });
+  it("inserts new blocks that omit their ids (ERMAIN-1194)", async () => {
+    const s = setup();
+    const { plan, after } = assertAccepted(
+      await s.edit(
+        { refs: ["b1"] },
+        {
+          body: [
+            {
+              operation: "insert-after",
+              anchor: "b1",
+              blocks: [
+                { type: "heading", level: 2, text: "Steps" },
+                {
+                  type: "list-item",
+                  text: "One",
+                  level: 0,
+                  list: "steps",
+                  ordered: true,
+                },
+                {
+                  type: "list-item",
+                  text: "Two",
+                  level: 0,
+                  list: "steps",
+                  ordered: true,
+                },
+              ],
+            },
+          ],
+        },
+      ),
+      s.snapshot,
+    );
+    const ids = plan.entries.flatMap((e) =>
+      e.kind === "keep" ? [] : e.blocks.map((b) => b.id),
+    );
+    expect(new Set(ids).size).toBe(3);
+    expect(after.blocks.map((b) => b.text)).toEqual([
+      "Before",
+      "Steps",
+      "One",
+      "Two",
+      "Target",
+      "After",
+    ]);
+  });
   it.each(["field", "bookmark", "content-control", "drawing", "image"])(
     "updates one native %s while retaining surrounding sources",
     async (kind) => {

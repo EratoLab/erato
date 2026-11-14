@@ -46,6 +46,7 @@ pub mod prompt_composition;
 pub mod prompt_guardrails;
 pub mod scheduled_deliveries;
 pub mod scheduled_items;
+pub mod stringified_arguments;
 pub mod task_delivery;
 pub mod template_rendering;
 pub mod text_language;

@@ -180,6 +180,51 @@ const refs = (v: unknown): v is string[] =>
   v.length > 0 &&
   v.length <= MAX_DOCUMENT_BLOCKS &&
   v.every(id);
+
+/**
+ * Gives each new block without an id one (ERMAIN-1194). Ids only let other
+ * parts of a plan refer to a block, so an omitted id is a slip, not a question.
+ * Positional and skipping every string the plan already holds, so each parse of
+ * the same arguments assigns the same ids: review restore and apply re-parse
+ * the stored arguments.
+ */
+function assignMissingBlockIds(plan: Record<string, unknown>) {
+  const taken = new Set<string>();
+  const collect = (v: unknown): void => {
+    if (typeof v === "string") taken.add(v);
+    else if (Array.isArray(v)) v.forEach(collect);
+    else if (object(v)) Object.values(v).forEach(collect);
+  };
+  collect(plan);
+  let sequence = 0;
+  const nextId = () => {
+    let candidate: string;
+    do candidate = `new_block_${++sequence}`;
+    while (taken.has(candidate));
+    return candidate;
+  };
+  const visit = (blocks: unknown, depth: number): void => {
+    if (!Array.isArray(blocks) || depth > 12) return;
+    for (const block of blocks) {
+      if (!object(block)) continue;
+      if (block.id === undefined) block.id = nextId();
+      if (Array.isArray(block.rows))
+        for (const row of block.rows)
+          if (object(row) && Array.isArray(row.cells))
+            for (const cell of row.cells)
+              if (object(cell)) visit(cell.blocks, depth + 1);
+      if (object(block.bookmark)) visit(block.bookmark.children, depth + 1);
+      if (object(block.control)) visit(block.control.children, depth + 1);
+      if (Array.isArray(block.edits))
+        for (const edit of block.edits)
+          if (object(edit)) visit(edit.children, depth + 1);
+    }
+  };
+  for (const entry of plan.entries as unknown[])
+    if (object(entry)) visit(entry.blocks, 0);
+  if (Array.isArray(plan.stories))
+    for (const story of plan.stories) if (object(story)) visit(story.blocks, 0);
+}
 export function parseWordDocumentPlan(
   content: string,
   issues?: WordPlanDiagnostics,
@@ -220,6 +265,7 @@ export function parseWordDocumentPlan(
         "plan-envelope",
         "Expected version 1, snapshot, readToken, scope, entries and optional deleted/stories/sections. Unknown properties are not supported.",
       );
+    assignMissingBlockIds(v);
     const comment = Array.isArray(v.stories)
       ? v.stories.findIndex(
           (story) => object(story) && story.type === "comment",
@@ -843,7 +889,7 @@ export function validateWordDocumentPlan(
           "invalid",
           `${path}/anchor/block`,
           "anchor-reference",
-          "Anchor block must identify an output body block or kept body source.",
+          `Anchor block ${JSON.stringify(story.anchor.block.slice(0, 100))} is neither the id of a body block in this plan nor a kept body source. Give the anchored block an id and use that id here.`,
         );
       const { start, end } = story.anchor;
       const offset = start ?? end;

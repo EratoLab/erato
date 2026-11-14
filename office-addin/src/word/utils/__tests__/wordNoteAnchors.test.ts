@@ -219,4 +219,28 @@ describe("note anchors count in the validator's text view (F7)", () => {
       ),
     ).toBe("Ce§ll");
   });
+
+  it("still refuses an anchor to an id no block has, also when new blocks omit theirs", () => {
+    const snapshot = snapshotOf(BLOCKS.hidden);
+    const refs = snapshot.blocks.map((b) => b.ref);
+    const plan = notePlan(snapshot, { block: "x9" }, [
+      { kind: "keep", source: [refs[0]] },
+      {
+        kind: "replace",
+        source: [refs[1]],
+        blocks: [{ type: "paragraph", text: "New text" } as never],
+      },
+      { kind: "keep", source: [refs[2]] },
+    ]);
+    const parsed = parseWordDocumentPlan(JSON.stringify(plan))!;
+    expect(parsed).not.toBeNull();
+    const issues: WordPlanDiagnostics = [];
+    expect(validateWordDocumentPlan(parsed, snapshot, issues)).toBe("invalid");
+    expect(issues[0]).toMatchObject({
+      path: "/stories/0/anchor/block",
+      code: "anchor-reference",
+    });
+    expect(issues[0].message).toContain('"x9"');
+    expect(issues[0].message).toContain("Give the anchored block an id");
+  });
 });
