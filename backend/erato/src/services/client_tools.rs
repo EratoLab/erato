@@ -72,6 +72,7 @@ pub struct GrantedCall {
 #[derive(Clone)]
 pub struct SubmissionPolicy {
     validator: Arc<jsonschema::Validator>,
+    schema: Arc<Value>,
     pub max_attempts: u32,
 }
 
@@ -106,6 +107,7 @@ impl OfferedClientTool {
                 erato_config::client_tool_schema::compile(schema).map(|validator| {
                     SubmissionPolicy {
                         validator: Arc::new(validator),
+                        schema: Arc::new(schema.clone()),
                         max_attempts: submission.max_attempts,
                     }
                 })
@@ -205,6 +207,12 @@ fn bound_issues(issues: Vec<ClientToolValidationIssue>) -> Vec<ClientToolValidat
 }
 
 impl SubmissionPolicy {
+    /// Decodes arrays and objects sent as JSON strings where the schema admits
+    /// only those; returns the decoded JSON Pointers.
+    pub fn decode_stringified(&self, input: &mut Value) -> Vec<String> {
+        crate::services::stringified_arguments::decode(&self.schema, input)
+    }
+
     pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
         let issues = self
             .validator
@@ -244,6 +252,35 @@ impl SubmissionPolicy {
                 else if finished { "failed" } else { "retry" },
             "attempts_remaining": if finished { 0 } else { self.max_attempts.saturating_sub(attempt) },
         });
+    }
+}
+
+/// Some models send a large array or object argument of a submission as a
+/// JSON string. Decoding it once, in the model's captured response, means the
+/// replayed call, the stored call and the client all see the same arguments.
+pub fn decode_stringified_submission_arguments(
+    content: &mut genai::chat::MessageContent,
+    offered: &HashMap<String, OfferedClientTool>,
+) {
+    for part in content.iter_mut() {
+        let genai::chat::ContentPart::ToolCall(call) = part else {
+            continue;
+        };
+        let Some(submission) = offered
+            .get(&call.fn_name)
+            .and_then(|tool| tool.submission.as_ref())
+        else {
+            continue;
+        };
+        let decoded = submission.decode_stringified(&mut call.fn_arguments);
+        if !decoded.is_empty() {
+            tracing::info!(
+                tool = %call.fn_name,
+                call_id = %call.call_id,
+                paths = ?decoded,
+                "Decoded submission arguments sent as JSON strings"
+            );
+        }
     }
 }
 
