@@ -7,6 +7,11 @@ import {
   WordTableCellSubmissionError,
 } from "@erato/frontend/word-review";
 
+import {
+  MAX_WORD_SCOPED_CHANGES,
+  MAX_WORD_SCOPED_SOURCES,
+} from "./wordAuthoringContract";
+
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
@@ -41,7 +46,9 @@ export function expandWordScopedSubmission(
     new TextEncoder().encode(JSON.stringify(input)).length >
     MAX_WORD_SCOPE_BYTES
   )
-    return fail("Scoped submission exceeds 24 KiB.");
+    return fail(
+      `Scoped submission exceeds ${MAX_WORD_SCOPE_BYTES / 1024} KiB. For larger content, read the complete document and submit a full plan.`,
+    );
   const edit = input.scoped_edit;
   if (
     !only(input, ["snapshot", "readToken", "scoped_edit"]) ||
@@ -53,8 +60,13 @@ export function expandWordScopedSubmission(
       "Expected scoped_edit with body, objects, stories and/or sections changes.",
     );
   for (const key of Object.keys(edit))
-    if (!Array.isArray(edit[key]) || (edit[key] as unknown[]).length > 16)
-      return fail("Each change collection must contain at most 16 changes.");
+    if (
+      !Array.isArray(edit[key]) ||
+      (edit[key] as unknown[]).length > MAX_WORD_SCOPED_CHANGES
+    )
+      return fail(
+        `Each change collection must contain at most ${MAX_WORD_SCOPED_CHANGES} changes. A change's blocks have no count limit, so keep a long list or passage in one change.`,
+      );
   const bodyRefs = new Set(
     scope.targets
       .filter((t) => t.bodyRef && !t.objectTarget)
@@ -118,6 +130,10 @@ export function expandWordScopedSubmission(
     return value as WordPlanBlock[];
   };
   const take = (refs: unknown): string[] => {
+    if (Array.isArray(refs) && refs.length > MAX_WORD_SCOPED_SOURCES)
+      return fail(
+        `A change may list at most ${MAX_WORD_SCOPED_SOURCES} source refs. Split a longer range into consecutive changes.`,
+      );
     if (
       !Array.isArray(refs) ||
       !refs.length ||

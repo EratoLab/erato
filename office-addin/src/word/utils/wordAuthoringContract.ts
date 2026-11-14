@@ -1,3 +1,11 @@
+import { MAX_WORD_SCOPE_BYTES } from "@erato/frontend/word-review";
+
+/** The backend schema for word_submit_document_plan (erato-action-facets.toml) and its tool
+ * description state the same numbers. Blocks per change have no count limit (ERMAIN-1193). */
+export const MAX_WORD_SCOPED_CHANGES = 16;
+export const MAX_WORD_SCOPED_SOURCES = 16;
+export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection, ${MAX_WORD_SCOPED_SOURCES} source refs per change and ${MAX_WORD_SCOPE_BYTES / 1024} KiB per submission`;
+
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
 
@@ -11,9 +19,8 @@ export const WORD_AUTHORING_CONTRACT = {
   freshness: WORD_FRESHNESS_NOTICE,
   scopedEdit: {
     read: "read_document_blocks accepts {snapshot,documentIdentity,target:{kind?,text?,nearbyText?,ref?,refs?,throughRef?,offset?}}. Search filters are ANDed; text searches object text/properties and nearbyText searches adjacent body blocks. Five bounded candidates per page. An ambiguous search grants no scope. Select returned refs explicitly (at most 16), or ref/throughRef for a contiguous body range. For multiple dependencies, target:{queries:[selectors]} resolves them atomically into one readToken; every selector must resolve uniquely or select explicit refs/a range. Any missing or ambiguous query grants no scope for the entire batch. Query results identify refs by index; select or refine unresolved queries without reading the whole document. At most 16 distinct targets and 24 KiB for the combined response, including guidance/metadata. Optional include:[text|formatting|table|media|structures|stories|sections] requests guidance for new content as well as existing target kinds. Only overall ready grants a readToken; larger responses require a narrower selection or complete read.",
-    input:
-      "{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. At most 16 changes per collection; overlapping changes are rejected. No full plans or draft repairs with scoped tokens.",
-    body: "{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[refs],anchor?:ref,blocks?:[typed blocks],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.",
+    input: `{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. Limits: ${WORD_SCOPED_LIMITS}; blocks per change have no count limit, so keep a long list or passage in one change. Split a longer source range into consecutive changes; for content over ${MAX_WORD_SCOPE_BYTES / 1024} KiB, read the complete document and submit a full plan. Overlapping changes are rejected. No full plans or draft repairs with scoped tokens.`,
+    body: `{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[at most ${MAX_WORD_SCOPED_SOURCES} refs],anchor?:ref,blocks?:[typed blocks, any count],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.`,
     objects:
       "{ref:returned-object-ref,edit:{operation:'update'|'delete'|'unwrap',...properties}}. Read the exact object. kind and native target are host-owned. Properties and supported operations follow structures.nativeEdit. The enclosing fragment is retained.",
     stories:
