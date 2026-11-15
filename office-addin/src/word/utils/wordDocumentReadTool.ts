@@ -59,10 +59,10 @@ export type WordDocumentReadRequest = Pick<
   "chatId" | "messageId"
 >;
 
-/** The pane has no read session for this request: it reloaded, or the request was not sent with
- * the document. Said so the model can pass it on as it is. */
+/** The pane has no read session for this request: it reloaded, a newer request from the pane
+ * replaced it, or the request was not sent with the document. Said so the model can pass it on. */
 export const WORD_NO_REQUEST_SESSION_MESSAGE =
-  "Word reloaded or this message wasn't sent with the document; send your request again from the Word pane.";
+  "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane.";
 
 /** A lost capture is final: a new request must capture the document again (contract §6). */
 export const captureUnavailable = (): ClientToolExecutionResult => ({

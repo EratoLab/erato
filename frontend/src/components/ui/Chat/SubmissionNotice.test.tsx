@@ -20,7 +20,9 @@ vi.mock("@/hooks/ui/useThemedIcon", () => ({
 
 const NO_RESPONSE = "Word didn't respond; keep Word open and send again.";
 const RELOADED =
-  "Word reloaded or this message wasn't sent with the document; send your request again from the Word pane.";
+  "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane.";
+const READ_NO_RESPONSE =
+  "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again.";
 
 type ToolUse = Extract<ContentPart, { content_type: "tool_use" }>;
 const tool = (tool_name: string, output: unknown): ContentPart => ({
@@ -119,12 +121,37 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     ).toBeInTheDocument();
   });
 
-  it("speaks up for a turn that ended on a Word read before any proposal", async () => {
+  it("says Word didn't respond when no pane was connected to run the plan", async () => {
+    await renderNotice(
+      message(
+        [
+          tool("submit_document_plan", {
+            status: "cancelled",
+            reason: "context_unavailable",
+          }),
+        ],
+        { submission_outcome: unresolved("context_unavailable") },
+      ),
+    );
+    expect(screen.getByText(NO_RESPONSE)).toBeInTheDocument();
+  });
+
+  it("says Word reloaded when comment changes reached a pane without this request's comments", async () => {
+    await renderNotice(
+      message(
+        [rejected("word_submit_comment_changes", "comments-unavailable")],
+        { submission_outcome: unresolved("context_unavailable") },
+      ),
+    );
+    expect(screen.getByText(RELOADED)).toBeInTheDocument();
+  });
+
+  it("speaks up for a Word read that failed before any proposal, without asking to resend an answer that may be complete", async () => {
     const { unmount } = await renderNotice(
       message([timedOut("read_document_blocks")]),
     );
     expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
-      NO_RESPONSE,
+      READ_NO_RESPONSE,
     );
     expect(
       screen.queryByText("No valid proposal was prepared"),
@@ -160,6 +187,13 @@ describe("SubmissionNotice when Word was not there to answer", () => {
     );
     expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
       "Es wurde kein gültiger Vorschlag erstelltWord hat nicht geantwortet. Lass Word geöffnet und sende die Nachricht noch einmal.",
+    );
+  });
+
+  it("is German for a German user after a read Word didn't answer", async () => {
+    await renderNotice(message([timedOut("read_document_blocks")]), "de");
+    expect(screen.getByTestId("submission-unresolved")).toHaveTextContent(
+      "Erato konnte das Dokument nicht lesen, weil Word nicht geantwortet hat. Falls die Antwort das Dokument braucht, lass Word geöffnet und sende die Nachricht noch einmal.",
     );
   });
 });

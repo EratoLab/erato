@@ -39,9 +39,9 @@ function latestOutcome(message: UiChatMessage): SubmissionOutcome | undefined {
 type WordCallEnd = "no-response" | "no-request-session";
 
 /**
- * How the message's last Word call ended, when Word was not there to answer it: it timed out
- * (the pane asleep or in the background), or the pane had no read session for this request
- * (it reloaded, or the request was not sent with the document).
+ * How the message's last Word call ended, when Word was not there to answer it: no pane answered
+ * (asleep, in the background or closed), or the pane had no session for this request (it
+ * reloaded, a newer request replaced this one, or the request was not sent with the document).
  */
 function wordCallEnd(content: ContentPart[]): WordCallEnd | undefined {
   const part = [...content]
@@ -60,30 +60,29 @@ function wordCallEnd(content: ContentPart[]): WordCallEnd | undefined {
   if (!output) return undefined;
   if (
     output.status === "cancelled" &&
-    (output.reason === "timeout" || output.reason === "expired")
+    (output.reason === "timeout" ||
+      output.reason === "expired" ||
+      output.reason === "context_unavailable")
   )
     return "no-response";
   if (
     output.submission_feedback?.recovery === "cannot_continue" &&
-    output.validation_errors?.some(
-      ({ code }) => code === "wrong-request" || code === "read-unavailable",
+    output.validation_errors?.some(({ code }) =>
+      ["wrong-request", "read-unavailable", "comments-unavailable"].includes(
+        code ?? "",
+      ),
     )
   )
     return "no-request-session";
   return undefined;
 }
 
-function wordCallEndText(end: WordCallEnd): string {
-  return end === "no-response"
-    ? t({
-        id: "chat.submission.word.noResponse",
-        message: "Word didn't respond; keep Word open and send again.",
-      })
-    : t({
-        id: "chat.submission.word.noRequestSession",
-        message:
-          "Word reloaded or this message wasn't sent with the document; send your request again from the Word pane.",
-      });
+function noRequestSessionText(): string {
+  return t({
+    id: "chat.submission.word.noRequestSession",
+    message:
+      "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane.",
+  });
 }
 
 function reasonText(
@@ -94,11 +93,12 @@ function reasonText(
     reason === "timeout" || reason === "context_unavailable"
       ? wordCallEnd(message.content)
       : undefined;
-  if (
-    (reason === "timeout" && end === "no-response") ||
-    (reason === "context_unavailable" && end === "no-request-session")
-  )
-    return wordCallEndText(end);
+  if (end === "no-response")
+    return t({
+      id: "chat.submission.word.noResponse",
+      message: "Word didn't respond; keep Word open and send again.",
+    });
+  if (end === "no-request-session") return noRequestSessionText();
   switch (reason) {
     case "attempts_exhausted":
       return t`The correction attempts were exhausted.`;
@@ -127,7 +127,8 @@ function reasonText(
 export function SubmissionNotice({ message }: { message: UiChatMessage }) {
   const outcome = latestOutcome(message);
   if (!outcome) {
-    // A turn that ends on a Word read, before any proposal, has no outcome to report.
+    // Reads before any proposal have no submission outcome, and the model still answers after
+    // them, sometimes without needing the document.
     const end =
       message.status !== "sending" ? wordCallEnd(message.content) : undefined;
     if (!end) return null;
@@ -138,7 +139,13 @@ export function SubmissionNotice({ message }: { message: UiChatMessage }) {
         className="mb-3"
         data-testid="submission-unresolved"
       >
-        {wordCallEndText(end)}
+        {end === "no-response"
+          ? t({
+              id: "chat.submission.word.readNoResponse",
+              message:
+                "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again.",
+            })
+          : noRequestSessionText()}
       </Alert>
     );
   }

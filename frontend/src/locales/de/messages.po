@@ -3136,12 +3136,17 @@ msgstr "Die Unterhaltung kann sensible Informationen enthalten"
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
 msgid "chat.submission.word.noRequestSession"
-msgstr "Word wurde neu geladen, oder diese Nachricht wurde ohne das Dokument gesendet. Sende deine Anfrage noch einmal aus dem Word-Bereich."
+msgstr "Der Word-Bereich wurde neu geladen, eine neuere Anfrage hat diese ersetzt, oder diese Nachricht wurde ohne das Dokument gesendet; sende deine Anfrage noch einmal aus dem Word-Bereich."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/SubmissionNotice.tsx
 msgid "chat.submission.word.noResponse"
 msgstr "Word hat nicht geantwortet. Lass Word geöffnet und sende die Nachricht noch einmal."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.readNoResponse"
+msgstr "Erato konnte das Dokument nicht lesen, weil Word nicht geantwortet hat. Falls die Antwort das Dokument braucht, lass Word geöffnet und sende die Nachricht noch einmal."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx

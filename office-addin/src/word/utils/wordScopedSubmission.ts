@@ -250,6 +250,8 @@ export function expandWordScopedSubmission(
   const stories: WordStoryChange[] = [];
   const storyOrigins: WordScopedOrigin[] = [];
   const entryOrigins = new Map<WordPlanEntry, WordScopedOrigin>();
+  /** Where each consumed body ref was named, and whether the block stays (a move). */
+  const consumedBy = new Map<string, { path: string; kept: boolean }>();
   const sectionChanges = edit.sections as Record<string, unknown>[] | undefined;
   const validateReferences = (v: unknown, path: string): void => {
     if (Array.isArray(v)) {
@@ -345,6 +347,9 @@ export function expandWordScopedSubmission(
     )
       return fail(path, "Unexpected arguments for this body operation.");
     const refs = insert ? [] : take(raw.source, `${path}/source`);
+    refs.forEach((ref, k) =>
+      consumedBy.set(ref, { path: `${path}/source/${k}`, kept: move }),
+    );
     if (op === "replace") {
       const entry: WordPlanEntry = {
         kind: "replace",
@@ -487,6 +492,7 @@ export function expandWordScopedSubmission(
       if (consumed.has(group.bodyRef))
         return fail(`${path}/ref`, "Object and body changes overlap.");
       consumed.add(group.bodyRef);
+      consumedBy.set(group.bodyRef, { path: `${path}/ref`, kept: false });
       const entry: WordPlanEntry = {
         kind: "replace",
         source: [group.bodyRef],
@@ -596,6 +602,8 @@ export function expandWordScopedSubmission(
   let sections: WordSectionPlan[] | undefined;
   /** Each changed section's id and its change. */
   const changedSections = new Map<string, number>();
+  /** Sections whose end the model moved or removed. */
+  const resectioned = new Set<string>();
   if (sectionChanges?.length) {
     if (!snapshot.fullDocument)
       return fail(
@@ -668,6 +676,8 @@ export function expandWordScopedSubmission(
             );
         }
       }
+      if (raw.after !== undefined || raw.delete === true)
+        resectioned.add(raw.id);
       if (raw.delete === true) {
         if (!only(raw, ["id", "delete"]) || i < 0 || sections.length === 1)
           return fail(`${path}/delete`, "Cannot remove the only section.");
@@ -719,6 +729,22 @@ export function expandWordScopedSubmission(
         (b.after === undefined
           ? originalRefs.length
           : originalRefs.indexOf(b.after)),
+    );
+  }
+  // The paragraph that ends a section carries its section break, so replacing or deleting it
+  // drops the break unless the change also moves or removes that section's end.
+  for (const block of snapshot.blocks) {
+    const by = block.sectionBoundary ? consumedBy.get(block.ref) : undefined;
+    if (!by || by.kept) continue;
+    const section = snapshot.sections?.find((s) => s.afterBlock === block.ref);
+    if (section && resectioned.has(section.id)) continue;
+    return fail(
+      by.path,
+      `Block ${block.ref} ends ${section ? `section ${section.id}` : "a section"}; leave it out of this change${
+        snapshot.fullDocument && section
+          ? `, or add a sections change for ${section.id} (after: a read block you keep, or delete: true)`
+          : ""
+      }.`,
     );
   }
   const entries: WordPlanEntry[] = [];

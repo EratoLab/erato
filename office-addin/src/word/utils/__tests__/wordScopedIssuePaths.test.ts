@@ -74,6 +74,30 @@ function setup(snapshot: WordAuthoringSnapshot = readySnapshot(texts(40))) {
   };
 }
 
+/** Four paragraphs in two sections; b2 ends the first. */
+function twoSections(fullDocument = true): WordAuthoringSnapshot {
+  const initial = captureWordAuthoringSnapshot(texts(4), "doc", "Off", true);
+  initial.readToken = "fixture";
+  const split: WordDocumentPlan = {
+    version: 1,
+    snapshot: initial.token,
+    readToken: "fixture",
+    scope: "document",
+    entries: initial.blocks.map((b) => ({ kind: "keep", source: [b.ref] })),
+    deleted: [],
+    sections: [
+      { id: "first", after: "b2" },
+      { id: "second", source: initial.sections![0].id },
+    ],
+  };
+  return captureWordAuthoringSnapshot(
+    compileWordDocumentPlan(split, initial),
+    initial.identity,
+    "Off",
+    fullDocument,
+  );
+}
+
 const insert = (anchor: string, blocks: unknown[]) => ({
   operation: "insert-after",
   anchor,
@@ -262,43 +286,158 @@ describe("a rejected sparse change points at the change the model sent", () => {
     });
   });
 
-  it("names an unchanged section by its id", async () => {
-    const initial = captureWordAuthoringSnapshot(texts(4), "doc", "Off", true);
-    initial.readToken = "fixture";
-    const split: WordDocumentPlan = {
-      version: 1,
-      snapshot: initial.token,
-      readToken: "fixture",
-      scope: "document",
-      entries: initial.blocks.map((b) => ({ kind: "keep", source: [b.ref] })),
-      deleted: [],
-      sections: [
-        { id: "first", after: "b2" },
-        { id: "second", source: initial.sections![0].id },
-      ],
-    };
-    const s = setup(
-      captureWordAuthoringSnapshot(
-        compileWordDocumentPlan(split, initial),
-        initial.identity,
-        "Off",
-        true,
-      ),
-    );
+  it("points a change that drops a section break at that change", async () => {
+    const s = setup(twoSections());
     const [first, second] = s.snapshot.sections!;
-    expect(first.afterBlock).toBe("b2");
-    const result = await s.sparse(await s.completeRead(), {
-      body: [{ operation: "delete", source: ["b2"], reason: "Removal" }],
-      sections: [{ id: second.id, layout: { orientation: "landscape" } }],
+    const readToken = await s.completeRead();
+    const hint = `Block b2 ends section ${first.id}; leave it out of this change, or add a sections change for ${first.id} (after: a read block you keep, or delete: true).`;
+    expect(
+      await s.sparse(readToken, {
+        body: [
+          insert("b1", [block("n", "New")]),
+          { operation: "replace", source: ["b2"], blocks: [block("r", "R")] },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "scoped-shape",
+          path: "/scoped_edit/body/1/source/0",
+          message: hint,
+        },
+      ],
     });
-    expect(result).toMatchObject({
+    expect(
+      await s.sparse(readToken, {
+        body: [{ operation: "delete", source: ["b2"], reason: "Removal" }],
+        sections: [{ id: second.id, layout: { orientation: "landscape" } }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "scoped-shape",
+          path: "/scoped_edit/body/0/source/0",
+          message: hint,
+        },
+      ],
+    });
+  });
+
+  it("offers no sections change on a body-only capture", async () => {
+    const s = setup(twoSections(false));
+    expect(
+      await s.sparse(await s.completeRead(), {
+        body: [
+          { operation: "replace", source: ["b2"], blocks: [block("r", "R")] },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          path: "/scoped_edit/body/0/source/0",
+          message: expect.stringMatching(
+            /^Block b2 ends (a section|section \S+); leave it out of this change\.$/,
+          ),
+        },
+      ],
+    });
+  });
+
+  it("accepts the change when it also moves that section's end", async () => {
+    const s = setup(twoSections());
+    const [first] = s.snapshot.sections!;
+    const result = await s.sparse(await s.completeRead(), {
+      body: [
+        { operation: "replace", source: ["b2"], blocks: [block("r", "R")] },
+      ],
+      sections: [{ id: first.id, after: "b3" }],
+    });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+  });
+
+  it("names the block and section a full plan drops a section break for", async () => {
+    const snapshot = twoSections();
+    const s = setup(snapshot);
+    const [first] = snapshot.sections!;
+    const readToken = await s.completeRead();
+    const execute = createWordDocumentSubmissionExecutor(s.session);
+    expect(
+      await execute(
+        {
+          version: 1,
+          snapshot: snapshot.token,
+          readToken,
+          scope: "document",
+          entries: snapshot.blocks.map((b) =>
+            b.ref === "b2"
+              ? { kind: "replace", source: ["b2"], blocks: [block("r", "R")] }
+              : { kind: "keep", source: [b.ref] },
+          ),
+          deleted: [],
+        },
+        { ...context, toolCallId: "full" },
+      ),
+    ).toMatchObject({
       ok: false,
       validationErrors: [
         {
           code: "section-order",
-          path: "/scoped_edit",
+          path: "/entries/1/source/0",
           message: expect.stringMatching(
-            new RegExp(`^Unchanged section ${first.id}: Section boundary`),
+            new RegExp(`^Block b2 ends section ${first.id}\\. `),
+          ),
+        },
+      ],
+    });
+  });
+
+  it("points a story block the parser rejects at that story change", async () => {
+    const s = setup(captureWordAuthoringSnapshot(texts(4), "doc", "Off", true));
+    expect(
+      await s.sparse(await s.completeRead(), {
+        stories: [
+          {
+            kind: "upsert",
+            type: "footnote",
+            id: "note",
+            anchor: { block: "b2" },
+            blocks: [{ id: "h", type: "heading", text: "H", level: 42 }],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "heading-level",
+          path: "/scoped_edit/stories/0/blocks/0/level",
+        },
+      ],
+    });
+  });
+
+  it("points an invalid section layout at that section change", async () => {
+    const s = setup(captureWordAuthoringSnapshot(texts(4), "doc", "Off", true));
+    expect(
+      await s.sparse(await s.completeRead(), {
+        sections: [
+          {
+            id: s.snapshot.sections![0].id,
+            layout: { orientation: "sideways" },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [
+        {
+          code: "section-shape",
+          path: "/scoped_edit/sections/0/layout",
+          message: expect.stringMatching(
+            /^Invalid layout\. orientation is portrait or landscape/,
           ),
         },
       ],
@@ -306,60 +445,78 @@ describe("a rejected sparse change points at the change the model sent", () => {
   });
 
   it("points an object edit the parser rejects at that object change", async () => {
-    const initial = captureWordAuthoringSnapshot(
-      packageXml(["Before", "Target", "After"].map(paragraph).join("")),
-      "doc-field",
-      "Off",
-      true,
-    );
-    initial.readToken = "fixture";
+    const control = (id: number, text: string) =>
+      `<w:sdt><w:sdtPr><w:id w:val="${id}"/></w:sdtPr><w:sdtContent><w:r><w:t>${text}</w:t></w:r></w:sdtContent></w:sdt>`;
     const snapshot = captureWordAuthoringSnapshot(
-      compileWordDocumentPlan(
-        {
-          version: 1,
-          snapshot: initial.token,
-          readToken: "fixture",
-          scope: "body",
-          entries: [
-            { kind: "keep", source: ["b1"] },
-            {
-              kind: "replace",
-              source: ["b2"],
-              blocks: [
-                {
-                  id: "field",
-                  type: "field",
-                  text: "",
-                  field: { instruction: "DATE", text: "Today" },
-                },
-              ],
-            },
-            { kind: "keep", source: ["b3"] },
-          ],
-          deleted: [],
-        },
-        initial,
+      packageXml(
+        paragraph("Before") +
+          `<w:p>${control(11, "First")}<w:r><w:t xml:space="preserve"> and </w:t></w:r>${control(12, "Second")}</w:p>`,
       ),
-      initial.identity,
+      "doc-controls",
       "Off",
       true,
     );
     const s = setup(snapshot);
     const readToken = await s.completeRead();
-    const field = wordTargetInventory(snapshot).find(
-      (t) => t.kind === "field" && t.objectTarget,
-    )!;
+    const controls = wordTargetInventory(snapshot).filter(
+      (t) => t.kind === "content-control" && t.objectTarget,
+    );
+    expect(controls.map((t) => t.bodyRef)).toEqual(["b2", "b2"]);
     expect(
       await s.sparse(readToken, {
-        body: [insert("b1", [block("n", "New")])],
-        objects: [{ ref: field.ref, edit: { operation: "update", text: 5 } }],
+        objects: [
+          {
+            ref: controls[0].ref,
+            edit: { operation: "update", color: "00FF00" },
+          },
+          {
+            ref: controls[1].ref,
+            edit: { operation: "update", color: "#FF0000" },
+          },
+        ],
       }),
     ).toMatchObject({
       ok: false,
       validationErrors: [
-        { code: "native-edit-shape", path: "/scoped_edit/objects/0/edit" },
+        { code: "native-edit-shape", path: "/scoped_edit/objects/1/edit" },
       ],
     });
+  });
+
+  it("names an unchanged section by its id", async () => {
+    const s = setup(twoSections());
+    const [first, second] = s.snapshot.sections!;
+    await s.completeRead();
+    const { origins } = expandWordScopedSubmission(
+      {
+        snapshot: s.snapshot.token,
+        readToken: s.snapshot.readToken,
+        scoped_edit: {
+          sections: [{ id: second.id, layout: { orientation: "landscape" } }],
+        },
+      },
+      s.snapshot,
+    );
+    expect(
+      wordScopedIssues(
+        [
+          { path: "/sections/0/after", code: "c", message: "Kept." },
+          { path: "/sections/1/layout", code: "c", message: "Changed." },
+        ],
+        origins,
+      ),
+    ).toEqual([
+      {
+        path: "/scoped_edit",
+        code: "c",
+        message: `Unchanged section ${first.id}: Kept.`,
+      },
+      {
+        path: "/scoped_edit/sections/0/layout",
+        code: "c",
+        message: "Changed.",
+      },
+    ]);
   });
 
   it("names a kept block by its ref and rewrites plan paths inside a message", async () => {
