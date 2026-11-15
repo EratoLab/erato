@@ -1,5 +1,7 @@
 import { t } from "@lingui/core/macro";
 
+import { hasFileRoute } from "../utils/powerpointFileContent";
+
 import type { PowerPointReadSupport } from "../utils/powerpointReadSupport";
 import type { ComposerContextItem } from "@erato/frontend/library";
 
@@ -21,7 +23,7 @@ export function powerpointReadScopeLines(
           message:
             "Erato reads slides one at a time, only when your request needs them. This PowerPoint version doesn't tell it what you selected.",
         }),
-    ...(support.slideExport || support.presentationFile
+    ...(hasFileRoute(support)
       ? fileScopeLines(support)
       : liveScopeLines(support)),
   ];

@@ -101,11 +101,17 @@ export function powerpointReadSupport(
 }
 
 export function currentPowerPointReadSupport(): PowerPointReadSupport {
-  const { requirements, document } = globalThis.Office?.context ?? {};
-  return powerpointReadSupport(
-    (name, version) => requirements?.isSetSupported(name, version) ?? false,
-    { fileApi: typeof document?.getFileAsync === "function" },
-  );
+  const { requirements, document, diagnostics } =
+    globalThis.Office?.context ?? {};
+  const isSetSupported: PowerPointRequirementCheck = (name, version) =>
+    requirements?.isSetSupported(name, version) ?? false;
+  return powerpointReadSupport(isSetSupported, {
+    fileApi:
+      typeof document?.getFileAsync === "function" &&
+      isSetSupported("CompressedFile", "1.1") &&
+      // iPad slices the file at 64 KB at most; the reader asks for 4 MB slices.
+      String(diagnostics?.platform) !== "iOS",
+  });
 }
 
 let logged = false;

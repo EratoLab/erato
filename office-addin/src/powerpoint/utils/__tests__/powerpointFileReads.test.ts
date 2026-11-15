@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import * as CFB from "cfb";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -10,6 +13,8 @@ import {
   chartFrame,
   chartXml,
   group,
+  ink,
+  oleFrame,
   pic,
   smartArtDataXml,
   smartArtFrame,
@@ -18,6 +23,7 @@ import {
 } from "../../../test/mocks/powerpoint/pptxFixture";
 import { powerpointTierText } from "../powerpointFacet";
 import { POWERPOINT_FILE_LIMITS } from "../powerpointFile";
+import { SAVED_FILE_NOTE } from "../powerpointFileContent";
 import { powerpointReadSupport } from "../powerpointReadSupport";
 import {
   POWERPOINT_READ_MAX_BYTES,
@@ -211,7 +217,13 @@ function deck(overrides: Partial<FakeDeck> = {}, file?: Uint8Array): FakeDeck {
 const ok = (read: ClientToolExecutionResult) => {
   if (!read.ok) throw new Error(read.error);
   return read.result as Record<string, unknown> & {
-    slide: { unread?: string[]; notes?: string; [key: string]: unknown };
+    slide: {
+      unread?: string[];
+      notes?: string;
+      fileContent?: string;
+      notesOnFirstPage?: boolean;
+      [key: string]: unknown;
+    };
     shapes: PowerPointShapeOut[];
   };
 };
@@ -255,9 +267,21 @@ describe("full tier: the one-slide export", () => {
     expect(host.fileOpens).toBe(0);
   });
 
-  it("says a slide has no notes rather than leaving them out", async () => {
+  it("does not state 'no notes' from an export that names no notes page", async () => {
     host = installFakePowerPoint(deck());
     const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_2 }));
+    expect(result.slide.notes).toBeUndefined();
+    expect(result.slide.unread).toEqual([
+      expect.stringMatching(
+        /^speaker notes: PowerPoint's slide export holds none; .* not verified yet/,
+      ),
+    ]);
+    expect(result.slide.fileContent).toBeUndefined();
+  });
+
+  it("says a slide has no notes when the whole file names none", async () => {
+    host = installFakePowerPoint(deck());
+    const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_2 }));
     expect(result.slide).toMatchObject({ hidden: false, notes: "" });
   });
 
@@ -275,7 +299,7 @@ describe("full tier: the one-slide export", () => {
   });
 
   it("returns the live read with reasons when the export hangs, and later reads still run", async () => {
-    POWERPOINT_FILE_LIMITS.exportTimeoutMs = 30;
+    POWERPOINT_FILE_LIMITS.fileDeadlineMs = 30;
     host = installFakePowerPoint(deck({ slideExports: { [SLIDE_1]: "hang" } }));
     const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
     expect(result.slide.unread).toEqual([
@@ -395,7 +419,7 @@ describe("basic tier: the whole file", () => {
     [
       "slow to open",
       () => {
-        POWERPOINT_FILE_LIMITS.fileBudgetMs = 30;
+        POWERPOINT_FILE_LIMITS.fileDeadlineMs = 30;
       },
       { hangOpen: true },
       /did not hand over the presentation file in time/,
@@ -403,7 +427,7 @@ describe("basic tier: the whole file", () => {
     [
       "a hanging slice",
       () => {
-        POWERPOINT_FILE_LIMITS.fileBudgetMs = 50;
+        POWERPOINT_FILE_LIMITS.fileDeadlineMs = 50;
       },
       { hangSlice: 0 },
       /did not hand over the presentation file in time/,
@@ -426,9 +450,9 @@ describe("basic tier: the whole file", () => {
       const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_1 }));
       expect(result.slide.unread?.[0]).toMatch(reason);
       expect(result.slide.notes).toBeUndefined();
-      expect(byId(result.shapes, "6").unread).toEqual([
-        "table contents: this PowerPoint version cannot read them (needs PowerPointApi 1.10)",
-      ]);
+      expect(byId(result.shapes, "6").unread?.[0]).toMatch(
+        /^table contents: (?!this PowerPoint version)/,
+      );
       expect(byId(result.shapes, "4").unread?.[0]).toMatch(/^chart data: /);
     },
   );
@@ -566,7 +590,10 @@ describe("caps", () => {
       deck({ slideExports: { [SLIDE_1]: buildPptx([fileSlide]) } }),
     );
     const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
-    expect(result.slide.notes).toMatch(/…\[cut: 1000 more characters\]$/);
+    expect(result.slide.notes).toMatch(/…\[cut: \d+ more characters\]$/);
+    expect(
+      new TextEncoder().encode(result.slide.notes).length,
+    ).toBeLessThanOrEqual(4000);
   });
 });
 
@@ -624,3 +651,314 @@ describe("hosts without a file route", () => {
     expect(host.fileOpens).toBe(0);
   });
 });
+
+describe("where file content comes from", () => {
+  it("labels whole-file content as possibly the last saved version, and the export not", async () => {
+    host = installFakePowerPoint(deck());
+    const basic = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_1 }));
+    expect(basic.slide.fileContent).toBe(SAVED_FILE_NOTE);
+    const full = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
+    expect(full.slide.fileContent).toBeUndefined();
+  });
+
+  it("checks a selection's file against the whole slide, as a slide read does", async () => {
+    const edited = liveSlide1.map((shape) =>
+      shape.id === "2" ? { ...shape, text: "Unsaved title" } : shape,
+    );
+    host = installFakePowerPoint(
+      deck({
+        slides: [
+          { id: SLIDE_1, shapes: edited },
+          { id: SLIDE_2, shapes: liveSlide2 },
+        ],
+        selectedSlideIds: [SLIDE_1],
+        selectedShapeIds: ["4"],
+      }),
+    );
+    const result = ok(await readPowerPointSelection(BASIC));
+    const [chart] = result.selectedShapes as PowerPointShapeOut[];
+    expect(chart.chart).toBeUndefined();
+    expect(chart.unread?.[0]).toMatch(
+      /^chart data: .*does not match the slide on screen/,
+    );
+    expect(result.fileContent).toBeUndefined();
+  });
+
+  it("labels a selection filled from the whole file", async () => {
+    host = installFakePowerPoint(
+      deck({ selectedSlideIds: [SLIDE_1], selectedShapeIds: ["6"] }),
+    );
+    const result = ok(await readPowerPointSelection(BASIC));
+    const [tableShape] = result.selectedShapes as PowerPointShapeOut[];
+    expect(tableShape.table?.values[1]).toEqual(["EU", "10"]);
+    expect(result.fileContent).toBe(SAVED_FILE_NOTE);
+  });
+});
+
+describe("reads issued together", () => {
+  it("each end by their own deadline and fall back, instead of queueing past the tool timeout", async () => {
+    POWERPOINT_FILE_LIMITS.fileDeadlineMs = 150;
+    host = installFakePowerPoint(
+      deck({
+        file: { bytes: buildPptx([fileSlide1, fileSlide2]), hangOpen: true },
+      }),
+    );
+    const started = Date.now();
+    const reads = await Promise.all(
+      [SLIDE_1, SLIDE_2, SLIDE_1, SLIDE_2].map(async (slideId) => {
+        const result = ok(await readPowerPointSlide(BASIC, { slideId }));
+        return { result, at: Date.now() - started };
+      }),
+    );
+    for (const { result, at } of reads) {
+      expect(at).toBeLessThan(600);
+      expect(result.slide.unread?.[0]).toMatch(/in time/);
+    }
+  });
+});
+
+describe("the page cap with notes", () => {
+  const long = "漢".repeat(3900);
+  const fileSlide = {
+    ...fileSlide2,
+    notes: "注".repeat(6000),
+    shapes: [
+      sp("2", long, { left: 40, top: 20 }, { textBox: true }),
+      ...fileSlide2.shapes.slice(1),
+    ],
+  };
+  const slides = [
+    { id: SLIDE_1, shapes: liveSlide1 },
+    {
+      id: SLIDE_2,
+      shapes: [{ ...liveSlide2[0], text: long }, ...liveSlide2.slice(1)],
+    },
+  ];
+
+  it("keeps notes and a large shape within 20 KB, and sends notes on the first page only", async () => {
+    host = installFakePowerPoint(
+      deck({ slides, slideExports: { [SLIDE_2]: buildPptx([fileSlide]) } }),
+    );
+    const first = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_2 }));
+    expect(bytes(first)).toBeLessThanOrEqual(POWERPOINT_READ_MAX_BYTES);
+    expect(first.slide.notes).toMatch(/^注+…\[cut: \d+ more characters\]$/);
+    const next = ok(
+      await readPowerPointSlide(FULL, { slideId: SLIDE_2, startShape: 1 }),
+    );
+    expect(next.slide.notes).toBeUndefined();
+    expect(next.slide.notesOnFirstPage).toBe(true);
+  });
+});
+
+describe("shapes the reader handles specially", () => {
+  it("matches ink by its p14 id, so the slide still gets its file content", async () => {
+    const withInk = {
+      ...fileSlide1,
+      shapes: [...fileSlide1.shapes, ink("10", { left: 600, top: 20 })],
+    };
+    host = installFakePowerPoint(
+      deck({
+        slides: [
+          { id: SLIDE_1, shapes: [...liveSlide1, { id: "10", type: "Ink" }] },
+          { id: SLIDE_2, shapes: liveSlide2 },
+        ],
+        slideExports: { [SLIDE_1]: buildPptx([withInk]) },
+      }),
+    );
+    const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
+    expect(result.slide.unread).toBeUndefined();
+    expect(result.slide.notes).toContain("Open with the numbers.");
+  });
+
+  it("names a shape it cannot model instead of asking to save", async () => {
+    const odd = {
+      ...fileSlide1,
+      shapes: [
+        ...fileSlide1.shapes,
+        "<p:futureShape><p:nvFuturePr/></p:futureShape>",
+      ],
+    };
+    host = installFakePowerPoint(
+      deck({
+        slides: [
+          {
+            id: SLIDE_1,
+            shapes: [...liveSlide1, { id: "11", type: "Unsupported" }],
+          },
+          { id: SLIDE_2, shapes: liveSlide2 },
+        ],
+        slideExports: { [SLIDE_1]: buildPptx([odd]) },
+      }),
+    );
+    const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
+    expect(result.slide.unread?.[0]).toMatch(
+      /a kind of shape this reader cannot match to the file$/,
+    );
+  });
+
+  it("keeps a note for an embedded object in a placeholder", async () => {
+    const withObject = {
+      ...fileSlide2,
+      shapes: [
+        fileSlide2.shapes[0],
+        oleFrame("3", { left: 40, top: 100 }, "body"),
+        fileSlide2.shapes[2],
+      ],
+    };
+    host = installFakePowerPoint(
+      deck(
+        {
+          slides: [
+            { id: SLIDE_1, shapes: liveSlide1 },
+            {
+              id: SLIDE_2,
+              shapes: [
+                liveSlide2[0],
+                {
+                  id: "3",
+                  type: "Placeholder",
+                  holds: "Ole",
+                  top: 100,
+                  left: 40,
+                },
+                liveSlide2[2],
+              ],
+            },
+          ],
+        },
+        buildPptx([fileSlide1, withObject]),
+      ),
+    );
+    const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_2 }));
+    expect(byId(result.shapes, "3")).toMatchObject({
+      holds: "Ole",
+      unread: ["embedded object content"],
+    });
+  });
+
+  it("does not give a chart another chart's data when the file repeats an id", async () => {
+    const other = chartXml({
+      categories: ["X"],
+      series: [{ name: "Other", values: [1] }],
+    });
+    const twice = {
+      ...fileSlide1,
+      shapes: [
+        ...fileSlide1.shapes,
+        chartFrame("4", "rIdOther", { left: 0, top: 0 }),
+      ],
+      charts: { rIdChart: sales, rIdOther: other },
+    };
+    host = installFakePowerPoint(
+      deck({ slideExports: { [SLIDE_1]: buildPptx([twice]) } }),
+    );
+    const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_1 }));
+    const chart = byId(result.shapes, "4");
+    expect(chart.chart).toBeUndefined();
+    expect(chart.unread).toContain(
+      "content from the file: the file has two shapes with this id",
+    );
+  });
+});
+
+describe("a file made outside these tests", () => {
+  it("reads the chart and title of a generated deck with masters, layouts and embedded workbooks", async () => {
+    const bytes = new Uint8Array(
+      readFileSync(
+        `${process.cwd()}/src/test/fixtures/powerpoint/Acme_Inc_Company_Overview.pptx`,
+      ),
+    );
+    host = installFakePowerPoint({
+      slides: [
+        { id: "256#1", shapes: [] },
+        {
+          id: "257#2",
+          shapes: [
+            {
+              id: "2",
+              type: "Placeholder",
+              role: "Title",
+              text: "Revenue Development (2000–2025)",
+            },
+            { id: "3", type: "Chart", top: 100 },
+          ],
+        },
+        { id: "258#3", shapes: [] },
+        { id: "259#4", shapes: [] },
+      ],
+      file: { bytes },
+    });
+    const result = ok(await readPowerPointSlide(BASIC, { slideId: "257#2" }));
+    expect(result.slide).toMatchObject({ hidden: false, notes: "" });
+    const chart = byId(result.shapes, "3").chart!;
+    expect(chart.type).toBe("line");
+    expect(chart.categories?.slice(0, 2)).toEqual(["2000", "2001"]);
+    expect(chart.series[0]).toMatchObject({
+      name: "Revenue (Million USD)",
+      values: expect.arrayContaining([120, 125]),
+    });
+  });
+});
+
+describe("the zip reader", () => {
+  it("skips a part with an unusual name instead of failing the package", async () => {
+    const zip = CFB.read(buildPptx([fileSlide1, fileSlide2]), {
+      type: "array",
+    });
+    CFB.utils.cfb_add(
+      zip,
+      "ppt/media/my picture.png",
+      new Uint8Array([1, 2, 3]),
+    );
+    const file = new Uint8Array(
+      CFB.write(zip, {
+        type: "array",
+        fileType: "zip",
+        compression: true,
+      }) as number[],
+    );
+    host = installFakePowerPoint(deck({}, file));
+    const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_1 }));
+    expect(result.slide.unread).toBeUndefined();
+  });
+
+  it("stops a part that inflates past its declared size", async () => {
+    const file = buildPptx([fileSlide1, fileSlide2]);
+    declareSize(file, "ppt/slides/slide1.xml", 100);
+    host = installFakePowerPoint(deck({}, file));
+    const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_1 }));
+    expect(result.slide.unread?.[0]).toMatch(/inflates past its declared size/);
+  });
+
+  it("says so when the web view cannot unpack", async () => {
+    const original = globalThis.DecompressionStream;
+    (globalThis as { DecompressionStream?: unknown }).DecompressionStream =
+      undefined;
+    try {
+      host = installFakePowerPoint(deck());
+      const result = ok(await readPowerPointSlide(BASIC, { slideId: SLIDE_1 }));
+      expect(result.slide.unread?.[0]).toMatch(/cannot unpack the file/);
+    } finally {
+      globalThis.DecompressionStream = original;
+    }
+  });
+});
+
+/** Rewrites the central directory's uncompressed size of `name`, as a crafted file would. */
+function declareSize(file: Uint8Array, name: string, size: number) {
+  const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
+  const wanted = new TextEncoder().encode(name);
+  for (let i = 0; i < file.length - 46; i++) {
+    if (view.getUint32(i, true) !== 0x02014b50) continue;
+    const length = view.getUint16(i + 28, true);
+    const candidate = file.subarray(i + 46, i + 46 + length);
+    if (
+      candidate.every((byte, k) => byte === wanted[k]) &&
+      length === wanted.length
+    ) {
+      view.setUint32(i + 24, size, true);
+      return;
+    }
+  }
+  throw new Error(`no entry ${name}`);
+}

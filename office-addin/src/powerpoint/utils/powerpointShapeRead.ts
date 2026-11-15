@@ -531,7 +531,7 @@ function prefixThatFits<T>(items: readonly T[], room: number): T[] {
 }
 
 const CUT = "cut to keep the result small";
-const CUT_MARK = /…\[cut: \d+ more characters\]$/;
+export const CUT_MARK = /…\[cut: \d+ more characters\]$/;
 
 /**
  * One shape within `maxBytes` of JSON: group children, table rows, paragraphs, then text and alt

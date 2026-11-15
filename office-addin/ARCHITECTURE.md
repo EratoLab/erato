@@ -47,7 +47,8 @@ implement the seams listed below, and never modify the core itself.
   group children below 1.10): the one-slide `slide.exportAsBase64()` at the
   full tier, else the whole file through `getFileAsync`, fetching only the
   slices that hold the slide's parts (`utils/powerpointFileContent.ts`). Nothing
-  is cached, and a file that does not match the shapes on screen is not used.
+  is cached; a file that does not match the shapes on screen is not used, and
+  what the whole file supplies is labelled as possibly the last saved version.
   Like Word's
   chip, the chip and the tools appear only while the server advertises the
   `powerpoint_presentation` action facet, and the tools are listed only for a

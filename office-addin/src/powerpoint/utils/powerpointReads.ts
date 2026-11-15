@@ -1,5 +1,7 @@
+import { POWERPOINT_FILE_LIMITS } from "./powerpointFile";
 import {
   POWERPOINT_FILE_CONTENT,
+  SAVED_FILE_NOTE,
   fileCouldFill,
   hasFileRoute,
   slideFileFields,
@@ -329,6 +331,7 @@ export function readPowerPointSlide(
     );
   const startShape = optionalInteger(input, "startShape", 0);
   if (typeof startShape !== "number") return Promise.resolve(startShape);
+  const deadline = Date.now() + POWERPOINT_FILE_LIMITS.fileDeadlineMs;
   return guarded(async () => {
     const live = await runPowerPoint(async (context) => {
       const all = context.presentation.slides.load("items/id");
@@ -351,9 +354,17 @@ export function readPowerPointSlide(
     });
     if (!live) return slideNotFound(slideId);
     const file = hasFileRoute(support)
-      ? slideFileFields(await withFileContent(support, live, live.shapes))
+      ? slideFileFields(
+          await withFileContent(
+            support,
+            live,
+            live.shapes,
+            live.shapes,
+            deadline,
+          ),
+          startShape === 0,
+        )
       : {};
-    const read = live.shapes.map((shape) => capShape(shape, MAX_SHAPE_BYTES));
     const result: Record<string, unknown> = {
       ...envelope(support),
       slide: {
@@ -362,9 +373,15 @@ export function readPowerPointSlide(
         layout: live.layout,
         ...file,
       },
-      shapeCount: read.length,
+      shapeCount: live.shapes.length,
       ...(startShape > 0 ? { startShape } : {}),
     };
+    // Notes share the page, so a shape gets at most what is left beside them.
+    const room = Math.min(
+      MAX_SHAPE_BYTES,
+      POWERPOINT_READ_MAX_BYTES - jsonBytes(result) - 600,
+    );
+    const read = live.shapes.map((shape) => capShape(shape, room));
     const { taken } = fitItems(result, "shapes", read.slice(startShape));
     const next = startShape + taken;
     if (next < read.length) {
@@ -385,6 +402,7 @@ function slideNotFound(slideId: string): ClientToolExecutionResult {
 export function readPowerPointSelection(
   support: PowerPointReadSupport,
 ): Promise<ClientToolExecutionResult> {
+  const deadline = Date.now() + POWERPOINT_FILE_LIMITS.fileDeadlineMs;
   return guarded(async () => {
     const live = await runPowerPoint(async (context) => {
       const { presentation } = context;
@@ -399,6 +417,22 @@ export function readPowerPointSelection(
         const range = p.getSelectedTextRange().load("text");
         return () => range.text;
       });
+      const selected = readingOrder(
+        await readShapeContent(context, shapes.items, support),
+      );
+      // Selected shapes sit on the slide being edited, known for sure only when one slide is
+      // selected. The file is checked against all of that slide's shapes, as a slide read does.
+      const [only] = slides.items;
+      let slideShapes: PowerPointShapeOut[] | null = null;
+      if (
+        hasFileRoute(support) &&
+        slides.items.length === 1 &&
+        fileCouldFill(selected)
+      ) {
+        const onSlide = only.shapes.load(shapeLoadPaths(support));
+        await context.sync();
+        slideShapes = await readShapeContent(context, onSlide.items, support);
+      }
       return {
         slideCount: all.items.length,
         slides: slides.items.map((slide) => ({
@@ -406,32 +440,32 @@ export function readPowerPointSelection(
           position: order.get(slide.id),
         })),
         text,
-        shapes: readingOrder(
-          await readShapeContent(context, shapes.items, support),
-        ),
+        shapes: selected,
+        slideShapes,
       };
     });
     const selection = selectedSlideList(live.slides);
     const [onlySlide] = live.slides;
-    // Selected shapes sit on the slide being edited, known for sure only when one slide is selected.
-    if (
-      hasFileRoute(support) &&
-      live.slides.length === 1 &&
-      onlySlide.position !== undefined &&
-      fileCouldFill(live.shapes)
-    )
-      await withFileContent(
-        support,
-        {
-          id: onlySlide.id,
-          position: onlySlide.position,
-          slideCount: live.slideCount,
-        },
-        live.shapes,
-      );
+    const outcome =
+      live.slideShapes && onlySlide.position !== undefined
+        ? await withFileContent(
+            support,
+            {
+              id: onlySlide.id,
+              position: onlySlide.position,
+              slideCount: live.slideCount,
+            },
+            live.slideShapes,
+            live.shapes,
+            deadline,
+          )
+        : null;
     const { text } = live;
     const result: Record<string, unknown> = {
       ...envelope(support),
+      ...(outcome?.ok && outcome.route === "file"
+        ? { fileContent: SAVED_FILE_NOTE }
+        : {}),
       selectedSlides: selection.listed,
       ...("selectedSlideCount" in selection
         ? { selectedSlideCount: selection.selectedSlideCount }

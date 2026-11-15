@@ -1,3 +1,5 @@
+import { base64 } from "./pptxFixture";
+
 /**
  * A PowerPoint host for the reads' tests, strict where Office.js is:
  * - a property can be read only after a `load` naming it and a `sync` that succeeded;
@@ -498,13 +500,6 @@ function installFakeFile(deck: FakeDeck, host: FakePowerPointHost) {
       );
     },
   };
-}
-
-function base64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 8192)
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return btoa(binary);
 }
 
 export function removeFakePowerPoint() {

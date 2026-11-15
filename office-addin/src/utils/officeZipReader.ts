@@ -1,5 +1,3 @@
-import * as CFB from "cfb";
-
 import { officePartPath } from "./officeXml";
 
 /** Random access to a file's bytes, so a reader fetches only the ranges it needs. */
@@ -34,11 +32,46 @@ const LOCAL_HEADER_BYTES = 30;
 const MAX_ENTRIES = 20_000;
 const MAX_DIRECTORY_BYTES = 8 * 1024 * 1024;
 
-const inflateRaw = (
-  CFB.utils as unknown as {
-    _inflateRaw: (data: Uint8Array, size: number) => Uint8Array;
+/**
+ * Inflates through the platform's streaming DecompressionStream, so a part that inflates past its
+ * declared size is stopped there instead of running to the end on the pane's thread. Every host
+ * with the PowerPoint reads has it (WebView2, and Safari 16.4+ under Microsoft 365 for Mac).
+ */
+async function inflateRaw(
+  data: Uint8Array,
+  size: number,
+  name: string,
+): Promise<Uint8Array> {
+  let stream: DecompressionStream;
+  try {
+    stream = new DecompressionStream("deflate-raw");
+  } catch {
+    throw new Error("this web view cannot unpack the file");
   }
-)._inflateRaw;
+  const writer = stream.writable.getWriter();
+  writer.write(data as Uint8Array<ArrayBuffer>).catch(() => {});
+  writer.close().catch(() => {});
+  const reader = stream.readable.getReader();
+  const out = new Uint8Array(size);
+  let offset = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (offset + value.length > size) {
+        await reader.cancel().catch(() => {});
+        throw new Error(`${name} inflates past its declared size.`);
+      }
+      out.set(value, offset);
+      offset += value.length;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes(name)) throw error;
+    throw new Error(`${name} could not be unpacked.`);
+  }
+  if (offset !== size) throw new Error(`${name} is shorter than declared.`);
+  return out;
+}
 
 export function bytesSource(bytes: Uint8Array): ZipByteSource {
   return {
@@ -104,10 +137,14 @@ export async function openOfficeZip(source: ZipByteSource): Promise<OfficeZip> {
     const name = decoder.decode(
       directory.subarray(cursor + 46, cursor + 46 + nameLength),
     );
-    if (!officePartPath(name.replace(/\/$/, "")) || entries.has(name))
-      throw new Error("Invalid or duplicate part name.");
-    // Encrypted parts are skipped rather than failing the package; reading one reports it missing.
-    if (!(dir.getUint16(cursor + 8, true) & 1) && !name.endsWith("/"))
+    if (entries.has(name)) throw new Error("Duplicate part name.");
+    // Parts with unusual names or encryption are skipped rather than failing the package; nothing
+    // a slide refers to is named that way, and reading one reports it missing.
+    if (
+      officePartPath(name) &&
+      !(dir.getUint16(cursor + 8, true) & 1) &&
+      !name.endsWith("/")
+    )
       entries.set(name, {
         method: dir.getUint16(cursor + 10, true),
         compressedSize: dir.getUint32(cursor + 20, true),
@@ -149,10 +186,7 @@ export async function openOfficeZip(source: ZipByteSource): Promise<OfficeZip> {
       if (entry.method !== 8)
         throw new Error(`Unsupported compression in ${name}.`);
       if (entry.size === 0) return new Uint8Array(0);
-      const inflated = inflateRaw(data, entry.size);
-      if (inflated.length < entry.size)
-        throw new Error(`Invalid ZIP entry ${name}.`);
-      return new Uint8Array(inflated.subarray(0, entry.size));
+      return inflateRaw(data, entry.size, name);
     },
   };
 }

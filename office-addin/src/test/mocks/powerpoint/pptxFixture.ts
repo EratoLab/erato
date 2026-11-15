@@ -124,6 +124,21 @@ export function chartFrame(
   );
 }
 
+/** Ink as PowerPoint 2010 and later write it: its id sits in the p14 namespace. */
+export function ink(id: string, box: Box) {
+  return `<mc:AlternateContent xmlns:mc="${NS.mc}"><mc:Choice xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" Requires="p14"><p:contentPart p14:bwMode="auto" r:id="rIdInk"><p14:nvContentPartPr><p14:cNvPr id="${id}" name="Ink ${id}"/><p14:cNvContentPartPr/><p14:nvPr/></p14:nvContentPartPr><p14:xfrm><a:off x="${box.left * EMU}" y="${box.top * EMU}"/><a:ext cx="100" cy="100"/></p14:xfrm></p:contentPart></mc:Choice><mc:Fallback>${pic(id, box)}</mc:Fallback></mc:AlternateContent>`;
+}
+
+export function oleFrame(id: string, box: Box, placeholder?: string) {
+  return frame(
+    id,
+    `Object ${id}`,
+    box,
+    `<a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole"><p:oleObj r:id="rIdOle" progId="Excel.Sheet.12"/></a:graphicData>`,
+    placeholder,
+  );
+}
+
 export function smartArtFrame(id: string, relId: string, box: Box) {
   return frame(
     id,

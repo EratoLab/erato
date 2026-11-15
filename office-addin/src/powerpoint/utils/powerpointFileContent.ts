@@ -1,4 +1,5 @@
 import {
+  POWERPOINT_FILE_LIMITS,
   PowerPointFileError,
   powerpointFileFailure,
   withExportedSlide,
@@ -13,6 +14,7 @@ import {
 import { PowerPointTimeoutError } from "./powerpointRun";
 import {
   CHART_UNREAD,
+  CUT_MARK,
   MAX_GROUP_DEPTH,
   OPAQUE_CONTENT,
   PLACEHOLDER_OTHER_UNREAD,
@@ -37,7 +39,7 @@ export const POWERPOINT_FILE_CONTENT = [
   "whether a slide is hidden",
 ];
 
-const MAX_NOTES_CHARACTERS = 4000;
+const MAX_NOTES_BYTES = 4000;
 
 export const hasFileRoute = (support: PowerPointReadSupport) =>
   support.slideExport || support.presentationFile;
@@ -50,14 +52,30 @@ export interface PowerPointSlideRef {
   slideCount: number;
 }
 
+/**
+ * "export": `slide.exportAsBase64()`, which PowerPoint builds from the open slide when asked, like
+ * every other Office.js read, so it is taken as current. "file": `getFileAsync`, which may hand
+ * over the last saved state; what it adds is labelled as such until a native check settles it.
+ */
+export type FileRoute = "export" | "file";
+
 export type FileSlideOutcome =
-  | { ok: true; slide: PptxSlide }
+  | { ok: true; slide: PptxSlide; route: FileRoute }
   | { ok: false; reason: string };
 
-const STALE =
-  "the presentation file PowerPoint handed over does not match the slide on screen (changes not saved yet, or made during the read); try again after saving";
+const MISMATCH: Record<FileRoute, string> = {
+  export:
+    "PowerPoint's slide export does not match the slide on screen (it changed during the read)",
+  file: "the presentation file PowerPoint handed over does not match the slide on screen (changes not saved yet, or made during the read); try again after saving",
+};
+const UNMODELED =
+  "the slide holds a kind of shape this reader cannot match to the file";
 
-class StaleFileError extends Error {}
+/** How the model should take content that came from the whole file. */
+export const SAVED_FILE_NOTE =
+  "Speaker notes, chart data, SmartArt text, the hidden flag, and tables and shapes inside groups that only the file supplied, come from the presentation file as PowerPoint handed it over. That may be the last saved version, so unsaved changes to them can be missing: call them the version last saved.";
+
+class FileMismatchError extends Error {}
 
 /**
  * The slide from a file. Full tier: the one-slide export, unless it leaves out a part the slide
@@ -67,22 +85,22 @@ class StaleFileError extends Error {}
 export async function readFileSlide(
   support: PowerPointReadSupport,
   ref: PowerPointSlideRef,
+  deadline: number,
 ): Promise<FileSlideOutcome> {
   let exportProblem: string | null = null;
   if (support.slideExport) {
     try {
-      const read = await withExportedSlide(ref.id, async (zip) => {
+      const read = await withExportedSlide(ref.id, deadline, async (zip) => {
         const list = await readPptxSlideList(zip);
         if (list.length !== 1)
           throw new PowerPointFileError(
-            "failed",
             `the slide export holds ${list.length} slides`,
           );
         const missing = await missingSlideParts(zip, list[0].part);
         if (missing.length > 0) return { missing, slide: null };
         return { missing, slide: await readPptxSlide(zip, list[0].part) };
       });
-      if (read.slide) return { ok: true, slide: read.slide };
+      if (read.slide) return { ok: true, slide: read.slide, route: "export" };
       exportProblem = `the slide export left out ${read.missing.join(", ")}`;
     } catch (error) {
       exportProblem = powerpointFileFailure(error);
@@ -98,8 +116,18 @@ export async function readFileSlide(
         exportProblem ??
         "this PowerPoint does not hand over the presentation file",
     };
+  const both = (reason: string) =>
+    exportProblem ? `${reason}; before that, ${exportProblem}` : reason;
+  if (
+    Date.now() + POWERPOINT_FILE_LIMITS.minWholeFileMs > deadline &&
+    exportProblem
+  )
+    return {
+      ok: false,
+      reason: both("no time was left to read the whole file"),
+    };
   try {
-    const slide = await withPresentationFile(async (zip) => {
+    const slide = await withPresentationFile(deadline, async (zip) => {
       const list = await readPptxSlideList(zip);
       const entry = list[ref.position - 1];
       const sldId = /^(\d+)(?:#|$)/.exec(ref.id)?.[1];
@@ -108,20 +136,22 @@ export async function readFileSlide(
         !entry ||
         (sldId !== undefined && entry.sldId !== sldId)
       )
-        throw new StaleFileError();
+        throw new FileMismatchError();
       return readPptxSlide(zip, entry.part);
     });
-    return { ok: true, slide };
+    return { ok: true, slide, route: "file" };
   } catch (error) {
     return {
       ok: false,
-      reason:
-        error instanceof StaleFileError ? STALE : powerpointFileFailure(error),
+      reason: both(
+        error instanceof FileMismatchError
+          ? MISMATCH.file
+          : powerpointFileFailure(error),
+      ),
     };
   }
 }
 
-const CUT_MARK = /…\[cut: \d+ more characters\]$/;
 const comparable = (text: string) => text.replace(/\s+/g, " ").trim();
 
 function liveText(
@@ -144,18 +174,24 @@ function liveText(
 }
 
 /**
- * Whether the file shows the slide as it is on screen: every live shape is in the file, and every
- * text the live read got is the file's text. getFileAsync may hand over the last saved state, and
- * the slide can change between the two reads; content from such a file is not returned.
+ * Why the file does not show the slide as it is on screen, or null when it does: every live shape
+ * must be in the file, and every text the live read got must be the file's text. A shape whose id
+ * the file holds twice is not compared.
  */
-export function fileMatchesLive(
+export function fileMismatch(
   live: readonly PowerPointShapeOut[],
   file: PptxSlide,
-): boolean {
-  const byId = pptxShapesById(file.shapes);
+  route: FileRoute,
+): string | null {
+  const { byId, duplicates } = pptxShapesById(file.shapes);
+  let missing = false;
   const matches = (shape: PowerPointShapeOut): boolean => {
+    if (duplicates.has(shape.id)) return true;
     const saved = byId.get(shape.id);
-    if (!saved) return false;
+    if (!saved) {
+      missing = true;
+      return false;
+    }
     const seen = liveText(shape);
     if (seen && !saved.hasField) {
       const a = comparable(seen.text);
@@ -164,7 +200,9 @@ export function fileMatchesLive(
     }
     return (shape.children ?? []).every(matches);
   };
-  return live.every(matches);
+  if (live.every(matches)) return null;
+  // A shape the reader cannot model is not evidence of unsaved changes.
+  return missing && file.unmodeled > 0 ? UNMODELED : MISMATCH[route];
 }
 
 function dropNote(out: PowerPointShapeOut, note: string): boolean {
@@ -192,6 +230,9 @@ function tableOut(table: NonNullable<PptxShape["table"]>) {
   };
 }
 
+const contentNote = (type: string) =>
+  OPAQUE_CONTENT[type] ?? (type === "Unsupported" ? UNDESCRIBED_UNREAD : null);
+
 /** A shape only the file describes: a group child where this host cannot read groups. */
 function shapeFromFile(saved: PptxShape, depth: number): PowerPointShapeOut {
   const out: PowerPointShapeOut = {
@@ -210,9 +251,9 @@ function shapeFromFile(saved: PptxShape, depth: number): PowerPointShapeOut {
   if (saved.chart) out.chart = saved.chart;
   if (saved.smartArt) out.smartArt = saved.smartArt;
   addNotes(out, saved.unread);
-  const opaque = OPAQUE_CONTENT[saved.type];
-  if (opaque && opaque !== CHART_UNREAD && opaque !== SMART_ART_UNREAD)
-    addNotes(out, [opaque]);
+  const note = contentNote(saved.type);
+  if (note && note !== CHART_UNREAD && note !== SMART_ART_UNREAD)
+    addNotes(out, [note]);
   if (saved.children) {
     if (depth + 1 >= MAX_GROUP_DEPTH)
       addNotes(out, ["group children: nested too deep to read"]);
@@ -230,13 +271,24 @@ export function applyFileSlide(
   file: PptxSlide,
   support: PowerPointReadSupport,
 ) {
-  const byId = pptxShapesById(file.shapes);
+  const { byId, duplicates } = pptxShapesById(file.shapes);
   const fill = (out: PowerPointShapeOut, depth: number) => {
     const saved = byId.get(out.id);
+    if (duplicates.has(out.id))
+      addNotes(out, [
+        "content from the file: the file has two shapes with this id",
+      ]);
     if (saved) {
       const placeholderOther = dropNote(out, PLACEHOLDER_OTHER_UNREAD);
-      if (placeholderOther && saved.type !== "Placeholder")
-        out.holds = saved.type;
+      if (placeholderOther) {
+        if (saved.type !== "Placeholder") out.holds = saved.type;
+        else if (saved.text && out.text === undefined)
+          out.text = capText(saved.text);
+        // What the placeholder holds and no reader can open, e.g. an embedded object.
+        const note = contentNote(saved.type);
+        if (note && note !== CHART_UNREAD && note !== SMART_ART_UNREAD)
+          addNotes(out, [note]);
+      }
       if (
         saved.type === "Chart" &&
         (dropNote(out, CHART_UNREAD) || placeholderOther)
@@ -260,8 +312,6 @@ export function applyFileSlide(
         out.table = table;
         if (cut) addNotes(out, [cut]);
       }
-      if (saved.type === "Image" && placeholderOther)
-        addNotes(out, [OPAQUE_CONTENT.Image]);
       if (
         saved.children &&
         !out.children &&
@@ -288,12 +338,25 @@ export function applyFileSlide(
   for (const out of live) fill(out, 0);
 }
 
-/** The file could not be used: the notes that said "no API reads it" now say why. */
-export function markFileUnread(live: PowerPointShapeOut[], reason: string) {
+/** The file could not be used: notes that pointed at the API's limits now say why. */
+export function markFileUnread(
+  live: PowerPointShapeOut[],
+  reason: string,
+  support: PowerPointReadSupport,
+) {
+  const replacements: [string, string][] = [
+    [CHART_UNREAD, "chart data"],
+    [SMART_ART_UNREAD, "SmartArt text"],
+    ...(support.presentationFile
+      ? ([
+          [hostCannot("tables"), "table contents"],
+          [hostCannot("groups"), "shapes inside groups"],
+        ] as [string, string][])
+      : []),
+  ];
   const mark = (out: PowerPointShapeOut) => {
-    if (dropNote(out, CHART_UNREAD)) addNotes(out, [`chart data: ${reason}`]);
-    if (dropNote(out, SMART_ART_UNREAD))
-      addNotes(out, [`SmartArt text: ${reason}`]);
+    for (const [note, what] of replacements)
+      if (dropNote(out, note)) addNotes(out, [`${what}: ${reason}`]);
     for (const child of out.children ?? []) mark(child);
   };
   live.forEach(mark);
@@ -315,30 +378,67 @@ export function fileCouldFill(live: readonly PowerPointShapeOut[]): boolean {
   return live.some(check);
 }
 
-/** Speaker notes and the hidden flag for a slide result, or why they are missing. */
-export function slideFileFields(outcome: FileSlideOutcome) {
+const encoder = new TextEncoder();
+
+/** The longest prefix of `text` within `maxBytes` of UTF-8, with a cut marker. */
+export function capTextBytes(text: string, maxBytes: number): string {
+  if (encoder.encode(text).length <= maxBytes) return text;
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (encoder.encode(text.slice(0, mid)).length <= maxBytes - 40) low = mid;
+    else high = mid - 1;
+  }
+  return `${text.slice(0, low)}…[cut: ${text.length - low} more characters]`;
+}
+
+/**
+ * Speaker notes, the hidden flag and the source label for a slide result, or why they are
+ * missing. Notes go on the first page only; continuation pages refer back to it.
+ */
+export function slideFileFields(outcome: FileSlideOutcome, firstPage: boolean) {
   if (!outcome.ok)
     return {
       unread: [
         `speaker notes and whether the slide is hidden: ${outcome.reason}`,
       ],
     };
+  const { slide, route } = outcome;
+  const notesUnconfirmed = route === "export" && !slide.hasNotesPage;
   return {
-    hidden: outcome.slide.hidden,
-    notes: capText(outcome.slide.notes, MAX_NOTES_CHARACTERS),
+    hidden: slide.hidden,
+    ...(!firstPage
+      ? { notesOnFirstPage: true }
+      : notesUnconfirmed
+        ? {
+            unread: [
+              "speaker notes: PowerPoint's slide export holds none; whether the export keeps notes is not verified yet, so the slide may still have some",
+            ],
+          }
+        : { notes: capTextBytes(slide.notes, MAX_NOTES_BYTES) }),
+    ...(route === "file" ? { fileContent: SAVED_FILE_NOTE } : {}),
   };
 }
 
-/** Reads the slide's file and merges it into `live`; on any failure `live` keeps its unread notes. */
+/**
+ * Reads the slide's file, checks it against `check` (the slide's live shapes) and fills `target`
+ * (the shapes the result returns: the slide's, or the selected ones). On any failure `target`
+ * keeps its unread notes with the reason.
+ */
 export async function withFileContent(
   support: PowerPointReadSupport,
   ref: PowerPointSlideRef,
-  live: PowerPointShapeOut[],
+  check: readonly PowerPointShapeOut[],
+  target: PowerPointShapeOut[],
+  deadline: number,
 ): Promise<FileSlideOutcome> {
-  let outcome = await readFileSlide(support, ref);
-  if (outcome.ok && !fileMatchesLive(live, outcome.slide))
-    outcome = { ok: false, reason: STALE };
-  if (outcome.ok) applyFileSlide(live, outcome.slide, support);
-  else markFileUnread(live, outcome.reason);
+  let outcome = await readFileSlide(support, ref, deadline);
+  if (outcome.ok) {
+    const mismatch = fileMismatch(check, outcome.slide, outcome.route);
+    if (mismatch) outcome = { ok: false, reason: mismatch };
+  }
+  if (outcome.ok) applyFileSlide(target, outcome.slide, support);
+  else markFileUnread(target, outcome.reason, support);
   return outcome;
 }
