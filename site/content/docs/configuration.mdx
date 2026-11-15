@@ -2652,7 +2652,9 @@ text shown and stored in the chat is unchanged:
   table is in the chat." (also French, Spanish and Polish). Several code blocks
   or tables with no spoken text between them get each sentence once.
 - Image descriptions, HTML, footnote marks and footnotes, struck-through text,
-  task-list boxes and emoji are omitted.
+  task-list boxes and emoji are omitted, and so are markdown marks without a
+  partner, e.g. the `*` in "Preis*" or the `~` in "~5 Minuten" (read "5
+  Minuten").
 - Markdown links are read by their visible text. A bare web address
   (`https://…` or `www.…`) is read as its site name, e.g. `example.com`. Mail
   addresses are read as written.
@@ -2665,16 +2667,18 @@ text shown and stored in the chat is unchanged:
   voice.
 
 The user's language is the one their screen shows, as last reported by the
-client; without it, the profile language the server resolves (ID token claim,
+client, when it is one of the supported languages (en, de, fr, pl, es), as for
+Explain; otherwise the profile language the server resolves (ID token claim,
 browser language, then `i18n.language.default_language`, `en` out of the box).
 Sentences are split by language rules; German and English text are both split
 with German rules, so a German reply to a profile that says English is not cut
 apart. German dates such as "am 14. November" (also before a comma or colon),
 abbreviations such as "z. B." and numbers such as "1.250,50 €" or "14.30 Uhr" do
-not end a passage. A sentence end is accepted only once the next word has
-arrived, and text of the answer still being written is spoken only once its
-markdown is settled (a table, a code block, bold or a link is known). A paragraph
-or other block ends a passage. Known limits: an ordinal before a noun that is not
+not end a passage, and neither does a full stop with no space after it ("1.º").
+A sentence end is accepted only once the next word has arrived, and a line of
+the answer still being written that may still become a table or a code block is
+spoken once the next line shows what it is. A paragraph or other block ends a
+passage. Known limits: an ordinal before a noun that is not
 a month ("auf dem 2. Platz", "im 3. Stock") is still treated as a sentence end;
 an abbreviation at a real sentence end ("Das klären wir ggf. Morgen …") does not
 end the passage.

@@ -1,4 +1,4 @@
-use super::me_profile_middleware::MeProfile;
+use super::me_profile_middleware::{MeProfile, normalize_supported_language};
 use crate::models::message::{ContentPart, MessageRole, MessageSchema, get_message_by_id};
 use crate::policy::engine::PolicyEngine;
 use crate::services::sentry::log_internal_server_error;
@@ -119,9 +119,9 @@ pub async fn read_message_aloud(
     if text.len() > MAX_INPUT_BYTES {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = SpeechLanguage::for_user(
-        me_user.preference_language.as_deref(),
-        &me_user.preferred_language,
+    let language = SpeechLanguage::new(
+        normalize_supported_language(me_user.preference_language.as_deref())
+            .unwrap_or(&me_user.preferred_language),
     );
     if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);

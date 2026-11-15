@@ -13,20 +13,16 @@ use std::sync::LazyLock;
 pub struct SpeechLanguage(String);
 
 impl SpeechLanguage {
-    /// Accepts "de", "de-DE" or "de_DE". Anything unusable becomes German, the language most of
-    /// our users speak.
+    /// Reduces "de-DE" or "de_DE" to "de". Callers pass the language the screen shows when it is
+    /// supported, else the profile's resolved language, as Explain does.
     pub fn new(language: &str) -> Self {
-        Self(usable(language).unwrap_or_else(|| "de".into()))
-    }
-
-    /// The language the user's screen shows, when the client reported one, else the language
-    /// the server resolved for the profile.
-    pub fn for_user(shown: Option<&str>, resolved: &str) -> Self {
         Self(
-            shown
-                .and_then(usable)
-                .or_else(|| usable(resolved))
-                .unwrap_or_else(|| "de".into()),
+            language
+                .split(['-', '_'])
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase(),
         )
     }
 
@@ -66,19 +62,9 @@ impl SpeechLanguage {
     }
 }
 
-fn usable(language: &str) -> Option<String> {
-    let code = language
-        .split(['-', '_'])
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    ((2..=3).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_lowercase())).then_some(code)
-}
-
 impl Default for SpeechLanguage {
     fn default() -> Self {
-        Self::new("")
+        Self::new("en")
     }
 }
 
@@ -108,16 +94,16 @@ pub(super) struct Reading {
 }
 
 enum Piece {
-    Text { text: String, hold: Option<usize> },
+    Text(String),
     Code,
     Table,
 }
 
 /// `open` marks markdown that is still being written: its last piece may continue, so it gets
-/// no closing full stop and no trailing space yet, and it ends before a mark that has no
-/// partner yet ("**", "_", "~~", "`", "["), which may still turn the text after it into
-/// emphasis, struck text, code or a link. `replaced` carries a run of code blocks and tables
-/// over from the markdown before.
+/// no closing full stop and no trailing space yet. A mark without a partner ("**", "_", "~",
+/// "`", "[") is not spoken, whether its partner is still to come or never comes, so a reading
+/// before the partner arrived starts like the one after. `replaced` carries a run of code
+/// blocks and tables over from the markdown before.
 pub(super) fn read(
     markdown: &str,
     language: &SpeechLanguage,
@@ -133,12 +119,11 @@ pub(super) fn read(
     let parser = Parser::new_with_broken_link_callback(markdown, options, Some(&mut unresolved));
     let mut pieces = Vec::new();
     let mut piece = String::new();
-    let mut hold = None;
     let mut hidden = 0usize;
     for (event, range) in parser.into_offset_iter() {
         match event {
             Event::Start(Tag::CodeBlock(_) | Tag::Table(_) | Tag::FootnoteDefinition(_)) => {
-                end_piece(&mut pieces, &mut piece, &mut hold);
+                end_piece(&mut pieces, &mut piece);
                 if hidden == 0 {
                     match event {
                         Event::Start(Tag::CodeBlock(_)) => pieces.push(Piece::Code),
@@ -157,33 +142,22 @@ pub(super) fn read(
                 | TagEnd::Strikethrough,
             ) => hidden -= 1,
             Event::Text(text) if hidden == 0 => {
-                if open && hold.is_none() && without_partner(&text, &markdown[range.end..]) {
-                    hold = Some(piece.len());
+                if !without_partner(&text, &markdown[range.end..]) {
+                    piece.push_str(&text);
                 }
-                piece.push_str(&text);
             }
             Event::Code(text) if hidden == 0 => piece.push_str(&text),
             Event::InlineHtml(html) if hidden == 0 && is_line_break(&html) => piece.push(' '),
             Event::SoftBreak | Event::HardBreak => piece.push(' '),
             Event::Start(Tag::Emphasis | Tag::Strong | Tag::Link { .. })
             | Event::End(TagEnd::Emphasis | TagEnd::Strong | TagEnd::Link) => {}
-            Event::Start(_) | Event::End(_) | Event::Rule => {
-                end_piece(&mut pieces, &mut piece, &mut hold)
-            }
+            Event::Start(_) | Event::End(_) | Event::Rule => end_piece(&mut pieces, &mut piece),
             _ => {}
         }
     }
-    end_piece(&mut pieces, &mut piece, &mut hold);
-    if open
-        && let Some(Piece::Text {
-            text,
-            hold: Some(at),
-        }) = pieces.last_mut()
-    {
-        text.truncate(*at);
-    }
+    end_piece(&mut pieces, &mut piece);
     pieces.retain_mut(|piece| match piece {
-        Piece::Text { text, .. } => {
+        Piece::Text(text) => {
             *text = clean(text);
             !text.is_empty()
         }
@@ -195,7 +169,7 @@ pub(super) fn read(
     let mut spoken = String::new();
     for (index, piece) in pieces.into_iter().enumerate() {
         let (sentence, said) = match piece {
-            Piece::Text { mut text, .. } => {
+            Piece::Text(mut text) => {
                 let unfinished = open && index == last;
                 if !unfinished {
                     close_sentence(&mut text);
@@ -226,18 +200,14 @@ pub(super) fn read(
     }
 }
 
-fn end_piece(pieces: &mut Vec<Piece>, piece: &mut String, hold: &mut Option<usize>) {
+fn end_piece(pieces: &mut Vec<Piece>, piece: &mut String) {
     if !piece.is_empty() {
-        pieces.push(Piece::Text {
-            text: std::mem::take(piece),
-            hold: hold.take(),
-        });
+        pieces.push(Piece::Text(std::mem::take(piece)));
     }
-    *hold = None;
 }
 
-/// A mark the parser left as text because its partner has not arrived. A "[" whose "]" is
-/// already there stays text (`[^1]` without a definition).
+/// A mark the parser left as text because it has no partner. A "[" whose "]" is already there
+/// stays text (`[^1]` without a definition).
 fn without_partner(text: &str, after: &str) -> bool {
     match text {
         "[" => !after.contains(']'),
@@ -369,34 +339,9 @@ mod tests {
     }
 
     #[test]
-    fn languages_are_reduced_to_a_bare_code_with_german_as_fallback() {
-        for (given, code) in [
-            ("de", "de"),
-            ("de-DE", "de"),
-            ("en_US", "en"),
-            ("EN", "en"),
-            ("", "de"),
-            ("*", "de"),
-        ] {
+    fn languages_are_reduced_to_a_bare_code() {
+        for (given, code) in [("de", "de"), ("de-DE", "de"), ("en_US", "en"), ("EN", "en")] {
             assert_eq!(SpeechLanguage::new(given).code(), code, "{given}");
-        }
-    }
-
-    #[test]
-    fn the_language_on_screen_comes_before_the_resolved_one() {
-        for (shown, resolved, code) in [
-            (Some("de-DE"), "en", "de"),
-            (Some("en"), "de", "en"),
-            (None, "en", "en"),
-            (Some(""), "fr", "fr"),
-            (Some("*"), "pl", "pl"),
-            (None, "", "de"),
-        ] {
-            assert_eq!(
-                SpeechLanguage::for_user(shown, resolved).code(),
-                code,
-                "{shown:?} {resolved}"
-            );
         }
         assert_eq!(SpeechLanguage::new("en").splitter(), "de");
         assert_eq!(SpeechLanguage::new("fr").splitter(), "fr");
@@ -441,7 +386,6 @@ mod tests {
             de("- [ ] Milch kaufen\n- [x] Brot holen"),
             "Milch kaufen. Brot holen. "
         );
-        assert_eq!(de("Es dauert ~5 Minuten."), "Es dauert ~5 Minuten. ");
     }
 
     #[test]
@@ -453,8 +397,8 @@ mod tests {
             "Done family flag key pride scotland heart ok. "
         );
         assert_eq!(
-            en("Room #3: 2 * 4 = 8, call 0800 123 *21#"),
-            "Room #3: 2 * 4 = 8, call 0800 123 *21#. "
+            en("Room #3: 2 * 4 = 8, call 0800 123 #21#"),
+            "Room #3: 2 * 4 = 8, call 0800 123 #21#. "
         );
         assert_eq!(en("🚀"), "");
     }
@@ -498,20 +442,30 @@ mod tests {
         let open = |markdown| read(markdown, &language, true, Replaced::default()).text;
         assert_eq!(open("# Titel\n\nDas ist"), "Titel. Das ist");
         assert_eq!(de("# Titel\n\nDas ist"), "Titel. Das ist. ");
-        // Marks whose partner has not arrived end the open reading; a closed one does not.
-        assert_eq!(open("Gut. **Wichtig. Bitte"), "Gut.");
-        assert_eq!(open("Gut. _Wichtig. Bitte"), "Gut.");
-        assert_eq!(open("Gut. Noch ~~alt. Neu"), "Gut. Noch");
-        assert_eq!(open("Gut. Siehe `code. Mehr"), "Gut. Siehe");
-        assert_eq!(open("Gut. Siehe [Quelle. Mehr"), "Gut. Siehe");
+        // A mark whose partner has not arrived is not spoken; the text after it is.
+        assert_eq!(open("Gut. **Wichtig. Bitte"), "Gut. Wichtig. Bitte");
+        assert_eq!(open("Gut. _Wichtig. Bitte"), "Gut. Wichtig. Bitte");
+        assert_eq!(open("Gut. Noch ~~alt. Neu"), "Gut. Noch alt. Neu");
+        assert_eq!(open("Gut. Siehe `code. Mehr"), "Gut. Siehe code. Mehr");
+        assert_eq!(open("Gut. Siehe [Quelle. Mehr"), "Gut. Siehe Quelle. Mehr");
         assert_eq!(open("**Wichtig.** Bitte"), "Wichtig. Bitte");
         assert_eq!(open("Studie[^1]. Mehr"), "Studie. Mehr");
+    }
+
+    #[test]
+    fn a_mark_without_a_partner_is_not_spoken() {
         assert_eq!(
-            open("Ein snake_case Wort. Mehr"),
-            "Ein snake_case Wort. Mehr"
+            de("Der Preis* gilt ab heute. Es dauert ~5 Minuten. Nutze `cargo run. Siehe [1. Gut."),
+            "Der Preis gilt ab heute. Es dauert 5 Minuten. Nutze cargo run. Siehe 1. Gut. "
         );
-        // Only the piece still being written waits; a finished list item cannot change.
-        assert_eq!(open("- **Erster.\n- Zweiter"), "**Erster. Zweiter");
+        assert_eq!(de("- **Erster.\n- Zweiter"), "Erster. Zweiter. ");
+        // Not marks: a lone "*" between spaces, "_" inside a word.
+        assert_eq!(
+            de("Das kostet 2 * 3 Euro in snake_case und mein_bericht_final.docx."),
+            "Das kostet 2 * 3 Euro in snake_case und mein_bericht_final.docx. "
+        );
+        // The price of the rule: a star code loses its star.
+        assert_eq!(en("Dial *21# now."), "Dial 21# now. ");
     }
 
     #[test]

@@ -11,9 +11,8 @@ const FREELY_REREAD_BYTES: usize = 4096;
 /// Markdown is read block by block (blocks end at a blank line outside a code fence), so a
 /// table or code block is never cut in half, and a finished block ends a passage. The block
 /// still being written is read again as it grows, but only as far as its meaning is settled:
-/// a line that may still become a table or a code fence waits for the next line, and text
-/// after a mark that may still open emphasis or a link waits for its partner. A sentence from
-/// it is handed out once the word after its end is complete: a German date such as "am 14.
+/// a line that may still become a table or a code fence waits for the next line. A sentence
+/// from it is handed out once the word after its end is complete: a German date such as "am 14.
 /// November" only stays together once "November" is known. A replacement sentence ("Der Code
 /// steht im Chat.") is a sentence of its own and is handed out as soon as the block is known.
 #[derive(Default)]
@@ -194,7 +193,10 @@ fn next_sentence(text: &str, language: &str, complete: bool) -> Option<usize> {
     let mut seen = false;
     for span in sentencex::segment(language, &text[..window]) {
         let blank = span.trim().is_empty();
-        if seen && !blank && !(language == "de" && month_after_number(&text[..end], span)) {
+        // Never directly after a full stop: "1.º" is one word.
+        let glued = text[..end].ends_with('.');
+        if seen && !blank && !glued && !(language == "de" && month_after_number(&text[..end], span))
+        {
             break;
         }
         end += span.len();
@@ -550,8 +552,14 @@ mod tests {
             "Drei Teile:\n\n```\na\n```\n\n```\nb\n```\n| x |\n|---|\n| 1 |\n\n```\nc\n```\n\nEnde.",
             "Am 3. Mai: Treffen. Das Treffen ist am 14. November, danach fahren wir (bis 1. Juni) heim.",
             "Siehe [Quelle][1], [Buch][] und [Heft]. Gut.\n\n[1]: https://example.com\n\nText<br>mit<br/>HTML. Es kostet ca.5 Euro.",
+            "Fue el 1.º de mayo. Es la 2.ª edición del libro. Gut.",
         ];
-        for text in GERMAN.iter().copied().chain(markdown) {
+        for text in GERMAN
+            .iter()
+            .copied()
+            .chain(markdown)
+            .chain(UNPAIRED_MARKS.iter().copied())
+        {
             let whole = sentences(text, "de");
             assert_eq!(
                 whole.concat(),
@@ -564,6 +572,71 @@ mod tests {
                     whole,
                     "{text} in pieces of {size}"
                 );
+            }
+        }
+    }
+
+    const UNPAIRED_MARKS: &[&str] = &[
+        "Der Preis* gilt ab heute. Danach kommt mehr Text in diesem Absatz. Und noch ein Satz folgt.\n\nNeuer Absatz.",
+        "Gut. Das ist ~ungefähr richtig. Danach kommt noch etwas mehr Text. Und ein letzter Satz.",
+        "Es dauert ~5 Minuten. Danach ist alles fertig und bereit. Dann geht es weiter.",
+        "Gut. Das kostet 5 € *pro Monat. Danach kommt noch mehr Text. Und ein letzter Satz.",
+        "Nutze `cargo run. Danach startet der Server sofort neu. Dann ist alles bereit.",
+        "Siehe [1. Danach kommt noch mehr Text hier. Und noch ein letzter Satz.",
+        "Das kostet 2 * 3 Euro. Danach kommt mehr. Nutze snake_case und mein_bericht_final.docx. Ende hier.",
+    ];
+
+    /// Streamed one character at a time, each passage goes out once the first word of the
+    /// next one has arrived, as with any sentence end; a mark without a partner does not hold
+    /// it back.
+    #[test]
+    fn a_mark_without_a_partner_does_not_hold_back_the_voice() {
+        for text in UNPAIRED_MARKS {
+            let mut s = Sentences::new(SpeechLanguage::new("de"));
+            let mut released = Vec::new();
+            for (count, c) in text.chars().enumerate() {
+                released.extend(s.push(&c.to_string()).into_iter().map(|p| (count + 1, p)));
+            }
+            let whole = sentences(text, "de");
+            assert!(released.len() >= whole.len() - 1, "{text}");
+            let mut from = 0;
+            for (index, (count, passage)) in released.iter().enumerate() {
+                assert_eq!(passage, &whole[index]);
+                let Some(next) = released.get(index + 1).map(|(_, next)| next) else {
+                    break;
+                };
+                let word = next.split_whitespace().next().unwrap();
+                let at = from + text[from..].find(word).unwrap() + word.len();
+                assert!(
+                    *count <= text[..at].chars().count() + 1,
+                    "{passage} released at {count} in {text}"
+                );
+                from = at;
+            }
+        }
+    }
+
+    #[test]
+    fn an_ordinal_is_never_cut_after_its_full_stop() {
+        for language in ["es", "de"] {
+            for (text, expected) in [
+                (
+                    "Fue el 1.º de mayo. Gut.",
+                    ["Fue el 1.º de mayo. ", "Gut. "],
+                ),
+                (
+                    "Es la 2.ª edición del libro. Gut.",
+                    ["Es la 2.ª edición del libro. ", "Gut. "],
+                ),
+            ] {
+                assert_eq!(sentences(text, language), expected, "{text} {language}");
+                for size in 1..=20 {
+                    assert_eq!(
+                        in_pieces(text, language, size),
+                        expected,
+                        "{text} {language} in {size}"
+                    );
+                }
             }
         }
     }
