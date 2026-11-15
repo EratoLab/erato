@@ -34,6 +34,8 @@ export interface FakeSlide {
   layout?: string;
   master?: string;
   shapes: FakeShape[];
+  /** Base64 that getImageAsBase64 returns; a small PNG naming the slide by default. */
+  picture?: string;
 }
 
 export interface FakeDeck {
@@ -45,6 +47,10 @@ export interface FakeDeck {
   selectionFails?: boolean;
   slideWidth?: number;
   slideHeight?: number;
+  /** getImageAsBase64 fails its batch. */
+  pictureFails?: boolean;
+  /** A batch that asks for a slide picture settles only on `host.releaseHang()`. */
+  pictureHangs?: boolean;
 }
 
 const TEXT_TYPES = new Set([
@@ -61,11 +67,22 @@ export interface FakePowerPointHost {
   syncs: number;
   failedSyncs: number;
   runs: number;
+  pictureRequests: { slideId: string; width?: number; height?: number }[];
+  /** Lets a hung sync go on as if PowerPoint had answered late. */
+  releaseHang: () => void;
 }
 
 interface State {
   pending: (() => void)[];
   poison: Error | null;
+  hang: boolean;
+}
+
+const PNG_SIGNATURE = "\x89PNG\r\n\x1a\n";
+
+/** Base64 of the PNG signature followed by `label`: enough for a check of the format. */
+export function fakePngBase64(label: string): string {
+  return btoa(PNG_SIGNATURE + label);
 }
 
 type Fake = Record<string, unknown> & {
@@ -159,8 +176,10 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
     syncs: 0,
     failedSyncs: 0,
     runs: 0,
+    pictureRequests: [],
+    releaseHang: () => {},
   };
-  const state: State = { pending: [], poison: null };
+  const state: State = { pending: [], poison: null, hang: false };
   const fail = (message: string) => {
     state.poison ??= hostError(message);
   };
@@ -280,6 +299,24 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
           name: () => slide.master ?? "Office Theme",
         }),
         shapes,
+        getImageAsBase64: (options?: { width?: number; height?: number }) => {
+          host.pictureRequests.push({ slideId: slide.id, ...options });
+          if (deck.pictureFails) fail("slide picture failed");
+          if (deck.pictureHangs) state.hang = true;
+          let ready = false;
+          state.pending.push(() => {
+            ready = true;
+          });
+          return {
+            get value() {
+              if (!ready)
+                throw new Error(
+                  "PropertyNotLoaded: value was read before sync",
+                );
+              return slide.picture ?? fakePngBase64(slide.id);
+            },
+          };
+        },
       },
     );
   };
@@ -316,8 +353,17 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
 
   const context = {
     presentation: {} as Record<string, unknown>,
-    sync: () => {
+    sync: (): Promise<void> => {
       host.syncs += 1;
+      if (state.hang) {
+        state.hang = false;
+        return new Promise<void>((resolve, reject) => {
+          host.releaseHang = () => {
+            host.syncs -= 1;
+            context.sync().then(resolve, reject);
+          };
+        });
+      }
       const poison = state.poison;
       const pending = state.pending;
       state.poison = null;
@@ -336,6 +382,7 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
       host.runs += 1;
       state.poison = null;
       state.pending = [];
+      state.hang = false;
       context.presentation = {
         slides: presentation(),
         getSelectedSlides: () => {

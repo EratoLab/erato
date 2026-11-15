@@ -1,5 +1,10 @@
+import {
+  useChatInputControls,
+  useLiveAnnouncement,
+} from "@erato/frontend/library";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { PowerPointComposerContext } from "./PowerPointComposerContext";
 import { powerpointPresentationChip } from "./powerpointPresentationChip";
 import { AddinChatInputCore } from "../../core/AddinChatInputCore";
 import {
@@ -8,6 +13,7 @@ import {
 } from "../../core/clientActions/useAvailableActionFacets";
 import { useConversationKey } from "../../core/selection/useConversationKey";
 import { powerpointInclusionStore } from "../hooks/powerpointInclusionStore";
+import { usePowerPointSlidePictures } from "../hooks/usePowerPointSlidePictures";
 import { registerPowerPointClientTools } from "../utils/powerpointClientTools";
 import {
   currentPowerPointPresentationName,
@@ -20,12 +26,14 @@ import {
   logPowerPointReadSupport,
 } from "../utils/powerpointReadSupport";
 
+import type { PowerPointComposerContextValue } from "./PowerPointComposerContext";
 import type {
   AddinChatInputRenderProps,
   AddinSendPreparation,
 } from "../../core/AddinChatCore";
 import type { AddinChatInputCoreProps } from "../../core/AddinChatInputCore";
 import type { PowerPointReadSupport } from "../utils/powerpointReadSupport";
+import type { FileUploadItem } from "@erato/frontend/library";
 
 /** One deck per pane: the pane closes with its presentation. */
 const PRESENTATION_IDENTITY = "powerpoint.presentation";
@@ -69,9 +77,33 @@ export function PowerPointChatInput({
     [support],
   );
 
+  const controls = useChatInputControls();
+  const [announcement, announce] = useLiveAnnouncement();
+  const [stagedCount, setStagedCount] = useState(0);
+  const onStagedFilesChange = useCallback(
+    (files: FileUploadItem[]) => setStagedCount(files.length),
+    [],
+  );
+  const {
+    offer: slidePicture,
+    notice,
+    clearNotice,
+  } = usePowerPointSlidePictures({
+    enabled: support.slidePicture && readable && included,
+    modelId: chatInputProps.controlledSelectedModel?.chat_provider_id,
+    conversationKey,
+    uploadFiles: chatInputProps.uploadFiles,
+    addUploadedFiles: controls.addUploadedFiles,
+    stagedCount,
+    maxFiles: chatInputProps.maxFiles,
+    announce,
+  });
+
   const keyRef = useRef(conversationKey);
   keyRef.current = conversationKey;
-  const locked = !!chatInputProps.disabled;
+  // Held while a slide picture renders and uploads, so a Send cannot leave without it.
+  const composerDisabled = !!chatInputProps.disabled || slidePicture.busy;
+  const locked = composerDisabled;
   const lockedRef = useRef(locked);
   lockedRef.current = locked;
   const setIncluded = useCallback((value: boolean) => {
@@ -81,6 +113,9 @@ export function PowerPointChatInput({
   const include = useCallback(() => setIncluded(true), [setIncluded]);
   const exclude = useCallback(() => setIncluded(false), [setIncluded]);
 
+  const attachSlidePicture = slidePicture.available
+    ? slidePicture.attach
+    : undefined;
   const contextItems = useMemo(
     () =>
       readable
@@ -92,10 +127,24 @@ export function PowerPointChatInput({
               locked,
               onInclude: include,
               onExclude: exclude,
+              onAttachSlidePicture: attachSlidePicture,
             }),
           ]
         : [],
-    [readable, presentationName, included, support, locked, include, exclude],
+    [
+      readable,
+      presentationName,
+      included,
+      support,
+      locked,
+      include,
+      exclude,
+      attachSlidePicture,
+    ],
+  );
+  const composer = useMemo<PowerPointComposerContextValue>(
+    () => ({ slidePicture }),
+    [slidePicture],
   );
 
   const { onSendMessage } = chatInputProps;
@@ -113,6 +162,7 @@ export function PowerPointChatInput({
       disabledMcpServerIds,
       disabledMcpTools,
     ) => {
+      clearNotice();
       const sendsPresentation = readEnabledRef.current;
       lastSendIncludedRef.current = sendsPresentation;
       const prepare: AddinSendPreparation | undefined = sendsPresentation
@@ -147,14 +197,26 @@ export function PowerPointChatInput({
         prepare,
       );
     },
-    [onSendMessage, support],
+    [onSendMessage, support, clearNotice],
   );
 
   return (
-    <AddinChatInputCore
-      {...chatInputProps}
-      contextItems={contextItems}
-      onSendMessage={handleSendMessage}
-    />
+    <PowerPointComposerContext.Provider value={composer}>
+      <AddinChatInputCore
+        {...chatInputProps}
+        disabled={composerDisabled}
+        contextItems={contextItems}
+        composerNotice={notice}
+        onStagedFilesChange={onStagedFilesChange}
+        onSendMessage={handleSendMessage}
+      />
+      <div
+        className="sr-only"
+        aria-live="polite"
+        data-testid="powerpoint-composer-announcer"
+      >
+        {announcement}
+      </div>
+    </PowerPointComposerContext.Provider>
   );
 }

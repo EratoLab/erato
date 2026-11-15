@@ -48,6 +48,8 @@ export interface PowerPointReadSupport {
   bulletLevels: boolean;
   /** presentation.pageSetup.slideWidth and slideHeight (1.10). */
   slideSize: boolean;
+  /** slide.getImageAsBase64, the picture a user attaches to a message (1.8). */
+  slidePicture: boolean;
 }
 
 const has = (
@@ -90,6 +92,7 @@ export function powerpointReadSupport(
     safeTextFrame: full,
     bulletLevels: full,
     slideSize: full,
+    slidePicture: full,
   };
 }
 

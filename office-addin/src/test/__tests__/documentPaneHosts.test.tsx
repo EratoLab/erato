@@ -1,4 +1,3 @@
-import { componentRegistry } from "@erato/frontend/library";
 import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -149,6 +148,8 @@ describe.each([
     App: ExcelApp,
     storageKey: EXCEL_CURRENT_CHAT_KEY,
     otherKey: POWERPOINT_CURRENT_CHAT_KEY,
+    loadRoute: () => import("../../excel/ExcelApp"),
+    registryKeys: [],
   },
   {
     host: "PowerPoint",
@@ -156,10 +157,13 @@ describe.each([
     App: PowerPointApp,
     storageKey: POWERPOINT_CURRENT_CHAT_KEY,
     otherKey: EXCEL_CURRENT_CHAT_KEY,
+    loadRoute: () => import("../../powerpoint/PowerPointApp"),
+    // The "+" menu's slide picture row.
+    registryKeys: ["ChatAddMenuExtraContent"],
   },
 ])(
   "$host task pane composition",
-  ({ host, platform, App, storageKey, otherKey }) => {
+  ({ host, platform, App, storageKey, otherKey, loadRoute, registryKeys }) => {
     beforeEach(() => {
       i18n.activate("en");
       spies.callLog.length = 0;
@@ -216,10 +220,15 @@ describe.each([
       );
     });
 
-    it("contributes nothing to the component registry", async () => {
-      await renderPane();
+    // Only the matched route module is evaluated in a pane, so each host is loaded on its own here.
+    it("contributes only its own entries to the component registry", async () => {
+      const { componentRegistry } = await import("@erato/frontend/library");
+      const registry = componentRegistry as unknown as Record<string, unknown>;
+      for (const key of Object.keys(registry)) delete registry[key];
+      vi.resetModules();
+      await loadRoute();
 
-      expect(Object.keys(componentRegistry)).toEqual([]);
+      expect(Object.keys(registry)).toEqual(registryKeys);
     });
 
     it("keeps its chat selection under its own key", async () => {
