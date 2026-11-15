@@ -9,6 +9,11 @@ import {
   examplePlan,
   readySnapshot,
 } from "../../../test/mocks/word/authoringFixtures";
+import {
+  captureWordAuthoringSnapshot,
+  compileWordDocumentPlan,
+  verifyWordPlanOutput,
+} from "../wordDocumentXml";
 
 describe("structural plan ownership and schema", () => {
   it("supports reordered nonadjacent merges, splits and explicit removal", () => {
@@ -95,4 +100,124 @@ describe("structural plan ownership and schema", () => {
     });
     expect(validateWordDocumentPlan(p, s)).toBe("invalid");
   });
+});
+
+describe("new blocks without ids (ERMAIN-1194)", () => {
+  // The production slip: every inserted block had only type, text, level, list and ordered.
+  const unnamed = () => [
+    { type: "heading", level: 2, text: "Next steps" },
+    {
+      type: "list-item",
+      text: "Call the vendor",
+      level: 0,
+      list: "steps",
+      ordered: true,
+    },
+    {
+      type: "list-item",
+      text: "Book the room",
+      level: 0,
+      list: "steps",
+      ordered: true,
+    },
+    {
+      type: "content-control",
+      control: {
+        lock: "none",
+        appearance: "bounding-box",
+        children: [{ type: "paragraph", text: "Inside" }],
+      },
+    },
+    {
+      type: "bookmark",
+      bookmark: {
+        name: "Marked",
+        children: [{ type: "paragraph", text: "Held" }],
+      },
+    },
+  ];
+  const ids = (value: unknown) =>
+    [...JSON.stringify(value).matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]);
+
+  it("get unique ids that every parse of the same arguments repeats", () => {
+    const s = readySnapshot();
+    const p = examplePlan(s.token);
+    const content = JSON.stringify({
+      ...p,
+      entries: [...p.entries, { kind: "insert", blocks: unnamed() }],
+    });
+    const plan = parseWordDocumentPlan(content)!;
+    expect(plan).not.toBeNull();
+    expect(validateWordDocumentPlan(plan, s)).toBeNull();
+    expect(parseWordDocumentPlan(content)).toEqual(plan);
+    expect(ids(plan.entries)).toEqual([
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "new_block_1",
+      "new_block_2",
+      "new_block_3",
+      "new_block_4",
+      "new_block_5",
+      "new_block_6",
+      "new_block_7",
+    ]);
+    const after = captureWordAuthoringSnapshot(
+      compileWordDocumentPlan(plan, s),
+      s.identity,
+      "Off",
+      s.fullDocument,
+    );
+    expect(verifyWordPlanOutput(plan, s, after)).toBe(true);
+    expect(after.blocks.map((b) => b.text)).toEqual(
+      expect.arrayContaining([
+        "Next steps",
+        "Call the vendor",
+        "Book the room",
+      ]),
+    );
+  });
+
+  it("skip every id the plan already uses", () => {
+    const s = readySnapshot();
+    const p = examplePlan(s.token);
+    p.entries[0] = {
+      kind: "insert",
+      contextRefs: ["b4"],
+      blocks: [
+        {
+          id: "new_block_1",
+          type: "heading",
+          level: 1,
+          text: "Recommendation",
+        },
+      ],
+    };
+    const plan = parseWordDocumentPlan(
+      JSON.stringify({
+        ...p,
+        entries: [
+          ...p.entries,
+          { kind: "insert", blocks: [{ type: "paragraph", text: "Added" }] },
+        ],
+      }),
+    )!;
+    expect(ids(plan.entries).slice(-2)).toEqual(["n4", "new_block_2"]);
+    expect(validateWordDocumentPlan(plan, s)).toBeNull();
+  });
+
+  it.each([7, "", "two words", null])(
+    "still reject an id that is given but not an identifier: %j",
+    (id) => {
+      const p = examplePlan("snap");
+      const raw = {
+        ...p,
+        entries: [
+          { kind: "insert", blocks: [{ id, type: "paragraph", text: "A" }] },
+        ],
+      };
+      expect(parseWordDocumentPlan(JSON.stringify(raw))).toBeNull();
+    },
+  );
 });

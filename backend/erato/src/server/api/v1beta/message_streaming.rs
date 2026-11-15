@@ -11539,7 +11539,13 @@ async fn stream_generate_chat_completion<'a>(
                 }
             }
         }
-        if let Some(stream_end) = stream_end {
+        if let Some(mut stream_end) = stream_end {
+            if let Some(content) = stream_end.captured_content.as_mut() {
+                crate::services::client_tools::decode_stringified_submission_arguments(
+                    content,
+                    &offered_client_tools,
+                );
+            }
             if let Some(elapsed) = first_response_elapsed {
                 report_chat_provider_time_to_first_token(chat_provider_metric_label, elapsed);
             }

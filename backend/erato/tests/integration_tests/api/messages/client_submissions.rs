@@ -715,6 +715,7 @@ struct ScenarioOptions {
     check_metadata: bool,
     withdraw_submission_on_approval: bool,
     label: Option<erato::config::ClientToolLabelConfig>,
+    parameters: Option<Value>,
 }
 
 impl Default for ScenarioOptions {
@@ -732,6 +733,7 @@ impl Default for ScenarioOptions {
             check_metadata: false,
             withdraw_submission_on_approval: false,
             label: None,
+            parameters: None,
         }
     }
 }
@@ -755,6 +757,7 @@ async fn run_scenario(
         check_metadata,
         withdraw_submission_on_approval,
         label,
+        parameters,
     } = options;
     let recorder = RequestBodyRecorder::new();
     let mut mocks = MockSet::new();
@@ -846,7 +849,9 @@ async fn run_scenario(
     config.client_tools.tools.insert("draft".into(), ClientToolConfig {
         name: "submit_draft".into(),
         description: "Validate and stage a draft for review. Call alone after reading.".into(),
-        parameters: json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}).to_string(),
+        parameters: parameters
+            .unwrap_or_else(|| json!({"type":"object","properties":{"title":{"type":"string"}},"required":["title"],"additionalProperties":false}))
+            .to_string(),
         timeout_ms: Some(timeout_ms),
         submission: (max_attempts > 0).then_some(ClientToolSubmissionConfig { max_attempts, max_recovery_reads: recovery_reads, recovery_read_tools: vec!["client/read_context".into()], ..Default::default() }),
         label,
@@ -1157,6 +1162,101 @@ async fn schema_then_parser_repair_stops_after_acceptance(pool: Pool<Postgres>) 
         events
             .iter()
             .any(|event| event["output"]["submission"]["status"] == "accepted")
+    );
+}
+
+fn list_parameters() -> Value {
+    json!({"type":"object","properties":{
+        "title":{"type":"string"},
+        "entries":{"type":"array","items":{"type":"object","properties":{
+            "kind":{"type":"string"},
+            "source":{"type":"array","items":{"type":"string"}}
+        },"required":["kind","source"],"additionalProperties":false}}
+    },"required":["title","entries"],"additionalProperties":false})
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_list_sent_as_a_json_string_is_decoded_before_validation(pool: Pool<Postgres>) {
+    let entries = json!([{"kind":"keep","source":["b1","b2"]}]);
+    let (requests, events) = run_scenario(
+        pool,
+        vec![ModelStep::Tools(vec![(
+            "call_stringified",
+            "submit_draft",
+            json!({"title":"[\"Draft\"]","entries":entries.to_string()}),
+        )])],
+        vec![json!({"result":{"draft_id":"draft-1"}})],
+        ScenarioOptions {
+            parameters: Some(list_parameters()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 1, "accepted on the first attempt");
+    // A string field that looks like JSON stays a string.
+    let expected = json!({"title":"[\"Draft\"]","entries":entries});
+    let call = events
+        .iter()
+        .find(|event| event["message_type"] == "client_tool_call")
+        .unwrap();
+    assert_eq!(call["input"], expected);
+    let row = completed_tool_rows(&events)
+        .iter()
+        .find(|part| part["content_type"] == "tool_use")
+        .unwrap();
+    assert_eq!(row["input"], expected);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_decoded_list_is_still_validated_and_replayed_decoded(pool: Pool<Postgres>) {
+    let invalid = json!([{"kind":"keep"}]);
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            ModelStep::Tools(vec![(
+                "call_invalid",
+                "submit_draft",
+                json!({"title":"Draft","entries":invalid.to_string()}),
+            )]),
+            ModelStep::Tools(vec![(
+                "call_valid",
+                "submit_draft",
+                json!({"title":"Draft","entries":[{"kind":"keep","source":["b1"]}]}),
+            )]),
+        ],
+        vec![json!({"result":{"draft_id":"draft-1"}})],
+        ScenarioOptions {
+            parameters: Some(list_parameters()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    let replay = requests[1]["messages"].as_array().unwrap();
+    let arguments = replay
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .unwrap()["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(arguments).unwrap()["entries"],
+        invalid
+    );
+    let rejection = replay
+        .iter()
+        .find(|message| message["role"] == "tool")
+        .unwrap()["content"]
+        .to_string();
+    assert!(rejection.contains("/entries/0"), "{rejection}");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["message_type"] == "client_tool_call")
+            .count(),
+        1,
+        "the invalid list never reaches the client"
     );
 }
 

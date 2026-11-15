@@ -219,4 +219,91 @@ describe("note anchors count in the validator's text view (F7)", () => {
       ),
     ).toBe("Ce§ll");
   });
+
+  it.each(["x9", "new_block_1"])(
+    "still refuses an anchor to an id no block has, also when new blocks omit theirs: %s",
+    (anchor) => {
+      const snapshot = snapshotOf(BLOCKS.hidden);
+      const refs = snapshot.blocks.map((b) => b.ref);
+      const plan = notePlan(snapshot, { block: anchor }, [
+        { kind: "keep", source: [refs[0]] },
+        {
+          kind: "replace",
+          source: [refs[1]],
+          blocks: [{ type: "paragraph", text: "New text" } as never],
+        },
+        { kind: "keep", source: [refs[2]] },
+      ]);
+      const parsed = parseWordDocumentPlan(JSON.stringify(plan))!;
+      expect(parsed).not.toBeNull();
+      const issues: WordPlanDiagnostics = [];
+      expect(validateWordDocumentPlan(parsed, snapshot, issues)).toBe(
+        "invalid",
+      );
+      expect(issues[0]).toMatchObject({
+        path: "/stories/0/anchor/block",
+        code: "anchor-reference",
+      });
+      expect(issues[0].message).toContain(JSON.stringify(anchor));
+      expect(issues[0].message).toContain("Give the anchored block an id");
+      // An id the plan names is never handed to a block without one.
+      const entry = parsed.entries[1];
+      expect(entry.kind === "replace" && entry.blocks[0].id).toBe(
+        anchor === "new_block_1" ? "new_block_2" : "new_block_1",
+      );
+    },
+  );
+
+  it("fills ids for table cell and story blocks that omit theirs", () => {
+    const snapshot = snapshotOf(BLOCKS.hidden);
+    const refs = snapshot.blocks.map((b) => b.ref);
+    const plan = notePlan(snapshot, { block: refs[0] }, [
+      { kind: "keep", source: [refs[0]] },
+      {
+        kind: "replace",
+        source: [refs[1]],
+        blocks: [
+          {
+            type: "table",
+            text: "",
+            rows: [
+              {
+                cells: [
+                  { blocks: [{ type: "paragraph", text: "Cell" }] },
+                  {
+                    blocks: [
+                      {
+                        type: "list-item",
+                        text: "Item",
+                        list: "l",
+                        level: 0,
+                        ordered: false,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          } as never,
+        ],
+      },
+      { kind: "keep", source: [refs[2]] },
+    ]);
+    plan.stories![0].blocks = [{ type: "paragraph", text: "A note." } as never];
+    const parsed = parseWordDocumentPlan(JSON.stringify(plan))!;
+    expect(parsed).not.toBeNull();
+    const ids = [
+      ...JSON.stringify(parsed).matchAll(/"id":"(new_block_\d+)"/g),
+    ].map((m) => m[1]);
+    expect(ids).toEqual([
+      "new_block_1",
+      "new_block_2",
+      "new_block_3",
+      "new_block_4",
+    ]);
+    expect(validateWordDocumentPlan(parsed, snapshot)).toBeNull();
+    const doc = parseWordXml(compileWordDocumentPlan(parsed, snapshot));
+    expect(doc.getElementsByTagNameNS(W, "tbl")).toHaveLength(1);
+    expect(doc.getElementsByTagNameNS(W, "footnoteReference")).toHaveLength(1);
+  });
 });
