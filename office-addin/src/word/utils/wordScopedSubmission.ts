@@ -4,6 +4,7 @@ import {
   MAX_WORD_SCOPE_BYTES,
   canonicalWordPlan,
   wordReadScope,
+  wordSourceReadRefs,
   WordTableCellSubmissionError,
 } from "@erato/frontend/word-review";
 
@@ -14,27 +15,67 @@ import {
   WORD_SCOPED_SIZE,
   WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN,
 } from "./wordAuthoringContract";
+import { wordTargetInventory } from "./wordTargetRead";
 
 import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanBlock,
+  WordPlanDiagnostics,
   WordPlanEntry,
+  WordScopeTarget,
   WordSectionPlan,
   WordStoryChange,
 } from "@erato/frontend/word-review";
+
+export const WORD_SCOPED_TOKEN_MESSAGE =
+  "Use an active readToken from this request: a target read's token or the final token of a complete read.";
+
+/** Carries every diagnostic of the expanded plan, not only the first. */
+export class WordScopedSubmissionError extends WordTableCellSubmissionError {
+  constructor(
+    path: string,
+    code: string,
+    message: string,
+    readonly issues?: WordPlanDiagnostics,
+  ) {
+    super(path, code, message);
+  }
+}
 
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const only = (v: Record<string, unknown>, keys: string[]) =>
   Object.keys(v).every((k) => keys.includes(k));
+/** A change the model can correct without reading again. */
 const fail = (message: string): never => {
-  throw new WordTableCellSubmissionError(
+  throw new WordScopedSubmissionError("/scoped_edit", "scoped-shape", message);
+};
+/** Only a token, ref, anchor, object, story or section the read did not return
+ * needs a new read; its code makes the model read again. */
+const unread = (message: string): never => {
+  throw new WordScopedSubmissionError(
     "/scoped_edit",
     "outside-read-scope",
     message,
   );
 };
+
+/** The final token of a finished complete read covers everything that read returned. */
+function completeReadTargets(
+  snapshot: WordAuthoringSnapshot,
+  token: unknown,
+): WordScopeTarget[] | undefined {
+  return typeof token === "string" &&
+    token === snapshot.readToken &&
+    !snapshot.revoked &&
+    !snapshot.used &&
+    !snapshot.issue &&
+    !snapshot.completeReadIssue &&
+    wordSourceReadRefs(snapshot).every((ref) => snapshot.read.has(ref))
+    ? wordTargetInventory(snapshot)
+    : undefined;
+}
 
 /** Materialize a sparse change set. The caller never supplies keep entries or a
  * complete output document. Source ownership and all non-target keeps are host-owned. */
@@ -42,9 +83,13 @@ export function expandWordScopedSubmission(
   input: Record<string, unknown>,
   snapshot: WordAuthoringSnapshot,
 ): WordDocumentPlan {
-  const scope = wordReadScope(snapshot, input.readToken);
-  if (input.snapshot !== snapshot.token || scope?.kind !== "objects")
-    return fail("Use an active object-scoped readToken from this request.");
+  const read = wordReadScope(snapshot, input.readToken);
+  const scope = read?.kind === "objects" ? read : undefined;
+  const targets =
+    scope?.targets ??
+    (read ? undefined : completeReadTargets(snapshot, input.readToken));
+  if (input.snapshot !== snapshot.token || !targets)
+    return unread(WORD_SCOPED_TOKEN_MESSAGE);
   if (
     new TextEncoder().encode(JSON.stringify(input)).length >
     MAX_WORD_SCOPE_BYTES
@@ -75,20 +120,16 @@ export function expandWordScopedSubmission(
         `Each change collection must contain at most ${MAX_WORD_SCOPED_CHANGES} changes. A change's blocks have no count limit, so keep a long list or passage in one change.`,
       );
   const bodyRefs = new Set(
-    scope.targets
-      .filter((t) => t.bodyRef && !t.objectTarget)
-      .map((t) => t.bodyRef!),
+    targets.filter((t) => t.bodyRef && !t.objectTarget).map((t) => t.bodyRef!),
   );
   const storyIds = new Set(
-    scope.targets
-      .filter((t) => t.storyId && !t.objectTarget)
-      .map((t) => t.storyId!),
+    targets.filter((t) => t.storyId && !t.objectTarget).map((t) => t.storyId!),
   );
   const sectionIds = new Set(
-    scope.targets.filter((t) => t.sectionId).map((t) => t.sectionId!),
+    targets.filter((t) => t.sectionId).map((t) => t.sectionId!),
   );
   const readableSources = new Set(
-    scope.targets
+    targets
       .flatMap((t) => [
         t.objectTarget ? undefined : t.bodyRef,
         !t.objectTarget && t.storyId ? `story_${t.storyId}` : undefined,
@@ -115,11 +156,14 @@ export function expandWordScopedSubmission(
     }
     if (!object(v)) return;
     for (const [k, value] of Object.entries(v)) {
+      if (k === "sourceRef" && typeof value !== "string")
+        fail("sourceRef must be a returned source ref.");
       if (
         k === "sourceRef" &&
-        (typeof value !== "string" || !readableSources.has(value))
+        typeof value === "string" &&
+        !readableSources.has(value)
       )
-        fail("A sourceRef outside the read scope cannot be reused.");
+        unread("A sourceRef outside the read scope cannot be reused.");
       if (
         k === "assetRef" &&
         !(snapshot.assets ?? []).some((a) => a.ref === value)
@@ -144,12 +188,14 @@ export function expandWordScopedSubmission(
     if (
       !Array.isArray(refs) ||
       !refs.length ||
-      refs.some(
-        (r) => typeof r !== "string" || !bodyRefs.has(r) || consumed.has(r),
-      ) ||
+      refs.some((r) => typeof r !== "string" || consumed.has(r)) ||
       new Set(refs).size !== refs.length
     )
       return fail(
+        "Each changed body source must be explicitly read and consumed once.",
+      );
+    if (refs.some((r) => !bodyRefs.has(r as string)))
+      return unread(
         "Each changed body source must be explicitly read and consumed once.",
       );
     const start = originalRefs.indexOf(refs[0]);
@@ -200,12 +246,12 @@ export function expandWordScopedSubmission(
         return fail("Deletion requires a bounded reason.");
       deleted.push({ source: refs, reason: raw.reason });
     } else {
-      if (
-        typeof raw.anchor !== "string" ||
-        !bodyRefs.has(raw.anchor) ||
-        refs.includes(raw.anchor)
-      )
+      if (typeof raw.anchor !== "string" || refs.includes(raw.anchor))
         return fail(
+          "Read the exact insertion/destination anchor as well as the moved sources.",
+        );
+      if (!bodyRefs.has(raw.anchor))
+        return unread(
           "Read the exact insertion/destination anchor as well as the moved sources.",
         );
       anchors.add(raw.anchor);
@@ -238,11 +284,12 @@ export function expandWordScopedSubmission(
       !object(raw.edit)
     )
       return fail("Object change requires ref and edit.");
-    const target = scope.targets.find(
-      (t) => t.ref === raw.ref && t.objectTarget,
-    );
+    const target = targets.find((t) => t.ref === raw.ref && t.objectTarget);
+    if (!target)
+      return unread(
+        "Read each exact object and change it once; kind and target are host-owned.",
+      );
     if (
-      !target ||
       seenObjects.has(target.ref) ||
       !only(raw.edit, [
         "operation",
@@ -343,7 +390,11 @@ export function expandWordScopedSubmission(
     )
       return fail("Story changes must be unique.");
     const existing = snapshot.stories?.find((s) => s.id === raw.id);
-    if (existing && (!storyIds.has(existing.id) || raw.type !== existing.type))
+    if (existing && !storyIds.has(existing.id))
+      return unread(
+        "Read the complete selected story before replacing or deleting it.",
+      );
+    if (existing && raw.type !== existing.type)
       return fail(
         "Read the complete selected story before replacing or deleting it.",
       );
@@ -353,10 +404,11 @@ export function expandWordScopedSubmission(
       if (
         !object(raw.anchor) ||
         typeof raw.anchor.block !== "string" ||
-        !bodyRefs.has(raw.anchor.block) ||
         consumed.has(raw.anchor.block)
       )
         return fail("Read and retain a note/comment's destination anchor.");
+      if (!bodyRefs.has(raw.anchor.block))
+        return unread("Read and retain a note/comment's destination anchor.");
     } else if (!existing && !["header", "footer"].includes(String(raw.type)))
       return fail("A new note/comment requires a read body anchor.");
     if (
@@ -398,7 +450,7 @@ export function expandWordScopedSubmission(
       seen.add(raw.id);
       const i = sections.findIndex((s) => s.id === raw.id);
       if (i >= 0 && !sectionIds.has(raw.id))
-        return fail("Read a section before changing it.");
+        return unread("Read a section before changing it.");
       if (
         i < 0 &&
         (raw.delete !== undefined ||
@@ -408,11 +460,11 @@ export function expandWordScopedSubmission(
       if (
         raw.after !== undefined &&
         raw.after !== null &&
-        (typeof raw.after !== "string" ||
-          !bodyRefs.has(raw.after) ||
-          consumed.has(raw.after))
+        (typeof raw.after !== "string" || consumed.has(raw.after))
       )
         return fail("Read and retain the destination section boundary.");
+      if (typeof raw.after === "string" && !bodyRefs.has(raw.after))
+        return unread("Read and retain the destination section boundary.");
       for (const [key, type] of [
         ["headers", "header"],
         ["footers", "footer"],
@@ -427,11 +479,11 @@ export function expandWordScopedSubmission(
             !stories.some(
               (s) => s.id === id && s.type === type && s.kind === "upsert",
             ) &&
-            !scope.targets.some(
+            !targets.some(
               (t) => t.storyId === id && !t.objectTarget && t.kind === type,
             )
           )
-            return fail(
+            return unread(
               "Read the header/footer before assigning it to a section.",
             );
         }
@@ -441,7 +493,7 @@ export function expandWordScopedSubmission(
           return fail("Cannot remove the only section.");
         const neighbor = sections[i + 1] ?? sections[i - 1];
         if (!sectionIds.has(neighbor.id))
-          return fail("Read both sections affected by removing a boundary.");
+          return unread("Read both sections affected by removing a boundary.");
         sections.splice(i, 1);
         if (i === sections.length) delete sections[i - 1].after;
       } else {
@@ -467,7 +519,7 @@ export function expandWordScopedSubmission(
                     originalRefs.indexOf(s.after) >= end,
                 );
           if (!container || !sectionIds.has(container.id))
-            return fail("Read the containing section before splitting it.");
+            return unread("Read the containing section before splitting it.");
           sections.push(change);
         }
       }
@@ -500,10 +552,22 @@ export function expandWordScopedSubmission(
     ...(stories.length ? { stories } : {}),
     ...(sections ? { sections } : {}),
   };
-  const parsed = parseWordDocumentPlan(JSON.stringify(value));
-  if (!parsed)
-    return fail("The scoped change does not satisfy the document contract.");
+  const issues: WordPlanDiagnostics = [];
+  const parsed = parseWordDocumentPlan(JSON.stringify(value), issues);
+  if (!parsed) {
+    const [first] = issues;
+    throw new WordScopedSubmissionError(
+      first?.path ?? "/scoped_edit",
+      first?.code ?? "scoped-shape",
+      first?.message ??
+        "The scoped change does not satisfy the document contract.",
+      issues,
+    );
+  }
   const plan = normalizeWordDocumentPlan(parsed, snapshot);
+  // After a complete read the expanded plan has a full plan's rights; the
+  // backend's attempt budget still applies.
+  if (!scope) return plan;
   if (scope.plans.size >= 3 && !scope.plans.has(canonicalWordPlan(plan)))
     return fail("Scoped proposal budget exhausted.");
   scope.plans.add(canonicalWordPlan(plan));
