@@ -1,5 +1,14 @@
 import * as CFB from "cfb";
 
+import {
+  officePartPath as wordPartPath,
+  officeRelationshipTarget as wordRelationshipTarget,
+  officeXmlText as wordXmlText,
+  parseOfficeXml as parseWordXml,
+} from "../../utils/officeXml";
+
+export { parseWordXml, wordPartPath, wordRelationshipTarget, wordXmlText };
+
 export type WordDocumentParts = ReadonlyMap<string, Uint8Array>;
 export const MAX_WORD_DOCX_BYTES = 4 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 64 * 1024 * 1024;
@@ -12,35 +21,6 @@ export const PACKAGE_REL_NS =
 const CONTENT_TYPES_NS =
   "http://schemas.openxmlformats.org/package/2006/content-types";
 const encoder = new TextEncoder();
-
-export function wordPartPath(path: unknown): path is string {
-  return (
-    typeof path === "string" &&
-    path.length > 0 &&
-    path.length <= 512 &&
-    !/[\\\s\u0000-\u001f?#]/.test(path) &&
-    !path.split("/").some((part) => !part || part === "." || part === "..")
-  );
-}
-
-export function parseWordXml(text: string): Document {
-  if (/<!DOCTYPE|<!ENTITY/i.test(text))
-    throw new Error("XML declarations with entities are not supported.");
-  const doc = new DOMParser().parseFromString(text, "application/xml");
-  if (!doc.documentElement || doc.getElementsByTagName("parsererror").length)
-    throw new Error("The proposed XML is incomplete or malformed.");
-  return doc;
-}
-
-export function wordXmlText(bytes: Uint8Array): string {
-  const utf16 =
-    bytes[0] === 0xff && bytes[1] === 0xfe
-      ? "utf-16le"
-      : bytes[0] === 0xfe && bytes[1] === 0xff
-        ? "utf-16be"
-        : "utf-8";
-  return new TextDecoder(utf16, { fatal: true }).decode(bytes);
-}
 
 export class WordDocumentTooLargeError extends Error {
   constructor(message: string) {
@@ -253,17 +233,6 @@ export function wordRelationshipOwner(path: string): string {
   const match = /^(.*\/)?_rels\/([^/]+)\.rels$/.exec(path);
   if (!match) throw new Error("Invalid relationship part path.");
   return `${match[1] ?? ""}${match[2]}`;
-}
-
-export function wordRelationshipTarget(owner: string, target: string): string {
-  const result = target.startsWith("/") ? [] : owner.split("/").slice(0, -1);
-  for (const segment of target.replace(/^\//, "").split("/")) {
-    if (segment === "..") {
-      if (!result.length) throw new Error("A relationship leaves the package.");
-      result.pop();
-    } else if (segment && segment !== ".") result.push(segment);
-  }
-  return result.join("/");
 }
 
 export function validateWordPackage(parts: WordDocumentParts): void {

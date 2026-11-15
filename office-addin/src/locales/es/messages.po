@@ -1417,13 +1417,28 @@ msgstr "Con esta versión de PowerPoint, Erato solo puede leer cuadros de texto 
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "Lee texto, tablas, formas dentro de grupos, notas del orador, datos de gráficos y texto de SmartArt. Esta versión de PowerPoint no le indica qué forma es el título ni cuáles son los niveles de viñetas."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.full"
 msgstr "Lee los títulos de las diapositivas, el texto con niveles de viñeta, las tablas, las formas dentro de grupos y el texto alternativo."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "Lee títulos de diapositivas, texto con niveles de viñetas, tablas, formas dentro de grupos, texto alternativo, notas del orador, datos de gráficos y texto de SmartArt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.never"
 msgstr "No se pueden leer las notas del orador, los comentarios, los datos de gráficos ni el texto de SmartArt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "No se pueden leer los comentarios ni las animaciones."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx

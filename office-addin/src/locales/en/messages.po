@@ -1417,13 +1417,28 @@ msgstr "This PowerPoint version lets Erato read text boxes and their positions o
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "It reads text, tables, shapes inside groups, speaker notes, chart data and SmartArt text. This PowerPoint version doesn't tell it which shape is the title or what the bullet levels are."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.full"
 msgstr "It reads slide titles, text with bullet levels, tables, shapes inside groups and alt text."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "It reads slide titles, text with bullet levels, tables, shapes inside groups, alt text, speaker notes, chart data and SmartArt text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.never"
 msgstr "Speaker notes, comments, chart data and SmartArt text can't be read."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Comments and animations can't be read."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx

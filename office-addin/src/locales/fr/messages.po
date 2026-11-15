@@ -1417,13 +1417,28 @@ msgstr "Avec cette version de PowerPoint, Erato ne peut lire que les zones de te
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "Elle lit le texte, les tableaux, les formes dans les groupes, les notes du présentateur, les données des graphiques et le texte SmartArt. Cette version de PowerPoint ne lui indique pas quelle forme est le titre ni quels sont les niveaux de puces."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.full"
 msgstr "Elle lit les titres des diapositives, le texte avec ses niveaux de puces, les tableaux, les formes groupées et le texte de remplacement."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "Elle lit les titres des diapositives, le texte avec ses niveaux de puces, les tableaux, les formes dans les groupes, le texte de remplacement, les notes du présentateur, les données des graphiques et le texte SmartArt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.never"
 msgstr "Les notes du présentateur, les commentaires, les données des graphiques et le texte SmartArt ne peuvent pas être lus."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Les commentaires et les animations ne peuvent pas être lus."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx

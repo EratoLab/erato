@@ -1,3 +1,10 @@
+import {
+  POWERPOINT_FILE_CONTENT,
+  fileCouldFill,
+  hasFileRoute,
+  slideFileFields,
+  withFileContent,
+} from "./powerpointFileContent";
 import { powerpointErrorText, runPowerPoint } from "./powerpointRun";
 import {
   capShape,
@@ -35,6 +42,14 @@ export const POWERPOINT_NEVER_READABLE = [
   "animations",
   "whether a slide is hidden",
 ];
+/** Neither the add-in API nor this pane's file reader reads these. */
+export const POWERPOINT_NEVER_READABLE_WITH_FILE = ["comments", "animations"];
+
+/** Slide reads take these from the presentation file where the host has no API for them. */
+const FILE_FILLS: (keyof typeof POWERPOINT_HOST_LIMITS)[] = [
+  "tables",
+  "groups",
+];
 
 /** What this host cannot read that a newer PowerPoint can, so a gap is never taken for "empty". */
 export function powerpointHostLimits(support: PowerPointReadSupport): string[] {
@@ -44,18 +59,28 @@ export function powerpointHostLimits(support: PowerPointReadSupport): string[] {
       string,
     ][]
   )
-    .filter(([feature]) => !support[feature])
+    .filter(
+      ([feature]) =>
+        !support[feature] &&
+        !(support.presentationFile && FILE_FILLS.includes(feature)),
+    )
     .map(([, what]) => what);
 }
 
-function envelope(support: PowerPointReadSupport) {
+function envelope(support: PowerPointReadSupport, overview = false) {
   const hostLimits = powerpointHostLimits(support);
+  const fileRoute = hasFileRoute(support);
   return {
     tier: support.tier,
     ...(hostLimits.length > 0
       ? { notReadableOnThisHost: hostLimits }
       : undefined),
-    neverReadable: POWERPOINT_NEVER_READABLE,
+    neverReadable: fileRoute
+      ? POWERPOINT_NEVER_READABLE_WITH_FILE
+      : POWERPOINT_NEVER_READABLE,
+    ...(fileRoute && overview
+      ? { onlyInSlideReads: POWERPOINT_FILE_CONTENT }
+      : undefined),
   };
 }
 
@@ -184,7 +209,7 @@ export function readPowerPointPresentation(
       const selection =
         selected && !failed(selected) ? selectedSlideList(selected) : null;
       const result: Record<string, unknown> = {
-        ...envelope(support),
+        ...envelope(support, true),
         slideCount: slides.items.length,
         headingSource: support.placeholderRole
           ? "the slide's title placeholder"
@@ -304,38 +329,50 @@ export function readPowerPointSlide(
     );
   const startShape = optionalInteger(input, "startShape", 0);
   if (typeof startShape !== "number") return Promise.resolve(startShape);
-  return guarded(() =>
-    runPowerPoint(async (context) => {
+  return guarded(async () => {
+    const live = await runPowerPoint(async (context) => {
       const all = context.presentation.slides.load("items/id");
       const slide = context.presentation.slides
         .getItemOrNullObject(slideId)
         .load("id,layout/name");
       await context.sync();
-      if (slide.isNullObject) return slideNotFound(slideId);
+      if (slide.isNullObject) return null;
       const shapes = slide.shapes.load(shapeLoadPaths(support));
       await context.sync();
-      const read = readingOrder(
-        await readShapeContent(context, shapes.items, support),
-      ).map((shape) => capShape(shape, MAX_SHAPE_BYTES));
-      const result: Record<string, unknown> = {
-        ...envelope(support),
-        slide: {
-          id: slide.id,
-          position: positions(all).get(slide.id),
-          layout: slide.layout.name,
-        },
-        shapeCount: read.length,
-        ...(startShape > 0 ? { startShape } : {}),
+      return {
+        id: slide.id,
+        position: positions(all).get(slide.id) ?? 0,
+        slideCount: all.items.length,
+        layout: slide.layout.name,
+        shapes: readingOrder(
+          await readShapeContent(context, shapes.items, support),
+        ),
       };
-      const { taken } = fitItems(result, "shapes", read.slice(startShape));
-      const next = startShape + taken;
-      if (next < read.length) {
-        result.nextStartShape = next;
-        result.truncated = `Shapes ${next + 1}-${read.length} of ${read.length} were left out to keep this result small. Call again with startShape=${next} to read them.`;
-      }
-      return { ok: true, result };
-    }),
-  );
+    });
+    if (!live) return slideNotFound(slideId);
+    const file = hasFileRoute(support)
+      ? slideFileFields(await withFileContent(support, live, live.shapes))
+      : {};
+    const read = live.shapes.map((shape) => capShape(shape, MAX_SHAPE_BYTES));
+    const result: Record<string, unknown> = {
+      ...envelope(support),
+      slide: {
+        id: live.id,
+        position: live.position,
+        layout: live.layout,
+        ...file,
+      },
+      shapeCount: read.length,
+      ...(startShape > 0 ? { startShape } : {}),
+    };
+    const { taken } = fitItems(result, "shapes", read.slice(startShape));
+    const next = startShape + taken;
+    if (next < read.length) {
+      result.nextStartShape = next;
+      result.truncated = `Shapes ${next + 1}-${read.length} of ${read.length} were left out to keep this result small. Call again with startShape=${next} to read them.`;
+    }
+    return { ok: true, result };
+  });
 }
 
 function slideNotFound(slideId: string): ClientToolExecutionResult {
@@ -348,8 +385,8 @@ function slideNotFound(slideId: string): ClientToolExecutionResult {
 export function readPowerPointSelection(
   support: PowerPointReadSupport,
 ): Promise<ClientToolExecutionResult> {
-  return guarded(() =>
-    runPowerPoint(async (context) => {
+  return guarded(async () => {
+    const live = await runPowerPoint(async (context) => {
       const { presentation } = context;
       const all = presentation.slides.load("items/id");
       const slides = presentation.getSelectedSlides().load("items/id");
@@ -358,35 +395,59 @@ export function readPowerPointSelection(
         .load(shapeLoadPaths(support));
       await context.sync();
       const order = positions(all);
-      const selection = selectedSlideList(
-        slides.items.map((slide) => ({
-          id: slide.id,
-          position: order.get(slide.id),
-        })),
-      );
       const [text] = await readEach(context, [presentation], (p) => {
         const range = p.getSelectedTextRange().load("text");
         return () => range.text;
       });
-      const result: Record<string, unknown> = {
-        ...envelope(support),
-        selectedSlides: selection.listed,
-        ...("selectedSlideCount" in selection
-          ? { selectedSlideCount: selection.selectedSlideCount }
-          : {}),
-        ...(!failed(text) && typeof text === "string" && text
-          ? { selectedText: capText(normalizePowerPointText(text), 2000) }
-          : {}),
+      return {
+        slideCount: all.items.length,
+        slides: slides.items.map((slide) => ({
+          id: slide.id,
+          position: order.get(slide.id),
+        })),
+        text,
+        shapes: readingOrder(
+          await readShapeContent(context, shapes.items, support),
+        ),
       };
-      // The selected text and slide list share the page, so a shape gets what is left.
-      const room = POWERPOINT_READ_MAX_BYTES - jsonBytes(result) - 600;
-      const selectedShapes: PowerPointShapeOut[] = readingOrder(
-        await readShapeContent(context, shapes.items, support),
-      ).map((shape) => capShape(shape, room));
-      const { taken } = fitItems(result, "selectedShapes", selectedShapes);
-      if (taken < selectedShapes.length)
-        result.truncated = `${selectedShapes.length - taken} more selected shapes were left out to keep this result small; read their slide instead.`;
-      return { ok: true, result };
-    }),
-  );
+    });
+    const selection = selectedSlideList(live.slides);
+    const [onlySlide] = live.slides;
+    // Selected shapes sit on the slide being edited, known for sure only when one slide is selected.
+    if (
+      hasFileRoute(support) &&
+      live.slides.length === 1 &&
+      onlySlide.position !== undefined &&
+      fileCouldFill(live.shapes)
+    )
+      await withFileContent(
+        support,
+        {
+          id: onlySlide.id,
+          position: onlySlide.position,
+          slideCount: live.slideCount,
+        },
+        live.shapes,
+      );
+    const { text } = live;
+    const result: Record<string, unknown> = {
+      ...envelope(support),
+      selectedSlides: selection.listed,
+      ...("selectedSlideCount" in selection
+        ? { selectedSlideCount: selection.selectedSlideCount }
+        : {}),
+      ...(!failed(text) && typeof text === "string" && text
+        ? { selectedText: capText(normalizePowerPointText(text), 2000) }
+        : {}),
+    };
+    // The selected text and slide list share the page, so a shape gets what is left.
+    const room = POWERPOINT_READ_MAX_BYTES - jsonBytes(result) - 600;
+    const selectedShapes: PowerPointShapeOut[] = live.shapes.map((shape) =>
+      capShape(shape, room),
+    );
+    const { taken } = fitItems(result, "selectedShapes", selectedShapes);
+    if (taken < selectedShapes.length)
+      result.truncated = `${selectedShapes.length - taken} more selected shapes were left out to keep this result small; read their slide instead.`;
+    return { ok: true, result };
+  });
 }

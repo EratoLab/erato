@@ -51,6 +51,22 @@ describe("PowerPoint read support", () => {
     );
   });
 
+  it("offers the slide export with the full tier and the whole file wherever the host hands it over", () => {
+    const at = (set: string, fileApi: boolean) =>
+      powerpointReadSupport(requirementsUpTo(set), { fileApi });
+    expect(at("1.10", true)).toMatchObject({
+      slideExport: true,
+      presentationFile: true,
+    });
+    expect(at("1.5", true)).toMatchObject({
+      slideExport: false,
+      presentationFile: true,
+    });
+    expect(at("1.5", false)).toMatchObject({ presentationFile: false });
+    // Below 1.4 nothing is read, so there is no slide to fill from the file.
+    expect(at("1.3", true)).toMatchObject({ presentationFile: false });
+  });
+
   it("is full exactly when every 1.10 switch is on", () => {
     for (const set of ["1.3", "1.4", "1.5", "1.8", "1.9", "1.10"]) {
       const support = powerpointReadSupport(requirementsUpTo(set));

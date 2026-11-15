@@ -45,6 +45,24 @@ export interface FakeDeck {
   selectionFails?: boolean;
   slideWidth?: number;
   slideHeight?: number;
+  /**
+   * slide.exportAsBase64() by slide id: a one-slide .pptx, "fail" (its batch fails) or "hang" (its
+   * sync never answers). A slide without an entry fails its batch.
+   */
+  slideExports?: Record<string, Uint8Array | "fail" | "hang">;
+  /** What Office.context.document.getFileAsync(Compressed) hands over; absent: the call fails. */
+  file?: FakeFile;
+}
+
+export interface FakeFile {
+  bytes: Uint8Array;
+  /** getFileAsync fails with this Office error code. */
+  refuseCode?: number;
+  hangOpen?: boolean;
+  failSlice?: number;
+  hangSlice?: number;
+  /** Slices of this size whatever the caller asked for. */
+  sliceSize?: number;
 }
 
 const TEXT_TYPES = new Set([
@@ -61,11 +79,17 @@ export interface FakePowerPointHost {
   syncs: number;
   failedSyncs: number;
   runs: number;
+  exports: number;
+  fileOpens: number;
+  /** Handles getFileAsync handed out and closeAsync has not closed. */
+  openFiles: number;
+  slicesRead: number[];
 }
 
 interface State {
   pending: (() => void)[];
   poison: Error | null;
+  hang: boolean;
 }
 
 type Fake = Record<string, unknown> & {
@@ -159,8 +183,12 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
     syncs: 0,
     failedSyncs: 0,
     runs: 0,
+    exports: 0,
+    fileOpens: 0,
+    openFiles: 0,
+    slicesRead: [],
   };
-  const state: State = { pending: [], poison: null };
+  const state: State = { pending: [], poison: null, hang: false };
   const fail = (message: string) => {
     state.poison ??= hostError(message);
   };
@@ -280,6 +308,18 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
           name: () => slide.master ?? "Office Theme",
         }),
         shapes,
+        exportAsBase64: () => {
+          host.exports += 1;
+          const exported = deck.slideExports?.[slide.id];
+          if (exported === "hang") state.hang = true;
+          else if (!exported || exported === "fail") fail("export failed");
+          const result = fake(state, {
+            value: () =>
+              exported instanceof Uint8Array ? base64(exported) : "",
+          });
+          result.queue(["value"]);
+          return result;
+        },
       },
     );
   };
@@ -311,6 +351,11 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
         const index = deck.slides.findIndex((slide) => slide.id === id);
         return index >= 0 ? slides[index] : nullSlide();
       },
+      getItem: (id: string) => {
+        const index = deck.slides.findIndex((slide) => slide.id === id);
+        if (index < 0) fail("ItemNotFound");
+        return index >= 0 ? slides[index] : nullSlide();
+      },
     });
   };
 
@@ -318,6 +363,7 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
     presentation: {} as Record<string, unknown>,
     sync: () => {
       host.syncs += 1;
+      if (state.hang) return new Promise<void>(() => {});
       const poison = state.poison;
       const pending = state.pending;
       state.poison = null;
@@ -336,6 +382,7 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
       host.runs += 1;
       state.poison = null;
       state.pending = [];
+      state.hang = false;
       context.presentation = {
         slides: presentation(),
         getSelectedSlides: () => {
@@ -368,11 +415,103 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
       return batch(context);
     },
   };
+  installFakeFile(deck, host);
   return host;
+}
+
+const officeGlobal = () =>
+  (
+    globalThis as unknown as {
+      Office: { context: Record<string, unknown>; FileType?: unknown };
+    }
+  ).Office;
+
+/** getFileAsync as Office.js documents it: a handle, sliced reads, closeAsync, two handles at most. */
+function installFakeFile(deck: FakeDeck, host: FakePowerPointHost) {
+  const office = officeGlobal();
+  office.FileType = { Compressed: "compressed" };
+  const later = (fn: () => void) => setTimeout(fn, 0);
+  office.context.document = {
+    getFileAsync: (
+      _type: string,
+      options: { sliceSize?: number },
+      callback: (result: unknown) => void,
+    ) => {
+      const file = deck.file;
+      if (file?.hangOpen) return;
+      if (!file || file.refuseCode !== undefined || host.openFiles >= 2) {
+        later(() =>
+          callback({
+            status: "failed",
+            error: {
+              code: host.openFiles >= 2 ? 11000 : (file?.refuseCode ?? 5001),
+              message: "fake refusal",
+            },
+          }),
+        );
+        return;
+      }
+      host.fileOpens += 1;
+      host.openFiles += 1;
+      const bytes = new Uint8Array(file.bytes);
+      const sliceSize = file.sliceSize ?? options.sliceSize ?? 4194304;
+      let closed = false;
+      later(() =>
+        callback({
+          status: "succeeded",
+          value: {
+            size: bytes.length,
+            sliceCount: Math.ceil(bytes.length / sliceSize),
+            getSliceAsync: (index: number, done: (result: unknown) => void) => {
+              if (closed) throw new Error("fake: slice read after closeAsync");
+              host.slicesRead.push(index);
+              if (index === file.hangSlice) return;
+              const data = bytes.slice(
+                index * sliceSize,
+                (index + 1) * sliceSize,
+              );
+              later(() =>
+                done(
+                  index === file.failSlice
+                    ? {
+                        status: "failed",
+                        error: { code: 5001, message: "fake" },
+                      }
+                    : {
+                        status: "succeeded",
+                        value: {
+                          index,
+                          size: data.length,
+                          data: Array.from(data),
+                        },
+                      },
+                ),
+              );
+            },
+            closeAsync: (done: () => void) => {
+              if (!closed) host.openFiles -= 1;
+              closed = true;
+              later(done);
+            },
+          },
+        }),
+      );
+    },
+  };
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 8192)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(binary);
 }
 
 export function removeFakePowerPoint() {
   delete (globalThis as { PowerPoint?: unknown }).PowerPoint;
+  const office = officeGlobal();
+  delete office.context.document;
+  delete office.FileType;
 }
 
 /** isSetSupported for a host whose highest PowerPointApi is `highest`. */

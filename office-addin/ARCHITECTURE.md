@@ -41,7 +41,14 @@ implement the seams listed below, and never modify the core itself.
   providers around `NeutralAddinChatPage`. Excel has no document context yet.
   PowerPoint's host (`PowerPointAddinChatHost`) adds a presentation chip and
   three read tools (overview, one slide, selection), each registered only where
-  `utils/powerpointReadSupport.ts` finds its `PowerPointApi` set. Like Word's
+  `utils/powerpointReadSupport.ts` finds its `PowerPointApi` set.
+  A slide read also takes from the presentation file what the API cannot
+  give (speaker notes, chart data, SmartArt text, the hidden flag; tables and
+  group children below 1.10): the one-slide `slide.exportAsBase64()` at the
+  full tier, else the whole file through `getFileAsync`, fetching only the
+  slices that hold the slide's parts (`utils/powerpointFileContent.ts`). Nothing
+  is cached, and a file that does not match the shapes on screen is not used.
+  Like Word's
   chip, the chip and the tools appear only while the server advertises the
   `powerpoint_presentation` action facet, and the tools are listed only for a
   send that includes the presentation. Two tiers: full at 1.10, basic below
@@ -53,6 +60,8 @@ implement the seams listed below, and never modify the core itself.
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,
   `OfficeDocumentAuthProvider` and `OfficeDocumentFeatureConfig` (sign-in and
   feature overrides of the three document panes), `useOfficeTheme`,
+  `utils/officeXml.ts` and `utils/officeZipReader.ts` (package parts for Word
+  and PowerPoint),
   `utils/officeTheme/`, `officeAsync.ts`, the drag-drop broker
   (`officeDragAndDropBroker.ts` + `useOfficeDragAndDrop.ts`), and
   `detectExchangeOnPrem.ts`. This ring is office.js-generic and is planned to

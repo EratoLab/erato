@@ -21,6 +21,35 @@ export function powerpointReadScopeLines(
           message:
             "Erato reads slides one at a time, only when your request needs them. This PowerPoint version doesn't tell it what you selected.",
         }),
+    ...(support.slideExport || support.presentationFile
+      ? fileScopeLines(support)
+      : liveScopeLines(support)),
+  ];
+}
+
+/** Hosts whose reads also take notes, charts and SmartArt from the presentation file. */
+function fileScopeLines(support: PowerPointReadSupport): string[] {
+  return [
+    support.tier === "full"
+      ? t({
+          id: "officeAddin.powerpoint.context.fullWithFile",
+          message:
+            "It reads slide titles, text with bullet levels, tables, shapes inside groups, alt text, speaker notes, chart data and SmartArt text.",
+        })
+      : t({
+          id: "officeAddin.powerpoint.context.basicWithFile",
+          message:
+            "It reads text, tables, shapes inside groups, speaker notes, chart data and SmartArt text. This PowerPoint version doesn't tell it which shape is the title or what the bullet levels are.",
+        }),
+    t({
+      id: "officeAddin.powerpoint.context.neverWithFile",
+      message: "Comments and animations can't be read.",
+    }),
+  ];
+}
+
+function liveScopeLines(support: PowerPointReadSupport): string[] {
+  return [
     // Every 1.10 switch is on exactly at the full tier, so this line cannot disagree with them.
     support.tier === "full"
       ? t({

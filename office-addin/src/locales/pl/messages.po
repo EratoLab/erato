@@ -1417,13 +1417,28 @@ msgstr "W tej wersji PowerPointa Erato może odczytać tylko pola tekstowe i ich
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "Odczytuje tekst, tabele, kształty w grupach, notatki prelegenta, dane wykresów i tekst SmartArt. Ta wersja programu PowerPoint nie informuje go, który kształt jest tytułem ani jakie są poziomy punktorów."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.full"
 msgstr "Odczytuje tytuły slajdów, tekst z poziomami punktorów, tabele, kształty w grupach i tekst alternatywny."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "Odczytuje tytuły slajdów, tekst z poziomami punktorów, tabele, kształty w grupach, tekst alternatywny, notatki prelegenta, dane wykresów i tekst SmartArt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.never"
 msgstr "Notatek prelegenta, komentarzy, danych wykresów i tekstu SmartArt nie da się odczytać."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Nie można odczytać komentarzy ani animacji."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx

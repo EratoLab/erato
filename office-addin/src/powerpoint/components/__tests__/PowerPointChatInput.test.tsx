@@ -107,7 +107,8 @@ describe("PowerPoint composer", () => {
         id: "powerpoint_presentation",
         args: {
           presentation_name: "Untitled presentation",
-          read_tier: "full (PowerPointApi 1.10)",
+          read_tier:
+            "full (PowerPointApi 1.10); slide reads also return speaker notes, chart data, SmartArt text and whether a slide is hidden from the presentation file",
           selection_summary: "Selected slides: 1 (id 256#).",
         },
       },
