@@ -3,6 +3,7 @@ use crate::models::message::{ContentPart, MessageRole, MessageSchema, get_messag
 use crate::policy::engine::PolicyEngine;
 use crate::services::sentry::log_internal_server_error;
 use crate::services::speech::session::{MAX_INPUT_BYTES, PassageSpeaker};
+use crate::services::speech::spoken::{SpeechLanguage, speakable};
 use crate::state::AppState;
 use axum::{
     Extension,
@@ -118,15 +119,13 @@ pub async fn read_message_aloud(
     if text.len() > MAX_INPUT_BYTES {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    if crate::services::speech::sentences::speakable(&text)
-        .trim()
-        .is_empty()
-    {
+    let language = SpeechLanguage::new(&me_user.preferred_language);
+    if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let speaker =
-        PassageSpeaker::for_text(provider_config, &text).map_err(log_internal_server_error)?;
+    let speaker = PassageSpeaker::for_text(provider_config, &text, language)
+        .map_err(log_internal_server_error)?;
 
     // The speaker lives in the response body: when the client disconnects the body is dropped,
     // and the provider request with it.
