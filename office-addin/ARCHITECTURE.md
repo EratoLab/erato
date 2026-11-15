@@ -52,7 +52,10 @@ implement the seams listed below, and never modify the core itself.
   model, the composer's upload rule plus `analyze_image`). The pane renders it
   with `slide.getImageAsBase64` through `runPowerPoint`, uploads it through the
   composer's own upload path and stages it as an ordinary image attachment; the
-  composer stays disabled until it is staged or a notice says why not.
+  composer stays disabled until it is staged or a notice says why not. A model
+  that cannot see images shows a warning for as long as a picture stays staged.
+  Image parts reach the model without a file name, so the send's
+  `selection_summary` names the slide each sent picture shows.
   They are sideloaded from `manifests/manifest-local-excel.xml` and
   `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,

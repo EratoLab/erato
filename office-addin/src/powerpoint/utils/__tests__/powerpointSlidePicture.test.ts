@@ -14,31 +14,17 @@ import {
 } from "../powerpointSlidePicture";
 
 import type { FakeDeck } from "../../../test/mocks/powerpoint/fakePowerPoint";
-import type { FileCapability } from "@erato/frontend/library";
+import type * as EratoLibrary from "@erato/frontend/library";
 
 vi.mock("@erato/frontend/library", async () => {
   const mock = await import("../../../test/helpers/eratoLibraryMock");
-  // The composer's own helpers, as the frontend writes them.
+  const actual = await vi.importActual<typeof EratoLibrary>(
+    "@erato/frontend/library",
+  );
+  // The composer's own helpers, so the rule is tested against the frontend's.
   return mock.createEratoLibraryMock({
-    findCapabilityByExtension: (
-      filename: string,
-      capabilities: FileCapability[],
-    ) => {
-      const extension = filename.split(".").pop()?.toLowerCase();
-      return (
-        capabilities.find((capability) =>
-          capability.extensions.some(
-            (entry) => entry.toLowerCase() === extension,
-          ),
-        ) ??
-        capabilities.find((capability) =>
-          capability.extensions.includes("*"),
-        ) ??
-        null
-      );
-    },
-    hasSupportedOperations: (capability: FileCapability) =>
-      capability.operations.length > 0,
+    findCapabilityByExtension: actual.findCapabilityByExtension,
+    hasSupportedOperations: actual.hasSupportedOperations,
   });
 });
 
@@ -76,17 +62,46 @@ describe("renderSelectedSlidePictures", () => {
     expect(await bytesOf(picture.file)).toBe(atob(fakePngBase64("257#")));
   });
 
-  it("renders only the first slides of the selection up to the limit and reports how many were selected", async () => {
+  it("renders the first slides of the selection as PowerPoint lists it, active slide first, up to the limit", async () => {
     const host = installFakePowerPoint(
-      deck({ selectedSlideIds: ["256#", "257#", "258#", "259#", "260#"] }),
+      deck({
+        selectedSlideIds: ["256#", "257#", "258#", "259#", "260#"],
+        activeSlideId: "259#",
+      }),
     );
     const result = await renderSelectedSlidePictures({ limit: 3 });
     expect(result).toMatchObject({ ok: true, selectedCount: 5 });
     expect(host.pictureRequests.map((request) => request.slideId)).toEqual([
+      "259#",
       "256#",
       "257#",
-      "258#",
     ]);
+    if (result.ok)
+      expect(result.pictures.map((picture) => picture.file.name)).toEqual([
+        "slide-4.png",
+        "slide-1.png",
+        "slide-2.png",
+      ]);
+  });
+
+  it("accepts a picture that comes back as a data URL", async () => {
+    installFakePowerPoint(
+      deck({
+        slides: [
+          {
+            id: "257#",
+            shapes: [],
+            picture: `data:image/png;base64,${fakePngBase64("257#")}`,
+          },
+        ],
+      }),
+    );
+    const result = await renderSelectedSlidePictures({ limit: 3 });
+    expect(result.ok).toBe(true);
+    if (result.ok)
+      expect(await bytesOf(result.pictures[0].file)).toBe(
+        atob(fakePngBase64("257#")),
+      );
   });
 
   it("asks for no picture when nothing is selected", async () => {
@@ -151,9 +166,9 @@ describe("renderSelectedSlidePictures", () => {
 
 describe("modelTakesSlidePictures", () => {
   const image = (
-    operations: FileCapability["operations"],
+    operations: EratoLibrary.FileCapability["operations"],
     upload_allowed?: boolean,
-  ): FileCapability => ({
+  ): EratoLibrary.FileCapability => ({
     id: "image",
     extensions: ["jpg", "png"],
     mime_types: ["image/*"],

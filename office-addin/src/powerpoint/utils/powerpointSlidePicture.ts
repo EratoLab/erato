@@ -69,12 +69,8 @@ export function modelTakesSlidePictures(
 /** Renders the first `limit` selected slides, in the order PowerPoint lists the selection. */
 export async function renderSelectedSlidePictures({
   limit,
-  width = SLIDE_PICTURE_WIDTH,
-  timeoutMs = SLIDE_PICTURE_TIMEOUT_MS,
 }: {
   limit: number;
-  width?: number;
-  timeoutMs?: number;
 }): Promise<SlidePictureRender> {
   const render = runPowerPoint(async (context) => {
     const { presentation } = context;
@@ -82,7 +78,9 @@ export async function renderSelectedSlidePictures({
     const selected = presentation.getSelectedSlides().load("items/id");
     await context.sync();
     const chosen = selected.items.slice(0, Math.max(0, limit));
-    const images = chosen.map((slide) => slide.getImageAsBase64({ width }));
+    const images = chosen.map((slide) =>
+      slide.getImageAsBase64({ width: SLIDE_PICTURE_WIDTH }),
+    );
     if (chosen.length > 0) await context.sync();
     const order = new Map(all.items.map((slide, i) => [slide.id, i + 1]));
     return {
@@ -98,7 +96,7 @@ export async function renderSelectedSlidePictures({
   let timer: ReturnType<typeof setTimeout> | undefined;
   // A render that times out still holds runPowerPoint's queue until PowerPoint answers.
   const timeout = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+    timer = setTimeout(() => resolve("timeout"), SLIDE_PICTURE_TIMEOUT_MS);
   });
   try {
     const result = await Promise.race([render, timeout]);

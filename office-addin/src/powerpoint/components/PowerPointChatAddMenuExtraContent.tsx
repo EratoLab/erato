@@ -33,7 +33,9 @@ export function PowerPointChatAddMenuExtraContent({
         role="menuitem"
         tabIndex={-1}
         data-testid="powerpoint-add-menu-slide-picture"
-        disabled={disabled || uploadDisabled || isProcessing || offer.busy}
+        disabled={
+          disabled || uploadDisabled || isProcessing || !offer.canAttach
+        }
         onClick={() => {
           offer.attach();
           onClose();

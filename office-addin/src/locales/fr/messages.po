@@ -1467,6 +1467,11 @@ msgstr "{attachedCount, plural, one {Image de la diapositive jointe.} other {# i
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {L’image de la diapositive a été prête après votre changement de conversation, elle n’est donc pas jointe ici. Ajoutez-la de nouveau si nécessaire.} other {Les images des diapositives ont été prêtes après votre changement de conversation, elles ne sont donc pas jointes ici. Ajoutez-les de nouveau si nécessaire.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.failed"
 msgstr "PowerPoint n’a pas pu créer l’image de la diapositive, rien n’a donc été joint. Réessayez."
 
@@ -1474,6 +1479,11 @@ msgstr "PowerPoint n’a pas pu créer l’image de la diapositive, rien n’a d
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.leftOut"
 msgstr "{leftOut, plural, one {Les {attachedCount} premières des {selectedCount} diapositives sélectionnées sont jointes. Pour ajouter la dernière, sélectionnez-la et ajoutez-la à nouveau.} other {Les {attachedCount} premières des {selectedCount} diapositives sélectionnées sont jointes. Pour ajouter les # autres, sélectionnez-les et ajoutez-les à nouveau.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {Le modèle sélectionné ne voit pas les images, il ne lira donc pas l’image de diapositive jointe. Choisissez un autre modèle ou retirez l’image.} other {Le modèle sélectionné ne voit pas les images, il ne lira donc pas les # images de diapositives jointes. Choisissez un autre modèle ou retirez les images.}}"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts

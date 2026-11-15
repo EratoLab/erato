@@ -1467,6 +1467,11 @@ msgstr "{attachedCount, plural, one {Folienbild angehängt.} other {# Folienbild
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {Das Folienbild war erst fertig, nachdem Sie den Chat gewechselt hatten, daher ist es hier nicht angehängt. Fügen Sie es bei Bedarf erneut hinzu.} other {Die Folienbilder waren erst fertig, nachdem Sie den Chat gewechselt hatten, daher sind sie hier nicht angehängt. Fügen Sie sie bei Bedarf erneut hinzu.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.failed"
 msgstr "PowerPoint konnte das Folienbild nicht erstellen, daher wurde nichts angehängt. Versuchen Sie es noch einmal."
 
@@ -1474,6 +1479,11 @@ msgstr "PowerPoint konnte das Folienbild nicht erstellen, daher wurde nichts ang
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.leftOut"
 msgstr "{leftOut, plural, one {Die ersten {attachedCount} von {selectedCount} ausgewählten Folien sind angehängt. Um die letzte hinzuzufügen, wählen Sie sie aus und fügen Sie sie erneut hinzu.} other {Die ersten {attachedCount} von {selectedCount} ausgewählten Folien sind angehängt. Um die übrigen # hinzuzufügen, wählen Sie sie aus und fügen Sie sie erneut hinzu.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {Das ausgewählte Modell kann keine Bilder sehen und liest das angehängte Folienbild daher nicht. Wählen Sie ein anderes Modell oder entfernen Sie das Bild.} other {Das ausgewählte Modell kann keine Bilder sehen und liest die # angehängten Folienbilder daher nicht. Wählen Sie ein anderes Modell oder entfernen Sie die Bilder.}}"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts

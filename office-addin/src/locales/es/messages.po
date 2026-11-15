@@ -1467,6 +1467,11 @@ msgstr "{attachedCount, plural, one {Imagen de la diapositiva adjuntada.} other 
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {La imagen de la diapositiva terminó después de que cambiaras de chat, así que no está adjunta aquí. Vuelve a añadirla si la necesitas.} other {Las imágenes de las diapositivas terminaron después de que cambiaras de chat, así que no están adjuntas aquí. Vuelve a añadirlas si las necesitas.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.failed"
 msgstr "PowerPoint no pudo crear la imagen de la diapositiva, así que no se adjuntó nada. Vuelve a intentarlo."
 
@@ -1474,6 +1479,11 @@ msgstr "PowerPoint no pudo crear la imagen de la diapositiva, así que no se adj
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.leftOut"
 msgstr "{leftOut, plural, one {Se adjuntaron las primeras {attachedCount} de {selectedCount} diapositivas seleccionadas. Para añadir la última, selecciónala y vuelve a añadirla.} other {Se adjuntaron las primeras {attachedCount} de {selectedCount} diapositivas seleccionadas. Para añadir las otras #, selecciónalas y vuelve a añadirlas.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {El modelo seleccionado no puede ver imágenes, así que no leerá la imagen de la diapositiva adjunta. Elige otro modelo o quita la imagen.} other {El modelo seleccionado no puede ver imágenes, así que no leerá las # imágenes de diapositivas adjuntas. Elige otro modelo o quita las imágenes.}}"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts

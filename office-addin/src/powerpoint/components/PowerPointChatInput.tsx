@@ -41,10 +41,13 @@ const PRESENTATION_IDENTITY = "powerpoint.presentation";
 export function PowerPointChatInput({
   chatInputProps,
   support: supportOverride,
+  onSlidePictureBusyChange,
 }: {
   chatInputProps: AddinChatInputRenderProps;
   /** For tests; the pane reads the host once. */
   support?: PowerPointReadSupport;
+  /** So the pane's drop target holds still while a slide picture is made. */
+  onSlidePictureBusyChange?: (busy: boolean) => void;
 }) {
   const [support] = useState(
     () => supportOverride ?? currentPowerPointReadSupport(),
@@ -79,33 +82,33 @@ export function PowerPointChatInput({
 
   const controls = useChatInputControls();
   const [announcement, announce] = useLiveAnnouncement();
-  const [stagedCount, setStagedCount] = useState(0);
-  const onStagedFilesChange = useCallback(
-    (files: FileUploadItem[]) => setStagedCount(files.length),
-    [],
-  );
+  const [stagedFiles, setStagedFiles] = useState<FileUploadItem[]>([]);
   const {
     offer: slidePicture,
     notice,
     clearNotice,
+    describeFiles,
   } = usePowerPointSlidePictures({
     enabled: support.slidePicture && readable && included,
+    locked: !!chatInputProps.disabled,
     modelId: chatInputProps.controlledSelectedModel?.chat_provider_id,
     conversationKey,
     uploadFiles: chatInputProps.uploadFiles,
     addUploadedFiles: controls.addUploadedFiles,
-    stagedCount,
+    stagedFiles,
     maxFiles: chatInputProps.maxFiles,
     announce,
   });
+  useEffect(() => {
+    onSlidePictureBusyChange?.(slidePicture.busy);
+  }, [onSlidePictureBusyChange, slidePicture.busy]);
 
   const keyRef = useRef(conversationKey);
   keyRef.current = conversationKey;
   // Held while a slide picture renders and uploads, so a Send cannot leave without it.
   const composerDisabled = !!chatInputProps.disabled || slidePicture.busy;
-  const locked = composerDisabled;
-  const lockedRef = useRef(locked);
-  lockedRef.current = locked;
+  const lockedRef = useRef(composerDisabled);
+  lockedRef.current = composerDisabled;
   const setIncluded = useCallback((value: boolean) => {
     if (lockedRef.current) return;
     powerpointInclusionStore.setIncluded(keyRef.current, value);
@@ -113,7 +116,7 @@ export function PowerPointChatInput({
   const include = useCallback(() => setIncluded(true), [setIncluded]);
   const exclude = useCallback(() => setIncluded(false), [setIncluded]);
 
-  const attachSlidePicture = slidePicture.available
+  const attachSlidePicture = slidePicture.canAttach
     ? slidePicture.attach
     : undefined;
   const contextItems = useMemo(
@@ -124,7 +127,7 @@ export function PowerPointChatInput({
               name: presentationName,
               included,
               support,
-              locked,
+              locked: composerDisabled,
               onInclude: include,
               onExclude: exclude,
               onAttachSlidePicture: attachSlidePicture,
@@ -136,7 +139,7 @@ export function PowerPointChatInput({
       presentationName,
       included,
       support,
-      locked,
+      composerDisabled,
       include,
       exclude,
       attachSlidePicture,
@@ -163,13 +166,16 @@ export function PowerPointChatInput({
       disabledMcpTools,
     ) => {
       clearNotice();
+      const pictureLine = describeFiles(inputFileIds);
       const sendsPresentation = readEnabledRef.current;
       lastSendIncludedRef.current = sendsPresentation;
       const prepare: AddinSendPreparation | undefined = sendsPresentation
         ? {
             run: async () => {
-              const selectionSummary =
-                await readPowerPointSelectionSummary(support);
+              const selection = await readPowerPointSelectionSummary(support);
+              const selectionSummary = pictureLine
+                ? `${selection} ${pictureLine}`
+                : selection;
               return {
                 actionFacet: resolvePowerPointFacet({
                   support,
@@ -197,7 +203,7 @@ export function PowerPointChatInput({
         prepare,
       );
     },
-    [onSendMessage, support, clearNotice],
+    [onSendMessage, support, clearNotice, describeFiles],
   );
 
   return (
@@ -207,7 +213,7 @@ export function PowerPointChatInput({
         disabled={composerDisabled}
         contextItems={contextItems}
         composerNotice={notice}
-        onStagedFilesChange={onStagedFilesChange}
+        onStagedFilesChange={setStagedFiles}
         onSendMessage={handleSendMessage}
       />
       <div

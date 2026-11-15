@@ -1467,6 +1467,11 @@ msgstr "{attachedCount, plural, one {Slide picture attached.} other {# slide pic
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {The slide picture finished after you switched chats, so it isn't attached here. Add it again if you need it.} other {The slide pictures finished after you switched chats, so they aren't attached here. Add them again if you need them.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.failed"
 msgstr "PowerPoint couldn't make the slide picture, so nothing was attached. Try again."
 
@@ -1474,6 +1479,11 @@ msgstr "PowerPoint couldn't make the slide picture, so nothing was attached. Try
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.leftOut"
 msgstr "{leftOut, plural, one {Attached the first {attachedCount} of {selectedCount} selected slides. To add the last one, select it and add again.} other {Attached the first {attachedCount} of {selectedCount} selected slides. To add the other #, select them and add again.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {The selected model can't see pictures, so it won't read the attached slide picture. Pick another model or remove the picture.} other {The selected model can't see pictures, so it won't read the # attached slide pictures. Pick another model or remove the pictures.}}"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
