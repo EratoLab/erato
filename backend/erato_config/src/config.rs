@@ -2409,6 +2409,9 @@ impl AppConfig {
             "audio_conversational",
             &config.audio_conversational.transcription,
         );
+        if let Err(message) = config.audio_conversational.validate_end_of_turn_silence() {
+            panic!("{message}");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -3267,6 +3270,36 @@ mod audio_config_tests {
         let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
         assert_eq!(conversational.transcription, shared);
         assert_eq!(conversational.speech_provider, None);
+        assert_eq!(conversational.end_of_turn_silence_ms, 1800);
+        assert_eq!(
+            AudioConversationalConfig::default().end_of_turn_silence_ms,
+            1800
+        );
+    }
+
+    #[test]
+    fn conversational_end_of_turn_silence_is_read_and_range_checked() {
+        let load = |toml: &str| {
+            config::Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AudioConversationalConfig>()
+                .unwrap()
+        };
+        let settings = load("enabled = true\nend_of_turn_silence_ms = 1200");
+        assert_eq!(settings.end_of_turn_silence_ms, 1200);
+        assert!(settings.validate_end_of_turn_silence().is_ok());
+
+        for allowed in [500, 5000] {
+            let settings = load(&format!("end_of_turn_silence_ms = {allowed}"));
+            assert!(settings.validate_end_of_turn_silence().is_ok());
+        }
+        for rejected in [0, 20, 499, 5001, 30000] {
+            let settings = load(&format!("end_of_turn_silence_ms = {rejected}"));
+            let error = settings.validate_end_of_turn_silence().unwrap_err();
+            assert!(error.contains("500 to 5000 milliseconds"), "{error}");
+        }
     }
 
     #[test]
@@ -8134,7 +8167,7 @@ fn default_speech_sample_rate() -> u32 {
     24000
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AudioConversationalConfig {
     #[serde(flatten)]
     #[facet(flatten)]
@@ -8144,6 +8177,41 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_provider: Option<String>,
+    /// Silence in milliseconds that ends the speaker's turn and sends it.
+    /// Defaults to `1800`; allowed from `500` to `5000`.
+    #[serde(default = "default_end_of_turn_silence_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub end_of_turn_silence_ms: u32,
+}
+
+pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
+
+fn default_end_of_turn_silence_ms() -> u32 {
+    1800
+}
+
+impl Default for AudioConversationalConfig {
+    fn default() -> Self {
+        Self {
+            transcription: AudioTranscriptionConfig::default(),
+            speech_provider: None,
+            end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
+        }
+    }
+}
+
+impl AudioConversationalConfig {
+    pub fn validate_end_of_turn_silence(&self) -> Result<(), String> {
+        let value = self.end_of_turn_silence_ms;
+        if END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
+            return Ok(());
+        }
+        Err(format!(
+            "Invalid `audio_conversational.end_of_turn_silence_ms`: {value} is outside {} to {} milliseconds.",
+            END_OF_TURN_SILENCE_MS_RANGE.start(),
+            END_OF_TURN_SILENCE_MS_RANGE.end()
+        ))
+    }
 }
 
 /// `[turn_instructions]`: one table per instruction type. A type or setting
