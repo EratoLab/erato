@@ -80,8 +80,26 @@ pub struct SubmissionPolicy {
 
 struct Alternative {
     validator: jsonschema::Validator,
+    required: Vec<String>,
     /// Its required keys that no other alternative names.
     keys: Vec<String>,
+}
+
+impl Alternative {
+    fn missing(&self, input: &Value) -> usize {
+        self.required
+            .iter()
+            .filter(|key| input.get(key.as_str()).is_none())
+            .count()
+    }
+
+    fn issues(&self, input: &Value, limit: usize) -> Vec<ClientToolValidationIssue> {
+        self.validator
+            .iter_errors(input)
+            .take(limit)
+            .map(|error| schema_issue(&error))
+            .collect()
+    }
 }
 
 impl OfferedClientTool {
@@ -217,12 +235,19 @@ fn schema_issue(error: &jsonschema::ValidationError<'_>) -> ClientToolValidation
 }
 
 /// Each alternative of a root `anyOf` as a schema of its own, with the root's
-/// definitions. If any of them cannot stand alone, there are none, and a
-/// failure reports the root `anyOf` as before.
+/// definitions. There are none, and a failure reports the root `anyOf` as
+/// before, unless every alternative is inline and compiles on its own and
+/// every reference points into the root's definitions: anywhere else, `#`
+/// would mean the alternative instead of the root.
 fn compile_alternatives(schema: &Value) -> Vec<Alternative> {
     let Some(choices) = schema.get("anyOf").and_then(Value::as_array) else {
         return Vec::new();
     };
+    if !references_only_definitions(schema)
+        || choices.iter().any(|choice| choice.get("$ref").is_some())
+    {
+        return Vec::new();
+    }
     let names = |choice: &Value, key: &str| {
         required_keys(choice).any(|name| name == key)
             || choice
@@ -252,9 +277,45 @@ fn compile_alternatives(schema: &Value) -> Vec<Alternative> {
             })
             .map(str::to_owned)
             .collect();
-        alternatives.push(Alternative { validator, keys });
+        alternatives.push(Alternative {
+            validator,
+            required: required_keys(choice).map(str::to_owned).collect(),
+            keys,
+        });
     }
     alternatives
+}
+
+fn references_only_definitions(schema: &Value) -> bool {
+    match schema {
+        Value::Object(object) => object
+            .iter()
+            .all(|(keyword, value)| match keyword.as_str() {
+                "$ref" => value.as_str().is_some_and(|reference| {
+                    reference.starts_with("#/$defs/") || reference.starts_with("#/definitions/")
+                }),
+                "$dynamicRef" | "$recursiveRef" => false,
+                "const" | "enum" | "default" | "examples" => true,
+                "properties" | "patternProperties" | "$defs" | "definitions"
+                | "dependentSchemas" => value
+                    .as_object()
+                    .is_none_or(|schemas| schemas.values().all(references_only_definitions)),
+                _ => references_only_definitions(value),
+            }),
+        Value::Array(items) => items.iter().all(references_only_definitions),
+        _ => true,
+    }
+}
+
+fn quoted_list(keys: &[String]) -> String {
+    let quoted = keys
+        .iter()
+        .map(|key| format!("\"{key}\""))
+        .collect::<Vec<_>>();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => quoted.concat(),
+    }
 }
 
 fn required_keys(schema: &Value) -> impl Iterator<Item = &str> {
@@ -290,7 +351,8 @@ impl SubmissionPolicy {
     }
 
     /// A failed root `anyOf` is reported as the errors of the alternative the
-    /// arguments aim at.
+    /// arguments aim at, or as the keys that tell the alternatives apart when
+    /// they aim at none.
     pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
         let mut issues = Vec::new();
         for error in self
@@ -298,50 +360,96 @@ impl SubmissionPolicy {
             .iter_errors(input)
             .take(MAX_VALIDATION_ISSUES)
         {
-            let before = issues.len();
-            if matches!(error.kind, jsonschema::error::ValidationErrorKind::AnyOf)
+            let replacement = if matches!(error.kind, jsonschema::error::ValidationErrorKind::AnyOf)
                 && error.instance_path.as_str().is_empty()
                 && error.schema_path.as_str() == "/anyOf"
-                && let Some(alternative) = self.alternative_aimed_at(input)
             {
-                issues.extend(
-                    alternative
-                        .validator
-                        .iter_errors(input)
-                        .take(MAX_VALIDATION_ISSUES)
-                        .map(|error| schema_issue(&error)),
-                );
-            }
-            if issues.len() == before {
+                self.alternative_issues(input)
+            } else {
+                Vec::new()
+            };
+            if replacement.is_empty() {
                 issues.push(schema_issue(&error));
+            } else {
+                issues.extend(replacement);
             }
         }
-        (!issues.is_empty())
-            .then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues), None))
+        let mut unique = Vec::with_capacity(issues.len());
+        for issue in issues {
+            if !unique.contains(&issue) {
+                unique.push(issue);
+            }
+        }
+        (!unique.is_empty())
+            .then(|| ClientToolOutcome::ValidationFailed(bound_issues(unique), None))
     }
 
-    /// The alternative whose own required key is present; otherwise the one
-    /// with the fewest errors, among those whose key is present if several
-    /// are, and the first on a tie.
-    fn alternative_aimed_at(&self, input: &Value) -> Option<&Alternative> {
+    /// The errors of the best alternative whose own required key is present:
+    /// fewest missing required keys, then fewest errors, then the first. When
+    /// none is present, the keys that tell them apart, or, if some alternative
+    /// has none, the best of all alternatives.
+    fn alternative_issues(&self, input: &Value) -> Vec<ClientToolValidationIssue> {
+        if self.alternatives.is_empty() {
+            return Vec::new();
+        }
         let mut aimed = self
             .alternatives
             .iter()
             .filter(|alternative| alternative.keys.iter().any(|key| input.get(key).is_some()))
             .collect::<Vec<_>>();
         if aimed.is_empty() {
+            if self
+                .alternatives
+                .iter()
+                .all(|alternative| !alternative.keys.is_empty())
+            {
+                return self.no_alternative_aimed_at(input);
+            }
             aimed = self.alternatives.iter().collect();
         }
-        if aimed.len() == 1 {
-            return aimed.pop();
+        aimed
+            .into_iter()
+            .min_by_key(|alternative| {
+                (
+                    alternative.missing(input),
+                    alternative
+                        .validator
+                        .iter_errors(input)
+                        .take(MAX_COUNTED_ERRORS)
+                        .count(),
+                )
+            })
+            .map_or_else(Vec::new, |alternative| {
+                alternative.issues(input, MAX_VALIDATION_ISSUES)
+            })
+    }
+
+    /// One issue naming each alternative's own keys, then the errors every
+    /// alternative has, such as a key none of them knows.
+    fn no_alternative_aimed_at(&self, input: &Value) -> Vec<ClientToolValidationIssue> {
+        let choices = self
+            .alternatives
+            .iter()
+            .map(|alternative| quoted_list(&alternative.keys))
+            .collect::<Vec<_>>();
+        let mut issues = vec![ClientToolValidationIssue {
+            path: String::new(),
+            code: "required".into(),
+            message: format!("one of these is required: {}", choices.join("; or ")),
+        }];
+        let mut each = self
+            .alternatives
+            .iter()
+            .map(|alternative| alternative.issues(input, MAX_COUNTED_ERRORS));
+        if let Some(first) = each.next() {
+            let rest = each.collect::<Vec<_>>();
+            issues.extend(
+                first
+                    .into_iter()
+                    .filter(|issue| rest.iter().all(|other| other.contains(issue))),
+            );
         }
-        aimed.into_iter().min_by_key(|alternative| {
-            alternative
-                .validator
-                .iter_errors(input)
-                .take(MAX_COUNTED_ERRORS)
-                .count()
-        })
+        issues
     }
 
     pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
@@ -936,18 +1044,32 @@ mod tests {
     }
 
     #[test]
-    fn without_one_aimed_alternative_the_fewest_errors_decide() {
+    fn several_aimed_alternatives_rank_by_missing_required_keys_first() {
         let policy = plan_policy();
-        assert_eq!(
-            issues(&policy, json!({"snapshot":"s1","readToken":"t1"})),
-            vec![issue(
-                "",
-                "required",
-                r#""table_cell" is a required property"#
-            )],
-            "a tie goes to the first alternative"
-        );
-        // The table cell alternative has as few errors, but its key is absent.
+        let wrong = json!({"op":"replace","source":["b1"]});
+        for body in [
+            vec![wrong.clone(), wrong],
+            vec![json!({"kind":"replace","source":["b1"]})],
+        ] {
+            let input =
+                json!({"snapshot":"s1","readToken":"t1","version":1,"scoped_edit":{"body":body}});
+            let reported = issues(&policy, input);
+            assert!(
+                reported
+                    .iter()
+                    .any(|(path, code, _)| path == "/scoped_edit/body/0" && code == "required"),
+                "{reported:?}"
+            );
+            assert!(
+                reported.iter().all(|(path, code, message)| {
+                    path.starts_with("/scoped_edit/body/")
+                        || code == "additionalProperties" && message.contains("'version'")
+                }),
+                "{reported:?}"
+            );
+        }
+        // The full plan misses `version` and `scope`. The table cell
+        // alternative has as few errors as the scoped edit, but its key is absent.
         let both =
             json!({"snapshot":"s1","readToken":"t1","entries":"x","scoped_edit":{"body":"x"}});
         let mut reported = issues(&policy, both)
@@ -963,24 +1085,85 @@ mod tests {
     }
 
     #[test]
-    fn alternatives_that_cannot_stand_alone_keep_the_root_error() {
-        let schema = json!({"type":"object","anyOf":[{"$ref":"#/anyOf/1"},{"required":["a"]}]});
+    fn arguments_aimed_at_no_alternative_get_the_keys_that_tell_them_apart() {
+        let policy = plan_policy();
+        let keys = issue(
+            "",
+            "required",
+            r#"one of these is required: "version", "scope" and "entries"; or "draft_id", "revision" and "patches"; or "table_cell"; or "scoped_edit""#,
+        );
+        assert_eq!(
+            issues(&policy, json!({"snapshot":"s1","readToken":"t1"})),
+            vec![keys.clone()]
+        );
+        for (key, value) in [
+            (
+                "scopedEdit",
+                json!({"body":[{"operation":"delete","source":["b1"]}]}),
+            ),
+            ("body", json!([{"operation":"delete","source":["b1"]}])),
+        ] {
+            let mut input = json!({"snapshot":"s1","readToken":"t1"});
+            input[key] = value;
+            assert_eq!(
+                issues(&policy, input),
+                vec![
+                    keys.clone(),
+                    issue(
+                        "",
+                        "additionalProperties",
+                        &format!("Additional properties are not allowed ('{key}' was unexpected)")
+                    )
+                ]
+            );
+        }
+        assert_eq!(
+            issues(&policy, json!({"readToken":"t1"})),
+            vec![
+                keys,
+                issue("", "required", r#""snapshot" is a required property"#)
+            ]
+        );
+    }
+
+    fn policy_for(schema: Value) -> SubmissionPolicy {
         let config = ClientToolConfig {
             parameters: schema.to_string(),
             submission: Some(Default::default()),
             ..Default::default()
         };
-        let policy = OfferedClientTool::prepare(&config, &schema)
+        OfferedClientTool::prepare(&config, &schema)
             .unwrap()
             .submission
-            .unwrap();
+            .unwrap()
+    }
+
+    fn root_any_of() -> (String, String, String) {
+        issue(
+            "",
+            "anyOf",
+            "value is not valid under any of the schemas listed in the 'anyOf' keyword",
+        )
+    }
+
+    #[test]
+    fn an_alternative_given_by_reference_keeps_the_root_error() {
+        let policy = policy_for(json!({"type":"object","anyOf":[
+            {"$ref":"#/$defs/a"},
+            {"type":"object","required":["b"]}
+        ],"$defs":{"a":{"type":"object","required":["a"]}}}));
+        assert_eq!(issues(&policy, json!({})), vec![root_any_of()]);
+    }
+
+    #[test]
+    fn a_reference_outside_the_definitions_keeps_the_root_error() {
+        let policy = policy_for(json!({"type":"object","anyOf":[
+            {"type":"object","required":["a"],"properties":{"a":{"properties":{"child":{"$ref":"#"}}}}},
+            {"type":"object","required":["b"]}
+        ]}));
         assert_eq!(
-            issues(&policy, json!({})),
-            vec![issue(
-                "",
-                "anyOf",
-                "value is not valid under any of the schemas listed in the 'anyOf' keyword"
-            )]
+            issues(&policy, json!({"a":{"child":1}})),
+            vec![root_any_of()]
         );
     }
 

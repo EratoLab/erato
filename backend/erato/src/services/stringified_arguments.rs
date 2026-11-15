@@ -7,8 +7,10 @@
 //! counts as admitting a string, so the argument stays as sent.
 //!
 //! The string's first JSON value is what decodes. It may be followed only by
-//! whitespace and closing brackets: production `entries` strings ended in one
-//! extra `}]` (ERMAIN-1192). Anything else after it keeps the string.
+//! whitespace and at most two closing brackets: production `entries` strings
+//! ended in one extra `}]` (ERMAIN-1192). A longer run more likely closes
+//! something early inside the string, so it keeps the string, as does
+//! anything else after the value.
 
 use serde_json::Value;
 
@@ -16,6 +18,7 @@ const MAX_DEPTH: usize = 64;
 /// Schema nodes visited per candidate string; alternatives that refer back to
 /// themselves would otherwise branch without end.
 const MAX_SCHEMA_STEPS: usize = 4096;
+const MAX_TRAILING_CLOSERS: usize = 2;
 
 static ANY_SCHEMA: Value = Value::Bool(true);
 
@@ -137,10 +140,15 @@ fn walk(root: &Value, value: &mut Value, path: &mut Vec<Segment>, decoded: &mut 
 fn leading_value(text: &str) -> Option<Value> {
     let mut values = serde_json::Deserializer::from_str(text).into_iter::<Value>();
     let value = values.next()?.ok()?;
-    text[values.byte_offset()..]
-        .chars()
-        .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | ']' | '}'))
-        .then_some(value)
+    let mut closers = 0;
+    for c in text[values.byte_offset()..].chars() {
+        match c {
+            ' ' | '\t' | '\n' | '\r' => {}
+            ']' | '}' if closers < MAX_TRAILING_CLOSERS => closers += 1,
+            _ => return None,
+        }
+    }
+    Some(value)
 }
 
 /// What `schema` admits at `path` below the instance it applies to: every
@@ -424,12 +432,26 @@ mod tests {
             format!("{entries} []"),
             format!("{entries},"),
             format!("{entries}\""),
+            format!("{entries}}}]}}"),
+            format!("{entries}}}]}}]}}]"),
         ] {
             let mut input = json!({"snapshot": "s1", "entries": text});
             let before = input.clone();
             assert!(decode(&schema, &mut input).is_empty(), "{before}");
             assert_eq!(input, before);
         }
+    }
+
+    #[test]
+    fn whole_arguments_sent_as_one_string_decode() {
+        let schema = plan_schema();
+        let arguments = json!({"snapshot": "s1", "entries": entries().to_string()});
+        let mut input = Value::String(format!("{arguments}}}]"));
+        assert_eq!(
+            decode(&schema, &mut input),
+            vec![String::new(), "/entries".to_string()]
+        );
+        assert_eq!(input, json!({"snapshot": "s1", "entries": entries()}));
     }
 
     #[test]
