@@ -56,6 +56,9 @@ async function scopedSubmit(
   );
 }
 
+const FULL_PLAN_RULE =
+  "Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.";
+
 const text = (value: string, id = "new"): WordPlanBlock => ({
   id,
   type: "paragraph",
@@ -102,68 +105,81 @@ afterEach(() => {
   window.WORD_IN_PLACE_APPLY = true;
 });
 
+/** One scoped insert-after of `blocks` on the Word PC host, applied and re-read; returns the written
+ * blocks after checking their order, type, level and ordered flag. */
+async function insertOnWordPc(blocks: WordPlanBlock[]) {
+  delete window.WORD_IN_PLACE_APPLY;
+  const host = installWordOoxmlHost(realisticWordPackageXml(), {
+    profile: "word-pc-16.0.20326",
+  });
+  const snapshot = await captureRealisticSnapshot();
+  const anchorIndex = snapshot.blocks.findIndex(
+    (b) => b.text === "Open questions follow.",
+  );
+  const anchor = snapshot.blocks[anchorIndex];
+
+  const submitted = await scopedSubmit(
+    snapshot,
+    { ref: anchor.ref },
+    { body: [{ operation: "insert-after", anchor: anchor.ref, blocks }] },
+  );
+  if (!submitted.ok) throw new Error(JSON.stringify(submitted));
+  const plan = (submitted.result as { plan: WordDocumentPlan }).plan;
+  const inserts = plan.entries.filter((e) => e.kind === "insert");
+  expect(inserts).toHaveLength(1);
+  expect(inserts[0].blocks).toHaveLength(blocks.length);
+  expect(
+    plan.entries.flatMap((e) => (e.kind === "keep" ? e.source : [])),
+  ).toEqual(snapshot.blocks.map((b) => b.ref));
+
+  const applied = await applyWordDocumentPlan(
+    JSON.stringify(plan),
+    snapshot,
+    "message-A",
+  );
+  expect(
+    applied.status,
+    renderWordDiagnosticReport("apply", applied.status, applied.diagnostic),
+  ).toBe("applied");
+
+  const after = captureWordAuthoringSnapshot(
+    wordDocumentFileToOoxml(host.get()),
+    "doc-A",
+    "Off",
+    true,
+  );
+  const start =
+    after.blocks.findIndex((b) => b.text === "Open questions follow.") + 1;
+  const written = after.blocks.slice(start, start + blocks.length);
+  expect(
+    written.map((b) => ({
+      type: b.type,
+      text: b.text,
+      level: b.level,
+      ordered: b.ordered,
+    })),
+  ).toEqual(
+    blocks.map((b) => ({
+      type: b.type,
+      text: b.text,
+      level: b.level,
+      ordered: b.type === "list-item" ? b.ordered : undefined,
+    })),
+  );
+  expect(after.blocks[start + blocks.length]?.text).toBe(
+    snapshot.blocks[anchorIndex + 1].text,
+  );
+  const existingLists = snapshot.blocks
+    .filter((b) => b.type === "list-item")
+    .map((b) => b.list);
+  return { written, existingLists };
+}
+
 describe("scoped submission limits", { timeout: 30_000 }, () => {
   it("inserts a 28-block outline in one scoped change and applies it on Word PC", async () => {
-    delete window.WORD_IN_PLACE_APPLY;
-    const host = installWordOoxmlHost(realisticWordPackageXml(), {
-      profile: "word-pc-16.0.20326",
-    });
-    const snapshot = await captureRealisticSnapshot();
-    const anchorIndex = snapshot.blocks.findIndex(
-      (b) => b.text === "Open questions follow.",
-    );
-    const anchor = snapshot.blocks[anchorIndex];
     const blocks = outline();
     expect(blocks.length).toBeGreaterThanOrEqual(26);
-
-    const submitted = await scopedSubmit(
-      snapshot,
-      { ref: anchor.ref },
-      { body: [{ operation: "insert-after", anchor: anchor.ref, blocks }] },
-    );
-    if (!submitted.ok) throw new Error(JSON.stringify(submitted));
-    const plan = (submitted.result as { plan: WordDocumentPlan }).plan;
-    const inserts = plan.entries.filter((e) => e.kind === "insert");
-    expect(inserts).toHaveLength(1);
-    expect(inserts[0].blocks).toHaveLength(blocks.length);
-    expect(
-      plan.entries.flatMap((e) => (e.kind === "keep" ? e.source : [])),
-    ).toEqual(snapshot.blocks.map((b) => b.ref));
-
-    const applied = await applyWordDocumentPlan(
-      JSON.stringify(plan),
-      snapshot,
-      "message-A",
-    );
-    expect(
-      applied.status,
-      renderWordDiagnosticReport("apply", applied.status, applied.diagnostic),
-    ).toBe("applied");
-
-    const after = captureWordAuthoringSnapshot(
-      wordDocumentFileToOoxml(host.get()),
-      "doc-A",
-      "Off",
-      true,
-    );
-    const start =
-      after.blocks.findIndex((b) => b.text === "Open questions follow.") + 1;
-    const written = after.blocks.slice(start, start + blocks.length);
-    expect(
-      written.map((b) => ({
-        type: b.type,
-        text: b.text,
-        level: b.level,
-        ordered: b.ordered,
-      })),
-    ).toEqual(
-      blocks.map((b) => ({
-        type: b.type,
-        text: b.text,
-        level: b.level,
-        ordered: b.type === "list-item" ? b.ordered : undefined,
-      })),
-    );
+    const { written, existingLists } = await insertOnWordPc(blocks);
     const listOf = (prefix: string) =>
       new Set(
         written
@@ -175,13 +191,22 @@ describe("scoped submission limits", { timeout: 30_000 }, () => {
     expect(rollout.size).toBe(1);
     expect(risks.size).toBe(1);
     expect([...rollout][0]).not.toBe([...risks][0]);
-    const existing = snapshot.blocks
-      .filter((b) => b.type === "list-item")
-      .map((b) => b.list);
-    expect(existing).not.toContain([...rollout][0]);
-    expect(after.blocks[start + blocks.length]?.text).toBe(
-      snapshot.blocks[anchorIndex + 1].text,
-    );
+    expect(existingLists).not.toContain([...rollout][0]);
+  });
+
+  it("inserts one 26-item ordered list in one scoped change as a single new list", async () => {
+    const blocks: WordPlanBlock[] = Array.from({ length: 26 }, (_, i) => ({
+      id: `step-${i}`,
+      type: "list-item",
+      list: "steps",
+      level: 0,
+      ordered: true,
+      text: `Step ${i + 1}`,
+    }));
+    const { written, existingLists } = await insertOnWordPc(blocks);
+    const lists = new Set(written.map((b) => b.list));
+    expect(lists.size).toBe(1);
+    expect(existingLists).not.toContain([...lists][0]);
   });
 
   it("names each remaining limit when a scoped submission exceeds it", async () => {
@@ -242,34 +267,45 @@ describe("scoped submission limits", { timeout: 30_000 }, () => {
     );
     expect(largest.ok, JSON.stringify(largest)).toBe(true);
 
-    const oversized = await scopedSubmit(
-      fresh(),
-      { ref: "b1" },
-      {
-        body: [
-          {
-            operation: "insert-after",
-            anchor: "b1",
-            blocks: Array.from({ length: 26 }, (_, i) =>
-              text("x".repeat(1000), `long-${i}`),
-            ),
-          },
-        ],
-      },
+    const oversizedEdit = {
+      body: [
+        {
+          operation: "insert-after",
+          anchor: "b1",
+          blocks: Array.from({ length: 26 }, (_, i) =>
+            text("x".repeat(1000), `long-${i}`),
+          ),
+        },
+      ],
+    };
+    const oversized = rejection(
+      await scopedSubmit(fresh(), { ref: "b1" }, oversizedEdit),
     );
-    const message = rejection(oversized);
-    expect(message).toContain("exceeds 24 KiB");
-    expect(message).toContain("full plan");
+    expect(oversized).toContain(
+      "exceeds 24 KiB (about 24,000 characters of JSON)",
+    );
+    expect(oversized).toContain(FULL_PLAN_RULE);
+
+    const tooLarge = fresh();
+    tooLarge.completeReadIssue = "too-large";
+    const truncated = rejection(
+      await scopedSubmit(tooLarge, { ref: "b1" }, oversizedEdit),
+    );
+    expect(truncated).toContain(
+      "This document is too large for a full plan; submit at most about 24,000 characters of JSON now and tell the user the rest follows in the next turn.",
+    );
+    expect(truncated).not.toContain("Use a full plan");
   });
 
   it("tells the model the same limits the checks and the backend schema enforce", () => {
-    // The tool description in erato-action-facets.toml carries this exact phrase.
+    // The tool description in erato-action-facets.toml carries these exact phrases.
     expect(WORD_AUTHORING_CONTRACT.scopedEdit.input).toContain(
-      "at most 16 changes per collection, 16 source refs per change and 24 KiB per submission",
+      "at most 16 changes per collection (body, objects, stories, sections), 16 source refs per change and 24 KiB (about 24,000 characters of JSON) per submission",
     );
     expect(WORD_AUTHORING_CONTRACT.scopedEdit.input).toContain(
       "blocks per change have no count limit",
     );
+    expect(WORD_AUTHORING_CONTRACT.scopedEdit.input).toContain(FULL_PLAN_RULE);
     expect(WORD_AUTHORING_CONTRACT.scopedEdit.body).toContain(
       "source?:[at most 16 refs]",
     );

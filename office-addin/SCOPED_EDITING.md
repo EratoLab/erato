@@ -44,7 +44,12 @@ this protocol does not make every Word feature editable.
 
 `submit_document_plan` accepts `{snapshot,readToken,scoped_edit}`. The change set
 contains optional `body`, `objects`, `stories` and `sections` collections, each
-limited to 16 entries and 24 KiB total submission size. The host materializes
+limited to 16 changes, with at most 16 `source` refs per change and 24 KiB (about
+24,000 characters of JSON) per submission. Blocks per change have no count
+limit, so a long list stays one change; a longer source range is split into
+consecutive changes. Beyond these limits the model submits a full plan after a
+complete read; when the document is too large for a complete read, it submits
+what fits and continues in the next turn. The host materializes
 all unchanged keeps and untouched sections. Overlapping writes and reuse of
 unread source references are rejected. Scope capabilities bind document identity,
 snapshot fingerprint and request ownership. Review and Apply accept only the

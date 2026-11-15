@@ -10,6 +10,9 @@ import {
 import {
   MAX_WORD_SCOPED_CHANGES,
   MAX_WORD_SCOPED_SOURCES,
+  WORD_FULL_PLAN_RULE,
+  WORD_SCOPED_SIZE,
+  WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN,
 } from "./wordAuthoringContract";
 
 import type {
@@ -47,7 +50,11 @@ export function expandWordScopedSubmission(
     MAX_WORD_SCOPE_BYTES
   )
     return fail(
-      `Scoped submission exceeds ${MAX_WORD_SCOPE_BYTES / 1024} KiB. For larger content, read the complete document and submit a full plan.`,
+      `Scoped submission exceeds ${WORD_SCOPED_SIZE}. ${
+        snapshot.completeReadIssue
+          ? WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN
+          : `${WORD_FULL_PLAN_RULE} A full plan needs a complete read.`
+      }`,
     );
   const edit = input.scoped_edit;
   if (
