@@ -814,6 +814,55 @@ describe("scoped object editing", () => {
       "After",
     ]);
   });
+  it.each(["content-control", "footer"])(
+    "fills ids for new %s blocks that omit theirs (ERMAIN-1194)",
+    async (kind) => {
+      const s = setup(richSnapshot());
+      const target = wordTargetInventory(s.snapshot).find(
+        (t) => t.kind === kind && (kind === "footer" || t.objectTarget),
+      )!;
+      expect(target).toBeDefined();
+      const unnamed = [
+        { type: "paragraph", text: "First" },
+        { type: "paragraph", text: "Second" },
+      ];
+      const { plan, after } = assertAccepted(
+        await s.edit(
+          { ref: target.ref },
+          kind === "footer"
+            ? {
+                stories: [
+                  {
+                    kind: "upsert",
+                    type: kind,
+                    id: target.storyId,
+                    blocks: unnamed,
+                  },
+                ],
+              }
+            : {
+                objects: [
+                  {
+                    ref: target.ref,
+                    edit: { operation: "update", children: unnamed },
+                  },
+                ],
+              },
+        ),
+        s.snapshot,
+      );
+      const ids = [
+        ...JSON.stringify(plan).matchAll(/"id":"(new_block_\d+)"/g),
+      ].map((m) => m[1]);
+      expect(ids).toEqual(["new_block_1", "new_block_2"]);
+      const text =
+        kind === "footer"
+          ? after.stories?.find((story) => story.id === target.storyId)?.text
+          : after.blocks.map((b) => b.text).join("\n");
+      expect(text).toContain("First");
+      expect(text).toContain("Second");
+    },
+  );
   it.each(["field", "bookmark", "content-control", "drawing", "image"])(
     "updates one native %s while retaining surrounding sources",
     async (kind) => {

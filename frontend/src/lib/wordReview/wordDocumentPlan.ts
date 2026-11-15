@@ -958,7 +958,14 @@ export function validateWordDocumentPlan(
         );
       if (section.after) {
         const position = bodyOrder.get(section.after);
-        if (position === undefined || position <= previous)
+        if (position === undefined)
+          return fail(
+            "section-order",
+            `${path}/after`,
+            "section-order",
+            `Section boundary ${JSON.stringify(section.after.slice(0, 100))} is neither the id of a top-level body block in this plan nor a kept body source. Give that block an id and use that id here.`,
+          );
+        if (position <= previous)
           return fail(
             "section-order",
             `${path}/after`,
