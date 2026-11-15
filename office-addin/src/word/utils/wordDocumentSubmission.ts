@@ -27,7 +27,11 @@ import {
   wordInPlaceCapabilitiesUnder,
 } from "./wordInPlaceSwitch";
 import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
-import { expandWordScopedSubmission } from "./wordScopedSubmission";
+import {
+  expandWordScopedSubmission,
+  WORD_SCOPED_TOKEN_MESSAGE,
+  WordScopedSubmissionError,
+} from "./wordScopedSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
 import type {
@@ -39,6 +43,7 @@ import type {
   WordAuthoringSnapshot,
   WordDocumentPlan,
   WordPlanDiagnostics,
+  WordReadScope,
 } from "@erato/frontend/word-review";
 
 export { WORD_SUBMIT_PLAN_ACTION, WORD_SUBMIT_PLAN_TOOL };
@@ -85,9 +90,63 @@ export function createWordDocumentSubmissionExecutor(
   };
 }
 
+/** A scoped_edit whose snapshot or token is not this request's active read; never parsed as a
+ * full plan, which would send the model to write one. */
+function scopedTokenRefusal(
+  snapshot: WordAuthoringSnapshot,
+  input: Record<string, unknown>,
+): ClientToolExecutionResult {
+  const expired =
+    snapshot.revoked || snapshot.used || input.snapshot !== snapshot.token;
+  const code = snapshot.issue ?? (expired ? "expired" : "incomplete-read");
+  const message = snapshot.issue
+    ? `This document capture is unavailable: ${snapshot.issue}.`
+    : snapshot.completeReadIssue
+      ? "Use an active readToken from a target read of this request; this document is too large for a complete read."
+      : expired
+        ? `Use this request's active snapshot. ${WORD_SCOPED_TOKEN_MESSAGE}`
+        : WORD_SCOPED_TOKEN_MESSAGE;
+  return {
+    ok: false,
+    error: "Scoped edit rejected.",
+    validationErrors: [
+      {
+        path: expired || snapshot.issue ? "/snapshot" : "/readToken",
+        code,
+        message,
+      },
+    ],
+  };
+}
+
 function createSubmissionExecutor(
   session: WordDocumentReadSession,
 ): ClientToolExecutor {
+  /** An unchanged sparse change with unchanged diagnostics ends the submission turn. */
+  const sparseRejection = (
+    input: unknown,
+    result: ClientToolExecutionResult,
+  ): ClientToolExecutionResult => {
+    if (
+      result.ok ||
+      !session.drafts.rejectSparse(input, result.validationErrors ?? [])
+    )
+      return result;
+    return {
+      ...result,
+      error: "The same document proposal failed with unchanged diagnostics.",
+      validationErrors: [
+        {
+          path: "",
+          code: "no-progress",
+          message:
+            "The proposal and validation errors are unchanged. This submission turn has ended.",
+        },
+        ...(result.validationErrors ?? []),
+      ].slice(0, 16),
+      submissionFeedback: { ...result.submissionFeedback, terminal: true },
+    };
+  };
   return async (input, context) => {
     if (!context || context.signal?.aborted)
       return {
@@ -152,7 +211,9 @@ function createSubmissionExecutor(
             ) ||
             input.readToken !== snapshot.readToken))
       )
-        return prepareWordDocumentSubmission(input, context, session);
+        return "scoped_edit" in input
+          ? sparseRejection(input, scopedTokenRefusal(snapshot, input))
+          : prepareWordDocumentSubmission(input, context, session);
       if (session.drafts.accepted)
         return {
           ok: false,
@@ -205,13 +266,11 @@ function createSubmissionExecutor(
             ...prepared,
             result: { ...(prepared.result as object), plan: value },
           };
-      } else if (
-        !scoped &&
-        kind !== "scoped_edit" &&
-        prepared.validationErrors?.length
-      ) {
+      } else if (kind === "scoped_edit") {
         // A sparse change is corrected by resubmitting it, never by patching the
         // expanded plan the model never saw.
+        result = sparseRejection(input, prepared);
+      } else if (!scoped && prepared.validationErrors?.length) {
         const feedback = session.drafts.reject(
           value as unknown as Record<string, unknown>,
           prepared.validationErrors,
@@ -252,13 +311,18 @@ function createSubmissionExecutor(
         ...(error instanceof WordDraftRepairError
           ? { submissionFeedback: session.drafts.feedback() }
           : {}),
-        validationErrors: [
-          { path: error.path, code: error.code, message: error.message },
-        ],
+        validationErrors:
+          error instanceof WordScopedSubmissionError && error.issues?.length
+            ? error.issues.slice(0, 16)
+            : [{ path: error.path, code: error.code, message: error.message }],
       };
       return error.code === "call-conflict"
         ? failure
-        : session.drafts.remember(context.toolCallId, serialized, failure);
+        : session.drafts.remember(
+            context.toolCallId,
+            serialized,
+            "scoped_edit" in input ? sparseRejection(input, failure) : failure,
+          );
     }
   };
 }
@@ -409,8 +473,8 @@ interface WordScopedWholeDocument {
   reasons: string[];
   /** In-place writing is off for the host or session, so no edit could be written in place. */
   hostWide: boolean;
-  /** The plan came from a target read rather than a complete one. */
-  scoped: boolean;
+  /** The read scope the plan came from; undefined after a complete read. */
+  scope?: WordReadScope["kind"];
 }
 
 /**
@@ -426,8 +490,8 @@ function scopedWholeDocumentReasons(
   sparse: boolean,
 ): WordScopedWholeDocument | undefined {
   const policy = wordApplyPolicy().wholeDocumentImport;
-  const scoped = !!wordPlanReadScope(plan, snapshot);
-  if (policy === "allowed" || (!scoped && !(sparse && policy === "off")))
+  const scope = wordPlanReadScope(plan, snapshot);
+  if (policy === "allowed" || (!scope && !(sparse && policy === "off")))
     return undefined;
   const availability = wordInPlaceAvailability();
   const caps = wordInPlaceCapabilitiesUnder(snapshot.trackingMode);
@@ -440,9 +504,9 @@ function scopedWholeDocumentReasons(
   );
   if (route.route === "in-place") return undefined;
   if (route.route === "body")
-    return { reasons: ["no-package"], hostWide: true, scoped };
+    return { reasons: ["no-package"], hostWide: true, scope };
   if (!availability.enabled)
-    return { reasons: [availability.reason], hostWide: true, scoped };
+    return { reasons: [availability.reason], hostWide: true, scope };
   let reasons: string[] = [];
   try {
     reasons = wordInPlaceFallbacks(plan, snapshot, caps, prepared);
@@ -452,14 +516,14 @@ function scopedWholeDocumentReasons(
   return {
     reasons: reasons.length ? reasons : [route.reason],
     hostWide: false,
-    scoped,
+    scope,
   };
 }
 
 /** Where nothing can be written in place, a smaller scoped edit cannot help; under `confirm` a full
  * plan still reaches the card's confirmation. */
 function scopedWholeDocumentRefusal(
-  { reasons, hostWide, scoped }: WordScopedWholeDocument,
+  { reasons, hostWide, scope }: WordScopedWholeDocument,
   snapshot: WordAuthoringSnapshot,
 ): ClientToolExecutionResult {
   const web = wordApplyHost(wordHostPlatform()) === "web";
@@ -470,10 +534,10 @@ function scopedWholeDocumentRefusal(
     wordApplyPolicy().wholeDocumentImport === "confirm" &&
     !snapshot.completeReadIssue;
   const message = !hostWide
-    ? `${host} writes ${scoped ? "edits from a scoped read" : "edits"} only in place, and this edit needs a full-document rewrite ${because} Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`
-    : `${host} can't write any edit in place right now ${because} ${scoped ? "An edit from a scoped read" : "This host"} never replaces the whole document, so ${
+    ? `${host} writes ${scope ? "edits from a scoped read" : "edits"} only in place, and this edit needs a full-document rewrite ${because} Resubmit only edits that can be written in place, such as rewording existing paragraphs, headings, list items or table cells, or tell the user that this change ${web ? "needs Word for Windows or Mac" : "can't be made in this version of Word"}.`
+    : `${host} can't write any edit in place right now ${because} ${scope ? "An edit from a scoped read" : "This host"} never replaces the whole document, so ${
         fullPlan
-          ? "complete the full read and submit a full-document plan instead; the user is asked to confirm before it replaces the whole document."
+          ? `complete the full read and resubmit the same ${scope === "table-cell" ? "table_cell change" : "scoped_edit"} with its final readToken; the user is asked to confirm before it replaces the whole document.`
           : web
             ? "tell the user that this change needs Word for Windows or Mac."
             : "tell the user that this change can't be made in this version of Word right now."

@@ -45,7 +45,7 @@ export const WORD_AUTHORING_CONTRACT = {
     revision:
       "Each changed rejected proposal advances the revision. Validation covers the complete materialized plan. Unchanged proposals with unchanged diagnostics end the submission turn. Full and repair submissions share the configured attempt budget. Acceptance persists the complete plan for review without writing to Word.",
   },
-  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. Use a full plan only to rewrite or reorder most of the document; for other changes, also after a complete read, submit only the changes with scoped_edit and the same readToken.",
+  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.",
   ownership:
     "Every body source ref is consumed once by keep, replace or deleted. New nested block IDs are globally unique. Story sources and document_sections are separate read records, not body ownership refs. Keep preserves exact content. Replacement and deletion accept native objects. Source references are scoped to this immutable snapshot.",
   entries: {

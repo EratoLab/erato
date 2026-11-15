@@ -77,8 +77,8 @@ function setup(snapshot: WordAuthoringSnapshot = paragraphs(40)) {
         cursor = page.nextCursor;
       }
     },
-    submit(args: Record<string, unknown>) {
-      return execute(args, { ...context, toolCallId: `edit-${++calls}` });
+    submit(args: Record<string, unknown>, call = context) {
+      return execute(args, { ...call, toolCallId: `edit-${++calls}` });
     },
     sparse(readToken: string, scoped_edit: Record<string, unknown>) {
       return this.submit({ snapshot: snapshot.token, readToken, scoped_edit });
@@ -260,10 +260,12 @@ describe("sparse changes after a complete read", () => {
     };
     const cases: [
       string,
+      string,
       (s: ReturnType<typeof setup>, token: string) => Promise<Submission>,
     ][] = [
       [
         "another snapshot",
+        "expired",
         (s, token) =>
           s.submit({
             snapshot: "old",
@@ -271,9 +273,14 @@ describe("sparse changes after a complete read", () => {
             scoped_edit: { body: [insert] },
           }),
       ],
-      ["an invented token", (s) => s.sparse("invented", { body: [insert] })],
+      [
+        "an invented token",
+        "incomplete-read",
+        (s) => s.sparse("invented", { body: [insert] }),
+      ],
       [
         "an anchor that is also replaced",
+        "scoped-shape",
         (s, token) =>
           s.sparse(token, {
             body: [
@@ -288,6 +295,7 @@ describe("sparse changes after a complete read", () => {
       ],
       [
         "a source changed twice",
+        "scoped-shape",
         (s, token) =>
           s.sparse(token, {
             body: [
@@ -302,6 +310,7 @@ describe("sparse changes after a complete read", () => {
       ],
       [
         "more than 24 KiB",
+        "scoped-shape",
         (s, token) =>
           s.sparse(token, {
             body: [
@@ -311,17 +320,118 @@ describe("sparse changes after a complete read", () => {
       ],
       [
         "a revoked capture",
+        "expired",
         (s, token) => {
           s.snapshot.revoked = true;
           return s.sparse(token, { body: [insert] });
         },
       ],
+      [
+        "a used capture",
+        "expired",
+        (s, token) => {
+          s.snapshot.used = true;
+          return s.sparse(token, { body: [insert] });
+        },
+      ],
+      [
+        "a table_cell token",
+        "outside-read-scope",
+        (s) => {
+          s.snapshot.readScopes!.set("cell", {
+            kind: "table-cell",
+            snapshot: s.snapshot.token,
+            identity: s.snapshot.identity,
+            fingerprint: s.snapshot.fingerprint,
+            sourceRef: "b2",
+            rowIndex: 0,
+            cellIndex: 0,
+            expectedText: "",
+          });
+          return s.sparse("cell", { body: [insert] });
+        },
+      ],
+      [
+        "a capture too large for a complete read",
+        "outside-read-scope",
+        (s, token) => {
+          s.snapshot.completeReadIssue = "too-large";
+          return s.sparse(token, { body: [insert] });
+        },
+      ],
     ];
-    for (const [name, submit] of cases) {
+    for (const [name, code, submit] of cases) {
       const s = setup();
       const token = await s.completeRead();
-      expect((await submit(s, token)).ok, name).toBe(false);
+      const result = await submit(s, token);
+      expect(result.ok, name).toBe(false);
+      expect(!result.ok && result.validationErrors?.[0]?.code, name).toBe(code);
     }
+  });
+
+  it("refuses a token from an earlier request on the same capture", async () => {
+    const s = setup();
+    const token = await s.completeRead();
+    const next = { ...context, messageId: "message-2" };
+    s.session.activate(s.snapshot, next);
+    expect(
+      await s.submit(
+        {
+          snapshot: s.snapshot.token,
+          readToken: token,
+          scoped_edit: {
+            body: [{ operation: "delete", source: ["b1"], reason: "Removal" }],
+          },
+        },
+        next,
+      ),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ path: "/readToken", code: "incomplete-read" }],
+      submissionFeedback: { recovery: "read_current_context" },
+    });
+  });
+
+  it("returns a correctable error for a malformed block, without a new read", async () => {
+    const s = setup();
+    const token = await s.completeRead();
+    const result = await s.sparse(token, {
+      body: [
+        {
+          operation: "insert-after",
+          anchor: "b9",
+          blocks: [{ id: "h", type: "heading", text: "H", level: 42 }],
+        },
+      ],
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "heading-level" }],
+      submissionFeedback: { recovery: "repair_arguments" },
+    });
+  });
+
+  it("ends the turn when an unchanged sparse change fails again", async () => {
+    const s = setup();
+    const token = await s.completeRead();
+    const change = {
+      body: [
+        {
+          operation: "insert-after",
+          anchor: "b9",
+          blocks: [{ id: "h", type: "heading", text: "H", level: 42 }],
+        },
+      ],
+    };
+    expect(await s.sparse(token, change)).toMatchObject({
+      ok: false,
+      submissionFeedback: { terminal: false },
+    });
+    expect(await s.sparse(token, change)).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "no-progress" }, { code: "heading-level" }],
+      submissionFeedback: { terminal: true },
+    });
   });
 
   it("does not widen a target read's token after a complete read", async () => {
@@ -338,24 +448,26 @@ describe("sparse changes after a complete read", () => {
     if (!target.ok) throw Error(target.error);
     const scoped = (target.result as { readToken: string }).readToken;
     expect(
-      (
-        await s.sparse(scoped, {
-          body: [{ operation: "delete", source: ["b1"], reason: "Outside" }],
-        })
-      ).ok,
-    ).toBe(false);
+      await s.sparse(scoped, {
+        body: [{ operation: "delete", source: ["b1"], reason: "Outside" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "outside-read-scope" }],
+    });
   });
 
   it("is refused before the complete read has finished", async () => {
     const s = setup(paragraphs(3));
     s.snapshot.readToken = "early";
     expect(
-      (
-        await s.sparse("early", {
-          body: [{ operation: "delete", source: ["b1"], reason: "Removal" }],
-        })
-      ).ok,
-    ).toBe(false);
+      await s.sparse("early", {
+        body: [{ operation: "delete", source: ["b1"], reason: "Removal" }],
+      }),
+    ).toMatchObject({
+      ok: false,
+      validationErrors: [{ code: "incomplete-read" }],
+    });
   });
 
   it("changes a native object by its block ref and target", async () => {
