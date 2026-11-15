@@ -38,8 +38,16 @@ implement the seams listed below, and never modify the core itself.
   compilation stay under `src/word/utils`; shared UI comes from the frontend library.
 - `src/excel`, `src/powerpoint` — the Excel and PowerPoint task panes at
   `/office-addin/excel` and `/office-addin/powerpoint`: the shared Office.js
-  providers around `NeutralAddinChatPage`, with no document context yet. They
-  are sideloaded from `manifests/manifest-local-excel.xml` and
+  providers around `NeutralAddinChatPage`. Excel has no document context yet.
+  PowerPoint's host (`PowerPointAddinChatHost`) adds a presentation chip and
+  three read tools (overview, one slide, selection), each registered only where
+  `utils/powerpointReadSupport.ts` finds its `PowerPointApi` set. Like Word's
+  chip, the chip and the tools appear only while the server advertises the
+  `powerpoint_presentation` action facet, and the tools are listed only for a
+  send that includes the presentation. Two tiers: full at 1.10, basic below
+  (Office LTSC 2024 at 1.5). Their manifests declare no minimum API set, so
+  LTSC keeps the pane.
+  They are sideloaded from `manifests/manifest-local-excel.xml` and
   `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,

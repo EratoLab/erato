@@ -12,6 +12,7 @@ import { captureWordAuthoringSnapshot } from "../wordDocumentXml";
 import type {
   WordDocumentPlan,
   WordPlanBlock,
+  WordPlanDiagnostics,
   WordStoryChange,
 } from "@erato/frontend/word-review";
 
@@ -294,9 +295,22 @@ describe("rich document plan reference validation", () => {
       { id: "b", after: source.blocks[0].ref },
       { id: "last" },
     ];
-    expect(validateWordDocumentPlan(plan, source)).toBe("section-order");
+    const reversed: WordPlanDiagnostics = [];
+    expect(validateWordDocumentPlan(plan, source, reversed)).toBe(
+      "section-order",
+    );
+    expect(reversed[0].message).toContain("strictly increasing");
     plan.sections = [{ id: "a", after: "unknown" }, { id: "last" }];
-    expect(validateWordDocumentPlan(plan, source)).toBe("section-order");
+    const missing: WordPlanDiagnostics = [];
+    expect(validateWordDocumentPlan(plan, source, missing)).toBe(
+      "section-order",
+    );
+    expect(missing[0]).toMatchObject({
+      path: "/sections/0/after",
+      code: "section-order",
+    });
+    expect(missing[0].message).toContain('"unknown"');
+    expect(missing[0].message).toContain("Give that block an id");
     plan.sections = [
       {
         id: "last",

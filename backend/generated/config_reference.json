@@ -4154,6 +4154,18 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers.<server-id>.mcp_apps.enabled": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.mcp_apps.sandbox_origin": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers.<server-id>.override_tool_annotations.destructive_hint": {
     "default_value_security": "unknown",
     "introduced_in": "0.7.0",

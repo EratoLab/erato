@@ -1,5 +1,6 @@
 use crate::config::{AppConfig, McpRuntimeConfig};
 use crate::db::entity::prelude::FileUploads;
+use crate::models::message::ToolResultDetails;
 use crate::services::file_storage::SharepointContext;
 use crate::services::mcp_call_error::{McpCallError, McpCallFailure};
 use crate::services::mcp_session_manager::{
@@ -154,6 +155,50 @@ impl McpServers {
 
     pub async fn active_session_count(&self, server_id: &str) -> usize {
         self.session_manager.active_session_count(server_id).await
+    }
+
+    /// The MCP Apps view at `uri` that a tool of `server_id` declares, read
+    /// once per server and URI for the tool list's lifetime.
+    pub async fn read_app_view(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        uri: &str,
+        auth_context: &McpRequestAuthContext<'_>,
+    ) -> Result<Arc<crate::services::mcp_apps::McpAppView>, Report> {
+        self.session_manager
+            .read_app_view(chat_id, server_id, uri, auth_context)
+            .await
+    }
+
+    /// A call's details with the view its tool declares (`view_uri`, see
+    /// `mcp_apps::view_uri`) and the result's `structuredContent` for it, when
+    /// the server enables MCP Apps and the view is accepted; otherwise
+    /// `details` as they are.
+    pub async fn with_app_view(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        view_uri: Option<&str>,
+        auth_context: &McpRequestAuthContext<'_>,
+        details: Option<ToolResultDetails>,
+        structured_content: Option<&serde_json::Value>,
+    ) -> Option<ToolResultDetails> {
+        let Some(uri) = view_uri else {
+            return details;
+        };
+        let Some(mut view) = self
+            .session_manager
+            .app_view_for_call(chat_id, server_id, uri, auth_context)
+            .await
+        else {
+            return details;
+        };
+        view.structured_content =
+            crate::services::mcp_apps::structured_content_for_view(structured_content);
+        let mut details = details.unwrap_or_default();
+        details.view = Some(view);
+        Some(details)
     }
 
     /// List all available tools for a specific chat

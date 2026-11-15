@@ -5519,6 +5519,130 @@ export const useListMcpServers = <TData = Schemas.ListMcpServersResponse,>(
   });
 };
 
+export type GetMcpServerAppViewPathParams = {
+  /**
+   * Configured MCP server ID
+   */
+  serverId: string;
+};
+
+export type GetMcpServerAppViewQueryParams = {
+  /**
+   * The view's ui:// URI, as a tool call's result_details.view names it
+   */
+  uri: string;
+};
+
+export type GetMcpServerAppViewError = Fetcher.ErrorWrapper<undefined>;
+
+export type GetMcpServerAppViewVariables = {
+  pathParams: GetMcpServerAppViewPathParams;
+  queryParams: GetMcpServerAppViewQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchGetMcpServerAppView = (
+  variables: GetMcpServerAppViewVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.McpAppViewResponse,
+    GetMcpServerAppViewError,
+    undefined,
+    {},
+    GetMcpServerAppViewQueryParams,
+    GetMcpServerAppViewPathParams
+  >({
+    url: "/api/v1beta/me/mcp_servers/{serverId}/app_view",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function getMcpServerAppViewQuery(
+  variables: GetMcpServerAppViewVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<Schemas.McpAppViewResponse>;
+};
+
+export function getMcpServerAppViewQuery(
+  variables: GetMcpServerAppViewVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<Schemas.McpAppViewResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function getMcpServerAppViewQuery(
+  variables: GetMcpServerAppViewVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/mcp_servers/{serverId}/app_view",
+      operationId: "getMcpServerAppView",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchGetMcpServerAppView(variables, signal),
+  };
+}
+
+export const useSuspenseGetMcpServerAppView = <
+  TData = Schemas.McpAppViewResponse,
+>(
+  variables: GetMcpServerAppViewVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.McpAppViewResponse,
+      GetMcpServerAppViewError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.McpAppViewResponse,
+    GetMcpServerAppViewError,
+    TData
+  >({
+    ...getMcpServerAppViewQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useGetMcpServerAppView = <TData = Schemas.McpAppViewResponse,>(
+  variables: GetMcpServerAppViewVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.McpAppViewResponse,
+      GetMcpServerAppViewError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.McpAppViewResponse,
+    GetMcpServerAppViewError,
+    TData
+  >({
+    ...getMcpServerAppViewQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type DisconnectMcpServerOauthPathParams = {
   /**
    * Configured MCP server ID
@@ -9461,6 +9585,11 @@ export type QueryOperation =
       path: "/api/v1beta/me/mcp_servers";
       operationId: "listMcpServers";
       variables: ListMcpServersVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/mcp_servers/{serverId}/app_view";
+      operationId: "getMcpServerAppView";
+      variables: GetMcpServerAppViewVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/mcp_servers/{serverId}/oauth/callback";

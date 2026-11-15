@@ -1,0 +1,180 @@
+<!doctype html>
+<!--
+  The sandbox page for MCP Apps views (spec 2026-01-26, "Sandbox proxy").
+  The web app loads it in a frame from an MCP server's `sandbox_origin`, never
+  from its own origin, and sends it the view's HTML; this page shows the view
+  in an inner frame and relays messages between the view and the web app.
+
+  Adapted from the reference sandbox proxy of modelcontextprotocol/ext-apps
+  (examples/basic-host/src/sandbox.ts, Copyright (c) Model Context Protocol a
+  Series of LF Projects, LLC, MIT License). Unlike the reference, which gets
+  the view's CSP as an HTTP header, this page is a static file: it applies the
+  CSP to itself before it creates the view's frame, which inherits it.
+
+  The page has no <head> tag on purpose: Erato's server adds its frontend
+  settings to the <head> of the pages it serves, and this page carries none.
+-->
+<meta charset="utf-8" />
+<meta name="color-scheme" content="light dark" />
+<title>MCP Apps sandbox</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    width: 100%;
+    background-color: transparent;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+  iframe {
+    flex-grow: 1;
+    border: 0;
+    padding: 0;
+    background-color: transparent;
+    color-scheme: inherit;
+  }
+</style>
+<script>
+  "use strict";
+
+  if (window.self === window.top) {
+    throw new Error(
+      "This page only runs in the frame of the app it belongs to.",
+    );
+  }
+  if (!document.referrer) {
+    throw new Error("No referrer: the origin of the embedding app is unknown.");
+  }
+  // The embedding app's origin: messages are taken from it and sent to it only.
+  const HOST_ORIGIN = new URL(document.referrer).origin;
+  const HOST_NAME = new URL(HOST_ORIGIN).hostname;
+  const OWN_ORIGIN = window.location.origin;
+  const OWN_NAME = window.location.hostname;
+
+  // The sandbox origin is never the app's, so an embedder on this page's own
+  // origin is a view, and a view must not get a policy of its choosing.
+  if (HOST_ORIGIN === OWN_ORIGIN) {
+    throw new Error(
+      "This page only runs in the frame of the app it belongs to.",
+    );
+  }
+
+  // Reading the app's document must fail. If it does not, this page shares the
+  // app's origin and must not run a view.
+  try {
+    void window.top.document;
+    throw "FAIL";
+  } catch (error) {
+    if (error === "FAIL") {
+      throw new Error("This page is not isolated from the app that embeds it.");
+    }
+  }
+
+  const SANDBOX_PREFIX = "ui/notifications/sandbox-";
+  const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
+  const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+
+  // Whether a declared domain covers `name`, whatever its scheme or port: the
+  // host itself, a wildcard over it, or a network scheme on its own.
+  const covers = (domain, name) => {
+    const source = domain.toLowerCase();
+    if (/^(https?|wss?):$/.test(source)) return true;
+    const [host] = source
+      .replace(/^(?:[a-z][a-z0-9+.-]*:)?\/\//, "")
+      .match(/^(?:\[[^\]]*\]|[^/:]*)/);
+    return (
+      host === "*" ||
+      host === name ||
+      (host.startsWith("*.") && name.endsWith(host.slice(1)))
+    );
+  };
+
+  // Declared domains, without anything that could end a source list or add a
+  // keyword such as 'unsafe-eval', and without any that cover one of `names`.
+  // The app's host is always left out: on a sandbox origin on the same site as
+  // the app, the browser sends the app's cookies with the view's requests to it.
+  const domains = (list, ...names) =>
+    (Array.isArray(list) ? list : []).filter(
+      (domain) =>
+        typeof domain === "string" &&
+        /^[^\s;,'"]+$/.test(domain) &&
+        !names.some((name) => covers(domain, name)),
+    );
+
+  // The view's CSP as the spec builds it from `_meta.ui.csp`. Without declared
+  // domains the view fetches and loads nothing from other origins, and no
+  // declared domain lets it reach the app's host. A CSP does not stop a view
+  // from navigating its own frame, and browsers do not apply it to WebRTC, so
+  // it is no barrier against sending data out.
+  const policyFor = (csp) => {
+    const declared = csp && typeof csp === "object" ? csp : {};
+    const resources = domains(declared.resourceDomains, HOST_NAME).join(" ");
+    const connect = domains(declared.connectDomains, HOST_NAME).join(" ");
+    // Nor a frame on this page's own host: a page loaded from it is not under
+    // this policy, and the view, sharing its origin, could fetch through it.
+    const frames = domains(declared.frameDomains, HOST_NAME, OWN_NAME).join(
+      " ",
+    );
+    const baseUris = domains(declared.baseUriDomains, HOST_NAME).join(" ");
+    return [
+      "default-src 'none'",
+      `script-src 'self' 'unsafe-inline' ${resources}`,
+      `style-src 'self' 'unsafe-inline' ${resources}`,
+      `img-src 'self' data: ${resources}`,
+      `font-src 'self' ${resources}`,
+      `media-src 'self' data: ${resources}`,
+      `connect-src ${connect || "'none'"}`,
+      `frame-src ${frames || "'none'"}`,
+      "object-src 'none'",
+      `base-uri ${baseUris || "'none'"}`,
+      "form-action 'none'",
+    ]
+      .map((directive) => directive.trim())
+      .join("; ");
+  };
+
+  let inner = null;
+
+  const load = ({ html, csp }) => {
+    if (inner || typeof html !== "string") return;
+    // First this page, so that neither the view's frame, which inherits the
+    // policy, nor the view reaching into this page can get around it.
+    const policy = document.createElement("meta");
+    policy.setAttribute("http-equiv", "Content-Security-Policy");
+    policy.setAttribute("content", policyFor(csp));
+    document.head.appendChild(policy);
+
+    inner = document.createElement("iframe");
+    inner.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    (document.body || document.documentElement).appendChild(inner);
+    const doc = inner.contentDocument;
+    doc.open();
+    doc.write(html);
+    doc.close();
+  };
+
+  const isSandboxMessage = (data) =>
+    typeof data?.method === "string" && data.method.startsWith(SANDBOX_PREFIX);
+
+  window.addEventListener("message", (event) => {
+    if (event.source === window.parent) {
+      if (event.origin !== HOST_ORIGIN) return;
+      if (event.data?.method === RESOURCE_READY) {
+        load(event.data.params ?? {});
+      } else if (!isSandboxMessage(event.data)) {
+        inner?.contentWindow?.postMessage(event.data, OWN_ORIGIN);
+      }
+    } else if (inner && event.source === inner.contentWindow) {
+      if (event.origin !== OWN_ORIGIN || isSandboxMessage(event.data)) return;
+      window.parent.postMessage(event.data, HOST_ORIGIN);
+    }
+  });
+
+  window.parent.postMessage(
+    { jsonrpc: "2.0", method: PROXY_READY, params: {} },
+    HOST_ORIGIN,
+  );
+</script>

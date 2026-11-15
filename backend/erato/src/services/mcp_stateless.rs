@@ -10,7 +10,8 @@ use futures::{StreamExt, TryStreamExt};
 use reqwest::header::{HeaderMap, HeaderValue};
 use rmcp::model::ServerJsonRpcMessage;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ListToolsResult, ProgressNotificationParam, Tool,
+    CallToolRequestParams, CallToolResult, ListToolsResult, ProgressNotificationParam,
+    ReadResourceResult, Tool,
 };
 use rmcp::transport::streamable_http_client::{
     StreamableHttpClient, StreamableHttpError, StreamableHttpPostResponse,
@@ -288,18 +289,23 @@ impl HttpRequest {
     }
 
     pub async fn list_tools(&self, fresh: bool) -> Result<Vec<Tool>, Report> {
+        Ok(self.tool_list(fresh).await?.0)
+    }
+
+    /// The tool list and when it goes stale.
+    pub async fn tool_list(&self, fresh: bool) -> Result<(Vec<Tool>, Instant), Report> {
         let mut state = self.partition.lock().await;
         if !fresh {
             if let Some(snapshot) = &state.tools
                 && snapshot.expires > Instant::now()
             {
-                return Ok(snapshot.tools.clone());
+                return Ok((snapshot.tools.clone(), snapshot.expires));
             }
             if let Some(snapshot) = &*self.server.public_tools.lock().await
                 && !state.denied
                 && snapshot.expires > Instant::now()
             {
-                return Ok(snapshot.tools.clone());
+                return Ok((snapshot.tools.clone(), snapshot.expires));
             }
             if let Some((error, until)) = &state.failure
                 && *until > Instant::now()
@@ -314,7 +320,7 @@ impl HttpRequest {
             Ok((snapshot, public)) => {
                 state.failure = None;
                 state.denied = false;
-                let tools = snapshot.tools.clone();
+                let tools = (snapshot.tools.clone(), snapshot.expires);
                 if public {
                     state.tools = None;
                     *self.server.public_tools.lock().await = Some(snapshot);
@@ -435,6 +441,15 @@ impl HttpRequest {
             .map_err(|error| McpCallError::report(McpCallFailure::Unreadable, error))
     }
 
+    /// One `resources/read`; the caller keeps what it accepts.
+    pub async fn read_resource(&self, uri: &str) -> Result<ReadResourceResult, Report> {
+        let result = self
+            .rpc("resources/read", json!({"uri": uri}), None)
+            .await?;
+        serde_json::from_value(result)
+            .map_err(|error| RequestError::protocol(format!("Invalid resource: {error}")).into())
+    }
+
     async fn rpc(
         &self,
         method: &str,
@@ -477,7 +492,13 @@ impl HttpRequest {
         }
         headers.insert("mcp-protocol-version", HeaderValue::from_static(VERSION));
         headers.insert("mcp-method", HeaderValue::from_str(method).unwrap());
-        if let Some(name) = params.get("name").and_then(Value::as_str) {
+        // A resource read is named by its URI, a tool call by its tool.
+        let name_field = if method == "resources/read" {
+            "uri"
+        } else {
+            "name"
+        };
+        if let Some(name) = params.get(name_field).and_then(Value::as_str) {
             headers.insert("mcp-name", encode_header(name)?);
         }
         let message = json!({

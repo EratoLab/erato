@@ -122,6 +122,31 @@ api_key = "fixed-api-key-secret"
 transport_type = "streamable_http"
 url = "http://erato-local-mock-mcp-server:44321/mcp/list-tools-500"
 
+# MCP Apps: the same mock server twice, its views shown for one group only.
+# Each group sees one of the two, so `show_counter` is never offered twice.
+[mcp_servers.mock_mcp_apps]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/apps"
+
+[mcp_servers.mock_mcp_apps.mcp_apps]
+enabled = true
+sandbox_origin = "https://mcp-apps.erato.internal:8443"
+
+# Showing a counter changes nothing, so the restrictive preset lets it run.
+[mcp_servers.mock_mcp_apps.default_tool_annotations]
+read_only_hint = true
+destructive_hint = false
+open_world_hint = false
+
+[mcp_servers.mock_mcp_apps_off]
+transport_type = "streamable_http"
+url = "http://erato-local-mock-mcp-server:44321/mcp/apps"
+
+[mcp_servers.mock_mcp_apps_off.default_tool_annotations]
+read_only_hint = true
+destructive_hint = false
+open_world_hint = false
+
 [mcp_server_permissions.rules.allow_mock_mcp_progress_for_all]
 rule_type = "allow-all"
 mcp_server_ids = ["mock_mcp_progress"]
@@ -158,6 +183,22 @@ groups = ["mcp-auth-forwarded-oidc"]
 rule_type = "allow-for-group-members"
 mcp_server_ids = ["mock_mcp_unavailable_500"]
 groups = ["mcp-unavailable-resilience"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_apps_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_apps"]
+groups = ["mcp-apps"]
+
+[mcp_server_permissions.rules.allow_mock_mcp_apps_off_for_group]
+rule_type = "allow-for-group-members"
+mcp_server_ids = ["mock_mcp_apps_off"]
+groups = ["mcp-apps-off"]
+
+# The sandbox page is served by the backend on the sandbox origin, and the
+# backend lets only Erato's own pages frame what it serves: the app's origin
+# may frame it there too.
+[frontend]
+extra_frame_ancestors = ["https://app.erato.internal:8443"]
 
 [chat_sharing]
 enabled = true

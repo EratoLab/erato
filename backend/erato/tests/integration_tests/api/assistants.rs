@@ -264,6 +264,7 @@ async fn test_update_assistant_endpoint(pool: Pool<Postgres>) {
         McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -748,6 +749,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -769,6 +771,7 @@ async fn test_create_assistant_endpoint(pool: Pool<Postgres>) {
         McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),
@@ -957,6 +960,7 @@ async fn test_create_assistant_rejects_unauthorized_mcp_server(pool: Pool<Postgr
         McpServerConfig {
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             display_name: None,
             approval_argument: None,
             protocol_mode: Default::default(),

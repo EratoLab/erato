@@ -165,6 +165,11 @@ chat_provider_ids = ["test-token-limit"]
 # # and table of the server.
 # 1 = "Low"
 # 2 = "High"
+# # Optional: read the interactive view (MCP Apps) a tool declares when it is
+# # called, for the web app to show from the sandbox origin (default: off).
+# [mcp_servers.file_provider.mcp_apps]
+# enabled = true
+# sandbox_origin = "https://mcp-apps.example.net"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)

@@ -5,6 +5,11 @@ use crate::config::{
     McpServerForwardedCredential, McpSurfaceConfig, McpToolAnnotationsConfig,
 };
 use crate::metrics::report_mcp_active_sessions_for_server;
+use crate::models::message::ToolResultView;
+use crate::services::mcp_apps::{
+    MAX_REMEMBERED_VIEW_FAILURES, McpAppView, VIEW_CACHE_BYTES, VIEW_FAILURE_RETRY_AFTER,
+    VIEW_READ_TIMEOUT, view_uri,
+};
 use crate::services::mcp_manager::{McpRequestAuthContext, ToolDiscoveryResult};
 use crate::services::mcp_oauth::resolve_oauth_access_token;
 use crate::services::mcp_surface::SurfaceHint;
@@ -12,7 +17,8 @@ use crate::services::mcp_tool_annotations::{ResolvedMcpTool, resolve_tool_annota
 use crate::services::mcp_transports::{ProgressClientHandler, create_mcp_service};
 use eyre::{Report, eyre};
 use futures::future::join_all;
-use rmcp::model::{CallToolRequestParams, CallToolResult, Tool};
+use moka::{Expiry, future::Cache};
+use rmcp::model::{CallToolRequestParams, CallToolResult, ReadResourceRequestParams, Tool};
 use rmcp::service::{Peer, RoleClient, RunningService};
 use sea_orm::prelude::Uuid;
 use std::collections::{HashMap, HashSet};
@@ -297,8 +303,60 @@ pub struct McpSessionManager {
     creation_gates:
         tokio::sync::Mutex<HashMap<SessionKey, std::sync::Weak<tokio::sync::Mutex<()>>>>,
     generation: std::sync::Mutex<HashMap<String, u64>>,
+    /// Accepted MCP Apps views by server and URI, each kept until the tool
+    /// list it was read under goes stale, within `VIEW_CACHE_BYTES` in all.
+    app_views: Cache<AppViewKey, CachedAppView>,
+    /// Why a view was refused or could not be read, kept for
+    /// `VIEW_FAILURE_RETRY_AFTER`. Kept per credentials, unlike accepted
+    /// views: one user's failed read must not hide the view from the others.
+    app_view_failures: Cache<AppViewFailureKey, String>,
     /// Handle to the background cleanup task
     _cleanup_task: JoinHandle<()>,
+}
+
+/// Server and view URI.
+type AppViewKey = (String, String);
+/// Server, view URI and a digest of the session auth key.
+type AppViewFailureKey = (String, String, Option<u64>);
+
+#[derive(Debug, Clone)]
+struct CachedAppView {
+    view: Arc<McpAppView>,
+    /// How long the tool list the view was read under stays fresh.
+    fresh_for: Duration,
+}
+
+struct AppViewExpiry;
+
+impl Expiry<AppViewKey, CachedAppView> for AppViewExpiry {
+    fn expire_after_create(
+        &self,
+        _key: &AppViewKey,
+        cached: &CachedAppView,
+        _created_at: std::time::Instant,
+    ) -> Option<Duration> {
+        Some(cached.fresh_for)
+    }
+}
+
+fn app_view_cache() -> Cache<AppViewKey, CachedAppView> {
+    Cache::builder()
+        .max_capacity(VIEW_CACHE_BYTES)
+        .weigher(|(server_id, uri): &AppViewKey, cached: &CachedAppView| {
+            let ui = cached.view.ui.as_ref().map_or(0, |ui| ui.to_string().len());
+            (server_id.len() + uri.len() + cached.view.html.len() + ui)
+                .try_into()
+                .unwrap_or(u32::MAX)
+        })
+        .expire_after(AppViewExpiry)
+        .build()
+}
+
+fn app_view_failure_cache() -> Cache<AppViewFailureKey, String> {
+    Cache::builder()
+        .max_capacity(MAX_REMEMBERED_VIEW_FAILURES)
+        .time_to_live(VIEW_FAILURE_RETRY_AFTER)
+        .build()
 }
 
 impl Drop for McpSessionManager {
@@ -448,6 +506,8 @@ impl McpSessionManager {
             http_servers: Default::default(),
             creation_gates: Default::default(),
             generation: Default::default(),
+            app_views: app_view_cache(),
+            app_view_failures: app_view_failure_cache(),
         }
     }
 
@@ -503,6 +563,8 @@ impl McpSessionManager {
             .lock()
             .await
             .retain(|id, _| !changed_server_ids.contains(id));
+        self.forget_app_views(|id| changed_server_ids.contains(id))
+            .await;
         let mut sessions = self.sessions.write().await;
         sessions.retain(|(_, server_id, _), _| !changed_server_ids.contains(server_id));
         Self::update_active_session_metrics(
@@ -666,6 +728,7 @@ impl McpSessionManager {
             .or_default() += 1;
         // Detached runtimes cannot republish into the replacement caches.
         self.http_servers.lock().await.remove(server_id);
+        self.forget_app_views(|id| id == server_id).await;
         let session_auth_key = format!("oauth2:{access_token}");
         let configured_server_ids = self.configured_server_ids().await;
         let mut sessions_guard = self.sessions.write().await;
@@ -726,10 +789,21 @@ impl McpSessionManager {
         server_id: &str,
         auth: &McpRequestAuthContext<'_>,
     ) -> Result<Vec<ResolvedMcpTool>, Report> {
+        Ok(self.tool_list(chat_id, server_id, auth).await?.0)
+    }
+
+    /// The server's tools and when that list goes stale. A legacy list the
+    /// server gave no TTL lives as long as an idle session.
+    async fn tool_list(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        auth: &McpRequestAuthContext<'_>,
+    ) -> Result<(Vec<ResolvedMcpTool>, tokio::time::Instant), Report> {
         if let Some(request) = self.stateless_request(server_id, auth).await? {
-            let tools = request.list_tools(false).await?;
+            let (tools, expires) = request.tool_list(false).await?;
             let config = self.configuration.read().await.session_config(server_id)?;
-            return Ok(config.resolve_tools(tools));
+            return Ok((config.resolve_tools(tools), expires));
         }
         let key = self.get_or_create_session(chat_id, server_id, auth).await?;
         let mut sessions = self.sessions.write().await;
@@ -739,6 +813,7 @@ impl McpSessionManager {
         session.touch();
         let connection = session._service.clone();
         let catalog = session.tools.clone();
+        let max_idle = session.max_idle_duration;
         drop(sessions);
         let mut catalog = catalog.lock().await;
         if catalog
@@ -748,7 +823,151 @@ impl McpSessionManager {
             let config = self.configuration.read().await.session_config(server_id)?;
             *catalog = LegacyTools::fetch(server_id, connection.peer(), &config).await?;
         }
-        Ok(catalog.tools.clone())
+        let expires = catalog
+            .expires
+            .unwrap_or_else(|| tokio::time::Instant::now() + max_idle);
+        Ok((catalog.tools.clone(), expires))
+    }
+
+    /// The view at `uri` that a tool of `server_id` declares, for a server
+    /// that enables MCP Apps. Read with `resources/read` in either protocol
+    /// era, within `VIEW_READ_TIMEOUT`, and kept per server and URI until the
+    /// tool list it was read under goes stale. A view that is refused or
+    /// cannot be read is not read again for `VIEW_FAILURE_RETRY_AFTER`.
+    pub async fn read_app_view(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        uri: &str,
+        auth: &McpRequestAuthContext<'_>,
+    ) -> Result<Arc<McpAppView>, Report> {
+        let config = self.server_config(server_id).await?;
+        if !config.mcp_apps.enabled {
+            return Err(eyre!("MCP Apps are off for this server"));
+        }
+        let (tools, tools_expire) = self.tool_list(chat_id, server_id, auth).await?;
+        if !tools.iter().any(|tool| view_uri(&tool.tool) == Some(uri)) {
+            return Err(eyre!("No tool of this server declares this view"));
+        }
+        let key = (server_id.to_owned(), uri.to_owned());
+        if let Some(cached) = self.app_views.get(&key).await {
+            return Ok(cached.view);
+        }
+        let failure_key = {
+            let auth_key = Self::session_auth_key(server_id, &config, auth).await?;
+            let digest = auth_key.map(|auth_key| {
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                std::hash::Hash::hash(&auth_key, &mut hasher);
+                std::hash::Hasher::finish(&hasher)
+            });
+            (server_id.to_owned(), uri.to_owned(), digest)
+        };
+        if let Some(reason) = self.app_view_failures.get(&failure_key).await {
+            return Err(eyre!(
+                "{reason} (from an earlier read, not repeated for {VIEW_FAILURE_RETRY_AFTER:?})"
+            ));
+        }
+        let generation = *self.generation.lock().unwrap().get(server_id).unwrap_or(&0);
+        let read = async {
+            match self.stateless_request(server_id, auth).await? {
+                Some(request) => request.read_resource(uri).await,
+                None => {
+                    let key = self.get_or_create_session(chat_id, server_id, auth).await?;
+                    let peer = {
+                        let mut sessions = self.sessions.write().await;
+                        let session = sessions
+                            .get_mut(&key)
+                            .ok_or_else(|| eyre!("MCP session invalidated during resource read"))?;
+                        session.touch();
+                        session.peer.clone()
+                    };
+                    Ok(peer
+                        .read_resource(ReadResourceRequestParams::new(uri))
+                        .await?)
+                }
+            }
+        };
+        // Calls that ask for the same view at once share one read.
+        let outcome = self
+            .app_views
+            .try_get_with(key.clone(), async {
+                let result = tokio::time::timeout(VIEW_READ_TIMEOUT, read)
+                    .await
+                    .map_err(|_| eyre!("the view was not read within {VIEW_READ_TIMEOUT:?}"))??;
+                Ok::<_, Report>(CachedAppView {
+                    view: Arc::new(McpAppView::from_read_result(uri, result)?),
+                    fresh_for: tools_expire.saturating_duration_since(tokio::time::Instant::now()),
+                })
+            })
+            .await;
+        // Nothing read across a reload or a credential change is kept.
+        let still_current =
+            *self.generation.lock().unwrap().get(server_id).unwrap_or(&0) == generation;
+        match outcome {
+            Ok(cached) => {
+                if !still_current {
+                    self.app_views.invalidate(&key).await;
+                }
+                Ok(cached.view)
+            }
+            Err(error) => {
+                let reason = format!("{error:#}");
+                if still_current {
+                    self.app_view_failures
+                        .insert(failure_key, reason.clone())
+                        .await;
+                }
+                Err(eyre!(reason))
+            }
+        }
+    }
+
+    /// Drops the kept views and remembered failures of the servers
+    /// `is_affected` names.
+    async fn forget_app_views(&self, is_affected: impl Fn(&String) -> bool) {
+        let views: Vec<_> = self.app_views.iter().map(|(key, _)| key).collect();
+        for key in views.iter().filter(|key| is_affected(&key.0)) {
+            self.app_views.invalidate(key.as_ref()).await;
+        }
+        let failures: Vec<_> = self.app_view_failures.iter().map(|(key, _)| key).collect();
+        for key in failures.iter().filter(|key| is_affected(&key.0)) {
+            self.app_view_failures.invalidate(key.as_ref()).await;
+        }
+    }
+
+    /// The view a call of a tool declaring `uri` on `server_id` is shown
+    /// with: none unless the server enables MCP Apps. A view that cannot be
+    /// read or is refused is logged, and the call goes on without one.
+    pub async fn app_view_for_call(
+        &self,
+        chat_id: Uuid,
+        server_id: &str,
+        uri: &str,
+        auth: &McpRequestAuthContext<'_>,
+    ) -> Option<ToolResultView> {
+        let enabled = self
+            .server_config(server_id)
+            .await
+            .is_ok_and(|server| server.mcp_apps.enabled);
+        if !enabled {
+            return None;
+        }
+        match self.read_app_view(chat_id, server_id, uri, auth).await {
+            Ok(_) => Some(ToolResultView {
+                server_id: server_id.to_owned(),
+                uri: uri.to_owned(),
+                structured_content: None,
+            }),
+            Err(error) => {
+                warn!(
+                    server_id,
+                    uri,
+                    error = %error,
+                    "MCP Apps view refused; the tool call is shown without it"
+                );
+                None
+            }
+        }
     }
 
     /// List all available tools for a chat across all configured MCP servers
@@ -1242,6 +1461,7 @@ mod tests {
             approval_argument: None,
             glossary: Default::default(),
             surface_hints: false,
+            mcp_apps: Default::default(),
             protocol_mode: Default::default(),
             transport_type: "streamable_http".to_string(),
             url: "http://localhost/mcp".to_string(),
@@ -1405,6 +1625,10 @@ mod tests {
 #[path = "mcp_progress_tests.rs"]
 mod progress_tests;
 
+#[cfg(test)]
+#[path = "mcp_apps_tests.rs"]
+mod apps_tests;
+
 impl erato_memory::HeapSize for McpSessionManager {
     fn heap_size(&self, c: &mut erato_memory::Context) {
         c.measure(&self.sessions);
@@ -1412,6 +1636,14 @@ impl erato_memory::HeapSize for McpSessionManager {
         c.measure(&self.http_servers);
         c.measure(&self.creation_gates);
         c.measure(&self.generation);
+        for (key, cached) in self.app_views.iter() {
+            c.measure(&*key);
+            c.measure(&cached.view);
+        }
+        for (key, reason) in self.app_view_failures.iter() {
+            c.measure(&*key);
+            c.measure(&reason);
+        }
         c.opaque(&self._cleanup_task);
     }
 }
