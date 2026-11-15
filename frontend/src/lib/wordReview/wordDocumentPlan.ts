@@ -287,23 +287,17 @@ export function parseWordDocumentPlan(
         "Stories and sections require scope=document and a full-document capture.",
       );
     if (v.stories !== undefined) {
-      const stories = parseWordStoryChanges(v.stories, parseWordBlock);
-      if (!stories)
-        return fail(
-          "/stories",
-          "story-shape",
-          "Invalid story changes or nested blocks; use the story contract returned by the read tool.",
-        );
+      const stories = parseWordStoryChanges(
+        v.stories,
+        (block, path) => parseWordBlock(block, 0, issues, path),
+        fail,
+      );
+      if (!stories) return null;
       v.stories = stories;
     }
     if (v.sections !== undefined) {
-      const sections = parseWordSections(v.sections);
-      if (!sections)
-        return fail(
-          "/sections",
-          "section-shape",
-          "Invalid section list; each non-final section requires after and the final section omits it.",
-        );
+      const sections = parseWordSections(v.sections, fail);
+      if (!sections) return null;
       v.sections = sections;
     }
     for (const [index, e] of v.entries.entries()) {
@@ -935,13 +929,13 @@ export function validateWordDocumentPlan(
   }
 
   if (plan.sections) {
-    if (!parseWordSections(plan.sections))
-      return fail(
-        "invalid",
-        "/sections",
-        "section-shape",
-        "Invalid complete section list.",
-      );
+    if (
+      !parseWordSections(plan.sections, (path, code, message) => {
+        reject(path, code, message);
+        return null;
+      })
+    )
+      return "invalid";
     let previous = -1;
     const oddEven = new Set<boolean>();
     for (const [index, section] of plan.sections.entries()) {
@@ -1005,13 +999,16 @@ export function validateWordDocumentPlan(
         ? entry.source.filter((ref) => sources.get(ref)?.sectionBoundary)
         : [],
     );
-    if (JSON.stringify(sections) !== JSON.stringify(outputSections))
+    const missing = sections.find((ref, i) => outputSections[i] !== ref);
+    if (missing) {
+      const section = snapshot.sections?.find((s) => s.afterBlock === missing);
       return fail(
         "section-order",
-        "/entries",
+        consumed.get(missing) ?? "/entries",
         "section-order",
-        "Without an explicit sections list, all existing section boundaries must be kept in their original order.",
+        `Block ${missing} ends ${section ? `section ${section.id}` : "a section"}. Without an explicit sections list, all existing section boundaries must be kept in their original order.`,
       );
+    }
   }
   return null;
 }

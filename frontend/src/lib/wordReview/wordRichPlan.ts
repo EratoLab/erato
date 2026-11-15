@@ -13,6 +13,7 @@ import { wordPlanError, wordPointerSegment } from "./wordPlanDiagnostics";
 import { parseWordTableBlock } from "./wordTableContent";
 
 import type { WordPlanBlock, WordPlanRun } from "./wordDocumentPlan";
+import type { WordNativeStructureEdit } from "./wordInlineStructures";
 import type { WordPlanDiagnostics } from "./wordPlanDiagnostics";
 
 const object = (v: unknown): v is Record<string, unknown> =>
@@ -144,25 +145,38 @@ export function parseWordBlock(
     };
   }
   if (value.type === "native-edit") {
+    const shape =
+      "Invalid native-edit specification; use the corresponding read-tool contract.";
     if (
       !keys(value, ["id", "type", "text", "sourceRef", "edits"]) ||
       !id(value.sourceRef) ||
       !Array.isArray(value.edits) ||
       !value.edits.length ||
-      value.edits.length > 2000 ||
-      !value.edits.every((e) => isWordNativeStructureEdit(e, validChild))
+      value.edits.length > 2000
     )
-      return fail(
-        "native-edit-shape",
-        "Invalid native-edit specification; use the corresponding read-tool contract.",
-        `${path}/edits`,
-      );
+      return fail("native-edit-shape", shape, `${path}/edits`);
+    const edits: WordNativeStructureEdit[] = [];
+    for (const [index, edit] of value.edits.entries()) {
+      const at = `${path}/edits/${index}`;
+      // A content control's children are checked in order and the check stops at the first
+      // invalid one, so the last child seen is the one that failed.
+      let child = -1;
+      let childFailed = false;
+      const validEditChild = (v: unknown) => {
+        child++;
+        childFailed = parseChild(v, `${at}/children/${child}`) === null;
+        return !childFailed;
+      };
+      if (!isWordNativeStructureEdit(edit, validEditChild))
+        return childFailed ? null : fail("native-edit-shape", shape, at);
+      edits.push(edit);
+    }
     return {
       id: value.id,
       type: "native-edit",
       text: "",
       sourceRef: value.sourceRef,
-      edits: value.edits.map((e) =>
+      edits: edits.map((e) =>
         e.kind === "content-control" && e.children
           ? { ...e, children: normalize(e.children) }
           : e,
