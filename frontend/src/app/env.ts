@@ -91,6 +91,7 @@ export type Env = {
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
   audioConversationalMaxRecordingDurationSeconds: number;
+  audioConversationalEndOfTurnSilenceMs?: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -185,6 +186,7 @@ declare global {
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
+    AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -511,6 +513,10 @@ export const env = (): Env => {
           .VITE_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS,
       )
     : (window.AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS ?? 20 * 60);
+  const audioConversationalEndOfTurnSilenceMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS
+    ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS)
+    : window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -653,6 +659,7 @@ export const env = (): Env => {
         ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
         : (window.READ_ALOUD_ENABLED ?? false),
     audioConversationalMaxRecordingDurationSeconds,
+    audioConversationalEndOfTurnSilenceMs,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

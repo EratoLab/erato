@@ -57,6 +57,19 @@ const AUDIO_DICTATION_WORKLET_PROCESSOR_NAME = "audio-dictation-processor";
 const logger = createLogger("HOOK", "useAudioDictationRecorder");
 
 const DEFAULT_AUDIO_DICTATION_CHUNK_DURATION_MS = 30_000;
+export const DEFAULT_END_OF_TURN_SILENCE_MS = 1800;
+// Same range the backend accepts; anything else falls back to the default.
+const MIN_END_OF_TURN_SILENCE_MS = 500;
+const MAX_END_OF_TURN_SILENCE_MS = 5000;
+
+export function resolveEndOfTurnSilenceMs(value: number | undefined): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= MIN_END_OF_TURN_SILENCE_MS &&
+    value <= MAX_END_OF_TURN_SILENCE_MS
+    ? value
+    : DEFAULT_END_OF_TURN_SILENCE_MS;
+}
 
 type LiveAudioDictationSession = {
   socket: WebSocket;
@@ -82,6 +95,8 @@ type UseAudioDictationRecorderOptions = {
   onTranscriptChunk: (chunk: AudioDictationTranscriptChunk) => void;
   vadAutoStopEnabled?: boolean;
   onVadAutoStop?: () => void;
+  /** Silence in milliseconds after which the VAD ends the turn. */
+  endOfTurnSilenceMs?: number;
 };
 
 /**
@@ -138,6 +153,7 @@ export function useAudioDictationRecorder({
   onTranscriptChunk,
   vadAutoStopEnabled = false,
   onVadAutoStop,
+  endOfTurnSilenceMs,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -970,7 +986,7 @@ export function useAudioDictationRecorder({
             persistentVadEngineRef.current ??
             createRicky0123VadEngine({
               model: "silero-v5",
-              redemptionMs: 1800,
+              redemptionMs: resolveEndOfTurnSilenceMs(endOfTurnSilenceMs),
               preSpeechPadMs: 500,
               minSpeechMs: 400,
             });
@@ -1117,6 +1133,7 @@ export function useAudioDictationRecorder({
   }, [
     clearRecordingDurationTimer,
     enabled,
+    endOfTurnSilenceMs,
     ensureAudioContextReady,
     flushLiveAudioSamples,
     isDictating,

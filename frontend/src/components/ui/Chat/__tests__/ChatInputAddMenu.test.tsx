@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { act } from "react";
+import { act, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Row } from "../../Controls/Row";
@@ -268,6 +268,83 @@ describe("ChatInputAddMenu", () => {
       expect((document.activeElement as HTMLElement | null)?.textContent).toBe(
         "Email thread",
       );
+    });
+  });
+
+  describe("dividers", () => {
+    const tools = [
+      { id: "search", label: "Web search", checked: false, onToggle: vi.fn() },
+    ];
+    const separators = () => screen.queryAllByRole("separator");
+    const open = () =>
+      fireEvent.click(screen.getByTestId("chat-input-add-menu-trigger"));
+
+    it("draws one divider between sections without host content", () => {
+      render(<ChatInputAddMenu fileSources={fileSources} tools={tools} />);
+      open();
+      expect(separators()).toHaveLength(1);
+    });
+
+    it("draws a divider on each side of host content that renders a row", () => {
+      render(
+        <ChatInputAddMenu
+          fileSources={fileSources}
+          tools={tools}
+          extraContent={() => (
+            <Row variant="menu" role="menuitem" tabIndex={-1}>
+              Email thread
+            </Row>
+          )}
+        />,
+      );
+      open();
+      expect(separators()).toHaveLength(2);
+    });
+
+    it("draws no divider for host content that renders nothing, wherever it sits", () => {
+      const Nothing = () => null;
+      const { unmount } = render(
+        <ChatInputAddMenu
+          fileSources={fileSources}
+          tools={tools}
+          extraContent={() => <Nothing />}
+        />,
+      );
+      open();
+      expect(separators()).toHaveLength(1);
+      unmount();
+
+      render(
+        <ChatInputAddMenu tools={tools} extraContent={() => <Nothing />} />,
+      );
+      open();
+      expect(separators()).toHaveLength(0);
+    });
+
+    it("adds the dividers when host content starts rendering a row while open", async () => {
+      let show: (value: boolean) => void = () => {};
+      const Toggled = () => {
+        const [visible, setVisible] = useState(false);
+        show = setVisible;
+        return visible ? (
+          <Row variant="menu" role="menuitem" tabIndex={-1}>
+            Email thread
+          </Row>
+        ) : null;
+      };
+      render(
+        <ChatInputAddMenu
+          fileSources={fileSources}
+          tools={tools}
+          extraContent={() => <Toggled />}
+        />,
+      );
+      open();
+      expect(separators()).toHaveLength(1);
+      await act(async () => show(true));
+      expect(separators()).toHaveLength(2);
+      await act(async () => show(false));
+      expect(separators()).toHaveLength(1);
     });
   });
 });

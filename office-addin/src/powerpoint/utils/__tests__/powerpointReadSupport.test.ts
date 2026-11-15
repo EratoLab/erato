@@ -42,6 +42,7 @@ describe("PowerPoint read support", () => {
       safeTextFrame: false,
       bulletLevels: false,
       slideSize: false,
+      slidePicture: false,
     };
     expect(at("1.4")).toMatchObject({ slides: true, selection: false });
     expect(at("1.5")).toMatchObject({ selection: true, ...fullOnly });
@@ -104,7 +105,10 @@ describe("PowerPoint read support", () => {
     for (const set of ["1.3", "1.4", "1.5", "1.8", "1.9", "1.10"]) {
       const support = powerpointReadSupport(requirementsUpTo(set));
       expect(support.tier === "full").toBe(
-        support.placeholderRole && support.tables && support.bulletLevels,
+        support.placeholderRole &&
+          support.tables &&
+          support.bulletLevels &&
+          support.slidePicture,
       );
     }
   });

@@ -359,6 +359,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_conversational.end_of_turn_silence_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_conversational.fixed_output_token_budget": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
