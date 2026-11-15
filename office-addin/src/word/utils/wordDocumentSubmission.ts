@@ -13,6 +13,7 @@ import {
 
 import { wordApplyHost, wordApplyPolicy } from "./wordApplyPolicy";
 import { WordDraftRepairError } from "./wordDocumentDrafts";
+import { WORD_NO_REQUEST_SESSION_MESSAGE } from "./wordDocumentReadTool";
 import {
   captureWordAuthoringSnapshot,
   compileWordDocumentPlan,
@@ -30,10 +31,12 @@ import { wordDocumentChangedRefusal } from "./wordPlanDocumentChanges";
 import {
   expandWordScopedSubmission,
   WORD_SCOPED_TOKEN_MESSAGE,
+  wordScopedIssues,
   WordScopedSubmissionError,
 } from "./wordScopedSubmission";
 
 import type { WordDocumentReadSession } from "./wordDocumentReadTool";
+import type { WordScopedOrigins } from "./wordScopedSubmission";
 import type {
   ClientToolExecutor,
   ClientToolCallContext,
@@ -226,17 +229,20 @@ function createSubmissionExecutor(
           : "table_cell" in submitted
             ? "table_cell"
             : undefined;
-      const value =
+      const expansion =
         kind === "scoped_edit"
           ? expandWordScopedSubmission(submitted, snapshot)
-          : kind === "table_cell"
-            ? expandWordTableCellSubmission(submitted, snapshot)
-            : session.drafts.materialize(submitted);
+          : undefined;
+      const value =
+        expansion?.plan ??
+        (kind === "table_cell"
+          ? expandWordTableCellSubmission(submitted, snapshot)
+          : session.drafts.materialize(submitted));
       const prepared = await prepareWordDocumentSubmission(
         value,
         context,
         session,
-        kind === "scoped_edit",
+        expansion?.origins,
       );
       // The read session may have been cleared while preparation was pending.
       if (
@@ -327,11 +333,12 @@ function createSubmissionExecutor(
   };
 }
 
+/** `origins` is set for a sparse change; its diagnostics then point at that change. */
 async function prepareWordDocumentSubmission(
   input: unknown,
   context: ClientToolCallContext | undefined,
   session: WordDocumentReadSession,
-  sparse = false,
+  origins?: WordScopedOrigins,
 ): Promise<ClientToolExecutionResult> {
   if (!context || context.signal?.aborted)
     return {
@@ -347,8 +354,7 @@ async function prepareWordDocumentSubmission(
         {
           path: "/snapshot",
           code: "wrong-request",
-          message:
-            "The snapshot must have been read by this chat and assistant request.",
+          message: WORD_NO_REQUEST_SESSION_MESSAGE,
         },
       ],
     };
@@ -366,7 +372,7 @@ async function prepareWordDocumentSubmission(
     return {
       ok: false,
       error: "Document plan validation failed.",
-      validationErrors: issues,
+      validationErrors: origins ? wordScopedIssues(issues, origins) : issues,
     };
   try {
     const compiled = compileWordDocumentPlan(plan, snapshot);
@@ -417,7 +423,7 @@ async function prepareWordDocumentSubmission(
       plan,
       snapshot,
       prepared,
-      sparse,
+      !!origins,
     );
     if (wholeDocument)
       return scopedWholeDocumentRefusal(wholeDocument, snapshot);

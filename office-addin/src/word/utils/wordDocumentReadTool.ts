@@ -59,6 +59,11 @@ export type WordDocumentReadRequest = Pick<
   "chatId" | "messageId"
 >;
 
+/** The pane has no read session for this request: it reloaded, or the request was not sent with
+ * the document. Said so the model can pass it on as it is. */
+export const WORD_NO_REQUEST_SESSION_MESSAGE =
+  "Word reloaded or this message wasn't sent with the document; send your request again from the Word pane.";
+
 /** A lost capture is final: a new request must capture the document again (contract §6). */
 export const captureUnavailable = (): ClientToolExecutionResult => ({
   ok: false,
@@ -321,8 +326,10 @@ export class WordDocumentReadSession {
         validationErrors: [{ path, code, message: error }],
       },
     });
-    if (!session || !context || context.signal?.aborted)
+    if (!context || context.signal?.aborted)
       return fail("Document read unavailable or stopped.", "read-unavailable");
+    if (!session)
+      return fail(WORD_NO_REQUEST_SESSION_MESSAGE, "read-unavailable");
     const { snapshot } = session;
     // Reject stale SSE ownership before disclosing a read token.
     if (
@@ -330,10 +337,7 @@ export class WordDocumentReadSession {
       snapshot.ownerMessageId !== context.messageId ||
       session.chatId !== context.chatId
     )
-      return fail(
-        "This request has no document capture of its own. A new request with the document included is required.",
-        "wrong-request",
-      );
+      return fail(WORD_NO_REQUEST_SESSION_MESSAGE, "wrong-request");
     if (!input || typeof input !== "object" || Array.isArray(input))
       return fail(
         "Expected a snapshot token and optional cursor.",

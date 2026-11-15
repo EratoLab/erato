@@ -3134,6 +3134,16 @@ msgid "chat.share.warning.title"
 msgstr "La conversation peut contenir des informations sensibles"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noRequestSession"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noResponse"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
 msgid "chat.task_approval.always"
 msgstr ""
