@@ -516,6 +516,7 @@ export const DEFAULT_STUBS = {
       chatHistorySources: [],
     },
   }),
+  useFileCapabilities: () => ({ data: undefined, isLoading: false }),
   useFileCapabilitiesContext: () => ({ capabilities: [] }),
   useFileDropzone: () => ({
     uploadFiles: async () => [],

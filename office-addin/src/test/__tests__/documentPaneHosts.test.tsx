@@ -8,6 +8,7 @@ import { NEUTRAL_CURRENT_CHAT_KEY } from "../../core/AddinChatProviderCore";
 import ExcelApp from "../../excel/ExcelApp";
 import { EXCEL_CURRENT_CHAT_KEY } from "../../excel/excelSession";
 import PowerPointApp from "../../powerpoint/PowerPointApp";
+import { installPowerPointComponentRegistrations } from "../../powerpoint/installPowerPointComponentRegistrations";
 import { POWERPOINT_CURRENT_CHAT_KEY } from "../../powerpoint/powerpointSession";
 
 import type { LoginHintResolver } from "../../core/auth/AuthSource";
@@ -149,6 +150,8 @@ describe.each([
     App: ExcelApp,
     storageKey: EXCEL_CURRENT_CHAT_KEY,
     otherKey: POWERPOINT_CURRENT_CHAT_KEY,
+    install: () => {},
+    registryKeys: [],
   },
   {
     host: "PowerPoint",
@@ -156,10 +159,13 @@ describe.each([
     App: PowerPointApp,
     storageKey: POWERPOINT_CURRENT_CHAT_KEY,
     otherKey: EXCEL_CURRENT_CHAT_KEY,
+    install: installPowerPointComponentRegistrations,
+    // The "+" menu's slide picture row.
+    registryKeys: ["ChatAddMenuExtraContent"],
   },
 ])(
   "$host task pane composition",
-  ({ host, platform, App, storageKey, otherKey }) => {
+  ({ host, platform, App, storageKey, otherKey, install, registryKeys }) => {
     beforeEach(() => {
       i18n.activate("en");
       spies.callLog.length = 0;
@@ -216,10 +222,22 @@ describe.each([
       );
     });
 
-    it("contributes nothing to the component registry", async () => {
-      await renderPane();
+    // A pane evaluates only its own route module; this file imports both, so each host's
+    // registrations are installed alone here and the shared registry is restored afterwards.
+    it("contributes only its own entries to the component registry", async () => {
+      const registry = componentRegistry as unknown as Record<string, unknown>;
+      const atImport = { ...registry };
+      try {
+        for (const key of registryKeys) expect(atImport).toHaveProperty(key);
+        for (const key of Object.keys(registry)) delete registry[key];
+        install();
+        await renderPane();
 
-      expect(Object.keys(componentRegistry)).toEqual([]);
+        expect(Object.keys(registry)).toEqual(registryKeys);
+      } finally {
+        for (const key of Object.keys(registry)) delete registry[key];
+        Object.assign(registry, atImport);
+      }
     });
 
     it("keeps its chat selection under its own key", async () => {

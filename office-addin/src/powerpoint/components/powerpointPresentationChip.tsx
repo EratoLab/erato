@@ -48,6 +48,8 @@ export function powerpointPresentationChip(input: {
   locked: boolean;
   onInclude: () => void;
   onExclude: () => void;
+  /** Present while a picture of the selected slide can be attached. */
+  onAttachSlidePicture?: () => void;
 }): ComposerContextItem {
   const spokenLabel = t({
     id: "officeAddin.powerpoint.chip.spokenLabel",
@@ -83,6 +85,20 @@ export function powerpointPresentationChip(input: {
     }),
     detail: {
       title: input.name || spokenLabel,
+      ...(input.included && input.onAttachSlidePicture
+        ? {
+            actions: [
+              {
+                id: "powerpoint.slidePicture",
+                label: t({
+                  id: "officeAddin.powerpoint.chip.attachSlidePicture",
+                  message: "Attach picture of selected slide",
+                }),
+                onSelect: input.onAttachSlidePicture,
+              },
+            ],
+          }
+        : {}),
       render: () => (
         <div className="space-y-2 text-sm">
           {(input.included

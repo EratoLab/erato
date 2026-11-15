@@ -1392,6 +1392,11 @@ msgstr "Ánclalo para seguir tu correo"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.attachSlidePicture"
+msgstr "Adjuntar imagen de la diapositiva seleccionada"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.chip.exclude"
 msgstr "No incluir esta presentación"
 
@@ -1439,6 +1444,76 @@ msgstr "Erato lee las diapositivas de una en una, solo cuando tu petición las n
 #: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.onDemandNoSelection"
 msgstr "Erato lee las diapositivas de una en una, solo cuando tu petición las necesita. Esta versión de PowerPoint no le indica qué has seleccionado."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.heading"
+msgstr "Presentación"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePicture"
+msgstr "Imagen de la diapositiva seleccionada"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
+msgstr "Para que Erato vea el diseño, los gráficos y las imágenes"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.attached"
+msgstr "{attachedCount, plural, one {Imagen de la diapositiva adjuntada.} other {# imágenes de diapositivas adjuntadas.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {La imagen de la diapositiva terminó después de que cambiaras de chat, así que no está adjunta aquí. Vuelve a añadirla si la necesitas.} other {Las imágenes de las diapositivas terminaron después de que cambiaras de chat, así que no están adjuntas aquí. Vuelve a añadirlas si las necesitas.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.failed"
+msgstr "PowerPoint no pudo crear la imagen de la diapositiva, así que no se adjuntó nada. Vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.leftOut"
+msgstr "{leftOut, plural, one {Se adjuntaron las primeras {attachedCount} de {selectedCount} diapositivas seleccionadas. Para añadir la última, selecciónala y vuelve a añadirla.} other {Se adjuntaron las primeras {attachedCount} de {selectedCount} diapositivas seleccionadas. Para añadir las otras #, selecciónalas y vuelve a añadirlas.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {El modelo seleccionado no puede ver imágenes, así que no leerá la imagen de la diapositiva adjunta. Elige otro modelo o quita la imagen.} other {El modelo seleccionado no puede ver imágenes, así que no leerá las # imágenes de diapositivas adjuntas. Elige otro modelo o quita las imágenes.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.noRoom"
+msgstr "Este mensaje ya tiene todos los archivos que admite. Quita uno para añadir una imagen de diapositiva."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.nothingSelected"
+msgstr "Primero selecciona una diapositiva en PowerPoint y luego añade su imagen."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.rendering"
+msgstr "Creando una imagen de la diapositiva seleccionada…"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.timeout"
+msgstr "PowerPoint tardó demasiado en crear la imagen de la diapositiva, así que no se adjuntó nada. Vuelve a intentarlo."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadFailed"
+msgstr "{total, plural, one {No se pudo subir la imagen de la diapositiva, así que no está adjunta.} other {No se pudieron subir las imágenes de las diapositivas, así que no hay ninguna adjunta.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
+msgstr "No se pudieron subir {missing} de {total} imágenes de diapositivas. Las demás están adjuntas."
 
 #. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts

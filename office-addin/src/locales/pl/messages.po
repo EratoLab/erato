@@ -1392,6 +1392,11 @@ msgstr "Przypnij, aby śledzić pocztę"
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.attachSlidePicture"
+msgstr "Dołącz obraz zaznaczonego slajdu"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.chip.exclude"
 msgstr "Nie dołączaj tej prezentacji"
 
@@ -1439,6 +1444,76 @@ msgstr "Erato odczytuje slajdy pojedynczo, tylko gdy Twoja prośba ich wymaga, i
 #: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.onDemandNoSelection"
 msgstr "Erato odczytuje slajdy pojedynczo, tylko gdy Twoja prośba ich wymaga. Ta wersja PowerPointa nie przekazuje, co zaznaczono."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.heading"
+msgstr "Prezentacja"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePicture"
+msgstr "Obraz zaznaczonego slajdu"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
+msgstr "Pozwala Erato zobaczyć układ, wykresy i obrazy"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.attached"
+msgstr "{attachedCount, plural, one {Dołączono obraz slajdu.} few {Dołączono # obrazy slajdów.} many {Dołączono # obrazów slajdów.} other {Dołączono # obrazu slajdów.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {Obraz slajdu był gotowy dopiero po zmianie czatu, więc nie jest tu dołączony. Dodaj go ponownie, jeśli go potrzebujesz.} few {Obrazy slajdów były gotowe dopiero po zmianie czatu, więc nie są tu dołączone. Dodaj je ponownie, jeśli ich potrzebujesz.} many {Obrazy slajdów były gotowe dopiero po zmianie czatu, więc nie są tu dołączone. Dodaj je ponownie, jeśli ich potrzebujesz.} other {Obrazy slajdów były gotowe dopiero po zmianie czatu, więc nie są tu dołączone. Dodaj je ponownie, jeśli ich potrzebujesz.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.failed"
+msgstr "PowerPoint nie mógł utworzyć obrazu slajdu, więc nic nie dołączono. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.leftOut"
+msgstr "{leftOut, plural, one {Dołączono pierwsze {attachedCount} z {selectedCount} zaznaczonych slajdów. Aby dodać ostatni, zaznacz go i dodaj ponownie.} few {Dołączono pierwsze {attachedCount} z {selectedCount} zaznaczonych slajdów. Aby dodać pozostałe #, zaznacz je i dodaj ponownie.} many {Dołączono pierwsze {attachedCount} z {selectedCount} zaznaczonych slajdów. Aby dodać pozostałe #, zaznacz je i dodaj ponownie.} other {Dołączono pierwsze {attachedCount} z {selectedCount} zaznaczonych slajdów. Aby dodać pozostałe #, zaznacz je i dodaj ponownie.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {Wybrany model nie widzi obrazów, więc nie odczyta dołączonego obrazu slajdu. Wybierz inny model albo usuń obraz.} few {Wybrany model nie widzi obrazów, więc nie odczyta # dołączonych obrazów slajdów. Wybierz inny model albo usuń obrazy.} many {Wybrany model nie widzi obrazów, więc nie odczyta # dołączonych obrazów slajdów. Wybierz inny model albo usuń obrazy.} other {Wybrany model nie widzi obrazów, więc nie odczyta # dołączonego obrazu slajdu. Wybierz inny model albo usuń obrazy.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.noRoom"
+msgstr "Ta wiadomość ma już tyle plików, ile może przyjąć. Usuń jeden, aby dodać obraz slajdu."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.nothingSelected"
+msgstr "Najpierw zaznacz slajd w PowerPoincie, a potem dodaj jego obraz."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.rendering"
+msgstr "Tworzenie obrazu zaznaczonego slajdu…"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.timeout"
+msgstr "Tworzenie obrazu slajdu w PowerPoincie trwało zbyt długo, więc nic nie dołączono. Spróbuj ponownie."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadFailed"
+msgstr "{total, plural, one {Nie udało się przesłać obrazu slajdu, więc nie jest dołączony.} few {Nie udało się przesłać obrazów slajdów, więc żaden nie jest dołączony.} many {Nie udało się przesłać obrazów slajdów, więc żaden nie jest dołączony.} other {Nie udało się przesłać obrazów slajdów, więc żaden nie jest dołączony.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
+msgstr "Nie udało się przesłać {missing} z {total} obrazów slajdów. Pozostałe są dołączone."
 
 #. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
