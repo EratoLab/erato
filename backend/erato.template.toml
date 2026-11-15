@@ -450,6 +450,7 @@ chat_provider_ids = ["test-token-limit"]
 # [audio_conversational]
 # enabled = false
 # speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
+# end_of_turn_silence_ms = 1800 # Silence that ends a spoken turn (500 to 5000); shorter replies sooner but cuts off more pauses
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30

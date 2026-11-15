@@ -5,7 +5,10 @@ import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
-import { useAudioDictationRecorder } from "../useAudioDictationRecorder";
+import {
+  resolveEndOfTurnSilenceMs,
+  useAudioDictationRecorder,
+} from "../useAudioDictationRecorder";
 
 vi.mock("../audio-dictation-worklet.ts?worker&url", () => ({
   default: "blob:mock-audio-dictation-worklet",
@@ -29,7 +32,7 @@ const vadMock = vi.hoisted(() => {
     emit: (event: Parameters<Listener>[0]) => void;
   }[] = [];
 
-  const createRicky0123VadEngine = vi.fn(() => {
+  const createRicky0123VadEngine = vi.fn((_options?: unknown) => {
     const engine = {
       listeners: [] as Listener[],
       acceptedFrames: [] as unknown[],
@@ -253,15 +256,19 @@ function renderDictationHook(
   options?: {
     vadAutoStopEnabled?: boolean;
     onVadAutoStop?: () => void;
+    mode?: "dictation" | "conversational";
+    endOfTurnSilenceMs?: number;
   },
 ) {
   return renderHook(() =>
     useAudioDictationRecorder({
       enabled: true,
+      mode: options?.mode,
       maxRecordingDurationSeconds: 1200,
       onTranscriptChunk,
       vadAutoStopEnabled: options?.vadAutoStopEnabled,
       onVadAutoStop: options?.onVadAutoStop,
+      endOfTurnSilenceMs: options?.endOfTurnSilenceMs,
     }),
   );
 }
@@ -689,5 +696,41 @@ describe("useAudioDictationRecorder", () => {
 
     unmount();
     expect(vadMock.engines[0].destroy).toHaveBeenCalled();
+  });
+
+  it.each([
+    [undefined, 1800],
+    [1200, 1200],
+    [100, 1800],
+  ])(
+    "ends a conversational turn after the configured silence (%s ms → %s ms)",
+    async (configured, expected) => {
+      const { result } = renderDictationHook(vi.fn(), {
+        mode: "conversational",
+        vadAutoStopEnabled: true,
+        endOfTurnSilenceMs: configured,
+      });
+
+      await act(async () => {
+        result.current.toggleDictation();
+      });
+      await waitFor(() =>
+        expect(vadMock.createRicky0123VadEngine).toHaveBeenCalledTimes(1),
+      );
+      expect(vadMock.createRicky0123VadEngine).toHaveBeenCalledWith(
+        expect.objectContaining({ redemptionMs: expected }),
+      );
+    },
+  );
+});
+
+describe("resolveEndOfTurnSilenceMs", () => {
+  it("keeps values the backend accepts and falls back to 1.8 s otherwise", () => {
+    expect(resolveEndOfTurnSilenceMs(500)).toBe(500);
+    expect(resolveEndOfTurnSilenceMs(5000)).toBe(5000);
+    expect(resolveEndOfTurnSilenceMs(undefined)).toBe(1800);
+    expect(resolveEndOfTurnSilenceMs(499)).toBe(1800);
+    expect(resolveEndOfTurnSilenceMs(30_000)).toBe(1800);
+    expect(resolveEndOfTurnSilenceMs(Number.NaN)).toBe(1800);
   });
 });
