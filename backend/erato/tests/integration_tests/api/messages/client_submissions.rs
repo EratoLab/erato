@@ -1260,6 +1260,80 @@ async fn a_decoded_list_is_still_validated_and_replayed_decoded(pool: Pool<Postg
     );
 }
 
+fn plan_parameters() -> Value {
+    json!({"type":"object","anyOf":[
+        {"type":"object","properties":{
+            "version":{"type":"integer","const":1},
+            "snapshot":{"type":"string"},
+            "entries":{"type":"array","items":{"$ref":"#/$defs/entry"}}
+        },"required":["version","snapshot","entries"],"additionalProperties":false},
+        {"type":"object","properties":{
+            "snapshot":{"type":"string"},
+            "scoped_edit":{"type":"object","properties":{
+                "body":{"type":"array","maxItems":16,"items":{"$ref":"#/$defs/entry"}}
+            },"additionalProperties":false}
+        },"required":["snapshot","scoped_edit"],"additionalProperties":false}
+    ],"$defs":{"entry":{"type":"object","properties":{
+        "kind":{"type":"string"},
+        "source":{"type":"array","items":{"type":"string"}}
+    },"required":["kind","source"],"additionalProperties":false}}})
+}
+
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_rejected_alternative_names_its_own_field_after_decoding(pool: Pool<Postgres>) {
+    let entries = json!([{"kind":"keep","source":["b1"]}]);
+    let (requests, events) = run_scenario(
+        pool,
+        vec![
+            ModelStep::Tools(vec![(
+                "call_unversioned",
+                "submit_draft",
+                json!({"snapshot":"s1","entries":format!("{entries}}}]")}),
+            )]),
+            ModelStep::Tools(vec![(
+                "call_valid",
+                "submit_draft",
+                json!({"version":1,"snapshot":"s1","entries":format!("{entries}}}]")}),
+            )]),
+        ],
+        vec![json!({"result":{"draft_id":"draft-1"}})],
+        ScenarioOptions {
+            parameters: Some(plan_parameters()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(requests.len(), 2);
+    let replay = requests[1]["messages"].as_array().unwrap();
+    let arguments = replay
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .unwrap()["tool_calls"][0]["function"]["arguments"]
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(arguments).unwrap()["entries"],
+        entries
+    );
+    let rejection = replay
+        .iter()
+        .find(|message| message["role"] == "tool")
+        .unwrap()["content"]
+        .as_str()
+        .unwrap();
+    let rejection: Value = serde_json::from_str(rejection).unwrap();
+    assert_eq!(
+        rejection["validation_errors"],
+        json!([{"path":"","code":"required","message":"\"version\" is a required property"}])
+    );
+    let call = events
+        .iter()
+        .find(|event| event["message_type"] == "client_tool_call")
+        .unwrap();
+    assert_eq!(call["input"]["entries"], entries);
+    assert_eq!(final_outcome(&events)["status"], "accepted");
+}
+
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn local_validation_stops_at_attempt_limit(pool: Pool<Postgres>) {
     let (requests, events) = run_submission(

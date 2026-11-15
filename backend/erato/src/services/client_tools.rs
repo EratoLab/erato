@@ -72,8 +72,16 @@ pub struct GrantedCall {
 #[derive(Clone)]
 pub struct SubmissionPolicy {
     validator: Arc<jsonschema::Validator>,
+    /// One per alternative of a root `anyOf`, whose own failure names no field.
+    alternatives: Arc<[Alternative]>,
     schema: Arc<Value>,
     pub max_attempts: u32,
+}
+
+struct Alternative {
+    validator: jsonschema::Validator,
+    /// Its required keys that no other alternative names.
+    keys: Vec<String>,
 }
 
 impl OfferedClientTool {
@@ -107,6 +115,7 @@ impl OfferedClientTool {
                 erato_config::client_tool_schema::compile(schema).map(|validator| {
                     SubmissionPolicy {
                         validator: Arc::new(validator),
+                        alternatives: compile_alternatives(schema).into(),
                         schema: Arc::new(schema.clone()),
                         max_attempts: submission.max_attempts,
                     }
@@ -189,6 +198,73 @@ impl SubmissionRecovery {
 }
 
 const MAX_VALIDATION_ISSUES: usize = 16;
+/// Errors counted per alternative when choosing between them.
+const MAX_COUNTED_ERRORS: usize = 256;
+
+fn schema_issue(error: &jsonschema::ValidationError<'_>) -> ClientToolValidationIssue {
+    ClientToolValidationIssue {
+        path: error.instance_path.to_string(),
+        code: error
+            .schema_path
+            .to_string()
+            .rsplit('/')
+            .next()
+            .unwrap_or("schema")
+            .into(),
+        // Do not echo the proposed artifact into a correction response.
+        message: bounded(&error.masked().to_string(), 512),
+    }
+}
+
+/// Each alternative of a root `anyOf` as a schema of its own, with the root's
+/// definitions. If any of them cannot stand alone, there are none, and a
+/// failure reports the root `anyOf` as before.
+fn compile_alternatives(schema: &Value) -> Vec<Alternative> {
+    let Some(choices) = schema.get("anyOf").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let names = |choice: &Value, key: &str| {
+        required_keys(choice).any(|name| name == key)
+            || choice
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| properties.contains_key(key))
+    };
+    let mut alternatives = Vec::with_capacity(choices.len());
+    for (index, choice) in choices.iter().enumerate() {
+        let mut standalone = choice.clone();
+        if let Some(object) = standalone.as_object_mut() {
+            for keyword in ["$schema", "$defs", "definitions"] {
+                if let Some(value) = schema.get(keyword) {
+                    object.insert(keyword.to_owned(), value.clone());
+                }
+            }
+        }
+        let Ok(validator) = erato_config::client_tool_schema::compile_part(&standalone) else {
+            return Vec::new();
+        };
+        let keys = required_keys(choice)
+            .filter(|key| {
+                choices
+                    .iter()
+                    .enumerate()
+                    .all(|(other, choice)| other == index || !names(choice, key))
+            })
+            .map(str::to_owned)
+            .collect();
+        alternatives.push(Alternative { validator, keys });
+    }
+    alternatives
+}
+
+fn required_keys(schema: &Value) -> impl Iterator<Item = &str> {
+    schema
+        .get("required")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+}
 
 fn bounded(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
@@ -213,28 +289,59 @@ impl SubmissionPolicy {
         crate::services::stringified_arguments::decode(&self.schema, input)
     }
 
+    /// A failed root `anyOf` is reported as the errors of the alternative the
+    /// arguments aim at.
     pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
-        let issues = self
+        let mut issues = Vec::new();
+        for error in self
             .validator
             .iter_errors(input)
             .take(MAX_VALIDATION_ISSUES)
-            .map(|error| {
-                ClientToolValidationIssue {
-                    path: error.instance_path.to_string(),
-                    code: error
-                        .schema_path
-                        .to_string()
-                        .rsplit('/')
-                        .next()
-                        .unwrap_or("schema")
-                        .into(),
-                    // Do not echo the proposed artifact into a correction response.
-                    message: bounded(&error.masked().to_string(), 512),
-                }
-            })
-            .collect::<Vec<_>>();
+        {
+            let before = issues.len();
+            if matches!(error.kind, jsonschema::error::ValidationErrorKind::AnyOf)
+                && error.instance_path.as_str().is_empty()
+                && error.schema_path.as_str() == "/anyOf"
+                && let Some(alternative) = self.alternative_aimed_at(input)
+            {
+                issues.extend(
+                    alternative
+                        .validator
+                        .iter_errors(input)
+                        .take(MAX_VALIDATION_ISSUES)
+                        .map(|error| schema_issue(&error)),
+                );
+            }
+            if issues.len() == before {
+                issues.push(schema_issue(&error));
+            }
+        }
         (!issues.is_empty())
             .then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues), None))
+    }
+
+    /// The alternative whose own required key is present; otherwise the one
+    /// with the fewest errors, among those whose key is present if several
+    /// are, and the first on a tie.
+    fn alternative_aimed_at(&self, input: &Value) -> Option<&Alternative> {
+        let mut aimed = self
+            .alternatives
+            .iter()
+            .filter(|alternative| alternative.keys.iter().any(|key| input.get(key).is_some()))
+            .collect::<Vec<_>>();
+        if aimed.is_empty() {
+            aimed = self.alternatives.iter().collect();
+        }
+        if aimed.len() == 1 {
+            return aimed.pop();
+        }
+        aimed.into_iter().min_by_key(|alternative| {
+            alternative
+                .validator
+                .iter_errors(input)
+                .take(MAX_COUNTED_ERRORS)
+                .count()
+        })
     }
 
     pub fn finish_after(&self, outcome: &ClientToolOutcome, attempt: u32) -> bool {
@@ -697,6 +804,183 @@ mod tests {
         assert_eq!(
             output["submission"],
             json!({"status":"failed","attempts_remaining":0})
+        );
+    }
+
+    /// The root of the Word plan tool: alternatives told apart by their own
+    /// required keys, sharing `$defs`.
+    fn plan_policy() -> SubmissionPolicy {
+        let read = json!({"snapshot":{"type":"string"},"readToken":{"type":"string"}});
+        let alternative = |own: Value, required: &[&str]| {
+            let mut properties = read.clone();
+            properties
+                .as_object_mut()
+                .unwrap()
+                .extend(own.as_object().unwrap().clone());
+            let mut keys = vec!["snapshot", "readToken"];
+            keys.extend(required);
+            json!({"type":"object","properties":properties,"required":keys,"additionalProperties":false})
+        };
+        let schema = json!({"type":"object","anyOf":[
+            alternative(json!({
+                "version":{"type":"integer","const":1},
+                "scope":{"type":"string","enum":["body","document"]},
+                "entries":{"type":"array","items":{"$ref":"#/$defs/entry"}}
+            }), &["version", "scope", "entries"]),
+            alternative(json!({
+                "draft_id":{"type":"string"},
+                "revision":{"type":"integer"},
+                "patches":{"type":"array","maxItems":32,"items":{"type":"object"}}
+            }), &["draft_id", "revision", "patches"]),
+            alternative(json!({"table_cell":{"type":"object"}}), &["table_cell"]),
+            alternative(json!({"scoped_edit":{"type":"object","minProperties":1,
+                "additionalProperties":false,"properties":{"body":{"type":"array","maxItems":16,
+                    "items":{"type":"object","required":["operation"],"additionalProperties":false,
+                        "properties":{
+                            "operation":{"type":"string","enum":["replace","delete","insert-after"]},
+                            "source":{"type":"array","maxItems":16,"items":{"type":"string"}},
+                            "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
+                        }}}}}}), &["scoped_edit"]),
+        ],"$defs":{
+            "entry":{"type":"object","required":["kind"],"additionalProperties":false,"properties":{
+                "kind":{"type":"string","enum":["keep","insert"]},
+                "source":{"type":"array","items":{"type":"string"}},
+                "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
+            }},
+            "block":{"type":"object","required":["type"],"additionalProperties":false,"properties":{
+                "type":{"type":"string","enum":["paragraph"]},"text":{"type":"string"}
+            }}
+        }});
+        let config = ClientToolConfig {
+            name: "submit_document_plan".into(),
+            parameters: schema.to_string(),
+            submission: Some(Default::default()),
+            ..Default::default()
+        };
+        OfferedClientTool::prepare(&config, &schema)
+            .unwrap()
+            .submission
+            .unwrap()
+    }
+
+    fn issues(policy: &SubmissionPolicy, mut input: Value) -> Vec<(String, String, String)> {
+        policy.decode_stringified(&mut input);
+        match policy.validate(&input) {
+            None => Vec::new(),
+            Some(ClientToolOutcome::ValidationFailed(issues, None)) => issues
+                .into_iter()
+                .map(|issue| (issue.path, issue.code, issue.message))
+                .collect(),
+            Some(other) => panic!("unexpected outcome {other:?}"),
+        }
+    }
+
+    fn issue(path: &str, code: &str, message: &str) -> (String, String, String) {
+        (path.into(), code.into(), message.into())
+    }
+
+    #[test]
+    fn a_failed_root_alternative_reports_the_errors_of_the_one_aimed_at() {
+        let policy = plan_policy();
+        let read = json!({"snapshot":"s1","readToken":"t1"});
+        let with = |fields: Value| {
+            let mut input = read.clone();
+            input
+                .as_object_mut()
+                .unwrap()
+                .extend(fields.as_object().unwrap().clone());
+            input
+        };
+        let change = json!({"operation":"replace","source":["b1"],"blocks":[{"type":"paragraph","text":"secret draft"}]});
+        assert_eq!(
+            issues(
+                &policy,
+                with(json!({"scoped_edit":{"body":vec![change.clone(); 17]}}))
+            ),
+            vec![issue(
+                "/scoped_edit/body",
+                "maxItems",
+                "value has more than 16 items"
+            )]
+        );
+        assert!(
+            issues(
+                &policy,
+                with(json!({"scoped_edit":{"body":vec![change; 16]}}))
+            )
+            .is_empty()
+        );
+
+        let entries = json!([{"kind":"keep","source":["b1"]},{"kind":"insert","blocks":[{"type":"paragraph","text":"[secret]"}]}]);
+        let plan = |entries: Value| with(json!({"version":1,"scope":"body","entries":entries}));
+        assert!(issues(&policy, plan(json!(format!("{entries}}}]")))).is_empty());
+        assert_eq!(
+            issues(&policy, plan(json!(format!("{entries}}}] secret")))),
+            vec![issue("/entries", "type", r#"value is not of type "array""#)]
+        );
+        let mut unversioned = plan(entries);
+        unversioned.as_object_mut().unwrap().remove("version");
+        assert_eq!(
+            issues(&policy, unversioned),
+            vec![issue("", "required", r#""version" is a required property"#)]
+        );
+
+        let many = issues(&policy, plan(json!(vec![json!({"kind":"secret"}); 20])));
+        assert_eq!(many.len(), 16);
+        assert!(
+            many.iter()
+                .all(|(path, code, message)| path.starts_with("/entries/")
+                    && code == "enum"
+                    && !message.contains("secret"))
+        );
+    }
+
+    #[test]
+    fn without_one_aimed_alternative_the_fewest_errors_decide() {
+        let policy = plan_policy();
+        assert_eq!(
+            issues(&policy, json!({"snapshot":"s1","readToken":"t1"})),
+            vec![issue(
+                "",
+                "required",
+                r#""table_cell" is a required property"#
+            )],
+            "a tie goes to the first alternative"
+        );
+        // The table cell alternative has as few errors, but its key is absent.
+        let both =
+            json!({"snapshot":"s1","readToken":"t1","entries":"x","scoped_edit":{"body":"x"}});
+        let mut reported = issues(&policy, both)
+            .into_iter()
+            .map(|(path, code, _)| (path, code))
+            .collect::<Vec<_>>();
+        reported.sort();
+        assert_eq!(
+            reported,
+            [("", "additionalProperties"), ("/scoped_edit/body", "type")]
+                .map(|(path, code)| (path.to_owned(), code.to_owned()))
+        );
+    }
+
+    #[test]
+    fn alternatives_that_cannot_stand_alone_keep_the_root_error() {
+        let schema = json!({"type":"object","anyOf":[{"$ref":"#/anyOf/1"},{"required":["a"]}]});
+        let config = ClientToolConfig {
+            parameters: schema.to_string(),
+            submission: Some(Default::default()),
+            ..Default::default()
+        };
+        let policy = OfferedClientTool::prepare(&config, &schema)
+            .unwrap()
+            .submission
+            .unwrap();
+        assert_eq!(
+            issues(&policy, json!({})),
+            vec![issue(
+                "",
+                "anyOf",
+                "value is not valid under any of the schemas listed in the 'anyOf' keyword"
+            )]
         );
     }
 
