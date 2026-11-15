@@ -1,3 +1,4 @@
+import { POWERPOINT_FILE_CONTENT, hasFileRoute } from "./powerpointFileContent";
 import { powerpointHostLimits } from "./powerpointReads";
 import { powerpointErrorText, runPowerPoint } from "./powerpointRun";
 import { capText } from "./powerpointShapeRead";
@@ -84,9 +85,12 @@ export function powerpointTierText(support: PowerPointReadSupport): string {
   const version = support.highestVersion
     ? `PowerPointApi ${support.highestVersion}`
     : "below PowerPointApi 1.3";
-  return limits.length
+  const tier = limits.length
     ? `${support.tier} (${version}); this host cannot read ${limits.join(", ")}`
     : `${support.tier} (${version})`;
+  return hasFileRoute(support)
+    ? `${tier}; slide reads also return ${POWERPOINT_FILE_CONTENT.slice(0, -1).join(", ")} and ${POWERPOINT_FILE_CONTENT.at(-1)} from the presentation file`
+    : tier;
 }
 
 export function resolvePowerPointFacet(input: {

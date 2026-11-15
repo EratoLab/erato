@@ -1,3 +1,7 @@
+import type {
+  PowerPointChartOut,
+  PowerPointSmartArtNodeOut,
+} from "./powerpointPackage";
 import type { PowerPointReadSupport } from "./powerpointReadSupport";
 
 /** A shape as the reads return it; box values are points. */
@@ -14,6 +18,10 @@ export interface PowerPointShapeOut {
   holds?: string;
   paragraphs?: PowerPointParagraphOut[];
   table?: { rows: number; columns: number; values: string[][] };
+  /** From the presentation file: series with their saved values. */
+  chart?: PowerPointChartOut;
+  /** From the presentation file: SmartArt node texts in outline order. */
+  smartArt?: PowerPointSmartArtNodeOut[];
   children?: PowerPointShapeOut[];
   z?: number;
   rotation?: number;
@@ -48,11 +56,18 @@ export const POWERPOINT_HOST_LIMITS = {
 export const hostCannot = (feature: keyof typeof POWERPOINT_HOST_LIMITS) =>
   `${POWERPOINT_HOST_LIMITS[feature]}: this PowerPoint version cannot read them (needs PowerPointApi 1.10)`;
 
+export const CHART_UNREAD = "chart data (no PowerPoint API reads it)";
+export const SMART_ART_UNREAD = "SmartArt text (no PowerPoint API reads it)";
+export const PLACEHOLDER_OTHER_UNREAD =
+  "placeholder content: it holds something other than text, which this PowerPoint version cannot tell apart";
+export const UNDESCRIBED_UNREAD =
+  "content: PowerPoint does not describe this shape type";
+
 /** Shape types whose content no PowerPoint API exposes. */
-const OPAQUE_CONTENT: Record<string, string> = {
-  Chart: "chart data (no PowerPoint API reads it)",
-  Diagram: "SmartArt text (no PowerPoint API reads it)",
-  SmartArt: "SmartArt text (no PowerPoint API reads it)",
+export const OPAQUE_CONTENT: Record<string, string> = {
+  Chart: CHART_UNREAD,
+  Diagram: SMART_ART_UNREAD,
+  SmartArt: SMART_ART_UNREAD,
   Graphic: "graphic content",
   Image: "picture content",
   Media: "media content",
@@ -67,7 +82,7 @@ const OPAQUE_CONTENT: Record<string, string> = {
  * these types are asked for text. A placeholder can still hold a table or a picture; readEach
  * isolates that one.
  */
-const TEXT_TYPES = new Set([
+export const TEXT_TYPES = new Set([
   "GeometricShape",
   "TextBox",
   "Placeholder",
@@ -239,10 +254,7 @@ export async function readShapeContent(
     const opaque = OPAQUE_CONTENT[contentType(p)];
     if (opaque) markUnread(p.out, opaque);
     else if (contentType(p) === "Unsupported" && p.out.text === undefined)
-      markUnread(
-        p.out,
-        "content: PowerPoint does not describe this shape type",
-      );
+      markUnread(p.out, UNDESCRIBED_UNREAD);
   }
 
   await readGroups(context, pending, support, depth);
@@ -278,7 +290,7 @@ async function readTexts(
       markUnread(
         p.out,
         !safe && p.out.type === "Placeholder"
-          ? "placeholder content: it holds something other than text, which this PowerPoint version cannot tell apart"
+          ? PLACEHOLDER_OTHER_UNREAD
           : "text: PowerPoint refused to read it",
       );
       return;
@@ -290,7 +302,7 @@ async function readTexts(
   });
 }
 
-function capTable(values: string[][]): string[][] {
+export function capTable(values: string[][]): string[][] {
   let cells = 0;
   const rows: string[][] = [];
   for (const row of values) {
@@ -519,7 +531,7 @@ function prefixThatFits<T>(items: readonly T[], room: number): T[] {
 }
 
 const CUT = "cut to keep the result small";
-const CUT_MARK = /…\[cut: \d+ more characters\]$/;
+export const CUT_MARK = /…\[cut: \d+ more characters\]$/;
 
 /**
  * One shape within `maxBytes` of JSON: group children, table rows, paragraphs, then text and alt
@@ -537,7 +549,14 @@ export function capShape(
   // Room for the notes this function adds.
   const budget = maxBytes - 400;
   const others = () =>
-    jsonBytes({ ...out, children: [], table: undefined, paragraphs: [] });
+    jsonBytes({
+      ...out,
+      children: [],
+      table: undefined,
+      paragraphs: [],
+      chart: undefined,
+      smartArt: [],
+    });
 
   if (out.children) {
     const all = out.children;
@@ -567,6 +586,16 @@ export function capShape(
       );
     out.table = { ...out.table, values: rows };
   }
+  if (out.chart && jsonBytes(out) > budget)
+    out.chart = capChart(out.chart, budget - others());
+  if (out.smartArt && jsonBytes(out) > budget) {
+    const kept = prefixThatFits(out.smartArt, budget - others());
+    if (kept.length < out.smartArt.length)
+      out.unread!.push(
+        `SmartArt nodes ${kept.length + 1}-${out.smartArt.length}: ${CUT}`,
+      );
+    out.smartArt = kept;
+  }
   if (out.paragraphs && jsonBytes(out) > budget) {
     const kept = prefixThatFits(out.paragraphs, budget - others());
     if (kept.length < out.paragraphs.length)
@@ -594,4 +623,44 @@ export function capShape(
   }
   if (out.unread!.length === 0) delete out.unread;
   return out;
+}
+
+/** Fewer points for every series first, then fewer series, until the chart fits `room`. */
+function capChart(chart: PowerPointChartOut, room: number): PowerPointChartOut {
+  const notes = [...(chart.unread ?? [])];
+  const longest = Math.max(
+    chart.categories?.length ?? 0,
+    ...chart.series.map((series) => series.values.length),
+  );
+  const firstPoints = (count: number): PowerPointChartOut => ({
+    ...chart,
+    ...(chart.categories
+      ? { categories: chart.categories.slice(0, count) }
+      : {}),
+    series: chart.series.map((series) => ({
+      ...series,
+      ...(series.categories
+        ? { categories: series.categories.slice(0, count) }
+        : {}),
+      values: series.values.slice(0, count),
+    })),
+  });
+  let points = longest;
+  while (points > 1 && jsonBytes(firstPoints(points)) > room)
+    points = Math.floor(points / 2);
+  let out = firstPoints(points);
+  if (points < longest)
+    notes.push(`chart points ${points + 1}-${longest} of every series: ${CUT}`);
+  if (jsonBytes(out) > room) {
+    const series = prefixThatFits(
+      out.series,
+      room - jsonBytes({ ...out, series: [] }) - 200,
+    );
+    if (series.length < out.series.length)
+      notes.push(
+        `chart series ${series.length + 1}-${out.series.length}: ${CUT}`,
+      );
+    out = { ...out, series };
+  }
+  return { ...out, ...(notes.length > 0 ? { unread: notes } : {}) };
 }

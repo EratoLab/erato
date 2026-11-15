@@ -32,6 +32,10 @@ export interface PowerPointReadSupport {
   slides: boolean;
   /** getSelectedSlides, getSelectedShapes, getSelectedTextRange (1.5). */
   selection: boolean;
+  /** slide.exportAsBase64(), a one-slide file (1.8; offered with the full tier). */
+  slideExport: boolean;
+  /** Office.context.document.getFileAsync, the whole file (Common API, every host). */
+  presentationFile: boolean;
   /** placeholderFormat.type and containedType: title, body, subtitle… */
   placeholderRole: boolean;
   /** shape.getTable().values. */
@@ -65,6 +69,7 @@ const has = (
 
 export function powerpointReadSupport(
   isSetSupported: PowerPointRequirementCheck,
+  { fileApi = false }: { fileApi?: boolean } = {},
 ): PowerPointReadSupport {
   const supported = new Set(
     POWERPOINT_API_VERSIONS.filter((version) => has(isSetSupported, version)),
@@ -84,6 +89,8 @@ export function powerpointReadSupport(
     highestVersion,
     slides,
     selection: slides && supported.has("1.5"),
+    slideExport: full,
+    presentationFile: slides && fileApi,
     placeholderRole: full,
     tables: full,
     groups: full,
@@ -97,10 +104,17 @@ export function powerpointReadSupport(
 }
 
 export function currentPowerPointReadSupport(): PowerPointReadSupport {
-  const requirements = globalThis.Office?.context?.requirements;
-  return powerpointReadSupport(
-    (name, version) => requirements?.isSetSupported(name, version) ?? false,
-  );
+  const { requirements, document, diagnostics } =
+    globalThis.Office?.context ?? {};
+  const isSetSupported: PowerPointRequirementCheck = (name, version) =>
+    requirements?.isSetSupported(name, version) ?? false;
+  return powerpointReadSupport(isSetSupported, {
+    fileApi:
+      typeof document?.getFileAsync === "function" &&
+      isSetSupported("CompressedFile", "1.1") &&
+      // iPad slices the file at 64 KB at most; the reader asks for 4 MB slices.
+      String(diagnostics?.platform) !== "iOS",
+  });
 }
 
 let logged = false;

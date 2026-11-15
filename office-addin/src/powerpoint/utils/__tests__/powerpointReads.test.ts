@@ -114,10 +114,16 @@ describe("one slide, full tier", () => {
     const result = ok(await readPowerPointSlide(FULL, { slideId: "256#" }));
     expect(result.tier).toBe("full");
     expect(result.notReadableOnThisHost).toBeUndefined();
+    // This deck has no file behind it; the file reader's own tests cover what it adds.
     expect(result.slide).toEqual({
       id: "256#",
       position: 1,
       layout: "Title and Content",
+      unread: [
+        expect.stringMatching(
+          /^speaker notes and whether the slide is hidden: /,
+        ),
+      ],
     });
     const shapes = shapesOf(result);
     expect(shapes.map((s) => s.id)).toEqual(["2", "3", "8", "4", "5", "9"]);

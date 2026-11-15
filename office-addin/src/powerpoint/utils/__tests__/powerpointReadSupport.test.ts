@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requirementsUpTo } from "../../../test/mocks/powerpoint/fakePowerPoint";
 import {
+  currentPowerPointReadSupport,
   logPowerPointReadSupport,
   powerpointReadSupport,
   resetPowerPointReadSupportLogForTests,
@@ -51,6 +52,54 @@ describe("PowerPoint read support", () => {
       Object.fromEntries(Object.keys(fullOnly).map((key) => [key, true])),
     );
   });
+
+  it("offers the slide export with the full tier and the whole file wherever the host hands it over", () => {
+    const at = (set: string, fileApi: boolean) =>
+      powerpointReadSupport(requirementsUpTo(set), { fileApi });
+    expect(at("1.10", true)).toMatchObject({
+      slideExport: true,
+      presentationFile: true,
+    });
+    expect(at("1.5", true)).toMatchObject({
+      slideExport: false,
+      presentationFile: true,
+    });
+    expect(at("1.5", false)).toMatchObject({ presentationFile: false });
+    // Below 1.4 nothing is read, so there is no slide to fill from the file.
+    expect(at("1.3", true)).toMatchObject({ presentationFile: false });
+  });
+
+  it.each([
+    ["PC", true, true],
+    ["Mac", true, true],
+    ["iOS", true, false],
+    ["PC", false, false],
+  ])(
+    "reads the whole file on %s only where the compressed file set is reported (%s)",
+    (platform, compressedFile, expected) => {
+      const office = (
+        globalThis as unknown as {
+          Office: { context: Record<string, unknown> };
+        }
+      ).Office;
+      const saved = { ...office.context };
+      office.context.requirements = {
+        isSetSupported: (name: string, version?: string) =>
+          name === "CompressedFile"
+            ? compressedFile
+            : requirementsUpTo("1.10")(name, version),
+      };
+      office.context.document = { getFileAsync: () => {} };
+      office.context.diagnostics = { platform };
+      try {
+        expect(currentPowerPointReadSupport().presentationFile).toBe(expected);
+      } finally {
+        for (const key of Object.keys(office.context))
+          delete office.context[key];
+        Object.assign(office.context, saved);
+      }
+    },
+  );
 
   it("is full exactly when every 1.10 switch is on", () => {
     for (const set of ["1.3", "1.4", "1.5", "1.8", "1.9", "1.10"]) {

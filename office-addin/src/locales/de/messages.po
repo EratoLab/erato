@@ -1422,13 +1422,28 @@ msgstr "Mit dieser PowerPoint-Version kann Erato nur Textfelder und ihre Positio
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "Erato liest Text, Tabellen, Formen in Gruppen, Notizen, Diagrammdaten und SmartArt-Text. Diese PowerPoint-Version zeigt ihm nicht, welche Form der Titel ist und welche Aufzählungsebenen es gibt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.full"
 msgstr "Erato liest Folientitel, Text mit Aufzählungsebenen, Tabellen, Formen in Gruppen und Alternativtext."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "Erato liest Folientitel, Text mit Aufzählungsebenen, Tabellen, Formen in Gruppen, Alternativtext, Notizen, Diagrammdaten und SmartArt-Text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
 msgid "officeAddin.powerpoint.context.never"
 msgstr "Notizen, Kommentare, Diagrammdaten und SmartArt-Text können nicht gelesen werden."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Kommentare und Animationen können nicht gelesen werden."
 
 #. js-lingui-explicit-id
 #: src/powerpoint/components/powerpointPresentationChip.tsx
