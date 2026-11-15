@@ -5,6 +5,12 @@
 //! one admits the decoded value. Anything this walk cannot resolve (external
 //! or dynamic references, conditionals, unmatched pattern properties, depth)
 //! counts as admitting a string, so the argument stays as sent.
+//!
+//! The string's first JSON value is what decodes. It may be followed only by
+//! whitespace and at most two closing brackets: production `entries` strings
+//! ended in one extra `}]` (ERMAIN-1192). A longer run more likely closes
+//! something early inside the string, so it keeps the string, as does
+//! anything else after the value.
 
 use serde_json::Value;
 
@@ -12,6 +18,7 @@ const MAX_DEPTH: usize = 64;
 /// Schema nodes visited per candidate string; alternatives that refer back to
 /// themselves would otherwise branch without end.
 const MAX_SCHEMA_STEPS: usize = 4096;
+const MAX_TRAILING_CLOSERS: usize = 2;
 
 static ANY_SCHEMA: Value = Value::Bool(true);
 
@@ -102,7 +109,7 @@ fn walk(root: &Value, value: &mut Value, path: &mut Vec<Segment>, decoded: &mut 
             if admits.string || !(admits.array || admits.object) {
                 return;
             }
-            let Ok(parsed) = serde_json::from_str::<Value>(text) else {
+            let Some(parsed) = leading_value(text) else {
                 return;
             };
             if !(parsed.is_array() && admits.array || parsed.is_object() && admits.object) {
@@ -128,6 +135,20 @@ fn walk(root: &Value, value: &mut Value, path: &mut Vec<Segment>, decoded: &mut 
         }
         _ => {}
     }
+}
+
+fn leading_value(text: &str) -> Option<Value> {
+    let mut values = serde_json::Deserializer::from_str(text).into_iter::<Value>();
+    let value = values.next()?.ok()?;
+    let mut closers = 0;
+    for c in text[values.byte_offset()..].chars() {
+        match c {
+            ' ' | '\t' | '\n' | '\r' => {}
+            ']' | '}' if closers < MAX_TRAILING_CLOSERS => closers += 1,
+            _ => return None,
+        }
+    }
+    Some(value)
 }
 
 /// What `schema` admits at `path` below the instance it applies to: every
@@ -395,6 +416,42 @@ mod tests {
             assert!(decode(&schema, &mut input).is_empty(), "{before}");
             assert_eq!(input, before);
         }
+    }
+
+    #[test]
+    fn a_list_closed_once_too_often_decodes_but_nothing_else_may_follow() {
+        let schema = plan_schema();
+        let entries = entries();
+        for text in [format!("{entries}}}]"), format!(" {entries} ]\n}} ")] {
+            let mut input = json!({"snapshot": "s1", "entries": text});
+            assert_eq!(decode(&schema, &mut input), vec!["/entries".to_string()]);
+            assert_eq!(input["entries"], entries);
+        }
+        for text in [
+            format!("{entries}}}] x"),
+            format!("{entries} []"),
+            format!("{entries},"),
+            format!("{entries}\""),
+            format!("{entries}}}]}}"),
+            format!("{entries}}}]}}]}}]"),
+        ] {
+            let mut input = json!({"snapshot": "s1", "entries": text});
+            let before = input.clone();
+            assert!(decode(&schema, &mut input).is_empty(), "{before}");
+            assert_eq!(input, before);
+        }
+    }
+
+    #[test]
+    fn whole_arguments_sent_as_one_string_decode() {
+        let schema = plan_schema();
+        let arguments = json!({"snapshot": "s1", "entries": entries().to_string()});
+        let mut input = Value::String(format!("{arguments}}}]"));
+        assert_eq!(
+            decode(&schema, &mut input),
+            vec![String::new(), "/entries".to_string()]
+        );
+        assert_eq!(input, json!({"snapshot": "s1", "entries": entries()}));
     }
 
     #[test]
