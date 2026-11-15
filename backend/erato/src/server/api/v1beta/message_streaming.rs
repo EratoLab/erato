@@ -18148,7 +18148,8 @@ async fn run_generation_after_user_message_memory_inner(
         .store(reply_is_read_back, std::sync::atomic::Ordering::Relaxed);
     let _ = task
         .speech_language
-        .set(crate::services::speech::spoken::SpeechLanguage::new(
+        .set(crate::services::speech::spoken::SpeechLanguage::for_user(
+            me_user.preference_language.as_deref(),
             &me_user.preferred_language,
         ));
     // Prepare chat request

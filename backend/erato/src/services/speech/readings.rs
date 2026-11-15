@@ -109,6 +109,9 @@ impl Readings {
                 if form.ends_with('.') && keeps_full_stop(&text[end..], reading, piece_ends) {
                     spoken.push('.');
                 }
+                if form.ends_with('.') && text[end..].starts_with(char::is_alphanumeric) {
+                    spoken.push(' ');
+                }
                 spoken
             })
             .into_owned()
@@ -188,7 +191,11 @@ mod tests {
     fn only_whole_words_are_replaced() {
         assert_eq!(
             german("Mallorca. Bestell-Nr. 7 in example.ca. und /etc. sowie ca.5 Liter"),
-            "Mallorca. Bestell-Nummer 7 in example.ca. und /etc. sowie circa5 Liter"
+            "Mallorca. Bestell-Nummer 7 in example.ca. und /etc. sowie circa 5 Liter"
+        );
+        assert_eq!(
+            german("Nr.5, Bus bzw.Bahn, z.B.Bahn, Obst usw.Danach"),
+            "Nummer 5, Bus beziehungsweise Bahn, zum Beispiel Bahn, Obst und so weiter Danach"
         );
         assert!(Readings::for_language(&SpeechLanguage::new("en")).is_none());
     }

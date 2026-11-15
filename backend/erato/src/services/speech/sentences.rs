@@ -1,4 +1,4 @@
-use super::spoken::{SpeechLanguage, read};
+use super::spoken::{BREAK, Replaced, SpeechLanguage, read};
 
 /// Upper bound for one piece of spoken text, below the providers' input limits.
 const MAX_CHARS: usize = 2000;
@@ -9,9 +9,13 @@ const FREELY_REREAD_BYTES: usize = 4096;
 /// Turns streamed markdown into spoken sentences.
 ///
 /// Markdown is read block by block (blocks end at a blank line outside a code fence), so a
-/// table or code block is never cut in half. The block still being written is read again as it
-/// grows, and a sentence from it is handed out once the word after its end is complete: a
-/// German date such as "am 14. November" only stays together once "November" is known.
+/// table or code block is never cut in half, and a finished block ends a passage. The block
+/// still being written is read again as it grows, but only as far as its meaning is settled:
+/// a line that may still become a table or a code fence waits for the next line, and text
+/// after a mark that may still open emphasis or a link waits for its partner. A sentence from
+/// it is handed out once the word after its end is complete: a German date such as "am 14.
+/// November" only stays together once "November" is known. A replacement sentence ("Der Code
+/// steht im Chat.") is a sentence of its own and is handed out as soon as the block is known.
 #[derive(Default)]
 pub struct Sentences {
     language: SpeechLanguage,
@@ -22,6 +26,10 @@ pub struct Sentences {
     /// Spoken text of finished blocks not yet handed out.
     queued: String,
     read_at: usize,
+    replaced: Replaced,
+    /// `block` was read while its code fence was open; until the fence closes, a new reading
+    /// cannot say more.
+    read_in_fence: bool,
 }
 
 impl Sentences {
@@ -50,11 +58,14 @@ impl Sentences {
     }
 
     fn close(&mut self, block: &str) {
-        let spoken = read(block, &self.language, false);
-        let from = continue_at(&spoken, &self.said);
-        self.queued.push_str(&spoken[from..]);
+        let reading = read(block, &self.language, false, self.replaced);
+        let from = continue_at(&reading.text, &self.said);
+        self.queued.push_str(&reading.text[from..]);
+        self.queued.push(BREAK);
+        self.replaced = reading.replaced;
         self.said.clear();
         self.read_at = 0;
+        self.read_in_fence = false;
         self.scan = BlockScan::default();
     }
 
@@ -62,12 +73,15 @@ impl Sentences {
     fn read_open_block(&mut self) -> Option<String> {
         let length = self.block.len();
         let wait = length.saturating_sub(FREELY_REREAD_BYTES) / 8;
-        if self.scan.fence.is_some() || length < self.read_at + wait {
+        let in_fence = self.scan.fence.is_some();
+        if length < self.read_at + wait || (in_fence && self.read_in_fence) {
             return None;
         }
         self.read_at = length;
-        let mut spoken = read(&self.block, &self.language, true);
-        if self.block.ends_with(char::is_whitespace) && spoken.ends_with(char::is_alphanumeric) {
+        self.read_in_fence = in_fence;
+        let settled = &self.block[..settled_end(&self.block)];
+        let mut spoken = read(settled, &self.language, true, self.replaced).text;
+        if settled.ends_with(char::is_whitespace) && spoken.ends_with(char::is_alphanumeric) {
             spoken.push(' ');
         }
         let from = continue_at(&spoken, &self.said);
@@ -79,12 +93,25 @@ impl Sentences {
         let text = format!("{}{open}", self.queued);
         let mut sentences = Vec::new();
         let mut at = 0;
-        while let Some(length) = next_sentence(&text[at..], self.language.code(), complete) {
-            let sentence = &text[at..at + length];
-            if !sentence.trim().is_empty() {
-                sentences.push(sentence.to_string());
+        loop {
+            // Text before a break is final, so its last sentence needs no next word.
+            let (end, settled) = match text[at..].find(BREAK) {
+                Some(index) => (at + index, true),
+                None => (text.len(), complete),
+            };
+            while let Some(length) =
+                next_sentence(&text[at..end], self.language.splitter(), settled)
+            {
+                let sentence = &text[at..at + length];
+                if !sentence.trim().is_empty() {
+                    sentences.push(sentence.to_string());
+                }
+                at += length;
             }
-            at += length;
+            if at < end || end == text.len() {
+                break;
+            }
+            at += BREAK.len_utf8();
         }
         if at <= split {
             self.queued.drain(..at);
@@ -95,6 +122,62 @@ impl Sentences {
         sentences
     }
 }
+
+/// How far the markdown of the block being written has a settled meaning. The line being
+/// written may still open a code fence or be a table row, and the line before it may be a table
+/// header while the line being written may still become the row under it that makes the table.
+fn settled_end(block: &str) -> usize {
+    let line_start = block.rfind('\n').map_or(0, |index| index + 1);
+    let line = &block[line_start..];
+    let mut end = if may_change(line) {
+        line_start
+    } else {
+        block.len()
+    };
+    if line_start > 0 && line.chars().all(is_delimiter_char) {
+        let previous_start = block[..line_start - 1]
+            .rfind('\n')
+            .map_or(0, |index| index + 1);
+        let previous = &block[previous_start..line_start];
+        if previous.contains('|') && !is_delimiter_row(previous) {
+            end = previous_start;
+        }
+    }
+    end
+}
+
+fn may_change(line: &str) -> bool {
+    let line = line.trim_start();
+    line.contains('|')
+        || ["```", "~~~"]
+            .iter()
+            .any(|fence| line.starts_with(fence) || (!line.is_empty() && fence.starts_with(line)))
+}
+
+fn is_delimiter_char(c: char) -> bool {
+    matches!(c, '|' | '-' | ':' | ' ' | '\t')
+}
+
+fn is_delimiter_row(line: &str) -> bool {
+    let line = line.trim();
+    line.contains('-') && line.chars().all(is_delimiter_char)
+}
+
+/// The months sentencex keeps after a number ("am 14. November").
+const MONTHS: [&str; 12] = [
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
+];
 
 /// Byte length of the first sentence of `text`, once it is certain. Without `complete` the
 /// text may still grow, so a boundary counts only when the next word is complete.
@@ -111,7 +194,7 @@ fn next_sentence(text: &str, language: &str, complete: bool) -> Option<usize> {
     let mut seen = false;
     for span in sentencex::segment(language, &text[..window]) {
         let blank = span.trim().is_empty();
-        if seen && !blank {
+        if seen && !blank && !(language == "de" && month_after_number(&text[..end], span)) {
             break;
         }
         end += span.len();
@@ -138,27 +221,44 @@ fn next_sentence(text: &str, language: &str, complete: bool) -> Option<usize> {
     }
 }
 
+/// sentencex 0.1.35 recognises the month only when a space or full stop follows it, so it
+/// splits "am 14. November, danach" and "Am 3. Mai: Treffen".
+fn month_after_number(before: &str, after: &str) -> bool {
+    let mut end = before.trim_end().chars().rev();
+    end.next() == Some('.')
+        && end.next().is_some_and(|c| c.is_ascii_digit())
+        && after.split_whitespace().next().is_some_and(|word| {
+            MONTHS.contains(&word.trim_end_matches(|c: char| !c.is_alphanumeric()))
+        })
+}
+
 fn next_word_complete(rest: &str) -> bool {
     let rest = rest.trim_start_matches(|c: char| !c.is_alphanumeric());
     rest.find(|c: char| !c.is_alphanumeric())
         .is_some_and(|end| end > 0)
 }
 
-/// Where a new reading of a block continues after the text already handed out from it. A later
-/// reading can differ slightly from an earlier one (an emphasis closed later turns "*" into
-/// nothing), so the fallback counts letters and digits.
+/// Where a new reading of a block continues after the text already handed out from it. Text is
+/// handed out only once its meaning is settled, so a new reading starts with it; should it
+/// still differ, the fallback counts letters and digits and resumes at a word start.
 fn continue_at(spoken: &str, said: &str) -> usize {
     if spoken.starts_with(said) {
         return said.len();
     }
     let mut left = said.chars().filter(|c| c.is_alphanumeric()).count();
+    let mut previous = None;
     for (index, c) in spoken.char_indices() {
-        if left == 0 && (c.is_alphanumeric() || !(c.is_whitespace() || c.is_ascii_punctuation())) {
+        let word_start = !previous.is_some_and(char::is_alphanumeric);
+        if left == 0
+            && word_start
+            && (c.is_alphanumeric() || !(c.is_whitespace() || c.is_ascii_punctuation()))
+        {
             return index;
         }
         if c.is_alphanumeric() {
             left = left.saturating_sub(1);
         }
+        previous = Some(c);
     }
     spoken.len()
 }
@@ -298,6 +398,35 @@ mod tests {
     }
 
     #[test]
+    fn a_month_after_a_number_stays_in_its_sentence_before_any_punctuation() {
+        for (text, expected) in [
+            (
+                "Das Treffen ist am 14. November, danach fahren wir.",
+                &["Das Treffen ist am 14. November, danach fahren wir. "][..],
+            ),
+            ("Am 3. Mai: Treffen.", &["Am 3. Mai: Treffen. "]),
+            (
+                "Bis zum 1. Juni; dann Pause. Gut.",
+                &["Bis zum 1. Juni; dann Pause. ", "Gut. "],
+            ),
+            (
+                "Ab heute (bis 31. März) offen. Gut.",
+                &["Ab heute (bis 31. März) offen. ", "Gut. "],
+            ),
+            (
+                "Das Treffen ist am 14. Danach Ruhe.",
+                &["Das Treffen ist am 14. ", "Danach Ruhe. "],
+            ),
+        ] {
+            assert_eq!(sentences(text, "de"), expected, "{text}");
+            assert_eq!(sentences(text, "en"), expected, "{text}");
+            for size in 1..=7 {
+                assert_eq!(in_pieces(text, "de", size), expected, "{text} in {size}");
+            }
+        }
+    }
+
+    #[test]
     fn a_boundary_waits_until_the_next_word_is_complete() {
         let mut s = Sentences::new(SpeechLanguage::new("de"));
         assert!(s.push("Das Treffen ist am 14. N").is_empty());
@@ -346,22 +475,65 @@ mod tests {
         }
     }
 
+    /// English sentences with their true ends. German rules are used for English text too.
+    const ENGLISH: &[&[&str]] = &[
+        &[
+            "We need fruit, e.g. apples and pears. ",
+            "Then we go home. ",
+        ],
+        &["Use a tool, i.e. a hammer. ", "Then nail it. "],
+        &["Dr. Smith will see you now. ", "Please wait. "],
+        &["Mr. and Mrs. Jones arrived. ", "They sat down. "],
+        &[
+            "Ms. Lee called at 5 p.m. yesterday. ",
+            "She left a message. ",
+        ],
+        &["The meeting starts at 9 a.m. sharp. ", "Be on time. "],
+        &["The U.S. economy grew. ", "Europe stalled. "],
+        &["He moved to the U.S. last year. ", "He likes it. "],
+        &["The U.S.A. is large. ", "Canada is too. "],
+        &["She has a Ph.D. in physics. ", "She teaches. "],
+        &["The price is 3.14 dollars. ", "That is cheap. "],
+        &["Growth was 2.5% in Q3. ", "Inflation fell. "],
+        &["The total came to 1,250.50 dollars. ", "We paid. "],
+        &["Version 2.1.3 is out. ", "Update now. "],
+        &["The answer is 42. ", "The question is unknown. "],
+        &["We finished in 2024. ", "The next project starts soon. "],
+        &["I scored 3. ", "Then I stopped. "],
+        &["We met on May 3. ", "It was sunny. "],
+        &["It happened on Nov. 14, 2026. ", "Nobody forgot. "],
+        &["See Fig. 3 for details. ", "It shows the trend. "],
+        &["Read pp. 12-15 first. ", "Then answer. "],
+        &["See No. 5 on the list. ", "It is the best. "],
+        &["Apple Inc. reported earnings. ", "Shares rose. "],
+        &["He lives on Main St. near the park. ", "It is quiet. "],
+        &["Prof. Brown teaches math. ", "Students like him. "],
+        &["John Smith Jr. arrived late. ", "Nobody noticed. "],
+        &["It is cats vs. dogs today. ", "Who wins? "],
+        &["Is it ready? ", "Yes! ", "Let's go. "],
+        &["He said \"Stop.\" ", "Then he left. "],
+        &["It was approx. 20 km away. ", "We walked. "],
+        &["We need 2 lbs. of flour. ", "Then bake. "],
+        &["It is 10 a.m. EST. ", "The call starts. "],
+        &["Sen. Warren spoke. ", "Gov. Newsom listened. "],
+        &["Dr. Smith paid 3.14 euros. ", "Next sentence! ", "Tail. "],
+    ];
+
     #[test]
-    fn english_splits_with_english_and_with_the_german_default() {
-        let text =
-            "Meet me at 3 p.m. today. Does that work? Mr. Smith agreed. The U.S. economy grew.";
-        let expected = [
-            "Meet me at 3 p.m. today. ",
-            "Does that work? ",
-            "Mr. Smith agreed. ",
-            "The U.S. economy grew. ",
-        ];
-        assert_eq!(sentences(text, "en"), expected);
-        assert_eq!(sentences(text, ""), expected);
-        assert_eq!(
-            sentences("Dr. Smith paid 3.14 euros. Next sentence! Tail", "en"),
-            ["Dr. Smith paid 3.14 euros. ", "Next sentence! ", "Tail. "]
-        );
+    fn english_text_is_split_with_german_rules_without_wrong_cuts() {
+        for expected in ENGLISH {
+            let text = expected.concat();
+            assert_eq!(sentences(text.trim(), "en"), *expected, "{text}");
+        }
+        // Where German rules miss a sentence end, the two sentences become one passage; the
+        // voice still hears the full stop. English rules cut "approx. 20", "2 lbs. of",
+        // "a.m. EST" in the list above instead.
+        for (text, passages) in [
+            ("We meet at 3 p.m. Tomorrow we travel.", 1),
+            ("Bring tools, paper, etc. We start at nine.", 1),
+        ] {
+            assert_eq!(sentences(text, "en").len(), passages, "{text}");
+        }
     }
 
     #[test]
@@ -370,6 +542,14 @@ mod tests {
             "## Termine\n\nDas Treffen ist am 14. November.\n\n- Erster Punkt\n- Zweiter Punkt, z. B. mit **fett gedrucktem\nText**. Danach mehr.\n\n| Ort | Zeit |\n|---|---|\n| Berlin | 14.30 Uhr |\n\nMehr unter https://www.example.com/termine. 👍🏽\n\n```rust\nlet x = 1;\n\nlet y = 2;\n```\n\nEnde am 31.12.2026",
             "Ein Satz[^1].\n\n[^1]: Die Quelle.\n\nNoch ~~alt~~ neu. Und\n\n1. eins\n\n   weiter eins\n2. zwei",
             "Inline ```code``` am Zeilenanfang:\n```nicht``` zu.\n\nDanach am 3. Mai. Gut.",
+            TABLE_WITH_PUNCTUATION,
+            "Intro.\n| Wer? | Was! |\n|:--|--:|\n| Ich. | Das. |\nEnde. Noch ein Satz.",
+            "Kein | Tisch? Nein. Wirklich nicht!\nWeiter. So.",
+            "**Wichtig. Bitte beachten.** Danach mehr. *Kursiv. Auch.* Und _so. Weiter._ Gut.",
+            "Gerne. Hier ist das Skript:\n\n```python\nprint(1)\nprint(2)\n```\n\nUnd die Tabelle:\n| a | b |\n|---|---|\n| 1 | 2 |\n\nFertig.",
+            "Drei Teile:\n\n```\na\n```\n\n```\nb\n```\n| x |\n|---|\n| 1 |\n\n```\nc\n```\n\nEnde.",
+            "Am 3. Mai: Treffen. Das Treffen ist am 14. November, danach fahren wir (bis 1. Juni) heim.",
+            "Siehe [Quelle][1], [Buch][] und [Heft]. Gut.\n\n[1]: https://example.com\n\nText<br>mit<br/>HTML. Es kostet ca.5 Euro.",
         ];
         for text in GERMAN.iter().copied().chain(markdown) {
             let whole = sentences(text, "de");
@@ -378,7 +558,7 @@ mod tests {
                 speakable(text, &SpeechLanguage::new("de")),
                 "{text}"
             );
-            for size in 1..=7 {
+            for size in 1..=20 {
                 assert_eq!(
                     in_pieces(text, "de", size),
                     whole,
@@ -386,6 +566,79 @@ mod tests {
                 );
             }
         }
+    }
+
+    const TABLE_WITH_PUNCTUATION: &str =
+        "Intro.\n\n| Frage? | Antwort. | Quelle |\n|---|---|---|\n| Was? | Das. | Buch |\n\nEnde.";
+
+    #[test]
+    fn a_streamed_table_is_never_read_as_text() {
+        for size in 1..=20 {
+            assert_eq!(
+                in_pieces(TABLE_WITH_PUNCTUATION, "de", size),
+                ["Intro. ", "Die Tabelle steht im Chat. ", "Ende. "],
+                "pieces of {size}"
+            );
+        }
+        // A line with a bar that turns out not to be a table is read once the next line shows it.
+        let mut s = Sentences::new(SpeechLanguage::new("de"));
+        assert!(s.push("Wahl: A | B? Ja. Gut\n").is_empty());
+        assert_eq!(s.push("Weiter"), ["Wahl: A | B? ", "Ja. "]);
+    }
+
+    #[test]
+    fn emphasis_across_a_sentence_end_leaves_no_marks() {
+        for (text, expected) in [
+            (
+                "**Wichtig. Bitte beachten.** Danach mehr.",
+                ["Wichtig. ", "Bitte beachten. ", "Danach mehr. "],
+            ),
+            (
+                "*Wichtig. Bitte beachten.* Danach mehr.",
+                ["Wichtig. ", "Bitte beachten. ", "Danach mehr. "],
+            ),
+            (
+                "_Wichtig. Bitte beachten._ Danach mehr.",
+                ["Wichtig. ", "Bitte beachten. ", "Danach mehr. "],
+            ),
+        ] {
+            for size in 1..=20 {
+                assert_eq!(in_pieces(text, "de", size), expected, "{text} in {size}");
+            }
+        }
+    }
+
+    /// How many characters had arrived when a passage starting with `start` was handed out.
+    fn released_at(text: &str, start: &str) -> usize {
+        let mut s = Sentences::new(SpeechLanguage::new("de"));
+        for (count, c) in text.chars().enumerate() {
+            if s.push(&c.to_string()).iter().any(|p| p.starts_with(start)) {
+                return count + 1;
+            }
+        }
+        panic!("{start} not handed out before the end of {text}");
+    }
+
+    #[test]
+    fn text_before_a_code_block_or_table_is_spoken_when_the_block_starts() {
+        let code = format!(
+            "Gerne. Hier ist das Skript:\n\n```python\n{}```\n\nEnde.",
+            "print(\"Hallo Welt\")\n".repeat(30)
+        );
+        let table = format!(
+            "Gerne. Hier ist die Tabelle:\n\n| Ort | Anzahl |\n|---|---|\n{}\nEnde.",
+            "| Berlin | 12 |\n".repeat(20)
+        );
+        let fence_end = code.find("```python\n").unwrap() + "```python\n".len();
+        assert!(released_at(&code, "Hier ist das Skript:") <= 30);
+        assert_eq!(released_at(&code, "Der Code steht im Chat."), fence_end);
+        assert!(released_at(&table, "Hier ist die Tabelle:") <= 31);
+        let delimiter_end = table.find("|---|---|\n").unwrap() + "|---|---|\n".len();
+        assert_eq!(released_at(&table, "Die Tabelle steht"), delimiter_end);
+        // Without a blank line the block is the same one; the text goes out with the fence.
+        let tight = code.replacen(":\n\n```", ":\n```", 1);
+        let tight_fence_end = tight.find("```python\n").unwrap() + "```python\n".len();
+        assert_eq!(released_at(&tight, "Hier ist das Skript:"), tight_fence_end);
     }
 
     #[test]

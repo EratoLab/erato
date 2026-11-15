@@ -119,7 +119,10 @@ pub async fn read_message_aloud(
     if text.len() > MAX_INPUT_BYTES {
         return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
-    let language = SpeechLanguage::new(&me_user.preferred_language);
+    let language = SpeechLanguage::for_user(
+        me_user.preference_language.as_deref(),
+        &me_user.preferred_language,
+    );
     if speakable(&text, &language).trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }

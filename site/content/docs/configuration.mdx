@@ -2647,9 +2647,10 @@ Only the copy of the answer sent to the voice is prepared for listening; the
 text shown and stored in the chat is unchanged:
 
 - A code block or a table is not read. In its place the voice says one short
-  sentence in the user's language, once per block: "Der Code steht im Chat." /
-  "The code is in the chat." and "Die Tabelle steht im Chat." / "The table is in
-  the chat." (also French, Spanish and Polish).
+  sentence in the user's language as soon as the block starts: "Der Code steht im
+  Chat." / "The code is in the chat." and "Die Tabelle steht im Chat." / "The
+  table is in the chat." (also French, Spanish and Polish). Several code blocks
+  or tables with no spoken text between them get each sentence once.
 - Image descriptions, HTML, footnote marks and footnotes, struck-through text,
   task-list boxes and emoji are omitted.
 - Markdown links are read by their visible text. A bare web address
@@ -2663,12 +2664,20 @@ text shown and stored in the chat is unchanged:
   "circa", "Nr." as "Nummer". Numbers, dates, amounts and times are left to the
   voice.
 
-Sentences are split by language rules for the user's language (the resolved UI
-language; German when it is unknown), so German dates such as "am 14. November",
+The user's language is the one their screen shows, as last reported by the
+client; without it, the profile language the server resolves (ID token claim,
+browser language, then `i18n.language.default_language`, `en` out of the box).
+Sentences are split by language rules; German and English text are both split
+with German rules, so a German reply to a profile that says English is not cut
+apart. German dates such as "am 14. November" (also before a comma or colon),
 abbreviations such as "z. B." and numbers such as "1.250,50 €" or "14.30 Uhr" do
 not end a passage. A sentence end is accepted only once the next word has
-arrived. Known limit: an ordinal before a noun that is not a month ("auf dem 2.
-Platz", "im 3. Stock") is still treated as a sentence end.
+arrived, and text of the answer still being written is spoken only once its
+markdown is settled (a table, a code block, bold or a link is known). A paragraph
+or other block ends a passage. Known limits: an ordinal before a noun that is not
+a month ("auf dem 2. Platz", "im 3. Stock") is still treated as a sentence end;
+an abbreviation at a real sentence end ("Das klären wir ggf. Morgen …") does not
+end the passage.
 
 The synthesis response is limited to 64 MiB of PCM per assistant message.
 Speech queuing does not block text streaming. Speech input is limited to 1 MiB

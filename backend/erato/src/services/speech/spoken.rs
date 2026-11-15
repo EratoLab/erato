@@ -3,7 +3,7 @@
 
 use super::readings::Readings;
 use linkify::{LinkFinder, LinkKind};
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{BrokenLink, CowStr, Event, Options, Parser, Tag, TagEnd};
 use regex::Regex;
 use std::borrow::Cow;
 use std::sync::LazyLock;
@@ -13,21 +13,36 @@ use std::sync::LazyLock;
 pub struct SpeechLanguage(String);
 
 impl SpeechLanguage {
-    /// Accepts "de", "de-DE" or "de_DE". Anything unusable becomes German: most of our users
-    /// speak it, and the German splitter made no wrong splits on English text.
+    /// Accepts "de", "de-DE" or "de_DE". Anything unusable becomes German, the language most of
+    /// our users speak.
     pub fn new(language: &str) -> Self {
-        let code = language
-            .split(['-', '_'])
-            .next()
-            .unwrap_or_default()
-            .trim()
-            .to_ascii_lowercase();
-        let usable = (2..=3).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_lowercase());
-        Self(if usable { code } else { "de".into() })
+        Self(usable(language).unwrap_or_else(|| "de".into()))
+    }
+
+    /// The language the user's screen shows, when the client reported one, else the language
+    /// the server resolved for the profile.
+    pub fn for_user(shown: Option<&str>, resolved: &str) -> Self {
+        Self(
+            shown
+                .and_then(usable)
+                .or_else(|| usable(resolved))
+                .unwrap_or_else(|| "de".into()),
+        )
     }
 
     pub fn code(&self) -> &str {
         &self.0
+    }
+
+    /// The rules sentences are split with. English text is split with German rules too: on
+    /// English text they cut no sentence in our tests (they only miss a few ends, e.g. after
+    /// "p.m."), while English rules cut German dates and abbreviations, and a profile that
+    /// says English does not mean the reply is English.
+    pub(super) fn splitter(&self) -> &str {
+        match self.code() {
+            "en" => "de",
+            code => code,
+        }
     }
 
     fn table_sentence(&self) -> &'static str {
@@ -51,41 +66,83 @@ impl SpeechLanguage {
     }
 }
 
+fn usable(language: &str) -> Option<String> {
+    let code = language
+        .split(['-', '_'])
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    ((2..=3).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_lowercase())).then_some(code)
+}
+
 impl Default for SpeechLanguage {
     fn default() -> Self {
         Self::new("")
     }
 }
 
+/// Ends a passage inside the text `read` returns: a replacement sentence is a sentence of its
+/// own, and a finished block ends its last sentence. Never sent to the voice.
+pub(super) const BREAK: char = '\u{1E}';
+
 /// Spoken text for complete markdown. Code blocks and tables are replaced by one short
-/// sentence each; images, footnotes, struck-through text and task-list boxes are left out;
-/// link targets are dropped and bare web addresses are read as their site name.
+/// sentence, once per run of them; images, footnotes, struck-through text and task-list boxes
+/// are left out; link targets are dropped and bare web addresses are read as their site name.
 pub fn speakable(markdown: &str, language: &SpeechLanguage) -> String {
-    read(markdown, language, false)
+    read(markdown, language, false, Replaced::default())
+        .text
+        .replace(BREAK, "")
+}
+
+/// Which replacement sentences were said since the last spoken text.
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub(super) struct Replaced {
+    code: bool,
+    table: bool,
+}
+
+pub(super) struct Reading {
+    pub text: String,
+    pub replaced: Replaced,
+}
+
+enum Piece {
+    Text { text: String, hold: Option<usize> },
+    Code,
+    Table,
 }
 
 /// `open` marks markdown that is still being written: its last piece may continue, so it gets
-/// no closing full stop and no trailing space yet.
-pub(super) fn read(markdown: &str, language: &SpeechLanguage, open: bool) -> String {
+/// no closing full stop and no trailing space yet, and it ends before a mark that has no
+/// partner yet ("**", "_", "~~", "`", "["), which may still turn the text after it into
+/// emphasis, struck text, code or a link. `replaced` carries a run of code blocks and tables
+/// over from the markdown before.
+pub(super) fn read(
+    markdown: &str,
+    language: &SpeechLanguage,
+    open: bool,
+    mut replaced: Replaced,
+) -> Reading {
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_TASKLISTS;
+    // A reference whose definition is in a later block ("[Quelle][1]") is read as a link.
+    let mut unresolved = |_: BrokenLink| Some((CowStr::Borrowed(""), CowStr::Borrowed("")));
+    let parser = Parser::new_with_broken_link_callback(markdown, options, Some(&mut unresolved));
     let mut pieces = Vec::new();
     let mut piece = String::new();
+    let mut hold = None;
     let mut hidden = 0usize;
-    for event in Parser::new_ext(markdown, options) {
+    for (event, range) in parser.into_offset_iter() {
         match event {
             Event::Start(Tag::CodeBlock(_) | Tag::Table(_) | Tag::FootnoteDefinition(_)) => {
-                end_piece(&mut pieces, &mut piece);
+                end_piece(&mut pieces, &mut piece, &mut hold);
                 if hidden == 0 {
                     match event {
-                        Event::Start(Tag::CodeBlock(_)) => {
-                            pieces.push(Cow::Borrowed(language.code_sentence()))
-                        }
-                        Event::Start(Tag::Table(_)) => {
-                            pieces.push(Cow::Borrowed(language.table_sentence()))
-                        }
+                        Event::Start(Tag::CodeBlock(_)) => pieces.push(Piece::Code),
+                        Event::Start(Tag::Table(_)) => pieces.push(Piece::Table),
                         _ => {}
                     }
                 }
@@ -99,41 +156,98 @@ pub(super) fn read(markdown: &str, language: &SpeechLanguage, open: bool) -> Str
                 | TagEnd::Image
                 | TagEnd::Strikethrough,
             ) => hidden -= 1,
-            Event::Text(text) | Event::Code(text) if hidden == 0 => piece.push_str(&text),
+            Event::Text(text) if hidden == 0 => {
+                if open && hold.is_none() && without_partner(&text, &markdown[range.end..]) {
+                    hold = Some(piece.len());
+                }
+                piece.push_str(&text);
+            }
+            Event::Code(text) if hidden == 0 => piece.push_str(&text),
+            Event::InlineHtml(html) if hidden == 0 && is_line_break(&html) => piece.push(' '),
             Event::SoftBreak | Event::HardBreak => piece.push(' '),
             Event::Start(Tag::Emphasis | Tag::Strong | Tag::Link { .. })
             | Event::End(TagEnd::Emphasis | TagEnd::Strong | TagEnd::Link) => {}
-            Event::Start(_) | Event::End(_) | Event::Rule => end_piece(&mut pieces, &mut piece),
+            Event::Start(_) | Event::End(_) | Event::Rule => {
+                end_piece(&mut pieces, &mut piece, &mut hold)
+            }
             _ => {}
         }
     }
-    end_piece(&mut pieces, &mut piece);
+    end_piece(&mut pieces, &mut piece, &mut hold);
+    if open
+        && let Some(Piece::Text {
+            text,
+            hold: Some(at),
+        }) = pieces.last_mut()
+    {
+        text.truncate(*at);
+    }
+    pieces.retain_mut(|piece| match piece {
+        Piece::Text { text, .. } => {
+            *text = clean(text);
+            !text.is_empty()
+        }
+        _ => true,
+    });
 
     let readings = Readings::for_language(language);
     let last = pieces.len().saturating_sub(1);
     let mut spoken = String::new();
     for (index, piece) in pieces.into_iter().enumerate() {
-        let unfinished = open && index == last;
-        let mut piece = piece.into_owned();
-        if !unfinished {
-            close_sentence(&mut piece);
-        }
-        if let Some(readings) = readings {
-            piece = readings.apply(&piece, !unfinished);
-        }
-        spoken.push_str(&piece);
-        if !unfinished {
+        let (sentence, said) = match piece {
+            Piece::Text { mut text, .. } => {
+                let unfinished = open && index == last;
+                if !unfinished {
+                    close_sentence(&mut text);
+                }
+                if let Some(readings) = readings {
+                    text = readings.apply(&text, !unfinished);
+                }
+                spoken.push_str(&text);
+                if !unfinished {
+                    spoken.push(' ');
+                }
+                replaced = Replaced::default();
+                continue;
+            }
+            Piece::Code => (language.code_sentence(), &mut replaced.code),
+            Piece::Table => (language.table_sentence(), &mut replaced.table),
+        };
+        if !std::mem::replace(said, true) {
+            spoken.push(BREAK);
+            spoken.push_str(sentence);
             spoken.push(' ');
+            spoken.push(BREAK);
         }
     }
-    spoken
+    Reading {
+        text: spoken,
+        replaced,
+    }
 }
 
-fn end_piece(pieces: &mut Vec<Cow<'static, str>>, piece: &mut String) {
-    let text = clean(&std::mem::take(piece));
-    if !text.is_empty() {
-        pieces.push(Cow::Owned(text));
+fn end_piece(pieces: &mut Vec<Piece>, piece: &mut String, hold: &mut Option<usize>) {
+    if !piece.is_empty() {
+        pieces.push(Piece::Text {
+            text: std::mem::take(piece),
+            hold: hold.take(),
+        });
     }
+    *hold = None;
+}
+
+/// A mark the parser left as text because its partner has not arrived. A "[" whose "]" is
+/// already there stays text (`[^1]` without a definition).
+fn without_partner(text: &str, after: &str) -> bool {
+    match text {
+        "[" => !after.contains(']'),
+        _ => !text.is_empty() && text.chars().all(|c| matches!(c, '*' | '_' | '~' | '`')),
+    }
+}
+
+fn is_line_break(html: &str) -> bool {
+    let tag = html.trim_start_matches('<').trim_end_matches('>');
+    tag.trim_end_matches('/').trim().eq_ignore_ascii_case("br")
 }
 
 static FOOTNOTE_MARK: LazyLock<Regex> =
@@ -158,7 +272,10 @@ fn clean(text: &str) -> String {
     let text = FOOTNOTE_MARK.replace_all(text, "");
     let text = speak_links(&text);
     let text = EMOJI.replace_all(&text, "");
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+    text.split(|c: char| c.is_whitespace() || c == BREAK)
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 const CLOSING_QUOTES: &[char] = &['"', '\'', '“', '”', '‘', '’', '»', '«', '›', '‹', '„', '‚'];
@@ -266,6 +383,26 @@ mod tests {
     }
 
     #[test]
+    fn the_language_on_screen_comes_before_the_resolved_one() {
+        for (shown, resolved, code) in [
+            (Some("de-DE"), "en", "de"),
+            (Some("en"), "de", "en"),
+            (None, "en", "en"),
+            (Some(""), "fr", "fr"),
+            (Some("*"), "pl", "pl"),
+            (None, "", "de"),
+        ] {
+            assert_eq!(
+                SpeechLanguage::for_user(shown, resolved).code(),
+                code,
+                "{shown:?} {resolved}"
+            );
+        }
+        assert_eq!(SpeechLanguage::new("en").splitter(), "de");
+        assert_eq!(SpeechLanguage::new("fr").splitter(), "fr");
+    }
+
+    #[test]
     fn speaks_visible_prose_but_omits_code_and_images() {
         assert_eq!(
             en(
@@ -358,13 +495,65 @@ mod tests {
     #[test]
     fn open_markdown_leaves_its_last_piece_unfinished() {
         let language = SpeechLanguage::new("de");
+        let open = |markdown| read(markdown, &language, true, Replaced::default()).text;
+        assert_eq!(open("# Titel\n\nDas ist"), "Titel. Das ist");
+        assert_eq!(de("# Titel\n\nDas ist"), "Titel. Das ist. ");
+        // Marks whose partner has not arrived end the open reading; a closed one does not.
+        assert_eq!(open("Gut. **Wichtig. Bitte"), "Gut.");
+        assert_eq!(open("Gut. _Wichtig. Bitte"), "Gut.");
+        assert_eq!(open("Gut. Noch ~~alt. Neu"), "Gut. Noch");
+        assert_eq!(open("Gut. Siehe `code. Mehr"), "Gut. Siehe");
+        assert_eq!(open("Gut. Siehe [Quelle. Mehr"), "Gut. Siehe");
+        assert_eq!(open("**Wichtig.** Bitte"), "Wichtig. Bitte");
+        assert_eq!(open("Studie[^1]. Mehr"), "Studie. Mehr");
         assert_eq!(
-            read("# Titel\n\nDas ist", &language, true),
-            "Titel. Das ist"
+            open("Ein snake_case Wort. Mehr"),
+            "Ein snake_case Wort. Mehr"
+        );
+        // Only the piece still being written waits; a finished list item cannot change.
+        assert_eq!(open("- **Erster.\n- Zweiter"), "**Erster. Zweiter");
+    }
+
+    #[test]
+    fn a_run_of_code_blocks_and_tables_gets_one_sentence_each() {
+        assert_eq!(
+            de("Drei Skripte:\n\n```\na\n```\n\n```\nb\n```\n```\nc\n```\n\nFertig."),
+            "Drei Skripte: Der Code steht im Chat. Fertig. "
         );
         assert_eq!(
-            read("# Titel\n\nDas ist", &language, false),
-            "Titel. Das ist. "
+            de("| a |\n|---|\n| 1 |\n\n![Bild](x.png)\n\n| b |\n|---|\n| 2 |\n\n```\nc\n```"),
+            "Die Tabelle steht im Chat. Der Code steht im Chat. "
         );
+        assert_eq!(
+            de("```\na\n```\n\nErster Schritt.\n\n```\nb\n```"),
+            "Der Code steht im Chat. Erster Schritt. Der Code steht im Chat. "
+        );
+    }
+
+    #[test]
+    fn reference_links_are_read_by_their_text() {
+        assert_eq!(
+            de("Siehe [Quelle][1], [Buch][] und [Heft].\n\n[1]: https://example.com"),
+            "Siehe Quelle, Buch und Heft. "
+        );
+        assert_eq!(
+            read(
+                "Siehe [Quelle][1]. Gut.",
+                &SpeechLanguage::new("de"),
+                false,
+                Replaced::default()
+            )
+            .text,
+            "Siehe Quelle. Gut. "
+        );
+    }
+
+    #[test]
+    fn an_html_line_break_is_a_space() {
+        assert_eq!(
+            de("Text<br>mit<br/>HTML<br />und <BR> mehr.\n\n- eins<br>zwei"),
+            "Text mit HTML und mehr. eins zwei. "
+        );
+        assert_eq!(de("Ein <b>fettes</b> Wort."), "Ein fettes Wort. ");
     }
 }
