@@ -1,4 +1,6 @@
-use super::{AudioStream, SpeechProvider, provider, sentences::Sentences, wav};
+use super::{
+    AudioStream, SpeechProvider, provider, sentences::Sentences, spoken::SpeechLanguage, wav,
+};
 use crate::policy::prelude::*;
 use crate::{
     config::SpeechProviderConfig,
@@ -116,9 +118,13 @@ impl PassageSpeaker {
     }
 
     /// A speaker for text that is already complete, split into the same passages as live speech.
-    pub fn for_text(config: &SpeechProviderConfig, text: &str) -> Result<Self, Report> {
+    pub fn for_text(
+        config: &SpeechProviderConfig,
+        text: &str,
+        language: SpeechLanguage,
+    ) -> Result<Self, Report> {
         let (sender, receiver) = mpsc::unbounded_channel();
-        let mut sentences = Sentences::default();
+        let mut sentences = Sentences::new(language);
         for sentence in sentences.push(text).into_iter().chain(sentences.finish()) {
             let _ = sender.send(sentence);
         }
@@ -163,7 +169,6 @@ impl PassageSpeaker {
                 self.finished = true;
                 return Ok(None);
             };
-            let text = super::sentences::speakable(&text);
             if text.trim().is_empty() {
                 continue;
             }
@@ -198,6 +203,7 @@ impl SpeechSession {
     pub fn start(
         config: SpeechProviderConfig,
         provider_id: String,
+        language: SpeechLanguage,
         task: Arc<StreamingTask>,
         tx: mpsc::Sender<Result<Event, Report>>,
         message_id: Uuid,
@@ -233,7 +239,7 @@ impl SpeechSession {
             Ok((pcm, speaker.segments, speaker.sample_rate))
         });
         Self {
-            sentences: Sentences::default(),
+            sentences: Sentences::new(language),
             sender: Some(sender),
             worker,
             config,
@@ -270,10 +276,10 @@ impl SpeechSession {
         if self.input_limit_exceeded {
             return Err(eyre!("Speech input exceeds 1 MiB"));
         }
-        if let Some(tail) = self.sentences.finish()
-            && let Some(sender) = &self.sender
-        {
-            let _ = sender.send(tail);
+        if let Some(sender) = &self.sender {
+            for sentence in self.sentences.finish() {
+                let _ = sender.send(sentence);
+            }
         }
         self.sender.take();
         let (pcm, segments, sample_rate) = (&mut self.worker).await??;
@@ -386,7 +392,14 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (_, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "mock".into(), task, tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "mock".into(),
+            SpeechLanguage::default(),
+            task,
+            tx,
+            message_id,
+        );
         session.push("The first sentence. More text ");
         tokio::time::timeout(std::time::Duration::from_secs(3), entered.notified())
             .await
@@ -459,7 +472,8 @@ mod tests {
             "Intro sentence.\n\n```rs\nlet secret = 1;\n```\n\n{}",
             "A long answer keeps going. ".repeat(200)
         );
-        let mut speaker = PassageSpeaker::for_text(&config, &text).unwrap();
+        let mut speaker =
+            PassageSpeaker::for_text(&config, &text, SpeechLanguage::default()).unwrap();
         let chunk = tokio::time::timeout(std::time::Duration::from_secs(3), speaker.next_chunk())
             .await
             .unwrap()
@@ -529,10 +543,17 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "live".into(), task, tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "live".into(),
+            SpeechLanguage::default(),
+            task,
+            tx,
+            message_id,
+        );
         session.push("Hello.");
-        if let Some(tail) = session.sentences.finish() {
-            session.sender.as_ref().unwrap().send(tail).unwrap();
+        for sentence in session.sentences.finish() {
+            session.sender.as_ref().unwrap().send(sentence).unwrap();
         }
         session.sender.take();
         let (pcm, segments, rate) = (&mut session.worker).await.unwrap().unwrap();
@@ -573,7 +594,14 @@ mod tests {
         let message_id = Uuid::new_v4();
         let (mut events, task) = manager.start_task(Uuid::new_v4(), message_id).await;
         let (tx, _rx) = mpsc::channel(8);
-        let mut session = SpeechSession::start(config, "test".into(), task.clone(), tx, message_id);
+        let mut session = SpeechSession::start(
+            config,
+            "test".into(),
+            SpeechLanguage::default(),
+            task.clone(),
+            tx,
+            message_id,
+        );
         session.push("First sentence. More text still arriving");
         let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
             .await

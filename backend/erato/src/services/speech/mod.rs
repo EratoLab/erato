@@ -3,8 +3,10 @@ pub mod gemini;
 pub mod gemini_live;
 pub mod openai;
 pub mod openai_realtime;
+pub mod readings;
 pub mod sentences;
 pub mod session;
+pub mod spoken;
 
 use crate::config::SpeechProviderConfig;
 use async_trait::async_trait;

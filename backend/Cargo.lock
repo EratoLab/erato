@@ -2850,6 +2850,7 @@ dependencies = [
  "jemalloc_pprof",
  "jsonschema",
  "jsonwebtoken 10.4.0",
+ "linkify",
  "lol_html",
  "magika",
  "metrics",
@@ -2881,6 +2882,7 @@ dependencies = [
  "rmcp-sse",
  "rustls",
  "sea-orm",
+ "sentencex",
  "sentry",
  "sentry-tower",
  "serde",
@@ -4892,6 +4894,15 @@ name = "link-section"
 version = "0.19.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39c29a617ce3df32c08497bdc1ab6e2376e0b17948ac166a2fbe5977c5954cd9"
+
+[[package]]
+name = "linkify"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92f9ae2f3d31697697311f016320fe984127e636b45cf5eb5c175b7eb103dadb"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "linktime-proc-macro"
@@ -8468,6 +8479,20 @@ name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+
+[[package]]
+name = "sentencex"
+version = "0.1.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48116bef613cac12c4fede2cdab6d11f8d1e0f3f6689e7edf9ae939d01d0ec75"
+dependencies = [
+ "clap",
+ "memchr",
+ "regex",
+ "rustc-hash",
+ "serde",
+ "strum 0.28.0",
+]
 
 [[package]]
 name = "sentry"

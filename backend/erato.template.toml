@@ -251,6 +251,13 @@ chat_provider_ids = ["test-token-limit"]
 # display_name = "Erato for Documents"
 # description = "Erato AI assistant for Word documents"
 #
+# # The PowerPoint add-in has its own catalog ID, distinct from the two above.
+# [integrations.ms_office.addin.presentation]
+# addin_id = "f13aa6d0-f017-46e3-8b17-a72159d689ea"
+# [integrations.ms_office.addin.presentation.manifest]
+# display_name = "Erato for PowerPoint"
+# description = "Erato AI assistant for PowerPoint presentations"
+#
 # # Runtime hosting the Outlook launch event handlers. Required as soon as at
 # # least one launch event is configured, rejected when none are. Both paths are
 # # resolved against the deployment base URL, so they must start with "/" and

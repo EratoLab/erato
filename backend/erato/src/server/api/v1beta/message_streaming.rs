@@ -6899,6 +6899,7 @@ async fn stream_generate_chat_completion<'a>(
                             crate::services::speech::session::SpeechSession::start(
                                 config.clone(),
                                 id.to_string(),
+                                task.speech_language.get().cloned().unwrap_or_default(),
                                 (*task).clone(),
                                 tx.clone(),
                                 assistant_message_id,
@@ -18171,6 +18172,14 @@ async fn run_generation_after_user_message_memory_inner(
             .is_some();
     task.speech_enabled
         .store(reply_is_read_back, std::sync::atomic::Ordering::Relaxed);
+    let _ = task
+        .speech_language
+        .set(crate::services::speech::spoken::SpeechLanguage::new(
+            super::me_profile_middleware::normalize_supported_language(
+                me_user.preference_language.as_deref(),
+            )
+            .unwrap_or(&me_user.preferred_language),
+        ));
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so

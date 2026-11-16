@@ -8990,9 +8990,13 @@ impl MsOfficeTeamsAppConfig {
         }
         if self.app_id.trim() == addin.addin_id.trim()
             || self.app_id.trim() == addin.document.addin_id.trim()
+            || self
+                .app_id
+                .trim()
+                .eq_ignore_ascii_case(addin.presentation.addin_id.trim())
         {
             return Err(eyre!(
-                "Microsoft Teams app ID must differ from the Outlook and Word add-in IDs."
+                "Microsoft Teams app ID must differ from the Outlook, Word and PowerPoint add-in IDs."
             ));
         }
         if addin
@@ -9841,6 +9845,11 @@ pub struct MsOfficeAddinConfig {
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub document: MsOfficeAddinDocumentConfig,
 
+    // Its own catalog entry, so it can be rolled out without updating a deployed Word add-in.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "0.9.0"))]
+    pub presentation: MsOfficeAddinPresentationConfig,
+
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.7.0"))]
     pub default_settings: MsOfficeAddinDefaultSettings,
@@ -10099,6 +10108,7 @@ impl Default for MsOfficeAddinConfig {
             favicon_path: None,
             manifest: MsOfficeAddinManifestConfig::default(),
             document: MsOfficeAddinDocumentConfig::default(),
+            presentation: MsOfficeAddinPresentationConfig::default(),
             default_settings: MsOfficeAddinDefaultSettings::default(),
             launch_event_runtime: None,
             launch_events: Vec::new(),
@@ -10116,6 +10126,8 @@ impl MsOfficeAddinConfig {
 
         self.manifest.validate()?;
         self.document.validate(&self.addin_id)?;
+        self.presentation
+            .validate(&self.addin_id, &self.document.addin_id)?;
         self.default_settings.validate()?;
         self.validate_launch_events()?;
 
@@ -10238,6 +10250,266 @@ impl MsOfficeAddinDocumentManifestConfig {
         }
 
         Ok(())
+    }
+}
+
+/// The PowerPoint add-in's catalog identity. Other branding is inherited at render time.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct MsOfficeAddinPresentationConfig {
+    #[serde(default = "default_ms_office_addin_presentation_id")]
+    pub addin_id: String,
+
+    #[serde(default)]
+    pub manifest: MsOfficeAddinPresentationManifestConfig,
+}
+
+impl Default for MsOfficeAddinPresentationConfig {
+    fn default() -> Self {
+        Self {
+            addin_id: default_ms_office_addin_presentation_id(),
+            manifest: MsOfficeAddinPresentationManifestConfig::default(),
+        }
+    }
+}
+
+impl MsOfficeAddinPresentationConfig {
+    /// A catalog rejects two add-ins with the same identity, and GUIDs compare case-insensitively.
+    pub fn validate(&self, mail_addin_id: &str, document_addin_id: &str) -> Result<(), Report> {
+        let addin_id = self.addin_id.trim();
+        if addin_id.is_empty() {
+            return Err(eyre!(
+                "Microsoft Office PowerPoint add-in id cannot be empty when the add-in is configured."
+            ));
+        }
+        if !is_ms_office_guid(addin_id) {
+            return Err(eyre!(
+                "Microsoft Office PowerPoint add-in id must be a GUID such as `f13aa6d0-f017-46e3-8b17-a72159d689ea`."
+            ));
+        }
+        if addin_id.eq_ignore_ascii_case(mail_addin_id.trim()) {
+            return Err(eyre!(
+                "Microsoft Office PowerPoint add-in id must differ from `integrations.ms_office.addin.addin_id`; two add-ins in one catalog cannot share an id."
+            ));
+        }
+        if addin_id.eq_ignore_ascii_case(document_addin_id.trim()) {
+            return Err(eyre!(
+                "Microsoft Office PowerPoint add-in id must differ from `integrations.ms_office.addin.document.addin_id`; two add-ins in one catalog cannot share an id."
+            ));
+        }
+
+        self.manifest.validate()
+    }
+
+    /// The id as the manifest carries it. Office treats GUIDs case-insensitively, so one
+    /// canonical spelling keeps the served id stable however the configuration writes it.
+    pub fn manifest_addin_id(&self) -> String {
+        self.addin_id.trim().to_ascii_lowercase()
+    }
+}
+
+/// PowerPoint-specific overrides; other manifest fields inherit the mail configuration at render time.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+pub struct MsOfficeAddinPresentationManifestConfig {
+    #[serde(default = "default_ms_office_addin_presentation_manifest_display_name")]
+    pub display_name: String,
+
+    #[serde(default = "default_ms_office_addin_presentation_manifest_description")]
+    pub description: String,
+}
+
+impl Default for MsOfficeAddinPresentationManifestConfig {
+    fn default() -> Self {
+        Self {
+            display_name: default_ms_office_addin_presentation_manifest_display_name(),
+            description: default_ms_office_addin_presentation_manifest_description(),
+        }
+    }
+}
+
+// Microsoft's manifest schema types `ShortString` and `LongString`. Its validator counts
+// UTF-16 units after XML unescaping, so `&` counts once and an emoji twice.
+const MS_OFFICE_MANIFEST_SHORT_STRING_MAX_LENGTH: usize = 125;
+const MS_OFFICE_MANIFEST_LONG_STRING_MAX_LENGTH: usize = 250;
+
+impl MsOfficeAddinPresentationManifestConfig {
+    pub fn validate(&self) -> Result<(), Report> {
+        for (key, value, max_length) in [
+            (
+                "display_name",
+                &self.display_name,
+                MS_OFFICE_MANIFEST_SHORT_STRING_MAX_LENGTH,
+            ),
+            (
+                "description",
+                &self.description,
+                MS_OFFICE_MANIFEST_LONG_STRING_MAX_LENGTH,
+            ),
+        ] {
+            if value.trim().is_empty() {
+                return Err(eyre!(
+                    "Microsoft Office PowerPoint add-in manifest field `{key}` cannot be empty."
+                ));
+            }
+            let length = value.encode_utf16().count();
+            if length > max_length {
+                return Err(eyre!(
+                    "Microsoft Office PowerPoint add-in manifest field `{key}` is {length} characters long; Microsoft allows at most {max_length}."
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod presentation_addin_config_tests {
+    use super::{MsOfficeAddinConfig, MsOfficeTeamsAppConfig};
+
+    fn error(config: &MsOfficeAddinConfig) -> String {
+        config
+            .validate()
+            .expect_err("configuration should be rejected")
+            .to_string()
+    }
+
+    #[test]
+    fn stock_defaults_declare_three_distinct_addin_ids() {
+        let config = MsOfficeAddinConfig::default();
+        config.validate().expect("stock defaults are valid");
+        assert_ne!(config.presentation.addin_id, config.addin_id);
+        assert_ne!(config.presentation.addin_id, config.document.addin_id);
+        assert_eq!(
+            config.presentation.manifest.display_name,
+            "Erato for PowerPoint"
+        );
+    }
+
+    #[test]
+    fn rejects_an_empty_or_shared_presentation_id() {
+        let mut empty = MsOfficeAddinConfig::default();
+        empty.presentation.addin_id = "  ".to_string();
+        assert!(error(&empty).contains("cannot be empty"));
+
+        let mut shares_mail = MsOfficeAddinConfig::default();
+        shares_mail.presentation.addin_id = format!(" {} ", shares_mail.addin_id);
+        assert!(error(&shares_mail).contains("`integrations.ms_office.addin.addin_id`"));
+
+        let mut shares_word = MsOfficeAddinConfig::default();
+        shares_word.presentation.addin_id = shares_word.document.addin_id.clone();
+        assert!(error(&shares_word).contains("`integrations.ms_office.addin.document.addin_id`"));
+    }
+
+    #[test]
+    fn rejects_a_presentation_id_that_is_not_a_guid() {
+        for addin_id in [
+            "presentation-addin-id",
+            "<x>&not-a-guid",
+            "f13aa6d0-f017-46e3-8b17-a72159d689e",
+            "{f13aa6d0-f017-46e3-8b17-a72159d689ea}",
+            "f13aa6d0f01746e38b17a72159d689ea0000",
+        ] {
+            let mut config = MsOfficeAddinConfig::default();
+            config.presentation.addin_id = addin_id.to_string();
+            assert!(
+                error(&config).contains("must be a GUID"),
+                "{addin_id} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn compares_presentation_ids_case_insensitively() {
+        let mut shares_word = MsOfficeAddinConfig::default();
+        shares_word.presentation.addin_id = shares_word.document.addin_id.to_ascii_uppercase();
+        assert!(error(&shares_word).contains("`integrations.ms_office.addin.document.addin_id`"));
+
+        let mut shares_mail = MsOfficeAddinConfig::default();
+        shares_mail.presentation.addin_id = shares_mail.addin_id.to_ascii_uppercase();
+        assert!(error(&shares_mail).contains("`integrations.ms_office.addin.addin_id`"));
+    }
+
+    #[test]
+    fn normalises_a_padded_upper_case_presentation_id() {
+        let mut config = MsOfficeAddinConfig::default();
+        config.presentation.addin_id = "  F13AA6D0-F017-46E3-8B17-A72159D689EA\t".to_string();
+        config
+            .validate()
+            .expect("a padded upper-case GUID is valid");
+        assert_eq!(
+            config.presentation.manifest_addin_id(),
+            "f13aa6d0-f017-46e3-8b17-a72159d689ea"
+        );
+    }
+
+    #[test]
+    fn enforces_microsofts_length_limits_on_presentation_texts() {
+        let mut longest = MsOfficeAddinConfig::default();
+        longest.presentation.manifest.display_name = "N".repeat(125);
+        longest.presentation.manifest.description = "D".repeat(250);
+        longest
+            .validate()
+            .expect("the limits themselves are allowed");
+
+        let mut escaped = MsOfficeAddinConfig::default();
+        escaped.presentation.manifest.display_name = "&".repeat(125);
+        escaped
+            .validate()
+            .expect("an escaped character counts once");
+
+        let mut long_name = MsOfficeAddinConfig::default();
+        long_name.presentation.manifest.display_name = "N".repeat(126);
+        let message = error(&long_name);
+        assert!(
+            message.contains("display_name") && message.contains("at most 125"),
+            "unexpected error: {message}"
+        );
+
+        let mut wide_name = MsOfficeAddinConfig::default();
+        wide_name.presentation.manifest.display_name = "\u{1F600}".repeat(63);
+        assert!(error(&wide_name).contains("at most 125"));
+
+        let mut long_description = MsOfficeAddinConfig::default();
+        long_description.presentation.manifest.description = "D".repeat(251);
+        let message = error(&long_description);
+        assert!(
+            message.contains("description") && message.contains("at most 250"),
+            "unexpected error: {message}"
+        );
+    }
+
+    #[test]
+    fn rejects_an_empty_presentation_display_name_or_description() {
+        let mut blank_name = MsOfficeAddinConfig::default();
+        blank_name.presentation.manifest.display_name = " ".to_string();
+        assert!(error(&blank_name).contains("display_name"));
+
+        let mut blank_description = MsOfficeAddinConfig::default();
+        blank_description.presentation.manifest.description = String::new();
+        assert!(error(&blank_description).contains("description"));
+    }
+
+    #[test]
+    fn teams_app_id_must_differ_from_the_presentation_id() {
+        let mut addin = MsOfficeAddinConfig {
+            enabled: true,
+            msal_client_id: Some("11111111-2222-3333-4444-555555555555".to_string()),
+            ..MsOfficeAddinConfig::default()
+        };
+        let teams = MsOfficeTeamsAppConfig {
+            enabled: true,
+            ..MsOfficeTeamsAppConfig::default()
+        };
+        teams
+            .validate(&addin)
+            .expect("stock Teams and add-in ids differ");
+
+        addin.presentation.addin_id = teams.app_id.to_ascii_uppercase();
+        let error = teams
+            .validate(&addin)
+            .expect_err("a Teams app id equal to the PowerPoint id is rejected")
+            .to_string();
+        assert!(error.contains("PowerPoint"), "unexpected error: {error}");
     }
 }
 
@@ -10445,6 +10717,20 @@ fn default_ms_office_addin_document_manifest_display_name() -> String {
 
 fn default_ms_office_addin_document_manifest_description() -> String {
     "Erato AI assistant for Word documents".to_string()
+}
+
+/// A distinct compile-time constant, never generated, for the same reason as
+/// the document add-in id.
+fn default_ms_office_addin_presentation_id() -> String {
+    "f13aa6d0-f017-46e3-8b17-a72159d689ea".to_string()
+}
+
+fn default_ms_office_addin_presentation_manifest_display_name() -> String {
+    "Erato for PowerPoint".to_string()
+}
+
+fn default_ms_office_addin_presentation_manifest_description() -> String {
+    "Erato AI assistant for PowerPoint presentations".to_string()
 }
 
 fn default_ms_office_addin_serve_bundle_legacy_path() -> bool {

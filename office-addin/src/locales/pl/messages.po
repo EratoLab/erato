@@ -1476,6 +1476,51 @@ msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
 msgstr "Pozwala Erato zobaczyć układ, wykresy i obrazy"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.chooseDistribution"
+msgstr "Wybierz sposób dystrybucji dodatku do programu PowerPoint, aby uzyskać jego manifest i instrukcje instalacji."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.desktopRedirectUriInstruction"
+msgstr "W rejestracji aplikacji w Entra ID dodaj identyfikator URI przekierowania SPA. PowerPoint dla systemów Windows i Mac loguje się za jego pomocą:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.distributionGuidance"
+msgstr "Wybierz centrum administracyjne Microsoft 365 dla użytkowników ze skrzynkami pocztowymi Exchange Online i odpowiednimi licencjami subskrypcyjnymi Microsoft 365. Wybierz katalog aplikacji SharePoint dla środowisk z lokalnymi skrzynkami Exchange lub bez scentralizowanego wdrażania. Dystrybucja przez katalog SharePoint wymaga administratora katalogu i nie obsługuje programu PowerPoint na komputerach Mac."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.downloadSelectedManifest"
+msgstr "Pobierz manifest programu PowerPoint"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.integratedOpen"
+msgstr "Gdy wdrożenie będzie dostępne dla użytkowników, uruchom ponownie program PowerPoint i otwórz Erato za pomocą przycisku na wstążce."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointOpen"
+msgstr "Otwórz okno dialogowe dodatków pakietu Office w programie PowerPoint i wybierz Moja organizacja, aby dodać Erato. Ta metoda dystrybucji nie udostępnia przycisku Erato na wstążce; otwieraj go z listy dodatków. PowerPoint w przeglądarce może korzystać z katalogu SharePoint Online."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointTrust"
+msgstr "W programie PowerPoint dla systemu Windows otwórz Plik → Opcje → Centrum zaufania → Ustawienia Centrum zaufania → Zaufane katalogi dodatków. Dodaj adres URL witryny katalogu, zaznacz Pokaż w menu i uruchom ponownie program PowerPoint."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.supportedVersions"
+msgstr "Obsługiwane wersje: PowerPoint w Microsoft 365 w systemie Windows, na komputerach Mac i w przeglądarce oraz PowerPoint w Office LTSC 2024. PowerPoint 2016 i 2019 również mogą wyświetlać dodatek, na przykład z katalogu aplikacji SharePoint, ale prawdopodobnie nie otworzą jego okienka i nie są obsługiwane."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.webSignInInstruction"
+msgstr "PowerPoint w przeglądarce nie oferuje logowania Office dla dodatków, dlatego użytkownicy logują się w oknie podręcznym przez logowanie oauth2-proxy tego wdrożenia. To logowanie używa internetowego identyfikatora URI przekierowania serwera proxy, który każde wdrożenie już rejestruje dla aplikacji internetowej Erato. Serwer proxy musi ustawić <0>cookie_samesite = \"none\"</0>, aby plik cookie sesji docierał do dodatku w programie PowerPoint:"
+
+#. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.attached"
 msgstr "{attachedCount, plural, one {Dołączono obraz slajdu.} few {Dołączono # obrazy slajdów.} many {Dołączono # obrazów slajdów.} other {Dołączono # obrazu slajdów.}}"

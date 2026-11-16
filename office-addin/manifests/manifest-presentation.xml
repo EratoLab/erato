@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xsi:type="TaskPaneApp">
+  <Id>{{OFFICE_ADDIN_ID}}</Id>
+  <Version>{{OFFICE_ADDIN_MANIFEST_VERSION}}</Version>
+  <ProviderName>{{OFFICE_ADDIN_MANIFEST_PROVIDER_NAME}}</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="{{OFFICE_ADDIN_MANIFEST_DISPLAY_NAME}}" />
+  <Description DefaultValue="{{OFFICE_ADDIN_MANIFEST_DESCRIPTION}}" />
+  <IconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_URL}}" />
+  <HighResolutionIconUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_HIGH_RESOLUTION_ICON_URL}}" />
+  <SupportUrl DefaultValue="{{OFFICE_ADDIN_MANIFEST_SUPPORT_URL}}" />
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+  <!-- No requirement sets: Office LTSC 2024 stops at the 1.5 API set for PowerPoint
+       and must still show the add-in; the pane picks its read tier at run time.
+       Supported: Microsoft 365 on Windows, Mac and the web, and Office LTSC 2024.
+       PowerPoint 2016 and 2019 are offered the add-in too but probably cannot start the pane. -->
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/powerpoint" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <!-- The backend omits this entire section for SharePoint catalog distribution. -->
+  <!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_START -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="eratoGroup">
+                <Label resid="groupLabel" />
+                <Icon>
+                  <bt:Image size="16" resid="icon16" />
+                  <bt:Image size="32" resid="icon32" />
+                  <bt:Image size="80" resid="icon80" />
+                </Icon>
+                <Control xsi:type="Button" id="eratoTaskpaneButton">
+                  <Label resid="buttonLabel" />
+                  <Supertip>
+                    <Title resid="buttonLabel" />
+                    <Description resid="buttonDesc" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="icon16" />
+                    <bt:Image size="32" resid="icon32" />
+                    <bt:Image size="80" resid="icon80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>eratoTaskpane</TaskpaneId>
+                    <SourceLocation resid="taskPaneUrl" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="icon16" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_16_URL}}" />
+        <bt:Image id="icon32" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_32_URL}}" />
+        <bt:Image id="icon80" DefaultValue="{{OFFICE_ADDIN_MANIFEST_ICON_80_URL}}" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="taskPaneUrl" DefaultValue="https://localhost:3002/public/platform-office-addin/powerpoint" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="groupLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_GROUP_LABEL}}" />
+        <bt:String id="buttonLabel" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_LABEL}}" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="buttonDesc" DefaultValue="{{OFFICE_ADDIN_MANIFEST_BUTTON_DESCRIPTION}}" />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+  <!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->
+</OfficeApp>

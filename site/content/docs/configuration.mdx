@@ -2641,8 +2641,48 @@ by the selected model; streamed output uses 16-bit little-endian mono PCM.
 The frontend pauses conversational microphone restart until speech playback ends.
 Stopping playback does not discard the text or prevent the backend from finishing
 the replay file. Cancelling generation discards incomplete speech. A speech
-failure leaves the text response available. Code blocks and image descriptions
-are omitted from spoken output; Markdown links are read by their visible text.
+failure leaves the text response available.
+
+Only the copy of the answer sent to the voice is prepared for listening; the
+text shown and stored in the chat is unchanged:
+
+- A code block or a table is not read. In its place the voice says one short
+  sentence in the user's language as soon as the block starts: "Der Code steht im
+  Chat." / "The code is in the chat." and "Die Tabelle steht im Chat." / "The
+  table is in the chat." (also French, Spanish and Polish). Several code blocks
+  or tables with no spoken text between them get each sentence once.
+- Image descriptions, HTML, footnote marks and footnotes, struck-through text,
+  task-list boxes and emoji are omitted, and so are markdown marks without a
+  partner, e.g. the `*` in "Preis*" or the `~` in "~5 Minuten" (read "5
+  Minuten").
+- Markdown links are read by their visible text. A bare web address
+  (`https://…` or `www.…`) is read as its site name, e.g. `example.com`. Mail
+  addresses are read as written.
+- A heading, list item or paragraph without closing punctuation gets a full
+  stop, so it does not run into the next sentence. Numbers of numbered lists are
+  not read.
+- For German, about twenty common abbreviations with one fixed reading are read
+  in full, e.g. "z. B." as "zum Beispiel", "bzw." as "beziehungsweise", "ca." as
+  "circa", "Nr." as "Nummer". Numbers, dates, amounts and times are left to the
+  voice.
+
+The user's language is the one their screen shows, as last reported by the
+client, when it is one of the supported languages (en, de, fr, pl, es), as for
+Explain; otherwise the profile language the server resolves (ID token claim,
+browser language, then `i18n.language.default_language`, `en` out of the box).
+Sentences are split by language rules; German and English text are both split
+with German rules, so a German reply to a profile that says English is not cut
+apart. German dates such as "am 14. November" (also before a comma or colon),
+abbreviations such as "z. B." and numbers such as "1.250,50 €" or "14.30 Uhr" do
+not end a passage, and neither does a full stop with no space after it ("1.º").
+A sentence end is accepted only once the next word has arrived, and a line of
+the answer still being written that may still become a table or a code block is
+spoken once the next line shows what it is. A paragraph or other block ends a
+passage. Known limits: an ordinal before a noun that is not
+a month ("auf dem 2. Platz", "im 3. Stock") is still treated as a sentence end;
+an abbreviation at a real sentence end ("Das klären wir ggf. Morgen …") does not
+end the passage.
+
 The synthesis response is limited to 64 MiB of PCM per assistant message.
 Speech queuing does not block text streaming. Speech input is limited to 1 MiB
 per assistant message; exceeding this limit stops speech synthesis and discards
@@ -2670,7 +2710,8 @@ enabled = true
 speech_provider = "voice"
 ```
 
-Code blocks, HTML and images are not read. Audio starts with the first passage
+The text is prepared for listening and split into sentences the same way as for
+Audio-back (see above), in the language of the user who clicks. Audio starts with the first passage
 of a long answer and is not stored: each click synthesises again and the message
 is not changed. Stopping playback, sending a message or leaving the chat ends
 the provider request. Usage is not metered. The button is not shown while an
@@ -3518,6 +3559,24 @@ It must be nonempty and differ from the Outlook ID in `integrations.ms_office.ad
 
 **Type:** `string`
 
+##### `integrations.ms_office.addin.presentation.addin_id`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.presentation.addin_id */}
+
+The PowerPoint add-in manifest ID, served by `/office-addin/manifest-presentation.xml`.
+PowerPoint is a separate add-in from Word, so it can be rolled out to its own users or groups, and adding it does not change a Word add-in that is already deployed.
+Supported versions are PowerPoint in Microsoft 365 on Windows, Mac and the web, and PowerPoint in Office LTSC 2024.
+The manifest declares no minimum PowerPoint API set, because any requirement would hide the add-in from Office LTSC 2024; the pane decides at run time what it can read.
+As a consequence, PowerPoint 2016 and 2019 are offered the add-in as well (for example from a SharePoint app catalog), but their add-in runtime probably cannot start the pane, so these versions are not supported.
+For SharePoint app catalogs, use `/office-addin/manifest-presentation.xml?distribution=sharepoint`, which omits ribbon commands like the Word variant.
+The add-in setup page lists it next to Word with the same distribution choice and instructions.
+It must be a GUID and differ from both `integrations.ms_office.addin.addin_id` and `integrations.ms_office.addin.document.addin_id`, ignoring case, so all three add-ins can be installed in the same catalog.
+Surrounding spaces are dropped and the manifest carries the ID in lower case.
+
+**Default value:** `"f13aa6d0-f017-46e3-8b17-a72159d689ea"`
+
+**Type:** `string`
+
 ##### `integrations.ms_office.teams.enabled`
 
 {/* erato_toml_config_key: integrations.ms_office.teams.enabled */}
@@ -3534,7 +3593,7 @@ When enabled, the backend serves a rendered manifest preview at `/office-addin/t
 
 {/* erato_toml_config_key: integrations.ms_office.teams.app_id */}
 
-Stable GUID identifying the standalone Teams app. It must differ from the Outlook and Word add-in IDs.
+Stable GUID identifying the standalone Teams app. It must differ from the Outlook, Word and PowerPoint add-in IDs.
 
 **Default value:** `"c88180bf-f50d-42dc-8b5e-c27280b6035e"`
 
@@ -3665,6 +3724,26 @@ The nonempty display name shown for the Word add-in. Other branding, such as the
 The nonempty description shown for the Word add-in.
 
 **Default value:** `"Erato AI assistant for Word documents"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.presentation.manifest.display_name`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.presentation.manifest.display_name */}
+
+The nonempty display name shown for the PowerPoint add-in, at most 125 characters (Microsoft's limit). Other branding, such as the provider name and icons, inherits from `integrations.ms_office.addin.manifest`.
+
+**Default value:** `"Erato for PowerPoint"`
+
+**Type:** `string`
+
+##### `integrations.ms_office.addin.presentation.manifest.description`
+
+{/* erato_toml_config_key: integrations.ms_office.addin.presentation.manifest.description */}
+
+The nonempty description shown for the PowerPoint add-in, at most 250 characters (Microsoft's limit).
+
+**Default value:** `"Erato AI assistant for PowerPoint presentations"`
 
 **Type:** `string`
 
