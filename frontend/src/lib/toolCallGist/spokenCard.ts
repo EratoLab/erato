@@ -36,6 +36,34 @@ export type SpokenPieceRole =
   | "request"
   | "pointer";
 
+/** What a value in a piece is to the sentence. */
+export type SpokenSlot =
+  | "count"
+  | "server"
+  | "tool"
+  | "name"
+  | "place"
+  | "recipient"
+  | "recipients"
+  | "outside"
+  | "statement"
+  | "field"
+  | "value"
+  | "from"
+  | "to"
+  | "words"
+  | "text"
+  | "consequence";
+
+/**
+ * A value a piece is built from, kept beside its text so a reworded piece
+ * can be checked against what the card says.
+ */
+export interface SpokenSource {
+  slot: SpokenSlot;
+  value: EarValue;
+}
+
 export interface SpokenPiece {
   role: SpokenPieceRole;
   text: string;
@@ -43,6 +71,8 @@ export interface SpokenPiece {
   mustSay: boolean;
   /** Silence before the piece, for a delete's request to decide. */
   pauseBeforeMs?: number;
+  /** The values the text says, in the order it says them. */
+  values?: SpokenSource[];
 }
 
 /** Details read before the rest is counted. */
@@ -537,6 +567,55 @@ const earOf = (value: GistValue, field: string, timeZone?: string): EarValue =>
 
 const DELETE_PAUSE_MS = 400;
 
+const text = (slot: SpokenSlot, value: string): SpokenSource => ({
+  slot,
+  value: { kind: "text", text: value },
+});
+const number = (slot: SpokenSlot, value: number): SpokenSource => ({
+  slot,
+  value: { kind: "number", value, percent: false },
+});
+
+const whatValues = (facts: SpokenFacts): SpokenSource[] => [
+  ...(facts.server ? [text("server", facts.server)] : []),
+  ...(facts.count > 1 ? [number("count", facts.count)] : []),
+  ...(facts.statement ? [text("statement", facts.statement)] : []),
+  ...facts.names.map((name) => text("name", name)),
+  ...facts.where.map((place) => text("place", place)),
+  ...(facts.recipients
+    ? [
+        ...facts.recipients.names
+          .slice(0, 1)
+          .map((name) => text("recipient", name)),
+        number("recipients", facts.recipients.total),
+      ]
+    : []),
+];
+
+const detailValues = (detail: SpokenDetail): SpokenSource[] => {
+  const field = text("field", detail.field);
+  switch (detail.type) {
+    case "set":
+      return [field, { slot: "value", value: detail.value }];
+    case "changed":
+      return [
+        field,
+        { slot: "from", value: detail.from },
+        { slot: "to", value: detail.to },
+      ];
+    case "list_replaced":
+    case "list_removed":
+    case "list_added":
+      return [
+        field,
+        ...detail.values.map((value) => ({ slot: "value" as const, value })),
+      ];
+    case "emptied":
+    case "unreadable":
+      return [field];
+  }
+};
+
 /** The pieces for one approval in the language given. */
 export const spokenApprovalPieces = (
   approval: SpokenApproval,
@@ -544,7 +623,7 @@ export const spokenApprovalPieces = (
 ): SpokenPiece[] => {
   const words = spokenWordsFor(options.language, options);
   const pointer: SpokenPiece[] = [
-    { role: "pointer", text: words.pointer(), mustSay: false },
+    { role: "pointer", text: words.pointer(), mustSay: false, values: [] },
   ];
   if (!words.full || approval.type === "pointer") return pointer;
   const { position } = options;
@@ -554,36 +633,65 @@ export const spokenApprovalPieces = (
       role: "count",
       text: words.count(position.total),
       mustSay: false,
+      values: [number("count", position.total)],
     });
   }
+  const request: SpokenPiece = {
+    role: "request",
+    text: words.request(),
+    mustSay: false,
+    values: [],
+  };
   const card = toolCallCardOf(approval.label, approval.input);
   if (card.kind !== "gist") {
     pieces.push({
       role: "what",
       text: words.generic(approval.toolTitle, approval.server),
       mustSay: false,
+      values: [
+        ...(approval.server ? [text("server", approval.server)] : []),
+        text("tool", approval.toolTitle),
+      ],
     });
-    pieces.push({ role: "request", text: words.request(), mustSay: false });
+    pieces.push(request);
     return pieces;
   }
   const facts = spokenFactsOf(card.gist, approval.server, options.timeZone);
   const loss = facts.action === "delete";
+  const item = words.item(facts, position);
   pieces.push({
     role: "what",
     text: words.what(facts, position),
     mustSay: loss,
+    values:
+      item.length > 0 ? whatValues({ ...facts, names: [] }) : whatValues(facts),
   });
-  const item = words.item(facts, position);
-  if (item.length > 0) pieces.push({ role: "item", text: item, mustSay: loss });
+  if (item.length > 0) {
+    pieces.push({
+      role: "item",
+      text: item,
+      mustSay: loss,
+      values: facts.names.slice(0, 1).map((name) => text("name", name)),
+    });
+  }
   const outside = facts.recipients ? words.outside(facts.recipients) : "";
-  if (outside.length > 0) {
-    pieces.push({ role: "outside", text: outside, mustSay: true });
+  if (facts.recipients && outside.length > 0) {
+    pieces.push({
+      role: "outside",
+      text: outside,
+      mustSay: true,
+      values: [
+        number("outside", facts.recipients.outside ?? 0),
+        number("recipients", facts.recipients.total),
+      ],
+    });
   }
   for (const detail of facts.details) {
     pieces.push({
       role: "detail",
       text: words.detail(detail, facts),
       mustSay: detail.loss,
+      values: detailValues(detail),
     });
   }
   if (facts.detailsOmitted > 0) {
@@ -591,25 +699,71 @@ export const spokenApprovalPieces = (
       role: "more",
       text: words.more(facts.detailsOmitted),
       mustSay: false,
+      values: [number("count", facts.detailsOmitted)],
     });
   }
-  for (const text of facts.texts) {
-    pieces.push({ role: "text", text: words.text(text), mustSay: false });
+  for (const spokenText of facts.texts) {
+    pieces.push({
+      role: "text",
+      text: words.text(spokenText),
+      mustSay: false,
+      values: [
+        ...(spokenText.field ? [text("field", spokenText.field)] : []),
+        spokenText.read === undefined
+          ? number("words", spokenText.words)
+          : text("text", spokenText.read),
+      ],
+    });
   }
   if (facts.consequences.length > 0) {
     pieces.push({
       role: "consequence",
       text: words.consequence(facts.consequences, facts),
       mustSay: true,
+      values: facts.consequences.map((consequence) =>
+        text("consequence", consequence),
+      ),
     });
   }
-  pieces.push({
-    role: "request",
-    text: words.request(),
-    mustSay: false,
-    ...(loss ? { pauseBeforeMs: DELETE_PAUSE_MS } : {}),
-  });
+  pieces.push(loss ? { ...request, pauseBeforeMs: DELETE_PAUSE_MS } : request);
   return pieces;
+};
+
+/** Approval kinds whose own call the voice describes; the rest it points to. */
+const DESCRIBED_KINDS: readonly string[] = [
+  "mcp_tool",
+  "client_tool",
+  "delegated_task",
+];
+
+/**
+ * What the voice says for one approval of a stop of `approvalKind`: the call
+ * a card describes, a task's call included, or for a limit, a plan or a
+ * built-in tool only that a decision waits on screen.
+ */
+export const spokenApprovalFor = (
+  approvalKind: string,
+  call: {
+    tool_name: string;
+    input: unknown;
+    display?: {
+      title?: string;
+      server_name?: string | null;
+      label?: ToolCallLabel;
+    } | null;
+    child?: unknown;
+  },
+): SpokenApproval => {
+  if (call.child == null && !DESCRIBED_KINDS.includes(approvalKind)) {
+    return { type: "pointer" };
+  }
+  return {
+    type: "call",
+    label: call.display?.label,
+    input: call.input,
+    toolTitle: call.display?.title ?? call.tool_name,
+    server: call.display?.server_name ?? undefined,
+  };
 };
 
 /** Whether two approvals said one after another are of the same kind. */

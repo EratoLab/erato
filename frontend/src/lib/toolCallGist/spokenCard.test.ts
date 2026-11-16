@@ -5,12 +5,15 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { messages as deMessages } from "@/locales/de/messages.json";
 
-import set from "./fixtures/spokenCardSet.json";
+import data from "./fixtures/spokenCards/calls.json";
+import expectedPieces from "./fixtures/spokenCards/expected.json";
 import { toolCallCardOf } from "./gist";
 import { gistPlainLine } from "./gistLabels";
 import {
+  MAX_READ_WORDS,
   MAX_SPOKEN_DETAILS,
   sameSpokenKind,
+  spokenApprovalFor,
   spokenApprovalPieces,
 } from "./spokenCard";
 
@@ -18,9 +21,9 @@ import type { SpokenApproval, SpokenPiece } from "./spokenCard";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
+/** A call shape of the set, labelled by the backend. */
 interface SetCall {
   id: string;
-  group: string;
   tool_name: string;
   server_id: string;
   input: unknown;
@@ -31,7 +34,22 @@ interface SetCall {
   };
 }
 
-const calls = (set as { calls: SetCall[] }).calls;
+/** A scenario of design section 9: its kind of card and what the card holds. */
+interface Scenario {
+  id: string;
+  kind: string[];
+  holds: string[];
+  approval_kind?: string;
+  calls: string[];
+}
+
+const { calls, scenarios } = data as unknown as {
+  calls: SetCall[];
+  scenarios: Scenario[];
+};
+const expected = expectedPieces as unknown as Partial<
+  Record<string, Record<string, SpokenPiece[][]>>
+>;
 const NOW = new Date("2026-11-17T09:00:00Z");
 const ZONE = "Europe/Berlin";
 
@@ -41,25 +59,33 @@ const callOf = (id: string): SetCall => {
   return call;
 };
 
-const approvalOf = (call: SetCall): SpokenApproval => ({
-  type: "call",
-  label: call.display.label as ToolCallLabel | undefined,
-  input: call.input,
-  toolTitle: call.display.title,
-  server: call.display.server_name ?? undefined,
+const approvalOf = (call: SetCall, approvalKind = "mcp_tool"): SpokenApproval =>
+  spokenApprovalFor(approvalKind, {
+    ...call,
+    display: {
+      ...call.display,
+      label: call.display.label as ToolCallLabel | undefined,
+    },
+  });
+
+/** A piece without its source values, for comparing the words alone. */
+const said = ({ role, text, mustSay }: SpokenPiece) => ({
+  role,
+  text,
+  mustSay,
 });
 
 const pieces = (
   id: string,
   language = "de",
   position?: Parameters<typeof spokenApprovalPieces>[1]["position"],
-): SpokenPiece[] =>
+) =>
   spokenApprovalPieces(approvalOf(callOf(id)), {
     language,
     now: NOW,
     timeZone: ZONE,
     position,
-  });
+  }).map(said);
 
 const spoken = (id: string, language = "de") =>
   pieces(id, language)
@@ -68,26 +94,45 @@ const spoken = (id: string, language = "de") =>
 
 const roles = (id: string) => pieces(id).map((piece) => piece.role);
 
-const QUEUE = ["queue-01-task", "queue-02-task", "queue-03-task"];
-
-const queuePieces = (language: string): SpokenPiece[][] =>
-  QUEUE.map((id, index) =>
-    spokenApprovalPieces(approvalOf(callOf(id)), {
+/** Every card of a scenario as the voice says it, one after another. */
+const scenarioPieces = (
+  scenario: Scenario,
+  language: string,
+): SpokenPiece[][] => {
+  const approvals =
+    scenario.calls.length > 0
+      ? scenario.calls.map((id) =>
+          approvalOf(callOf(id), scenario.approval_kind),
+        )
+      : [
+          spokenApprovalFor(scenario.approval_kind ?? "mcp_tool", {
+            tool_name: scenario.id,
+            input: null,
+          }),
+        ];
+  return approvals.map((approval, index) =>
+    spokenApprovalPieces(approval, {
       language,
       now: NOW,
       timeZone: ZONE,
-      position: {
-        index,
-        total: QUEUE.length,
-        sameAsPrevious:
-          index > 0 &&
-          sameSpokenKind(
-            approvalOf(callOf(QUEUE[index - 1])),
-            approvalOf(callOf(id)),
-          ),
-      },
+      position:
+        approvals.length > 1
+          ? {
+              index,
+              total: approvals.length,
+              sameAsPrevious:
+                index > 0 && sameSpokenKind(approvals[index - 1], approval),
+            }
+          : undefined,
     }),
   );
+};
+
+const QUEUE = scenarios.find(
+  (scenario) => scenario.id === "queue-01-three-tasks",
+) as Scenario;
+const queuePieces = (language: string) =>
+  scenarioPieces(QUEUE, language).map((card) => card.map(said));
 
 describe("spoken approval card", () => {
   it("says a create in the fixed order, from the card's data", () => {
@@ -226,7 +271,15 @@ describe("spoken approval card", () => {
       "Bitte auf dem Bildschirm bestätigen.",
     ]);
     expect(task.map((piece) => piece.mustSay)).toEqual([true, true, false]);
-    expect(task[2].pauseBeforeMs).toBeGreaterThan(0);
+    expect(
+      spokenApprovalPieces(
+        approvalOf(callOf("delete-01-task-created-earlier")),
+        {
+          language: "de",
+          now: NOW,
+        },
+      )[2].pauseBeforeMs,
+    ).toBeGreaterThan(0);
     expect(spoken("delete-07-file-permanent")).toBe(
       "Ich möchte in Google Drive die Datei Angebot Linie 4 v3.docx löschen. Das lässt sich nicht rückgängig machen. Bitte auf dem Bildschirm bestätigen.",
     );
@@ -281,7 +334,10 @@ describe("spoken approval card", () => {
 
   it("points to the screen for other cards and other languages", () => {
     expect(
-      spokenApprovalPieces({ type: "pointer" }, { language: "de", now: NOW }),
+      spokenApprovalPieces(
+        { type: "pointer" },
+        { language: "de", now: NOW },
+      ).map(said),
     ).toEqual([
       {
         role: "pointer",
@@ -347,8 +403,156 @@ describe("spoken approval card", () => {
   });
 });
 
+/** The order the design fixes; a later piece never comes before an earlier one. */
+const ROLE_ORDER = [
+  "count",
+  "what",
+  "item",
+  "outside",
+  "detail",
+  "more",
+  "text",
+  "consequence",
+  "request",
+];
+
+const CONSEQUENCE_KINDS = ["delete", "run"];
+
+describe("every scenario of the set", () => {
+  const languages = ["de", "en"];
+
+  it.each(scenarios.map((scenario) => [scenario.id, scenario] as const))(
+    "%s",
+    (_id, scenario) => {
+      for (const language of languages) {
+        const cards = scenarioPieces(scenario, language);
+        expect(cards, `${scenario.id} ${language}`).toEqual(
+          expected[scenario.id]?.[language],
+        );
+        cards.forEach((card, index) => {
+          const where = `${scenario.id} ${language} #${index}`;
+          const order = card.map((piece) => piece.role);
+          if (order[0] === "pointer") {
+            expect(order, where).toEqual(["pointer"]);
+            return;
+          }
+          // The design's order, and nothing said twice.
+          const ranks = order.map((role) => ROLE_ORDER.indexOf(role));
+          expect(
+            ranks.every((rank) => rank >= 0),
+            where,
+          ).toBe(true);
+          expect(
+            ranks.every((rank, at) => at === 0 || rank >= ranks[at - 1]),
+            where,
+          ).toBe(true);
+          const texts = card.map((piece) => piece.text);
+          expect(new Set(texts).size, where).toBe(texts.length);
+          expect(order.at(-1), where).toBe("request");
+          expect(order.includes("count"), where).toBe(
+            index === 0 && cards.length > 1,
+          );
+          // The consequence is said, and before the request to decide.
+          const consequence = order.indexOf("consequence");
+          if (
+            scenario.kind.some((kind) => CONSEQUENCE_KINDS.includes(kind)) ||
+            scenario.holds.includes("permanent_delete")
+          ) {
+            expect(consequence, where).toBeGreaterThan(-1);
+          }
+          if (consequence !== -1) {
+            expect(consequence, where).toBeLessThan(order.indexOf("request"));
+            expect(card[consequence].mustSay, where).toBe(true);
+          }
+          // What the card holds shows in what is said.
+          if (scenario.holds.includes("many_fields"))
+            expect(order, where).toContain("more");
+          if (scenario.holds.includes("short_fields"))
+            expect(order, where).not.toContain("more");
+          if (scenario.holds.includes("long_text")) {
+            expect(
+              card.some(
+                (piece) =>
+                  piece.role === "text" &&
+                  piece.values?.some(
+                    (source) =>
+                      source.slot === "words" &&
+                      source.value.kind === "number" &&
+                      source.value.value > MAX_READ_WORDS,
+                  ),
+              ),
+              where,
+            ).toBe(true);
+          }
+          if (scenario.holds.includes("loss"))
+            expect(
+              card.some((piece) => piece.role === "detail" && piece.mustSay),
+              where,
+            ).toBe(true);
+          if (scenario.holds.includes("outside_recipients"))
+            expect(
+              card.find((piece) => piece.role === "outside")?.mustSay,
+              where,
+            ).toBe(true);
+          if (scenario.holds.includes("unread_record"))
+            expect(texts.join(" "), where).toMatch(
+              language === "de" ? /nicht gelesen/ : /haven't read/,
+            );
+          if (scenario.holds.includes("permanent_delete"))
+            expect(texts.join(" "), where).toMatch(
+              language === "de" ? /nicht rückgängig/ : /cannot be undone/,
+            );
+          // Every value a piece says is kept beside its text.
+          for (const piece of card) expect(piece.values, where).toBeDefined();
+        });
+      }
+      for (const language of ["fr", "es", "pl"]) {
+        for (const card of scenarioPieces(scenario, language))
+          expect(card.map((piece) => piece.role)).toEqual(["pointer"]);
+      }
+    },
+  );
+
+  it("keeps the source values of a piece beside its words", () => {
+    const [card] = scenarioPieces(
+      scenarios.find(
+        (scenario) => scenario.id === "update-01-date-and-probability",
+      ) as Scenario,
+      "de",
+    );
+    expect(card[0].values).toEqual([
+      { slot: "server", value: { kind: "text", text: "Dynamics 365" } },
+      { slot: "name", value: { kind: "text", text: "Line 4 Retrofit" } },
+    ]);
+    expect(card[1].values).toEqual([
+      { slot: "field", value: { kind: "text", text: "Estimated close date" } },
+      { slot: "from", value: { kind: "date", year: 2026, month: 12, day: 1 } },
+      { slot: "to", value: { kind: "date", year: 2030, month: 1, day: 15 } },
+    ]);
+  });
+
+  it("writes the expected pieces when asked", () => {
+    if (!process.env.SPOKEN_CARD_EXPECT_WRITE) return;
+    const all = Object.fromEntries(
+      scenarios.map((scenario) => [
+        scenario.id,
+        Object.fromEntries(
+          languages.map((language) => [
+            language,
+            scenarioPieces(scenario, language),
+          ]),
+        ),
+      ]),
+    );
+    writeFileSync(
+      "src/lib/toolCallGist/fixtures/spokenCards/expected.json",
+      `${JSON.stringify(all, null, 2)}\n`,
+    );
+  });
+});
+
 /**
- * Writes the set as heard, call by call beside the card's headline:
+ * Writes the set as heard, scenario by scenario beside the card's headline:
  * `SPOKEN_CARD_RENDER=/path/to/file.md pnpm vitest run spokenCard`.
  */
 describe.runIf(Boolean(process.env.SPOKEN_CARD_RENDER))("rendered set", () => {
@@ -356,7 +560,8 @@ describe.runIf(Boolean(process.env.SPOKEN_CARD_RENDER))("rendered set", () => {
   i18n.load("de", deMessages as unknown as Messages);
   afterEach(() => i18n.activate(previous));
 
-  const headline = (call: SetCall, locale: string): string => {
+  const headline = (call: SetCall | undefined, locale: string): string => {
+    if (!call) return "(no call: the card is drawn by its own component)";
     i18n.activate(locale);
     const card = toolCallCardOf(
       call.display.label as ToolCallLabel | undefined,
@@ -368,42 +573,33 @@ describe.runIf(Boolean(process.env.SPOKEN_CARD_RENDER))("rendered set", () => {
   };
 
   it("writes the file", () => {
-    const sections: string[] = [];
-    const say = (said: SpokenPiece[]) =>
-      said
-        .map(
-          (piece) =>
-            `${piece.mustSay ? "**" : ""}[${piece.role}]${piece.mustSay ? "**" : ""} ${piece.text}`,
+    const say = (cards: SpokenPiece[][]) =>
+      cards
+        .map((card) =>
+          card
+            .map(
+              (piece) =>
+                `${piece.mustSay ? "**" : ""}[${piece.role}]${piece.mustSay ? "**" : ""} ${piece.text}`,
+            )
+            .join("<br>"),
         )
-        .join("<br>");
-    let group = "";
-    for (const call of calls) {
-      if (call.group === "queue") continue;
-      if (call.group !== group) {
-        group = call.group;
-        sections.push(`\n## ${group}\n`);
-        sections.push(
-          "| Call | On screen | Spoken, German | Spoken, English |",
-        );
-        sections.push("|---|---|---|---|");
-      }
-      sections.push(
-        `| \`${call.id}\` | ${headline(call, "de")}<br>_${headline(call, "en")}_ | ${say(pieces(call.id, "de"))} | ${say(pieces(call.id, "en"))} |`,
+        .join("<br>―<br>");
+    const lines = [
+      "| Scenario | Kind / holds | On screen | Spoken, German | Spoken, English |",
+      "|---|---|---|---|---|",
+    ];
+    for (const scenario of scenarios) {
+      const members = scenario.calls.map(callOf);
+      const screen = (members.length > 0 ? members : [undefined])
+        .map((call) => `${headline(call, "de")}<br>_${headline(call, "en")}_`)
+        .join("<br>―<br>");
+      lines.push(
+        `| \`${scenario.id}\` | ${scenario.kind.join(", ")}<br>_${scenario.holds.join(", ") || "–"}_ | ${screen} | ${say(scenarioPieces(scenario, "de"))} | ${say(scenarioPieces(scenario, "en"))} |`,
       );
     }
-    sections.push("\n## queue of three\n");
-    sections.push("| Call | On screen | Spoken, German | Spoken, English |");
-    sections.push("|---|---|---|---|");
-    const german = queuePieces("de");
-    const english = queuePieces("en");
-    QUEUE.forEach((id, index) => {
-      sections.push(
-        `| \`${id}\` | ${headline(callOf(id), "de")}<br>_${headline(callOf(id), "en")}_ | ${say(german[index])} | ${say(english[index])} |`,
-      );
-    });
     writeFileSync(
       process.env.SPOKEN_CARD_RENDER as string,
-      `${sections.join("\n")}\n`,
+      `${lines.join("\n")}\n`,
     );
   });
 });

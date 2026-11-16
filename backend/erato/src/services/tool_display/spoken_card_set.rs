@@ -1,6 +1,8 @@
-//! The calls the spoken approval card is written and heard against, labelled
-//! here exactly as a chat labels them. The frontend composes its spoken cards
-//! from the generated file, so a change to the labels shows up there.
+//! The scenarios the spoken approval card is written and heard against: each
+//! with a stable id, its kind of card and what the card holds, and the calls
+//! it is made of, labelled here exactly as a chat labels them. The frontend
+//! composes its spoken cards from the generated file, so a change to the
+//! labels shows up there.
 //!
 //! Regenerate with `SPOKEN_CARD_SET_WRITE=1 cargo nextest run -p erato spoken_card_set`.
 
@@ -16,14 +18,32 @@ use std::collections::BTreeMap;
 const INPUT: &str = include_str!("spoken_card_set.json");
 const OUTPUT_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../frontend/src/lib/toolCallGist/fixtures/spokenCardSet.json"
+    "/../../frontend/src/lib/toolCallGist/fixtures/spokenCards/calls.json"
 );
 
 #[derive(serde::Deserialize)]
 struct Set {
+    tags: Tags,
+    scenarios: Vec<Scenario>,
     servers: BTreeMap<String, Value>,
     history: BTreeMap<String, Vec<Step>>,
     calls: Vec<Call>,
+}
+
+#[derive(serde::Deserialize)]
+struct Tags {
+    kind: Vec<String>,
+    holds: Vec<String>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Scenario {
+    id: String,
+    kind: Vec<String>,
+    holds: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    approval_kind: Option<String>,
+    calls: Vec<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -36,7 +56,6 @@ struct Step {
 #[derive(serde::Deserialize)]
 struct Call {
     id: String,
-    group: String,
     server: String,
     tool: String,
     #[serde(default)]
@@ -119,7 +138,6 @@ fn generated() -> Value {
             );
             json!({
                 "id": call.id,
-                "group": call.group,
                 "tool_name": call.tool,
                 "server_id": call.server,
                 "input": call.arguments,
@@ -127,7 +145,27 @@ fn generated() -> Value {
             })
         })
         .collect();
-    json!({ "calls": calls })
+    json!({ "scenarios": set.scenarios, "calls": calls })
+}
+
+#[test]
+fn every_scenario_is_tagged_from_the_vocabulary_and_names_known_calls() {
+    let set: Set = serde_json::from_str(INPUT).unwrap();
+    let calls: Vec<&str> = set.calls.iter().map(|call| call.id.as_str()).collect();
+    let mut ids = std::collections::HashSet::new();
+    for scenario in &set.scenarios {
+        assert!(ids.insert(&scenario.id), "{} twice", scenario.id);
+        assert!(!scenario.kind.is_empty(), "{}", scenario.id);
+        for kind in &scenario.kind {
+            assert!(set.tags.kind.contains(kind), "{}: {kind}", scenario.id);
+        }
+        for holds in &scenario.holds {
+            assert!(set.tags.holds.contains(holds), "{}: {holds}", scenario.id);
+        }
+        for call in &scenario.calls {
+            assert!(calls.contains(&call.as_str()), "{}: {call}", scenario.id);
+        }
+    }
 }
 
 #[test]

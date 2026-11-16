@@ -25,6 +25,7 @@ import {
   isApprovalDecision,
 } from "@/lib/toolApprovalDecisions";
 import { approvalDisplayOf } from "@/lib/toolCallGist/approvalCard";
+import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
@@ -56,7 +57,6 @@ import type {
   ToolApprovalDecision,
 } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { DecidedApproval } from "@/lib/toolApprovalDecisions";
-import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 
 /** The `409` a child card gets while its origin is asking the same question. */
@@ -138,25 +138,6 @@ const mismatchedIds = (
   } catch {
     return null;
   }
-};
-
-/**
- * What the voice says for one approval: the call a card describes, or for a
- * limit, a plan or a built-in tool only that a decision waits on screen.
- */
-const spokenApprovalOf = (
-  call: { tool_name: string; input: unknown; display?: unknown },
-  describes: boolean,
-): SpokenApproval => {
-  if (!describes) return { type: "pointer" };
-  const display = approvalDisplayOf(call.display, call.tool_name);
-  return {
-    type: "call",
-    label: display?.label,
-    input: call.input,
-    toolTitle: display?.title ?? call.tool_name,
-    server: display?.server_name ?? undefined,
-  };
 };
 
 /**
@@ -632,16 +613,15 @@ export const McpToolApprovalCard = ({
       (waiting.length > 0 || approvalItems.some((item) => item.child != null)));
 
   // Spoken in the order the screen shows them: a queue one item at a time.
-  const describesOwnCall =
-    kind === "mcp_tool" || isClientTool || kind === "delegated_task";
   const spokenItems = isQueue
     ? approvalQueueOf(request, approvalItems)
     : approvalItems.slice(0, 1);
-  const spokenApprovals = isQueue
-    ? spokenItems.map((item) =>
-        spokenApprovalOf(item, item.child != null || describesOwnCall),
-      )
-    : [spokenApprovalOf(request, describesOwnCall)];
+  const spokenApprovals = (isQueue ? spokenItems : [request]).map((call) =>
+    spokenApprovalFor(kind, {
+      ...call,
+      display: approvalDisplayOf(call.display, call.tool_name),
+    }),
+  );
   const unanswered = spokenItems.findIndex(
     (item) => staged[item.approval_id] === undefined,
   );

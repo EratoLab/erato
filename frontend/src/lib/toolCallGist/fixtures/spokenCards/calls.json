@@ -1,8 +1,570 @@
 {
+  "scenarios": [
+    {
+      "id": "create-01-task-long-description",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "create-01-task-long-description"
+      ]
+    },
+    {
+      "id": "create-02-appointment",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-02-appointment"
+      ]
+    },
+    {
+      "id": "create-03-contact",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-03-contact"
+      ]
+    },
+    {
+      "id": "create-04-email-two-contacts",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "long_text"
+      ],
+      "calls": [
+        "create-04-email-two-contacts"
+      ]
+    },
+    {
+      "id": "create-05-task-many-fields",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-05-task-many-fields"
+      ]
+    },
+    {
+      "id": "create-06-task-unread-regarding",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "unread_record"
+      ],
+      "calls": [
+        "create-06-task-unread-regarding"
+      ]
+    },
+    {
+      "id": "create-07-phonecall",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-07-phonecall"
+      ]
+    },
+    {
+      "id": "create-08-opportunity-amounts",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "create-08-opportunity-amounts"
+      ]
+    },
+    {
+      "id": "create-09-note-very-long",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "create-09-note-very-long"
+      ]
+    },
+    {
+      "id": "create-10-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-10-account"
+      ]
+    },
+    {
+      "id": "create-11-batch-rows",
+      "kind": [
+        "create",
+        "batch"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-11-batch-rows"
+      ]
+    },
+    {
+      "id": "create-12-hidden-characters",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields",
+        "warning"
+      ],
+      "calls": [
+        "create-12-hidden-characters"
+      ]
+    },
+    {
+      "id": "update-01-date-and-probability",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-01-date-and-probability"
+      ]
+    },
+    {
+      "id": "update-02-coded-value",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-02-coded-value"
+      ]
+    },
+    {
+      "id": "update-03-lookup",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-03-lookup"
+      ]
+    },
+    {
+      "id": "update-04-emptied-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "loss"
+      ],
+      "calls": [
+        "update-04-emptied-fields"
+      ]
+    },
+    {
+      "id": "update-05-record-nobody-read",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "unread_record"
+      ],
+      "calls": [
+        "update-05-record-nobody-read"
+      ]
+    },
+    {
+      "id": "update-06-many-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "many_fields"
+      ],
+      "calls": [
+        "update-06-many-fields"
+      ]
+    },
+    {
+      "id": "update-07-reschedule-appointment",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-07-reschedule-appointment"
+      ]
+    },
+    {
+      "id": "update-08-long-text",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "calls": [
+        "update-08-long-text"
+      ]
+    },
+    {
+      "id": "update-09-task-status-codes",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-09-task-status-codes"
+      ]
+    },
+    {
+      "id": "update-10-contact-two-fields",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-10-contact-two-fields"
+      ]
+    },
+    {
+      "id": "delete-01-task-created-earlier",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-01-task-created-earlier"
+      ]
+    },
+    {
+      "id": "delete-02-appointment",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-02-appointment"
+      ]
+    },
+    {
+      "id": "delete-03-record-nobody-read",
+      "kind": [
+        "delete"
+      ],
+      "holds": [
+        "unread_record"
+      ],
+      "calls": [
+        "delete-03-record-nobody-read"
+      ]
+    },
+    {
+      "id": "delete-04-contact",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-04-contact"
+      ]
+    },
+    {
+      "id": "delete-05-account",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-05-account"
+      ]
+    },
+    {
+      "id": "delete-06-batch-pages",
+      "kind": [
+        "delete",
+        "batch"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-06-batch-pages"
+      ]
+    },
+    {
+      "id": "delete-07-file-permanent",
+      "kind": [
+        "delete"
+      ],
+      "holds": [
+        "permanent_delete"
+      ],
+      "calls": [
+        "delete-07-file-permanent"
+      ]
+    },
+    {
+      "id": "delete-08-file-trash",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-08-file-trash"
+      ]
+    },
+    {
+      "id": "delete-09-single-page",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-09-single-page"
+      ]
+    },
+    {
+      "id": "delete-10-file-by-id-only",
+      "kind": [
+        "delete"
+      ],
+      "holds": [],
+      "calls": [
+        "delete-10-file-by-id-only"
+      ]
+    },
+    {
+      "id": "send-01-mail-several-recipients",
+      "kind": [
+        "send"
+      ],
+      "holds": [
+        "long_text",
+        "outside_recipients"
+      ],
+      "calls": [
+        "send-01-mail-several-recipients"
+      ]
+    },
+    {
+      "id": "send-02-slack-message",
+      "kind": [
+        "send"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "send-02-slack-message"
+      ]
+    },
+    {
+      "id": "move-01-pages",
+      "kind": [
+        "move",
+        "batch"
+      ],
+      "holds": [],
+      "calls": [
+        "move-01-pages"
+      ]
+    },
+    {
+      "id": "archive-01-note",
+      "kind": [
+        "archive"
+      ],
+      "holds": [],
+      "calls": [
+        "archive-01-note"
+      ]
+    },
+    {
+      "id": "share-01-file-outside",
+      "kind": [
+        "share"
+      ],
+      "holds": [
+        "short_fields",
+        "outside_recipients"
+      ],
+      "calls": [
+        "share-01-file-outside"
+      ]
+    },
+    {
+      "id": "upsert-01-company",
+      "kind": [
+        "upsert"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "upsert-01-company"
+      ]
+    },
+    {
+      "id": "comment-01-page",
+      "kind": [
+        "comment"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "comment-01-page"
+      ]
+    },
+    {
+      "id": "upload-01-file",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "upload-01-file"
+      ]
+    },
+    {
+      "id": "run-01-sql",
+      "kind": [
+        "run"
+      ],
+      "holds": [],
+      "calls": [
+        "run-01-sql"
+      ]
+    },
+    {
+      "id": "read-01-search",
+      "kind": [
+        "read"
+      ],
+      "holds": [],
+      "calls": [
+        "read-01-search"
+      ]
+    },
+    {
+      "id": "read-02-query",
+      "kind": [
+        "read"
+      ],
+      "holds": [],
+      "calls": [
+        "read-02-query"
+      ]
+    },
+    {
+      "id": "generic-01-word-comment-delete",
+      "kind": [
+        "generic"
+      ],
+      "holds": [],
+      "calls": [
+        "generic-01-word-comment-delete"
+      ]
+    },
+    {
+      "id": "generic-02-sync-remote-page",
+      "kind": [
+        "generic"
+      ],
+      "holds": [],
+      "calls": [
+        "generic-02-sync-remote-page"
+      ]
+    },
+    {
+      "id": "queue-01-three-tasks",
+      "kind": [
+        "queue",
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "queue-01-task",
+        "queue-02-task",
+        "queue-03-task"
+      ]
+    },
+    {
+      "id": "builtin-01-cancel-reminder",
+      "kind": [
+        "builtin_tool"
+      ],
+      "holds": [],
+      "approval_kind": "builtin_tool",
+      "calls": []
+    },
+    {
+      "id": "task-plan-01",
+      "kind": [
+        "task_plan"
+      ],
+      "holds": [],
+      "approval_kind": "task_plan",
+      "calls": []
+    },
+    {
+      "id": "tool-call-limit-01",
+      "kind": [
+        "tool_call_limit"
+      ],
+      "holds": [],
+      "approval_kind": "tool_call_limit",
+      "calls": []
+    }
+  ],
   "calls": [
     {
       "id": "create-01-task-long-description",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -198,7 +760,6 @@
     },
     {
       "id": "create-02-appointment",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -390,7 +951,6 @@
     },
     {
       "id": "create-03-contact",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -583,7 +1143,6 @@
     },
     {
       "id": "create-04-email-two-contacts",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -793,7 +1352,6 @@
     },
     {
       "id": "create-05-task-many-fields",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1048,7 +1606,6 @@
     },
     {
       "id": "create-06-task-unread-regarding",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1187,7 +1744,6 @@
     },
     {
       "id": "create-07-phonecall",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1335,7 +1891,6 @@
     },
     {
       "id": "create-08-opportunity-amounts",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1528,7 +2083,6 @@
     },
     {
       "id": "create-09-note-very-long",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1657,7 +2211,6 @@
     },
     {
       "id": "create-10-account",
-      "group": "create",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -1808,7 +2361,6 @@
     },
     {
       "id": "create-11-batch-rows",
-      "group": "create",
       "tool_name": "notion-create-pages",
       "server_id": "notion",
       "input": {
@@ -2171,8 +2723,107 @@
       }
     },
     {
+      "id": "create-12-hidden-characters",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot​ freigeben",
+          "scheduledend": "2030-01-12"
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "task",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/subject",
+                "values": [
+                  {
+                    "path": "/item/subject",
+                    "text": "Angebot freigeben"
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/scheduledend",
+                  "name": "scheduledend",
+                  "values": [
+                    {
+                      "path": "/item/scheduledend",
+                      "text": "2030-01-12"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/subject",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/scheduledend",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "warnings": [
+            "hidden_characters"
+          ],
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/scheduledend",
+                "name": "Scheduled end",
+                "raw_name": "scheduledend",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "2030-01-12"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "complete": true
+          }
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -2310,7 +2961,6 @@
     },
     {
       "id": "update-02-coded-value",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -2426,7 +3076,6 @@
     },
     {
       "id": "update-03-lookup",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -2556,7 +3205,6 @@
     },
     {
       "id": "update-04-emptied-fields",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -2693,7 +3341,6 @@
     },
     {
       "id": "update-05-record-nobody-read",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -2798,7 +3445,6 @@
     },
     {
       "id": "update-06-many-fields",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -3048,7 +3694,6 @@
     },
     {
       "id": "update-07-reschedule-appointment",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -3185,7 +3830,6 @@
     },
     {
       "id": "update-08-long-text",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -3271,7 +3915,6 @@
     },
     {
       "id": "update-09-task-status-codes",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -3397,7 +4040,6 @@
     },
     {
       "id": "update-10-contact-two-fields",
-      "group": "update",
       "tool_name": "update_record",
       "server_id": "dynamics",
       "input": {
@@ -3531,7 +4173,6 @@
     },
     {
       "id": "delete-01-task-created-earlier",
-      "group": "delete",
       "tool_name": "delete_record",
       "server_id": "dynamics",
       "input": {
@@ -3603,7 +4244,6 @@
     },
     {
       "id": "delete-02-appointment",
-      "group": "delete",
       "tool_name": "delete_record",
       "server_id": "dynamics",
       "input": {
@@ -3675,7 +4315,6 @@
     },
     {
       "id": "delete-03-record-nobody-read",
-      "group": "delete",
       "tool_name": "delete_record",
       "server_id": "dynamics",
       "input": {
@@ -3748,7 +4387,6 @@
     },
     {
       "id": "delete-04-contact",
-      "group": "delete",
       "tool_name": "delete_record",
       "server_id": "dynamics",
       "input": {
@@ -3821,7 +4459,6 @@
     },
     {
       "id": "delete-05-account",
-      "group": "delete",
       "tool_name": "delete_record",
       "server_id": "dynamics",
       "input": {
@@ -3894,7 +4531,6 @@
     },
     {
       "id": "delete-06-batch-pages",
-      "group": "delete",
       "tool_name": "notion-delete-pages",
       "server_id": "notion",
       "input": {
@@ -4067,7 +4703,6 @@
     },
     {
       "id": "delete-07-file-permanent",
-      "group": "delete",
       "tool_name": "delete_file",
       "server_id": "drive",
       "input": {
@@ -4145,7 +4780,6 @@
     },
     {
       "id": "delete-08-file-trash",
-      "group": "delete",
       "tool_name": "trash_file",
       "server_id": "drive",
       "input": {
@@ -4223,7 +4857,6 @@
     },
     {
       "id": "delete-09-single-page",
-      "group": "delete",
       "tool_name": "notion-delete-pages",
       "server_id": "notion",
       "input": {
@@ -4293,7 +4926,6 @@
     },
     {
       "id": "delete-10-file-by-id-only",
-      "group": "delete",
       "tool_name": "delete_file",
       "server_id": "drive",
       "input": {
@@ -4352,7 +4984,6 @@
     },
     {
       "id": "send-01-mail-several-recipients",
-      "group": "send",
       "tool_name": "send_mail",
       "server_id": "outlook",
       "input": {
@@ -4527,7 +5158,6 @@
     },
     {
       "id": "send-02-slack-message",
-      "group": "send",
       "tool_name": "post_message",
       "server_id": "slack",
       "input": {
@@ -4606,7 +5236,6 @@
     },
     {
       "id": "move-01-pages",
-      "group": "other-verbs",
       "tool_name": "notion-move-pages",
       "server_id": "notion",
       "input": {
@@ -4706,7 +5335,6 @@
     },
     {
       "id": "archive-01-note",
-      "group": "other-verbs",
       "tool_name": "archive_note",
       "server_id": "notion",
       "input": {
@@ -4782,7 +5410,6 @@
     },
     {
       "id": "share-01-file-outside",
-      "group": "other-verbs",
       "tool_name": "share_file",
       "server_id": "drive",
       "input": {
@@ -4910,7 +5537,6 @@
     },
     {
       "id": "upsert-01-company",
-      "group": "other-verbs",
       "tool_name": "crm.records.upsert",
       "server_id": "crm",
       "input": {
@@ -5048,7 +5674,6 @@
     },
     {
       "id": "comment-01-page",
-      "group": "other-verbs",
       "tool_name": "notion-create-comment",
       "server_id": "notion",
       "input": {
@@ -5129,7 +5754,6 @@
     },
     {
       "id": "upload-01-file",
-      "group": "other-verbs",
       "tool_name": "notion-create-file-upload",
       "server_id": "notion",
       "input": {
@@ -5214,7 +5838,6 @@
     },
     {
       "id": "run-01-sql",
-      "group": "other-verbs",
       "tool_name": "execute_sql",
       "server_id": "warehouse",
       "input": {
@@ -5273,7 +5896,6 @@
     },
     {
       "id": "read-01-search",
-      "group": "read",
       "tool_name": "search",
       "server_id": "dynamics",
       "input": {
@@ -5308,7 +5930,6 @@
     },
     {
       "id": "read-02-query",
-      "group": "read",
       "tool_name": "read_query",
       "server_id": "dynamics",
       "input": {
@@ -5343,7 +5964,6 @@
     },
     {
       "id": "generic-01-word-comment-delete",
-      "group": "generic",
       "tool_name": "word_submit_comment_changes",
       "server_id": "word",
       "input": {
@@ -5408,7 +6028,6 @@
     },
     {
       "id": "generic-02-sync-remote-page",
-      "group": "generic",
       "tool_name": "sync_page",
       "server_id": "notion",
       "input": {
@@ -5442,7 +6061,6 @@
     },
     {
       "id": "queue-01-task",
-      "group": "queue",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -5582,7 +6200,6 @@
     },
     {
       "id": "queue-02-task",
-      "group": "queue",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {
@@ -5722,7 +6339,6 @@
     },
     {
       "id": "queue-03-task",
-      "group": "queue",
       "tool_name": "create_record",
       "server_id": "dynamics",
       "input": {

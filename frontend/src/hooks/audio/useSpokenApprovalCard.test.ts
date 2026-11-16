@@ -62,6 +62,7 @@ describe("useSpokenApprovalCard", () => {
         role: "pointer",
         text: "A decision is waiting on screen.",
         mustSay: false,
+        values: [],
       },
     ]);
     // Not again on a later render or a remount.
