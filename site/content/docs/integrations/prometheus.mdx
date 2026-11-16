@@ -234,6 +234,14 @@ still produce temporary differences.
   - Total number of chat generation failures
   - Labels: `chat_provider_id`, `error_type`
 
+### Office add-in metrics
+
+- `erato_office_addin_messages_total` (counter)
+  - Messages submitted from an Office add-in pane, counted once per submit. The pane sends its host, platform and Office build from `Office.context.diagnostics`; the PowerPoint pane adds its PowerPoint API set and read tier. No user, chat or document data is attached.
+  - Labels: `host` (`Word`, `Excel`, `PowerPoint`, `Outlook`…), `platform` (`PC`, `Mac`, `OfficeOnline`, `iOS`, `Android`, `Universal`), `office_build` (the first three parts of the Office version, such as `16.0.20527`), `api_set` (PowerPoint only, such as `1.10`; `none` below 1.3), `tier` (PowerPoint only: `full`, `basic` or `none`)
+  - Values outside these shapes are reported as `other`; labels a host does not send are empty.
+  - Example: `sum by (platform, office_build, tier) (increase(erato_office_addin_messages_total{host="PowerPoint"}[30d]))` shows how many PowerPoint messages came from Office LTSC (basic tier).
+
 ### MCP metrics
 
 - `erato_mcp_active_sessions` (gauge)

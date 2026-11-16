@@ -28,6 +28,7 @@ pub mod components;
 ))]
 mod exporter;
 pub(crate) mod memory;
+pub(crate) mod office_host;
 #[doc(hidden)]
 pub mod owned;
 mod process;
@@ -349,6 +350,11 @@ fn describe_application_metrics() {
         FILE_TYPE_DETECTION_TOTAL_METRIC,
         Unit::Count,
         "Total cold file type detection attempts segmented by configured mode and outcome."
+    );
+    describe_counter!(
+        office_host::OFFICE_ADDIN_MESSAGES_METRIC,
+        Unit::Count,
+        "Messages submitted from Office add-in panes, by Office host, platform, Office build and, for PowerPoint, API set and read tier."
     );
     describe_gauge!(
         MCP_ACTIVE_SESSIONS_METRIC,

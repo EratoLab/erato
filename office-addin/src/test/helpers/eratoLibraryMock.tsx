@@ -440,6 +440,7 @@ export const DEFAULT_STUBS = {
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
+  setOfficeHostInfo: noop,
   setWordLiveCards: noop,
   toast: {
     info: noop,

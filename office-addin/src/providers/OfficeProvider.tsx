@@ -1,5 +1,6 @@
 import {
   installAudioCaptureAccessPolicy,
+  setOfficeHostInfo,
   toast,
   saveComposeReloadState,
   restoreComposeReloadState,
@@ -96,6 +97,17 @@ export function OfficeProvider({ children }: { children: React.ReactNode }) {
         return Office.onReady().then(async (info) => {
           const host = info.host ? String(info.host) : null;
           const platform = info.platform ? String(info.platform) : null;
+          let version: string | undefined;
+          try {
+            version = Office.context.diagnostics?.version;
+          } catch {
+            // Older hosts have no diagnostics; host and platform still count.
+          }
+          setOfficeHostInfo({
+            host: host ?? undefined,
+            platform: platform ?? undefined,
+            version,
+          });
 
           // Children render in the host's language from their first paint.
           let displayLanguage: string | null = null;

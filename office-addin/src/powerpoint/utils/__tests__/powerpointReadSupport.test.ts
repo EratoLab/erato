@@ -1,15 +1,16 @@
+import { setOfficeHostInfo } from "@erato/frontend/library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requirementsUpTo } from "../../../test/mocks/powerpoint/fakePowerPoint";
 import {
   currentPowerPointReadSupport,
-  logPowerPointReadSupport,
   powerpointReadSupport,
-  resetPowerPointReadSupportLogForTests,
+  reportPowerPointReadSupport,
 } from "../powerpointReadSupport";
 
+vi.mock("@erato/frontend/library", () => ({ setOfficeHostInfo: vi.fn() }));
+
 afterEach(() => {
-  resetPowerPointReadSupportLogForTests();
   vi.restoreAllMocks();
 });
 
@@ -136,15 +137,16 @@ describe("PowerPoint read support", () => {
     ]);
   });
 
-  it("logs the detected set once per session", () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
-    const support = powerpointReadSupport(requirementsUpTo("1.5"));
-    logPowerPointReadSupport(support);
-    logPowerPointReadSupport(support);
-    expect(info).toHaveBeenCalledTimes(1);
-    expect(info).toHaveBeenCalledWith(
-      "PowerPoint read support",
-      expect.objectContaining({ tier: "basic", highestVersion: "1.5" }),
-    );
+  it("reports the API set and tier for the backend's metrics", () => {
+    reportPowerPointReadSupport(powerpointReadSupport(requirementsUpTo("1.5")));
+    expect(setOfficeHostInfo).toHaveBeenLastCalledWith({
+      api: "1.5",
+      tier: "basic",
+    });
+    reportPowerPointReadSupport(powerpointReadSupport(() => false));
+    expect(setOfficeHostInfo).toHaveBeenLastCalledWith({
+      api: "none",
+      tier: "none",
+    });
   });
 });

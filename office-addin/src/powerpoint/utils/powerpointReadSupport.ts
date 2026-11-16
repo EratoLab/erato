@@ -1,3 +1,5 @@
+import { setOfficeHostInfo } from "@erato/frontend/library";
+
 /** `Office.context.requirements.isSetSupported`, passed in so the table needs no Office host. */
 export type PowerPointRequirementCheck = (
   name: string,
@@ -117,22 +119,10 @@ export function currentPowerPointReadSupport(): PowerPointReadSupport {
   });
 }
 
-let logged = false;
-
-/** Once per pane session, so the console shows which PowerPoint builds people run. */
-export function logPowerPointReadSupport(support: PowerPointReadSupport) {
-  if (logged) return;
-  logged = true;
-  const diagnostics = globalThis.Office?.context?.diagnostics;
-  console.info("PowerPoint read support", {
+/** Sent with each message, so the backend's metrics show which PowerPoint builds panes run. */
+export function reportPowerPointReadSupport(support: PowerPointReadSupport) {
+  setOfficeHostInfo({
+    api: support.highestVersion ?? "none",
     tier: support.tier,
-    highestVersion: support.highestVersion,
-    host: diagnostics?.host,
-    platform: diagnostics?.platform,
-    version: diagnostics?.version,
   });
-}
-
-export function resetPowerPointReadSupportLogForTests() {
-  logged = false;
 }
