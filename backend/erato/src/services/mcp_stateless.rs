@@ -192,11 +192,20 @@ pub(super) struct HttpRequest {
 
 impl HttpServer {
     pub fn new(config: McpServerConfig) -> Result<Self, Report> {
+        let exchange_enabled = matches!(&config.authentication,
+            crate::config::McpServerAuthenticationConfig::Forwarded { forwarded }
+                if super::mcp_token_exchange::enabled(forwarded));
+        let client = reqwest::Client::builder()
+            .redirect(if exchange_enabled {
+                reqwest::redirect::Policy::none()
+            } else {
+                reqwest::redirect::Policy::default()
+            })
+            .connect_timeout(Duration::from_secs(5))
+            .build()?;
         Ok(Self {
             config,
-            client: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .build()?,
+            client,
             partitions: Mutex::new(HashMap::new()),
             public_tools: Mutex::new(None),
         })
@@ -208,12 +217,16 @@ impl HttpServer {
         auth: &McpRequestAuthContext<'_>,
     ) -> Result<HttpRequest, Report> {
         let mut headers = oauth_default_headers(&self.config)?;
-        apply_auth_headers(&mut headers, server_id, &self.config, auth).await?;
+        let exchange_generation =
+            apply_auth_headers(&mut headers, server_id, &self.config, auth).await?;
         // Include all configured/credential headers: custom authentication headers
         // must partition just as strictly as Authorization.
         let mut entries = headers.iter().collect::<Vec<_>>();
         entries.sort_by_key(|(name, _)| name.as_str());
         let mut digest = Sha256::new();
+        if let Some(generation) = exchange_generation {
+            digest.update(generation.as_bytes());
+        }
         for (name, value) in entries {
             digest.update(name.as_str().as_bytes());
             digest.update([0]);

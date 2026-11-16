@@ -52,6 +52,8 @@ struct McpSession {
     last_activity: SystemTime,
     /// Maximum idle time before this session is evicted
     max_idle_duration: Duration,
+    /// Do not keep an authenticated transport beyond the exchange refresh deadline.
+    exchange_deadline: Option<std::time::Instant>,
 }
 
 #[derive(Debug, erato_memory::HeapSize)]
@@ -96,6 +98,26 @@ impl McpSession {
             "Creating MCP service connection"
         );
 
+        let exchange_deadline = if let McpServerAuthenticationConfig::Forwarded { forwarded } =
+            &config.server.authentication
+        {
+            if super::mcp_token_exchange::enabled(forwarded) {
+                Some(
+                    super::mcp_token_exchange::resolve(
+                        &server_id,
+                        &config.server,
+                        forwarded,
+                        auth_context,
+                    )
+                    .await?
+                    .usable_until,
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let service = create_mcp_service(&server_id, &config.server, auth_context)
             .await
             .map_err(|e| eyre!("Failed to create MCP service: {}", e))?;
@@ -119,6 +141,7 @@ impl McpSession {
             tools: Arc::new(tokio::sync::Mutex::new(tools)),
             last_activity: SystemTime::now(),
             max_idle_duration: Duration::from_secs(config.max_idle_seconds),
+            exchange_deadline,
         })
     }
 
@@ -131,6 +154,12 @@ impl McpSession {
     fn is_inactive(&self) -> bool {
         if self._service.service().has_active_calls() {
             return false;
+        }
+        if self
+            .exchange_deadline
+            .is_some_and(|deadline| deadline <= std::time::Instant::now())
+        {
+            return true;
         }
         if let Ok(elapsed) = self.last_activity.elapsed() {
             elapsed > self.max_idle_duration
@@ -444,6 +473,14 @@ impl McpSessionManager {
         config: &McpServerConfig,
         auth_context: &McpRequestAuthContext<'_>,
     ) -> Result<SessionAuthKey, Report> {
+        if let McpServerAuthenticationConfig::Forwarded { forwarded } = &config.authentication
+            && super::mcp_token_exchange::enabled(forwarded)
+        {
+            let exchanged =
+                super::mcp_token_exchange::resolve(server_id, config, forwarded, auth_context)
+                    .await?;
+            return Ok(Some(format!("exchange:{}", exchanged.generation)));
+        }
         match &config.authentication {
             McpServerAuthenticationConfig::None | McpServerAuthenticationConfig::Fixed { .. } => {
                 Ok(None)
@@ -689,14 +726,26 @@ impl McpSessionManager {
                 if configuration.session_config(server_id)? != config {
                     continue;
                 }
-                if self.sessions.read().await.contains_key(&key) {
-                    return Ok(key);
+                let mut sessions = self.sessions.write().await;
+                if let Some(session) = sessions.get(&key) {
+                    if session
+                        .exchange_deadline
+                        .is_none_or(|deadline| deadline > std::time::Instant::now())
+                    {
+                        return Ok(key);
+                    }
+                    sessions.remove(&key);
                 }
             }
 
             debug!(chat_id = %chat_id, server_id = %server_id, "Creating new MCP session");
             let session = McpSession::new(server_id.to_string(), &config, auth_context).await;
 
+            // An exchange may have refreshed while the connection was opening.
+            // Never store a transport under a different credential generation.
+            if Self::session_auth_key(server_id, &config.server, auth_context).await? != key.2 {
+                continue;
+            }
             // Keep this guard through insertion: reconfigure takes the same
             // configuration-then-sessions lock order. A reload during connection
             // setup cannot put a stale tool list back into the cache.

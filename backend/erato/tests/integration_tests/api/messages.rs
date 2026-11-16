@@ -5778,6 +5778,7 @@ async fn label_of_a_call_with_a_cached_mapping(
                 user_id: None,
                 oidc_token: None,
                 access_token: None,
+                ..Default::default()
             },
         )
         .await

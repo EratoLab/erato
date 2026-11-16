@@ -208,6 +208,26 @@ mod tests {
     }
 
     #[test]
+    fn custom_token_exchange_metadata_is_hidden_and_unstable() {
+        let generated = generate_config_reference().unwrap();
+        let prefix = "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange";
+        for field in [
+            ".enabled",
+            ".subject_credential",
+            ".token_endpoint",
+            ".grant_type",
+            ".client_id",
+            ".client_secret",
+            ".scope",
+        ] {
+            let value = &generated[format!("{prefix}{field}")];
+            assert_eq!(value["hide_in_docs"], true, "{field}");
+            assert_eq!(value["stability"], "unstable", "{field}");
+            assert_eq!(value["introduced_in"], "unreleased", "{field}");
+        }
+    }
+
+    #[test]
     fn includes_hide_in_docs_metadata() {
         let generated = generate_config_reference().unwrap();
         let object = generated
