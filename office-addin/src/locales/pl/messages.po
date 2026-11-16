@@ -1512,6 +1512,11 @@ msgstr "W programie PowerPoint dla systemu Windows otwórz Plik → Opcje → Ce
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.supportedVersions"
+msgstr "Obsługiwane wersje: PowerPoint w Microsoft 365 w systemie Windows, na komputerach Mac i w przeglądarce oraz PowerPoint w Office LTSC 2024. PowerPoint 2016 i 2019 również mogą wyświetlać dodatek, na przykład z katalogu aplikacji SharePoint, ale prawdopodobnie nie otworzą jego okienka i nie są obsługiwane."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.powerpoint.setup.webSignInInstruction"
 msgstr "PowerPoint w przeglądarce nie oferuje logowania Office dla dodatków, dlatego użytkownicy logują się w oknie podręcznym przez logowanie oauth2-proxy tego wdrożenia. To logowanie używa internetowego identyfikatora URI przekierowania serwera proxy, który każde wdrożenie już rejestruje dla aplikacji internetowej Erato. Serwer proxy musi ustawić <0>cookie_samesite = \"none\"</0>, aby plik cookie sesji docierał do dodatku w programie PowerPoint:"
 

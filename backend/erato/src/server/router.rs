@@ -364,12 +364,12 @@ fn render_office_addin_manifest(
 ) -> String {
     let task_pane_identity = match manifest_name {
         OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME => Some((
-            &addin_config.document.addin_id,
+            addin_config.document.addin_id.clone(),
             &addin_config.document.manifest.display_name,
             &addin_config.document.manifest.description,
         )),
         OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME => Some((
-            &addin_config.presentation.addin_id,
+            addin_config.presentation.manifest_addin_id(),
             &addin_config.presentation.manifest.display_name,
             &addin_config.presentation.manifest.description,
         )),
@@ -377,17 +377,21 @@ fn render_office_addin_manifest(
     };
     // Serde defaults do not inherit customer branding from the mail block; compose it explicitly.
     let task_pane_manifest_config =
-        task_pane_identity.map(
-            |(_, display_name, description)| MsOfficeAddinManifestConfig {
-                display_name: display_name.clone(),
-                description: description.clone(),
-                ..addin_config.manifest.clone()
-            },
-        );
+        task_pane_identity
+            .as_ref()
+            .map(
+                |(_, display_name, description)| MsOfficeAddinManifestConfig {
+                    display_name: (*display_name).clone(),
+                    description: (*description).clone(),
+                    ..addin_config.manifest.clone()
+                },
+            );
     let manifest_config = task_pane_manifest_config
         .as_ref()
         .unwrap_or(&addin_config.manifest);
-    let addin_id = task_pane_identity.map_or(&addin_config.addin_id, |(addin_id, _, _)| addin_id);
+    let addin_id = task_pane_identity
+        .as_ref()
+        .map_or(&addin_config.addin_id, |(addin_id, _, _)| addin_id);
     let normalized_base_url = base_url.trim_end_matches('/');
     let office_addin_base_url =
         format!("{normalized_base_url}{OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH}");
@@ -1561,7 +1565,7 @@ mod tests {
     fn presentation_addin_config() -> MsOfficeAddinConfig {
         MsOfficeAddinConfig {
             presentation: MsOfficeAddinPresentationConfig {
-                addin_id: "presentation-addin-id".to_string(),
+                addin_id: "0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00".to_string(),
                 manifest: MsOfficeAddinPresentationManifestConfig {
                     display_name: "Erato for Slides".to_string(),
                     description: "Erato AI assistant for slide decks".to_string(),
@@ -1637,7 +1641,7 @@ mod tests {
             "unsubstituted placeholder in: {rendered}"
         );
         assert!(!rendered.contains("OFFICE_ADDIN_DOCUMENT_COMMANDS_"));
-        assert!(rendered.contains("<Id>presentation-addin-id</Id>"));
+        assert!(rendered.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
         assert!(!rendered.contains("custom-addin-id"));
         assert!(!rendered.contains("document-addin-id"));
         assert!(rendered.contains(r#"<DisplayName DefaultValue="Erato for Slides" />"#));
@@ -1657,6 +1661,25 @@ mod tests {
         ));
         assert!(rendered.contains(r#"<ExtensionPoint xsi:type="PrimaryCommandSurface">"#));
         assert!(!rendered.contains("localhost:3002"));
+    }
+
+    #[test]
+    fn render_office_addin_presentation_manifest_normalises_the_configured_id() {
+        let mut config = presentation_addin_config();
+        config.presentation.addin_id = "  0B9E4F7A-3C2D-4E1F-8A6B-5D4C3B2A1F00\n".to_string();
+        let rendered = render_office_addin_manifest(
+            &prepare_document_manifest(
+                &stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME),
+                &OfficeAddinDistribution::IntegratedApps,
+            )
+            .unwrap(),
+            "https://app.example.com/base",
+            &config,
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(rendered.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
     }
 
     #[test]
@@ -1735,7 +1758,7 @@ mod tests {
         assert!(!sharepoint.contains("VersionOverrides"));
         assert!(!sharepoint.contains("PrimaryCommandSurface"));
         for xml in [&standard, &sharepoint] {
-            assert!(xml.contains("<Id>presentation-addin-id</Id>"));
+            assert!(xml.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
             assert!(xml.contains(r#"<Host Name="Presentation" />"#));
             assert!(xml.contains(r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/powerpoint" />"#));
         }
@@ -1794,7 +1817,7 @@ mod tests {
     fn presentation_settings_leave_the_outlook_and_word_manifests_unchanged() {
         let changed = MsOfficeAddinConfig {
             presentation: MsOfficeAddinPresentationConfig {
-                addin_id: "presentation-addin-id".to_string(),
+                addin_id: "0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00".to_string(),
                 manifest: MsOfficeAddinPresentationManifestConfig {
                     display_name: "Erato for Slides".to_string(),
                     description: "Erato AI assistant for slide decks".to_string(),
@@ -1828,7 +1851,7 @@ mod tests {
                 };
                 let rendered = render(&changed);
                 assert_eq!(rendered, render(&MsOfficeAddinConfig::default()), "{name}");
-                assert!(!rendered.contains("presentation-addin-id"));
+                assert!(!rendered.contains("0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00"));
                 assert!(!rendered.contains("Erato for Slides"));
                 assert!(!rendered.contains("/office-addin/powerpoint"));
             }

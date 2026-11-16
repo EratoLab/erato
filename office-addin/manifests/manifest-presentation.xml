@@ -17,7 +17,9 @@
     <Host Name="Presentation" />
   </Hosts>
   <!-- No requirement sets: Office LTSC 2024 stops at the 1.5 API set for PowerPoint
-       and must still show the add-in; the pane picks its read tier at run time. -->
+       and must still show the add-in; the pane picks its read tier at run time.
+       Supported: Microsoft 365 on Windows, Mac and the web, and Office LTSC 2024.
+       PowerPoint 2016 and 2019 are offered the add-in too but probably cannot start the pane. -->
   <DefaultSettings>
     <SourceLocation DefaultValue="https://localhost:3002/public/platform-office-addin/powerpoint" />
   </DefaultSettings>

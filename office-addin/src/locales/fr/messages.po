@@ -1512,6 +1512,11 @@ msgstr "Dans PowerPoint sous Windows, ouvrez Fichier → Options → Centre de g
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.supportedVersions"
+msgstr "Versions prises en charge : PowerPoint de Microsoft 365 sur Windows, Mac et le web, et PowerPoint d’Office LTSC 2024. PowerPoint 2016 et 2019 peuvent aussi afficher le complément, par exemple depuis un catalogue d’applications SharePoint, mais ne pourront probablement pas ouvrir son volet et ne sont pas pris en charge."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.powerpoint.setup.webSignInInstruction"
 msgstr "PowerPoint sur le web ne propose pas de connexion Office pour les compléments ; les utilisateurs se connectent donc dans une fenêtre contextuelle via la connexion oauth2-proxy de ce déploiement. Cette connexion utilise l’URI de redirection web du proxy, que chaque déploiement enregistre déjà pour l’application web Erato. Le proxy doit définir <0>cookie_samesite = \"none\"</0> pour que le cookie de session parvienne au complément dans PowerPoint :"
 

@@ -638,6 +638,16 @@ function DocumentDistributionSelector({
           </Trans>
         )}
       </p>
+      {product === "powerpoint" && (
+        <p className="office-setup-copy">
+          <Trans id="officeAddin.powerpoint.setup.supportedVersions">
+            Supported versions: PowerPoint in Microsoft 365 on Windows, Mac and
+            the web, and PowerPoint in Office LTSC 2024. PowerPoint 2016 and
+            2019 may list the add-in as well, for example from a SharePoint app
+            catalog, but probably cannot open its pane and are not supported.
+          </Trans>
+        </p>
+      )}
     </div>
   );
 }

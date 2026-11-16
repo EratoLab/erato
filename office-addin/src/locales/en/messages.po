@@ -1512,6 +1512,11 @@ msgstr "In PowerPoint on Windows, open File → Options → Trust Center → Tru
 
 #. js-lingui-explicit-id
 #: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.supportedVersions"
+msgstr "Supported versions: PowerPoint in Microsoft 365 on Windows, Mac and the web, and PowerPoint in Office LTSC 2024. PowerPoint 2016 and 2019 may list the add-in as well, for example from a SharePoint app catalog, but probably cannot open its pane and are not supported."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
 msgid "officeAddin.powerpoint.setup.webSignInInstruction"
 msgstr "PowerPoint on the web has no Office sign-in for add-ins, so users sign in through this deployment's oauth2-proxy login in a popup. That login uses the proxy's web redirect URI, which every deployment already registers for the Erato web app. The proxy must set <0>cookie_samesite = \"none\"</0> so the session cookie reaches the add-in inside PowerPoint:"
 

@@ -133,10 +133,20 @@ function render({ manifest, template, withLaunchEvents }) {
   return rendered;
 }
 
+// Optional manifest names narrow the run, e.g. `manifest-presentation.xml`.
+const only = process.argv.slice(2);
+const selected = MANIFESTS.filter(
+  (manifest) => only.length === 0 || only.includes(manifest.name),
+);
+if (selected.length === 0) {
+  console.error(`No served manifest is named ${only.join(", ")}`);
+  process.exit(1);
+}
+
 const outDir = mkdtempSync(join(tmpdir(), "erato-manifest-"));
 const validator = join(root, "node_modules/.bin/office-addin-manifest");
 let failed = false;
-for (const manifest of MANIFESTS) {
+for (const manifest of selected) {
   const template = readFileSync(
     join(root, "manifests", manifest.templateName ?? manifest.name),
     "utf8",

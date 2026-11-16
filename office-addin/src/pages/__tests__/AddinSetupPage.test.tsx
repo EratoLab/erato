@@ -385,6 +385,93 @@ describe("AddinSetupRoute PowerPoint branch", () => {
     expect(anchor.download).toBe("manifest-presentation-sharepoint.xml");
   });
 
+  it("keeps the chosen distribution when switching between Word and PowerPoint", async () => {
+    render(<AddinSetupRoute />);
+    await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "Word" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "SharePoint app catalog" }),
+    );
+    await waitFor(() =>
+      expect(fetchedManifests().at(-1)).toContain(
+        "manifest-document.xml?distribution=sharepoint",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "PowerPoint" }));
+    await waitFor(() =>
+      expect(fetchedManifests().at(-1)).toContain(
+        "manifest-presentation.xml?distribution=sharepoint",
+      ),
+    );
+    expect(
+      screen.getByRole("button", { name: "SharePoint app catalog" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByText(/In PowerPoint on Windows, open File/),
+    ).toBeVisible();
+    expect(
+      screen.queryByText(/In Word on Windows, open File/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Word" }));
+    await waitFor(() =>
+      expect(fetchedManifests().at(-1)).toContain(
+        "manifest-document.xml?distribution=sharepoint",
+      ),
+    );
+    expect(screen.getByText(/In Word on Windows, open File/)).toBeVisible();
+    expect(
+      screen.queryByText(/In PowerPoint on Windows, open File/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "PowerPoint" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+      ).toBeEnabled(),
+    );
+    const anchor = stubDownload();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+    );
+    expect(anchor.download).toBe("manifest-presentation-sharepoint.xml");
+  });
+
+  it("names the supported PowerPoint versions only under PowerPoint", async () => {
+    await selectPowerPoint("Microsoft 365 admin center");
+    expect(
+      screen.getByText(/Microsoft 365 on Windows, Mac and the web/),
+    ).toBeVisible();
+    expect(screen.getByText(/Office LTSC 2024/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Word" }));
+    expect(screen.queryByText(/Office LTSC 2024/)).not.toBeInTheDocument();
+  });
+
+  it("shows the load error and keeps the download disabled when the bundle has no PowerPoint manifest", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(
+      async (url) =>
+        (String(url).includes("manifest-presentation.xml")
+          ? { ok: false, status: 404, text: async () => "not found" }
+          : { ok: true, text: async () => "<OfficeApp />" }) as Response,
+    );
+    render(<AddinSetupRoute />);
+    await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "PowerPoint" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Microsoft 365 admin center" }),
+    );
+
+    expect(
+      await screen.findByText("Failed to load manifest (404)"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText("Manifest preview")).toHaveValue("");
+  });
+
   it("keeps Excel unavailable", async () => {
     render(<AddinSetupRoute />);
     await waitFor(() => expect(fetchedManifests()).toHaveLength(1));

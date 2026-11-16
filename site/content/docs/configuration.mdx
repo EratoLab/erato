@@ -3524,10 +3524,13 @@ It must be nonempty and differ from the Outlook ID in `integrations.ms_office.ad
 
 The PowerPoint add-in manifest ID, served by `/office-addin/manifest-presentation.xml`.
 PowerPoint is a separate add-in from Word, so it can be rolled out to its own users or groups, and adding it does not change a Word add-in that is already deployed.
-The manifest declares no minimum PowerPoint API set, so PowerPoint in Microsoft 365 (Windows, Mac, web) and Office LTSC 2024 all show the add-in; the pane decides at run time what it can read.
+Supported versions are PowerPoint in Microsoft 365 on Windows, Mac and the web, and PowerPoint in Office LTSC 2024.
+The manifest declares no minimum PowerPoint API set, because any requirement would hide the add-in from Office LTSC 2024; the pane decides at run time what it can read.
+As a consequence, PowerPoint 2016 and 2019 are offered the add-in as well (for example from a SharePoint app catalog), but their add-in runtime probably cannot start the pane, so these versions are not supported.
 For SharePoint app catalogs, use `/office-addin/manifest-presentation.xml?distribution=sharepoint`, which omits ribbon commands like the Word variant.
 The add-in setup page lists it next to Word with the same distribution choice and instructions.
-It must be nonempty and differ from both `integrations.ms_office.addin.addin_id` and `integrations.ms_office.addin.document.addin_id` so all three add-ins can be installed in the same catalog.
+It must be a GUID and differ from both `integrations.ms_office.addin.addin_id` and `integrations.ms_office.addin.document.addin_id`, ignoring case, so all three add-ins can be installed in the same catalog.
+Surrounding spaces are dropped and the manifest carries the ID in lower case.
 
 **Default value:** `"f13aa6d0-f017-46e3-8b17-a72159d689ea"`
 
@@ -3687,7 +3690,7 @@ The nonempty description shown for the Word add-in.
 
 {/* erato_toml_config_key: integrations.ms_office.addin.presentation.manifest.display_name */}
 
-The nonempty display name shown for the PowerPoint add-in. Other branding, such as the provider name and icons, inherits from `integrations.ms_office.addin.manifest`.
+The nonempty display name shown for the PowerPoint add-in, at most 125 characters (Microsoft's limit). Other branding, such as the provider name and icons, inherits from `integrations.ms_office.addin.manifest`.
 
 **Default value:** `"Erato for PowerPoint"`
 
@@ -3697,7 +3700,7 @@ The nonempty display name shown for the PowerPoint add-in. Other branding, such 
 
 {/* erato_toml_config_key: integrations.ms_office.addin.presentation.manifest.description */}
 
-The nonempty description shown for the PowerPoint add-in.
+The nonempty description shown for the PowerPoint add-in, at most 250 characters (Microsoft's limit).
 
 **Default value:** `"Erato AI assistant for PowerPoint presentations"`
 
