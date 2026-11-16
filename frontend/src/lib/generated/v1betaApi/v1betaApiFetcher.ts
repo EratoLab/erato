@@ -1,8 +1,53 @@
 import type { V1betaApiContext } from "./v1betaApiContext";
 import { tryRecoverAuth } from "../../../auth/authRecovery";
 import { mergeApiAuthHeaders } from "../../../auth/apiRequestAuth";
+import {
+  connectivity,
+  isNetworkFailure,
+  markNetworkFailure,
+} from "../../connectivity/connectivity";
 
 const baseUrl = ""; // TODO add your baseUrl
+
+/**
+ * How long a read may wait for the response to start. Reads only: a write may
+ * still be running on the server, so cutting it off and retrying could apply
+ * it twice. Without a limit, a request on a connection that died silently can
+ * hang for minutes. The body is not limited, so a slow download completes.
+ */
+export const READ_RESPONSE_TIMEOUT_MS = 45_000;
+
+function withReadTimeout(method: string, callerSignal?: AbortSignal) {
+  if (method.toUpperCase() !== "GET") {
+    return {
+      signal: callerSignal,
+      timedOut: () => false,
+      responded: () => {},
+      clear: () => {},
+    };
+  }
+  const controller = new AbortController();
+  let timedOut = false;
+  const forwardAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    forwardAbort();
+  } else {
+    callerSignal?.addEventListener("abort", forwardAbort, { once: true });
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, READ_RESPONSE_TIMEOUT_MS);
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    responded: () => clearTimeout(timer),
+    clear: () => {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener("abort", forwardAbort);
+    },
+  };
+}
 
 export type ErrorWrapper<TError> =
   | TError
@@ -41,6 +86,10 @@ export async function v1betaApiFetch<
   const { url, method, body, headers, pathParams, queryParams, signal } =
     options;
   let error: ErrorWrapper<TError>;
+  const readTimeout = withReadTimeout(method, signal);
+  // Separates fetch's own "no response" TypeError from TypeErrors thrown while
+  // building the request, such as a body JSON.stringify cannot serialize.
+  let requestSent = false;
   try {
     const isFormDataBody = body instanceof FormData;
     const requestHeaders = mergeApiAuthHeaders({
@@ -61,19 +110,21 @@ export async function v1betaApiFetch<
       delete requestHeaders["Content-Type"];
     }
 
-    const response = await window.fetch(
-      `${baseUrl}${resolveUrl(url, queryParams, pathParams)}`,
-      {
-        signal,
-        method: method.toUpperCase(),
-        body: body
-          ? body instanceof FormData
-            ? body
-            : JSON.stringify(body)
-          : undefined,
-        headers: requestHeaders,
-      },
-    );
+    const requestUrl = `${baseUrl}${resolveUrl(url, queryParams, pathParams)}`;
+    const requestInit: RequestInit = {
+      signal: readTimeout.signal,
+      method: method.toUpperCase(),
+      body: body
+        ? body instanceof FormData
+          ? body
+          : JSON.stringify(body)
+        : undefined,
+      headers: requestHeaders,
+    };
+    requestSent = true;
+    const response = await window.fetch(requestUrl, requestInit);
+    readTimeout.responded();
+    connectivity.reportNetworkSuccess();
     if (!response.ok) {
       // On a 401, ask the (optionally) registered recovery handler to refresh
       // the session, then replay the request exactly once. Falls straight
@@ -111,13 +162,31 @@ export async function v1betaApiFetch<
       return (await response.blob()) as unknown as TData;
     }
   } catch (e) {
+    if (isNetworkFailure(e)) {
+      throw e;
+    }
     const errorObject: Error = {
       name: "unknown" as const,
-      message:
-        e instanceof Error ? `Network error (${e.message})` : "Network error",
+      message: readTimeout.timedOut()
+        ? "Network error (request timed out)"
+        : e instanceof Error
+          ? `Network error (${e.message})`
+          : "Network error",
       stack: e as string,
     };
+    // fetch rejects with a TypeError when no response arrives, and reading the
+    // body does the same when the connection drops mid-body. Anything else
+    // caught here, such as the replay's HTTP error or a JSON SyntaxError, is not
+    // a connection problem.
+    const noResponse =
+      readTimeout.timedOut() || (requestSent && e instanceof TypeError);
+    if (noResponse && signal?.aborted !== true) {
+      markNetworkFailure(errorObject);
+      connectivity.reportNetworkFailure();
+    }
     throw errorObject;
+  } finally {
+    readTimeout.clear();
   }
   throw error;
 }

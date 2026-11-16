@@ -49,6 +49,11 @@ import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
 import {
+  connectivity,
+  isNetworkFailure,
+  isStalledStream,
+} from "@/lib/connectivity/connectivity";
+import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
   listMcpServerToolsQuery,
@@ -58,6 +63,7 @@ import {
   useUpdateChat,
 } from "@/lib/generated/v1betaApi/v1betaApiComponents";
 import { buildContinueStreamBody } from "@/lib/toolApprovalDecisions";
+import { abortableDelay } from "@/utils/abortableDelay";
 import { mapApiMessageToUiMessage } from "@/utils/adapters/messageAdapter";
 import { seedDispatchedDelegatedRun } from "@/utils/chat/delegatedRunDispatch";
 import {
@@ -67,6 +73,7 @@ import {
 } from "@/utils/chat/messageUtils";
 import { useStableValue } from "@/utils/chat/stableValues";
 import { createLogger } from "@/utils/debugLogger";
+import { FrontendRequestError } from "@/utils/errorReport";
 import { createSSEConnection, type SSEEvent } from "@/utils/sse/sseClient";
 
 import { seedDecisionParts, standingAnswerTargets } from "./approvalSeeding";
@@ -124,6 +131,22 @@ import type { AssistantMention } from "@/utils/chat/assistantMentions";
 const logger = createLogger("HOOK", "useChatMessaging");
 const COMPLETION_CLOSE_DEDUP_MS = 5000;
 const MAX_RESUME_ATTEMPTS_PER_KEY = 3;
+/** Stop ends the turn locally when the server has not answered by then. */
+const STOP_LOCAL_FALLBACK_MS = 3_000;
+const ABORT_REQUEST_TIMEOUT_MS = 10_000;
+// Chat streams carry a server keep-alive every second. Generous, because a
+// proxy that holds small chunks back makes a healthy stream look silent.
+const CHAT_STREAM_IDLE_TIMEOUT_MS = 30_000;
+// resumestream answers at once; this only catches a request lost on a dead
+// connection.
+const RESUME_CONNECT_TIMEOUT_MS = 20_000;
+// After this many reattaches for silence within one answer, the stream is
+// probably fine and only held back on the way, so stop watching for silence.
+const MAX_STALL_REATTACHES = 3;
+// Failed reconnects while the network looks fine; waiting offline is free.
+const MAX_NETWORK_RESUME_RETRIES = 6;
+const networkResumeDelayMs = (retry: number) =>
+  Math.min(1_000 * 2 ** (retry - 1), 15_000);
 
 const X_ERATO_PLATFORM_HEADER = "X-Erato-Platform";
 
@@ -362,6 +385,9 @@ export function useChatMessaging(
   const isSubmittingByKeyRef = useRef<Record<string, boolean>>({});
   const recentlyCompletedByKeyRef = useRef<Record<string, number>>({});
   const resumeAttemptsByKeyRef = useRef<Record<string, number>>({});
+  const networkResumeRetriesByKeyRef = useRef<Record<string, number>>({});
+  const stallReattachesByKeyRef = useRef<Record<string, number>>({});
+  const reconnectWaitByKeyRef = useRef<Record<string, () => void>>({});
   const preparationAbortByKeyRef = useRef<Record<string, AbortController>>({});
   const lastResumeAttemptedChatIdRef = useRef<string | null>(null);
   /**
@@ -870,30 +896,128 @@ export function useChatMessaging(
       return;
     }
 
+    // Normally the server hears the stop and ends the stream itself. When it
+    // cannot (offline, or the connection hangs without failing), end the turn
+    // here and deliver the stop once the server is reachable again.
+    const stoppedKey = getStreamKey(effectiveChatId);
+    let endedLocally = false;
+    const endTurnLocally = () => {
+      if (endedLocally) {
+        return;
+      }
+      endedLocally = true;
+      reconnectWaitByKeyRef.current[stoppedKey]?.();
+      const closeConnection = getSSECleanupForKey(stoppedKey);
+      setSSECleanupForKey(stoppedKey, null);
+      setSSEAbortCallback(null, stoppedKey);
+      const messaging = useMessagingStore.getState();
+      const streamed = messaging.getStreaming(stoppedKey);
+      const streamedId = streamed.currentMessageId;
+      if (streamedId) {
+        // Keep the text read so far on screen until the chat can be fetched
+        // again. The answer's row exists from the start of the turn, so the
+        // copy fetched earlier would otherwise replace it with stale content.
+        const saved = messaging.getApiMessages(stoppedKey);
+        const savedCopy = saved[streamedId] as Message | undefined;
+        if (savedCopy) {
+          messaging.setApiMessages(
+            Object.values({
+              ...saved,
+              [streamedId]: {
+                ...savedCopy,
+                content: streamed.content,
+                status: "complete",
+              },
+            }),
+            stoppedKey,
+          );
+        }
+        messaging.setStreaming(
+          { isStreaming: false, isFinalizing: false },
+          stoppedKey,
+        );
+      } else {
+        resetStreaming(stoppedKey);
+      }
+      setSubmittingForKey(stoppedKey, false);
+      setHandoffSubmitKey((current) =>
+        current === stoppedKey ? null : current,
+      );
+      clearPendingChat(stoppedKey);
+      // Its status still says running until the server hears the stop, which
+      // would reattach the turn the user just stopped.
+      useGenerationStatusStore
+        .getState()
+        .markTerminalLocal(effectiveChatId, "finished");
+      // Closing fires the stream's onClose, which resumes a turn it still
+      // sees streaming; so close only after the turn has ended.
+      closeConnection?.();
+      // Offline this fails; the chat refetches once the connection is back.
+      handleRefetchAndClear({ logContext: "Stopped without connection" }).catch(
+        (error: unknown) => {
+          logger.warn("Refetch after an offline stop failed", error);
+        },
+      );
+    };
+    if (
+      reconnectWaitByKeyRef.current[stoppedKey] ||
+      connectivity.getStatus() === "offline"
+    ) {
+      endTurnLocally();
+    }
+
     // The POST below stops the backend turn; this stops any client-tool
     // execution still running on this device for it (e.g. a sidecar search).
     // Only this user-initiated pathway aborts executions — SSE cleanup never
     // does, because a dropped connection resumes and the result still lands.
     abortClientToolCalls(effectiveChatId);
 
-    void fetch("/api/v1beta/me/messages/abortstream", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      body: JSON.stringify({
-        chat_id: effectiveChatId,
-      }),
-    }).catch((error: unknown) => {
-      logger.error("Failed to request message cancellation", error);
-    });
+    const requestAbort = async (): Promise<boolean> => {
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(),
+        ABORT_REQUEST_TIMEOUT_MS,
+      );
+      try {
+        await fetch("/api/v1beta/me/messages/abortstream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            chat_id: effectiveChatId,
+          }),
+          signal: controller.signal,
+        });
+        return true;
+      } catch (error: unknown) {
+        logger.error("Failed to request message cancellation", error);
+        connectivity.reportNetworkFailure();
+        return false;
+      } finally {
+        clearTimeout(timeout);
+      }
+    };
+    void (async () => {
+      const fallback = setTimeout(endTurnLocally, STOP_LOCAL_FALLBACK_MS);
+      const delivered = await requestAbort();
+      clearTimeout(fallback);
+      if (delivered) {
+        return;
+      }
+      endTurnLocally();
+      await connectivity.waitUntilOnline();
+      await requestAbort();
+    })();
   }, [
     chatId,
     newlyCreatedChatId,
     streamKey,
     getSSECleanupForKey,
+    handleRefetchAndClear,
     isSubmittingForKey,
+    setSSEAbortCallback,
     setSSECleanupForKey,
     resetStreaming,
     setSubmittingForKey,
@@ -1431,6 +1555,81 @@ export function useChatMessaging(
     [isSubmittingForKey, resetStreaming, setSubmittingForKey],
   );
 
+  const attemptResumeStreamRef = useRef<
+    | ((options: {
+        reason: string;
+        chatIdHint?: string | null;
+        streamKeyHint?: string;
+        force?: boolean;
+      }) => boolean)
+    | null
+  >(null);
+
+  /**
+   * The answer keeps generating on the server while the connection is down, so
+   * a dropped stream waits for the network and reattaches instead of failing.
+   * Registered as the stream's abort callback so Stop and chat teardown cancel
+   * the wait.
+   */
+  const resumeAfterReconnect = useCallback(
+    (resumeStreamKey: string, resumeChatId: string, reason: string) => {
+      const retry =
+        (networkResumeRetriesByKeyRef.current[resumeStreamKey] ?? 0) + 1;
+      if (retry > MAX_NETWORK_RESUME_RETRIES) {
+        delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+        return false;
+      }
+      networkResumeRetriesByKeyRef.current[resumeStreamKey] = retry;
+
+      const controller = new AbortController();
+      const cancel = () => {
+        controller.abort();
+        delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+        delete stallReattachesByKeyRef.current[resumeStreamKey];
+        delete reconnectWaitByKeyRef.current[resumeStreamKey];
+      };
+      reconnectWaitByKeyRef.current[resumeStreamKey] = cancel;
+      setSSECleanupForKey(resumeStreamKey, cancel);
+      setSSEAbortCallback(cancel, resumeStreamKey);
+      logger.warn(
+        `[DEBUG_STREAMING] stream connection lost (${reason}); reattaching after reconnect, retry=${retry}`,
+      );
+
+      void (async () => {
+        try {
+          await connectivity.waitUntilOnline(controller.signal);
+          await abortableDelay(networkResumeDelayMs(retry), controller.signal);
+        } catch {
+          return;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
+        delete reconnectWaitByKeyRef.current[resumeStreamKey];
+        setSSECleanupForKey(resumeStreamKey, null);
+        setSSEAbortCallback(null, resumeStreamKey);
+        if (
+          !useMessagingStore.getState().getStreaming(resumeStreamKey)
+            .isStreaming
+        ) {
+          delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
+          delete stallReattachesByKeyRef.current[resumeStreamKey];
+          return;
+        }
+        attemptResumeStreamRef.current?.({
+          reason: reason.endsWith("-reconnect")
+            ? reason
+            : `${reason}-reconnect`,
+          chatIdHint: resumeChatId,
+          streamKeyHint: resumeStreamKey,
+          force: true,
+        });
+      })();
+      return true;
+    },
+    [setSSEAbortCallback, setSSECleanupForKey],
+  );
+
   const attemptResumeStream = useCallback(
     (options: {
       reason: string;
@@ -1507,10 +1706,17 @@ export function useChatMessaging(
             [X_ERATO_PLATFORM_HEADER]: platform,
           },
           body: JSON.stringify({ chat_id: effectiveChatId }),
+          connectTimeoutMs: RESUME_CONNECT_TIMEOUT_MS,
+          idleTimeoutMs:
+            (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) <
+            MAX_STALL_REATTACHES
+              ? CHAT_STREAM_IDLE_TIMEOUT_MS
+              : undefined,
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, resumeStreamKeyRef),
           onOpen: () => {
             resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+            delete networkResumeRetriesByKeyRef.current[resumeStreamKey];
             logger.log(
               `[DEBUG_STREAMING] resumestream opened for chat ${effectiveChatId}`,
             );
@@ -1520,6 +1726,30 @@ export function useChatMessaging(
               errorEvent,
               "SSE resume connection error",
             );
+            if (
+              isNetworkFailure(connectionError) &&
+              useMessagingStore.getState().getStreaming(resumeStreamKey)
+                .isStreaming
+            ) {
+              if (isStalledStream(connectionError)) {
+                stallReattachesByKeyRef.current[resumeStreamKey] =
+                  (stallReattachesByKeyRef.current[resumeStreamKey] ?? 0) + 1;
+              }
+              if (
+                resumeAfterReconnect(resumeStreamKey, effectiveChatId, reason)
+              ) {
+                return;
+              }
+            }
+            delete stallReattachesByKeyRef.current[resumeStreamKey];
+            // Nothing is running any more, typically because the answer
+            // finished while the connection was down: show what was stored.
+            const generationGone =
+              connectionError instanceof FrontendRequestError &&
+              connectionError.response?.status === 404;
+            if (generationGone) {
+              resumeAttemptsByKeyRef.current[resumeStreamKey] = 0;
+            }
             const errorMessage = connectionError.message;
             if (!errorMessage.includes("404")) {
               logger.error(
@@ -1544,7 +1774,9 @@ export function useChatMessaging(
               .getState()
               .getStreaming(resumeStreamKey).isStreaming;
             if (stillStreaming) {
-              setError(connectionError);
+              if (!generationGone) {
+                setError(connectionError);
+              }
               resetStreaming(resumeStreamKey);
               void handleRefetchAndClear({
                 logContext: `Resume stream error (${reason})`,
@@ -1555,6 +1787,7 @@ export function useChatMessaging(
             logger.log(
               `[DEBUG_STREAMING] resumestream closed for chat ${effectiveChatId}`,
             );
+            delete stallReattachesByKeyRef.current[resumeStreamKey];
             setSSECleanupForKey(resumeStreamKey, null);
             setSSEAbortCallback(null, resumeStreamKey);
             releaseHandedOffSubmit(resumeStreamKey);
@@ -1596,12 +1829,17 @@ export function useChatMessaging(
       processStreamEvent,
       releaseHandedOffSubmit,
       resetStreaming,
+      resumeAfterReconnect,
       setError,
       setSSEAbortCallback,
       setSSECleanupForKey,
       streamKey,
     ],
   );
+
+  useEffect(() => {
+    attemptResumeStreamRef.current = attemptResumeStream;
+  }, [attemptResumeStream]);
 
   /**
    * The one door every forced attach to a generation this client did not
@@ -2093,6 +2331,7 @@ export function useChatMessaging(
         // Store the abort function in both the ref AND the global store
         // This allows external code (like createNewChat) to abort the connection
         const cleanup = createSSEConnection(sseUrl, {
+          idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
@@ -2115,6 +2354,8 @@ export function useChatMessaging(
               const resumed = attemptResumeStream({
                 reason: "submitstream-onError",
                 streamKeyHint: activeStreamKey,
+                // A dropped connection is a new outage, not another failed resume.
+                force: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 logger.warn(
@@ -2412,6 +2653,7 @@ export function useChatMessaging(
         const sseUrl = `/api/v1beta/me/messages/editstream`;
         const connectionStreamKeyRef = { current: streamKey };
         const cleanup = createSSEConnection(sseUrl, {
+          idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
@@ -2436,6 +2678,8 @@ export function useChatMessaging(
               const resumed = attemptResumeStream({
                 reason: "editstream-onError",
                 streamKeyHint: activeStreamKey,
+                // A dropped connection is a new outage, not another failed resume.
+                force: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 return;
@@ -2565,6 +2809,7 @@ export function useChatMessaging(
         const sseUrl = `/api/v1beta/me/messages/regeneratestream`;
         const connectionStreamKeyRef = { current: streamKey };
         const cleanup = createSSEConnection(sseUrl, {
+          idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
           onMessage: (sseEvent) =>
             processStreamEvent(sseEvent, connectionStreamKeyRef),
           onError: (errorEvent) => {
@@ -2589,6 +2834,8 @@ export function useChatMessaging(
               const resumed = attemptResumeStream({
                 reason: "regeneratestream-onError",
                 streamKeyHint: activeStreamKey,
+                // A dropped connection is a new outage, not another failed resume.
+                force: isNetworkFailure(connectionError),
               });
               if (resumed) {
                 return;
@@ -2862,6 +3109,7 @@ export function useChatMessaging(
         const cleanup = createSSEConnection(
           "/api/v1beta/me/messages/continuestream",
           {
+            idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
             onMessage: (sseEvent) =>
               processStreamEvent(sseEvent, connectionStreamKeyRef),
             onOpen: () => {
@@ -2900,6 +3148,8 @@ export function useChatMessaging(
                 const resumed = attemptResumeStream({
                   reason: "continuestream-onError",
                   streamKeyHint: activeStreamKey,
+                  // A dropped connection is a new outage, not another failed resume.
+                  force: isNetworkFailure(connectionError),
                 });
                 if (resumed) {
                   return;
