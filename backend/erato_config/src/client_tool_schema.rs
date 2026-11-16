@@ -17,12 +17,6 @@ pub fn compile(schema: &Value) -> Result<jsonschema::Validator, String> {
     if schema.get("type").and_then(Value::as_str) != Some("object") {
         return Err("Client tool schemas must have type = object".into());
     }
-    compile_part(schema)
-}
-
-/// Compiles a schema taken from part of a configured one, which need not be
-/// an object schema of its own.
-pub fn compile_part(schema: &Value) -> Result<jsonschema::Validator, String> {
     jsonschema::options()
         .with_retriever(NoExternalReferences)
         .build(schema)

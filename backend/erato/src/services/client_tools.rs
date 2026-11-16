@@ -72,34 +72,8 @@ pub struct GrantedCall {
 #[derive(Clone)]
 pub struct SubmissionPolicy {
     validator: Arc<jsonschema::Validator>,
-    /// One per alternative of a root `anyOf`, whose own failure names no field.
-    alternatives: Arc<[Alternative]>,
     schema: Arc<Value>,
     pub max_attempts: u32,
-}
-
-struct Alternative {
-    validator: jsonschema::Validator,
-    required: Vec<String>,
-    /// Its required keys that no other alternative names.
-    keys: Vec<String>,
-}
-
-impl Alternative {
-    fn missing(&self, input: &Value) -> usize {
-        self.required
-            .iter()
-            .filter(|key| input.get(key.as_str()).is_none())
-            .count()
-    }
-
-    fn issues(&self, input: &Value, limit: usize) -> Vec<ClientToolValidationIssue> {
-        self.validator
-            .iter_errors(input)
-            .take(limit)
-            .map(|error| schema_issue(&error))
-            .collect()
-    }
 }
 
 impl OfferedClientTool {
@@ -133,7 +107,6 @@ impl OfferedClientTool {
                 erato_config::client_tool_schema::compile(schema).map(|validator| {
                     SubmissionPolicy {
                         validator: Arc::new(validator),
-                        alternatives: compile_alternatives(schema).into(),
                         schema: Arc::new(schema.clone()),
                         max_attempts: submission.max_attempts,
                     }
@@ -216,8 +189,10 @@ impl SubmissionRecovery {
 }
 
 const MAX_VALIDATION_ISSUES: usize = 16;
-/// Errors counted per alternative when choosing between them.
+/// Issues compared per alternative when looking for the ones all share.
 const MAX_COUNTED_ERRORS: usize = 256;
+/// `$ref` hops followed when reading an alternative's keys.
+const MAX_REFERENCE_HOPS: usize = 8;
 
 fn schema_issue(error: &jsonschema::ValidationError<'_>) -> ClientToolValidationIssue {
     ClientToolValidationIssue {
@@ -234,80 +209,121 @@ fn schema_issue(error: &jsonschema::ValidationError<'_>) -> ClientToolValidation
     }
 }
 
-/// Each alternative of a root `anyOf` as a schema of its own, with the root's
-/// definitions. There are none, and a failure reports the root `anyOf` as
-/// before, unless every alternative is inline and compiles on its own and
-/// every reference points into the root's definitions: anywhere else, `#`
-/// would mean the alternative instead of the root.
-fn compile_alternatives(schema: &Value) -> Vec<Alternative> {
-    let Some(choices) = schema.get("anyOf").and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    if !references_only_definitions(schema)
-        || choices.iter().any(|choice| choice.get("$ref").is_some())
-    {
-        return Vec::new();
-    }
-    let names = |choice: &Value, key: &str| {
-        required_keys(choice).any(|name| name == key)
-            || choice
+enum Choice {
+    Alternative(usize),
+    Issues(Vec<ClientToolValidationIssue>),
+}
+
+/// What one alternative of an `anyOf` or `oneOf` requires and names, read
+/// through its `$ref`s.
+#[derive(Default)]
+struct Alternative<'s> {
+    required: Vec<&'s str>,
+    properties: Vec<(&'s str, &'s Value)>,
+}
+
+impl<'s> Alternative<'s> {
+    fn read(root: &'s Value, mut schema: &'s Value) -> Self {
+        let mut alternative = Self::default();
+        for _ in 0..MAX_REFERENCE_HOPS {
+            let Some(object) = schema.as_object() else {
+                break;
+            };
+            alternative.required.extend(required_keys(schema));
+            for (name, property) in object
                 .get("properties")
                 .and_then(Value::as_object)
-                .is_some_and(|properties| properties.contains_key(key))
-    };
-    let mut alternatives = Vec::with_capacity(choices.len());
-    for (index, choice) in choices.iter().enumerate() {
-        let mut standalone = choice.clone();
-        if let Some(object) = standalone.as_object_mut() {
-            for keyword in ["$schema", "$defs", "definitions"] {
-                if let Some(value) = schema.get(keyword) {
-                    object.insert(keyword.to_owned(), value.clone());
+                .into_iter()
+                .flatten()
+            {
+                if !alternative
+                    .properties
+                    .iter()
+                    .any(|(known, _)| known == name)
+                {
+                    alternative.properties.push((name, property));
                 }
             }
+            match object
+                .get("$ref")
+                .and_then(Value::as_str)
+                .and_then(|reference| resolve(root, reference))
+            {
+                Some(target) => schema = target,
+                None => break,
+            }
         }
-        let Ok(validator) = erato_config::client_tool_schema::compile_part(&standalone) else {
-            return Vec::new();
+        alternative
+    }
+
+    fn names(&self, key: &str) -> bool {
+        self.required.contains(&key) || self.properties.iter().any(|(name, _)| *name == key)
+    }
+
+    fn constants(&self, key: &str) -> Option<Vec<&'s Value>> {
+        let (_, property) = self.properties.iter().find(|(name, _)| *name == key)?;
+        if let Some(value) = property.get("const") {
+            return Some(vec![value]);
+        }
+        property
+            .get("enum")
+            .and_then(Value::as_array)
+            .map(|values| values.iter().collect())
+    }
+}
+
+/// The properties every alternative constrains with `const` or `enum`, such
+/// as `kind`, with the values any of them allows.
+fn tags<'s>(alternatives: &[Alternative<'s>]) -> Vec<(&'s str, Vec<&'s Value>)> {
+    let Some(first) = alternatives.first() else {
+        return Vec::new();
+    };
+    first
+        .properties
+        .iter()
+        .filter_map(|(name, _)| {
+            let mut values = Vec::new();
+            for alternative in alternatives {
+                for value in alternative.constants(name)? {
+                    if !values.contains(&value) {
+                        values.push(value);
+                    }
+                }
+            }
+            Some((*name, values))
+        })
+        .collect()
+}
+
+/// The schema at a keyword location, whose `$ref` segments stand for the
+/// schema the reference points to.
+fn schema_at<'s>(root: &'s Value, location: &str) -> Option<&'s Value> {
+    let mut schema = root;
+    for token in location.split('/').skip(1) {
+        let token = token.replace("~1", "/").replace("~0", "~");
+        schema = match schema {
+            Value::Object(object) => match object.get(&token)? {
+                Value::String(reference) if token == "$ref" => resolve(root, reference)?,
+                value => value,
+            },
+            Value::Array(items) => items.get(token.parse::<usize>().ok()?)?,
+            _ => return None,
         };
-        let keys = required_keys(choice)
-            .filter(|key| {
-                choices
-                    .iter()
-                    .enumerate()
-                    .all(|(other, choice)| other == index || !names(choice, key))
-            })
-            .map(str::to_owned)
-            .collect();
-        alternatives.push(Alternative {
-            validator,
-            required: required_keys(choice).map(str::to_owned).collect(),
-            keys,
-        });
     }
-    alternatives
+    Some(schema)
 }
 
-fn references_only_definitions(schema: &Value) -> bool {
-    match schema {
-        Value::Object(object) => object
-            .iter()
-            .all(|(keyword, value)| match keyword.as_str() {
-                "$ref" => value.as_str().is_some_and(|reference| {
-                    reference.starts_with("#/$defs/") || reference.starts_with("#/definitions/")
-                }),
-                "$dynamicRef" | "$recursiveRef" => false,
-                "const" | "enum" | "default" | "examples" => true,
-                "properties" | "patternProperties" | "$defs" | "definitions"
-                | "dependentSchemas" => value
-                    .as_object()
-                    .is_none_or(|schemas| schemas.values().all(references_only_definitions)),
-                _ => references_only_definitions(value),
-            }),
-        Value::Array(items) => items.iter().all(references_only_definitions),
-        _ => true,
-    }
+/// Follows `#` and `#/…` pointers into this schema only. An anchor is not
+/// followed, so its alternatives are ranked by their errors alone.
+fn resolve<'s>(root: &'s Value, reference: &str) -> Option<&'s Value> {
+    root.pointer(reference.strip_prefix('#')?)
 }
 
-fn quoted_list(keys: &[String]) -> String {
+fn pointer_token(key: &str) -> String {
+    key.replace('~', "~0").replace('/', "~1")
+}
+
+fn quoted_list(keys: &[&str]) -> String {
     let quoted = keys
         .iter()
         .map(|key| format!("\"{key}\""))
@@ -343,6 +359,16 @@ fn bound_issues(issues: Vec<ClientToolValidationIssue>) -> Vec<ClientToolValidat
         .collect()
 }
 
+fn push_issue(
+    issues: &mut Vec<ClientToolValidationIssue>,
+    issue: ClientToolValidationIssue,
+    limit: usize,
+) {
+    if issues.len() < limit && !issues.contains(&issue) {
+        issues.push(issue);
+    }
+}
+
 impl SubmissionPolicy {
     /// Decodes arrays and objects sent as JSON strings where the schema admits
     /// only those; returns the decoded JSON Pointers.
@@ -350,103 +376,209 @@ impl SubmissionPolicy {
         crate::services::stringified_arguments::decode(&self.schema, input)
     }
 
-    /// A failed root `anyOf` is reported as the errors of the alternative the
-    /// arguments aim at, or as the keys that tell the alternatives apart when
-    /// they aim at none.
+    /// A failed `anyOf` or `oneOf`, at any depth, is reported as the errors of
+    /// the alternative the value aims at (see `choose`), not as one issue.
     pub fn validate(&self, input: &Value) -> Option<ClientToolOutcome> {
         let mut issues = Vec::new();
-        for error in self
-            .validator
-            .iter_errors(input)
-            .take(MAX_VALIDATION_ISSUES)
-        {
-            let replacement = if matches!(error.kind, jsonschema::error::ValidationErrorKind::AnyOf)
-                && error.instance_path.as_str().is_empty()
-                && error.schema_path.as_str() == "/anyOf"
-            {
-                self.alternative_issues(input)
-            } else {
-                Vec::new()
-            };
-            if replacement.is_empty() {
-                issues.push(schema_issue(&error));
-            } else {
-                issues.extend(replacement);
+        for error in self.validator.iter_errors(input) {
+            if issues.len() >= MAX_VALIDATION_ISSUES {
+                break;
             }
+            self.report(&error, &mut issues, MAX_VALIDATION_ISSUES);
         }
-        let mut unique = Vec::with_capacity(issues.len());
-        for issue in issues {
-            if !unique.contains(&issue) {
-                unique.push(issue);
-            }
-        }
-        (!unique.is_empty())
-            .then(|| ClientToolOutcome::ValidationFailed(bound_issues(unique), None))
+        (!issues.is_empty())
+            .then(|| ClientToolOutcome::ValidationFailed(bound_issues(issues), None))
     }
 
-    /// The errors of the best alternative whose own required key is present:
-    /// fewest missing required keys, then fewest errors, then the first. When
-    /// none is present, the keys that tell them apart, or, if some alternative
-    /// has none, the best of all alternatives.
-    fn alternative_issues(&self, input: &Value) -> Vec<ClientToolValidationIssue> {
-        if self.alternatives.is_empty() {
-            return Vec::new();
-        }
-        let mut aimed = self
-            .alternatives
-            .iter()
-            .filter(|alternative| alternative.keys.iter().any(|key| input.get(key).is_some()))
-            .collect::<Vec<_>>();
-        if aimed.is_empty() {
-            if self
-                .alternatives
-                .iter()
-                .all(|alternative| !alternative.keys.is_empty())
-            {
-                return self.no_alternative_aimed_at(input);
+    fn report(
+        &self,
+        error: &jsonschema::ValidationError<'_>,
+        issues: &mut Vec<ClientToolValidationIssue>,
+        limit: usize,
+    ) {
+        use jsonschema::error::ValidationErrorKind::{AnyOf, OneOfNotValid};
+        if let AnyOf { context } | OneOfNotValid { context } = &error.kind {
+            match self.choose(error, context) {
+                Some(Choice::Alternative(index)) if !context[index].is_empty() => {
+                    for nested in &context[index] {
+                        self.report(nested, issues, limit);
+                    }
+                    return;
+                }
+                Some(Choice::Issues(chosen)) => {
+                    for issue in chosen {
+                        push_issue(issues, issue, limit);
+                    }
+                    return;
+                }
+                _ => {}
             }
-            aimed = self.alternatives.iter().collect();
         }
-        aimed
-            .into_iter()
-            .min_by_key(|alternative| {
+        push_issue(issues, schema_issue(error), limit);
+    }
+
+    fn issues_of(
+        &self,
+        errors: &[jsonschema::ValidationError<'_>],
+        limit: usize,
+    ) -> Vec<ClientToolValidationIssue> {
+        let mut issues = Vec::new();
+        for error in errors {
+            self.report(error, &mut issues, limit);
+        }
+        issues
+    }
+
+    /// The alternative a value that fails every alternative aims at: the one
+    /// whose tag (a property every alternative constrains with `const` or
+    /// `enum`, such as `kind`) accepts the value's, else the one whose own
+    /// required key (one no other alternative names) is present; then the
+    /// fewest missing required keys, the fewest errors, the first. A tag value
+    /// no alternative accepts, a missing tag every alternative requires, or no
+    /// own key present where every alternative has one is reported as such.
+    fn choose(
+        &self,
+        error: &jsonschema::ValidationError<'_>,
+        context: &[Vec<jsonschema::ValidationError<'static>>],
+    ) -> Option<Choice> {
+        use jsonschema::error::ValidationErrorKind::{Constant, Enum, Required};
+        if context.len() < 2 {
+            return (!context.is_empty()).then_some(Choice::Alternative(0));
+        }
+        let path = error.instance_path.as_str();
+        let alternatives = schema_at(&self.schema, error.schema_path.as_str())
+            .and_then(Value::as_array)
+            .filter(|choices| choices.len() == context.len())
+            .map(|choices| {
+                choices
+                    .iter()
+                    .map(|choice| Alternative::read(&self.schema, choice))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let object = error.instance.as_object();
+        let mut tagged: Option<Vec<bool>> = None;
+        for (tag, values) in object.map_or_else(Vec::new, |_| tags(&alternatives)) {
+            let allowed = Value::Array(values.into_iter().cloned().collect());
+            if object.is_some_and(|object| !object.contains_key(tag)) {
+                if alternatives
+                    .iter()
+                    .all(|alternative| alternative.required.contains(&tag))
+                {
+                    return Some(Choice::Issues(vec![ClientToolValidationIssue {
+                        path: path.to_owned(),
+                        code: "required".into(),
+                        message: format!("\"{tag}\" is a required property (one of {allowed})"),
+                    }]));
+                }
+                continue;
+            }
+            let at = format!("{path}/{}", pointer_token(tag));
+            let accepted = context
+                .iter()
+                .map(|errors| {
+                    !errors.iter().any(|error| {
+                        error.instance_path.as_str() == at
+                            && matches!(error.kind, Constant { .. } | Enum { .. })
+                    })
+                })
+                .collect::<Vec<_>>();
+            if !accepted.contains(&true) {
+                return Some(Choice::Issues(vec![ClientToolValidationIssue {
+                    path: at,
+                    code: "enum".into(),
+                    message: format!("value is not one of {allowed}"),
+                }]));
+            }
+            tagged = Some(match tagged {
+                Some(tagged) => tagged
+                    .into_iter()
+                    .zip(accepted)
+                    .map(|(a, b)| a && b)
+                    .collect(),
+                None => accepted,
+            });
+        }
+        let tagged = tagged.unwrap_or_else(|| vec![false; context.len()]);
+        let own = alternatives
+            .iter()
+            .enumerate()
+            .map(|(index, alternative)| {
+                alternative
+                    .required
+                    .iter()
+                    .copied()
+                    .filter(|key| {
+                        alternatives
+                            .iter()
+                            .enumerate()
+                            .all(|(other, alternative)| other == index || !alternative.names(key))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let aimed = (0..context.len())
+            .map(|index| {
+                own.get(index).is_some_and(|keys| {
+                    keys.iter()
+                        .any(|key| object.is_some_and(|object| object.contains_key(*key)))
+                })
+            })
+            .collect::<Vec<_>>();
+        if object.is_some()
+            && !tagged.contains(&true)
+            && !aimed.contains(&true)
+            && !own.is_empty()
+            && own.iter().all(|keys| !keys.is_empty())
+        {
+            return Some(Choice::Issues(
+                self.no_alternative_aimed_at(path, &own, context),
+            ));
+        }
+        let missing = |errors: &[jsonschema::ValidationError<'static>]| {
+            errors
+                .iter()
+                .filter(|error| {
+                    matches!(error.kind, Required { .. }) && error.instance_path.as_str() == path
+                })
+                .count()
+        };
+        (0..context.len())
+            .min_by_key(|&index| {
                 (
-                    alternative.missing(input),
-                    alternative
-                        .validator
-                        .iter_errors(input)
-                        .take(MAX_COUNTED_ERRORS)
-                        .count(),
+                    !tagged[index],
+                    !aimed[index],
+                    missing(&context[index]),
+                    context[index].len(),
                 )
             })
-            .map_or_else(Vec::new, |alternative| {
-                alternative.issues(input, MAX_VALIDATION_ISSUES)
-            })
+            .map(Choice::Alternative)
     }
 
-    /// One issue naming each alternative's own keys, then the errors every
+    /// One issue naming each alternative's own keys, then the issues every
     /// alternative has, such as a key none of them knows.
-    fn no_alternative_aimed_at(&self, input: &Value) -> Vec<ClientToolValidationIssue> {
-        let choices = self
-            .alternatives
-            .iter()
-            .map(|alternative| quoted_list(&alternative.keys))
-            .collect::<Vec<_>>();
+    fn no_alternative_aimed_at(
+        &self,
+        path: &str,
+        own: &[Vec<&str>],
+        context: &[Vec<jsonschema::ValidationError<'static>>],
+    ) -> Vec<ClientToolValidationIssue> {
+        let choices = own.iter().map(|keys| quoted_list(keys)).collect::<Vec<_>>();
         let mut issues = vec![ClientToolValidationIssue {
-            path: String::new(),
+            path: path.to_owned(),
             code: "required".into(),
             message: format!("one of these is required: {}", choices.join("; or ")),
         }];
-        let mut each = self
-            .alternatives
+        let each = context
             .iter()
-            .map(|alternative| alternative.issues(input, MAX_COUNTED_ERRORS));
-        if let Some(first) = each.next() {
-            let rest = each.collect::<Vec<_>>();
+            .map(|errors| self.issues_of(errors, MAX_COUNTED_ERRORS))
+            .collect::<Vec<_>>();
+        if let Some((first, rest)) = each.split_first() {
             issues.extend(
                 first
-                    .into_iter()
-                    .filter(|issue| rest.iter().all(|other| other.contains(issue))),
+                    .iter()
+                    .filter(|issue| rest.iter().all(|other| other.contains(issue)))
+                    .cloned(),
             );
         }
         issues
@@ -915,8 +1047,8 @@ mod tests {
         );
     }
 
-    /// The root of the Word plan tool: alternatives told apart by their own
-    /// required keys, sharing `$defs`.
+    /// The Word plan tool's shape: root alternatives told apart by their own
+    /// required keys, entries by `kind` and patches by `op`.
     fn plan_policy() -> SubmissionPolicy {
         let read = json!({"snapshot":{"type":"string"},"readToken":{"type":"string"}});
         let alternative = |own: Value, required: &[&str]| {
@@ -938,7 +1070,13 @@ mod tests {
             alternative(json!({
                 "draft_id":{"type":"string"},
                 "revision":{"type":"integer"},
-                "patches":{"type":"array","maxItems":32,"items":{"type":"object"}}
+                "patches":{"type":"array","maxItems":32,"items":{"anyOf":[
+                    {"type":"object","required":["op","path","value"],"additionalProperties":false,
+                        "properties":{"op":{"type":"string","enum":["add","replace"]},
+                            "path":{"type":"string"},"value":{}}},
+                    {"type":"object","required":["op","path"],"additionalProperties":false,
+                        "properties":{"op":{"type":"string","const":"remove"},"path":{"type":"string"}}}
+                ]}}
             }), &["draft_id", "revision", "patches"]),
             alternative(json!({"table_cell":{"type":"object"}}), &["table_cell"]),
             alternative(json!({"scoped_edit":{"type":"object","minProperties":1,
@@ -950,11 +1088,21 @@ mod tests {
                             "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
                         }}}}}}), &["scoped_edit"]),
         ],"$defs":{
-            "entry":{"type":"object","required":["kind"],"additionalProperties":false,"properties":{
-                "kind":{"type":"string","enum":["keep","insert"]},
-                "source":{"type":"array","items":{"type":"string"}},
-                "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
-            }},
+            "entry":{"anyOf":[
+                {"type":"object","required":["kind","source"],"additionalProperties":false,"properties":{
+                    "kind":{"type":"string","const":"keep"},
+                    "source":{"type":"array","items":{"type":"string"}}
+                }},
+                {"type":"object","required":["kind","source","blocks"],"additionalProperties":false,"properties":{
+                    "kind":{"type":"string","const":"replace"},
+                    "source":{"type":"array","items":{"type":"string"}},
+                    "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
+                }},
+                {"type":"object","required":["kind","blocks"],"additionalProperties":false,"properties":{
+                    "kind":{"type":"string","const":"insert"},
+                    "blocks":{"type":"array","items":{"$ref":"#/$defs/block"}}
+                }}
+            ]},
             "block":{"type":"object","required":["type"],"additionalProperties":false,"properties":{
                 "type":{"type":"string","enum":["paragraph"]},"text":{"type":"string"}
             }}
@@ -1138,32 +1286,117 @@ mod tests {
             .unwrap()
     }
 
-    fn root_any_of() -> (String, String, String) {
-        issue(
-            "",
-            "anyOf",
-            "value is not valid under any of the schemas listed in the 'anyOf' keyword",
-        )
+    #[test]
+    fn a_mistake_inside_an_entry_names_the_field_of_its_kind() {
+        let policy = plan_policy();
+        let plan = |entry: Value| {
+            json!({"snapshot":"s1","readToken":"t1","version":1,"scope":"body",
+                "entries":[{"kind":"keep","source":["b1"]}, entry]})
+        };
+        let block = json!({"type":"paragraph","text":"secret draft"});
+        assert_eq!(
+            issues(&policy, plan(json!({"kind":"replace","source":["b2"]}))),
+            vec![issue(
+                "/entries/1",
+                "required",
+                r#""blocks" is a required property"#
+            )]
+        );
+        assert_eq!(
+            issues(
+                &policy,
+                plan(json!({"kind":"rewrite","source":["b2"],"blocks":[block.clone()]}))
+            ),
+            vec![issue(
+                "/entries/1/kind",
+                "enum",
+                r#"value is not one of ["keep","replace","insert"]"#
+            )]
+        );
+        assert_eq!(
+            issues(&policy, plan(json!({"source":["b2"],"blocks":[block]}))),
+            vec![issue(
+                "/entries/1",
+                "required",
+                r#""kind" is a required property (one of ["keep","replace","insert"])"#
+            )]
+        );
+        assert_eq!(
+            issues(
+                &policy,
+                plan(json!({"kind":"insert","blocks":[{"type":"secret","text":"secret"}]}))
+            ),
+            vec![issue(
+                "/entries/1/blocks/0/type",
+                "enum",
+                r#"value is not one of ["paragraph"]"#
+            )]
+        );
     }
 
     #[test]
-    fn an_alternative_given_by_reference_keeps_the_root_error() {
+    fn a_mistake_inside_a_patch_names_the_field_of_its_op() {
+        let policy = plan_policy();
+        let repair = |patch: Value| json!({"snapshot":"s1","readToken":"t1","draft_id":"d1","revision":1,"patches":[patch]});
+        assert_eq!(
+            issues(
+                &policy,
+                repair(json!({"op":"remove","path":"/entries/0","value":"secret"}))
+            ),
+            vec![issue(
+                "/patches/0",
+                "additionalProperties",
+                "Additional properties are not allowed ('value' was unexpected)"
+            )]
+        );
+        assert_eq!(
+            issues(&policy, repair(json!({"op":"add","path":"/entries/0"}))),
+            vec![issue(
+                "/patches/0",
+                "required",
+                r#""value" is a required property"#
+            )]
+        );
+        assert_eq!(
+            issues(&policy, repair(json!({"op":"delete","path":"/entries/0"}))),
+            vec![issue(
+                "/patches/0/op",
+                "enum",
+                r#"value is not one of ["add","replace","remove"]"#
+            )]
+        );
+    }
+
+    #[test]
+    fn alternatives_are_read_through_references() {
         let policy = policy_for(json!({"type":"object","anyOf":[
             {"$ref":"#/$defs/a"},
             {"type":"object","required":["b"]}
-        ],"$defs":{"a":{"type":"object","required":["a"]}}}));
-        assert_eq!(issues(&policy, json!({})), vec![root_any_of()]);
-    }
+        ],"$defs":{"a":{"type":"object","required":["a"],"properties":{"a":{"type":"string"}}}}}));
+        assert_eq!(
+            issues(&policy, json!({})),
+            vec![issue(
+                "",
+                "required",
+                r#"one of these is required: "a"; or "b""#
+            )]
+        );
+        assert_eq!(
+            issues(&policy, json!({"a":1})),
+            vec![issue("/a", "type", r#"value is not of type "string""#)]
+        );
 
-    #[test]
-    fn a_reference_outside_the_definitions_keeps_the_root_error() {
-        let policy = policy_for(json!({"type":"object","anyOf":[
+        let policy = policy_for(json!({"type":"object","oneOf":[
             {"type":"object","required":["a"],"properties":{"a":{"properties":{"child":{"$ref":"#"}}}}},
             {"type":"object","required":["b"]}
         ]}));
         assert_eq!(
             issues(&policy, json!({"a":{"child":1}})),
-            vec![root_any_of()]
+            vec![issue(
+                "/a/child",
+                "type",
+                r#"value is not of type "object""#
+            )]
         );
     }
 
