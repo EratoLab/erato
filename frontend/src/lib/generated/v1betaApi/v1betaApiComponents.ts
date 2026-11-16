@@ -6393,6 +6393,74 @@ export const useMessageSubmitSse = (
   });
 };
 
+export type SpeakApprovalPathParams = {
+  /**
+   * The assistant message whose approval is spoken
+   *
+   * @format uuid
+   */
+  messageId: string;
+};
+
+export type SpeakApprovalError = Fetcher.ErrorWrapper<undefined>;
+
+export type SpeakApprovalVariables = {
+  body: Schemas.ApprovalSpeechRequest;
+  pathParams: SpeakApprovalPathParams;
+} & V1betaApiContext["fetcherOptions"];
+
+/**
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
+ */
+export const fetchSpeakApproval = (
+  variables: SpeakApprovalVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    SpeakApprovalError,
+    Schemas.ApprovalSpeechRequest,
+    {},
+    {},
+    SpeakApprovalPathParams
+  >({
+    url: "/api/v1beta/me/messages/{messageId}/approval-speech",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+/**
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
+ */
+export const useSpeakApproval = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      SpeakApprovalError,
+      SpeakApprovalVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    SpeakApprovalError,
+    SpeakApprovalVariables
+  >({
+    mutationFn: (variables: SpeakApprovalVariables) =>
+      fetchSpeakApproval(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ExplainMessageTextPathParams = {
   /**
    * The message the marked text belongs to

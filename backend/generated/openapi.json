@@ -3572,6 +3572,67 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/approval-speech": {
+      "post": {
+        "tags": [
+          "read_aloud"
+        ],
+        "summary": "Speak the approval a message of the user is waiting on.",
+        "description": "The client composes the sentences from the card it shows; this only speaks\nthem, with the voice and cleaning of conversational mode's replies, piece\nby piece. It answers only for a message of the user's own chat whose stop\nstill has a decision open, and stores nothing.",
+        "operationId": "speak_approval",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message whose approval is spoken",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalSpeechRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No pieces, or a piece with nothing to say"
+          },
+          "404": {
+            "description": "Conversational speech is off, or the message does not exist or is not in a chat of the user"
+          },
+          "409": {
+            "description": "The message has no approval waiting for a decision"
+          },
+          "413": {
+            "description": "More than 16 pieces, a piece over 400 characters, or more than 2000 characters in all"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/{message_id}/explain": {
       "post": {
         "tags": [
@@ -5682,6 +5743,22 @@
           },
           "scope_id": {
             "type": "string"
+          }
+        }
+      },
+      "ApprovalSpeechRequest": {
+        "type": "object",
+        "description": "What a client says about the approval it shows.",
+        "required": [
+          "pieces"
+        ],
+        "properties": {
+          "pieces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
       },
@@ -8491,6 +8568,10 @@
           "message_id"
         ],
         "properties": {
+          "conversational_audio_back": {
+            "type": "boolean",
+            "description": "Read the continued answer back, as `conversational_audio_back` does on\na submitted message."
+          },
           "decision": {
             "oneOf": [
               {
@@ -12068,6 +12149,12 @@
                   "audio_delta"
                 ]
               },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
+                "description": "The piece of a spoken approval card the audio belongs to; absent\nwhen a message is read aloud.",
+                "minimum": 0
+              },
               "sample_rate": {
                 "type": "integer",
                 "format": "int32",
@@ -12076,6 +12163,27 @@
               "sequence": {
                 "type": "integer",
                 "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every audio chunk of this piece of a spoken approval card was sent.",
+            "required": [
+              "piece",
+              "message_type"
+            ],
+            "properties": {
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "piece_done"
+                ]
+              },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
                 "minimum": 0
               }
             }

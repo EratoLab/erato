@@ -2974,6 +2974,17 @@ impl AppConfig {
         Some((id, self.speech_providers.provider.get(id)?))
     }
 
+    /// The speech provider conversational mode reads replies back with, or
+    /// `None` while conversational mode cannot speak.
+    pub fn conversational_speech_provider(&self) -> Option<(&str, &SpeechProviderConfig)> {
+        if !self.audio_conversational.transcription.enabled {
+            return None;
+        }
+        let id = self.audio_conversational.speech_provider.as_deref()?;
+        let id = self.resolve_speech_provider_id(id).ok()?;
+        Some((id, self.speech_providers.provider.get(id)?))
+    }
+
     pub fn resolve_speech_provider_id<'a>(&'a self, id: &'a str) -> Result<&'a str, Report> {
         resolve_provider_id(id, &self.speech_providers.replacement_providers, |id| {
             self.speech_providers

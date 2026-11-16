@@ -1826,6 +1826,11 @@ msgstr "Odtwórz ponownie odpowiedź głosową"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Pomiń"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_stop"
 msgstr "Zatrzymaj odtwarzanie"
 

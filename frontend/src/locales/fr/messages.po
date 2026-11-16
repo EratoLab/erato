@@ -1826,6 +1826,11 @@ msgstr "Réécouter la réponse audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Passer"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_stop"
 msgstr "Arrêter la lecture"
 

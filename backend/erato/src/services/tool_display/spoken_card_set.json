@@ -1,0 +1,1092 @@
+{
+  "servers": {
+    "dynamics": {
+      "display_name": "Dynamics 365",
+      "glossary": {
+        "field_names": {
+          "estimatedclosedate": "Estimated close date",
+          "closeprobability": "Probability",
+          "risklevel": "Risk level"
+        },
+        "choice_labels": {
+          "risklevel": {
+            "1": "Low",
+            "2": "Medium",
+            "3": "High"
+          }
+        }
+      }
+    },
+    "notion": {
+      "display_name": "Notion"
+    },
+    "outlook": {
+      "display_name": "Outlook"
+    },
+    "drive": {
+      "display_name": "Google Drive"
+    },
+    "slack": {
+      "display_name": "Slack"
+    },
+    "crm": {
+      "display_name": "CRM"
+    },
+    "warehouse": {
+      "display_name": "Data warehouse"
+    },
+    "word": {
+      "display_name": "Word"
+    }
+  },
+  "history": {
+    "dynamics": [
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT name, opportunityid, customerid, parentcontactid, estimatedclosedate, closeprobability, risklevel, description, telephone1 FROM opportunity",
+          "top": 5
+        },
+        "output": [
+          {
+            "name": "Line 4 Retrofit",
+            "opportunityid": "5f0c2a10-0000-4000-8000-00000000a001",
+            "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "parentcontactid": "5f0c2a10-0000-4000-8000-00000000b001",
+            "estimatedclosedate": "2026-12-01T00:00:00",
+            "closeprobability": 10,
+            "risklevel": 1,
+            "description": "Umbau der Linie 4 auf die neue Steuerung.",
+            "telephone1": "+49 89 1234 567"
+          },
+          {
+            "name": "Ersatzteil-Rahmenvertrag",
+            "opportunityid": "5f0c2a10-0000-4000-8000-00000000a002",
+            "customerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "parentcontactid": null,
+            "estimatedclosedate": "2027-02-01T00:00:00",
+            "closeprobability": 30,
+            "risklevel": 2,
+            "description": null,
+            "telephone1": null
+          }
+        ]
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT fullname, contactid, parentcustomerid, jobtitle, telephone1 FROM contact WHERE parentcustomerid = '5f0c2a10-0000-4000-8000-00000000c001'"
+        },
+        "output": [
+          {
+            "fullname": "Anna Müller",
+            "contactid": "5f0c2a10-0000-4000-8000-00000000b001",
+            "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "jobtitle": "Werksleiterin",
+            "telephone1": "+49 89 1234 500"
+          },
+          {
+            "fullname": "Ben Schmidt",
+            "contactid": "5f0c2a10-0000-4000-8000-00000000b002",
+            "parentcustomerid": "5f0c2a10-0000-4000-8000-00000000c001",
+            "jobtitle": "Einkauf",
+            "telephone1": null
+          }
+        ]
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT name, accountid FROM account WHERE accountid = '5f0c2a10-0000-4000-8000-00000000c001'"
+        },
+        "output": [
+          {
+            "name": "Beispiel Industrie GmbH",
+            "accountid": "5f0c2a10-0000-4000-8000-00000000c001"
+          }
+        ]
+      },
+      {
+        "tool_name": "create_record",
+        "input": {
+          "tablename": "task",
+          "item": {
+            "subject": "Technisches Layout abstimmen",
+            "scheduledend": "2026-11-20",
+            "regardingobjectid": {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+              "relatedTable": "opportunity"
+            }
+          }
+        },
+        "output": "Created record with ID 5f0c2a10-0000-4000-8000-00000000d001."
+      },
+      {
+        "tool_name": "create_record",
+        "input": {
+          "tablename": "appointment",
+          "item": {
+            "subject": "Werksbesuch Linie 4",
+            "scheduledstart": "2026-11-24T09:00:00",
+            "scheduledend": "2026-11-24T11:00:00"
+          }
+        },
+        "output": "Created record with ID 5f0c2a10-0000-4000-8000-00000000d002."
+      },
+      {
+        "tool_name": "read_query",
+        "input": {
+          "querytext": "SELECT subject, activityid, scheduledstart, scheduledend, location FROM appointment WHERE activityid = '5f0c2a10-0000-4000-8000-00000000d002'"
+        },
+        "output": [
+          {
+            "subject": "Werksbesuch Linie 4",
+            "activityid": "5f0c2a10-0000-4000-8000-00000000d002",
+            "scheduledstart": "2026-11-24T09:00:00",
+            "scheduledend": "2026-11-24T11:00:00",
+            "location": "Werk Augsburg"
+          }
+        ]
+      }
+    ],
+    "notion": [
+      {
+        "tool_name": "notion-search",
+        "input": {
+          "query": "Projekte"
+        },
+        "output": {
+          "results": [
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e1",
+              "title": "Projekte 2026"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e2",
+              "title": "Archiv"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e3",
+              "title": "Kickoff Line 4"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e4",
+              "title": "Wochenbericht KW 44"
+            },
+            {
+              "id": "5f0c2a10-0000-4000-8000-0000000000e5",
+              "title": "Wochenbericht KW 45"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "calls": [
+    {
+      "id": "create-01-task-long-description",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Technisches Layout abstimmen",
+          "description": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+          "scheduledend": "2030-01-15",
+          "prioritycode": 2,
+          "regardingobjectid": {
+            "name": "Line four, as the model typed it",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-02-appointment",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "item": {
+          "subject": "Begehung Linie 4",
+          "location": "Werk Augsburg",
+          "scheduledstart": "2030-01-20T10:30:00",
+          "scheduledend": "2030-01-20T12:00:00",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-03-contact",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "contact",
+        "item": {
+          "firstname": "Clara",
+          "lastname": "Weber",
+          "jobtitle": "Projektleiterin",
+          "emailaddress1": "clara.weber@beispiel-industrie.de",
+          "parentcustomerid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+            "relatedTable": "account"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-04-email-two-contacts",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "email",
+        "item": {
+          "subject": "Termin für die Begehung",
+          "description": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
+          "to": [
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+              "relatedTable": "contact"
+            },
+            {
+              "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+              "relatedTable": "contact"
+            }
+          ],
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-05-task-many-fields",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot nachfassen",
+          "scheduledend": "2030-01-22",
+          "prioritycode": 2,
+          "percentcomplete": 0,
+          "actualdurationminutes": 30,
+          "category": "Vertrieb",
+          "subcategory": "Nachfassen",
+          "statecode": 0,
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a002",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-06-task-unread-regarding",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Rückruf vereinbaren",
+          "scheduledend": "2030-01-16",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-07-phonecall",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "phonecall",
+        "item": {
+          "subject": "Rückfrage zur Stillstandszeit",
+          "phonenumber": "+49 89 1234 500",
+          "scheduledend": "2030-01-14T15:00:00",
+          "description": "Kurz klären, ob zwei Tage Stillstand reichen."
+        }
+      }
+    },
+    {
+      "id": "create-08-opportunity-amounts",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 5 Modernisierung",
+          "estimatedvalue": 185000,
+          "estimatedclosedate": "2030-06-30",
+          "closeprobability": 40,
+          "customerid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+            "relatedTable": "account"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-09-note-very-long",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "annotation",
+        "item": {
+          "subject": "Gesprächsnotiz Werksbesuch",
+          "notetext": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
+          "objectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "create-10-account",
+      "group": "create",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "account",
+        "item": {
+          "name": "Muster Maschinenbau AG",
+          "telephone1": "+49 821 555 0100",
+          "websiteurl": "https://www.muster-maschinenbau.example",
+          "address1_city": "Augsburg"
+        }
+      }
+    },
+    {
+      "id": "create-11-batch-rows",
+      "group": "create",
+      "server": "notion",
+      "tool": "notion-create-pages",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "parent": {
+          "data_source_id": "5f0c2a10-0000-4000-8000-0000000000e1"
+        },
+        "pages": [
+          {
+            "properties": {
+              "Name": "Zeichnungen prüfen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Stillstand abschätzen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Schulung planen",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Angebot schreiben",
+              "Status": "Offen"
+            }
+          },
+          {
+            "properties": {
+              "Name": "Termin Elektroplaner",
+              "Status": "Offen"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "update-01-date-and-probability",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "estimatedclosedate": "2030-01-15",
+          "closeprobability": 60
+        }
+      }
+    },
+    {
+      "id": "update-02-coded-value",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "risklevel": 3
+        }
+      }
+    },
+    {
+      "id": "update-03-lookup",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "parentcontactid": {
+            "name": "Typed by the model",
+            "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+            "relatedTable": "contact"
+          }
+        }
+      }
+    },
+    {
+      "id": "update-04-emptied-fields",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "telephone1": null,
+          "description": "",
+          "closeprobability": 50
+        }
+      }
+    },
+    {
+      "id": "update-05-record-nobody-read",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+        "item": {
+          "risklevel": 2
+        }
+      }
+    },
+    {
+      "id": "update-06-many-fields",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "estimatedclosedate": "2030-03-31",
+          "closeprobability": 75,
+          "risklevel": 2,
+          "estimatedvalue": 240000,
+          "stepname": "Angebot",
+          "budgetstatus": 2,
+          "purchasetimeframe": 1
+        }
+      }
+    },
+    {
+      "id": "update-07-reschedule-appointment",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d002",
+        "item": {
+          "scheduledstart": "2026-11-26T14:00:00",
+          "scheduledend": "2026-11-26T16:00:00"
+        }
+      }
+    },
+    {
+      "id": "update-08-long-text",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "description": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme."
+        }
+      }
+    },
+    {
+      "id": "update-09-task-status-codes",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001",
+        "item": {
+          "statecode": 1,
+          "statuscode": 5
+        }
+      }
+    },
+    {
+      "id": "update-10-contact-two-fields",
+      "group": "update",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "contact",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000b001",
+        "item": {
+          "jobtitle": "Technische Leiterin",
+          "telephone1": "+49 89 1234 510"
+        }
+      }
+    },
+    {
+      "id": "delete-01-task-created-earlier",
+      "group": "delete",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d001",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-02-appointment",
+      "group": "delete",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "appointment",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000d002",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-03-record-nobody-read",
+      "group": "delete",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a009",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-04-contact",
+      "group": "delete",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "contact",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000b002",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-05-account",
+      "group": "delete",
+      "server": "dynamics",
+      "tool": "delete_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "tablename": "account",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000c001",
+        "hasUserApproved": true
+      }
+    },
+    {
+      "id": "delete-06-batch-pages",
+      "group": "delete",
+      "server": "notion",
+      "tool": "notion-delete-pages",
+      "description": "Deletes pages. Deleted pages are moved to the trash and can be restored for 30 days.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e3",
+          "5f0c2a10-0000-4000-8000-0000000000e4",
+          "5f0c2a10-0000-4000-8000-0000000000e5",
+          "5f0c2a10-0000-4000-8000-0000000000f1",
+          "5f0c2a10-0000-4000-8000-0000000000f2",
+          "5f0c2a10-0000-4000-8000-0000000000f3",
+          "5f0c2a10-0000-4000-8000-0000000000f4",
+          "5f0c2a10-0000-4000-8000-0000000000f5",
+          "5f0c2a10-0000-4000-8000-0000000000f6",
+          "5f0c2a10-0000-4000-8000-0000000000f7",
+          "5f0c2a10-0000-4000-8000-0000000000f8",
+          "5f0c2a10-0000-4000-8000-0000000000f9"
+        ]
+      }
+    },
+    {
+      "id": "delete-07-file-permanent",
+      "group": "delete",
+      "server": "drive",
+      "tool": "delete_file",
+      "description": "Permanently deletes a file. This cannot be undone.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "1aB2cD3eF4",
+        "fileName": "Angebot Linie 4 v3.docx"
+      }
+    },
+    {
+      "id": "delete-08-file-trash",
+      "group": "delete",
+      "server": "drive",
+      "tool": "trash_file",
+      "description": "Moves a file to the trash. It can be restored from the trash.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "6VcJ",
+        "fileName": "Entwurf Zeitplan.xlsx"
+      }
+    },
+    {
+      "id": "delete-09-single-page",
+      "group": "delete",
+      "server": "notion",
+      "tool": "notion-delete-pages",
+      "description": "Deletes pages. Deleted pages are moved to the trash and can be restored for 30 days.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e3"
+        ]
+      }
+    },
+    {
+      "id": "delete-10-file-by-id-only",
+      "group": "delete",
+      "server": "drive",
+      "tool": "delete_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "fileId": "1zY9xW8vU7"
+      }
+    },
+    {
+      "id": "send-01-mail-several-recipients",
+      "group": "send",
+      "server": "outlook",
+      "tool": "send_mail",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "to": [
+          "anna.mueller@beispiel-industrie.de",
+          "ben.schmidt@beispiel-industrie.de"
+        ],
+        "cc": [
+          "kollege@example.com",
+          "einkauf@lieferant.example"
+        ],
+        "subject": "Zusammenfassung Werksbesuch Linie 4",
+        "body": "Hallo zusammen, anbei die Zusammenfassung unseres Werksbesuchs. Wir haben die Engstellen an der Übergabe zwischen Presse und Förderband besprochen und vereinbart, dass wir bis Mitte Januar eine Abschätzung der Stillstandszeit liefern. Die Zeichnungen der Fördertechnik kommen bis Ende November. Bitte gebt Bescheid, wenn etwas fehlt oder falsch ist. Viele Grüße"
+      }
+    },
+    {
+      "id": "send-02-slack-message",
+      "group": "send",
+      "server": "slack",
+      "tool": "post_message",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "channel": "vertrieb-sued",
+        "text": "Begehung Linie 4 ist am 20. Januar bestätigt."
+      }
+    },
+    {
+      "id": "move-01-pages",
+      "group": "other-verbs",
+      "server": "notion",
+      "tool": "notion-move-pages",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "page_or_database_ids": [
+          "5f0c2a10-0000-4000-8000-0000000000e4",
+          "5f0c2a10-0000-4000-8000-0000000000e5"
+        ],
+        "new_parent": {
+          "page_id": "5f0c2a10-0000-4000-8000-0000000000e2"
+        }
+      }
+    },
+    {
+      "id": "archive-01-note",
+      "group": "other-verbs",
+      "server": "notion",
+      "tool": "archive_note",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "note_id": "u_8",
+        "title": "Kickoff Line 4"
+      }
+    },
+    {
+      "id": "share-01-file-outside",
+      "group": "other-verbs",
+      "server": "drive",
+      "tool": "share_file",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "openWorldHint": true
+      },
+      "arguments": {
+        "fileId": "6VcJ",
+        "fileName": "Zeitplan Linie 4.xlsx",
+        "emailAddress": "planer@extern.example",
+        "role": "writer",
+        "sendNotificationEmail": true
+      }
+    },
+    {
+      "id": "upsert-01-company",
+      "group": "other-verbs",
+      "server": "crm",
+      "tool": "crm.records.upsert",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "record": {
+          "object_type": "company",
+          "data": {
+            "attributes": {
+              "company": {
+                "legal_name": "Muster Maschinenbau AG",
+                "website": "muster-maschinenbau.example",
+                "segment": "Mittelstand"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "comment-01-page",
+      "group": "other-verbs",
+      "server": "notion",
+      "tool": "notion-create-comment",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "page_id": "5f0c2a10-0000-4000-8000-0000000000e3",
+        "markdown": "Bitte bis Freitag die Zeichnungen ergänzen."
+      }
+    },
+    {
+      "id": "upload-01-file",
+      "group": "other-verbs",
+      "server": "notion",
+      "tool": "notion-create-file-upload",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "filename": "Zeichnungen-Foerdertechnik.pdf",
+        "content_type": "application/pdf"
+      }
+    },
+    {
+      "id": "run-01-sql",
+      "group": "other-verbs",
+      "server": "warehouse",
+      "tool": "execute_sql",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "query": "UPDATE opportunities SET stage = 'lost' WHERE close_date < '2025-01-01' AND stage = 'open'"
+      }
+    },
+    {
+      "id": "read-01-search",
+      "group": "read",
+      "server": "dynamics",
+      "tool": "search",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "query": "Müller GmbH",
+        "limit": 10
+      }
+    },
+    {
+      "id": "read-02-query",
+      "group": "read",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT name, estimatedclosedate FROM opportunity WHERE statecode = 0",
+        "top": 10
+      }
+    },
+    {
+      "id": "generic-01-word-comment-delete",
+      "group": "generic",
+      "server": "word",
+      "tool": "word_submit_comment_changes",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "changes": [
+          {
+            "op": "delete",
+            "text": null,
+            "anchor": null,
+            "target": "fmta",
+            "thread": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "generic-02-sync-remote-page",
+      "group": "generic",
+      "server": "notion",
+      "tool": "sync_page",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true
+      },
+      "arguments": {
+        "page_id": "5f0c2a10-0000-4000-8000-0000000000e3",
+        "mode": "delete_remote"
+      }
+    },
+    {
+      "id": "queue-01-task",
+      "group": "queue",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Zeichnungen anfordern",
+          "scheduledend": "2030-01-10",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "queue-02-task",
+      "group": "queue",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Angebot nachfassen",
+          "scheduledend": "2030-01-20",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    },
+    {
+      "id": "queue-03-task",
+      "group": "queue",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Schulung planen",
+          "scheduledend": "2030-02-03",
+          "regardingobjectid": {
+            "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+            "relatedTable": "opportunity"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1826,6 +1826,11 @@ msgstr "Volver a reproducir la respuesta de audio"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Saltar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_stop"
 msgstr "Detener reproducción"
 

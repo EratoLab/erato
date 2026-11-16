@@ -1,6 +1,13 @@
 import { t } from "@lingui/core/macro";
 import clsx from "clsx";
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { Disclosure } from "@/components/ui/Controls/Disclosure";
@@ -16,6 +23,7 @@ import {
   ToolCallIdentity,
   ToolCallInput,
 } from "@/components/ui/ToolCall";
+import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import {
   approvalDisplayOf,
   useToolCallCard,
@@ -455,6 +463,12 @@ export const ApprovalReferent = (props: ApprovalReferentProps) => {
   );
 };
 
+/** Opening the technical details ends a spoken card: the reader looks now. */
+const StopsApprovalSpeech = () => {
+  useEffect(() => stopApprovalSpeech(), []);
+  return null;
+};
+
 const LabelledTechnicalDetails = ({
   toolName,
   display,
@@ -497,6 +511,7 @@ const LabelledTechnicalDetails = ({
         />
       )}
       {!showsRawInput(card) && <ToolCallInput input={input} />}
+      <StopsApprovalSpeech />
     </Disclosure>
   );
 };

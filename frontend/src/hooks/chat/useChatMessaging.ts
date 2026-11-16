@@ -2855,6 +2855,13 @@ export function useChatMessaging(
           .setStreaming({ content: seededContent }, activeStreamKey);
       };
 
+      // The answer after a decision is read back the way a sent message's
+      // is, while conversational mode reads back.
+      const speech = useSpeechPlayback.getState();
+      const readBack =
+        !nothingToDecide && speech.conversational && speech.enabled;
+      if (readBack) beginSpeechResponse(streamKey);
+
       return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
         let settled = false;
@@ -2977,6 +2984,7 @@ export function useChatMessaging(
                     approvalIds,
                     itemDecisions,
                     enumerate,
+                    readBack,
                   }),
             ),
           },

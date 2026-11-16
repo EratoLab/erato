@@ -195,6 +195,18 @@ export type ApprovalScopeLineage = {
 };
 
 /**
+ * What a client says about the approval it shows.
+ */
+export type ApprovalSpeechRequest = {
+  /**
+   * The spoken card's pieces in the order they are said: plain sentences,
+   * at most 16 of them, each at most 400 and all together at most 2000
+   * characters.
+   */
+  pieces: string[];
+};
+
+/**
  * Response from the archive all chats endpoint
  */
 export type ArchiveAllChatsResponse = {
@@ -1660,6 +1672,11 @@ export type ContentPartTurnInstructionMarker = {
  * to guess which call the user answered.
  */
 export type ContinueStreamRequest = {
+  /**
+   * Read the continued answer back, as `conversational_audio_back` does on
+   * a submitted message.
+   */
+  conversational_audio_back?: boolean;
   decision?: null | ToolApprovalDecision;
   decisions?: ApprovalDecisionItem[];
   /**
@@ -3510,6 +3527,14 @@ export type ReadAloudStreamEvent =
       audio: string;
       message_type: "audio_delta";
       /**
+       * The piece of a spoken approval card the audio belongs to; absent
+       * when a message is read aloud.
+       *
+       * @format int32
+       * @minimum 0
+       */
+      piece?: number;
+      /**
        * @format int32
        * @minimum 0
        */
@@ -3519,6 +3544,14 @@ export type ReadAloudStreamEvent =
        * @minimum 0
        */
       sequence: number;
+    }
+  | {
+      message_type: "piece_done";
+      /**
+       * @format int32
+       * @minimum 0
+       */
+      piece: number;
     }
   | {
       message_type: "done";

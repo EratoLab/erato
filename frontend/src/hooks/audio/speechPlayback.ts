@@ -22,6 +22,11 @@ interface SpeechState {
   playing: boolean;
   blocked: boolean;
   failed: boolean;
+  /**
+   * The stream of the last response that was asked to be read back: a card
+   * it stops on is spoken too. Unlike playback it survives a stop.
+   */
+  spokenTurn?: string;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -69,10 +74,15 @@ export function beginSpeechResponse(streamKey?: string) {
   accepting =
     useSpeechPlayback.getState().enabled &&
     useSpeechPlayback.getState().conversational;
-  useSpeechPlayback.setState({ failed: false });
+  useSpeechPlayback.setState({
+    failed: false,
+    spokenTurn: accepting ? streamKey : undefined,
+  });
 }
 export function moveSpeechStream(from: string, to: string) {
   if (acceptingStream === from) acceptingStream = to;
+  if (useSpeechPlayback.getState().spokenTurn === from)
+    useSpeechPlayback.setState({ spokenTurn: to });
 }
 export function speechFailed(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;

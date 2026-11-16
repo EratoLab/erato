@@ -1826,6 +1826,11 @@ msgstr "Audioantwort erneut abspielen"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Weiter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
 msgid "chat.audio_stop"
 msgstr "Wiedergabe stoppen"
 
