@@ -166,6 +166,13 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    does not offer them yet. Like every add-in platform, they log an
    unknown-platform warning until an action facet declares them.
 
+7. **Pane start report** — `OfficeHostReport` (`src/providers/`), mounted
+   inside `AuthGate` in the Word, Excel, PowerPoint and Outlook apps, posts
+   the host and platform from `Office.onReady` once per pane start to
+   `/me/office-host-report`; PowerPoint adds its API set and read tier. The
+   backend only counts it (`erato_office_addin_pane_starts_total`). Teams
+   and the web app send nothing.
+
 ## Boundary enforcement (`eslint.config.mjs`)
 
 - Core fence — an `import/no-restricted-paths` zone: `src/core/**` may not

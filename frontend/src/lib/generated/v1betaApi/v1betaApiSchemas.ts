@@ -3190,6 +3190,28 @@ export type OccurrenceTime = {
   local: string;
 };
 
+/**
+ * What an Office add-in pane runs on, sent once when the pane has started and signed in.
+ */
+export type OfficeHostReportRequest = {
+  /**
+   * PowerPoint only: the highest PowerPoint API set the pane detected, or `none`.
+   */
+  api_set?: string;
+  /**
+   * `Office.HostType` as `Office.onReady` reports it, e.g. `PowerPoint`.
+   */
+  host: string;
+  /**
+   * `Office.PlatformType`, e.g. `PC`, `Mac` or `OfficeOnline`.
+   */
+  platform?: string;
+  /**
+   * PowerPoint only: the pane's read tier, `full`, `basic` or `none`.
+   */
+  tier?: string;
+};
+
 export type OperationError = {
   code: string;
   /**

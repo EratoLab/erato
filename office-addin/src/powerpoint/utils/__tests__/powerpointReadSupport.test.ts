@@ -4,6 +4,7 @@ import { requirementsUpTo } from "../../../test/mocks/powerpoint/fakePowerPoint"
 import {
   currentPowerPointReadSupport,
   logPowerPointReadSupport,
+  powerpointHostReportDetails,
   powerpointReadSupport,
   resetPowerPointReadSupportLogForTests,
 } from "../powerpointReadSupport";
@@ -100,6 +101,28 @@ describe("PowerPoint read support", () => {
       }
     },
   );
+
+  it("reports the API set and tier the pane detected", () => {
+    const office = (
+      globalThis as unknown as { Office: { context: Record<string, unknown> } }
+    ).Office;
+    const saved = { ...office.context };
+    office.context.requirements = { isSetSupported: requirementsUpTo("1.5") };
+    try {
+      expect(powerpointHostReportDetails()).toEqual({
+        apiSet: "1.5",
+        tier: "basic",
+      });
+      office.context.requirements = { isSetSupported: () => false };
+      expect(powerpointHostReportDetails()).toEqual({
+        apiSet: "none",
+        tier: "none",
+      });
+    } finally {
+      for (const key of Object.keys(office.context)) delete office.context[key];
+      Object.assign(office.context, saved);
+    }
+  });
 
   it("is full exactly when every 1.10 switch is on", () => {
     for (const set of ["1.3", "1.4", "1.5", "1.8", "1.9", "1.10"]) {

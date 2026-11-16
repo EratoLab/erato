@@ -434,6 +434,7 @@ export const DEFAULT_STUBS = {
     }
   },
   requestClientOperationSweep: noop,
+  reportOfficeHostStart: () => Promise.resolve(),
   dismissChatActionFailure: noop,
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,

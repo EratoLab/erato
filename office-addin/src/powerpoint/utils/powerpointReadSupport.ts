@@ -117,6 +117,15 @@ export function currentPowerPointReadSupport(): PowerPointReadSupport {
   });
 }
 
+/** PowerPoint's part of the pane-start report: which API set and read tier this host has. */
+export function powerpointHostReportDetails(): {
+  apiSet: string;
+  tier: PowerPointReadTier;
+} {
+  const support = currentPowerPointReadSupport();
+  return { apiSet: support.highestVersion ?? "none", tier: support.tier };
+}
+
 let logged = false;
 
 /** Once per pane session, so the console shows which PowerPoint builds people run. */
