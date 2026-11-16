@@ -2149,6 +2149,14 @@ impl AppConfig {
                                 qualified, error
                             );
                         }
+                        let fanned = crate::client_tool_schema::fanned_choices(&value);
+                        if !fanned.is_empty() {
+                            panic!(
+                                "Client tool '{}' submission schema: two alternatives of {} lead back to it through the same property; a failed check would repeat once per alternative at every nesting level. Give that property to one alternative only, or pick the alternative with if/then.",
+                                qualified,
+                                fanned.join(", ")
+                            );
+                        }
                     }
                 }
                 Ok(_) => panic!(
