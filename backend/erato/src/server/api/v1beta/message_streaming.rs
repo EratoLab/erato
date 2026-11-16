@@ -16994,7 +16994,6 @@ pub async fn message_submit_sse(
         request,
     )
     .await?;
-    crate::metrics::office_host::report_office_addin_message(&headers);
 
     let events = live_streaming_events(broadcast_rx);
     let event_stream = owned_streaming_events_to_sse(events, client_stream_guard);

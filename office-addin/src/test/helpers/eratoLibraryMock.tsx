@@ -434,13 +434,13 @@ export const DEFAULT_STUBS = {
     }
   },
   requestClientOperationSweep: noop,
+  reportOfficeHostStart: () => Promise.resolve(),
   dismissChatActionFailure: noop,
   resolveComponentOverride: (override: unknown, fallback: unknown) =>
     override ?? fallback,
   seedGenerationStatusFromListing: noop,
   setAuthRecoveryHandler: noop,
   setClientPlatform: noop,
-  setOfficeHostInfo: noop,
   setWordLiveCards: noop,
   toast: {
     info: noop,

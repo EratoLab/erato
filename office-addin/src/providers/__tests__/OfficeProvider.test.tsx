@@ -8,15 +8,11 @@ const spies = vi.hoisted(() => ({
   beforeReload: null as (() => void) | null,
   /** What the Toaster would show, with the store's dedupe-slot rules. */
   toasts: [] as Array<{ title?: string; dedupeKey?: string }>,
-  hostInfo: [] as Array<Record<string, string | undefined>>,
 }));
 
 vi.mock("@erato/frontend/library", () => ({
   installAudioCaptureAccessPolicy: () => () => {},
   restoreComposeReloadState: () => {},
-  setOfficeHostInfo: (info: Record<string, string | undefined>) => {
-    spies.hostInfo.push(info);
-  },
   saveComposeReloadState: () => {
     const error = new Error("Attachments are still staged");
     error.name = "ComposeReloadBlockedError";
@@ -52,13 +48,9 @@ describe("OfficeProvider", () => {
     i18n.activate("en");
     spies.beforeReload = null;
     spies.toasts = [];
-    spies.hostInfo = [];
     vi.stubGlobal("Office", {
       onReady: () => Promise.resolve({ host: "Word", platform: "PC" }),
-      context: {
-        displayLanguage: "en-US",
-        diagnostics: { version: "16.0.20527.20000" },
-      },
+      context: { displayLanguage: "en-US" },
     });
   });
   afterEach(() => {
@@ -79,18 +71,5 @@ describe("OfficeProvider", () => {
 
     expect(spies.toasts).toHaveLength(1);
     expect(spies.toasts[0]?.title).toContain("Finish uploading");
-  });
-
-  it("reports the Office host, platform and version for the backend's metrics", async () => {
-    render(
-      <OfficeProvider>
-        <p>ready</p>
-      </OfficeProvider>,
-    );
-    await screen.findByText("ready");
-
-    expect(spies.hostInfo).toEqual([
-      { host: "Word", platform: "PC", version: "16.0.20527.20000" },
-    ]);
   });
 });

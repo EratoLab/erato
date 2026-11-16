@@ -48,7 +48,6 @@ import { BUDGET_QUERY_KEY } from "@/hooks/budget/useBudgetStatus";
 import { refreshChatQueries } from "@/hooks/chat/refreshChatQueries";
 import { useFileUploadStore } from "@/hooks/files/useFileUploadStore";
 import { requestClientOperationSweep } from "@/lib/clientOperations/handlers";
-import { officeHostHeaders } from "@/lib/clientPlatform";
 import {
   chatMessagesQuery as buildChatMessagesQuery,
   fetchChatMessages,
@@ -2271,7 +2270,6 @@ export function useChatMessaging(
           headers: {
             "Content-Type": "application/json",
             [X_ERATO_PLATFORM_HEADER]: platform,
-            ...officeHostHeaders(),
             ...getClientToolHeaders(),
             ...getAuthHeaders(),
           },

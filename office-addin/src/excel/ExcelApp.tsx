@@ -5,6 +5,7 @@ import { NeutralAddinChatPage } from "../core/NeutralAddinChatPage";
 import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
 import { OfficeDocumentAuthProvider } from "../providers/OfficeDocumentAuthProvider";
 import { OfficeDocumentFeatureConfig } from "../providers/OfficeDocumentFeatureConfig";
+import { OfficeHostReport } from "../providers/OfficeHostReport";
 import { OfficeProvider } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 
@@ -22,6 +23,7 @@ export default function ExcelApp() {
           <OfficeThemeProvider>
             <OfficeDocumentAuthProvider>
               <AuthGate>
+                <OfficeHostReport />
                 <div className="office-shell">
                   <NeutralAddinChatPage
                     platform="excel"

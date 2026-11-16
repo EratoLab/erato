@@ -352,9 +352,9 @@ fn describe_application_metrics() {
         "Total cold file type detection attempts segmented by configured mode and outcome."
     );
     describe_counter!(
-        office_host::OFFICE_ADDIN_MESSAGES_METRIC,
+        office_host::OFFICE_ADDIN_PANE_STARTS_METRIC,
         Unit::Count,
-        "Messages submitted from Office add-in panes, by Office host, platform, Office build and, for PowerPoint, API set and read tier."
+        "Office add-in pane starts (a pane that loaded and signed in), by Office host, platform and, for PowerPoint, API set and read tier."
     );
     describe_gauge!(
         MCP_ACTIVE_SESSIONS_METRIC,

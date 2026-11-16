@@ -16,6 +16,7 @@ pub mod message_streaming;
 mod message_streaming_file_extraction;
 pub mod message_text_actions;
 pub mod ms_office;
+pub mod office_host_report;
 pub mod policy_engine_middleware;
 pub mod read_aloud;
 pub mod scheduled_items;
@@ -285,6 +286,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route("/file-capabilities", get(file_capabilities))
         .route("/budget", get(budget::budget_status))
         .route(
+            "/office-host-report",
+            post(office_host_report::office_host_report),
+        )
+        .route(
             "/desktop-sidecar/organization-configuration",
             get(desktop_sidecar::organization_configuration),
         )
@@ -552,6 +557,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         mcp_servers::disconnect_mcp_server_oauth,
         file_capabilities,
         budget::budget_status,
+        office_host_report::office_host_report,
         desktop_sidecar::organization_configuration,
         desktop_sidecar::distribution,
         desktop_sidecar::download_distribution_artifact,
@@ -727,6 +733,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         message_text_actions::MessageExplainCompleted,
         message_text_actions::MessageExplainFailed,
         budget::BudgetStatusResponse,
+        office_host_report::OfficeHostReportRequest,
         crate::config::DesktopSidecarOrganizationConfigurationResponse,
         desktop_sidecar::DesktopSidecarDistributionResponse,
         desktop_sidecar::DesktopSidecarDistributionTargetResponse,

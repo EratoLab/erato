@@ -10,6 +10,7 @@ import {
   SHARED_ADDIN_FEATURE_CONFIG,
   SharedAddinShell,
 } from "../core/SharedAddinShell";
+import { OfficeHostReport } from "../providers/OfficeHostReport";
 import { OfficeProvider, useOffice } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
 import { OutlookAuthProvider } from "./providers/OutlookAuthProvider";
@@ -69,6 +70,7 @@ export default function OutlookApp() {
           <OfficeThemeProvider>
             <OutlookAuthProvider>
               <AuthGate>
+                <OfficeHostReport />
                 <OutlookProviders>
                   <div className="office-shell">
                     <OutlookAddinChatPage />

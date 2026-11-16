@@ -236,11 +236,25 @@ still produce temporary differences.
 
 ### Office add-in metrics
 
-- `erato_office_addin_messages_total` (counter)
-  - Messages submitted from an Office add-in pane, counted once per submit. The pane sends its host, platform and Office build from `Office.context.diagnostics`; the PowerPoint pane adds its PowerPoint API set and read tier. No user, chat or document data is attached.
-  - Labels: `host` (`Word`, `Excel`, `PowerPoint`, `Outlook`…), `platform` (`PC`, `Mac`, `OfficeOnline`, `iOS`, `Android`, `Universal`), `office_build` (the first three parts of the Office version, such as `16.0.20527`), `api_set` (PowerPoint only, such as `1.10`; `none` below 1.3), `tier` (PowerPoint only: `full`, `basic` or `none`)
-  - Values outside these shapes are reported as `other`; labels a host does not send are empty.
-  - Example: `sum by (platform, office_build, tier) (increase(erato_office_addin_messages_total{host="PowerPoint"}[30d]))` shows how many PowerPoint messages came from Office LTSC (basic tier).
+- `erato_office_addin_pane_starts_total` (counter)
+  - One count is one Office add-in pane that loaded and signed in. A reload of the same pane is not counted again where the pane keeps its session storage; closing and reopening the pane counts again. Sending messages does not count.
+  - The pane reports its host and platform as `Office.onReady` gives them; the PowerPoint pane adds the PowerPoint API set and read tier it detected. No Office build, user, chat or document data is sent or labelled.
+  - Labels:
+    - `host`: `Word`, `Excel`, `PowerPoint`, `Outlook`, `OneNote`, `Project`, `Access`
+    - `platform`: `PC` (Windows), `Mac`, `OfficeOnline` (web), `iOS`, `Android`, `Universal`, or empty
+    - `api_set` (PowerPoint only): the highest PowerPoint API set the pane checks for (`1.3`, `1.4`, `1.5`, `1.8`, `1.10`; `1.8` also covers 1.9), `none` below 1.3, empty for other hosts
+    - `tier` (PowerPoint only): `full` (PowerPointApi 1.10: current Microsoft 365), `basic` (1.4 to 1.9: Office LTSC 2024 and older Microsoft 365 builds), `none` (below that: for example Office LTSC 2021 and 2019), empty for other hosts
+  - Any other value is reported as `other`, so a client cannot create new series.
+  - Each series starts at its first pane start per backend pod, so `increase()` and `rate()` miss a combination that appears only once per pod lifetime. To see which combinations exist, and roughly how many pane starts each had, sum the last value of every series instead:
+
+    ```promql
+    sum by (host, platform, api_set, tier) (
+      max_over_time(erato_office_addin_pane_starts_total{host="PowerPoint"}[30d])
+    )
+    ```
+
+    This counts since each pod started, so a pod that was already running when the window began adds its earlier starts too.
+  - On deployments that customers operate themselves, these numbers stay in their own metrics. Erato does not see them.
 
 ### MCP metrics
 

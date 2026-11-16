@@ -6634,6 +6634,52 @@ export const useAvailableModels = <TData = AvailableModelsResponse,>(
   });
 };
 
+export type OfficeHostReportError = Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeHostReportVariables = {
+  body: Schemas.OfficeHostReportRequest;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeHostReport = (
+  variables: OfficeHostReportVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeHostReportError,
+    Schemas.OfficeHostReportRequest,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/office-host-report",
+    method: "post",
+    ...variables,
+    signal,
+  });
+
+export const useOfficeHostReport = (
+  options?: Omit<
+    reactQuery.UseMutationOptions<
+      undefined,
+      OfficeHostReportError,
+      OfficeHostReportVariables
+    >,
+    "mutationFn"
+  >,
+) => {
+  const { fetcherOptions } = useV1betaApiContext();
+  return reactQuery.useMutation<
+    undefined,
+    OfficeHostReportError,
+    OfficeHostReportVariables
+  >({
+    mutationFn: (variables: OfficeHostReportVariables) =>
+      fetchOfficeHostReport(deepMerge(fetcherOptions, variables)),
+    ...options,
+  });
+};
+
 export type ListOrganizationGroupsQueryParams = {
   /**
    * Filter to only show groups the requesting user is "involved" with.

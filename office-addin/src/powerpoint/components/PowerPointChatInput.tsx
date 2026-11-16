@@ -23,7 +23,7 @@ import {
 } from "../utils/powerpointFacet";
 import {
   currentPowerPointReadSupport,
-  reportPowerPointReadSupport,
+  logPowerPointReadSupport,
 } from "../utils/powerpointReadSupport";
 
 import type { PowerPointComposerContextValue } from "./PowerPointComposerContext";
@@ -54,7 +54,7 @@ export function PowerPointChatInput({
   );
   // Read on every render: Save As renames the deck while the pane stays open.
   const presentationName = currentPowerPointPresentationName();
-  useEffect(() => reportPowerPointReadSupport(support), [support]);
+  useEffect(() => logPowerPointReadSupport(support), [support]);
 
   const { chatId } = chatInputProps;
   const conversationKey = useConversationKey(chatId, PRESENTATION_IDENTITY);

@@ -3717,6 +3717,40 @@
         ]
       }
     },
+    "/api/v1beta/me/office-host-report": {
+      "post": {
+        "tags": [
+          "office_host_report"
+        ],
+        "operationId": "office_host_report",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfficeHostReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Counted in erato_office_addin_pane_starts_total"
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "422": {
+            "description": "When the body is not a report"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/organization/groups": {
       "get": {
         "tags": [
@@ -11384,6 +11418,32 @@
             "example": "2026-11-13T10:00:00"
           }
         }
+      },
+      "OfficeHostReportRequest": {
+        "type": "object",
+        "description": "What an Office add-in pane runs on, sent once when the pane has started and signed in.",
+        "required": [
+          "host"
+        ],
+        "properties": {
+          "api_set": {
+            "type": "string",
+            "description": "PowerPoint only: the highest PowerPoint API set the pane detected, or `none`."
+          },
+          "host": {
+            "type": "string",
+            "description": "`Office.HostType` as `Office.onReady` reports it, e.g. `PowerPoint`."
+          },
+          "platform": {
+            "type": "string",
+            "description": "`Office.PlatformType`, e.g. `PC`, `Mac` or `OfficeOnline`."
+          },
+          "tier": {
+            "type": "string",
+            "description": "PowerPoint only: the pane's read tier, `full`, `basic` or `none`."
+          }
+        },
+        "additionalProperties": false
       },
       "OperationError": {
         "type": "object",

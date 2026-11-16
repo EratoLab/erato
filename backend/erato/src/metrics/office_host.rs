@@ -1,15 +1,11 @@
-//! Which Office host, platform and build add-in panes run, from the
-//! `X-Erato-Office-Host` header the pane sends with each message submit.
-//! Every label is reduced to a closed or short-shaped value, so a client
-//! cannot grow the label set.
+//! Which Office hosts, platforms and PowerPoint read tiers add-in panes start on, counted once
+//! per pane start from `POST /me/office-host-report`. Every label is one of a closed set of
+//! values, `other` or empty, so no client can create new series.
 
-use axum::http::HeaderMap;
 use metrics::counter;
 
-pub(crate) const OFFICE_ADDIN_MESSAGES_METRIC: &str = "erato_office_addin_messages_total";
-const OFFICE_HOST_HEADER: &str = "X-Erato-Office-Host";
+pub(crate) const OFFICE_ADDIN_PANE_STARTS_METRIC: &str = "erato_office_addin_pane_starts_total";
 const OTHER: &str = "other";
-const MAX_HEADER_BYTES: usize = 256;
 
 const HOSTS: &[&str] = &[
     "Word",
@@ -21,79 +17,52 @@ const HOSTS: &[&str] = &[
     "Access",
 ];
 const PLATFORMS: &[&str] = &["PC", "OfficeOnline", "Mac", "iOS", "Android", "Universal"];
+const POWERPOINT_API_SETS: &[&str] = &[
+    "none", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10",
+];
 const TIERS: &[&str] = &["full", "basic", "none"];
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct OfficeHostLabels {
-    pub host: String,
-    pub platform: String,
-    pub office_build: String,
-    pub api_set: String,
-    pub tier: String,
+    pub host: &'static str,
+    pub platform: &'static str,
+    pub api_set: &'static str,
+    pub tier: &'static str,
 }
 
-pub(crate) fn office_host_labels(headers: &HeaderMap) -> Option<OfficeHostLabels> {
-    let raw = headers.get(OFFICE_HOST_HEADER)?.to_str().ok()?;
-    if raw.len() > MAX_HEADER_BYTES {
-        return None;
-    }
-    let field = |name: &str| {
-        raw.split(';').find_map(|part| {
-            let (key, value) = part.split_once('=')?;
-            (key.trim() == name).then(|| value.trim())
-        })
-    };
-    let host = field("host")?;
-    let one_of = |value: Option<&str>, known: &[&str]| match value {
-        None | Some("") => String::new(),
+fn one_of(value: Option<&str>, known: &[&'static str]) -> &'static str {
+    match value.map(str::trim) {
+        None | Some("") => "",
         Some(value) => known
             .iter()
-            .find(|known| **known == value)
-            .map_or(OTHER, |known| known)
-            .to_string(),
-    };
-    Some(OfficeHostLabels {
-        host: one_of(Some(host), HOSTS),
-        platform: one_of(field("platform"), PLATFORMS),
-        office_build: field("version").map(office_build).unwrap_or_default(),
-        api_set: field("api").map(api_set).unwrap_or_default(),
-        tier: one_of(field("tier"), TIERS),
-    })
-}
-
-/// `16.0.20527.20000` → `16.0.20527`: the revision only adds label values.
-fn office_build(version: &str) -> String {
-    let parts: Vec<&str> = version.split('.').collect();
-    let numeric = |part: &&str| {
-        !part.is_empty() && part.len() <= 8 && part.bytes().all(|b| b.is_ascii_digit())
-    };
-    if parts.len() >= 3 && parts[..3].iter().all(numeric) {
-        parts[..3].join(".")
-    } else {
-        OTHER.to_string()
+            .copied()
+            .find(|known| *known == value)
+            .unwrap_or(OTHER),
     }
 }
 
-fn api_set(value: &str) -> String {
-    let short =
-        |part: &str| (1..=2).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_digit());
-    match value.split_once('.') {
-        Some((major, minor)) if short(major) && short(minor) => value.to_string(),
-        _ if value == "none" => value.to_string(),
-        _ => OTHER.to_string(),
+pub(crate) fn office_host_labels(
+    host: &str,
+    platform: Option<&str>,
+    api_set: Option<&str>,
+    tier: Option<&str>,
+) -> OfficeHostLabels {
+    OfficeHostLabels {
+        host: match one_of(Some(host), HOSTS) {
+            "" => OTHER,
+            host => host,
+        },
+        platform: one_of(platform, PLATFORMS),
+        api_set: one_of(api_set, POWERPOINT_API_SETS),
+        tier: one_of(tier, TIERS),
     }
 }
 
-/// Counts one message submit from an add-in pane; requests without the header are not counted.
-pub(crate) fn report_office_addin_message(headers: &HeaderMap) {
-    let Some(labels) = office_host_labels(headers) else {
-        return;
-    };
+pub(crate) fn record_office_addin_pane_start(labels: &OfficeHostLabels) {
     counter!(
-        OFFICE_ADDIN_MESSAGES_METRIC,
+        OFFICE_ADDIN_PANE_STARTS_METRIC,
         "host" => labels.host,
         "platform" => labels.platform,
-        "office_build" => labels.office_build,
         "api_set" => labels.api_set,
         "tier" => labels.tier
     )
@@ -103,60 +72,57 @@ pub(crate) fn report_office_addin_message(headers: &HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
-
-    fn labels(value: &str) -> Option<OfficeHostLabels> {
-        let mut headers = HeaderMap::new();
-        headers.insert(OFFICE_HOST_HEADER, HeaderValue::from_str(value).unwrap());
-        office_host_labels(&headers)
-    }
+    use std::collections::BTreeSet;
 
     #[test]
-    fn reads_a_powerpoint_pane() {
+    fn reads_a_powerpoint_pane_with_its_tier() {
         assert_eq!(
-            labels("host=PowerPoint; platform=PC; version=16.0.20527.20000; api=1.10; tier=full"),
-            Some(OfficeHostLabels {
-                host: "PowerPoint".into(),
-                platform: "PC".into(),
-                office_build: "16.0.20527".into(),
-                api_set: "1.10".into(),
-                tier: "full".into(),
-            })
+            office_host_labels("PowerPoint", Some("PC"), Some("1.5"), Some("basic")),
+            OfficeHostLabels {
+                host: "PowerPoint",
+                platform: "PC",
+                api_set: "1.5",
+                tier: "basic",
+            }
         );
     }
 
     #[test]
     fn hosts_without_read_tiers_leave_those_labels_empty() {
-        let word = labels("host=Word; platform=Mac; version=16.103.25110918").unwrap();
-        assert_eq!(word.office_build, "16.103.25110918");
-        assert_eq!(word.api_set, "");
-        assert_eq!(word.tier, "");
-    }
-
-    #[test]
-    fn unknown_or_odd_values_become_other() {
-        let odd =
-            labels("host=Evil; platform=Linux; version=../../etc; api=1.1000; tier=ultra").unwrap();
         assert_eq!(
-            odd,
+            office_host_labels("Outlook", Some("OfficeOnline"), None, None),
             OfficeHostLabels {
-                host: OTHER.into(),
-                platform: OTHER.into(),
-                office_build: OTHER.into(),
-                api_set: OTHER.into(),
-                tier: OTHER.into(),
+                host: "Outlook",
+                platform: "OfficeOnline",
+                api_set: "",
+                tier: "",
             }
         );
-        assert_eq!(labels("host=PowerPoint; api=none").unwrap().api_set, "none");
+        let no_platform = office_host_labels("Word", None, Some(""), None);
+        assert_eq!((no_platform.platform, no_platform.api_set), ("", ""));
     }
 
     #[test]
-    fn needs_a_host_and_a_short_header() {
-        assert_eq!(labels("platform=PC"), None);
-        assert_eq!(
-            labels(&format!("host=Word; version={}", "1".repeat(300))),
-            None
-        );
-        assert_eq!(office_host_labels(&HeaderMap::new()), None);
+    fn hostile_values_cannot_create_new_label_sets() {
+        let mut seen = BTreeSet::new();
+        for i in 0..5_000 {
+            let odd = format!("{i}.{i}.x");
+            seen.insert(office_host_labels(
+                &format!("Host{i}"),
+                Some(&odd),
+                Some(&odd),
+                Some(&odd),
+            ));
+        }
+        for api in ["01.5", "1.11", "1.10.0", "1.5\u{0}", "16.0.20527"] {
+            seen.insert(office_host_labels(
+                "PowerPoint",
+                Some("PC"),
+                Some(api),
+                Some("full"),
+            ));
+        }
+        assert_eq!(seen.len(), 2, "{seen:?}");
+        assert!(seen.iter().all(|labels| labels.api_set == OTHER));
     }
 }

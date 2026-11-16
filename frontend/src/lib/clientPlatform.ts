@@ -18,32 +18,3 @@ export function getClientPlatform(): string {
 export function clientPlatformHeaders(): Record<string, string> {
   return { [X_ERATO_PLATFORM_HEADER]: clientPlatform };
 }
-
-// eslint-disable-next-line lingui/no-unlocalized-strings -- HTTP header name
-export const X_ERATO_OFFICE_HOST_HEADER = "X-Erato-Office-Host";
-
-// What an Office add-in pane runs on (host, platform, Office build and host
-// specific read support), counted per deployment by the backend's metrics.
-let officeHostInfo: Record<string, string> = {};
-
-/** Merges `info` into the add-in's host description; empty values are dropped. */
-export function setOfficeHostInfo(info: Record<string, string | undefined>) {
-  const next = { ...officeHostInfo };
-  for (const [key, value] of Object.entries(info)) {
-    if (value) next[key] = value;
-    else delete next[key];
-  }
-  officeHostInfo = next;
-}
-
-/** `X-Erato-Office-Host`, e.g. "host=PowerPoint; platform=PC; version=16.0.1"; none outside a pane. */
-export function officeHostHeaders(): Record<string, string> {
-  const value = Object.entries(officeHostInfo)
-    .map(([key, part]) => `${key}=${part.replace(/[;=\s]/g, "")}`)
-    .join("; ");
-  return value ? { [X_ERATO_OFFICE_HOST_HEADER]: value } : {};
-}
-
-export function resetOfficeHostInfoForTests() {
-  officeHostInfo = {};
-}

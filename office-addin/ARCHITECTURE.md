@@ -161,11 +161,13 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    and gives both a built-in MCP surface hint. The chat list's source filter
    does not offer them yet. Like every add-in platform, they log an
    unknown-platform warning until an action facet declares them.
-   Office hosts also send `X-Erato-Office-Host` on message submits:
-   `OfficeProvider` sets host, platform and Office version from
-   `Office.onReady` and `Office.context.diagnostics`, and the PowerPoint pane
-   adds its PowerPoint API set and read tier. The backend counts it in
-   `erato_office_addin_messages_total`; nothing else reads it.
+
+7. **Pane start report** — `OfficeHostReport` (`src/providers/`), mounted
+   inside `AuthGate` in the Word, Excel, PowerPoint and Outlook apps, posts
+   the host and platform from `Office.onReady` once per pane start to
+   `/me/office-host-report`; PowerPoint adds its API set and read tier. The
+   backend only counts it (`erato_office_addin_pane_starts_total`). Teams
+   and the web app send nothing.
 
 ## Boundary enforcement (`eslint.config.mjs`)
 

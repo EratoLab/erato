@@ -555,7 +555,9 @@ export {
   type ChatHistoryStatusFilter,
   type ChatHistoryTypeFilter,
 } from "@/hooks/chat/store/chatHistoryFilterStore";
-export { setClientPlatform, setOfficeHostInfo } from "@/lib/clientPlatform";
+export { setClientPlatform } from "@/lib/clientPlatform";
+export { reportOfficeHostStart } from "@/lib/officeHostReport";
+export type { OfficeHostReport } from "@/lib/officeHostReport";
 export {
   buildInfiniteChatsQueryKey,
   buildRecentChatsFilterParams,
