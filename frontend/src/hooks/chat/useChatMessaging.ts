@@ -933,7 +933,11 @@ export function useChatMessaging(
           );
         }
         messaging.setStreaming(
-          { isStreaming: false, isFinalizing: false },
+          {
+            isStreaming: false,
+            isFinalizing: false,
+            stoppedLocallyMessageId: streamedId,
+          },
           stoppedKey,
         );
       } else {
@@ -1550,7 +1554,14 @@ export function useChatMessaging(
       setHandoffSubmitKey((current) =>
         current === resumeStreamKey ? null : current,
       );
-      resetStreaming(resumeStreamKey);
+      // A finished answer stays until the completion refetch has the saved
+      // copy, as after an uninterrupted turn; resetting here drops it from
+      // the list until then.
+      if (
+        !useMessagingStore.getState().getStreaming(resumeStreamKey).isFinalizing
+      ) {
+        resetStreaming(resumeStreamKey);
+      }
     },
     [isSubmittingForKey, resetStreaming, setSubmittingForKey],
   );

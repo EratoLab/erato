@@ -26,6 +26,8 @@ export interface StreamingState {
   createdAt: string | null; // Timestamp for message ordering
   /** Host preparation still running before the request is sent. */
   pendingLabel?: string | null;
+  /** The answer the user stopped on this device before the server heard it. */
+  stoppedLocallyMessageId?: string | null;
 }
 
 // Add user messages to the store
@@ -132,6 +134,16 @@ export const useMessagingStore = create<MessagingStore>()(
       ) =>
         state.userMessagesByKey[resolveStreamKeyFromState(state, streamKey)] ??
         EMPTY_MESSAGES;
+      const textSize = (content: ContentPart[]) =>
+        content.reduce(
+          (size, part) =>
+            size +
+            ("text" in part && typeof part.text === "string"
+              ? part.text.length
+              : 0),
+          0,
+        );
+
       const buildRenderableMessages = (
         state: MessagingStore,
         streamKey: string,
@@ -164,10 +176,20 @@ export const useMessagingStore = create<MessagingStore>()(
         // the completion refetch then holds the finished row — and not in
         // the window between the completion event and that refetch, where it
         // would show the message as it was before the turn.
+        //
+        // An answer stopped on this device keeps the text read so far until
+        // the server's copy has caught up: the refetch on reconnect can read
+        // the row before the server has saved the stopped answer.
+        const apiCopy = combinedMessages[currentStreaming.currentMessageId];
+        const apiCopyIsBehind =
+          currentStreaming.stoppedLocallyMessageId ===
+            currentStreaming.currentMessageId &&
+          textSize(apiCopy?.content ?? []) < textSize(currentStreaming.content);
         if (
-          combinedMessages[currentStreaming.currentMessageId] &&
+          apiCopy &&
           !currentStreaming.isStreaming &&
-          !currentStreaming.isFinalizing
+          !currentStreaming.isFinalizing &&
+          !apiCopyIsBehind
         ) {
           return combinedMessages;
         }

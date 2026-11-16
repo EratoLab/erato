@@ -32,6 +32,7 @@ import { MessageTextActionsToolbar } from "./MessageTextActionsToolbar";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { StandardMessageList } from "./StandardMessageList";
 import { VirtualizedMessageList } from "./VirtualizedMessageList";
+import { useKeepScrollPositionOnRebuild } from "./useKeepScrollPositionOnRebuild";
 import { ConversationMessagesProvider } from "../Message/ConversationMessages";
 
 import type { ChatMessageProps } from "../Chat/ChatMessage";
@@ -957,6 +958,17 @@ export const MessageList = memo<MessageListProps>(
 
     // Check if there are no messages to display
     const showEmptyState = messageOrder.length === 0 && !isPending;
+    const contentRef = useRef<HTMLDivElement>(null);
+    const rebuildSpacerRef = useRef<HTMLDivElement>(null);
+    useKeepScrollPositionOnRebuild({
+      containerRef,
+      contentRef,
+      spacerRef: rebuildSpacerRef,
+      messages,
+      messageOrder,
+      sessionId: currentSessionId,
+      contentShown: !(showEmptyState && emptyStateComponent),
+    });
 
     // Return the header component with load more button if needed
     const renderMessageListHeader = useMemo(() => {
@@ -1082,7 +1094,11 @@ export const MessageList = memo<MessageListProps>(
               {emptyStateComponent}
             </div>
           ) : (
-            <div className="mx-auto w-full" style={contentWidthStyle}>
+            <div
+              ref={contentRef}
+              className="mx-auto w-full"
+              style={contentWidthStyle}
+            >
               <ConversationMessagesProvider messages={messages}>
                 {shouldUseVirtualization ? (
                   <VirtualizedMessageList
@@ -1131,6 +1147,7 @@ export const MessageList = memo<MessageListProps>(
                   />
                 )}
               </ConversationMessagesProvider>
+              <div ref={rebuildSpacerRef} aria-hidden="true" />
             </div>
           )}
         </div>
