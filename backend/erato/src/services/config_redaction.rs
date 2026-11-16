@@ -14,8 +14,17 @@ pub const SERVER_ENCRYPTION_KEY_PATH: [TomlPathSegment<'static>; 2] = [
     TomlPathSegment::Key("encryption_key"),
 ];
 
-pub const RUNTIME_CONFIGURATION_REDACTION_PATHS: [&[TomlPathSegment<'static>]; 1] =
-    [&SERVER_ENCRYPTION_KEY_PATH];
+pub const MCP_EXCHANGE_SECRET_PATH: [TomlPathSegment<'static>; 6] = [
+    TomlPathSegment::Key("mcp_servers"),
+    TomlPathSegment::AnyKey,
+    TomlPathSegment::Key("authentication"),
+    TomlPathSegment::Key("forwarded"),
+    TomlPathSegment::Key("custom_token_exchange"),
+    TomlPathSegment::Key("client_secret"),
+];
+
+pub const RUNTIME_CONFIGURATION_REDACTION_PATHS: [&[TomlPathSegment<'static>]; 2] =
+    [&SERVER_ENCRYPTION_KEY_PATH, &MCP_EXCHANGE_SECRET_PATH];
 
 pub fn redact_toml_keys(source: &str, paths: &[&[TomlPathSegment<'_>]]) -> Result<String, Report> {
     let mut document = source
@@ -158,6 +167,15 @@ mod tests {
         );
         assert!(!redacted.contains("super-secret"));
         assert!(redacted.contains(REDACTION_MARKER));
+    }
+
+    #[test]
+    fn redacts_custom_token_exchange_secrets_for_each_target() {
+        let source = "[mcp_servers.normal.authentication.forwarded.custom_token_exchange]\nclient_secret = 'normal-secret'\n[mcp_servers.admin.authentication.forwarded.custom_token_exchange]\nclient_secret = 'admin-secret'\n";
+        let redacted = redact_toml_keys(source, &RUNTIME_CONFIGURATION_REDACTION_PATHS).unwrap();
+        assert!(!redacted.contains("normal-secret"));
+        assert!(!redacted.contains("admin-secret"));
+        assert_eq!(redacted.matches(REDACTION_MARKER).count(), 2);
     }
 
     #[test]

@@ -1,0 +1,726 @@
+import { i18n } from "@lingui/core";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  installFakePowerPoint,
+  removeFakePowerPoint,
+  requirementsUpTo,
+} from "../../../test/mocks/powerpoint/fakePowerPoint";
+import { powerpointInclusionStore } from "../../hooks/powerpointInclusionStore";
+import { describeSlidePictures } from "../../hooks/usePowerPointSlidePictures";
+import { powerpointReadSupport } from "../../utils/powerpointReadSupport";
+import { PowerPointChatInput } from "../PowerPointChatInput";
+
+import type {
+  AddinChatInputRenderProps,
+  AddinSendPreparation,
+} from "../../../core/AddinChatCore";
+import type { AddinChatInputCoreProps } from "../../../core/AddinChatInputCore";
+import type { FakeDeck } from "../../../test/mocks/powerpoint/fakePowerPoint";
+import type * as EratoLibrary from "@erato/frontend/library";
+import type { ReactNode } from "react";
+
+type ComposerContextItem = EratoLibrary.ComposerContextItem;
+type FileCapability = EratoLibrary.FileCapability;
+type FileUploadItem = EratoLibrary.FileUploadItem;
+
+const VISION: FileCapability[] = [
+  {
+    id: "image",
+    extensions: ["png", "jpg"],
+    mime_types: ["image/*"],
+    operations: ["analyze_image"],
+    upload_allowed: true,
+  },
+];
+
+const mocks = vi.hoisted(() => ({
+  composer: null as AddinChatInputCoreProps | null,
+  available: new Map<string, () => boolean>(),
+  facets: [
+    {
+      id: "powerpoint_presentation",
+      allowed_args: ["presentation_name", "read_tier", "selection_summary"],
+    },
+  ] as { id: string; allowed_args: string[] }[],
+  capabilities: undefined as FileCapability[] | undefined,
+  /** Per model id; a model missing here gets `capabilities`. */
+  capabilitiesByModel: new Map<string, FileCapability[]>(),
+  uploadStore: { isUploading: false, error: null as Error | null },
+  capabilityQueries: [] as { modelId?: string; enabled?: boolean }[],
+  addUploadedFiles: (_files: FileUploadItem[]) => {},
+  menu: { uploadDisabled: false, onClose: () => {} },
+  uploadEnabled: true,
+}));
+
+vi.mock("../../../core/AddinChatInputCore", async () => {
+  const { PowerPointChatAddMenuExtraContent } = await import(
+    "../PowerPointChatAddMenuExtraContent"
+  );
+  return {
+    AddinChatInputCore: (props: AddinChatInputCoreProps) => {
+      mocks.composer = props;
+      return (
+        <PowerPointChatAddMenuExtraContent
+          onClose={mocks.menu.onClose}
+          uploadDisabled={mocks.menu.uploadDisabled}
+        />
+      );
+    },
+  };
+});
+
+vi.mock("@erato/frontend/library", async () => {
+  const mock = await import("../../../test/helpers/eratoLibraryMock");
+  const actual = await vi.importActual<typeof EratoLibrary>(
+    "@erato/frontend/library",
+  );
+  const uploadState = () => mocks.uploadStore;
+  return mock.createEratoLibraryMock({
+    useFacets: () => ({ data: { action_facets: mocks.facets } }),
+    registerClientToolExecutor: (
+      name: string,
+      _executor: unknown,
+      isAvailable: () => boolean,
+    ) => {
+      mocks.available.set(name, isAvailable);
+      return () => mocks.available.delete(name);
+    },
+    useFileCapabilities: (
+      variables: { queryParams?: { model_id?: string } },
+      options?: { enabled?: boolean },
+    ) => {
+      mocks.capabilityQueries.push({
+        modelId: variables.queryParams?.model_id,
+        enabled: options?.enabled,
+      });
+      const modelId = variables.queryParams?.model_id ?? "";
+      return {
+        data: options?.enabled
+          ? (mocks.capabilitiesByModel.get(modelId) ?? mocks.capabilities)
+          : undefined,
+      };
+    },
+    findCapabilityByExtension: actual.findCapabilityByExtension,
+    hasSupportedOperations: actual.hasSupportedOperations,
+    useFileUploadStore: Object.assign(
+      (selector?: (state: typeof mocks.uploadStore) => unknown) =>
+        selector ? selector(uploadState()) : uploadState(),
+      { getState: uploadState },
+    ),
+    useUploadFeature: () => ({
+      enabled: mocks.uploadEnabled,
+      maxSizeBytes: 20 * 1024 * 1024,
+      maxSizeFormatted: "20 MB",
+    }),
+    useChatInputControls: () => ({
+      addUploadedFiles: (files: FileUploadItem[]) =>
+        mocks.addUploadedFiles(files),
+      removeUploadedFiles: () => {},
+      focusInput: () => {},
+    }),
+    Row: ({
+      children,
+      onClick,
+      disabled,
+      "data-testid": testId,
+    }: {
+      children?: ReactNode;
+      onClick?: () => void;
+      disabled?: boolean;
+      "data-testid"?: string;
+    }) => (
+      <button
+        type="button"
+        data-testid={testId}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        {children}
+      </button>
+    ),
+  });
+});
+
+beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
+  installFakePowerPoint({
+    slides: [{ id: "256#", shapes: [] }],
+    selectedSlideIds: ["256#"],
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  removeFakePowerPoint();
+  powerpointInclusionStore.resetForTests();
+  mocks.composer = null;
+  mocks.available.clear();
+  mocks.capabilities = undefined;
+  mocks.capabilitiesByModel = new Map();
+  mocks.uploadStore = { isUploading: false, error: null };
+  mocks.capabilityQueries = [];
+  mocks.addUploadedFiles = () => {};
+  mocks.menu = { uploadDisabled: false, onClose: () => {} };
+  mocks.uploadEnabled = true;
+  mocks.facets = [
+    {
+      id: "powerpoint_presentation",
+      allowed_args: ["presentation_name", "read_tier", "selection_summary"],
+    },
+  ];
+});
+
+interface InputOptions {
+  uploadFiles?: AddinChatInputRenderProps["uploadFiles"];
+  maxFiles?: number;
+  modelId?: string;
+  chatId?: string | null;
+  /** The chat's composer lock: archived, or a delegated run still writing. */
+  disabled?: boolean;
+  onSlidePictureBusyChange?: (busy: boolean) => void;
+}
+
+function renderInput(set = "1.10", options: InputOptions = {}) {
+  const onSendMessage = vi.fn<AddinChatInputRenderProps["onSendMessage"]>();
+  const support = powerpointReadSupport(requirementsUpTo(set));
+  const element = ({
+    uploadFiles,
+    maxFiles = 5,
+    modelId = "vision-model",
+    chatId = null,
+    disabled = false,
+    onSlidePictureBusyChange,
+  }: InputOptions) => {
+    const props = {
+      chatId,
+      disabled,
+      onSendMessage,
+      uploadFiles,
+      maxFiles,
+      controlledSelectedModel: {
+        chat_provider_id: modelId,
+        model_display_name: modelId,
+      },
+    } as unknown as AddinChatInputRenderProps;
+    return (
+      <PowerPointChatInput
+        chatInputProps={props}
+        support={support}
+        onSlidePictureBusyChange={onSlidePictureBusyChange}
+      />
+    );
+  };
+  const view = render(element(options));
+  let current = options;
+  const update = (changes: InputOptions) => {
+    current = { ...current, ...changes };
+    view.rerender(element(current));
+  };
+  return { onSendMessage, update };
+}
+
+const chip = () => mocks.composer?.contextItems?.[0] as ComposerContextItem;
+const send = () =>
+  act(() => mocks.composer!.onSendMessage("Summarise slide 1"));
+
+describe("PowerPoint composer", () => {
+  it("includes the presentation by default and sends the facet with the selection", async () => {
+    const { onSendMessage } = renderInput();
+    expect(chip()).toMatchObject({ state: "included", label: "Presentation" });
+    send();
+    const prepare = onSendMessage.mock.calls[0][11] as AddinSendPreparation;
+    expect(prepare).toBeDefined();
+    const prepared = await prepare.run(new AbortController().signal);
+    expect(prepared).toEqual({
+      hostContextIdentity: null,
+      actionFacet: {
+        id: "powerpoint_presentation",
+        args: {
+          presentation_name: "Untitled presentation",
+          read_tier:
+            "full (PowerPointApi 1.10); slide reads also return speaker notes, chart data, SmartArt text and whether a slide is hidden from the presentation file",
+          selection_summary: "Selected slides: 1 (id 256#).",
+        },
+      },
+    });
+    expect(
+      [...mocks.available.values()].every((isAvailable) => isAvailable()),
+    ).toBe(true);
+  });
+
+  it("sends nothing of the presentation and withholds the tools once left out", () => {
+    const { onSendMessage } = renderInput();
+    act(() => chip().onRemove?.());
+    expect(chip().state).toBe("suggested");
+    send();
+    expect(onSendMessage.mock.calls[0][4]).toBeUndefined();
+    expect(onSendMessage.mock.calls[0][11]).toBeUndefined();
+    expect(
+      [...mocks.available.values()].some((isAvailable) => isAvailable()),
+    ).toBe(false);
+    act(() => chip().onRestore?.());
+    expect(chip().state).toBe("included");
+  });
+
+  it("keeps the tools listed for the turn when inclusion is turned off after the send", () => {
+    renderInput();
+    send();
+    act(() => chip().onRemove?.());
+    expect(
+      [...mocks.available.values()].every((isAvailable) => isAvailable()),
+    ).toBe(true);
+  });
+
+  it("shows no chip, lists no tools and reads nothing when the server offers no PowerPoint facet", () => {
+    mocks.facets = [];
+    const host = installFakePowerPoint({ slides: [] });
+    const { onSendMessage } = renderInput();
+    expect(mocks.composer?.contextItems).toEqual([]);
+    expect(
+      [...mocks.available.values()].some((isAvailable) => isAvailable()),
+    ).toBe(false);
+    send();
+    expect(onSendMessage.mock.calls[0][11]).toBeUndefined();
+    expect(host.runs).toBe(0);
+  });
+
+  it("describes a basic host's reads in the chip from the same switches", () => {
+    renderInput("1.9");
+    const detail = render(
+      <>{chip().detail?.render({ locked: false, runAction: () => {} })}</>,
+    );
+    expect(detail.container.textContent).toContain(
+      "text boxes and their positions only",
+    );
+  });
+
+  it("offers no selection read and no chip on a host that cannot read slides", () => {
+    renderInput("1.3");
+    expect(mocks.composer?.contextItems).toEqual([]);
+    expect(mocks.available.size).toBe(0);
+  });
+
+  it("registers no selection read on PowerPointApi 1.4", () => {
+    renderInput("1.4");
+    expect([...mocks.available.keys()]).toEqual([
+      "powerpoint_read_presentation",
+      "powerpoint_read_slide",
+    ]);
+  });
+});
+
+describe("slide picture", () => {
+  const SLIDES: FakeDeck = {
+    slides: ["256#", "257#", "258#", "259#", "260#"].map((id) => ({
+      id,
+      shapes: [],
+    })),
+    selectedSlideIds: ["257#"],
+  };
+  const uploadedFor = (files: File[]): FileUploadItem[] =>
+    files.map(
+      (file, i) =>
+        ({ id: `upload-${i}`, filename: file.name }) as FileUploadItem,
+    );
+  const row = () => screen.queryByTestId("powerpoint-add-menu-slide-picture");
+  const chipAction = () => chip().detail?.actions?.[0];
+  const offered = () => row() !== null && chipAction() !== undefined;
+
+  beforeEach(() => {
+    mocks.capabilities = VISION;
+    installFakePowerPoint(SLIDES);
+  });
+
+  it("is offered on a full host, with the facet, the presentation included and a model that sees images", () => {
+    renderInput();
+    expect(offered()).toBe(true);
+    expect(chipAction()?.label).toBe("Attach picture of selected slide");
+    expect(mocks.capabilityQueries.at(-1)).toEqual({
+      modelId: "vision-model",
+      enabled: true,
+    });
+  });
+
+  it("is not offered on the basic tier, without the facet, or with the presentation left out", () => {
+    renderInput("1.9");
+    expect(offered()).toBe(false);
+    expect(mocks.capabilityQueries.every((query) => !query.enabled)).toBe(true);
+    cleanup();
+
+    mocks.facets = [];
+    renderInput();
+    expect(row()).toBeNull();
+    expect(mocks.composer?.contextItems).toEqual([]);
+    cleanup();
+
+    mocks.facets = [
+      {
+        id: "powerpoint_presentation",
+        allowed_args: ["presentation_name", "read_tier", "selection_summary"],
+      },
+    ];
+    renderInput();
+    expect(offered()).toBe(true);
+    act(() => chip().onRemove?.());
+    expect(offered()).toBe(false);
+  });
+
+  it("is not offered where the composer takes no uploads", () => {
+    mocks.uploadEnabled = false;
+    renderInput();
+    expect(offered()).toBe(false);
+    expect(mocks.capabilityQueries.every((query) => !query.enabled)).toBe(true);
+  });
+
+  it("is not offered while the selected model cannot see images", () => {
+    mocks.capabilities = [{ ...VISION[0], operations: [] }];
+    renderInput("1.10", { modelId: "text-only" });
+    expect(offered()).toBe(false);
+    expect(mocks.capabilityQueries.at(-1)?.modelId).toBe("text-only");
+  });
+
+  it("renders the selected slide, uploads it through the composer and stages it, holding Send meanwhile", async () => {
+    let finishUpload: (items: FileUploadItem[]) => void = () => {};
+    const uploadFiles = vi.fn(
+      (_files: File[]) =>
+        new Promise<FileUploadItem[] | undefined>((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    const onClose = vi.fn();
+    mocks.menu.onClose = onClose;
+    renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    expect(onClose).toHaveBeenCalled();
+    expect(mocks.composer?.disabled).toBe(true);
+    expect(mocks.composer?.composerNotice).toMatchObject({
+      busy: true,
+      tone: "info",
+    });
+    await waitFor(() => expect(uploadFiles).toHaveBeenCalledTimes(1));
+    const [files] = uploadFiles.mock.calls[0];
+    expect(files.map((file) => [file.name, file.type])).toEqual([
+      ["slide-2.png", "image/png"],
+    ]);
+    expect(mocks.composer?.disabled).toBe(true);
+
+    await act(async () => finishUpload(uploadedFor(files)));
+    expect(staged).toEqual([[{ id: "upload-0", filename: "slide-2.png" }]]);
+    expect(mocks.composer?.disabled).toBe(false);
+    expect(mocks.composer?.composerNotice).toBeNull();
+    expect(
+      screen.getByTestId("powerpoint-composer-announcer").textContent,
+    ).toBe("Slide picture attached.");
+  });
+
+  it("attaches nothing and says so when PowerPoint cannot make the picture", async () => {
+    installFakePowerPoint({ ...SLIDES, pictureFails: true });
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    renderInput("1.10", { uploadFiles });
+
+    act(() => chipAction()?.onSelect());
+    await waitFor(() =>
+      expect(mocks.composer?.composerNotice?.tone).toBe("error"),
+    );
+    expect(mocks.composer?.composerNotice?.text).toBe(
+      "PowerPoint couldn't make the slide picture, so nothing was attached. Try again.",
+    );
+    expect(uploadFiles).not.toHaveBeenCalled();
+    expect(staged).toEqual([]);
+    expect(mocks.composer?.disabled).toBe(false);
+    act(() => mocks.composer?.composerNotice?.onDismiss?.());
+    expect(mocks.composer?.composerNotice).toBeNull();
+  });
+
+  it("attaches nothing and says so when the upload fails", async () => {
+    const uploadFiles = vi.fn(async () => undefined);
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    await waitFor(() =>
+      expect(mocks.composer?.composerNotice?.tone).toBe("error"),
+    );
+    expect(mocks.composer?.composerNotice?.text).toBe(
+      "The slide picture couldn't be uploaded, so it isn't attached.",
+    );
+    expect(staged).toEqual([]);
+    expect(mocks.composer?.disabled).toBe(false);
+  });
+
+  it("attaches the first three of several selected slides and names how many were left out", async () => {
+    installFakePowerPoint({
+      ...SLIDES,
+      selectedSlideIds: ["256#", "257#", "258#", "259#", "260#"],
+    });
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    await waitFor(() =>
+      expect(mocks.composer?.composerNotice?.busy).toBeFalsy(),
+    );
+    expect(uploadFiles.mock.calls[0][0].map((file) => file.name)).toEqual([
+      "slide-1.png",
+      "slide-2.png",
+      "slide-3.png",
+    ]);
+    expect(mocks.composer?.composerNotice).toMatchObject({
+      tone: "info",
+      text: "Attached the first 3 of 5 selected slides. To add the other 2, select them and add again.",
+    });
+  });
+
+  it("renders only as many slides as the message has room for, and none when it is full", async () => {
+    installFakePowerPoint({
+      ...SLIDES,
+      selectedSlideIds: ["256#", "257#", "258#"],
+    });
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    renderInput("1.10", { uploadFiles, maxFiles: 5 });
+    const four = Array.from(
+      { length: 4 },
+      (_, i) => ({ id: `f${i}`, filename: `f${i}.txt` }) as FileUploadItem,
+    );
+    act(() => mocks.composer?.onStagedFilesChange?.(four));
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(uploadFiles).toHaveBeenCalledTimes(1));
+    expect(uploadFiles.mock.calls[0][0]).toHaveLength(1);
+
+    act(() =>
+      mocks.composer?.onStagedFilesChange?.([
+        ...four,
+        { id: "f4", filename: "f4.txt" } as FileUploadItem,
+      ]),
+    );
+    await waitFor(() => expect(mocks.composer?.disabled).toBe(false));
+    act(() => chipAction()?.onSelect());
+    expect(mocks.composer?.composerNotice?.text).toBe(
+      "This message has as many files as it can take. Remove one to add a slide picture.",
+    );
+    expect(uploadFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the model which slide each attached picture shows, read at send time from what is sent", async () => {
+    const deck: FakeDeck = { ...SLIDES, selectedSlideIds: ["257#"] };
+    installFakePowerPoint(deck);
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    const { onSendMessage } = renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(staged).toHaveLength(1));
+    // The user clicks another slide before sending.
+    deck.selectedSlideIds = ["260#"];
+    const summaryOfSend = async (call: number) => {
+      const prepare = onSendMessage.mock.calls[
+        call
+      ][11] as AddinSendPreparation;
+      const prepared = await prepare.run(new AbortController().signal);
+      return prepared?.actionFacet?.args?.selection_summary;
+    };
+
+    act(() =>
+      mocks.composer!.onSendMessage("What does this slide show?", [
+        "other-file",
+        "upload-0",
+      ]),
+    );
+    expect(await summaryOfSend(0)).toBe(
+      "Selected slides: 5 (id 260#). The attached slide picture shows slide 2 (id 257#) as it looked when attached.",
+    );
+
+    // Removed from the composer before the send, it is not among the sent files.
+    act(() => mocks.composer!.onSendMessage("And now?", ["other-file"]));
+    expect(onSendMessage.mock.calls[1][1]).toEqual(["other-file"]);
+    expect(await summaryOfSend(1)).toBe("Selected slides: 5 (id 260#).");
+  });
+
+  it("names several pictures in attachment order", () => {
+    expect(
+      describeSlidePictures([
+        { slideId: "259#", slideNumber: 4 },
+        { slideId: "256#", slideNumber: 1 },
+      ]),
+    ).toBe(
+      "The attached slide pictures show, in attachment order, slide 4 (id 259#), slide 1 (id 256#), each as it looked when attached.",
+    );
+    expect(describeSlidePictures([])).toBeNull();
+  });
+
+  it("offers no chip action and no row while the chat's composer is locked, and a stale action does nothing", async () => {
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    const { update } = renderInput("1.10", { uploadFiles, disabled: true });
+    expect(chip().locked).toBe(true);
+    expect(chipAction()).toBeUndefined();
+    expect(row()).toBeDisabled();
+
+    update({ disabled: false });
+    const action = chipAction();
+    expect(action).toBeDefined();
+    update({ disabled: true });
+    act(() => action?.onSelect());
+    await act(async () => {});
+    expect(uploadFiles).not.toHaveBeenCalled();
+    expect(mocks.composer?.composerNotice).toBeNull();
+  });
+
+  it("offers nothing while another upload is still running", () => {
+    mocks.uploadStore.isUploading = true;
+    renderInput();
+    expect(chipAction()).toBeUndefined();
+    expect(row()).toBeDisabled();
+  });
+
+  it("warns while a staged picture goes to a model that cannot see it", async () => {
+    mocks.capabilitiesByModel.set("text-only", [
+      { ...VISION[0], operations: [] },
+    ]);
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    const { update } = renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(staged).toHaveLength(1));
+    act(() => mocks.composer?.onStagedFilesChange?.(staged[0]));
+    expect(mocks.composer?.composerNotice).toBeNull();
+
+    update({ modelId: "text-only" });
+    expect(offered()).toBe(false);
+    expect(mocks.composer?.composerNotice).toMatchObject({
+      tone: "warning",
+      text: "The selected model can't see pictures, so it won't read the attached slide picture. Pick another model or remove the picture.",
+    });
+
+    update({ modelId: "vision-model" });
+    expect(mocks.composer?.composerNotice).toBeNull();
+    update({ modelId: "text-only" });
+    expect(mocks.composer?.composerNotice?.tone).toBe("warning");
+    act(() => mocks.composer?.onStagedFilesChange?.([]));
+    expect(mocks.composer?.composerNotice).toBeNull();
+  });
+
+  it("counts a file dropped during the render against the room, and holds the pane's drop target meanwhile", async () => {
+    const host = installFakePowerPoint({
+      ...SLIDES,
+      selectedSlideIds: ["256#", "257#", "258#"],
+      pictureHangs: true,
+    });
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    const busy: boolean[] = [];
+    renderInput("1.10", {
+      uploadFiles,
+      maxFiles: 5,
+      onSlidePictureBusyChange: (value) => busy.push(value),
+    });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(busy).toEqual([false, true]));
+    const dropped = Array.from(
+      { length: 4 },
+      (_, i) => ({ id: `drop-${i}`, filename: `d${i}.txt` }) as FileUploadItem,
+    );
+    act(() => mocks.composer?.onStagedFilesChange?.(dropped));
+    await act(async () => host.releaseHang());
+
+    await waitFor(() => expect(staged).toHaveLength(1));
+    expect(uploadFiles.mock.calls[0][0].map((file) => file.name)).toEqual([
+      "slide-1.png",
+    ]);
+    expect(staged[0].map((file) => file.filename)).toEqual(["slide-1.png"]);
+    expect(
+      screen.getByTestId("powerpoint-composer-announcer").textContent,
+    ).toBe("Slide picture attached.");
+    expect(mocks.composer?.composerNotice?.text).toBe(
+      "Attached the first 1 of 3 selected slides. To add the other 2, select them and add again.",
+    );
+    await waitFor(() => expect(busy.at(-1)).toBe(false));
+  });
+
+  it("uploads nothing when a drop during the render filled the message", async () => {
+    const host = installFakePowerPoint({ ...SLIDES, pictureHangs: true });
+    const uploadFiles = vi.fn(async (files: File[]) => uploadedFor(files));
+    renderInput("1.10", { uploadFiles, maxFiles: 2 });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(host.pictureRequests).toHaveLength(1));
+    act(() =>
+      mocks.composer?.onStagedFilesChange?.([
+        { id: "a", filename: "a.txt" } as FileUploadItem,
+        { id: "b", filename: "b.txt" } as FileUploadItem,
+      ]),
+    );
+    await act(async () => host.releaseHang());
+    await waitFor(() => expect(mocks.composer?.disabled).toBe(false));
+    expect(uploadFiles).not.toHaveBeenCalled();
+    expect(mocks.composer?.composerNotice?.text).toBe(
+      "This message has as many files as it can take. Remove one to add a slide picture.",
+    );
+  });
+
+  it("stages nothing in another chat and says so when the chat changes during the upload", async () => {
+    let finishUpload: (items: FileUploadItem[]) => void = () => {};
+    const uploadFiles = vi.fn(
+      (_files: File[]) =>
+        new Promise<FileUploadItem[] | undefined>((resolve) => {
+          finishUpload = resolve;
+        }),
+    );
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    const { update } = renderInput("1.10", { uploadFiles, chatId: "chat-a" });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(uploadFiles).toHaveBeenCalledTimes(1));
+    update({ chatId: "chat-b" });
+    await act(async () =>
+      finishUpload(uploadedFor(uploadFiles.mock.calls[0][0])),
+    );
+
+    expect(staged).toEqual([]);
+    expect(mocks.composer?.composerNotice).toMatchObject({
+      tone: "error",
+      text: "The slide picture finished after you switched chats, so it isn't attached here. Add it again if you need it.",
+    });
+    expect(
+      screen.getByTestId("powerpoint-composer-announcer").textContent,
+    ).toBe("");
+  });
+
+  it("leaves a failed upload to the composer's own error, once", async () => {
+    const uploadFiles = vi.fn(async () => {
+      mocks.uploadStore.error = new Error("The file is too large.");
+      return undefined;
+    });
+    const staged: FileUploadItem[][] = [];
+    mocks.addUploadedFiles = (files) => staged.push(files);
+    renderInput("1.10", { uploadFiles });
+
+    fireEvent.click(row()!);
+    await waitFor(() => expect(mocks.composer?.disabled).toBe(false));
+    expect(uploadFiles).toHaveBeenCalledTimes(1);
+    expect(staged).toEqual([]);
+    expect(mocks.composer?.composerNotice).toBeNull();
+  });
+});

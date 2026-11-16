@@ -104,6 +104,9 @@
     "@lingui/detect-locale": "5.9.4",
     "@lingui/format-po": "5.9.4",
     "@lingui/vite-plugin": "5.9.4",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/core": "2.4.0",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
     "@react-hook/resize-observer": "^2.0.2",
     "@ricky0123/vad-web": "0.0.30",
     "@types/react-syntax-highlighter": "^15.5.13",
@@ -137,6 +140,7 @@
     "simple-icons": "^16.13.0",
     "sse.js": "^2.5.0",
     "use-debounce": "^10.0.4",
+    "zod": "4.4.3",
     "zustand": "^5.0.3"
   },
   "devDependencies": {

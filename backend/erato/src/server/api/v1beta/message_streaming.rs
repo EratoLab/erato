@@ -28,7 +28,7 @@ use crate::server::api::v1beta::file_resolution::resolve_directive_markers_in_ge
 use crate::server::api::v1beta::me_profile_middleware::MeProfile;
 use crate::server::api::v1beta::message_streaming_file_extraction::{
     mcp_tool_processing_error_output, parse_content_filter_error_from_mcp_tool_result,
-    post_process_mcp_tool_result,
+    post_process_mcp_tool_result, structured_content_for_view,
 };
 use crate::services::background_tasks::{
     BackgroundTaskManager, ClientStreamGuard, LeaseHeld, StreamingEvent, StreamingTask, Takeover,
@@ -45,6 +45,7 @@ use crate::services::genai_langfuse::{
     langfuse_model_tag, langfuse_tool_called_tag,
 };
 use crate::services::langfuse::TracingLangfuseClient;
+use crate::services::mcp_apps::view_uri;
 use crate::services::mcp_call_error::failed_call_row;
 use crate::services::mcp_manager::{McpRequestAuthContext, convert_mcp_tools_to_genai_tools};
 use crate::services::mcp_session_manager::is_tool_allowed_to_wait;
@@ -4911,6 +4912,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         user_id: me_profile_input.user_id,
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
+        ..Default::default()
     };
     let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(chat)?;
     let GenerationMcpToolSet {
@@ -6805,6 +6807,7 @@ mod generation_event_wire_format_tests {
                                     title: None,
                                 }],
                                 failure: None,
+                                view: None,
                             }
                         }),
                         allowed_by: with_progress.then_some(ToolAllowedBy::Policy),
@@ -9808,6 +9811,8 @@ async fn stream_generate_chat_completion<'a>(
                 continue;
             }
             let output_schema = managed_tool_call.tool.output_schema.clone();
+            let app_view_server_id = managed_tool_call.server_id.clone();
+            let app_view_uri = view_uri(&managed_tool_call.tool).map(str::to_owned);
             let server_url = mcp
                 .config
                 .mcp_servers
@@ -10102,11 +10107,26 @@ async fn stream_generate_chat_completion<'a>(
                     let tool_response = post_processed.tool_response;
                     let output_value = post_processed.output_value;
                     let file_content_parts = post_processed.file_content_parts;
-                    let result_details = post_processed.result_details;
                     // The server's own verdict. A run it flagged with `isError`
                     // settles as an error, and its payload still goes back to the
                     // model for recovery.
                     let tool_failed = tool_call_result.is_error == Some(true);
+                    // Only the web app reads the view; replay drops the details.
+                    let result_details = mcp
+                        .servers
+                        .with_app_view(
+                            chat_id,
+                            &app_view_server_id,
+                            app_view_uri.as_deref().filter(|_| !tool_failed),
+                            &mcp_auth_context,
+                            post_processed.result_details,
+                            structured_content_for_view(
+                                &tool_call_result,
+                                &file_content_parts,
+                                output_value.as_ref(),
+                            ),
+                        )
+                        .await;
 
                     persist_otel_tool_call(
                         tracing_client.as_ref(),
@@ -11521,7 +11541,13 @@ async fn stream_generate_chat_completion<'a>(
                 }
             }
         }
-        if let Some(stream_end) = stream_end {
+        if let Some(mut stream_end) = stream_end {
+            if let Some(content) = stream_end.captured_content.as_mut() {
+                crate::services::client_tools::decode_stringified_submission_arguments(
+                    content,
+                    &offered_client_tools,
+                );
+            }
             if let Some(elapsed) = first_response_elapsed {
                 report_chat_provider_time_to_first_token(chat_provider_metric_label, elapsed);
             }
@@ -18356,6 +18382,7 @@ async fn run_generation_after_user_message_memory_inner(
         user_id: Uuid::parse_str(&me_user.id).ok(),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let generation_task = stream_generate_chat_completion(
         temp_tx2.clone(),
@@ -19109,6 +19136,7 @@ pub(crate) async fn start_regeneration(
                 user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
+                ..Default::default()
             };
             let generation_result = stream_generate_chat_completion(
                 tx.clone(),
@@ -19742,6 +19770,7 @@ pub(crate) async fn start_edit(
                 user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
+                ..Default::default()
             };
             let generation_result = stream_generate_chat_completion(
                 tx.clone(),
@@ -23072,6 +23101,7 @@ pub(crate) async fn run_continuation(
         user_id: Some(user_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     // Rebuild the tool set the parked turn was offered instead of trusting a
     // fresh, unfiltered discovery: the persisted parameters carry the facet
@@ -23301,6 +23331,7 @@ pub(crate) async fn run_continuation(
                 thought_signatures: None,
             };
             let output_schema = managed_tool.tool.output_schema.clone();
+            let app_view_uri = view_uri(&managed_tool.tool).map(str::to_owned);
             let started_at = now_timestamp();
             let (progress_tx, progress_rx) = tokio::sync::mpsc::unbounded_channel();
             let dispatched_call = mcp.servers.call_tool_with_progress(
@@ -23380,12 +23411,28 @@ pub(crate) async fn run_continuation(
                                 // Like the normal path: a run the server flagged with
                                 // `isError` settles as an error, and its payload still
                                 // goes back to the model for recovery.
-                                let status = if result.is_error == Some(true) {
+                                let failed = result.is_error == Some(true);
+                                let status = if failed {
                                     MessageToolCallStatus::Error
                                 } else {
                                     MessageToolCallStatus::Success
                                 };
-                                (status, processed.output_value, processed.result_details)
+                                let result_details = mcp
+                                    .servers
+                                    .with_app_view(
+                                        chat.id,
+                                        &server_id,
+                                        app_view_uri.as_deref().filter(|_| !failed),
+                                        &mcp_auth_context,
+                                        processed.result_details,
+                                        structured_content_for_view(
+                                            &result,
+                                            &file_content_parts,
+                                            processed.output_value.as_ref(),
+                                        ),
+                                    )
+                                    .await;
+                                (status, processed.output_value, result_details)
                             }
                             Err(error) => (
                                 MessageToolCallStatus::Error,
@@ -24172,6 +24219,7 @@ async fn resume_parked_generation(
         user_id: Some(user_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let mut effective_selected_facet_ids: Vec<String> = generation_parameters
         .selected_facets
@@ -24994,6 +25042,7 @@ pub(crate) async fn run_client_operation_continuation(
         user_id: Some(account_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let tools = resolve_generation_mcp_tools(
         app_state,

@@ -540,6 +540,7 @@ export const ChatInput = ({
     enabled: audioConversationalEnabled,
     speechEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
+    endOfTurnSilenceMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   useEffect(() => {
@@ -775,6 +776,7 @@ export const ChatInput = ({
     onTranscriptChunk: appendDictationTranscript,
     vadAutoStopEnabled: audioConversationalEnabled && isAudioMode,
     onVadAutoStop: handleConversationVadAutoStop,
+    endOfTurnSilenceMs,
   });
 
   const ownsAudio =

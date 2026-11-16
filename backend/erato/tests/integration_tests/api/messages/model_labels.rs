@@ -164,6 +164,7 @@ async fn update_gizmo(app_state: &erato::state::AppState) -> rmcp::model::Tool {
                 user_id: None,
                 oidc_token: None,
                 access_token: None,
+                ..Default::default()
             },
         )
         .await

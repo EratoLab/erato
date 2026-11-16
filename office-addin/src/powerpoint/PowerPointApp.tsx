@@ -1,5 +1,7 @@
 import { createBrowserClientInfo } from "@erato/frontend/library";
 
+import { PowerPointAddinChatHost } from "./PowerPointAddinChatHost";
+import { installPowerPointComponentRegistrations } from "./installPowerPointComponentRegistrations";
 import { PowerPointAddinSessionController } from "./powerpointSession";
 import { NeutralAddinChatPage } from "../core/NeutralAddinChatPage";
 import { AuthGate, SharedAddinShell } from "../core/SharedAddinShell";
@@ -7,6 +9,8 @@ import { OfficeDocumentAuthProvider } from "../providers/OfficeDocumentAuthProvi
 import { OfficeDocumentFeatureConfig } from "../providers/OfficeDocumentFeatureConfig";
 import { OfficeProvider } from "../providers/OfficeProvider";
 import { OfficeThemeProvider } from "../providers/OfficeThemeProvider";
+
+installPowerPointComponentRegistrations();
 
 const POWERPOINT_SIDECAR_CLIENT_INFO = createBrowserClientInfo({
   name: "erato-office-addin",
@@ -26,6 +30,7 @@ export default function PowerPointApp() {
                   <NeutralAddinChatPage
                     platform="powerpoint"
                     SessionController={PowerPointAddinSessionController}
+                    Host={PowerPointAddinChatHost}
                   />
                 </div>
               </AuthGate>

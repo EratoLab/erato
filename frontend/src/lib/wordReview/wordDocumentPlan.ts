@@ -180,6 +180,51 @@ const refs = (v: unknown): v is string[] =>
   v.length > 0 &&
   v.length <= MAX_DOCUMENT_BLOCKS &&
   v.every(id);
+
+/**
+ * Gives each new block without an id one (ERMAIN-1194). Ids only let other
+ * parts of a plan refer to a block, so an omitted id is a slip, not a question.
+ * Positional and skipping every string the plan already holds, so each parse of
+ * the same arguments assigns the same ids: review restore and apply re-parse
+ * the stored arguments.
+ */
+function assignMissingBlockIds(plan: Record<string, unknown>) {
+  const taken = new Set<string>();
+  const collect = (v: unknown): void => {
+    if (typeof v === "string") taken.add(v);
+    else if (Array.isArray(v)) v.forEach(collect);
+    else if (object(v)) Object.values(v).forEach(collect);
+  };
+  collect(plan);
+  let sequence = 0;
+  const nextId = () => {
+    let candidate: string;
+    do candidate = `new_block_${++sequence}`;
+    while (taken.has(candidate));
+    return candidate;
+  };
+  const visit = (blocks: unknown, depth: number): void => {
+    if (!Array.isArray(blocks) || depth > 12) return;
+    for (const block of blocks) {
+      if (!object(block)) continue;
+      if (block.id === undefined) block.id = nextId();
+      if (Array.isArray(block.rows))
+        for (const row of block.rows)
+          if (object(row) && Array.isArray(row.cells))
+            for (const cell of row.cells)
+              if (object(cell)) visit(cell.blocks, depth + 1);
+      if (object(block.bookmark)) visit(block.bookmark.children, depth + 1);
+      if (object(block.control)) visit(block.control.children, depth + 1);
+      if (Array.isArray(block.edits))
+        for (const edit of block.edits)
+          if (object(edit)) visit(edit.children, depth + 1);
+    }
+  };
+  for (const entry of plan.entries as unknown[])
+    if (object(entry)) visit(entry.blocks, 0);
+  if (Array.isArray(plan.stories))
+    for (const story of plan.stories) if (object(story)) visit(story.blocks, 0);
+}
 export function parseWordDocumentPlan(
   content: string,
   issues?: WordPlanDiagnostics,
@@ -220,6 +265,7 @@ export function parseWordDocumentPlan(
         "plan-envelope",
         "Expected version 1, snapshot, readToken, scope, entries and optional deleted/stories/sections. Unknown properties are not supported.",
       );
+    assignMissingBlockIds(v);
     const comment = Array.isArray(v.stories)
       ? v.stories.findIndex(
           (story) => object(story) && story.type === "comment",
@@ -241,23 +287,17 @@ export function parseWordDocumentPlan(
         "Stories and sections require scope=document and a full-document capture.",
       );
     if (v.stories !== undefined) {
-      const stories = parseWordStoryChanges(v.stories, parseWordBlock);
-      if (!stories)
-        return fail(
-          "/stories",
-          "story-shape",
-          "Invalid story changes or nested blocks; use the story contract returned by the read tool.",
-        );
+      const stories = parseWordStoryChanges(
+        v.stories,
+        (block, path) => parseWordBlock(block, 0, issues, path),
+        fail,
+      );
+      if (!stories) return null;
       v.stories = stories;
     }
     if (v.sections !== undefined) {
-      const sections = parseWordSections(v.sections);
-      if (!sections)
-        return fail(
-          "/sections",
-          "section-shape",
-          "Invalid section list; each non-final section requires after and the final section omits it.",
-        );
+      const sections = parseWordSections(v.sections, fail);
+      if (!sections) return null;
       v.sections = sections;
     }
     for (const [index, e] of v.entries.entries()) {
@@ -843,7 +883,7 @@ export function validateWordDocumentPlan(
           "invalid",
           `${path}/anchor/block`,
           "anchor-reference",
-          "Anchor block must identify an output body block or kept body source.",
+          `Anchor block ${JSON.stringify(story.anchor.block.slice(0, 100))} is neither the id of a body block in this plan nor a kept body source. Give the anchored block an id and use that id here.`,
         );
       const { start, end } = story.anchor;
       const offset = start ?? end;
@@ -889,13 +929,13 @@ export function validateWordDocumentPlan(
   }
 
   if (plan.sections) {
-    if (!parseWordSections(plan.sections))
-      return fail(
-        "invalid",
-        "/sections",
-        "section-shape",
-        "Invalid complete section list.",
-      );
+    if (
+      !parseWordSections(plan.sections, (path, code, message) => {
+        reject(path, code, message);
+        return null;
+      })
+    )
+      return "invalid";
     let previous = -1;
     const oddEven = new Set<boolean>();
     for (const [index, section] of plan.sections.entries()) {
@@ -912,7 +952,14 @@ export function validateWordDocumentPlan(
         );
       if (section.after) {
         const position = bodyOrder.get(section.after);
-        if (position === undefined || position <= previous)
+        if (position === undefined)
+          return fail(
+            "section-order",
+            `${path}/after`,
+            "section-order",
+            `Section boundary ${JSON.stringify(section.after.slice(0, 100))} is neither the id of a top-level body block in this plan nor a kept body source. Give that block an id and use that id here.`,
+          );
+        if (position <= previous)
           return fail(
             "section-order",
             `${path}/after`,
@@ -952,13 +999,16 @@ export function validateWordDocumentPlan(
         ? entry.source.filter((ref) => sources.get(ref)?.sectionBoundary)
         : [],
     );
-    if (JSON.stringify(sections) !== JSON.stringify(outputSections))
+    const missing = sections.find((ref, i) => outputSections[i] !== ref);
+    if (missing) {
+      const section = snapshot.sections?.find((s) => s.afterBlock === missing);
       return fail(
         "section-order",
-        "/entries",
+        consumed.get(missing) ?? "/entries",
         "section-order",
-        "Without an explicit sections list, all existing section boundaries must be kept in their original order.",
+        `Block ${missing} ends ${section ? `section ${section.id}` : "a section"}. Without an explicit sections list, all existing section boundaries must be kept in their original order.`,
       );
+    }
   }
   return null;
 }

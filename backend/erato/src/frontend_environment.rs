@@ -92,6 +92,8 @@ const FRONTEND_ENV_KEY_AUDIO_DICTATION_MAX_RECORDING_DURATION_SECONDS: &str =
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_ENABLED: &str = "AUDIO_CONVERSATIONAL_ENABLED";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS: &str =
     "AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS: &str =
+    "AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
@@ -637,6 +639,10 @@ fn build_frontend_environment(
                 .max_recording_duration_seconds
                 .into(),
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS.to_string(),
+        Value::Number(config.audio_conversational.end_of_turn_silence_ms.into()),
     );
     env.additional_environment.insert(
         "SPEECH_ENABLED".to_string(),
@@ -1389,6 +1395,25 @@ mod tests {
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_SCHEDULED_ENABLED),
                 Some(&Value::Bool(enabled))
+            );
+        }
+    }
+
+    #[test]
+    fn end_of_turn_silence_reaches_web_and_office_addin() {
+        let mut config = AppConfig::default();
+        for (silence_ms, kind) in [
+            (1800, FrontendKind::Web),
+            (1200, FrontendKind::Web),
+            (1200, FrontendKind::OfficeAddin),
+        ] {
+            config.audio_conversational.end_of_turn_silence_ms = silence_ms;
+            let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS),
+                Some(&Value::Number(silence_ms.into()))
             );
         }
     }

@@ -1391,6 +1391,146 @@ msgid "officeAddin.pinHint.title"
 msgstr "Anheften, um deinen E-Mails zu folgen"
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.attachSlidePicture"
+msgstr "Bild der ausgewählten Folie anhängen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.exclude"
+msgstr "Diese Präsentation nicht einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.include"
+msgstr "Diese Präsentation einbeziehen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.onDemand"
+msgstr "Wird bei Bedarf gelesen"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.spokenLabel"
+msgstr "Präsentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basic"
+msgstr "Mit dieser PowerPoint-Version kann Erato nur Textfelder und ihre Positionen lesen. Titel, Tabellen und Formen in Gruppen bleiben ungelesen."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "Erato liest Text, Tabellen, Formen in Gruppen, Notizen, Diagrammdaten und SmartArt-Text. Diese PowerPoint-Version zeigt ihm nicht, welche Form der Titel ist und welche Aufzählungsebenen es gibt."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.full"
+msgstr "Erato liest Folientitel, Text mit Aufzählungsebenen, Tabellen, Formen in Gruppen und Alternativtext."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "Erato liest Folientitel, Text mit Aufzählungsebenen, Tabellen, Formen in Gruppen, Alternativtext, Notizen, Diagrammdaten und SmartArt-Text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.never"
+msgstr "Notizen, Kommentare, Diagrammdaten und SmartArt-Text können nicht gelesen werden."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Kommentare und Animationen können nicht gelesen werden."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.off"
+msgstr "Nicht einbezogen: Erato liest diese Präsentation in diesem Chat nicht."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemand"
+msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht, und sieht, welche Folien und Formen Sie ausgewählt haben."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato liest Folien einzeln und nur, wenn Ihre Anfrage sie braucht. Diese PowerPoint-Version teilt Erato nicht mit, was Sie ausgewählt haben."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.heading"
+msgstr "Präsentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePicture"
+msgstr "Bild der ausgewählten Folie"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
+msgstr "Damit Erato Layout, Diagramme und Bilder sieht"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.attached"
+msgstr "{attachedCount, plural, one {Folienbild angehängt.} other {# Folienbilder angehängt.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {Das Folienbild war erst fertig, nachdem Sie den Chat gewechselt hatten, daher ist es hier nicht angehängt. Fügen Sie es bei Bedarf erneut hinzu.} other {Die Folienbilder waren erst fertig, nachdem Sie den Chat gewechselt hatten, daher sind sie hier nicht angehängt. Fügen Sie sie bei Bedarf erneut hinzu.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.failed"
+msgstr "PowerPoint konnte das Folienbild nicht erstellen, daher wurde nichts angehängt. Versuchen Sie es noch einmal."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.leftOut"
+msgstr "{leftOut, plural, one {Die ersten {attachedCount} von {selectedCount} ausgewählten Folien sind angehängt. Um die letzte hinzuzufügen, wählen Sie sie aus und fügen Sie sie erneut hinzu.} other {Die ersten {attachedCount} von {selectedCount} ausgewählten Folien sind angehängt. Um die übrigen # hinzuzufügen, wählen Sie sie aus und fügen Sie sie erneut hinzu.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {Das ausgewählte Modell kann keine Bilder sehen und liest das angehängte Folienbild daher nicht. Wählen Sie ein anderes Modell oder entfernen Sie das Bild.} other {Das ausgewählte Modell kann keine Bilder sehen und liest die # angehängten Folienbilder daher nicht. Wählen Sie ein anderes Modell oder entfernen Sie die Bilder.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.noRoom"
+msgstr "Diese Nachricht hat so viele Dateien, wie sie aufnehmen kann. Entfernen Sie eine, um ein Folienbild hinzuzufügen."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.nothingSelected"
+msgstr "Wählen Sie zuerst in PowerPoint eine Folie aus und fügen Sie dann ihr Bild hinzu."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.rendering"
+msgstr "Bild der ausgewählten Folie wird erstellt…"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.timeout"
+msgstr "PowerPoint hat für das Folienbild zu lange gebraucht, daher wurde nichts angehängt. Versuchen Sie es noch einmal."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadFailed"
+msgstr "{total, plural, one {Das Folienbild konnte nicht hochgeladen werden und ist nicht angehängt.} other {Die Folienbilder konnten nicht hochgeladen werden; keines ist angehängt.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
+msgstr "{missing} von {total} Folienbildern konnten nicht hochgeladen werden. Die anderen sind angehängt."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "„{excerpt}“"

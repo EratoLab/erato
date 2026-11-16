@@ -2903,6 +2903,63 @@
         ]
       }
     },
+    "/api/v1beta/me/mcp_servers/{server_id}/app_view": {
+      "get": {
+        "tags": [
+          "mcp_servers"
+        ],
+        "operationId": "get_mcp_server_app_view",
+        "parameters": [
+          {
+            "name": "server_id",
+            "in": "path",
+            "description": "Configured MCP server ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "uri",
+            "in": "query",
+            "description": "The view's ui:// URI, as a tool call's result_details.view names it",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpAppViewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          },
+          "403": {
+            "description": "The user is not authorized to access the MCP server"
+          },
+          "404": {
+            "description": "The server is not configured or does not enable MCP Apps"
+          },
+          "502": {
+            "description": "No tool of the server declares the view, or the view could not be read or was refused"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/mcp_servers/{server_id}/oauth": {
       "delete": {
         "tags": [
@@ -10127,6 +10184,33 @@
           }
         }
       },
+      "McpAppViewResponse": {
+        "type": "object",
+        "description": "A tool's interactive view (MCP Apps), for the web app to show in a\nsandboxed frame loaded from `sandbox_origin`, with the tool call's\n`input` and `output`.",
+        "required": [
+          "uri",
+          "html",
+          "sandbox_origin"
+        ],
+        "properties": {
+          "html": {
+            "type": "string",
+            "description": "The view document (`text/html;profile=mcp-app`), at most 8 MiB with\n`ui`. Only ever shown inside the frame on `sandbox_origin`, never on\nErato's own origin."
+          },
+          "sandbox_origin": {
+            "type": "string",
+            "description": "The origin this server's views are loaded from\n(`mcp_servers.<id>.mcp_apps.sandbox_origin`)."
+          },
+          "ui": {
+            "type": "object",
+            "description": "The resource's `_meta.ui` as the server declared it: `csp`\n(`connectDomains`, `resourceDomains`, `frameDomains`,\n`baseUriDomains`), `permissions`, `domain` and `prefersBorder`.\nAbsent when the server declared none: the view then gets no network."
+          },
+          "uri": {
+            "type": "string",
+            "description": "The view's `ui://` URI."
+          }
+        }
+      },
       "McpServerStatus": {
         "type": "object",
         "required": [
@@ -14784,6 +14868,10 @@
             "items": {
               "$ref": "#/components/schemas/ToolResultLink"
             }
+          },
+          "view": {
+            "$ref": "#/components/schemas/ToolResultView",
+            "description": "The interactive view (MCP Apps) the tool declares, set when its server\nenables `mcp_apps` and the view was read and accepted for this call."
           }
         }
       },
@@ -14812,6 +14900,27 @@
           },
           "uri": {
             "type": "string"
+          }
+        }
+      },
+      "ToolResultView": {
+        "type": "object",
+        "description": "Where the web app gets a call's view: `GET\n/api/v1beta/me/mcp_servers/{server_id}/app_view?uri=` answers with its\nHTML and its `_meta.ui`. The view is shown with the call's `input`, its\n`output` and `structured_content`.",
+        "required": [
+          "server_id",
+          "uri"
+        ],
+        "properties": {
+          "server_id": {
+            "type": "string"
+          },
+          "structured_content": {
+            "type": "object",
+            "description": "The call's `structuredContent`, which a view takes its data from. Kept\nonly here, for the view: the model reads the call's `output`."
+          },
+          "uri": {
+            "type": "string",
+            "description": "The view's `ui://` URI, as the tool declares it."
           }
         }
       },

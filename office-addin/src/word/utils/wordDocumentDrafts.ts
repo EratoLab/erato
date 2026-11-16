@@ -132,6 +132,7 @@ export class WordDocumentDraftStore {
     value: Record<string, unknown>;
   };
   private failure?: string;
+  private sparseFailure?: string;
   private replies = new Map<
     string,
     { input: string; result: ClientToolExecutionResult }
@@ -141,6 +142,7 @@ export class WordDocumentDraftStore {
   clear(): void {
     this.draft = undefined;
     this.failure = undefined;
+    this.sparseFailure = undefined;
     this.replies.clear();
     this.accepted = false;
   }
@@ -206,6 +208,15 @@ export class WordDocumentDraftStore {
           terminal: false,
         }
       : undefined;
+  }
+
+  /** A sparse change gets no draft, so only its last rejection is kept: true when this one
+   * repeats it with the same diagnostics. */
+  rejectSparse(value: unknown, issues: WordPlanDiagnostics): boolean {
+    const fingerprint = canonical([value, issues]);
+    const repeated = fingerprint === this.sparseFailure;
+    this.sparseFailure = fingerprint;
+    return repeated;
   }
 
   reject(value: Record<string, unknown>, issues: WordPlanDiagnostics) {

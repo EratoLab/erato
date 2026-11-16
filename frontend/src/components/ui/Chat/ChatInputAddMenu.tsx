@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -187,6 +188,21 @@ export function ChatInputAddMenu({
     setIsOpen(false);
   }, [cancelPendingClose]);
 
+  // Host content can render nothing (no row to offer right now), which the
+  // menu learns only from the DOM; an empty block gets no dividers.
+  const [extraContentNode, setExtraContentNode] =
+    useState<HTMLDivElement | null>(null);
+  const [extraContentEmpty, setExtraContentEmpty] = useState(false);
+  useLayoutEffect(() => {
+    if (!extraContentNode) return;
+    const update = () =>
+      setExtraContentEmpty(extraContentNode.childNodes.length === 0);
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(extraContentNode, { childList: true });
+    return () => observer.disconnect();
+  }, [extraContentNode]);
+
   // A close scheduled by a selection must not survive a dismiss-and-reopen —
   // without this, the stale timer closes the freshly reopened menu.
   const handleOpenChange = useCallback(
@@ -329,7 +345,7 @@ export function ChatInputAddMenu({
   // Build the visible sections in order, then interleave dividers so the menu
   // reads as grouped without dangling rules — regardless of which sections the
   // host actually supplies.
-  const blocks: { key: string; node: React.ReactNode }[] = [];
+  const blocks: { key: string; node: React.ReactNode; empty?: boolean }[] = [];
 
   if (hasFileSources) {
     blocks.push({
@@ -347,8 +363,14 @@ export function ChatInputAddMenu({
   if (extraContent) {
     blocks.push({
       key: "extra-content",
+      empty: extraContentEmpty,
       node: (
-        <div className="flex flex-col">{extraContent({ close: closeNow })}</div>
+        <div
+          ref={setExtraContentNode}
+          className={clsx("flex flex-col", extraContentEmpty && "hidden")}
+        >
+          {extraContent({ close: closeNow })}
+        </div>
       ),
     });
   }
@@ -431,7 +453,10 @@ export function ChatInputAddMenu({
       <PopoverChrome dataUi="chat-input-add-menu-content">
         {blocks.map((block, index) => (
           <Fragment key={block.key}>
-            {index > 0 && <PopoverSeparator />}
+            {!block.empty &&
+              blocks.slice(0, index).some((before) => !before.empty) && (
+                <PopoverSeparator />
+              )}
             {block.node}
           </Fragment>
         ))}

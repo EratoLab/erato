@@ -3134,6 +3134,21 @@ msgid "chat.share.warning.title"
 msgstr "The conversation may contain sensitive information"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noRequestSession"
+msgstr "The Word pane was reloaded, a newer request replaced this one, or this message wasn't sent with the document; send your request again from the Word pane."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noResponse"
+msgstr "Word didn't respond; keep Word open and send again."
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.readNoResponse"
+msgstr "Erato couldn't read the document because Word didn't respond. If the answer needs it, keep Word open and send again."
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
 msgid "chat.task_approval.always"
 msgstr "Any task run for you here needs your approval first."
@@ -10436,6 +10451,11 @@ msgstr "Thinking…"
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
 msgstr "Approved"
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.title"
+msgstr "Interactive view of {toolName}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/Trace.tsx

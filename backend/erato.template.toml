@@ -165,6 +165,11 @@ chat_provider_ids = ["test-token-limit"]
 # # and table of the server.
 # 1 = "Low"
 # 2 = "High"
+# # Optional: read the interactive view (MCP Apps) a tool declares when it is
+# # called, for the web app to show from the sandbox origin (default: off).
+# [mcp_servers.file_provider.mcp_apps]
+# enabled = true
+# sandbox_origin = "https://mcp-apps.example.net"
 # [mcp_servers.file_provider.authentication]
 # mode = "none"
 # # Optional per-server override (seconds)
@@ -445,6 +450,7 @@ chat_provider_ids = ["test-token-limit"]
 # [audio_conversational]
 # enabled = false
 # speech_provider = "assistant_voice" # Optional ID from speech_providers.provider; enables Audio-back
+# end_of_turn_silence_ms = 1800 # Silence that ends a spoken turn (500 to 5000); shorter replies sooner but cuts off more pauses
 # chat_provider_id = "mock-llm-openai" # Optional: defaults to first audio-capable provider by priority
 # max_recording_duration_seconds = 1200
 # chunk_duration_seconds = 30

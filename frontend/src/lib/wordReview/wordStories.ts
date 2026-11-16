@@ -117,32 +117,67 @@ const make = (doc: Document, name: string, value?: string) => {
 const serialize = (node: Element) =>
   new XMLSerializer().serializeToString(cloneWordMediaNode(node));
 
+/** Reports where a story or section change is malformed; parsing stops at the first one. */
+export type WordStructureFailure = (
+  path: string,
+  code: string,
+  message: string,
+) => null;
+
+const STORY_SHAPE =
+  "Invalid story change; use the story contract returned by the read tool.";
+
+/** A block that fails reports its own diagnostic at the path it is given. */
 export function parseWordStoryChanges(
   value: unknown,
-  parseBlock: (value: unknown) => WordPlanBlock | null,
+  parseBlock: (value: unknown, path: string) => WordPlanBlock | null,
+  fail: WordStructureFailure = () => null,
 ): WordStoryChange[] | null {
-  if (!Array.isArray(value) || value.length > 2000) return null;
+  if (!Array.isArray(value) || value.length > 2000)
+    return fail("/stories", "story-shape", STORY_SHAPE);
   const seen = new Set<string>();
   const result: WordStoryChange[] = [];
-  for (const v of value) {
-    if (
-      !record(v) ||
-      !keys(v, ["kind", "type", "id", "blocks", "anchor"]) ||
-      !["upsert", "delete"].includes(String(v.kind)) ||
-      !["header", "footer", "footnote", "endnote"].includes(String(v.type)) ||
-      !id(v.id) ||
-      seen.has(v.id)
-    )
-      return null;
+  for (const [index, v] of value.entries()) {
+    const path = `/stories/${index}`;
+    if (!record(v) || !keys(v, ["kind", "type", "id", "blocks", "anchor"]))
+      return fail(path, "story-shape", STORY_SHAPE);
+    if (!["upsert", "delete"].includes(String(v.kind)))
+      return fail(`${path}/kind`, "story-shape", "kind is upsert or delete.");
+    if (!["header", "footer", "footnote", "endnote"].includes(String(v.type)))
+      return fail(
+        `${path}/type`,
+        "story-shape",
+        "type is header, footer, footnote or endnote.",
+      );
+    if (!id(v.id) || seen.has(v.id))
+      return fail(
+        `${path}/id`,
+        "story-shape",
+        "Each story change needs its own id of 1–100 letters, digits, underscores or hyphens.",
+      );
     seen.add(v.id);
     if (v.kind === "delete") {
-      if (!keys(v, ["kind", "type", "id"])) return null;
+      if (!keys(v, ["kind", "type", "id"]))
+        return fail(
+          path,
+          "story-shape",
+          "A delete takes only kind, type and id.",
+        );
       result.push(v as unknown as WordStoryChange);
       continue;
     }
-    if (!Array.isArray(v.blocks) || v.blocks.length > 2000) return null;
-    const blocks = v.blocks.map((block) => parseBlock(block));
-    if (blocks.some((b) => !b)) return null;
+    if (!Array.isArray(v.blocks) || v.blocks.length > 2000)
+      return fail(
+        `${path}/blocks`,
+        "story-shape",
+        "An upsert needs a blocks array of at most 2000 blocks.",
+      );
+    const blocks: WordPlanBlock[] = [];
+    for (const [k, block] of v.blocks.entries()) {
+      const parsed = parseBlock(block, `${path}/blocks/${k}`);
+      if (!parsed) return null;
+      blocks.push(parsed);
+    }
     if (v.anchor !== undefined) {
       const a = v.anchor;
       if (
@@ -158,19 +193,31 @@ export function parseWordStoryChanges(
           a.end !== undefined &&
           Number(a.end) < Number(a.start))
       )
-        return null;
+        return fail(
+          `${path}/anchor`,
+          "story-shape",
+          "A note anchor is {block, start?, end?} with offsets from 0; headers and footers take none.",
+        );
     }
     result.push({ ...v, blocks } as unknown as WordStoryChange);
   }
   return result;
 }
 
-export function parseWordSections(value: unknown): WordSectionPlan[] | null {
+export function parseWordSections(
+  value: unknown,
+  fail: WordStructureFailure = () => null,
+): WordSectionPlan[] | null {
   if (!Array.isArray(value) || !value.length || value.length > 2000)
-    return null;
+    return fail(
+      "/sections",
+      "section-shape",
+      "Expected a nonempty list of sections.",
+    );
   const ids = new Set<string>();
   const after = new Set<string>();
   for (const [index, v] of value.entries()) {
+    const path = `/sections/${index}`;
     if (
       !record(v) ||
       !keys(v, ["id", "source", "after", "layout", "headers", "footers"]) ||
@@ -178,23 +225,48 @@ export function parseWordSections(value: unknown): WordSectionPlan[] | null {
       ids.has(v.id) ||
       (v.source !== undefined && !id(v.source))
     )
-      return null;
+      return fail(
+        path,
+        "section-shape",
+        "Each section has its own id and only source, after, layout, headers and footers.",
+      );
     ids.add(v.id);
     if (index === value.length - 1 ? v.after !== undefined : !id(v.after))
-      return null;
+      return fail(
+        `${path}/after`,
+        "section-shape",
+        "Each non-final section requires after; the final section omits it.",
+      );
     if (typeof v.after === "string") {
-      if (after.has(v.after)) return null;
+      if (after.has(v.after))
+        return fail(
+          `${path}/after`,
+          "section-shape",
+          "Two sections cannot end after the same block.",
+        );
       after.add(v.after);
     }
-    if (v.layout !== undefined && !validLayout(v.layout)) return null;
-    for (const references of [v.headers, v.footers]) {
+    if (v.layout !== undefined && !validLayout(v.layout))
+      return fail(
+        `${path}/layout`,
+        "section-shape",
+        "Invalid layout. orientation is portrait or landscape; width and height are 72–1584 pt; margins are 0–720 pt; columns is 1–12 with columnSpacing 0–720 pt; break is nextPage, continuous, evenPage or oddPage; pageNumberStart is 1–32767; differentFirstPage and differentOddEvenPages are booleans.",
+      );
+    for (const [key, references] of [
+      ["headers", v.headers],
+      ["footers", v.footers],
+    ] as const) {
       if (references === undefined) continue;
       if (
         !record(references) ||
         !keys(references, ["default", "first", "even"]) ||
         Object.values(references).some((ref) => ref !== null && !id(ref))
       )
-        return null;
+        return fail(
+          `${path}/${key}`,
+          "section-shape",
+          "headers and footers map default, first or even to a story id or null.",
+        );
     }
   }
   return value as WordSectionPlan[];

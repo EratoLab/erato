@@ -197,6 +197,8 @@ export const contentTypeForPath = (filePath: string): string => {
   switch (extension) {
     case ".css":
       return "text/css; charset=utf-8";
+    case ".html":
+      return "text/html; charset=utf-8";
     case ".js":
     case ".mjs":
       return "text/javascript; charset=utf-8";

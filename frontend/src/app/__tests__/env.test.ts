@@ -44,6 +44,24 @@ describe("env readAloudEnabled", () => {
   );
 });
 
+describe("env audioConversationalEndOfTurnSilenceMs", () => {
+  afterEach(() => {
+    delete window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
+    vi.unstubAllEnvs();
+  });
+
+  it("is unset by default, so the recorder keeps 1.8 s", () => {
+    expect(env().audioConversationalEndOfTurnSilenceMs).toBeUndefined();
+  });
+
+  it("reads backend configuration and prefers the Vite override", () => {
+    window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS = 1500;
+    expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1500);
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS", "1200");
+    expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1200);
+  });
+});
+
 describe("env faviconPath", () => {
   afterEach(() => {
     delete window.FAVICON_PATH;

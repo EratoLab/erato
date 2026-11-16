@@ -3134,6 +3134,21 @@ msgid "chat.share.warning.title"
 msgstr "La conversación puede contener información confidencial"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noRequestSession"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.noResponse"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/SubmissionNotice.tsx
+msgid "chat.submission.word.readNoResponse"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatTaskPlanAdvisory.tsx
 msgid "chat.task_approval.always"
 msgstr ""
@@ -10435,6 +10450,11 @@ msgstr "Pensando…"
 #. js-lingui-explicit-id
 #: src/components/ui/Trace/steps/ToolStatusPill.tsx
 msgid "trace.tool.approved"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/ToolCall/McpAppView.tsx
+msgid "trace.tool.appView.title"
 msgstr ""
 
 #. js-lingui-explicit-id

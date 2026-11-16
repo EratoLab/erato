@@ -38,13 +38,40 @@ implement the seams listed below, and never modify the core itself.
   compilation stay under `src/word/utils`; shared UI comes from the frontend library.
 - `src/excel`, `src/powerpoint` — the Excel and PowerPoint task panes at
   `/office-addin/excel` and `/office-addin/powerpoint`: the shared Office.js
-  providers around `NeutralAddinChatPage`, with no document context yet. They
-  are sideloaded from `manifests/manifest-local-excel.xml` and
+  providers around `NeutralAddinChatPage`. Excel has no document context yet.
+  PowerPoint's host (`PowerPointAddinChatHost`) adds a presentation chip and
+  three read tools (overview, one slide, selection), each registered only where
+  `utils/powerpointReadSupport.ts` finds its `PowerPointApi` set.
+  A slide read also takes from the presentation file what the API cannot
+  give (speaker notes, chart data, SmartArt text, the hidden flag; tables and
+  group children below 1.10): the one-slide `slide.exportAsBase64()` at the
+  full tier, else the whole file through `getFileAsync`, fetching only the
+  slices that hold the slide's parts (`utils/powerpointFileContent.ts`). Nothing
+  is cached; a file that does not match the shapes on screen is not used, and
+  what the whole file supplies is labelled as possibly the last saved version.
+  Like Word's
+  chip, the chip and the tools appear only while the server advertises the
+  `powerpoint_presentation` action facet, and the tools are listed only for a
+  send that includes the presentation. Two tiers: full at 1.10, basic below
+  (Office LTSC 2024 at 1.5). Their manifests declare no minimum API set, so
+  LTSC keeps the pane. At the full tier, with the presentation included, the
+  "+" menu and the chip's detail offer a picture of the selected slide, but
+  only while the selected model takes images (`/me/file-capabilities` for that
+  model, the composer's upload rule plus `analyze_image`). The pane renders it
+  with `slide.getImageAsBase64` through `runPowerPoint`, uploads it through the
+  composer's own upload path and stages it as an ordinary image attachment; the
+  composer stays disabled until it is staged or a notice says why not. A model
+  that cannot see images shows a warning for as long as a picture stays staged.
+  Image parts reach the model without a file name, so the send's
+  `selection_summary` names the slide each sent picture shows.
+  They are sideloaded from `manifests/manifest-local-excel.xml` and
   `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,
   `OfficeDocumentAuthProvider` and `OfficeDocumentFeatureConfig` (sign-in and
   feature overrides of the three document panes), `useOfficeTheme`,
+  `utils/officeXml.ts` and `utils/officeZipReader.ts` (package parts for Word
+  and PowerPoint),
   `utils/officeTheme/`, `officeAsync.ts`, the drag-drop broker
   (`officeDragAndDropBroker.ts` + `useOfficeDragAndDrop.ts`), and
   `detectExchangeOnPrem.ts`. This ring is office.js-generic and is planned to
@@ -120,7 +147,8 @@ combination before enabling the on-prem pinning hint in `OfficeProvider`.
    `installTeamsComponentRegistrations()`, which contributes only
    `ChatAddMenuExtraContent`: a transcript is a context chip, so a kit's
    `ChatInputAttachmentPreview` renders the tab's other files. Word registers its renderer in
-   `HostCardCodeBlock`. Component-kit registrations are applied at the entry
+   `HostCardCodeBlock`. PowerPoint's `installPowerPointComponentRegistrations()`
+   contributes its slide picture row as `ChatAddMenuExtraContent`. Component-kit registrations are applied at the entry
    point via `applyComponentKitRegistrations()` in `src/main.tsx`, before any
    host route module is evaluated.
 6. **Platform identifier** — stamped explicitly per host, never inferred from

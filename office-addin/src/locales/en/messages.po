@@ -1391,6 +1391,146 @@ msgid "officeAddin.pinHint.title"
 msgstr "Pin to follow your mail"
 
 #. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.attachSlidePicture"
+msgstr "Attach picture of selected slide"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.exclude"
+msgstr "Don't include this presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.include"
+msgstr "Include this presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.onDemand"
+msgstr "Read when needed"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.chip.spokenLabel"
+msgstr "Presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basic"
+msgstr "This PowerPoint version lets Erato read text boxes and their positions only. Titles, tables and shapes inside groups stay unread."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.basicWithFile"
+msgstr "It reads text, tables, shapes inside groups, speaker notes, chart data and SmartArt text. This PowerPoint version doesn't tell it which shape is the title or what the bullet levels are."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.full"
+msgstr "It reads slide titles, text with bullet levels, tables, shapes inside groups and alt text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.fullWithFile"
+msgstr "It reads slide titles, text with bullet levels, tables, shapes inside groups, alt text, speaker notes, chart data and SmartArt text."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.never"
+msgstr "Speaker notes, comments, chart data and SmartArt text can't be read."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.neverWithFile"
+msgstr "Comments and animations can't be read."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.off"
+msgstr "Left out: Erato doesn't read this presentation in this chat."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemand"
+msgstr "Erato reads slides one at a time, only when your request needs them, and sees which slides and shapes you selected."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/powerpointPresentationChip.tsx
+msgid "officeAddin.powerpoint.context.onDemandNoSelection"
+msgstr "Erato reads slides one at a time, only when your request needs them. This PowerPoint version doesn't tell it what you selected."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.heading"
+msgstr "Presentation"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePicture"
+msgstr "Picture of the selected slide"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/components/PowerPointChatAddMenuExtraContent.tsx
+msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
+msgstr "Lets Erato see the layout, charts and pictures"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.attached"
+msgstr "{attachedCount, plural, one {Slide picture attached.} other {# slide pictures attached.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.chatSwitched"
+msgstr "{uploadedCount, plural, one {The slide picture finished after you switched chats, so it isn't attached here. Add it again if you need it.} other {The slide pictures finished after you switched chats, so they aren't attached here. Add them again if you need them.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.failed"
+msgstr "PowerPoint couldn't make the slide picture, so nothing was attached. Try again."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.leftOut"
+msgstr "{leftOut, plural, one {Attached the first {attachedCount} of {selectedCount} selected slides. To add the last one, select it and add again.} other {Attached the first {attachedCount} of {selectedCount} selected slides. To add the other #, select them and add again.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.modelCannotRead"
+msgstr "{stagedPictureCount, plural, one {The selected model can't see pictures, so it won't read the attached slide picture. Pick another model or remove the picture.} other {The selected model can't see pictures, so it won't read the # attached slide pictures. Pick another model or remove the pictures.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.noRoom"
+msgstr "This message has as many files as it can take. Remove one to add a slide picture."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.nothingSelected"
+msgstr "Select a slide in PowerPoint first, then add its picture."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.rendering"
+msgstr "Making a picture of the selected slide…"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.timeout"
+msgstr "PowerPoint took too long to make the slide picture, so nothing was attached. Try again."
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadFailed"
+msgstr "{total, plural, one {The slide picture couldn't be uploaded, so it isn't attached.} other {The slide pictures couldn't be uploaded, so none is attached.}}"
+
+#. js-lingui-explicit-id
+#: src/powerpoint/hooks/usePowerPointSlidePictures.ts
+msgid "officeAddin.powerpoint.slidePicture.uploadPartly"
+msgstr "{missing} of {total} slide pictures couldn't be uploaded. The others are attached."
+
+#. js-lingui-explicit-id
 #: src/core/selection/selectionExcerpt.ts
 msgid "officeAddin.selection.quoted"
 msgstr "“{excerpt}”"

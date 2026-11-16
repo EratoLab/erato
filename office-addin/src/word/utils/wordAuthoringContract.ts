@@ -1,3 +1,17 @@
+import { MAX_WORD_SCOPE_BYTES } from "@erato/frontend/word-review";
+
+/** The backend schema for word_submit_document_plan (erato-action-facets.toml) and its tool
+ * description state the same numbers. Blocks per change have no count limit (ERMAIN-1193). */
+export const MAX_WORD_SCOPED_CHANGES = 16;
+export const MAX_WORD_SCOPED_SOURCES = 16;
+const WORD_SCOPED_JSON = `about ${Math.floor(MAX_WORD_SCOPE_BYTES / 1000)},000 characters of JSON`;
+export const WORD_SCOPED_SIZE = `${MAX_WORD_SCOPE_BYTES / 1024} KiB (${WORD_SCOPED_JSON})`;
+export const WORD_SCOPED_LIMITS = `at most ${MAX_WORD_SCOPED_CHANGES} changes per collection (body, objects, stories, sections), ${MAX_WORD_SCOPED_SOURCES} source refs per change and ${WORD_SCOPED_SIZE} per submission`;
+/** One rule for when a full plan is needed; the plan contract, tool description and facet prompt
+ * carry the same sentence (ERMAIN-1186). */
+export const WORD_FULL_PLAN_RULE = `Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than ${MAX_WORD_SCOPED_CHANGES} changes per collection, or ${WORD_SCOPED_JSON}). Otherwise submit only the changes with scoped_edit, also after a complete read.`;
+export const WORD_SCOPED_TOO_LARGE_FOR_FULL_PLAN = `This document is too large for a full plan; submit at most ${WORD_SCOPED_JSON} now and tell the user the rest follows in the next turn.`;
+
 export const WORD_SECTION_PROPERTIES =
   "headers/footers:{default?:storyId|null,first?:storyId|null,even?:storyId|null}; null removes that reference. layout:{orientation:portrait|landscape,width?,height?,margins?:{top,right,bottom,left,header,footer,gutter},columns?,columnSpacing?,break:nextPage|continuous|evenPage|oddPage,pageNumberStart?,differentFirstPage?,differentOddEvenPages?}. All dimensions are points.";
 
@@ -11,17 +25,16 @@ export const WORD_AUTHORING_CONTRACT = {
   freshness: WORD_FRESHNESS_NOTICE,
   scopedEdit: {
     read: "read_document_blocks accepts {snapshot,documentIdentity,target:{kind?,text?,nearbyText?,ref?,refs?,throughRef?,offset?}}. Search filters are ANDed; text searches object text/properties and nearbyText searches adjacent body blocks. Five bounded candidates per page. An ambiguous search grants no scope. Select returned refs explicitly (at most 16), or ref/throughRef for a contiguous body range. For multiple dependencies, target:{queries:[selectors]} resolves them atomically into one readToken; every selector must resolve uniquely or select explicit refs/a range. Any missing or ambiguous query grants no scope for the entire batch. Query results identify refs by index; select or refine unresolved queries without reading the whole document. At most 16 distinct targets and 24 KiB for the combined response, including guidance/metadata. Optional include:[text|formatting|table|media|structures|stories|sections] requests guidance for new content as well as existing target kinds. Only overall ready grants a readToken; larger responses require a narrower selection or complete read.",
-    input:
-      "{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. At most 16 changes per collection; overlapping changes are rejected. No full plans or draft repairs with scoped tokens.",
-    body: "{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[refs],anchor?:ref,blocks?:[typed blocks],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.",
+    input: `{snapshot,readToken,scoped_edit:{body?:[],objects?:[],stories?:[],sections?:[]}}. Supply only changes. The host retains every other source. Limits: ${WORD_SCOPED_LIMITS}; blocks per change have no count limit, so keep a long list or passage in one change. Split a longer source range into consecutive changes. ${WORD_FULL_PLAN_RULE} Overlapping changes are rejected. No full plans or draft repairs with scoped tokens.`,
+    body: `{operation:'replace'|'delete'|'insert-before'|'insert-after'|'move-before'|'move-after',source?:[at most ${MAX_WORD_SCOPED_SOURCES} refs],anchor?:ref,blocks?:[typed blocks, any count],reason?:string}. Replace/delete/move source is an explicitly read contiguous range. Insert/move anchor must also be explicitly read and retained. Replacement/insertion uses the existing typed block contract. Delete needs a reason. Moves preserve the original source exactly.`,
     objects:
-      "{ref:returned-object-ref,edit:{operation:'update'|'delete'|'unwrap',...properties}}. Read the exact object. kind and native target are host-owned. Properties and supported operations follow structures.nativeEdit. The enclosing fragment is retained.",
+      "{ref:returned-object-ref,edit:{operation:'update'|'delete'|'unwrap',...properties}}. Read the exact object. After a complete read, ref is the containing block or story ref, two underscores and the object's target (b7__field-1). kind and native target are host-owned. Properties and supported operations follow structures.nativeEdit. The enclosing fragment is retained.",
     stories:
       "Existing story changes follow the stories contract and require a complete scoped read of that story. New notes need an explicitly read, retained body anchor. New headers/footers need a read section and an association in the same scoped submission. Deleting a story also removes its anchors/section references. Other stories are preserved.",
     sections:
       "Sparse section changes: {id,after?,layout?,headers?,footers?} or {id,delete:true}. Existing sections must be read. Changing a boundary needs a read retained body anchor; after:null makes the selected section final. Splitting a section needs its read section plus boundary. Removing a boundary requires both affected sections. Header/footer associations require read stories or stories created in the same submission. Host retains other sections and their properties.",
     authorization:
-      "Scope is bound to document identity, immutable snapshot and request. Context neighbors do not grant write permission. Source reuse requires read references. Full-document plans still require complete pagination. Success stores the complete plan for review; it is not model continuation context.",
+      "Scope is bound to document identity, immutable snapshot and request. readToken is a target read's token or the final token of a complete read; after a complete read every returned block, object, story and section counts as read. A target read's context neighbors do not grant write permission. Source reuse requires read references. Full-document plans still require complete pagination. Success stores the complete plan for review; it is not model continuation context.",
   },
   tableCell: {
     tool: "submit_document_plan",
@@ -45,7 +58,7 @@ export const WORD_AUTHORING_CONTRACT = {
     revision:
       "Each changed rejected proposal advances the revision. Validation covers the complete materialized plan. Unchanged proposals with unchanged diagnostics end the submission turn. Full and repair submissions share the configured attempt budget. Acceptance persists the complete plan for review without writing to Word.",
   },
-  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete.",
+  plan: "{version:1,snapshot,readToken,scope:'body'|'document',entries:[keep|replace|insert],deleted?:[{source:[refs],reason}],stories?:[],sections?:[]}; omitted deleted means []. Source coverage must still be complete. Use a full plan only to rewrite or reorder most of the document, or when the changes exceed scoped_edit's limits (more than 16 changes per collection, or about 24,000 characters of JSON). Otherwise submit only the changes with scoped_edit, also after a complete read.",
   ownership:
     "Every body source ref is consumed once by keep, replace or deleted. New nested block IDs are globally unique. Story sources and document_sections are separate read records, not body ownership refs. Keep preserves exact content. Replacement and deletion accept native objects. Source references are scoped to this immutable snapshot.",
   entries: {

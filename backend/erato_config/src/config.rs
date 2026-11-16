@@ -96,7 +96,13 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
+        if let McpServerAuthenticationConfig::Forwarded { forwarded } = &server.authentication
+            && let Some(exchange) = &forwarded.custom_token_exchange
+        {
+            exchange.validate(&forwarded.credential)?;
+        }
         server.glossary.validate(id)?;
+        server.mcp_apps.validate(id)?;
     }
 
     Ok(())
@@ -2408,6 +2414,9 @@ impl AppConfig {
             "audio_conversational",
             &config.audio_conversational.transcription,
         );
+        if let Err(message) = config.audio_conversational.validate_end_of_turn_silence() {
+            panic!("{message}");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -3266,6 +3275,36 @@ mod audio_config_tests {
         let shared: AudioTranscriptionConfig = serde_json::from_value(empty).unwrap();
         assert_eq!(conversational.transcription, shared);
         assert_eq!(conversational.speech_provider, None);
+        assert_eq!(conversational.end_of_turn_silence_ms, 1800);
+        assert_eq!(
+            AudioConversationalConfig::default().end_of_turn_silence_ms,
+            1800
+        );
+    }
+
+    #[test]
+    fn conversational_end_of_turn_silence_is_read_and_range_checked() {
+        let load = |toml: &str| {
+            config::Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AudioConversationalConfig>()
+                .unwrap()
+        };
+        let settings = load("enabled = true\nend_of_turn_silence_ms = 1200");
+        assert_eq!(settings.end_of_turn_silence_ms, 1200);
+        assert!(settings.validate_end_of_turn_silence().is_ok());
+
+        for allowed in [500, 5000] {
+            let settings = load(&format!("end_of_turn_silence_ms = {allowed}"));
+            assert!(settings.validate_end_of_turn_silence().is_ok());
+        }
+        for rejected in [0, 20, 499, 5001, 30000] {
+            let settings = load(&format!("end_of_turn_silence_ms = {rejected}"));
+            let error = settings.validate_end_of_turn_silence().unwrap_err();
+            assert!(error.contains("500 to 5000 milliseconds"), "{error}");
+        }
     }
 
     #[test]
@@ -4240,6 +4279,11 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub surface_hints: bool,
+    /// Interactive views (MCP Apps) that this server's tools declare. Off by
+    /// default: the server's tools then work as they always have.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub mcp_apps: McpAppsConfig,
     // Wildcard patterns selecting tools that may ask the model to wait before
     // continuing the current generation. An empty list disables waiting for
     // this server unless the global setting is enabled.
@@ -4255,6 +4299,60 @@ pub struct McpServerConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.6.0"))]
     pub max_session_idle_seconds: Option<u64>,
+}
+
+/// MCP Apps for one server: the `ui://` view a tool names in
+/// `_meta.ui.resourceUri` is read with `resources/read` when the tool is
+/// called, and the web app shows it beside the call.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(deny_unknown_fields)]
+pub struct McpAppsConfig {
+    /// Whether the views this server's tools declare are read and offered to
+    /// the web app. A view never reaches the model.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub enabled: bool,
+    /// The origin the web app loads this server's views from, such as
+    /// `https://mcp-apps.example.net`: `http` or `https`, a host and an
+    /// optional port, nothing else. It must not be Erato's own origin, and in
+    /// production it must be on another site than Erato's, since the browser
+    /// sends Erato's cookies with requests from the same site.
+    /// Required when `enabled` is set.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sandbox_origin: Option<String>,
+}
+
+impl McpAppsConfig {
+    /// Called from both config load paths, like `validate_mcp_server_ids`.
+    fn validate(&self, server_id: &str) -> Result<(), Report> {
+        let Some(origin) = &self.sandbox_origin else {
+            return if self.enabled {
+                Err(eyre!(
+                    "MCP server '{server_id}': mcp_apps.sandbox_origin is required when mcp_apps.enabled is set"
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if !is_web_origin(origin) {
+            return Err(eyre!(
+                "MCP server '{server_id}': mcp_apps.sandbox_origin '{}' must be an http or https origin written as the browser does, such as https://mcp-apps.example.net",
+                origin.escape_debug()
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Whether `value` is an `http` or `https` origin exactly as a browser
+/// serializes it: scheme, host and a non-default port, without user info,
+/// path, query or fragment.
+fn is_web_origin(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https") && url.origin().ascii_serialization() == value
 }
 
 /// Words for a server's machine names, written by the operator. Used when an
@@ -4391,7 +4489,11 @@ pub struct McpToolConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default, HeapSize)]
-#[serde(tag = "mode", rename_all = "snake_case")]
+#[serde(
+    tag = "mode",
+    rename_all = "snake_case",
+    try_from = "McpAuthenticationInput"
+)]
 #[repr(C)]
 pub enum McpServerAuthenticationConfig {
     #[default]
@@ -4409,8 +4511,56 @@ pub enum McpServerAuthenticationConfig {
     },
 }
 
+// Validate inactive sections too: serde's tagged unit variant otherwise ignores them.
+#[derive(Deserialize)]
+struct McpAuthenticationInput {
+    mode: String,
+    forwarded: Option<McpServerForwardedAuthenticationConfig>,
+    fixed: Option<McpServerFixedAuthenticationConfig>,
+    oauth2: Option<McpServerOauth2AuthenticationConfig>,
+}
+
+impl TryFrom<McpAuthenticationInput> for McpServerAuthenticationConfig {
+    type Error = &'static str;
+    fn try_from(input: McpAuthenticationInput) -> Result<Self, Self::Error> {
+        if input.mode != "forwarded"
+            && input
+                .forwarded
+                .as_ref()
+                .and_then(|forwarded| forwarded.custom_token_exchange.as_ref())
+                .is_some_and(|exchange| exchange.enabled)
+        {
+            return Err("MCP custom token exchange requires forwarded authentication");
+        }
+        match input.mode.as_str() {
+            "none" => Ok(Self::None),
+            "forwarded" => Ok(Self::Forwarded {
+                forwarded: input
+                    .forwarded
+                    .ok_or("Missing forwarded authentication configuration")?,
+            }),
+            "fixed" => Ok(Self::Fixed {
+                fixed: input
+                    .fixed
+                    .ok_or("Missing fixed authentication configuration")?,
+            }),
+            "oauth2" => Ok(Self::Oauth2 {
+                oauth2: input
+                    .oauth2
+                    .ok_or("Missing OAuth2 authentication configuration")?,
+            }),
+            _ => Err("Invalid MCP authentication mode"),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerForwardedAuthenticationConfig {
+    #[serde(default)]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
+    #[facet(erato_config::stability(level = "unstable"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub custom_token_exchange: Option<McpCustomTokenExchangeConfig>,
     pub credential: McpServerForwardedCredential,
     #[serde(default = "default_mcp_forwarded_auth_header_name")]
     pub header_name: String,
@@ -4421,10 +4571,76 @@ pub struct McpServerForwardedAuthenticationConfig {
 impl Default for McpServerForwardedAuthenticationConfig {
     fn default() -> Self {
         Self {
+            custom_token_exchange: None,
             credential: McpServerForwardedCredential::AccessToken,
             header_name: default_mcp_forwarded_auth_header_name(),
             prefix: default_mcp_forwarded_auth_prefix(),
         }
+    }
+}
+
+/// Unstable operator-only external Entra JWT exchange.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default, deny_unknown_fields)]
+#[facet(erato_config::hide_in_docs(hidden = true))]
+#[facet(erato_config::stability(level = "unstable"))]
+#[facet(erato_config::introduced_in(version = "unreleased"))]
+pub struct McpCustomTokenExchangeConfig {
+    pub enabled: bool,
+    pub subject_credential: McpServerForwardedCredential,
+    pub token_endpoint: String,
+    pub grant_type: String,
+    pub client_id: String,
+    #[facet(sensitive)]
+    pub client_secret: SecretConfigString,
+    pub scope: String,
+}
+
+impl McpCustomTokenExchangeConfig {
+    pub fn validate(&self, output: &McpServerForwardedCredential) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if [
+            &self.token_endpoint,
+            &self.grant_type,
+            &self.client_id,
+            self.client_secret.expose_secret(),
+            &self.scope,
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err(eyre!(
+                "Enabled MCP custom token exchange requires token_endpoint, grant_type, client_id, client_secret and scope"
+            ));
+        }
+        let endpoint = url::Url::parse(&self.token_endpoint)
+            .map_err(|_| eyre!("Invalid MCP token exchange endpoint"))?;
+        let local_http = endpoint.scheme() == "http"
+            && endpoint.host_str().is_some_and(|host| {
+                host == "localhost"
+                    || host
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            });
+        if (endpoint.scheme() != "https" && !local_http)
+            || endpoint.host_str().is_none()
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+            || endpoint.fragment().is_some()
+            || endpoint.query().is_some()
+        {
+            return Err(eyre!(
+                "MCP token exchange endpoint must be HTTPS (or loopback HTTP) without credentials, query or fragment"
+            ));
+        }
+        if *output == McpServerForwardedCredential::OidcIdToken
+            && !self.scope.split_whitespace().any(|scope| scope == "openid")
+        {
+            return Err(eyre!("MCP ID token exchange requires the openid scope"));
+        }
+        Ok(())
     }
 }
 
@@ -4436,10 +4652,11 @@ fn default_mcp_forwarded_auth_prefix() -> String {
     "Bearer ".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum McpServerForwardedCredential {
+    #[default]
     AccessToken,
     #[serde(alias = "oidc_token")]
     OidcIdToken,
@@ -8074,7 +8291,7 @@ fn default_speech_sample_rate() -> u32 {
     24000
 }
 
-#[derive(Debug, Default, Deserialize, PartialEq, Clone, Facet, HeapSize)]
+#[derive(Debug, Deserialize, PartialEq, Clone, Facet, HeapSize)]
 pub struct AudioConversationalConfig {
     #[serde(flatten)]
     #[facet(flatten)]
@@ -8084,6 +8301,41 @@ pub struct AudioConversationalConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "0.8.0"))]
     pub speech_provider: Option<String>,
+    /// Silence in milliseconds that ends the speaker's turn and sends it.
+    /// Defaults to `1800`; allowed from `500` to `5000`.
+    #[serde(default = "default_end_of_turn_silence_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub end_of_turn_silence_ms: u32,
+}
+
+pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
+
+fn default_end_of_turn_silence_ms() -> u32 {
+    1800
+}
+
+impl Default for AudioConversationalConfig {
+    fn default() -> Self {
+        Self {
+            transcription: AudioTranscriptionConfig::default(),
+            speech_provider: None,
+            end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
+        }
+    }
+}
+
+impl AudioConversationalConfig {
+    pub fn validate_end_of_turn_silence(&self) -> Result<(), String> {
+        let value = self.end_of_turn_silence_ms;
+        if END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
+            return Ok(());
+        }
+        Err(format!(
+            "Invalid `audio_conversational.end_of_turn_silence_ms`: {value} is outside {} to {} milliseconds.",
+            END_OF_TURN_SILENCE_MS_RANGE.start(),
+            END_OF_TURN_SILENCE_MS_RANGE.end()
+        ))
+    }
 }
 
 /// `[turn_instructions]`: one table per instruction type. A type or setting
@@ -11631,5 +11883,129 @@ mod client_tool_label_tests {
             .map(|(id, _)| id.as_str())
             .collect();
         assert_eq!(labelled, ["c", "d", "kept"].into());
+    }
+}
+
+#[cfg(test)]
+mod custom_token_exchange_tests {
+    use super::*;
+
+    fn parse(source: &str) -> Result<McpServerAuthenticationConfig, config::ConfigError> {
+        Config::builder()
+            .add_source(File::from_str(source, FileFormat::Toml))
+            .build()?
+            .try_deserialize()
+    }
+
+    const VALID: &str = r#"
+mode = "forwarded"
+[forwarded]
+credential = "oidc_token"
+[forwarded.custom_token_exchange]
+enabled = true
+token_endpoint = "https://sts.example.com/token"
+grant_type = "urn:example:external-jwt"
+client_id = "client"
+client_secret = "super-secret"
+scope = "openid target"
+"#;
+
+    #[test]
+    fn custom_token_exchange_parsing_validation_and_redaction() {
+        for selector in [
+            None,
+            Some("access_token"),
+            Some("oidc_id_token"),
+            Some("oidc_token"),
+        ] {
+            let source = format!(
+                "{VALID}{}",
+                selector
+                    .map(|value| format!("subject_credential = {value:?}\n"))
+                    .unwrap_or_default()
+            );
+            let config = parse(&source).unwrap();
+            assert!(!format!("{config:?}").contains("super-secret"));
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = config else {
+                panic!()
+            };
+            let exchange = forwarded.custom_token_exchange.unwrap();
+            assert_eq!(
+                exchange.subject_credential,
+                if selector.is_none() || selector == Some("access_token") {
+                    McpServerForwardedCredential::AccessToken
+                } else {
+                    McpServerForwardedCredential::OidcIdToken
+                }
+            );
+            exchange.validate(&forwarded.credential).unwrap();
+        }
+        assert!(parse(&format!("{VALID}subject_credential = 'invalid'\n")).is_err());
+        for mode in ["none", "fixed", "oauth2"] {
+            assert!(
+                parse(&VALID.replacen("mode = \"forwarded\"", &format!("mode = {mode:?}"), 1))
+                    .is_err()
+            );
+        }
+        for field in [
+            "token_endpoint",
+            "grant_type",
+            "client_id",
+            "client_secret",
+            "scope",
+        ] {
+            let source = VALID
+                .lines()
+                .filter(|line| !line.starts_with(field))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = parse(&source).unwrap()
+            else {
+                panic!()
+            };
+            assert!(
+                forwarded
+                    .custom_token_exchange
+                    .unwrap()
+                    .validate(&forwarded.credential)
+                    .is_err()
+            );
+        }
+        let McpServerAuthenticationConfig::Forwarded { forwarded } =
+            parse(&VALID.replace("openid target", "target")).unwrap()
+        else {
+            panic!()
+        };
+        let exchange = forwarded.custom_token_exchange.unwrap();
+        assert!(
+            exchange
+                .validate(&McpServerForwardedCredential::OidcIdToken)
+                .is_err()
+        );
+        assert!(
+            exchange
+                .validate(&McpServerForwardedCredential::AccessToken)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn custom_token_exchange_is_opt_in() {
+        for section in [
+            "",
+            "[forwarded.custom_token_exchange]\n",
+            "[forwarded.custom_token_exchange]\nenabled = false",
+        ] {
+            let source =
+                format!("mode = 'forwarded'\n[forwarded]\ncredential = 'access_token'\n{section}");
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = parse(&source).unwrap()
+            else {
+                panic!()
+            };
+            if let Some(exchange) = forwarded.custom_token_exchange {
+                assert!(!exchange.enabled);
+                exchange.validate(&forwarded.credential).unwrap();
+            }
+        }
     }
 }

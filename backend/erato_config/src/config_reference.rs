@@ -123,6 +123,7 @@ mod tests {
         ));
         assert!(keys.contains(&"mcp_servers.<server-id>.tools.<tool-name>.default_tool_annotations.open_world_hint".to_string()));
         assert!(keys.contains(&"mcp_servers.<server-id>.surface_hints".to_string()));
+        assert!(keys.contains(&"mcp_servers.<server-id>.mcp_apps.sandbox_origin".to_string()));
         assert!(keys.contains(&"mcp_servers_global.surfaces.<surface>.accept.[]".to_string()));
         assert!(keys.contains(&"client_tools.tools.<key>.name".to_string()));
         assert!(keys.contains(&"chat_providers.priority_order.[]".to_string()));
@@ -204,6 +205,26 @@ mod tests {
     fn validates_replacement_keys() {
         let generated = generate_config_reference().unwrap();
         validate_config_reference(&generated).expect("replacement keys should exist");
+    }
+
+    #[test]
+    fn custom_token_exchange_metadata_is_hidden_and_unstable() {
+        let generated = generate_config_reference().unwrap();
+        let prefix = "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange";
+        for field in [
+            ".enabled",
+            ".subject_credential",
+            ".token_endpoint",
+            ".grant_type",
+            ".client_id",
+            ".client_secret",
+            ".scope",
+        ] {
+            let value = &generated[format!("{prefix}{field}")];
+            assert_eq!(value["hide_in_docs"], true, "{field}");
+            assert_eq!(value["stability"], "unstable", "{field}");
+            assert_eq!(value["introduced_in"], "unreleased", "{field}");
+        }
     }
 
     #[test]

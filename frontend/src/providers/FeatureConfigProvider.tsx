@@ -81,6 +81,8 @@ interface AudioConversationalFeatureConfig {
   enabled: boolean;
   /** Maximum recording duration in seconds for conversational audio captures */
   maxRecordingDurationSeconds: number;
+  /** Silence in milliseconds that ends a spoken turn; 1800 when omitted. */
+  endOfTurnSilenceMs?: number;
 }
 
 /**
@@ -475,6 +477,7 @@ function createFeatureConfig(
       enabled: Boolean(environment.audioConversationalEnabled),
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
+      endOfTurnSilenceMs: environment.audioConversationalEndOfTurnSilenceMs,
     },
     auth: {
       showLogout: !environment.disableLogout,

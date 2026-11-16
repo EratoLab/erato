@@ -533,7 +533,7 @@ describe("table-cell edits where the whole-document import needs confirmation", 
             code: "in-place-unavailable",
             message: expect.stringMatching(
               new RegExp(
-                `because of: ${reason}\\..*complete the full read and submit a full-document plan instead`,
+                `because of: ${reason}\\..*complete the full read and resubmit the same table_cell change with its final readToken`,
               ),
             ),
           },
