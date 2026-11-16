@@ -565,6 +565,7 @@ fn auth_context<'a>(
         user_id: Some(user_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     }
 }
 

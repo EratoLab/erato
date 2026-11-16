@@ -37,6 +37,7 @@ pub mod mcp_oauth;
 pub mod mcp_session_manager;
 mod mcp_stateless;
 pub mod mcp_surface;
+mod mcp_token_exchange;
 pub mod mcp_tool_annotations;
 pub mod mcp_tool_approval;
 pub mod mcp_transports;

@@ -96,6 +96,11 @@ pub fn validate_mcp_server_ids(
                 "MCP server '{id}': display_name must not be blank, must be at most 128 bytes and must not contain control, bidi or invisible formatting characters"
             ));
         }
+        if let McpServerAuthenticationConfig::Forwarded { forwarded } = &server.authentication
+            && let Some(exchange) = &forwarded.custom_token_exchange
+        {
+            exchange.validate(&forwarded.credential)?;
+        }
         server.glossary.validate(id)?;
         server.mcp_apps.validate(id)?;
     }
@@ -4484,7 +4489,11 @@ pub struct McpToolConfig {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, Default, HeapSize)]
-#[serde(tag = "mode", rename_all = "snake_case")]
+#[serde(
+    tag = "mode",
+    rename_all = "snake_case",
+    try_from = "McpAuthenticationInput"
+)]
 #[repr(C)]
 pub enum McpServerAuthenticationConfig {
     #[default]
@@ -4502,8 +4511,56 @@ pub enum McpServerAuthenticationConfig {
     },
 }
 
+// Validate inactive sections too: serde's tagged unit variant otherwise ignores them.
+#[derive(Deserialize)]
+struct McpAuthenticationInput {
+    mode: String,
+    forwarded: Option<McpServerForwardedAuthenticationConfig>,
+    fixed: Option<McpServerFixedAuthenticationConfig>,
+    oauth2: Option<McpServerOauth2AuthenticationConfig>,
+}
+
+impl TryFrom<McpAuthenticationInput> for McpServerAuthenticationConfig {
+    type Error = &'static str;
+    fn try_from(input: McpAuthenticationInput) -> Result<Self, Self::Error> {
+        if input.mode != "forwarded"
+            && input
+                .forwarded
+                .as_ref()
+                .and_then(|forwarded| forwarded.custom_token_exchange.as_ref())
+                .is_some_and(|exchange| exchange.enabled)
+        {
+            return Err("MCP custom token exchange requires forwarded authentication");
+        }
+        match input.mode.as_str() {
+            "none" => Ok(Self::None),
+            "forwarded" => Ok(Self::Forwarded {
+                forwarded: input
+                    .forwarded
+                    .ok_or("Missing forwarded authentication configuration")?,
+            }),
+            "fixed" => Ok(Self::Fixed {
+                fixed: input
+                    .fixed
+                    .ok_or("Missing fixed authentication configuration")?,
+            }),
+            "oauth2" => Ok(Self::Oauth2 {
+                oauth2: input
+                    .oauth2
+                    .ok_or("Missing OAuth2 authentication configuration")?,
+            }),
+            _ => Err("Invalid MCP authentication mode"),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 pub struct McpServerForwardedAuthenticationConfig {
+    #[serde(default)]
+    #[facet(erato_config::hide_in_docs(hidden = true))]
+    #[facet(erato_config::stability(level = "unstable"))]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub custom_token_exchange: Option<McpCustomTokenExchangeConfig>,
     pub credential: McpServerForwardedCredential,
     #[serde(default = "default_mcp_forwarded_auth_header_name")]
     pub header_name: String,
@@ -4514,10 +4571,76 @@ pub struct McpServerForwardedAuthenticationConfig {
 impl Default for McpServerForwardedAuthenticationConfig {
     fn default() -> Self {
         Self {
+            custom_token_exchange: None,
             credential: McpServerForwardedCredential::AccessToken,
             header_name: default_mcp_forwarded_auth_header_name(),
             prefix: default_mcp_forwarded_auth_prefix(),
         }
+    }
+}
+
+/// Unstable operator-only external Entra JWT exchange.
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default, deny_unknown_fields)]
+#[facet(erato_config::hide_in_docs(hidden = true))]
+#[facet(erato_config::stability(level = "unstable"))]
+#[facet(erato_config::introduced_in(version = "unreleased"))]
+pub struct McpCustomTokenExchangeConfig {
+    pub enabled: bool,
+    pub subject_credential: McpServerForwardedCredential,
+    pub token_endpoint: String,
+    pub grant_type: String,
+    pub client_id: String,
+    #[facet(sensitive)]
+    pub client_secret: SecretConfigString,
+    pub scope: String,
+}
+
+impl McpCustomTokenExchangeConfig {
+    pub fn validate(&self, output: &McpServerForwardedCredential) -> Result<(), Report> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if [
+            &self.token_endpoint,
+            &self.grant_type,
+            &self.client_id,
+            self.client_secret.expose_secret(),
+            &self.scope,
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err(eyre!(
+                "Enabled MCP custom token exchange requires token_endpoint, grant_type, client_id, client_secret and scope"
+            ));
+        }
+        let endpoint = url::Url::parse(&self.token_endpoint)
+            .map_err(|_| eyre!("Invalid MCP token exchange endpoint"))?;
+        let local_http = endpoint.scheme() == "http"
+            && endpoint.host_str().is_some_and(|host| {
+                host == "localhost"
+                    || host
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            });
+        if (endpoint.scheme() != "https" && !local_http)
+            || endpoint.host_str().is_none()
+            || !endpoint.username().is_empty()
+            || endpoint.password().is_some()
+            || endpoint.fragment().is_some()
+            || endpoint.query().is_some()
+        {
+            return Err(eyre!(
+                "MCP token exchange endpoint must be HTTPS (or loopback HTTP) without credentials, query or fragment"
+            ));
+        }
+        if *output == McpServerForwardedCredential::OidcIdToken
+            && !self.scope.split_whitespace().any(|scope| scope == "openid")
+        {
+            return Err(eyre!("MCP ID token exchange requires the openid scope"));
+        }
+        Ok(())
     }
 }
 
@@ -4529,10 +4652,11 @@ fn default_mcp_forwarded_auth_prefix() -> String {
     "Bearer ".to_string()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
 #[serde(rename_all = "snake_case")]
 #[repr(C)]
 pub enum McpServerForwardedCredential {
+    #[default]
     AccessToken,
     #[serde(alias = "oidc_token")]
     OidcIdToken,
@@ -11759,5 +11883,129 @@ mod client_tool_label_tests {
             .map(|(id, _)| id.as_str())
             .collect();
         assert_eq!(labelled, ["c", "d", "kept"].into());
+    }
+}
+
+#[cfg(test)]
+mod custom_token_exchange_tests {
+    use super::*;
+
+    fn parse(source: &str) -> Result<McpServerAuthenticationConfig, config::ConfigError> {
+        Config::builder()
+            .add_source(File::from_str(source, FileFormat::Toml))
+            .build()?
+            .try_deserialize()
+    }
+
+    const VALID: &str = r#"
+mode = "forwarded"
+[forwarded]
+credential = "oidc_token"
+[forwarded.custom_token_exchange]
+enabled = true
+token_endpoint = "https://sts.example.com/token"
+grant_type = "urn:example:external-jwt"
+client_id = "client"
+client_secret = "super-secret"
+scope = "openid target"
+"#;
+
+    #[test]
+    fn custom_token_exchange_parsing_validation_and_redaction() {
+        for selector in [
+            None,
+            Some("access_token"),
+            Some("oidc_id_token"),
+            Some("oidc_token"),
+        ] {
+            let source = format!(
+                "{VALID}{}",
+                selector
+                    .map(|value| format!("subject_credential = {value:?}\n"))
+                    .unwrap_or_default()
+            );
+            let config = parse(&source).unwrap();
+            assert!(!format!("{config:?}").contains("super-secret"));
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = config else {
+                panic!()
+            };
+            let exchange = forwarded.custom_token_exchange.unwrap();
+            assert_eq!(
+                exchange.subject_credential,
+                if selector.is_none() || selector == Some("access_token") {
+                    McpServerForwardedCredential::AccessToken
+                } else {
+                    McpServerForwardedCredential::OidcIdToken
+                }
+            );
+            exchange.validate(&forwarded.credential).unwrap();
+        }
+        assert!(parse(&format!("{VALID}subject_credential = 'invalid'\n")).is_err());
+        for mode in ["none", "fixed", "oauth2"] {
+            assert!(
+                parse(&VALID.replacen("mode = \"forwarded\"", &format!("mode = {mode:?}"), 1))
+                    .is_err()
+            );
+        }
+        for field in [
+            "token_endpoint",
+            "grant_type",
+            "client_id",
+            "client_secret",
+            "scope",
+        ] {
+            let source = VALID
+                .lines()
+                .filter(|line| !line.starts_with(field))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = parse(&source).unwrap()
+            else {
+                panic!()
+            };
+            assert!(
+                forwarded
+                    .custom_token_exchange
+                    .unwrap()
+                    .validate(&forwarded.credential)
+                    .is_err()
+            );
+        }
+        let McpServerAuthenticationConfig::Forwarded { forwarded } =
+            parse(&VALID.replace("openid target", "target")).unwrap()
+        else {
+            panic!()
+        };
+        let exchange = forwarded.custom_token_exchange.unwrap();
+        assert!(
+            exchange
+                .validate(&McpServerForwardedCredential::OidcIdToken)
+                .is_err()
+        );
+        assert!(
+            exchange
+                .validate(&McpServerForwardedCredential::AccessToken)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn custom_token_exchange_is_opt_in() {
+        for section in [
+            "",
+            "[forwarded.custom_token_exchange]\n",
+            "[forwarded.custom_token_exchange]\nenabled = false",
+        ] {
+            let source =
+                format!("mode = 'forwarded'\n[forwarded]\ncredential = 'access_token'\n{section}");
+            let McpServerAuthenticationConfig::Forwarded { forwarded } = parse(&source).unwrap()
+            else {
+                panic!()
+            };
+            if let Some(exchange) = forwarded.custom_token_exchange {
+                assert!(!exchange.enabled);
+                exchange.validate(&forwarded.credential).unwrap();
+            }
+        }
     }
 }

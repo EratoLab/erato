@@ -4052,6 +4052,55 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.client_id": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.client_secret": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.enabled": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.grant_type": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.scope": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.subject_credential": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "mcp_servers.<server-id>.authentication.forwarded.custom_token_exchange.token_endpoint": {
+    "default_value_security": "unknown",
+    "hide_in_docs": true,
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "mcp_servers.<server-id>.authentication.forwarded.header_name": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

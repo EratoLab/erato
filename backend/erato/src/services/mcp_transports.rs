@@ -26,11 +26,13 @@ fn apply_auth_header(
     header_name: &str,
     header_value: &str,
 ) -> Result<(), Report> {
+    let mut value = HeaderValue::from_str(header_value)
+        .map_err(|_| eyre!("Invalid MCP authentication header value"))?;
+    value.set_sensitive(true);
     headers.insert(
         HeaderName::from_bytes(header_name.as_bytes())
             .map_err(|e| eyre!("Invalid MCP auth header name '{}': {}", header_name, e))?,
-        HeaderValue::from_str(header_value)
-            .map_err(|e| eyre!("Invalid MCP auth header value for '{}': {}", header_name, e))?,
+        value,
     );
     Ok(())
 }
@@ -40,7 +42,19 @@ pub(super) async fn apply_auth_headers(
     server_id: &str,
     config: &McpServerConfig,
     auth_context: &McpRequestAuthContext<'_>,
-) -> Result<(), Report> {
+) -> Result<Option<uuid::Uuid>, Report> {
+    if let McpServerAuthenticationConfig::Forwarded { forwarded } = &config.authentication
+        && super::mcp_token_exchange::enabled(forwarded)
+    {
+        let exchanged =
+            super::mcp_token_exchange::resolve(server_id, config, forwarded, auth_context).await?;
+        apply_auth_header(
+            default_headers,
+            &forwarded.header_name,
+            &format!("{}{}", forwarded.prefix, exchanged.token),
+        )?;
+        return Ok(Some(exchanged.generation));
+    }
     match &config.authentication {
         McpServerAuthenticationConfig::None => Ok(()),
         McpServerAuthenticationConfig::Forwarded { forwarded } => match forwarded.credential {
@@ -96,6 +110,7 @@ pub(super) async fn apply_auth_headers(
             )
         }
     }
+    .map(|()| None)
 }
 
 pub fn oauth_default_headers(config: &McpServerConfig) -> Result<HeaderMap, Report> {
@@ -148,9 +163,15 @@ async fn build_reqwest_client(
             );
         }
     }
-    apply_auth_headers(&mut default_headers, server_id, config, auth_context).await?;
+    let exchange_generation =
+        apply_auth_headers(&mut default_headers, server_id, config, auth_context).await?;
     crate::metrics::components::sync(crate::metrics::components::Component::McpClient, || {
         reqwest::Client::builder()
+            .redirect(if exchange_generation.is_some() {
+                reqwest::redirect::Policy::none()
+            } else {
+                reqwest::redirect::Policy::default()
+            })
             .default_headers(default_headers)
             .build()
             .map_err(|e| eyre!("Failed to build MCP reqwest client: {}", e))

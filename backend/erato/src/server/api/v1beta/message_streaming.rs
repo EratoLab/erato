@@ -4912,6 +4912,7 @@ async fn prepare_chat_request_with_adapters_memory_inner(
         user_id: me_profile_input.user_id,
         oidc_token: Some(me_profile_input.oidc_token),
         access_token: me_profile_input.access_token,
+        ..Default::default()
     };
     let parent_mcp_ceiling = task_parent_mcp_ceiling_for_chat(chat)?;
     let GenerationMcpToolSet {
@@ -18372,6 +18373,7 @@ async fn run_generation_after_user_message_memory_inner(
         user_id: Uuid::parse_str(&me_user.id).ok(),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let generation_task = stream_generate_chat_completion(
         temp_tx2.clone(),
@@ -19125,6 +19127,7 @@ pub(crate) async fn start_regeneration(
                 user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
+                ..Default::default()
             };
             let generation_result = stream_generate_chat_completion(
                 tx.clone(),
@@ -19758,6 +19761,7 @@ pub(crate) async fn start_edit(
                 user_id: Uuid::parse_str(&me_user.id).ok(),
                 oidc_token: Some(&me_user.oidc_token),
                 access_token: me_user.access_token.as_deref(),
+                ..Default::default()
             };
             let generation_result = stream_generate_chat_completion(
                 tx.clone(),
@@ -23088,6 +23092,7 @@ pub(crate) async fn run_continuation(
         user_id: Some(user_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     // Rebuild the tool set the parked turn was offered instead of trusting a
     // fresh, unfiltered discovery: the persisted parameters carry the facet
@@ -24205,6 +24210,7 @@ async fn resume_parked_generation(
         user_id: Some(user_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let mut effective_selected_facet_ids: Vec<String> = generation_parameters
         .selected_facets
@@ -25027,6 +25033,7 @@ pub(crate) async fn run_client_operation_continuation(
         user_id: Some(account_id),
         oidc_token: Some(&me_user.oidc_token),
         access_token: me_user.access_token.as_deref(),
+        ..Default::default()
     };
     let tools = resolve_generation_mcp_tools(
         app_state,

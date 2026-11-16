@@ -18,12 +18,15 @@ use sea_orm::prelude::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct McpRequestAuthContext<'a> {
     pub app_state: Option<&'a AppState>,
     pub user_id: Option<Uuid>,
     pub oidc_token: Option<&'a str>,
     pub access_token: Option<&'a str>,
+    /// Trusted token/session expiry, when provided by the authentication layer.
+    pub access_token_expires_at: Option<std::time::SystemTime>,
+    pub oidc_token_expires_at: Option<std::time::SystemTime>,
 }
 
 /// Wrapper struct that provides a high-level API for MCP operations
