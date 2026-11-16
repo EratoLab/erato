@@ -3626,6 +3626,24 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "integrations.ms_office.addin.presentation.addin_id": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.presentation.manifest.description": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "integrations.ms_office.addin.presentation.manifest.display_name": {
+    "default_value_security": "unknown",
+    "introduced_in": "0.9.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "integrations.ms_office.addin.serve_bundle_legacy_path": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

@@ -254,6 +254,20 @@ config = { endpoint = "https://xxx.blob.core.windows.net", container = "xxx", ac
             .display_name,
         "Erato for Documents"
     );
+    assert_eq!(
+        config.integrations.ms_office.addin.presentation.addin_id,
+        "f13aa6d0-f017-46e3-8b17-a72159d689ea"
+    );
+    assert_eq!(
+        config
+            .integrations
+            .ms_office
+            .addin
+            .presentation
+            .manifest
+            .display_name,
+        "Erato for PowerPoint"
+    );
     assert!(
         config
             .integrations
@@ -5541,6 +5555,74 @@ model_name = "gpt-4o"
         config.integrations.ms_office.addin.document,
         erato_config::config::MsOfficeAddinDocumentConfig::default(),
         "erato.template.toml's document add-in block drifted from the Rust defaults"
+    );
+}
+
+#[test]
+fn test_ms_office_addin_presentation_template_block_matches_rust_defaults() {
+    // The surrounding mail example intentionally differs from Default; compare only the presentation block.
+    let template = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../erato.template.toml"
+    ))
+    .expect("read erato.template.toml");
+    let start = template
+        .find("# [integrations.ms_office.addin.presentation]")
+        .expect("template contains the presentation add-in block");
+    let end = template[start..]
+        .find("\n#\n")
+        .map(|offset| start + offset)
+        .expect("presentation add-in block is terminated by a bare comment line");
+    let uncommented: String = template[start..end]
+        .lines()
+        .map(|line| {
+            line.strip_prefix("# ")
+                .or_else(|| line.strip_prefix("#"))
+                .unwrap_or(line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut temp_file = Builder::new()
+        .suffix(".toml")
+        .tempfile()
+        .expect("Failed to create temporary file");
+    temp_file
+        .write_all(
+            format!(
+                r#"
+{uncommented}
+
+[chat_provider]
+provider_kind = "openai"
+model_name = "gpt-4o"
+
+[file_storage_providers]
+"#
+            )
+            .as_bytes(),
+        )
+        .expect("Failed to write configuration");
+    temp_file.flush().expect("Failed to flush temporary file");
+
+    let mut builder = AppConfig::config_schema_builder(
+        Some(vec![temp_file.path().to_string_lossy().into_owned()]),
+        false,
+    )
+    .expect("Failed to create config builder");
+    builder = builder
+        .set_override("database_url", "postgres://user:pass@localhost:5432/test")
+        .unwrap();
+    let config: AppConfig = builder
+        .build()
+        .expect("Failed to build config schema")
+        .try_deserialize()
+        .expect("Failed to deserialize config");
+
+    assert_eq!(
+        config.integrations.ms_office.addin.presentation,
+        erato_config::config::MsOfficeAddinPresentationConfig::default(),
+        "erato.template.toml's presentation add-in block drifted from the Rust defaults"
     );
 }
 

@@ -46,6 +46,7 @@ const OFFICE_ADDIN_ID_PLACEHOLDER: &str = "{{OFFICE_ADDIN_ID}}";
 const OFFICE_ADDIN_MANIFEST_FILE_NAME: &str = "manifest.xml";
 const OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME: &str = "manifest-exchange-server.xml";
 const OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME: &str = "manifest-document.xml";
+const OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME: &str = "manifest-presentation.xml";
 // The launch event placeholders sit in element-only content models
 // (`Host`, `DesktopFormFactor`, `bt:Urls`), where bare character data is not
 // schema-valid. Wrapping them in XML comments keeps the shipped template
@@ -77,7 +78,8 @@ const DOCUMENT_COMMANDS_START: &str = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_START
 const DOCUMENT_COMMANDS_END: &str = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->";
 
 /// Keep the template schema-valid for local tooling, but omit command markup
-/// unsupported by SharePoint catalogs in the served SharePoint variant.
+/// unsupported by SharePoint catalogs in the served SharePoint variant. Applies
+/// to every task pane manifest a SharePoint catalog can hold (Word, PowerPoint).
 fn prepare_document_manifest(
     template: &str,
     distribution: &OfficeAddinDistribution,
@@ -89,10 +91,10 @@ fn prepare_document_manifest(
     }
     let (before, rest) = template
         .split_once(DOCUMENT_COMMANDS_START)
-        .ok_or("Word manifest is missing its command section start marker")?;
+        .ok_or("Task pane manifest is missing its command section start marker")?;
     let (_, after) = rest
         .split_once(DOCUMENT_COMMANDS_END)
-        .ok_or("Word manifest is missing its command section end marker")?;
+        .ok_or("Task pane manifest is missing its command section end marker")?;
     let rendered = format!("{before}{after}");
     if rendered.contains("VersionOverrides") {
         return Err("SharePoint manifest still contains VersionOverrides");
@@ -108,7 +110,7 @@ struct OfficeAddinManifestQuery {
 }
 
 #[derive(Debug, Deserialize, IntoParams)]
-struct WordAddinManifestQuery {
+struct TaskPaneAddinManifestQuery {
     /// Optional externally reachable deployment base URL used to rewrite the manifest.
     /// Example: https://app.example.com
     base_url: Option<String>,
@@ -360,21 +362,36 @@ fn render_office_addin_manifest(
     manifest_name: &str,
     deployment_version: Option<&str>,
 ) -> String {
+    let task_pane_identity = match manifest_name {
+        OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME => Some((
+            addin_config.document.addin_id.clone(),
+            &addin_config.document.manifest.display_name,
+            &addin_config.document.manifest.description,
+        )),
+        OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME => Some((
+            addin_config.presentation.manifest_addin_id(),
+            &addin_config.presentation.manifest.display_name,
+            &addin_config.presentation.manifest.description,
+        )),
+        _ => None,
+    };
     // Serde defaults do not inherit customer branding from the mail block; compose it explicitly.
-    let is_document_manifest = manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME;
-    let document_manifest_config = is_document_manifest.then(|| MsOfficeAddinManifestConfig {
-        display_name: addin_config.document.manifest.display_name.clone(),
-        description: addin_config.document.manifest.description.clone(),
-        ..addin_config.manifest.clone()
-    });
-    let manifest_config = document_manifest_config
+    let task_pane_manifest_config =
+        task_pane_identity
+            .as_ref()
+            .map(
+                |(_, display_name, description)| MsOfficeAddinManifestConfig {
+                    display_name: (*display_name).clone(),
+                    description: (*description).clone(),
+                    ..addin_config.manifest.clone()
+                },
+            );
+    let manifest_config = task_pane_manifest_config
         .as_ref()
         .unwrap_or(&addin_config.manifest);
-    let addin_id = if is_document_manifest {
-        &addin_config.document.addin_id
-    } else {
-        &addin_config.addin_id
-    };
+    let addin_id = task_pane_identity
+        .as_ref()
+        .map_or(&addin_config.addin_id, |(addin_id, _, _)| addin_id);
     let normalized_base_url = base_url.trim_end_matches('/');
     let office_addin_base_url =
         format!("{normalized_base_url}{OFFICE_ADDIN_MANIFEST_FRONTEND_MOUNT_PATH}");
@@ -643,7 +660,9 @@ async fn office_addin_manifest_response(
         }
     };
 
-    let manifest_template = if manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME {
+    let manifest_template = if manifest_name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME
+        || manifest_name == OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME
+    {
         match prepare_document_manifest(&manifest_template, &distribution) {
             Ok(template) => template,
             Err(message) => {
@@ -733,7 +752,7 @@ async fn office_addin_exchange_server_manifest(
 #[utoipa::path(
     get,
     path = "office-addin/manifest-document.xml",
-    params(WordAddinManifestQuery),
+    params(TaskPaneAddinManifestQuery),
     responses(
         (status = OK, description = "Rendered document task-pane Office add-in manifest", body = str, content_type = "application/xml"),
         (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
@@ -745,7 +764,7 @@ async fn office_addin_document_manifest(
     State(app_state): State<AppState>,
     Extension(deployment_version): Extension<DeploymentVersion>,
     headers: HeaderMap,
-    Query(query): Query<WordAddinManifestQuery>,
+    Query(query): Query<TaskPaneAddinManifestQuery>,
 ) -> Response {
     office_addin_manifest_response(
         app_state,
@@ -755,6 +774,37 @@ async fn office_addin_document_manifest(
             base_url: query.base_url,
         },
         OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+        query.distribution.unwrap_or_default(),
+    )
+    .await
+}
+
+/// Get the PowerPoint task-pane Office add-in manifest with runtime URL substitutions.
+#[utoipa::path(
+    get,
+    path = "office-addin/manifest-presentation.xml",
+    params(TaskPaneAddinManifestQuery),
+    responses(
+        (status = OK, description = "Rendered PowerPoint task-pane Office add-in manifest", body = str, content_type = "application/xml"),
+        (status = NOT_FOUND, description = "Office add-in is disabled or manifest is unavailable", body = str),
+        (status = BAD_REQUEST, description = "Invalid base_url or distribution query parameter", body = str),
+        (status = INTERNAL_SERVER_ERROR, description = "Failed to render manifest", body = str)
+    )
+)]
+async fn office_addin_presentation_manifest(
+    State(app_state): State<AppState>,
+    Extension(deployment_version): Extension<DeploymentVersion>,
+    headers: HeaderMap,
+    Query(query): Query<TaskPaneAddinManifestQuery>,
+) -> Response {
+    office_addin_manifest_response(
+        app_state,
+        deployment_version,
+        headers,
+        OfficeAddinManifestQuery {
+            base_url: query.base_url,
+        },
+        OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
         query.distribution.unwrap_or_default(),
     )
     .await
@@ -1017,6 +1067,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/office-addin/manifest-document.xml",
             get(office_addin_document_manifest),
         )
+        .route(
+            "/office-addin/manifest-presentation.xml",
+            get(office_addin_presentation_manifest),
+        )
         .route("/office-addin/teams/manifest.json", get(teams_app_manifest))
         .route(
             "/office-addin/teams/app-package.zip",
@@ -1047,6 +1101,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         office_addin_manifest,
         office_addin_exchange_server_manifest,
         office_addin_document_manifest,
+        office_addin_presentation_manifest,
         crate::server::license_notices::license_notices
     ),
     nest(
@@ -1069,7 +1124,8 @@ mod tests {
     use crate::config::{
         MsOfficeAddinDocumentConfig, MsOfficeAddinDocumentManifestConfig,
         MsOfficeAddinLaunchEventConfig, MsOfficeAddinLaunchEventRuntimeConfig,
-        MsOfficeAddinLaunchEventType, MsOfficeAddinManifestConfig,
+        MsOfficeAddinLaunchEventType, MsOfficeAddinManifestConfig, MsOfficeAddinPresentationConfig,
+        MsOfficeAddinPresentationManifestConfig,
     };
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -1378,9 +1434,9 @@ mod tests {
         let invalid = "/office-addin/manifest-document.xml?distribution=network-share"
             .parse()
             .unwrap();
-        assert!(Query::<WordAddinManifestQuery>::try_from_uri(&invalid).is_err());
+        assert!(Query::<TaskPaneAddinManifestQuery>::try_from_uri(&invalid).is_err());
         let default = "/office-addin/manifest-document.xml".parse().unwrap();
-        let Query(default) = Query::<WordAddinManifestQuery>::try_from_uri(&default).unwrap();
+        let Query(default) = Query::<TaskPaneAddinManifestQuery>::try_from_uri(&default).unwrap();
         assert_eq!(
             default.distribution.unwrap_or_default(),
             OfficeAddinDistribution::IntegratedApps
@@ -1388,7 +1444,8 @@ mod tests {
         let sharepoint = "/office-addin/manifest-document.xml?distribution=sharepoint"
             .parse()
             .unwrap();
-        let Query(sharepoint) = Query::<WordAddinManifestQuery>::try_from_uri(&sharepoint).unwrap();
+        let Query(sharepoint) =
+            Query::<TaskPaneAddinManifestQuery>::try_from_uri(&sharepoint).unwrap();
         assert_eq!(
             sharepoint.distribution,
             Some(OfficeAddinDistribution::Sharepoint)
@@ -1503,6 +1560,302 @@ mod tests {
         assert!(rendered.contains("<Id>custom-addin-id</Id>"));
         assert!(!rendered.contains("document-addin-id"));
         assert!(!rendered.contains("Erato for Documents"));
+    }
+
+    fn presentation_addin_config() -> MsOfficeAddinConfig {
+        MsOfficeAddinConfig {
+            presentation: MsOfficeAddinPresentationConfig {
+                addin_id: "0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00".to_string(),
+                manifest: MsOfficeAddinPresentationManifestConfig {
+                    display_name: "Erato for Slides".to_string(),
+                    description: "Erato AI assistant for slide decks".to_string(),
+                },
+            },
+            document: MsOfficeAddinDocumentConfig {
+                addin_id: "document-addin-id".to_string(),
+                ..MsOfficeAddinDocumentConfig::default()
+            },
+            ..addin_config(MsOfficeAddinManifestConfig::default())
+        }
+    }
+
+    #[test]
+    fn office_addin_presentation_manifest_template_declares_the_powerpoint_task_pane_shape() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+
+        assert!(template.contains(r#"xsi:type="TaskPaneApp""#));
+        assert_eq!(template.matches("<Host Name=").count(), 1);
+        assert!(template.contains(r#"<Host Name="Presentation" />"#));
+        assert!(template.contains(r#"<Host xsi:type="Presentation">"#));
+        assert!(!template.contains(r#""Document""#));
+        assert!(template.contains("<Permissions>ReadWriteDocument</Permissions>"));
+        assert!(template.contains(DOCUMENT_COMMANDS_START));
+        assert!(template.contains(DOCUMENT_COMMANDS_END));
+        for placeholder in OFFICE_ADDIN_MANIFEST_LAUNCH_EVENT_PLACEHOLDERS {
+            assert!(
+                !template.contains(placeholder),
+                "the presentation template must not carry {placeholder}"
+            );
+        }
+    }
+
+    /// Office LTSC 2024 stops at PowerPointApi 1.5. Any API set requirement
+    /// hides the add-in from hosts below it, so the pane decides at run time.
+    #[test]
+    fn office_addin_presentation_manifest_declares_no_api_set_minimum() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+        for distribution in [
+            OfficeAddinDistribution::IntegratedApps,
+            OfficeAddinDistribution::Sharepoint,
+        ] {
+            let rendered = render_office_addin_manifest(
+                &prepare_document_manifest(&template, &distribution).unwrap(),
+                "https://app.example.com/base",
+                &presentation_addin_config(),
+                OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+                None,
+            );
+            for forbidden in ["<Requirements", "<Sets", "<Set ", "PowerPointApi"] {
+                assert!(
+                    !rendered.contains(forbidden),
+                    "{distribution:?} variant contains {forbidden}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn render_office_addin_presentation_manifest_uses_its_own_identity_and_the_powerpoint_route() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+        let rendered = render_office_addin_manifest(
+            &prepare_document_manifest(&template, &OfficeAddinDistribution::IntegratedApps)
+                .unwrap(),
+            "https://app.example.com/base",
+            &presentation_addin_config(),
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+            Some("42"),
+        );
+
+        assert!(
+            !rendered.contains("{{"),
+            "unsubstituted placeholder in: {rendered}"
+        );
+        assert!(!rendered.contains("OFFICE_ADDIN_DOCUMENT_COMMANDS_"));
+        assert!(rendered.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
+        assert!(!rendered.contains("custom-addin-id"));
+        assert!(!rendered.contains("document-addin-id"));
+        assert!(rendered.contains(r#"<DisplayName DefaultValue="Erato for Slides" />"#));
+        assert!(
+            rendered
+                .contains(r#"<Description DefaultValue="Erato AI assistant for slide decks" />"#)
+        );
+        assert!(rendered.contains(&format!(
+            "<Version>{}</Version>",
+            office_addin_manifest_version(Some("42"))
+        )));
+        assert!(rendered.contains(
+            r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/powerpoint" />"#
+        ));
+        assert!(rendered.contains(
+            r#"<bt:Url id="taskPaneUrl" DefaultValue="https://app.example.com/base/office-addin/powerpoint" />"#
+        ));
+        assert!(rendered.contains(r#"<ExtensionPoint xsi:type="PrimaryCommandSurface">"#));
+        assert!(!rendered.contains("localhost:3002"));
+    }
+
+    #[test]
+    fn render_office_addin_presentation_manifest_normalises_the_configured_id() {
+        let mut config = presentation_addin_config();
+        config.presentation.addin_id = "  0B9E4F7A-3C2D-4E1F-8A6B-5D4C3B2A1F00\n".to_string();
+        let rendered = render_office_addin_manifest(
+            &prepare_document_manifest(
+                &stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME),
+                &OfficeAddinDistribution::IntegratedApps,
+            )
+            .unwrap(),
+            "https://app.example.com/base",
+            &config,
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(rendered.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
+    }
+
+    #[test]
+    fn render_office_addin_presentation_manifest_inherits_the_mail_branding() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+        let config = MsOfficeAddinConfig {
+            manifest: MsOfficeAddinManifestConfig {
+                provider_name: "Contoso & Co".to_string(),
+                display_name: "Contoso Mail".to_string(),
+                support_url: "https://example.com/support".to_string(),
+                group_label: "Contoso".to_string(),
+                button_label: "Open Contoso".to_string(),
+                button_description: "Open the Contoso assistant".to_string(),
+                icon_path: "assets/contoso-color.png".to_string(),
+                icon_80_path: "/public/common/custom-theme/contoso/ribbon-80.png".to_string(),
+                ..MsOfficeAddinManifestConfig::default()
+            },
+            ..presentation_addin_config()
+        };
+
+        let rendered = render_office_addin_manifest(
+            &prepare_document_manifest(&template, &OfficeAddinDistribution::IntegratedApps)
+                .unwrap(),
+            "https://app.example.com/base",
+            &config,
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(rendered.contains("<ProviderName>Contoso &amp; Co</ProviderName>"));
+        assert!(rendered.contains(r#"<DisplayName DefaultValue="Erato for Slides" />"#));
+        assert!(!rendered.contains("Contoso Mail"));
+        assert!(rendered.contains(r#"<SupportUrl DefaultValue="https://example.com/support" />"#));
+        assert!(rendered.contains(r#"<bt:String id="groupLabel" DefaultValue="Contoso" />"#));
+        assert!(rendered.contains(r#"<bt:String id="buttonLabel" DefaultValue="Open Contoso" />"#));
+        assert!(rendered.contains(
+            r#"<IconUrl DefaultValue="https://app.example.com/base/public/platform-office-addin/assets/contoso-color.png" />"#
+        ));
+        assert!(rendered.contains(
+            r#"<bt:Image id="icon80" DefaultValue="https://app.example.com/base/public/common/custom-theme/contoso/ribbon-80.png" />"#
+        ));
+    }
+
+    #[test]
+    fn render_office_addin_presentation_manifest_never_emits_launch_events() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+        let rendered = render_office_addin_manifest(
+            &prepare_document_manifest(&template, &OfficeAddinDistribution::IntegratedApps)
+                .unwrap(),
+            "https://app.example.com/base",
+            &addin_config_with_launch_events(&["onNewMessageComposeHandler"]),
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+            None,
+        );
+
+        assert!(!rendered.contains("LaunchEvent"));
+        assert!(!rendered.contains("<Runtimes>"));
+    }
+
+    #[test]
+    fn presentation_distribution_omits_sharepoint_commands_and_keeps_identity() {
+        let template = stock_manifest_template(OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME);
+        let config = presentation_addin_config();
+        let render = |distribution| {
+            render_office_addin_manifest(
+                &prepare_document_manifest(&template, &distribution).unwrap(),
+                "https://app.example.com/base",
+                &config,
+                OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+                None,
+            )
+        };
+        let standard = render(OfficeAddinDistribution::IntegratedApps);
+        let sharepoint = render(OfficeAddinDistribution::Sharepoint);
+        assert!(standard.contains("<VersionOverrides"));
+        assert!(!sharepoint.contains("VersionOverrides"));
+        assert!(!sharepoint.contains("PrimaryCommandSurface"));
+        for xml in [&standard, &sharepoint] {
+            assert!(xml.contains("<Id>0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00</Id>"));
+            assert!(xml.contains(r#"<Host Name="Presentation" />"#));
+            assert!(xml.contains(r#"<SourceLocation DefaultValue="https://app.example.com/base/office-addin/powerpoint" />"#));
+        }
+        let uri = "/office-addin/manifest-presentation.xml?distribution=sharepoint"
+            .parse()
+            .unwrap();
+        let Query(query) = Query::<TaskPaneAddinManifestQuery>::try_from_uri(&uri).unwrap();
+        assert_eq!(
+            query.distribution,
+            Some(OfficeAddinDistribution::Sharepoint)
+        );
+    }
+
+    #[test]
+    fn stock_defaults_give_each_office_manifest_a_distinct_identity() {
+        let config = MsOfficeAddinConfig::default();
+        let ids = [
+            OFFICE_ADDIN_MANIFEST_FILE_NAME,
+            OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+            OFFICE_ADDIN_PRESENTATION_MANIFEST_FILE_NAME,
+        ]
+        .map(|name| {
+            let rendered = render_office_addin_manifest(
+                &prepare_document_manifest(
+                    &stock_manifest_template(name),
+                    &OfficeAddinDistribution::IntegratedApps,
+                )
+                .unwrap(),
+                "https://app.example.com",
+                &config,
+                name,
+                None,
+            );
+            rendered
+                .split_once("<Id>")
+                .and_then(|(_, rest)| rest.split_once("</Id>"))
+                .map(|(id, _)| id.to_string())
+                .unwrap()
+        });
+        assert_eq!(
+            ids,
+            [
+                config.addin_id.clone(),
+                config.document.addin_id.clone(),
+                config.presentation.addin_id.clone(),
+            ]
+        );
+        assert_ne!(ids[0], ids[1]);
+        assert_ne!(ids[0], ids[2]);
+        assert_ne!(ids[1], ids[2]);
+    }
+
+    /// Adding the PowerPoint manifest must not change what Outlook and Word
+    /// deployments already serve.
+    #[test]
+    fn presentation_settings_leave_the_outlook_and_word_manifests_unchanged() {
+        let changed = MsOfficeAddinConfig {
+            presentation: MsOfficeAddinPresentationConfig {
+                addin_id: "0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00".to_string(),
+                manifest: MsOfficeAddinPresentationManifestConfig {
+                    display_name: "Erato for Slides".to_string(),
+                    description: "Erato AI assistant for slide decks".to_string(),
+                },
+            },
+            ..MsOfficeAddinConfig::default()
+        };
+        for name in [
+            OFFICE_ADDIN_MANIFEST_FILE_NAME,
+            OFFICE_ADDIN_EXCHANGE_SERVER_MANIFEST_FILE_NAME,
+            OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME,
+        ] {
+            let template = stock_manifest_template(name);
+            for distribution in [
+                OfficeAddinDistribution::IntegratedApps,
+                OfficeAddinDistribution::Sharepoint,
+            ] {
+                let template = if name == OFFICE_ADDIN_DOCUMENT_MANIFEST_FILE_NAME {
+                    prepare_document_manifest(&template, &distribution).unwrap()
+                } else {
+                    template.clone()
+                };
+                let render = |config: &MsOfficeAddinConfig| {
+                    render_office_addin_manifest(
+                        &template,
+                        "https://app.example.com/base",
+                        config,
+                        name,
+                        Some("42"),
+                    )
+                };
+                let rendered = render(&changed);
+                assert_eq!(rendered, render(&MsOfficeAddinConfig::default()), "{name}");
+                assert!(!rendered.contains("0b9e4f7a-3c2d-4e1f-8a6b-5d4c3b2a1f00"));
+                assert!(!rendered.contains("Erato for Slides"));
+                assert!(!rendered.contains("/office-addin/powerpoint"));
+            }
+        }
     }
 
     /// The Exchange Server variant is excluded by manifest name, not merely by
@@ -1730,6 +2083,10 @@ mod tests {
             (
                 "manifest-document.xml",
                 include_str!("../../../../office-addin/manifests/manifest-document.xml"),
+            ),
+            (
+                "manifest-presentation.xml",
+                include_str!("../../../../office-addin/manifests/manifest-presentation.xml"),
             ),
             (
                 "manifest-exchange-server.xml",

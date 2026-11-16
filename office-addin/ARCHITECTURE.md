@@ -64,8 +64,12 @@ implement the seams listed below, and never modify the core itself.
   that cannot see images shows a warning for as long as a picture stays staged.
   Image parts reach the model without a file name, so the send's
   `selection_summary` names the slide each sent picture shows.
-  They are sideloaded from `manifests/manifest-local-excel.xml` and
-  `manifest-local-powerpoint.xml`; the backend renders no manifest for them.
+  Locally they are sideloaded from `manifests/manifest-local-excel.xml` and
+  `manifest-local-powerpoint.xml`. For deployments the backend renders
+  `manifests/manifest-presentation.xml` at `/office-addin/manifest-presentation.xml`
+  (own add-in id `integrations.ms_office.addin.presentation`, branding inherited
+  like Word's, SharePoint variant like Word's, no `Requirements`); Excel has no
+  deployable manifest.
 - The shared Office.js ring — stays in `src/providers`, `src/hooks`,
   `src/utils`: `OfficeProvider`, `OfficeThemeProvider`,
   `OfficeDocumentAuthProvider` and `OfficeDocumentFeatureConfig` (sign-in and
