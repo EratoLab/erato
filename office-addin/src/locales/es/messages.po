@@ -1476,6 +1476,46 @@ msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
 msgstr "Para que Erato vea el diseño, los gráficos y las imágenes"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.chooseDistribution"
+msgstr "Elige cómo distribuir el complemento de PowerPoint para obtener su manifiesto y las instrucciones de instalación."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.desktopRedirectUriInstruction"
+msgstr "En el registro de la aplicación de Entra ID, agrega el URI de redirección de SPA. PowerPoint para Windows y Mac inicia sesión a través de él:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.distributionGuidance"
+msgstr "Elige el centro de administración de Microsoft 365 para usuarios con buzones de Exchange Online y licencias de suscripción de Microsoft 365 compatibles. Elige el catálogo de aplicaciones de SharePoint para entornos con buzones de Exchange locales o sin implementación centralizada. La distribución mediante el catálogo de SharePoint requiere un administrador del catálogo y no admite PowerPoint en Mac."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.downloadSelectedManifest"
+msgstr "Descargar manifiesto de PowerPoint"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.integratedOpen"
+msgstr "Cuando la implementación esté disponible para los usuarios, reinicia PowerPoint y abre Erato desde su botón en la cinta de opciones."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointOpen"
+msgstr "Abre el cuadro de diálogo de complementos de Office en PowerPoint y selecciona Mi organización para agregar Erato. Este método de distribución no incluye un botón de Erato en la cinta de opciones; ábrelo desde la lista de complementos. PowerPoint en la web puede usar un catálogo de SharePoint Online."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointTrust"
+msgstr "En PowerPoint para Windows, abre Archivo → Opciones → Centro de confianza → Configuración del Centro de confianza → Catálogos de complementos de confianza. Agrega la URL del sitio del catálogo, selecciona Mostrar en menú y reinicia PowerPoint."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.webSignInInstruction"
+msgstr "PowerPoint en la web no ofrece inicio de sesión de Office para complementos, así que los usuarios inician sesión en una ventana emergente mediante el inicio de sesión de oauth2-proxy de esta implementación. Ese inicio de sesión usa el URI de redirección web del proxy, que todas las implementaciones ya registran para la aplicación web de Erato. El proxy debe establecer <0>cookie_samesite = \"none\"</0> para que la cookie de sesión llegue al complemento dentro de PowerPoint:"
+
+#. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.attached"
 msgstr "{attachedCount, plural, one {Imagen de la diapositiva adjuntada.} other {# imágenes de diapositivas adjuntadas.}}"

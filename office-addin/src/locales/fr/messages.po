@@ -1476,6 +1476,46 @@ msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
 msgstr "Pour qu’Erato voie la mise en page, les graphiques et les images"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.chooseDistribution"
+msgstr "Choisissez le mode de distribution du complément PowerPoint pour obtenir son manifeste et les instructions d’installation."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.desktopRedirectUriInstruction"
+msgstr "Dans l’inscription d’application Entra ID, ajoutez l’URI de redirection SPA. PowerPoint sous Windows et sur Mac se connecte par son intermédiaire :"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.distributionGuidance"
+msgstr "Choisissez le centre d’administration Microsoft 365 pour les utilisateurs disposant de boîtes aux lettres Exchange Online et de licences d’abonnement Microsoft 365 éligibles. Choisissez le catalogue d’applications SharePoint pour les environnements avec des boîtes aux lettres Exchange locales ou sans déploiement centralisé. La distribution par catalogue SharePoint nécessite un administrateur du catalogue et ne prend pas en charge PowerPoint sur Mac."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.downloadSelectedManifest"
+msgstr "Télécharger le manifeste PowerPoint"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.integratedOpen"
+msgstr "Une fois le déploiement effectif pour les utilisateurs, redémarrez PowerPoint et ouvrez Erato à l’aide de son bouton dans le ruban."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointOpen"
+msgstr "Ouvrez la boîte de dialogue des compléments Office dans PowerPoint et sélectionnez Mon organisation pour ajouter Erato. Ce mode de distribution ne propose pas de bouton Erato dans le ruban ; ouvrez-le depuis la liste des compléments. PowerPoint sur le web peut utiliser un catalogue SharePoint Online."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointTrust"
+msgstr "Dans PowerPoint sous Windows, ouvrez Fichier → Options → Centre de gestion de la confidentialité → Paramètres du Centre de gestion de la confidentialité → Catalogues de compléments approuvés. Ajoutez l’URL du site du catalogue, sélectionnez Afficher dans le menu, puis redémarrez PowerPoint."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.webSignInInstruction"
+msgstr "PowerPoint sur le web ne propose pas de connexion Office pour les compléments ; les utilisateurs se connectent donc dans une fenêtre contextuelle via la connexion oauth2-proxy de ce déploiement. Cette connexion utilise l’URI de redirection web du proxy, que chaque déploiement enregistre déjà pour l’application web Erato. Le proxy doit définir <0>cookie_samesite = \"none\"</0> pour que le cookie de session parvienne au complément dans PowerPoint :"
+
+#. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.attached"
 msgstr "{attachedCount, plural, one {Image de la diapositive jointe.} other {# images de diapositives jointes.}}"

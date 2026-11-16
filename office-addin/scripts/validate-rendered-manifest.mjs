@@ -18,6 +18,8 @@ const MANIFESTS = [
   },
   { name: "manifest-document.xml", launchEvents: false },
   { name: "manifest-document.xml", launchEvents: false, sharepoint: true },
+  { name: "manifest-presentation.xml", launchEvents: false },
+  { name: "manifest-presentation.xml", launchEvents: false, sharepoint: true },
 ];
 
 // Synthetic values in the shape the backend renders. The version is the one
@@ -71,7 +73,9 @@ function render({ manifest, template, withLaunchEvents }) {
   const end = "<!-- OFFICE_ADDIN_DOCUMENT_COMMANDS_END -->";
   if (manifest.sharepoint) {
     if (!rendered.includes(start) || !rendered.includes(end)) {
-      throw new Error("Word template is missing its command section markers");
+      throw new Error(
+        `${manifest.name} is missing its command section markers`,
+      );
     }
     rendered =
       rendered.slice(0, rendered.indexOf(start)) +

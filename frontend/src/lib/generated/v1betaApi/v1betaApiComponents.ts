@@ -9312,6 +9312,128 @@ export const useOfficeAddinExchangeServerManifest = <TData = undefined,>(
   });
 };
 
+export type OfficeAddinPresentationManifestQueryParams = {
+  /**
+   * Optional externally reachable deployment base URL used to rewrite the manifest.
+   * Example: https://app.example.com
+   */
+  base_url?: null | undefined;
+  /**
+   * integrated-apps (default) or sharepoint, which omits ribbon commands.
+   */
+  distribution?: null | ("integrated-apps" | "sharepoint");
+};
+
+export type OfficeAddinPresentationManifestError =
+  Fetcher.ErrorWrapper<undefined>;
+
+export type OfficeAddinPresentationManifestVariables = {
+  queryParams?: OfficeAddinPresentationManifestQueryParams;
+} & V1betaApiContext["fetcherOptions"];
+
+export const fetchOfficeAddinPresentationManifest = (
+  variables: OfficeAddinPresentationManifestVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    undefined,
+    {},
+    OfficeAddinPresentationManifestQueryParams,
+    {}
+  >({
+    url: "/office-addin/manifest-presentation.xml",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (options: QueryFnOptions) => Promise<undefined>;
+};
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((options: QueryFnOptions) => Promise<undefined>)
+    | reactQuery.SkipToken;
+};
+
+export function officeAddinPresentationManifestQuery(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/office-addin/manifest-presentation.xml",
+      operationId: "officeAddinPresentationManifest",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchOfficeAddinPresentationManifest(variables, signal),
+  };
+}
+
+export const useSuspenseOfficeAddinPresentationManifest = <TData = undefined,>(
+  variables: OfficeAddinPresentationManifestVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinPresentationManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    TData
+  >({
+    ...officeAddinPresentationManifestQuery(
+      deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useOfficeAddinPresentationManifest = <TData = undefined,>(
+  variables: OfficeAddinPresentationManifestVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      undefined,
+      OfficeAddinPresentationManifestError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    undefined,
+    OfficeAddinPresentationManifestError,
+    TData
+  >({
+    ...officeAddinPresentationManifestQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type OfficeAddinManifestQueryParams = {
   /**
    * Optional externally reachable deployment base URL used to rewrite the manifest.
@@ -9691,6 +9813,13 @@ export type QueryOperation =
       operationId: "officeAddinExchangeServerManifest";
       variables:
         | OfficeAddinExchangeServerManifestVariables
+        | reactQuery.SkipToken;
+    }
+  | {
+      path: "/office-addin/manifest-presentation.xml";
+      operationId: "officeAddinPresentationManifest";
+      variables:
+        | OfficeAddinPresentationManifestVariables
         | reactQuery.SkipToken;
     }
   | {

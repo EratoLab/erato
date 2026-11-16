@@ -276,6 +276,126 @@ describe("AddinSetupRoute Word branch", () => {
   });
 });
 
+describe("AddinSetupRoute PowerPoint branch", () => {
+  const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
+
+  beforeEach(() => {
+    Reflect.deleteProperty(globalThis, "Office");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => "<OfficeApp />",
+      })),
+    );
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    if (originalOffice) {
+      Object.defineProperty(globalThis, "Office", originalOffice);
+    }
+  });
+
+  function fetchedManifests(): string[] {
+    return vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([url]) => String(url))
+      .filter((url) => url.includes("manifest"));
+  }
+
+  function stubDownload(): HTMLAnchorElement {
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:manifest"),
+      revokeObjectURL: vi.fn(),
+    });
+    const anchor = document.createElement("a");
+    vi.spyOn(anchor, "click").mockImplementation(() => undefined);
+    vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    return anchor;
+  }
+
+  async function selectPowerPoint(
+    distribution: "Microsoft 365 admin center" | "SharePoint app catalog",
+  ) {
+    render(<AddinSetupRoute />);
+    await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
+    fireEvent.click(screen.getByRole("button", { name: "PowerPoint" }));
+    expect(
+      screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+    ).toBeDisabled();
+    expect(fetchedManifests()).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: distribution }));
+    await waitFor(() => expect(fetchedManifests()).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+      ).toBeEnabled(),
+    );
+  }
+
+  it("offers PowerPoint next to Word and downloads its own manifest", async () => {
+    await selectPowerPoint("Microsoft 365 admin center");
+
+    const requested = fetchedManifests().at(-1);
+    expect(requested).toContain("manifest-presentation.xml");
+    expect(requested).toContain("distribution=integrated-apps");
+    expect(screen.getByRole("button", { name: "PowerPoint" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByText(/restart PowerPoint and open Erato from its ribbon/),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Download Word manifest" }),
+    ).not.toBeInTheDocument();
+
+    const anchor = stubDownload();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+    );
+    expect(anchor.download).toBe("manifest-presentation.xml");
+  });
+
+  it("downloads the SharePoint variant with PowerPoint instructions", async () => {
+    await selectPowerPoint("SharePoint app catalog");
+
+    expect(fetchedManifests().at(-1)).toContain(
+      "manifest-presentation.xml?distribution=sharepoint",
+    );
+    expect(
+      screen.getByText(/In PowerPoint on Windows, open File/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/does not support PowerPoint on Mac/),
+    ).toBeVisible();
+    fireEvent.click(screen.getByText("Authentication prerequisites"));
+    expect(
+      screen.getByText(/PowerPoint on the web has no Office sign-in/),
+    ).toBeVisible();
+
+    const anchor = stubDownload();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download PowerPoint manifest" }),
+    );
+    expect(anchor.download).toBe("manifest-presentation-sharepoint.xml");
+  });
+
+  it("keeps Excel unavailable", async () => {
+    render(<AddinSetupRoute />);
+    await waitFor(() => expect(fetchedManifests()).toHaveLength(1));
+    const excel = screen.getByRole("button", { name: "Excel" });
+    expect(excel).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(excel);
+    expect(excel).toHaveAttribute("aria-pressed", "false");
+    expect(fetchedManifests()).toHaveLength(1);
+  });
+});
+
 describe("AddinSetupRoute Teams bot section", () => {
   const originalOffice = Object.getOwnPropertyDescriptor(globalThis, "Office");
   const botId = "11111111-2222-3333-4444-555555555555";

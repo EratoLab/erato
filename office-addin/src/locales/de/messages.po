@@ -1476,6 +1476,46 @@ msgid "officeAddin.powerpoint.fileSource.slidePictureHint"
 msgstr "Damit Erato Layout, Diagramme und Bilder sieht"
 
 #. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.chooseDistribution"
+msgstr "Wähle die Verteilungsmethode für das PowerPoint-Add-in, um das passende Manifest und die Installationsanleitung zu erhalten."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.desktopRedirectUriInstruction"
+msgstr "Füge in der App-Registrierung in Entra ID den SPA-Umleitungs-URI hinzu. PowerPoint unter Windows und auf dem Mac meldet sich darüber an:"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.distributionGuidance"
+msgstr "Wähle das Microsoft 365 Admin Center für Benutzer mit Exchange Online-Postfächern und geeigneten Microsoft 365-Abonnementlizenzen. Wähle den SharePoint-App-Katalog für Umgebungen mit lokalen Exchange-Postfächern oder ohne zentrale Bereitstellung. Die Verteilung über einen SharePoint-Katalog erfordert einen Katalogadministrator und unterstützt PowerPoint auf dem Mac nicht."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.downloadSelectedManifest"
+msgstr "PowerPoint-Manifest herunterladen"
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.integratedOpen"
+msgstr "Starte PowerPoint neu, sobald die Bereitstellung die Benutzer erreicht hat, und öffne Erato über die Schaltfläche im Menüband."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointOpen"
+msgstr "Öffne in PowerPoint den Dialog für Office-Add-ins und wähle „Meine Organisation“, um Erato hinzuzufügen. Bei dieser Verteilungsmethode gibt es keine Erato-Schaltfläche im Menüband; öffne Erato über die Add-in-Liste. PowerPoint im Web kann einen SharePoint Online-Katalog verwenden."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.sharepointTrust"
+msgstr "Öffne in PowerPoint unter Windows Datei → Optionen → Trust Center → Einstellungen für das Trust Center → Kataloge vertrauenswürdiger Add-Ins. Füge die URL der Katalogwebsite hinzu, aktiviere „Im Menü anzeigen“ und starte PowerPoint neu."
+
+#. js-lingui-explicit-id
+#: src/pages/AddinSetupPage.tsx
+msgid "officeAddin.powerpoint.setup.webSignInInstruction"
+msgstr "PowerPoint im Web bietet keine Office-Anmeldung für Add-ins. Benutzer melden sich deshalb in einem Pop-up über die oauth2-proxy-Anmeldung dieser Bereitstellung an. Diese Anmeldung nutzt den Web-Umleitungs-URI des Proxys, den jede Bereitstellung bereits für die Erato-Web-App registriert. Der Proxy muss <0>cookie_samesite = \"none\"</0> setzen, damit das Sitzungscookie das Add-in in PowerPoint erreicht:"
+
+#. js-lingui-explicit-id
 #: src/powerpoint/hooks/usePowerPointSlidePictures.ts
 msgid "officeAddin.powerpoint.slidePicture.attached"
 msgstr "{attachedCount, plural, one {Folienbild angehängt.} other {# Folienbilder angehängt.}}"

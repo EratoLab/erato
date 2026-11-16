@@ -5237,6 +5237,89 @@
         }
       }
     },
+    "/office-addin/manifest-presentation.xml": {
+      "get": {
+        "tags": [],
+        "summary": "Get the PowerPoint task-pane Office add-in manifest with runtime URL substitutions.",
+        "operationId": "office_addin_presentation_manifest",
+        "parameters": [
+          {
+            "name": "base_url",
+            "in": "query",
+            "description": "Optional externally reachable deployment base URL used to rewrite the manifest.\nExample: https://app.example.com",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "distribution",
+            "in": "query",
+            "description": "integrated-apps (default) or sharepoint, which omits ribbon commands.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "integrated-apps",
+                    "sharepoint"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rendered PowerPoint task-pane Office add-in manifest",
+            "content": {
+              "application/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid base_url or distribution query parameter",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Office add-in is disabled or manifest is unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to render manifest",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/office-addin/manifest.xml": {
       "get": {
         "tags": [],
