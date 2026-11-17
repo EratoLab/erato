@@ -2891,6 +2891,11 @@ msgstr "Auf diesem Gerät durchsucht: {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source}: {from} – {to}"
 
@@ -2903,6 +2908,11 @@ msgstr "{source}: seit {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source}: noch nicht durchsuchbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -7955,6 +7965,11 @@ msgstr "Maximale Anzahl gleichzeitig verarbeiteter Dokumente."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Indexierungspriorität"
 
@@ -8122,6 +8137,11 @@ msgstr "Noch nicht gescannt"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Teilweise indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx

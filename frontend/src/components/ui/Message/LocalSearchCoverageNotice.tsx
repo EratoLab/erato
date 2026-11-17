@@ -19,6 +19,21 @@ const formatUtcDay = (iso: string) =>
 
 function sourcePeriod(coverage: SearchCoverageSource): string {
   const source = numberedLabel(coverage);
+  if (
+    coverage.inventoryComplete === false &&
+    (coverage.searchableDocuments ?? 0) > 0
+  ) {
+    return t({
+      id: "chat.message.localSearchCoverage.sourcePartial",
+      message: `${source}: indexed items searched; inventory and date coverage are incomplete`,
+    });
+  }
+  if (coverage.from === null && (coverage.searchableDocuments ?? 0) > 0) {
+    return t({
+      id: "chat.message.localSearchCoverage.sourceUndated",
+      message: `${source}: indexed items searched; document dates are unavailable`,
+    });
+  }
   if (coverage.from === null) {
     return t({
       id: "chat.message.localSearchCoverage.sourceUnavailable",
@@ -76,7 +91,9 @@ export function LocalSearchCoverageNotice({
     );
   }
 
-  const warning = summary.requestedFrom !== null;
+  const warning =
+    summary.requestedFrom !== null ||
+    summary.sources.some((source) => source.inventoryComplete === false);
   // The source that triggered the warning leads, so the visible period explains it.
   const sources = [...summary.sources].sort(
     (a, b) =>
