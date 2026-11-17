@@ -657,7 +657,6 @@ export const addsOnToolsWord = (
   change: GistChange,
   effect: ChangeEffect,
 ): boolean =>
-   
   effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list);
 
 /** Whether the description says something a card should show. */
