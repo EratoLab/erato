@@ -724,14 +724,23 @@ describe("a corrected card the sentences alone would call the same", () => {
   });
 });
 
+/** Every leaf of an argument, as a JSON pointer. */
+const leaves = (value: unknown, at = ""): string[] =>
+  typeof value === "object" && value !== null
+    ? Object.entries(value).flatMap(([key, inner]) =>
+        leaves(inner, `${at}/${key}`),
+      )
+    : [at];
+const readOf = (pointer: string, input: unknown): unknown =>
+  pointer
+    .split("/")
+    .slice(1)
+    .reduce<unknown>(
+      (holder, key) => (holder as Record<string, unknown>)[key],
+      input,
+    );
+
 describe("whatever differs in the arguments is told", () => {
-  /** Every leaf of an argument, as a JSON pointer. */
-  const leaves = (value: unknown, at = ""): string[] =>
-    typeof value === "object" && value !== null
-      ? Object.entries(value).flatMap(([key, inner]) =>
-          leaves(inner, `${at}/${key}`),
-        )
-      : [at];
   const mutated = (value: unknown): unknown =>
     typeof value === "string"
       ? `${value} x`
@@ -740,15 +749,6 @@ describe("whatever differs in the arguments is told", () => {
         : typeof value === "boolean"
           ? !value
           : "x";
-  const readOf = (pointer: string, input: unknown): unknown =>
-    pointer
-      .split("/")
-      .slice(1)
-      .reduce<unknown>(
-        (holder, key) => (holder as Record<string, unknown>)[key],
-        input,
-      );
-
   const described = calls.filter(
     (call) =>
       approvalOf(call).type === "call" &&
@@ -1168,6 +1168,82 @@ describe("a batch past its stored rows", () => {
         ).pieces,
       ),
     ).toContain("Changed: One row is different now; it's on screen.");
+  });
+});
+
+describe("a batch covers only the rows that changed", () => {
+  /** Row 3 renamed, as the label's row summary shows it. */
+  const renamed = (call: SetCall) => {
+    const rows = (
+      call.display.label.change as unknown as {
+        batch: { rows: { effects: { values: { text: string }[] }[] }[] };
+      }
+    ).batch.rows;
+    rows[2].effects[0].values = [
+      { text: "Name: Schulung absagen, Status: Offen" },
+    ];
+    setInput(call, "/pages/2/properties/Name", "Schulung absagen");
+  };
+
+  it.each([
+    [
+      "a member the summary does not show",
+      "/pages/4/properties/Projekt",
+      "Linie 5",
+    ],
+    [
+      "a relation the summary shows only as an ID",
+      "/pages/4/properties/Relation",
+      "5f0c2a10-0000-4000-8000-0000000000ff",
+    ],
+    [
+      "a member past the row's effects",
+      "/pages/4/properties/Status",
+      "Erledigt",
+    ],
+  ])("B7: another row changed in %s is told", (_, path, value) => {
+    const before = callOf("create-11-batch-rows");
+    const after = callOf("create-11-batch-rows");
+    renamed(after);
+    setInput(after, path, value);
+    const texts = textsOf(
+      difference(
+        withdrawn(before, "Zeile drei soll Schulung absagen heißen"),
+        after,
+      ).pieces,
+    );
+    expect(texts).toContain(
+      "Changed: One row is different now; it's on screen.",
+    );
+    expect(texts).toContain(ELSEWHERE);
+    expect(texts).not.toContain(REST);
+  });
+
+  it("B7: with every other row's arguments changed one at a time, the rest is never as before", () => {
+    const card = callOf("create-11-batch-rows");
+    const others = leaves(card.input).filter(
+      (pointer) =>
+        pointer.startsWith("/pages/") && !pointer.startsWith("/pages/2/"),
+    );
+    expect(others.length).toBeGreaterThan(0);
+    for (const pointer of others) {
+      const before = callOf("create-11-batch-rows");
+      const after = callOf("create-11-batch-rows");
+      renamed(after);
+      setInput(after, pointer, `${String(readOf(pointer, after.input))} x`);
+      const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+      expect(texts, pointer).toContain(ELSEWHERE);
+      expect(texts, pointer).not.toContain(REST);
+    }
+  });
+
+  it("only the asked row changed: the rest is as before", () => {
+    const before = callOf("create-11-batch-rows");
+    const after = callOf("create-11-batch-rows");
+    renamed(after);
+    expect(textsOf(difference(withdrawn(before, "x"), after).pieces)).toContain(
+      REST,
+    );
   });
 });
 

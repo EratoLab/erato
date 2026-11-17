@@ -91,8 +91,8 @@ interface Entry {
    * part did not change.
    */
   plainer?: string;
-  /** For a batch: each stored row's comparison and the values that name it. */
-  rows?: { compare: string; said: EarValue[] }[];
+  /** For a batch: each stored row's comparison, the values that name it, and its paths. */
+  rows?: { compare: string; said: EarValue[]; paths: string[] }[];
 }
 
 const pieceId = (role: SpokenPieceRole, field?: string) =>
@@ -189,28 +189,38 @@ const rowCompare = (row: {
  * not covered, so its change is told as something else that differs.
  */
 const batchPaths = (rows: readonly { effects: ChangeEffect[] }[]): string[] => [
+  ...new Set(rows.flatMap(rowPaths)),
+];
+
+/** One stored row's own paths, up to its index. */
+const rowPaths = (row: { effects: ChangeEffect[] }): string[] => [
   ...new Set(
-    rows.flatMap((row) =>
-      row.effects.flatMap(
-        (effect) => /^(.*?\/\d+)(?:\/|$)/.exec(effect.path)?.[1] ?? [],
-      ),
+    row.effects.flatMap(
+      (effect) => /^(.*?\/\d+)(?:\/|$)/.exec(effect.path)?.[1] ?? [],
     ),
   ),
 ];
 
-/** A batch named by the rows that changed, in either card; any other entry as it is. */
+/**
+ * A batch as the rows that changed, in either card: named by their values
+ * and covering only their own paths, so a row that differs where its
+ * summary shows nothing is still told. Any other entry as it is.
+ */
 const changedRows = (entry: Entry, old: Entry | undefined): Entry => {
   if (!entry.rows) return entry;
   const before = old?.rows ?? [];
   const rows = Math.max(entry.rows.length, before.length);
   const said: EarValue[] = [];
+  const paths: string[] = [];
   for (let index = 0; index < rows; index++) {
     const now = entry.rows.at(index);
     const then = before.at(index);
-    if (now?.compare !== then?.compare)
+    if (now?.compare !== then?.compare) {
       said.push(...(now?.said ?? []), ...(then?.said ?? []));
+      paths.push(...(now?.paths ?? []), ...(then?.paths ?? []));
+    }
   }
-  return { ...entry, said };
+  return { ...entry, said, paths };
 };
 
 /** How many rows of a batch differ between two cards. */
@@ -496,6 +506,7 @@ const entriesOf = (
             effect.values.map((value) => earOf(value, timeZone)),
           ),
         ],
+        paths: rowPaths(row),
       })),
     });
   }
@@ -1044,11 +1055,12 @@ export const spokenDifference = (
             old?.sentence === entry.sentence && entry.plainer !== undefined
             ? entry.plainer
             : entry.sentence;
+      const changed = changedRows(entry, old);
       differs(
         entry,
         sentence,
-        asks(said, changedRows(entry, old), old, siblings),
-        [...entry.paths, ...(old?.paths ?? [])],
+        asks(said, changed, old, siblings),
+        entry.rows ? changed.paths : [...entry.paths, ...(old?.paths ?? [])],
       );
     } else if (entry.key === "consequence") {
       consequence = entry;
