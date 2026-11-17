@@ -12111,7 +12111,13 @@ async fn stream_generate_chat_completion<'a>(
                 .finish(app_state, policy, subject, chat_id, assistant_message_id)
                 .await
             {
-                Ok(Some(pointer)) => content.push(pointer),
+                Ok(Some(pointer)) => {
+                    // A stop on an approval stays the last part: that is what
+                    // marks the turn as waiting.
+                    let at = content.len()
+                        - usize::from(crate::models::message::is_durable_stop(content));
+                    content.insert(at, pointer);
+                }
                 Ok(None) => {}
                 Err(error) => {
                     tracing::warn!(%error, "Speech synthesis failed; keeping text response");

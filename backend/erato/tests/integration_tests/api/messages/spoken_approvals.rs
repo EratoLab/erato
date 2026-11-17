@@ -6,6 +6,7 @@ use super::reminder_tools::{
     answer_turn, extract_answer, next_friday, parked, reminder, setup_with_config, tool_turn,
 };
 use super::*;
+use crate::test_utils::build_openai_narrated_tool_calls_streaming_response;
 use erato::config::McpToolApprovalPreset;
 use erato::services::scheduled_items;
 use std::sync::Arc;
@@ -360,5 +361,123 @@ async fn the_answer_after_a_decision_is_spoken_like_the_turn_it_continues(pool: 
     assert!(!spoken.is_empty() && !typed.is_empty());
     assert!(spoken.iter().all(|body| body.contains(INSTRUCTION)));
     assert!(typed.iter().all(|body| !body.contains(INSTRUCTION)));
+    speech.abort();
+}
+
+/// The usual spoken turn says a sentence before its call. Its recording must
+/// not end the message after the approval request, or the stop is no longer
+/// seen as waiting for a decision; and the answer after the decision is a
+/// second recording, stored apart from the first.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn a_sentence_before_the_call_keeps_the_stop_and_its_own_recording(pool: Pool<Postgres>) {
+    let (speech_url, _, speech) = mock_speech().await;
+    let (state, server, user_id, _, llm) = setup_with_config(
+        pool,
+        MockSet::new(),
+        true,
+        "de-DE",
+        Some(McpToolApprovalPreset::Permissive),
+        |config| speak_with(config, &speech_url),
+    )
+    .await;
+    let item = scheduled_items::create_checked(
+        &state,
+        user_id,
+        reminder("Vorgelesen", next_friday(), 10),
+        json!({"via": "web"}),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    {
+        let mut mocks = llm.mocks();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(
+                    &["Lösch Vorgelesen"],
+                    &["call_narrated"],
+                ));
+            mock_llm_sse_response(
+                then,
+                build_openai_narrated_tool_calls_streaming_response(
+                    "Ich lösche die Erinnerung.",
+                    &[(
+                        "call_narrated",
+                        "cancel_reminder",
+                        json!({"reminder_id": item.id}),
+                    )],
+                ),
+            );
+        });
+        answer_turn(&mut mocks, "call_narrated", "Erledigt.");
+    }
+    let chat_id = seed_origin_chat(&state.db).await;
+
+    send(&server, chat_id, "Lösch Vorgelesen", true).await;
+
+    // `parked` finds the message whose last part is the approval request.
+    let (message_id, request) = parked(&state, chat_id).await;
+    // The chat's state is written as the generation ends, just after the stream.
+    let mut generation_state = None;
+    for _ in 0..50 {
+        generation_state = chats::Entity::find_by_id(chat_id)
+            .one(&state.db)
+            .await
+            .unwrap()
+            .unwrap()
+            .generation_state;
+        if generation_state.as_deref() == Some("awaiting_approval") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(generation_state.as_deref(), Some("awaiting_approval"));
+    let audio_parts = |raw: &Value| -> Vec<Uuid> {
+        raw["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|part| part["content_type"] == "audio_file_pointer")
+            .map(|part| part["file_upload_id"].as_str().unwrap().parse().unwrap())
+            .collect()
+    };
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(audio_parts(&stored.raw_message).len(), 1);
+
+    let response = server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": request["approvals"][0]["approval_id"], "decision": "approve"}],
+            "conversational_audio_back": true,
+        }))
+        .await;
+    response.assert_status_ok();
+    let continued = events(&response);
+    assert_eq!(extract_answer(&continued), "Erledigt.");
+
+    let stored = Messages::find_by_id(message_id)
+        .one(&state.db)
+        .await
+        .unwrap()
+        .unwrap();
+    let files = audio_parts(&stored.raw_message);
+    assert_eq!(files.len(), 2, "{}", stored.raw_message);
+    let mut paths = Vec::new();
+    for file in files {
+        let record = erato::db::entity::file_uploads::Entity::find_by_id(file)
+            .one(&state.db)
+            .await
+            .unwrap()
+            .expect("the recording's file record");
+        paths.push(record.file_storage_path);
+    }
+    assert_ne!(paths[0], paths[1], "each recording has a path of its own");
     speech.abort();
 }
