@@ -592,7 +592,7 @@ const setInput = (call: SetCall, pointer: string, value: unknown): void => {
 const REST = "Everything else is as before.";
 const ELSEWHERE = "Something else is different too; it's on screen.";
 const UNREADABLE =
-  "The card changed in details I can't read out; they're on screen.";
+  "I can't tell from the card whether the change is in: only something I can't read out is different. It's on screen.";
 
 describe("a corrected card the sentences alone would call the same", () => {
   it("another record by ID is another item, also under the same name", () => {
@@ -870,5 +870,251 @@ describe("what counts as asked for", () => {
     );
     expect(counted).toHaveLength(1);
     expect(texts.filter((text) => UNASKED.test(text))).toHaveLength(7);
+  });
+});
+
+// Re-check of the review: what a card cannot tell apart, and what names a field.
+
+describe("differences a card cannot tell apart are no differences", () => {
+  const same = (
+    change: (call: SetCall) => void,
+    id = "create-02-appointment",
+  ) => {
+    const before = callOf(id);
+    const after = callOf(id);
+    change(after);
+    return difference(withdrawn(before, "nimm den 22."), after);
+  };
+
+  it("an optional argument null instead of missing", () => {
+    expect(
+      same((call) => {
+        (call.input.item as Record<string, unknown>).description = null;
+      }).intro,
+    ).toBe("same");
+  });
+
+  it("a blank value instead of missing, and spacing only", () => {
+    expect(
+      same((call) => {
+        const item = call.input.item as Record<string, unknown>;
+        item.description = "   ";
+        item.location = "  Werk   Augsburg ";
+      }).intro,
+    ).toBe("same");
+  });
+
+  it("a token made anew for the request", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    before.input.idempotency_key = "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
+    after.input.idempotency_key = "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
+    before.input.requestId = "req_01HZX4K9Q2W7E5R3T8Y6U1I0OP";
+    after.input.requestId = "req_01HZX4M2N8B5V7C3X1Z9A4S6DF";
+    expect(difference(withdrawn(before, "x"), after).intro).toBe("same");
+  });
+
+  it("an id the call names as such is still a difference", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    before.input.owner_id = "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
+    after.input.owner_id = "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts).toContain(UNREADABLE);
+  });
+
+  it("only what nobody can read differs: the voice does not say the change is in", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    (after.input.item as Record<string, unknown>).regardingobjectid = {
+      recordId: "5f0c2a10-0000-4000-8000-00000000a001",
+      relatedTable: "account",
+    };
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts).toContain(UNREADABLE);
+    expect(texts.some((text) => ASKED.test(text))).toBe(false);
+  });
+});
+
+describe("a batch past its stored rows", () => {
+  it("a change past the stored rows is told besides a stored row's", () => {
+    const before = callOf("create-11-batch-rows");
+    const pages = before.input.pages as {
+      properties: Record<string, string>;
+    }[];
+    pages.push({ properties: { Name: "Weitere Zeile", Status: "Offen" } });
+    const after = JSON.parse(JSON.stringify(before)) as SetCall;
+    const rows = (
+      after.display.label.change as unknown as {
+        batch: { rows: { effects: { values: { text: string }[] }[] }[] };
+      }
+    ).batch.rows;
+    rows[2].effects[0].values = [
+      { text: "Name: Schulung absagen, Status: Offen" },
+    ];
+    setInput(after, "/pages/2/properties/Name", "Schulung absagen");
+    // The sixth row is past what the label stored.
+    setInput(after, "/pages/5/properties/Status", "Erledigt");
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts).toContain(
+      "Also changed, without being asked: One row is different now; it's on screen.",
+    );
+    expect(texts).toContain(ELSEWHERE);
+    expect(texts).not.toContain(REST);
+  });
+
+  it("a row the user named is asked for", () => {
+    const before = callOf("create-11-batch-rows");
+    const after = callOf("create-11-batch-rows");
+    const rows = (
+      after.display.label.change as unknown as {
+        batch: { rows: { effects: { values: { text: string }[] }[] }[] };
+      }
+    ).batch.rows;
+    rows[2].effects[0].values = [
+      { text: "Name: Schulung absagen, Status: Offen" },
+    ];
+    setInput(after, "/pages/2/properties/Name", "Schulung absagen");
+    expect(
+      textsOf(
+        difference(
+          withdrawn(before, "Zeile drei soll Schulung absagen heißen"),
+          after,
+        ).pieces,
+      ),
+    ).toContain("Changed: One row is different now; it's on screen.");
+  });
+});
+
+describe("a recipient group covers its own place only", () => {
+  const withGroup = (call: SetCall, to: string[]) => {
+    const groups = (
+      call.display.label.change as unknown as {
+        recipients: { groups: { values: string[] }[] };
+      }
+    ).recipients.groups;
+    groups[0].values = to;
+    call.input.to = to;
+  };
+
+  it("another argument under a key of the same name is told", () => {
+    const before = callOf("send-01-mail-several-recipients");
+    before.input.schedule = { to: "2030-01-20" };
+    const after = JSON.parse(JSON.stringify(before)) as SetCall;
+    withGroup(after, ["anna.mueller@beispiel-industrie.de"]);
+    after.input.schedule = { to: "2030-01-27" };
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts).toContain(
+      "Also changed, without being asked: Now to: Anna Mueller.",
+    );
+    expect(texts).toContain(ELSEWHERE);
+  });
+
+  it("a recipient's other field is told, not hidden behind the group", () => {
+    const before = callOf("send-01-mail-several-recipients");
+    before.input.to = [
+      { email: "anna.mueller@beispiel-industrie.de", type: "required" },
+      { email: "ben.schmidt@beispiel-industrie.de", type: "required" },
+    ];
+    const after = JSON.parse(JSON.stringify(before)) as SetCall;
+    const groups = (
+      after.display.label.change as unknown as {
+        recipients: { groups: { values: string[] }[] };
+      }
+    ).recipients.groups;
+    groups[0].values = ["anna.mueller@beispiel-industrie.de"];
+    after.input.to = [
+      { email: "anna.mueller@beispiel-industrie.de", type: "optional" },
+    ];
+    const texts = textsOf(
+      difference(withdrawn(before, "ohne Ben"), after).pieces,
+    );
+    expect(texts).toContain("Changed: Now to: Anna Mueller.");
+    expect(texts).toContain(ELSEWHERE);
+  });
+
+  it("a recipient dropped from the group is covered by it", () => {
+    const before = callOf("send-01-mail-several-recipients");
+    const after = callOf("send-01-mail-several-recipients");
+    withGroup(after, ["anna.mueller@beispiel-industrie.de"]);
+    expect(
+      textsOf(difference(withdrawn(before, "ohne Ben"), after).pieces),
+    ).toContain(REST);
+  });
+
+  it("another address with the same name is said in full", () => {
+    const before = callOf("share-01-file-outside");
+    const after = callOf("share-01-file-outside");
+    const recipients = (
+      after.display.label.change as unknown as {
+        recipients: { groups: { values: string[] }[]; outside: string[] };
+      }
+    ).recipients;
+    recipients.groups[0].values = ["planer@konkurrenz.example"];
+    recipients.outside = ["planer@konkurrenz.example"];
+    after.input.emailAddress = "planer@konkurrenz.example";
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts.join(" ")).toContain("planer@konkurrenz.example");
+    expect(texts).toContain(REST);
+  });
+
+  it("a value that differs only past its cut says that the field changed", () => {
+    const base =
+      "Bitte die Zeichnungen der Fördertechnik bis Freitag an Frau Müller schicken und dann";
+    const before = callOf("create-02-appointment");
+    setField("location", `${base} anrufen`)(before);
+    const after = callOf("create-02-appointment");
+    setField("location", `${base} vorbeibringen`)(after);
+    expect(textsOf(difference(withdrawn(before, "x"), after).pieces)).toContain(
+      "Also changed, without being asked: Location is different now; it's on screen.",
+    );
+  });
+});
+
+describe("a field the user names", () => {
+  const glossed = (call: SetCall) => {
+    for (const effect of call.display.label.change.effects ?? []) {
+      const named = effect as { raw_name: string; name?: string };
+      if (named.raw_name === "scheduledstart") named.name = "Terminbeginn";
+      if (named.raw_name === "scheduledend") named.name = "Terminende";
+    }
+  };
+
+  it("a part every sibling shares names none of them", () => {
+    const before = callOf("create-02-appointment");
+    glossed(before);
+    const after = callOf("create-02-appointment");
+    glossed(after);
+    setField("scheduledstart", "2030-01-22T10:30:00")(after);
+    setField("scheduledend", "2030-01-29T11:30:00")(after);
+    const texts = textsOf(
+      difference(withdrawn(before, "Termin auf den 22."), after).pieces,
+    );
+    expect(texts.filter((text) => ASKED.test(text))).toHaveLength(1);
+    expect(texts.find((text) => text.includes("Terminende"))).toMatch(UNASKED);
+  });
+
+  it("a part only one field has names it", () => {
+    const before = callOf("create-02-appointment");
+    glossed(before);
+    const after = callOf("create-02-appointment");
+    glossed(after);
+    setField("scheduledend", "2030-01-20T13:00:00")(after);
+    expect(
+      textsOf(
+        difference(withdrawn(before, "das Ende später"), after).pieces,
+      ).find((text) => text.includes("Terminende")),
+    ).toMatch(ASKED);
+  });
+
+  it("words that only frame a change name nothing", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    setField("location", "Bitte am Empfang melden")(after);
+    expect(
+      textsOf(
+        difference(withdrawn(before, "bitte nimm doch lieber"), after).pieces,
+      ).find((text) => text.includes("Empfang")),
+    ).toMatch(UNASKED);
   });
 });
