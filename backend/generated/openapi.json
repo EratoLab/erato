@@ -5754,6 +5754,10 @@
             "type": "string",
             "example": "call_abc123"
           },
+          "change_request": {
+            "type": "string",
+            "description": "The user's words for `request_change`, as they typed or said them.\nRefused on any other decision."
+          },
           "decision": {
             "$ref": "#/components/schemas/ToolApprovalDecision"
           },
@@ -5827,6 +5831,13 @@
           },
           "input": {
             "$ref": "#/components/schemas/Value"
+          },
+          "replaces_approval_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The item of an earlier stop on the same message this one replaces: the\nuser asked for that call to be changed and this is the model's\ncorrected call of the same tool on the same server."
           },
           "tool_call_id": {
             "type": "string"
@@ -8737,6 +8748,13 @@
               "null"
             ]
           },
+          "change_request": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user's words when `reason` is `change_requested`."
+          },
           "child_chat_id": {
             "type": [
               "string",
@@ -8753,7 +8771,7 @@
               "string",
               "null"
             ],
-            "description": "Why the call was rejected when the user did not decide it directly.\nThe only value is `withdrawn`."
+            "description": "Why the call was rejected when the user did not simply deny it:\n`withdrawn` when the user took the question back, `change_requested`\nwhen they asked for the call to be different."
           },
           "rejected_at": {
             "type": "string"
@@ -14237,7 +14255,8 @@
           "approve_always",
           "reject_always",
           "withdraw",
-          "approve_context"
+          "approve_context",
+          "request_change"
         ]
       },
       "ToolApprovalKind": {

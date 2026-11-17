@@ -1540,6 +1540,11 @@ pub struct ApprovalItem {
     pub input: JsonValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child: Option<ChildApprovalRef>,
+    /// The item of an earlier stop on the same message this one replaces: the
+    /// user asked for that call to be changed and this is the model's
+    /// corrected call of the same tool on the same server.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaces_approval_id: Option<String>,
 }
 
 /// A call of the parked batch that was never popped. The parked part is the
@@ -1599,6 +1604,7 @@ impl ContentPartToolApprovalRequest {
             display: self.display.clone(),
             input: self.input.clone(),
             child: None,
+            replaces_approval_id: None,
         }]
     }
 }
@@ -1639,10 +1645,14 @@ pub struct ContentPartToolRejection {
     pub approval_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub child_chat_id: Option<Uuid>,
-    /// Why the call was rejected when the user did not decide it directly.
-    /// The only value is `withdrawn`.
+    /// Why the call was rejected when the user did not simply deny it:
+    /// `withdrawn` when the user took the question back, `change_requested`
+    /// when they asked for the call to be different.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The user's words when `reason` is `change_requested`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_request: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]

@@ -639,9 +639,10 @@ impl ToolResultContext {
         }
     }
 
-    /// A call Erato itself turned down (the user denied it, a gate refused it,
-    /// the budget ran out) never reached its server. Erato writes exactly
-    /// `{status: "rejected", error: <text>}`, never with `allowed_by`. A call
+    /// A call Erato itself turned down (the user denied it or asked for it to
+    /// change, a gate refused it, the budget ran out) never reached its
+    /// server. Erato writes exactly `{status: "rejected", error: <text>}`, or
+    /// a change request's result, never with `allowed_by`. A call
     /// that ran may get the same shape from its server: with `allowed_by` or
     /// an approval it counts as ran. Earlier turns replay without their
     /// decision parts, so there a card-approved call stays ambiguous and
@@ -655,9 +656,12 @@ impl ToolResultContext {
                 .as_ref()
                 .and_then(Value::as_object)
                 .is_some_and(|output| {
-                    output.len() == 2
+                    (output.len() == 2
                         && output.get("status").and_then(Value::as_str) == Some("rejected")
-                        && output.get("error").is_some_and(Value::is_string)
+                        && output.get("error").is_some_and(Value::is_string))
+                        || crate::services::approval_change_requests::is_change_request_output(
+                            output,
+                        )
                 })
     }
 

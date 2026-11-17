@@ -249,6 +249,14 @@ const schemaStringFieldFixes = [
     from: "  reason?: null | undefined;",
     to: "  reason?: string | null | undefined;",
   },
+  {
+    from: "change_request?: null | undefined;",
+    to: "change_request?: string | null | undefined;",
+  },
+  {
+    from: "replaces_approval_id?: null | undefined;",
+    to: "replaces_approval_id?: string | null | undefined;",
+  },
 ];
 
 async function patchVoidTypes(filePath) {

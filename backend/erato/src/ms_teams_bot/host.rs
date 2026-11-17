@@ -1714,6 +1714,7 @@ mod tests {
                     waiting_for: None,
                     approval_scope: None,
                 }),
+                replaces_approval_id: None,
             });
         ContentPart::ToolApprovalRequest(request)
     }
