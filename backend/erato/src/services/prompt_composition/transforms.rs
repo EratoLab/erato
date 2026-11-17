@@ -920,6 +920,7 @@ fn strip_ui_only_tool_output(
             description_truncated: false,
             server_name: display.server_name,
             read_only: false,
+            closed_world: false,
             label: display
                 .label
                 .map(|label| crate::models::message::ToolCallLabel {

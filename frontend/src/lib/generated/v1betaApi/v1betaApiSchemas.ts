@@ -5470,6 +5470,12 @@ export type ToolCallValueMeaningSource =
  * select a tool, evaluate policy or execute a call.
  */
 export type ToolDisplayMetadata = {
+  /**
+   * Whether the tool says it reaches nothing outside its server
+   * (`openWorldHint: false`) by the annotations the approval policy read
+   * for this call. Unknown counts as open. Set on MCP calls only.
+   */
+  closed_world?: boolean;
   description?: string | null | undefined;
   description_truncated: boolean;
   label?: ToolCallLabel;

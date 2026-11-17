@@ -5332,6 +5332,11 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     let read = &content[0];
     assert_eq!(read["content_type"], "tool_use");
     assert_eq!(read["status"], "success");
+    // Read-only and closed-world: it ran without a card under the restrictive
+    // preset, and its row says so for the plain step.
+    assert_eq!(read["allowed_by"], "policy");
+    assert_eq!(read["display"]["read_only"], true);
+    assert_eq!(read["display"]["closed_world"], true);
     assert_eq!(
         read["display"]["label"],
         json!({
@@ -5364,6 +5369,9 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
     assert_eq!(request["approvals"][0]["display"], request["display"]);
     assert_eq!(request["input"], arguments);
     assert_eq!(request["preset"], "restrictive");
+    // The open-world probe asks, and its card may say it can send data out.
+    assert!(request["display"].get("closed_world").is_none());
+    assert_eq!(request["annotations"]["openWorldHint"], true);
     let label = &request["display"]["label"];
     assert_eq!(
         (&label["source"], &label["action"]),

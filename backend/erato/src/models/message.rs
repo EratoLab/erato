@@ -604,6 +604,15 @@ pub struct ToolDisplayMetadata {
         deserialize_with = "readable_flag"
     )]
     pub read_only: bool,
+    /// Whether the tool says it reaches nothing outside its server
+    /// (`openWorldHint: false`) by the annotations the approval policy read
+    /// for this call. Unknown counts as open. Set on MCP calls only.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "readable_flag"
+    )]
+    pub closed_world: bool,
 }
 
 /// A stored label, result detail or decision note this version cannot read is

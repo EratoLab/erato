@@ -14580,6 +14580,7 @@ mod tests {
                 server_name: None,
                 label: None,
                 read_only: false,
+                closed_world: false,
             })
         };
         let asks = |config: &McpToolApprovalConfig, name: &str| {

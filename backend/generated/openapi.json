@@ -15298,6 +15298,10 @@
           "description_truncated"
         ],
         "properties": {
+          "closed_world": {
+            "type": "boolean",
+            "description": "Whether the tool says it reaches nothing outside its server\n(`openWorldHint: false`) by the annotations the approval policy read\nfor this call. Unknown counts as open. Set on MCP calls only."
+          },
           "description": {
             "type": [
               "string",

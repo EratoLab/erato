@@ -41,6 +41,7 @@ fn earlier(results: Vec<(&str, Value, Value)>) -> ToolResultContext {
                         server_name: Some(SERVER.into()),
                         label: None,
                         read_only: false,
+                        closed_world: false,
                     }),
                     input: Some(input),
                     output: Some(output),

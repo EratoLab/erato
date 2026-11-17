@@ -339,7 +339,7 @@ describe("McpToolApprovalCard", () => {
     expect(screen.queryByText("mock_mcp_approval")).not.toBeInTheDocument();
   });
 
-  it("uses the saved descriptor as plain text and submits the executable identity", async () => {
+  it("uses the saved title as plain text, never the description, and submits the executable identity", async () => {
     const continueToolApproval = vi.fn().mockResolvedValue(undefined);
     const request = {
       ...approvalRequest,
@@ -364,10 +364,10 @@ describe("McpToolApprovalCard", () => {
       "dir",
       "auto",
     );
-    expect(screen.getByText(request.display.description)).toHaveAttribute(
-      "dir",
-      "auto",
-    );
+    // Written for the model, so no card shows it.
+    expect(
+      screen.queryByText(request.display.description),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Description shortened by Erato"),
     ).not.toBeInTheDocument();
@@ -389,7 +389,7 @@ describe("McpToolApprovalCard", () => {
     );
   });
 
-  it("keeps long multiline arguments complete alongside a shortened description", async () => {
+  it("keeps long multiline arguments complete and leaves out a shortened description", async () => {
     const continueToolApproval = vi.fn().mockResolvedValue(undefined);
     const message = `${"Message  line\n".repeat(500)}Final message line`;
     const request = {
@@ -417,7 +417,8 @@ describe("McpToolApprovalCard", () => {
     expect(value?.textContent).toBe(`"${message}"`);
     expect(value).toHaveClass("whitespace-pre-wrap", "break-words");
     expect(value?.closest(".max-h-48")).toHaveClass("overflow-y-auto");
-    expect(screen.getByText("Description shortened by Erato")).toBeVisible();
+    expect(screen.queryByText("Shortened tool description")).toBeNull();
+    expect(screen.queryByText("Description shortened by Erato")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
     await waitFor(() =>
@@ -502,11 +503,11 @@ describe("McpToolApprovalCard", () => {
     expect(screen.getByText("Approval Probe")).toBeInTheDocument();
     expect(screen.queryByText("mock_mcp_approval")).not.toBeInTheDocument();
     expect(
-      screen.getByText("A truncated child description"),
-    ).toBeInTheDocument();
+      screen.queryByText("A truncated child description"),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Description shortened by Erato"),
-    ).toBeInTheDocument();
+      screen.queryByText("Description shortened by Erato"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
   });
 
@@ -3438,9 +3439,10 @@ describe("gist cards", () => {
     openTechnicalDetails();
     expect(screen.getByText("create_pages")).toBeInTheDocument();
     expect(screen.getByText("records")).toBeInTheDocument();
+    // The description is written for the model: not even its details show it.
     expect(
-      screen.getByText("Creates pages in a data source."),
-    ).toBeInTheDocument();
+      screen.queryByText("Creates pages in a data source."),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
     expect(screen.getByText(`"${DATA_SOURCE_ID}"`)).toBeInTheDocument();
 
@@ -3645,6 +3647,8 @@ describe("gist cards", () => {
         />,
       );
 
+      // A generic card keeps its arguments in its details.
+      openTechnicalDetails();
       const values = Array.from(
         screen.getByTestId("tool-argument-view").querySelectorAll("dd"),
         (value) => value.textContent,
@@ -3983,7 +3987,7 @@ describe("gist cards", () => {
       }
     });
 
-    it("keeps notes above the arguments on a generic card, and focusable boxes there too", () => {
+    it("keeps a generic card's notes on the card and its arguments in its details, in focusable boxes", () => {
       const input = { note: `Hello\u200B ${LONG}`, count: 3 };
       cardWith(input, {
         action: "generic",
@@ -3993,28 +3997,30 @@ describe("gist cards", () => {
         warnings: ["arguments_truncated"],
       });
 
+      const note = screen.getByTestId("tool-call-hidden-characters");
+      expect(screen.queryByTestId("tool-argument-view")).toBeNull();
+      // The card lists no arguments, so it says none are left out.
+      expect(
+        screen.queryByText(/Some arguments are not shown here/),
+      ).toBeNull();
+      expect(
+        document.querySelector('[aria-label="Scrollable tool description"]'),
+      ).toBeNull();
+
+      openTechnicalDetails();
       const view = screen.getByTestId("tool-argument-view");
       const box = view.closest(SCROLL_BOX)!;
       expect(box).toHaveClass("max-h-48", "focus-ring-inset");
       expect(box).toHaveAttribute("tabindex", "0");
       expect(box).toHaveAccessibleName("Scrollable arguments of this call");
-      expect(
-        comesBefore(screen.getByTestId("tool-call-hidden-characters"), box),
-      ).toBe(true);
-      const truncated = screen.getByText(/Some arguments are not shown here/);
-      expect(comesBefore(box, truncated)).toBe(true);
-      expect(truncated.closest('[data-ui="alert"]')).toBeNull();
+      expect(comesBefore(note, box)).toBe(true);
       expect(screen.getByTestId("tool-argument-text")).toHaveAttribute(
         "tabindex",
         "0",
       );
-      const description = document.querySelector(
-        '[aria-label="Scrollable tool description"]',
-      );
-      expect(description).toHaveAttribute("tabindex", "0");
     });
 
-    it("gives a generic card one footnote, after its arguments", () => {
+    it("gives a generic card one footnote, before its details", () => {
       const input = { note: "Hello", count: 3 };
       cardWith(input, {
         action: "generic",
@@ -4045,14 +4051,16 @@ describe("gist cards", () => {
       expect(footnote).toHaveTextContent(
         "Old values are from earlier in this chat and may have changed.",
       );
-      expect(footnote).toHaveTextContent(
-        "Some arguments are not shown here. Technical details has all of them.",
-      );
+      expect(footnote).not.toHaveTextContent("Some arguments are not shown");
+      expect(
+        comesBefore(footnote, screen.getByTestId("approval-technical-details")),
+      ).toBe(true);
+      openTechnicalDetails();
       const box = screen.getByTestId("tool-argument-view").closest(SCROLL_BOX)!;
-      expect(comesBefore(box, footnote)).toBe(true);
+      expect(comesBefore(footnote, box)).toBe(true);
     });
 
-    it("keeps a generic card's notes above raw arguments when it has no readable view", () => {
+    it("keeps a generic card's notes on the card and its raw arguments in its details when it has no readable view", () => {
       const input = { note: "Hello\u200B" };
       cardWith(input, {
         action: "generic",
@@ -4062,10 +4070,11 @@ describe("gist cards", () => {
       });
 
       const note = screen.getByTestId("tool-call-hidden-characters");
-      const box = screen.getByRole("group", {
-        name: "Scrollable arguments of this call",
-      });
-      expect(comesBefore(note, box)).toBe(true);
+      expect(screen.queryByText("Input Parameters")).toBeNull();
+      openTechnicalDetails();
+      expect(comesBefore(note, screen.getByText("Input Parameters"))).toBe(
+        true,
+      );
     });
   });
 
@@ -4224,6 +4233,17 @@ describe("gist cards", () => {
       />,
     );
 
+    // The card says what happens; the arguments are in its details.
+    expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+      /^Publish approval demo in Approval Probe$/,
+    );
+    expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("publish_approval_probe"),
+    ).not.toBeInTheDocument();
+
+    openTechnicalDetails();
     const view = screen.getByTestId("tool-argument-view");
     expect(view).toHaveTextContent("channel");
     expect(view).toHaveTextContent("release");
@@ -4235,17 +4255,7 @@ describe("gist cards", () => {
     expect(
       screen.queryByRole("link", { name: "notes" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Publish approval demo")).toBeInTheDocument();
     expect(screen.getByText("publish_approval_probe")).toBeInTheDocument();
-    expect(screen.getByText("Approval Probe")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Some arguments are not shown here. Technical details has all of them.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
-
-    openTechnicalDetails();
     expect(screen.getByText("Input Parameters")).toBeInTheDocument();
     expect(screen.getByText("hasUserApproved")).toBeInTheDocument();
   });
@@ -4267,10 +4277,11 @@ describe("gist cards", () => {
       />,
     );
 
-    expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.queryByText("Input Parameters")).not.toBeInTheDocument();
     expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
     openTechnicalDetails();
     expect(screen.getAllByText("Input Parameters")).toHaveLength(1);
+    expect(screen.queryByTestId("tool-argument-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
       "publish_approval_probe",
     );
@@ -4520,7 +4531,7 @@ describe("gist cards", () => {
       expect(otherArguments()).toBeNull();
     });
 
-    it("keeps every argument in view when a generic card turns into a gist", async () => {
+    it("keeps every argument reachable when a generic card turns into a gist", async () => {
       const continueToolApproval = vi.fn().mockResolvedValue(undefined);
       const card = (label: unknown) =>
         withChatContext(
@@ -4545,6 +4556,9 @@ describe("gist cards", () => {
           source: "generic",
           arguments: viewOf(emailInput),
         }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Technical details" }),
       );
       expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
         "leak@example.net",
@@ -4800,6 +4814,15 @@ describe("gist cards", () => {
       screen.queryByTestId("tool-call-consent-left-out");
     const hiddenNote = () =>
       screen.queryByTestId("tool-call-hidden-characters");
+    // A generic card keeps its arguments in its details.
+    const argumentView = () => {
+      if (!screen.queryByTestId("tool-argument-view")) {
+        fireEvent.click(
+          screen.getByRole("button", { name: "Technical details" }),
+        );
+      }
+      return screen.getByTestId("tool-argument-view");
+    };
 
     it("puts the address the call writes beside a name an earlier result gave it", () => {
       cardFor(emailInput, emailLabel);
@@ -4876,7 +4899,7 @@ describe("gist cards", () => {
       };
       cardFor(input, genericLabel(input));
 
-      const view = screen.getByTestId("tool-argument-view");
+      const view = argumentView();
       expect(view).not.toHaveTextContent("hasUserApproved");
       expect(view).toHaveTextContent("marketing_consent");
       expect(view).toHaveTextContent("user_confirmed");
@@ -4891,9 +4914,7 @@ describe("gist cards", () => {
         ...genericLabel({ recordId: "r1" }),
       });
 
-      expect(screen.getByTestId("tool-argument-view")).not.toHaveTextContent(
-        "confirmed",
-      );
+      expect(argumentView()).not.toHaveTextContent("confirmed");
       expect(consentNote()).toBeInTheDocument();
     });
 
@@ -4926,9 +4947,7 @@ describe("gist cards", () => {
       const input = { iban: "DE89\u200B3704\u20600044", note: "ok" };
       cardFor(input, genericLabel(input));
 
-      expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
-        "DE8937040044",
-      );
+      expect(argumentView()).toHaveTextContent("DE8937040044");
       expect(hiddenNote()).toBeInTheDocument();
       expect(
         hiddenNote()!.compareDocumentPosition(
@@ -4941,7 +4960,7 @@ describe("gist cards", () => {
       const input = { status: "Sunny \u2600\uFE0F", note: "I \u2764\uFE0F it" };
       cardFor(input, genericLabel(input));
 
-      const view = screen.getByTestId("tool-argument-view");
+      const view = argumentView();
       expect(view).toHaveTextContent("Sunny \u2600\uFE0F");
       expect(view).toHaveTextContent("I \u2764\uFE0F it");
       expect(hiddenNote()).not.toBeInTheDocument();
@@ -4959,10 +4978,7 @@ describe("gist cards", () => {
       const input = { note };
       cardFor(input, genericLabel(input));
 
-      expect(
-        screen.getByTestId("tool-argument-view").querySelector("dd")
-          ?.textContent,
-      ).toBe(shown);
+      expect(argumentView().querySelector("dd")?.textContent).toBe(shown);
       expect(hiddenNote()).toBeInTheDocument();
     });
 
@@ -4972,7 +4988,7 @@ describe("gist cards", () => {
 
       expect(
         Array.from(
-          screen.getByTestId("tool-argument-view").querySelectorAll("dt"),
+          argumentView().querySelectorAll("dt"),
           (name) => name.textContent,
         ),
       ).toEqual(["status", "status"]);
@@ -5115,6 +5131,10 @@ describe("gist cards", () => {
       );
 
       expect(screen.queryByTestId("tool-call-gist")).not.toBeInTheDocument();
+      expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+        /^Create pages in Records$/,
+      );
+      openTechnicalDetails();
       expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
         "Northwind",
       );
@@ -5689,5 +5709,301 @@ describe("the decision area of an MCP approval", () => {
     expect(
       within(item).getByRole("button", { name: "Deny" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("an MCP card for a call with no line of its own", () => {
+  const chartInput = {
+    spec: {
+      data: {
+        values: [
+          { month: "2026-01-01", region: "North", revenue: 120 },
+          { month: "2026-02-01", region: "North", revenue: 135 },
+        ],
+      },
+      chart_spec: { chartType: "Line Chart" },
+    },
+  };
+  const chartRequest = (
+    display: Record<string, unknown>,
+    openWorldHint: boolean,
+  ) =>
+    ({
+      ...approvalRequest,
+      tool_name: "render_chart",
+      mcp_server_id: "charts",
+      input: chartInput,
+      annotations: {
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint,
+        readOnlyHint: true,
+      },
+      display: {
+        title: "Create chart",
+        description:
+          "Render a chart from data rows. spec: data.values [rows], chart_spec {chartType, encodings}.",
+        description_truncated: false,
+        server_name: "Charts",
+        label: {
+          action: "other",
+          object_kind: "other",
+          source: "generic",
+          arguments: {
+            path: "",
+            kind: "group",
+            children: [
+              {
+                path: "/spec",
+                kind: "group",
+                children: [
+                  {
+                    path: "/spec/data",
+                    kind: "group",
+                    children: [
+                      {
+                        path: "/spec/data/values",
+                        kind: "list",
+                        children: [
+                          {
+                            path: "/spec/data/values/0",
+                            kind: "group",
+                            children: [
+                              {
+                                path: "/spec/data/values/0/month",
+                                kind: "value",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        ...display,
+      },
+    }) as McpToolApprovalRequestPart;
+  const renderRequest = (request: McpToolApprovalRequestPart) =>
+    renderCard(
+      <McpToolApprovalCard
+        messageId="message-1"
+        request={request}
+        resolution={null}
+      />,
+    );
+  const openDetails = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Technical details" }));
+  const OUTSIDE = "This tool may send data to an external service.";
+
+  afterEach(() => {
+    i18n.activate("en");
+  });
+
+  it("never shows the tool's description, on the card or in its details", () => {
+    renderRequest(chartRequest({}, true));
+
+    expect(screen.queryByText(/Render a chart from data rows/)).toBeNull();
+    expect(
+      document.querySelector('[aria-label="Scrollable tool description"]'),
+    ).toBeNull();
+    openDetails();
+    expect(screen.queryByText(/Render a chart from data rows/)).toBeNull();
+  });
+
+  it("says what happens in one sentence, the tool's title and its server, and keeps the arguments behind Technical details", () => {
+    renderRequest(chartRequest({}, false));
+
+    const sentence = screen.getByTestId("approval-call-sentence");
+    expect(sentence).toHaveTextContent(/^Create chart in Charts$/);
+    expect(sentence.querySelectorAll("p")).toHaveLength(1);
+    expect(screen.queryByText("render_chart")).toBeNull();
+    expect(screen.queryByTestId("tool-argument-view")).toBeNull();
+    expect(screen.queryByText("Input Parameters")).toBeNull();
+    expect(screen.queryByText(/2026-01-01/)).toBeNull();
+
+    openDetails();
+    expect(screen.getByTestId("tool-call-identity")).toHaveTextContent(
+      "render_chart",
+    );
+    expect(screen.getByTestId("tool-argument-view")).toHaveTextContent(
+      "2026-01-01",
+    );
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+  });
+
+  it("names the tool by its name when it has no title of its own", () => {
+    renderRequest(chartRequest({ title: "render_chart" }, false));
+
+    expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+      /^render_chart in Charts$/,
+    );
+  });
+
+  it("says how many rows a call over rows has and what their fields hold, and keeps the rows behind Technical details", () => {
+    const months = [1, 2, 3, 4, 5, 6].map((month) => `2026-0${month}-01`);
+    const rows = ["North", "South"].flatMap((region, at) =>
+      months.map((month, index) => ({
+        month,
+        region,
+        revenue: 120 + index * 10 + at * 5,
+      })),
+    );
+    const field = (name: string, distinct: number, samples: string[]) => ({
+      name: name[0].toUpperCase() + name.slice(1),
+      raw_name: name,
+      rows: rows.length,
+      distinct,
+      samples: samples.map((text) => ({ text })),
+    });
+    const request = chartRequest(
+      {
+        label: {
+          action: "other",
+          object_kind: "other",
+          source: "generic",
+          arguments: {
+            path: "",
+            kind: "group",
+            children: [
+              {
+                path: "/spec",
+                kind: "group",
+                children: [
+                  {
+                    path: "/spec/data",
+                    kind: "group",
+                    children: [
+                      {
+                        path: "/spec/data/values",
+                        kind: "list",
+                        children: rows.map((row, index) => ({
+                          path: `/spec/data/values/${index}`,
+                          kind: "group",
+                          children: Object.keys(row).map((key) => ({
+                            path: `/spec/data/values/${index}/${key}`,
+                            kind: "value",
+                          })),
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          change: {
+            counts: {},
+            complete: true,
+            batch: {
+              path: "/spec/data/values",
+              name: "Values",
+              total: rows.length,
+              same_change: false,
+              read_all: true,
+              rows: rows.map((row, index) => ({
+                number: index + 1,
+                effects: Object.entries(row).map(([key, value]) => ({
+                  path: `/spec/data/values/${index}/${key}`,
+                  name: key[0].toUpperCase() + key.slice(1),
+                  raw_name: key,
+                  effect: "set",
+                  values: [{ text: String(value) }],
+                })),
+              })),
+              fields: [
+                field("month", 6, months.slice(0, 3)),
+                field("region", 2, ["North", "South"]),
+                field("revenue", 12, ["120", "130", "140"]),
+              ],
+            },
+          },
+        },
+      },
+      true,
+    );
+    const batchRequest = {
+      ...request,
+      input: { spec: { data: { values: rows } } },
+    };
+    i18n.load("de", deMessages as unknown as Messages);
+    i18n.activate("de");
+    const german = renderRequest(batchRequest);
+    expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+      /^Create chart in Charts: 12 Zeilen$/,
+    );
+    german.unmount();
+    i18n.activate("en");
+
+    renderRequest(batchRequest);
+    expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+      /^Create chart in Charts: 12 rows$/,
+    );
+    const fields = screen.getByTestId("tool-call-change-batch-fields");
+    expect(fields).toHaveTextContent("Region");
+    expect(fields).toHaveTextContent("2 different values on all 12 rows");
+    // No row of the call on the card: not one, and no way to open them there.
+    expect(screen.queryByTestId("tool-call-change-batch-row")).toBeNull();
+    expect(screen.queryByText("Row 1")).toBeNull();
+    expect(screen.queryByText("Each row is different.")).toBeNull();
+    expect(screen.queryByText(/more rows?$/)).toBeNull();
+    expect(screen.queryByText(/2026-06-01/)).toBeNull();
+    expect(screen.queryByTestId("tool-argument-view")).toBeNull();
+
+    openDetails();
+    const view = screen.getByTestId("tool-argument-view");
+    expect(view).toHaveTextContent("2026-06-01");
+    expect(view).toHaveTextContent("175");
+    expect(screen.getByText("Input Parameters")).toBeInTheDocument();
+  });
+
+  it("says that the tool may send data out only when it is open-world or its hints are unknown, in every language", () => {
+    for (const [locale, messages, sentence, outside] of [
+      ["en", enMessages, "Create chart in Charts", OUTSIDE],
+      [
+        "de",
+        deMessages,
+        "Create chart in Charts",
+        "Dieses Tool kann Daten an einen externen Dienst senden.",
+      ],
+      [
+        "fr",
+        frMessages,
+        "Create chart dans Charts",
+        "Cet outil peut envoyer des données à un service externe.",
+      ],
+      [
+        "es",
+        esMessages,
+        "Create chart en Charts",
+        "Esta herramienta puede enviar datos a un servicio externo.",
+      ],
+      [
+        "pl",
+        plMessages,
+        "Create chart w Charts",
+        "To narzędzie może wysyłać dane do usługi zewnętrznej.",
+      ],
+    ] as const) {
+      i18n.load(locale, messages as unknown as Messages);
+      i18n.activate(locale);
+      // The backend reads unknown hints as open-world, so the card gets true.
+      const open = renderRequest(chartRequest({}, true));
+      expect(screen.getByTestId("approval-call-sentence")).toHaveTextContent(
+        sentence,
+      );
+      expect(
+        screen.getByTestId("action-confirmation-tool-facts"),
+      ).toHaveTextContent(outside);
+      open.unmount();
+
+      const closed = renderRequest(chartRequest({}, false));
+      expect(screen.queryByText(outside)).toBeNull();
+      expect(screen.queryByTestId("action-confirmation-tool-facts")).toBeNull();
+      closed.unmount();
+    }
   });
 });

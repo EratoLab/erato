@@ -2136,6 +2136,7 @@ fn the_test_sets_records_are_named_by_the_reads_before_them() {
                     server_name: Some(SERVER.into()),
                     label: None,
                     read_only: true,
+                    closed_world: false,
                 }),
                 input: Some(call.input),
                 output: Some(call.output),

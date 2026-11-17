@@ -1569,6 +1569,7 @@ mod tests {
             server_name: None,
             label: None,
             read_only: false,
+            closed_world: false,
         });
         let completion = completion_from_content(
             &FacetsConfig::default(),
@@ -1619,6 +1620,7 @@ mod tests {
                 server_name: Some("Team Wiki".into()),
                 label: None,
                 read_only: false,
+                closed_world: false,
             });
         let completion = completion_from_content(
             &FacetsConfig::default(),

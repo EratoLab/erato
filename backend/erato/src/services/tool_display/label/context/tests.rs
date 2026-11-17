@@ -26,6 +26,7 @@ fn on(server: Option<&str>) -> Option<ToolDisplayMetadata> {
         server_name: server.map(str::to_string),
         label: None,
         read_only: false,
+        closed_world: false,
     })
 }
 
@@ -364,6 +365,7 @@ fn a_create_names_the_one_id_in_its_short_result_from_its_own_arguments() {
         server_name: Some(SERVER.into()),
         label: Some(label),
         read_only: false,
+        closed_world: false,
     });
     assert_eq!(
         name(&after(vec![labelled]), json!(TASK)).as_deref(),

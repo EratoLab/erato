@@ -9675,6 +9675,16 @@ msgid "toolGist.archive.failed"
 msgstr "{shape, select, full {Nie udało się zarchiwizować: {kind} {title} w {where}} titled {Nie udało się zarchiwizować: {kind} {title}} placed {Nie udało się zarchiwizować: {kind} w {where}} other {Nie udało się zarchiwizować: {kind}}}"
 
 #. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence"
+msgstr "{title} w {server}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/gistLabels.ts
+msgid "toolGist.callSentence.rows"
+msgstr "{rows, plural, one {{title} w {server}: # wiersz} few {{title} w {server}: # wiersze} many {{title} w {server}: # wierszy} other {{title} w {server}: # wiersza}}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/ToolCall/ToolCallChange.tsx
 #: src/components/ui/ToolCall/ToolCallGist.tsx
 msgid "toolGist.changesTo"

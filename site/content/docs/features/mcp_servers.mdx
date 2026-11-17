@@ -258,6 +258,15 @@ Operators can supply `default_tool_annotations` and `override_tool_annotations` 
 
 Set `allow_always = true` to expose an **Always allow** choice. The resulting user setting is scoped to the user, MCP server ID, and tool name; it can be deactivated through the MCP approval settings API. Disabling `allow_always` hides the choice and prevents those persisted settings from bypassing future gates.
 
+A tool whose resolved hints say `readOnlyHint = true`, `destructiveHint = false` and `openWorldHint = false` therefore runs without an approval card under either preset. To have users confirm such a tool anyway, override its hints on the exact tool; marking it destructive asks under both presets:
+
+```toml
+[mcp_servers.charts.tools.render_chart.override_tool_annotations]
+destructive_hint = true
+```
+
+In the web app, the step of a read-only, closed-world call is one plain line: the title the tool declares (its MCP `title`, else `annotations.title`) and the server's name, with the call's arguments behind the step's details toggle. A tool without a title keeps the step's usual line. The web app's approval card never shows a tool's description, which is written for the model; the Teams bot's card still does. A call the card has no sentence of its own for reads as one sentence, the tool's title (else its name) in the server and, for a call over rows, how many, such as "Create chart in Charts: 12 rows", above what the card reads from its arguments, such as the recipients or what each of the rows' fields holds; the arguments themselves, the rows among them, are under **Technical details**. The card says that the tool may send data to an external service only when its `openWorldHint` is `true` or unknown.
+
 ### Tool filtering
 
 Each MCP server can define `allow_tools` and `exclude_tools` wildcard patterns over its unqualified tool names. Erato first keeps tools matching `allow_tools`, then removes tools matching `exclude_tools`. This happens before request-level permission filtering.
