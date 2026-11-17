@@ -897,7 +897,8 @@ const differenceElsewhere = (): string =>
 const differenceUnreadable = (): string =>
   t({
     id: "spokenCard.difference.unreadable",
-    message: "The card changed in details I can't read out; they're on screen.",
+    message:
+      "I can't tell from the card whether the change is in: only something I can't read out is different. It's on screen.",
   });
 
 const differenceRest = (): string =>

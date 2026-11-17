@@ -8727,7 +8727,7 @@ msgstr "{shape, select, subject {The subject is now {name}.} other {The title is
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.unreadable"
-msgstr "The card changed in details I can't read out; they're on screen."
+msgstr "I can't tell from the card whether the change is in: only something I can't read out is different. It's on screen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

@@ -75,7 +75,10 @@ interface Entry {
   mustSay: boolean;
   values: SpokenSource[];
   readOut?: SpokenReadOut;
-  /** Where in the call's arguments it sits; `#key` for any path through a key. */
+  /**
+   * Where in the call's arguments it sits: a path covers what lies below
+   * it, a path starting with `=` only itself.
+   */
   paths: string[];
   /** The values a user may name to ask for it. */
   said: EarValue[];
@@ -83,6 +86,14 @@ interface Entry {
   list: boolean;
   /** For a long text: its words, to tell what was added or taken out. */
   words?: string;
+  /**
+   * Said instead of `sentence` when the withdrawn card's sentence is the
+   * same although the values differ: a cut value, an address whose name
+   * part did not change.
+   */
+  plainer?: string;
+  /** For a batch: each stored row's comparison, the values that name it, and its paths. */
+  rows?: { compare: string; said: EarValue[]; paths: string[] }[];
 }
 
 const pieceId = (role: SpokenPieceRole, field?: string) =>
@@ -174,14 +185,44 @@ const rowCompare = (row: {
     row.effectsOmitted,
   ]);
 
-/** The arrays a batch's rows sit in: each row's path up to its index. */
+/**
+ * The stored rows' own paths, up to each row's index: a row past them is
+ * not covered, so its change is told as something else that differs.
+ */
 const batchPaths = (rows: readonly { effects: ChangeEffect[] }[]): string[] => [
+  ...new Set(rows.flatMap(rowPaths)),
+];
+
+/** One stored row's own paths, up to its index. */
+const rowPaths = (row: { effects: ChangeEffect[] }): string[] => [
   ...new Set(
-    rows.flatMap((row) =>
-      row.effects.map((effect) => effect.path.replace(/\/\d+(\/.*)?$/, "")),
+    row.effects.flatMap(
+      (effect) => /^(.*?\/\d+)(?:\/|$)/.exec(effect.path)?.[1] ?? [],
     ),
   ),
 ];
+
+/**
+ * A batch as the rows that changed, in either card: named by their values
+ * and covering only their own paths, so a row that differs where its
+ * summary shows nothing is still told. Any other entry as it is.
+ */
+const changedRows = (entry: Entry, old: Entry | undefined): Entry => {
+  if (!entry.rows) return entry;
+  const before = old?.rows ?? [];
+  const rows = Math.max(entry.rows.length, before.length);
+  const said: EarValue[] = [];
+  const paths: string[] = [];
+  for (let index = 0; index < rows; index++) {
+    const now = entry.rows.at(index);
+    const then = before.at(index);
+    if (now?.compare !== then?.compare) {
+      said.push(...(now?.said ?? []), ...(then?.said ?? []));
+      paths.push(...(now?.paths ?? []), ...(then?.paths ?? []));
+    }
+  }
+  return { ...entry, said, paths };
+};
 
 /** How many rows of a batch differ between two cards. */
 const rowsChanged = (before: string, after: string): number => {
@@ -195,6 +236,7 @@ const rowsChanged = (before: string, after: string): number => {
 
 const entriesOf = (
   gist: Gist,
+  input: unknown,
   facts: SpokenFacts,
   words: LanguageWords,
   timeZone: string | undefined,
@@ -291,6 +333,7 @@ const entriesOf = (
     add({
       key: `effect:${effect.path}`,
       ...spoken,
+      plainer: words.difference.field(spoken.field ?? ""),
       compare: JSON.stringify(effectCompare(effect)),
       paths: [effect.path],
       said: [...effect.values, ...effect.added].map((value) =>
@@ -396,11 +439,17 @@ const entriesOf = (
         spoken,
         group.omitted,
       ),
+      plainer: words.difference.recipientsIn(
+        group.kind,
+        group.name,
+        group.values.map((address) => shorten(address)),
+        group.omitted,
+      ),
       compare: JSON.stringify([group.kind, group.values, group.omitted]),
       field: group.name,
       mustSay: true,
       values: spoken.map((recipient) => sourceOf("recipient", recipient)),
-      paths: [`#${group.rawName}`],
+      paths: recipientPaths(input, group.rawName, group.values),
       said: group.values.map(textValue),
       list: true,
     });
@@ -450,6 +499,16 @@ const entriesOf = (
       paths: batchPaths(change.batch.rows),
       said: [],
       list: false,
+      rows: change.batch.rows.map((row) => ({
+        compare: rowCompare(row),
+        said: [
+          ...(row.name === undefined ? [] : [textValue(row.name)]),
+          ...row.effects.flatMap((effect) =>
+            effect.values.map((value) => earOf(value, timeZone)),
+          ),
+        ],
+        paths: rowPaths(row),
+      })),
     });
   }
 
@@ -475,38 +534,211 @@ const entriesOf = (
 
 // Comparing the calls' arguments
 
-/** The leaf paths where two arguments differ, as JSON pointers. */
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const pointerKey = (key: string) =>
+  key.replaceAll("~", "~0").replaceAll("/", "~1");
+
+/**
+ * A value as a described card can tell it apart: the label reads `null`
+ * and a blank value as empty, and spacing as nothing. Only for a value the
+ * label shows; anywhere else the raw value counts, since `null` may clear
+ * something and a line break may be content.
+ */
+const plain = (value: unknown): unknown => {
+  if (value === null) return undefined;
+  if (typeof value === "string") {
+    const words = value.trim().replace(/\s+/g, " ");
+    return words.length === 0 ? undefined : words;
+  }
+  return value;
+};
+
+/**
+ * Keys that only ever hold a token made anew for each request, never a
+ * reference to something: compared without case, `-` and `_`. A key that
+ * merely ends in "request id" (`parent_request_id`, `new_requestid`) may
+ * name a record, so it is not one of them.
+ */
+const REQUEST_TOKEN_KEYS = new Set([
+  "idempotencykey",
+  "nonce",
+  "clientrequestid",
+  "clientrequesttoken",
+  "clienttoken",
+  "xrequestid",
+]);
+const TOKEN_VALUE =
+  /^[0-9A-Za-z_-]{16,}$|^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+const isRequestToken = (key: string, before: unknown, after: unknown) =>
+  REQUEST_TOKEN_KEYS.has(key.toLowerCase().replace(/[-_]/g, "")) &&
+  typeof before === "string" &&
+  typeof after === "string" &&
+  TOKEN_VALUE.test(before) &&
+  TOKEN_VALUE.test(after) &&
+  /\d/.test(before) &&
+  /\d/.test(after);
+
+/** How two arguments are compared; without it, on their raw values. */
+interface Reading {
+  /** The label shows the value at `path` as a value, so it is read plain. */
+  plainAt: (path: string) => boolean;
+  /** The label shows or holds `path`, so a token rule never applies there. */
+  heldAt: (path: string) => boolean;
+}
+
+/**
+ * The leaf paths where two arguments differ, as JSON pointers. With a
+ * reading, what the label shows as a value is compared as the card can tell
+ * it apart, and a token made anew for each request under a key that only
+ * holds such tokens is no difference. When in doubt it counts: the voice
+ * then says that something differs, never that nothing changed.
+ */
 export const changedPaths = (
   before: unknown,
   after: unknown,
+  reading?: Reading,
   at = "",
+  key = "",
 ): string[] => {
-  if (Object.is(before, after)) return [];
-  const isObject = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null;
+  const shown = reading?.plainAt(at) ?? false;
+  const left = shown ? plain(before) : before;
+  const right = shown ? plain(after) : after;
+  if (Object.is(left, right)) return [];
+  if (reading && !reading.heldAt(at) && isRequestToken(key, left, right))
+    return [];
   if (
-    !isObject(before) ||
-    !isObject(after) ||
-    Array.isArray(before) !== Array.isArray(after)
+    !isObject(left) ||
+    !isObject(right) ||
+    Array.isArray(left) !== Array.isArray(right)
   )
     return [at];
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  return [...keys].flatMap((key) =>
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].flatMap((inner) =>
     changedPaths(
-      before[key],
-      after[key],
-      `${at}/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`,
+      left[inner],
+      right[inner],
+      reading,
+      `${at}/${pointerKey(inner)}`,
+      inner,
     ),
   );
 };
 
-/** Whether `path` lies within one of `covers`; `#key` covers any path through that key. */
+interface LabelNode {
+  path?: string;
+  kind?: string;
+  children?: LabelNode[] | null;
+}
+interface LabelPaths {
+  arguments?: LabelNode | null;
+  items?: Record<string, unknown>[] | null;
+  change?: {
+    effects?: { path?: string }[] | null;
+    texts?: { path?: string }[] | null;
+    opaque?: { path?: string }[] | null;
+  } | null;
+}
+
+/**
+ * What the labels of two cards show as values, and every path an item,
+ * field or change of them holds. The arguments tree's own ID kinds do not
+ * count as held: the backend marks every generated token as a machine ID,
+ * so they would rule out the very tokens the token rule is for.
+ */
+const readingOf = (...labels: unknown[]): Reading => {
+  const values = new Set<string>();
+  const held = new Set<string>();
+  const walk = (node: LabelNode | null | undefined) => {
+    if (!node) return;
+    if (node.kind === "value" && typeof node.path === "string")
+      values.add(node.path);
+    for (const child of node.children ?? []) walk(child);
+  };
+  const hold = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(hold);
+    else if (isObject(value)) {
+      if (typeof value.path === "string" && value.path.length > 0)
+        held.add(value.path);
+      Object.values(value).forEach(hold);
+    }
+  };
+  for (const label of labels as (LabelPaths | null | undefined)[]) {
+    walk(label?.arguments);
+    hold(label?.items);
+    hold(label?.change?.effects);
+    hold(label?.change?.texts);
+    hold(label?.change?.opaque);
+  }
+  return {
+    plainAt: (path) => values.has(path),
+    heldAt: (path) => held.has(path),
+  };
+};
+
+/** Whether `path` lies within one of `covers`; a cover starting with `=` is that path only. */
 const covered = (path: string, covers: readonly string[]): boolean =>
   covers.some((cover) =>
-    cover.startsWith("#")
-      ? path.split("/").includes(cover.slice(1))
+    cover.startsWith("=")
+      ? path === cover.slice(1)
       : path === cover || path.startsWith(`${cover}/`),
   );
+
+/**
+ * What a recipient group stands for in the arguments: under the key it was
+ * read from, each address and each whole entry, never a recipient's other
+ * fields (such as whether an attendee is required).
+ */
+const recipientPaths = (
+  input: unknown,
+  rawName: string,
+  addresses: readonly string[],
+): string[] => {
+  const wanted = new Set(addresses.map((address) => plain(address)));
+  const holds = (value: unknown): boolean =>
+    typeof value === "string"
+      ? wanted.has(plain(value))
+      : isObject(value) && Object.values(value).some(holds);
+  const found: string[] = [];
+  const walk = (value: unknown, at: string) => {
+    if (!isObject(value)) return;
+    for (const [key, inner] of Object.entries(value)) {
+      const path = `${at}/${pointerKey(key)}`;
+      if (key === rawName && holds(inner)) found.push(path);
+      else walk(inner, path);
+    }
+  };
+  walk(input, "");
+  return found.flatMap((group) => {
+    const covers: string[] = [];
+    const mark = (value: unknown, at: string, entry: boolean) => {
+      if (typeof value === "string") {
+        if (wanted.has(plain(value))) covers.push(`=${at}`);
+      } else if (isObject(value)) {
+        if (entry) covers.push(`=${at}`);
+        for (const [key, inner] of Object.entries(value))
+          mark(inner, `${at}/${pointerKey(key)}`, Array.isArray(value));
+      }
+    };
+    covers.push(`=${group}`);
+    mark(readAt(input, group), group, false);
+    return covers;
+  });
+};
+
+const readAt = (input: unknown, pointer: string): unknown =>
+  pointer
+    .split("/")
+    .slice(1)
+    .reduce<unknown>(
+      (holder, key) =>
+        isObject(holder)
+          ? holder[key.replaceAll("~1", "/").replaceAll("~0", "~")]
+          : undefined,
+      input,
+    );
 
 // Whether the user's words ask for a difference
 
@@ -534,6 +766,38 @@ const FILLERS = new Set([
   "with",
   "from",
   "not",
+  // Words that frame a change rather than name what changes.
+  "bitte",
+  "doch",
+  "lieber",
+  "statt",
+  "stattdessen",
+  "nimm",
+  "nehmen",
+  "mach",
+  "mache",
+  "machen",
+  "setz",
+  "setze",
+  "setzen",
+  "ändere",
+  "ändern",
+  "noch",
+  "eben",
+  "jetzt",
+  "lass",
+  "aber",
+  "auch",
+  "please",
+  "instead",
+  "rather",
+  "make",
+  "take",
+  "change",
+  "just",
+  "also",
+  "then",
+  "now",
 ]);
 
 const tokensOf = (text: string): string[] =>
@@ -613,13 +877,10 @@ const asks = (
   said: readonly string[],
   entry: Entry | undefined,
   old: Entry | undefined,
+  siblings: readonly string[],
 ): boolean => {
   const field = entry?.field ?? old?.field;
-  if (
-    field &&
-    tokensOf(field).some((term) => term.length >= 4 && wordMatches(said, term))
-  )
-    return true;
+  if (field !== undefined && fieldNamed(said, field, siblings)) return true;
   if (entry?.said.some((value) => names(said, value))) return true;
   if (entry?.words !== undefined || old?.words !== undefined) {
     const before = new Set(tokensOf(old?.words ?? ""));
@@ -637,6 +898,39 @@ const asks = (
       .some((value) => names(said, value));
   }
   return false;
+};
+
+/** The words of a field name a user may say for it. */
+const fieldWords = (field: string): string[] =>
+  tokensOf(field).filter((word) => word.length >= 4 && !FILLERS.has(word));
+
+/**
+ * Whether the user's words name a field: one of its words whole, or a whole
+ * part of a compound that no other field of the card shares ("Ende" names
+ * "Terminende"; "Termin" names neither "Terminbeginn" nor "Terminende").
+ */
+const fieldNamed = (
+  said: readonly string[],
+  field: string,
+  siblings: readonly string[],
+): boolean => {
+  const others = siblings
+    .filter((sibling) => sibling !== field)
+    .flatMap(fieldWords);
+  const partOf = (part: string, word: string) =>
+    part !== word && (word.startsWith(part) || word.endsWith(part));
+  return fieldWords(field).some(
+    (word) =>
+      said.includes(word) ||
+      said.some(
+        (token) =>
+          token.length >= 4 &&
+          !FILLERS.has(token) &&
+          ((partOf(token, word) &&
+            !others.some((other) => other === token || partOf(token, other))) ||
+            (partOf(word, token) && !others.includes(word))),
+      ),
+  );
 };
 
 const introduced = (
@@ -682,7 +976,6 @@ export const spokenDifference = (
   if (before.type !== "call" || next.type !== "call") {
     return introduced(whole, "reread", words);
   }
-  const inputChanged = changedPaths(before.input, next.input);
   const oldCard = toolCallCardOf(before.label, before.input);
   const newCard = toolCallCardOf(next.label, next.input);
   // A read is said by its own sentence, not the card's, so its pieces have
@@ -691,13 +984,19 @@ export const spokenDifference = (
     spokenReadFactsOf(before.label) !== undefined ||
     spokenReadFactsOf(next.label) !== undefined;
   if (oldCard.kind !== "gist" || newCard.kind !== "gist" || readSaid) {
+    // Nothing compares these arguments entry by entry: any difference counts.
     const same =
       before.toolTitle === next.toolTitle &&
       before.server === next.server &&
-      inputChanged.length === 0;
+      changedPaths(before.input, next.input).length === 0;
     return introduced(whole, same ? "same" : "reread", words);
   }
   if (!heard.has("what")) return introduced(whole, "reread", words);
+  const inputChanged = changedPaths(
+    before.input,
+    next.input,
+    readingOf(before.label, next.label),
+  );
   if (identityOf(oldCard.gist, before) !== identityOf(newCard.gist, next)) {
     return introduced(whole, "other_item", words);
   }
@@ -705,12 +1004,14 @@ export const spokenDifference = (
   const { timeZone } = options;
   const oldEntries = entriesOf(
     oldCard.gist,
+    before.input,
     spokenFactsOf(oldCard.gist, before.server, timeZone, true),
     words,
     timeZone,
   );
   const newEntries = entriesOf(
     newCard.gist,
+    next.input,
     spokenFactsOf(newCard.gist, next.server, timeZone, true),
     words,
     timeZone,
@@ -718,6 +1019,13 @@ export const spokenDifference = (
   const said = tokensOf(previous.words);
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
   const newKeys = new Set(newEntries.map((entry) => entry.key));
+  const siblings = [
+    ...new Set(
+      [...oldEntries, ...newEntries].flatMap((entry) =>
+        entry.field === undefined ? [] : [entry.field],
+      ),
+    ),
+  ];
 
   const differences: Difference[] = [];
   const owed: ComposedPiece[] = [];
@@ -744,15 +1052,21 @@ export const spokenDifference = (
     const old = oldByKey.get(entry.key);
     if (old?.compare !== entry.compare) {
       if (entry.key === "name") nameChanged = true;
-      differs(
-        entry,
+      const sentence =
         entry.key === "batch"
           ? words.difference.rows(
               rowsChanged(old?.compare ?? "[]", entry.compare),
             )
-          : entry.sentence,
-        asks(said, entry, old),
-        [...entry.paths, ...(old?.paths ?? [])],
+          : // The same words as before would hide the difference.
+            old?.sentence === entry.sentence && entry.plainer !== undefined
+            ? entry.plainer
+            : entry.sentence;
+      const changed = changedRows(entry, old);
+      differs(
+        entry,
+        sentence,
+        asks(said, changed, old, siblings),
+        entry.rows ? changed.paths : [...entry.paths, ...(old?.paths ?? [])],
       );
     } else if (entry.key === "consequence") {
       consequence = entry;
@@ -771,7 +1085,7 @@ export const spokenDifference = (
     differs(
       { ...old, values: [] },
       words.difference.dropped(old.field ?? ""),
-      asks(said, undefined, old),
+      asks(said, undefined, old, siblings),
       old.paths,
     );
   }
