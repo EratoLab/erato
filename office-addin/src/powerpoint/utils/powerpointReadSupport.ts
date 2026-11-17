@@ -36,6 +36,11 @@ export interface PowerPointReadSupport {
   slideExport: boolean;
   /** Office.context.document.getFileAsync, the whole file (Common API, every host). */
   presentationFile: boolean;
+  /**
+   * The whole file includes edits not saved yet. Measured on PowerPoint for Windows (16.0.20527,
+   * 2026-11-17); Mac and the web are not measured, so their file content stays labelled as saved.
+   */
+  fileIsCurrent: boolean;
   /** placeholderFormat.type and containedType: title, body, subtitle… */
   placeholderRole: boolean;
   /** shape.getTable().values. */
@@ -69,7 +74,10 @@ const has = (
 
 export function powerpointReadSupport(
   isSetSupported: PowerPointRequirementCheck,
-  { fileApi = false }: { fileApi?: boolean } = {},
+  {
+    fileApi = false,
+    fileIsCurrent = false,
+  }: { fileApi?: boolean; fileIsCurrent?: boolean } = {},
 ): PowerPointReadSupport {
   const supported = new Set(
     POWERPOINT_API_VERSIONS.filter((version) => has(isSetSupported, version)),
@@ -91,6 +99,7 @@ export function powerpointReadSupport(
     selection: slides && supported.has("1.5"),
     slideExport: full,
     presentationFile: slides && fileApi,
+    fileIsCurrent: slides && fileApi && fileIsCurrent,
     placeholderRole: full,
     tables: full,
     groups: full,
@@ -114,6 +123,7 @@ export function currentPowerPointReadSupport(): PowerPointReadSupport {
       isSetSupported("CompressedFile", "1.1") &&
       // iPad slices the file at 64 KB at most; the reader asks for 4 MB slices.
       String(diagnostics?.platform) !== "iOS",
+    fileIsCurrent: String(diagnostics?.platform) === "PC",
   });
 }
 

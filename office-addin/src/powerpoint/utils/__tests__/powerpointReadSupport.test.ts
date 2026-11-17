@@ -71,13 +71,14 @@ describe("PowerPoint read support", () => {
   });
 
   it.each([
-    ["PC", true, true],
-    ["Mac", true, true],
-    ["iOS", true, false],
-    ["PC", false, false],
+    ["PC", true, true, true],
+    ["Mac", true, true, false],
+    ["OfficeOnline", true, true, false],
+    ["iOS", true, false, false],
+    ["PC", false, false, false],
   ])(
-    "reads the whole file on %s only where the compressed file set is reported (%s)",
-    (platform, compressedFile, expected) => {
+    "reads the whole file on %s only where the compressed file set is reported (%s), taking it as current only on Windows",
+    (platform, compressedFile, expected, current) => {
       const office = (
         globalThis as unknown as {
           Office: { context: Record<string, unknown> };
@@ -93,7 +94,10 @@ describe("PowerPoint read support", () => {
       office.context.document = { getFileAsync: () => {} };
       office.context.diagnostics = { platform };
       try {
-        expect(currentPowerPointReadSupport().presentationFile).toBe(expected);
+        expect(currentPowerPointReadSupport()).toMatchObject({
+          presentationFile: expected,
+          fileIsCurrent: current,
+        });
       } finally {
         for (const key of Object.keys(office.context))
           delete office.context[key];

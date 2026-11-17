@@ -463,7 +463,7 @@ export function readPowerPointSelection(
     const { text } = live;
     const result: Record<string, unknown> = {
       ...envelope(support),
-      ...(outcome?.ok && outcome.route === "file"
+      ...(outcome?.ok && !outcome.current
         ? { fileContent: SAVED_FILE_NOTE }
         : {}),
       selectedSlides: selection.listed,

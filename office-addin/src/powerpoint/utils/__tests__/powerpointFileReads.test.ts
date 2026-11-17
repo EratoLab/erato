@@ -267,15 +267,11 @@ describe("full tier: the one-slide export", () => {
     expect(host.fileOpens).toBe(0);
   });
 
-  it("does not state 'no notes' from an export that names no notes page", async () => {
+  it("says a slide has no notes when its export names no notes page", async () => {
     host = installFakePowerPoint(deck());
     const result = ok(await readPowerPointSlide(FULL, { slideId: SLIDE_2 }));
-    expect(result.slide.notes).toBeUndefined();
-    expect(result.slide.unread).toEqual([
-      expect.stringMatching(
-        /^speaker notes: PowerPoint's slide export holds none; .* not verified yet/,
-      ),
-    ]);
+    expect(result.slide.notes).toBe("");
+    expect(result.slide.unread).toBeUndefined();
     expect(result.slide.fileContent).toBeUndefined();
   });
 
@@ -682,6 +678,44 @@ describe("where file content comes from", () => {
       /^chart data: .*does not match the slide on screen/,
     );
     expect(result.fileContent).toBeUndefined();
+  });
+
+  it("does not label the whole file where it includes unsaved edits", async () => {
+    const current = powerpointReadSupport(requirementsUpTo("1.5"), {
+      fileApi: true,
+      fileIsCurrent: true,
+    });
+    host = installFakePowerPoint(
+      deck({ selectedSlideIds: [SLIDE_1], selectedShapeIds: ["6"] }),
+    );
+    const slide = ok(await readPowerPointSlide(current, { slideId: SLIDE_1 }));
+    expect(slide.slide.fileContent).toBeUndefined();
+    expect(slide.slide.notes).toBeDefined();
+    const selection = ok(await readPowerPointSelection(current));
+    expect(selection.fileContent).toBeUndefined();
+  });
+
+  it("does not ask to save first where the file includes unsaved edits", async () => {
+    const current = powerpointReadSupport(requirementsUpTo("1.5"), {
+      fileApi: true,
+      fileIsCurrent: true,
+    });
+    const edited = liveSlide1.map((shape) =>
+      shape.id === "2" ? { ...shape, text: "Changed during the read" } : shape,
+    );
+    host = installFakePowerPoint(
+      deck({
+        slides: [
+          { id: SLIDE_1, shapes: edited },
+          { id: SLIDE_2, shapes: liveSlide2 },
+        ],
+        selectedSlideIds: [SLIDE_1],
+        selectedShapeIds: ["4"],
+      }),
+    );
+    const result = ok(await readPowerPointSelection(current));
+    const [chart] = result.selectedShapes as PowerPointShapeOut[];
+    expect(chart.unread?.[0]).toMatch(/\(it changed during the read\)$/);
   });
 
   it("labels a selection filled from the whole file", async () => {

@@ -42,12 +42,8 @@ export interface FakeSlide {
 
 export interface FakeDeck {
   slides: FakeSlide[];
+  /** In the order the user selected them, which getSelectedSlides keeps (PowerPoint for Windows). */
   selectedSlideIds?: string[];
-  /**
-   * Comes first in getSelectedSlides, as in PowerPoint, the rest in deck order. Defaults to the
-   * first of `selectedSlideIds`.
-   */
-  activeSlideId?: string;
   selectedShapeIds?: string[];
   selectedText?: string;
   /** getSelectedSlides fails its batch, as in a view that has no slide selection. */
@@ -438,17 +434,10 @@ export function installFakePowerPoint(deck: FakeDeck): FakePowerPointHost {
         slides: presentation(),
         getSelectedSlides: () => {
           if (deck.selectionFails) fail("no selection in this view");
-          const active = deck.activeSlideId ?? deck.selectedSlideIds?.[0];
-          const selected = deck.slides.filter((slide) =>
-            deck.selectedSlideIds?.includes(slide.id),
+          const selected = (deck.selectedSlideIds ?? []).flatMap((id) =>
+            deck.slides.filter((slide) => slide.id === id),
           );
-          return collection(
-            state,
-            [
-              ...selected.filter((slide) => slide.id === active),
-              ...selected.filter((slide) => slide.id !== active),
-            ].map(slideProxy),
-          );
+          return collection(state, selected.map(slideProxy));
         },
         getSelectedShapes: () => {
           const byId = shapesById();
