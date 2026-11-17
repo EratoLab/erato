@@ -529,9 +529,10 @@ const pointerKey = (key: string) =>
   key.replaceAll("~", "~0").replaceAll("/", "~1");
 
 /**
- * An argument as a card can tell it apart: the label reads `null` and a
- * blank value as empty, and spacing as nothing, so they count as missing
- * and as the plain words.
+ * A value as a described card can tell it apart: the label reads `null`
+ * and a blank value as empty, and spacing as nothing. Only for a value the
+ * label shows; anywhere else the raw value counts, since `null` may clear
+ * something and a line break may be content.
  */
 const plain = (value: unknown): unknown => {
   if (value === null) return undefined;
@@ -543,19 +544,24 @@ const plain = (value: unknown): unknown => {
 };
 
 /**
- * A key that holds a token made anew for each request (an idempotency key,
- * a request or correlation id, a nonce). Two such tokens differ on every
- * retry and say nothing about what the call does.
+ * Keys that only ever hold a token made anew for each request, never a
+ * reference to something: compared without case, `-` and `_`. A key that
+ * merely ends in "request id" (`parent_request_id`, `new_requestid`) may
+ * name a record, so it is not one of them.
  */
-const REQUEST_TOKEN_KEY =
-  /^(?:.*[_-])?(?:idempotency(?:[_-]?key)?|nonce|(?:client[_-]?)?request[_-]?id|correlation[_-]?id|trace[_-]?id|dedup(?:e|lication)?[_-]?(?:key|id))$/i;
-const REQUEST_TOKEN_CAMEL =
-  /(?:idempotencyKey|requestId|correlationId|traceId|nonce)$/;
+const REQUEST_TOKEN_KEYS = new Set([
+  "idempotencykey",
+  "nonce",
+  "clientrequestid",
+  "clientrequesttoken",
+  "clienttoken",
+  "xrequestid",
+]);
 const TOKEN_VALUE =
   /^[0-9A-Za-z_-]{16,}$|^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 const isRequestToken = (key: string, before: unknown, after: unknown) =>
-  (REQUEST_TOKEN_KEY.test(key) || REQUEST_TOKEN_CAMEL.test(key)) &&
+  REQUEST_TOKEN_KEYS.has(key.toLowerCase().replace(/[-_]/g, "")) &&
   typeof before === "string" &&
   typeof after === "string" &&
   TOKEN_VALUE.test(before) &&
@@ -563,21 +569,34 @@ const isRequestToken = (key: string, before: unknown, after: unknown) =>
   /\d/.test(before) &&
   /\d/.test(after);
 
+/** How two arguments are compared; without it, on their raw values. */
+interface Reading {
+  /** The label shows the value at `path` as a value, so it is read plain. */
+  plainAt: (path: string) => boolean;
+  /** The label shows or holds `path`, so a token rule never applies there. */
+  heldAt: (path: string) => boolean;
+}
+
 /**
- * The leaf paths where two arguments differ in what a card can tell, as
- * JSON pointers: not in empty or blank values, spacing, or a token made
- * anew for each request.
+ * The leaf paths where two arguments differ, as JSON pointers. With a
+ * reading, what the label shows as a value is compared as the card can tell
+ * it apart, and a token made anew for each request under a key that only
+ * holds such tokens is no difference. When in doubt it counts: the voice
+ * then says that something differs, never that nothing changed.
  */
 export const changedPaths = (
   before: unknown,
   after: unknown,
+  reading?: Reading,
   at = "",
   key = "",
 ): string[] => {
-  const left = plain(before);
-  const right = plain(after);
+  const shown = reading?.plainAt(at) ?? false;
+  const left = shown ? plain(before) : before;
+  const right = shown ? plain(after) : after;
   if (Object.is(left, right)) return [];
-  if (isRequestToken(key, left, right)) return [];
+  if (reading && !reading.heldAt(at) && isRequestToken(key, left, right))
+    return [];
   if (
     !isObject(left) ||
     !isObject(right) ||
@@ -589,10 +608,62 @@ export const changedPaths = (
     changedPaths(
       left[inner],
       right[inner],
+      reading,
       `${at}/${pointerKey(inner)}`,
       inner,
     ),
   );
+};
+
+interface LabelNode {
+  path?: string;
+  kind?: string;
+  children?: LabelNode[] | null;
+}
+interface LabelPaths {
+  arguments?: LabelNode | null;
+  items?: Record<string, unknown>[] | null;
+  change?: {
+    effects?: { path?: string }[] | null;
+    texts?: { path?: string }[] | null;
+    opaque?: { path?: string }[] | null;
+  } | null;
+}
+
+/**
+ * What the labels of two cards show as values, and every path an item,
+ * field or change of them holds. The arguments tree's own ID kinds do not
+ * count as held: the backend marks every generated token as a machine ID,
+ * so they would rule out the very tokens the token rule is for.
+ */
+const readingOf = (...labels: unknown[]): Reading => {
+  const values = new Set<string>();
+  const held = new Set<string>();
+  const walk = (node: LabelNode | null | undefined) => {
+    if (!node) return;
+    if (node.kind === "value" && typeof node.path === "string")
+      values.add(node.path);
+    for (const child of node.children ?? []) walk(child);
+  };
+  const hold = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(hold);
+    else if (isObject(value)) {
+      if (typeof value.path === "string" && value.path.length > 0)
+        held.add(value.path);
+      Object.values(value).forEach(hold);
+    }
+  };
+  for (const label of labels as (LabelPaths | null | undefined)[]) {
+    walk(label?.arguments);
+    hold(label?.items);
+    hold(label?.change?.effects);
+    hold(label?.change?.texts);
+    hold(label?.change?.opaque);
+  }
+  return {
+    plainAt: (path) => values.has(path),
+    heldAt: (path) => held.has(path),
+  };
 };
 
 /** Whether `path` lies within one of `covers`; a cover starting with `=` is that path only. */
@@ -893,17 +964,22 @@ export const spokenDifference = (
   if (before.type !== "call" || next.type !== "call") {
     return introduced(whole, "reread", words);
   }
-  const inputChanged = changedPaths(before.input, next.input);
   const oldCard = toolCallCardOf(before.label, before.input);
   const newCard = toolCallCardOf(next.label, next.input);
   if (oldCard.kind !== "gist" || newCard.kind !== "gist") {
+    // Nothing describes these arguments: any difference in them counts.
     const same =
       before.toolTitle === next.toolTitle &&
       before.server === next.server &&
-      inputChanged.length === 0;
+      changedPaths(before.input, next.input).length === 0;
     return introduced(whole, same ? "same" : "reread", words);
   }
   if (!heard.has("what")) return introduced(whole, "reread", words);
+  const inputChanged = changedPaths(
+    before.input,
+    next.input,
+    readingOf(before.label, next.label),
+  );
   if (identityOf(oldCard.gist, before) !== identityOf(newCard.gist, next)) {
     return introduced(whole, "other_item", words);
   }

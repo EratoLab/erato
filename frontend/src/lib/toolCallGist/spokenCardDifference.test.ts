@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
+import { toolCallCardOf } from "./gist";
 import { spokenApprovalFor, spokenApprovalPieces } from "./spokenCard";
 import { spokenDifference } from "./spokenCardDifference";
 import { spokenCardFlow, spokenCardStep } from "./spokenCardFlow";
@@ -777,6 +778,70 @@ describe("whatever differs in the arguments is told", () => {
     },
   );
 
+  /** The paths a label's arguments tree shows as values. */
+  const valuePaths = (call: SetCall): Set<string> => {
+    const found = new Set<string>();
+    const walk = (node?: {
+      path: string;
+      kind: string;
+      children?: unknown[];
+    }) => {
+      if (!node) return;
+      if (node.kind === "value") found.add(node.path);
+      for (const child of node.children ?? [])
+        walk(child as { path: string; kind: string; children?: unknown[] });
+    };
+    walk(
+      (
+        call.display.label as unknown as {
+          arguments?: { path: string; kind: string };
+        }
+      ).arguments,
+    );
+    return found;
+  };
+
+  /** Changes a reader of the card may not tell apart. */
+  const nearlyInvisible = (value: unknown): unknown[] =>
+    typeof value === "string"
+      ? [null, "", ` ${value} `, value.replace(/ /g, "\n"), `${value}\n`]
+      : [null, ""];
+
+  it.each(calls.map((call) => call.id))(
+    "%s: no reading turns differing arguments into the same, unless the label shows the value as equal",
+    (id) => {
+      const card = callOf(id);
+      const shown = valuePaths(card);
+      const generic =
+        toolCallCardOf(
+          approvalOf(card).type === "call"
+            ? (card.display.label as unknown as ToolCallLabel)
+            : undefined,
+          card.input,
+        ).kind !== "gist";
+      const pointers = [...leaves(card.input), "/added_argument"];
+      for (const pointer of pointers) {
+        const original =
+          pointer === "/added_argument"
+            ? undefined
+            : readOf(pointer, card.input);
+        for (const value of nearlyInvisible(original ?? "x")) {
+          const before = callOf(id);
+          const after = callOf(id);
+          setInput(after, pointer, value);
+          if (JSON.stringify(after.input) === JSON.stringify(before.input))
+            continue;
+          const result = difference(withdrawn(before, "x"), after);
+          if (result.intro === "same")
+            expect(
+              !generic && shown.has(pointer),
+              `${pointer} = ${JSON.stringify(value)}`,
+            ).toBe(true);
+        }
+      }
+    },
+  );
+
   it("a said difference beside one nobody can say is followed by 'something else'", () => {
     const before = callOf("create-02-appointment");
     const after = callOf("create-02-appointment");
@@ -875,6 +940,26 @@ describe("what counts as asked for", () => {
 
 // Re-check of the review: what a card cannot tell apart, and what names a field.
 
+/**
+ * The label as the backend writes it for an argument it lists: a `null`
+ * or a short string is a value node of the arguments tree.
+ */
+const listed = (call: SetCall, path: string, kind = "value"): void => {
+  const tree = (
+    call.display.label as unknown as {
+      arguments: { children?: { path: string; kind: string }[] };
+    }
+  ).arguments;
+  tree.children = [...(tree.children ?? []), { path, kind }];
+};
+
+const NOT_SAME = (result: { intro: string; pieces: SpokenPiece[] }) => {
+  expect(result.intro).not.toBe("same");
+  expect(textsOf(result.pieces)).not.toContain(
+    "Nothing was changed. Try saying the change a different way.",
+  );
+};
+
 describe("differences a card cannot tell apart are no differences", () => {
   const same = (
     change: (call: SetCall) => void,
@@ -886,31 +971,42 @@ describe("differences a card cannot tell apart are no differences", () => {
     return difference(withdrawn(before, "nimm den 22."), after);
   };
 
-  it("an optional argument null instead of missing", () => {
+  it("an optional argument the label lists, null instead of missing", () => {
     expect(
       same((call) => {
         (call.input.item as Record<string, unknown>).description = null;
+        listed(call, "/item/description");
       }).intro,
     ).toBe("same");
   });
 
-  it("a blank value instead of missing, and spacing only", () => {
+  it("a blank value instead of missing, and spacing only, where the label lists them", () => {
     expect(
       same((call) => {
         const item = call.input.item as Record<string, unknown>;
         item.description = "   ";
         item.location = "  Werk   Augsburg ";
+        listed(call, "/item/description");
       }).intro,
     ).toBe("same");
   });
 
-  it("a token made anew for the request", () => {
+  it("a token made anew for the request, under a key that only holds such tokens", () => {
     const before = callOf("create-02-appointment");
     const after = callOf("create-02-appointment");
     before.input.idempotency_key = "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
     after.input.idempotency_key = "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
-    before.input.requestId = "req_01HZX4K9Q2W7E5R3T8Y6U1I0OP";
-    after.input.requestId = "req_01HZX4M2N8B5V7C3X1Z9A4S6DF";
+    before.input.clientRequestId = "req_01HZX4K9Q2W7E5R3T8Y6U1I0OP";
+    after.input.clientRequestId = "req_01HZX4M2N8B5V7C3X1Z9A4S6DF";
+    before.input["x-request-id"] = "4f1c9a7e2b8d4e6f9a0b1c2d3e4f5a6b";
+    after.input["x-request-id"] = "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b";
+    for (const call of [before, after])
+      for (const path of [
+        "/idempotency_key",
+        "/clientRequestId",
+        "/x-request-id",
+      ])
+        listed(call, path, "machine_id");
     expect(difference(withdrawn(before, "x"), after).intro).toBe("same");
   });
 
@@ -933,6 +1029,95 @@ describe("differences a card cannot tell apart are no differences", () => {
     const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
     expect(texts).toContain(UNREADABLE);
     expect(texts.some((text) => ASKED.test(text))).toBe(false);
+  });
+});
+
+describe("a real change is never said as the same", () => {
+  it.each([
+    "parent_request_id",
+    "change_request_id",
+    "service_request_id",
+    "approval_request_id",
+    "leave_request_id",
+    "new_requestid",
+    "requestId",
+    "correlation_id",
+    "trace_id",
+  ])("N1: another record under %s", (key) => {
+    const before = callOf("create-06-task-unread-regarding");
+    const after = callOf("create-06-task-unread-regarding");
+    (before.input.item as Record<string, unknown>)[key] =
+      "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
+    (after.input.item as Record<string, unknown>)[key] =
+      "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
+    for (const call of [before, after])
+      listed(call, `/item/${key}`, "machine_id");
+    NOT_SAME(
+      difference(withdrawn(before, "nicht diese Anfrage, die andere"), after),
+    );
+  });
+
+  it("N1: a token key the label shows as a field still counts", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    before.input.nonce = "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
+    after.input.nonce = "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
+    for (const call of [before, after])
+      call.display.label.items[0].fields = [
+        ...(call.display.label.items[0].fields ?? []),
+        {
+          name: "nonce",
+          values: [{ path: "/nonce", text: String(call.input.nonce) }],
+        },
+      ];
+    NOT_SAME(difference(withdrawn(before, "x"), after));
+  });
+
+  it("N1: a changed request id on a card nobody could describe", () => {
+    const before = callOf("generic-02-sync-remote-page");
+    const after = callOf("generic-02-sync-remote-page");
+    before.input.request_id = "8d1f7c2e-1b0a-4c55-9f0e-2a3b4c5d6e7f";
+    after.input.request_id = "0b9e6a11-73c2-4d8e-a1f4-6c7d8e9f0a1b";
+    NOT_SAME(difference(withdrawn(before, "x"), after));
+  });
+
+  it.each([null, ""])(
+    "N2: clearing an argument with %j on a card nobody could describe",
+    (cleared) => {
+      const before = callOf("generic-02-sync-remote-page");
+      const after = callOf("generic-02-sync-remote-page");
+      after.input.note = cleared;
+      NOT_SAME(difference(withdrawn(before, "Notiz löschen"), after));
+    },
+  );
+
+  it("N2: null where the label does not list the argument", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    (after.input.item as Record<string, unknown>).description = null;
+    const texts = textsOf(difference(withdrawn(before, "x"), after).pieces);
+    expect(texts).toContain(UNREADABLE);
+  });
+
+  it.each([
+    ["line breaks", "a: 1\nb: 2", "a: 1 b: 2"],
+    ["indentation", "if x:\n    run()", "if x:\nrun()"],
+    ["a list put on one line", "- eins\n- zwei", "- eins - zwei"],
+  ])("N3: only %s changed on a card nobody could describe", (_, from, to) => {
+    const before = callOf("generic-02-sync-remote-page");
+    const after = callOf("generic-02-sync-remote-page");
+    before.input.content = from;
+    after.input.content = to;
+    NOT_SAME(difference(withdrawn(before, "x"), after));
+  });
+
+  it("N3: only line breaks changed in an argument the label does not list as a value", () => {
+    const before = callOf("create-02-appointment");
+    const after = callOf("create-02-appointment");
+    before.input.script = "if x:\n    run()";
+    after.input.script = "if x:\nrun()";
+    for (const call of [before, after]) listed(call, "/script", "text");
+    NOT_SAME(difference(withdrawn(before, "x"), after));
   });
 });
 
