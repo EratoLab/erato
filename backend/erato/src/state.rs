@@ -572,6 +572,27 @@ impl AppState {
             .then_some(&self.tool_label_cache)
     }
 
+    /// The provider for voice commands the rules do not match; `None` when
+    /// none is configured.
+    pub fn chat_provider_for_approval_voice_commands(
+        &self,
+    ) -> Option<Result<ChatProviderConfigWithId, Report>> {
+        let id = self
+            .config
+            .approval_voice_commands
+            .chat_provider_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())?;
+        Some(
+            self.config
+                .resolve_chat_provider_id(id)
+                .map(|id| ChatProviderConfigWithId {
+                    chat_provider_id: id.to_string(),
+                    chat_provider_config: self.config.get_chat_provider(id).clone(),
+                }),
+        )
+    }
+
     pub fn chat_provider_for_tool_labels(&self) -> Result<ChatProviderConfigWithId, Report> {
         self.config.validate_tool_labels()?;
         let id = self

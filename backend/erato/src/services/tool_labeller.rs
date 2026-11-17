@@ -533,7 +533,7 @@ fn shown_label(
 
 /// What kind of failure a provider error is, for logs that leave out the
 /// provider's own text.
-fn provider_failure(error: &genai::Error) -> &'static str {
+pub(crate) fn provider_failure(error: &genai::Error) -> &'static str {
     if let Some(status) = error.status() {
         return match status.as_u16() {
             401 | 403 => "unauthorized",

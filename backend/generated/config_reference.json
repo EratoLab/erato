@@ -137,6 +137,30 @@
     "security_relevance": "unknown",
     "stability": "deprecated"
   },
+  "approval_voice_commands.chat_provider_id": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.enabled": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.model_timeout_ms": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
+  "approval_voice_commands.prompt": {
+    "default_value_security": "more_secure",
+    "introduced_in": "unreleased",
+    "security_relevance": "medium",
+    "stability": "alpha"
+  },
   "assistant_hub.categories.<key>.display_name": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.2",
