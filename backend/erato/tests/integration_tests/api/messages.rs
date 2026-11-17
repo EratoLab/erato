@@ -1,5 +1,6 @@
 //! Message submission and streaming API tests.
 
+mod approval_voice_commands;
 mod client_operations;
 mod client_submissions;
 mod client_tool_decisions;

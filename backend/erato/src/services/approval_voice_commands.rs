@@ -202,29 +202,44 @@ pub struct Classified {
 }
 
 pub async fn classify(input: &VoiceCommandInput<'_>, model: Option<VoiceModel<'_>>) -> Classified {
-    if let Some(found) = rules::match_rules(input) {
-        return Classified {
-            command: guarded(
-                input,
-                found.meaning,
-                found.piece_id,
-                VoiceCommandSource::Rules,
-            ),
-            outcome: "rules",
-        };
+    if let Some(classified) = classify_by_rules(input) {
+        return classified;
     }
-    let Some(model) = model else {
-        return Classified {
-            command: unclear(),
-            outcome: "no_model",
-        };
-    };
-    match model::ask(&model, input).await {
+    match model {
+        Some(model) => classify_by_model(input, &model).await,
+        None => classify_without_model("no_model"),
+    }
+}
+
+/// The rules' answer, or `None` when they are not sure.
+pub fn classify_by_rules(input: &VoiceCommandInput<'_>) -> Option<Classified> {
+    let found = rules::match_rules(input)?;
+    Some(Classified {
+        command: guarded(
+            input,
+            found.meaning,
+            found.piece_id,
+            VoiceCommandSource::Rules,
+        ),
+        outcome: "rules",
+    })
+}
+
+pub async fn classify_by_model(
+    input: &VoiceCommandInput<'_>,
+    model: &VoiceModel<'_>,
+) -> Classified {
+    match model::ask(model, input).await {
         Ok(answer) => from_answer(input, &answer),
-        Err(outcome) => Classified {
-            command: unclear(),
-            outcome,
-        },
+        Err(outcome) => classify_without_model(outcome),
+    }
+}
+
+/// "Unclear", for words the rules leave and no model answers.
+pub fn classify_without_model(outcome: &'static str) -> Classified {
+    Classified {
+        command: unclear(),
+        outcome,
     }
 }
 
@@ -301,8 +316,19 @@ fn default_text_piece(input: &VoiceCommandInput<'_>) -> Option<String> {
     }
 }
 
-/// A decision only for a clear, short, unconditional sentence, and a new
-/// request only when it cannot be a change: otherwise "unclear".
+/// Whether the card has asked for a decision: its request piece was heard,
+/// or it has none.
+fn request_heard(pieces: &[CardPiece]) -> bool {
+    pieces
+        .iter()
+        .filter(|piece| piece.role == CardPieceRole::Request)
+        .all(|piece| piece.state == CardPieceState::Heard)
+}
+
+/// A decision only for a clear, short, unconditional sentence, a change only
+/// once it says what to change, and a new request only when it cannot be a
+/// change: otherwise "unclear". A yes or no said before the card asked, or
+/// beside a backchannel ("mhm, ja"), is listening noise.
 fn guarded(
     input: &VoiceCommandInput<'_>,
     meaning: VoiceMeaning,
@@ -311,10 +337,17 @@ fn guarded(
 ) -> VoiceCommand {
     let words = rules::Words::of(input.transcript);
     let refused = (meaning.is_decision() && !words.could_be_plain_decision(meaning, input.pieces))
+        || (meaning == VoiceMeaning::Change && words.breaks_off())
         || (meaning == VoiceMeaning::NewRequest && words.could_be_change(input.pieces));
     if refused {
         return unclear();
     }
+    let meaning =
+        if meaning.is_decision() && (words.is_backchannel_yes() || !request_heard(input.pieces)) {
+            VoiceMeaning::Noise
+        } else {
+            meaning
+        };
     VoiceCommand {
         meaning,
         piece_id,

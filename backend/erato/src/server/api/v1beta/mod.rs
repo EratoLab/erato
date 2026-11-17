@@ -1,4 +1,5 @@
 #![allow(deprecated)]
+pub(crate) mod approval_access;
 pub mod approval_voice_commands;
 pub mod assistant_hub;
 pub mod assistant_usage;

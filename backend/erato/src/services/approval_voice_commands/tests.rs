@@ -35,9 +35,25 @@ pub(super) fn sentence_set() -> SentenceSet {
     serde_json::from_str(include_str!("sentences.json")).expect("the sentence set is valid")
 }
 
+/// Sentences written by a reviewer and never used to tune the rules or the
+/// instruction.
+pub(super) fn heldout_set() -> SentenceSet {
+    serde_json::from_str(include_str!("heldout_sentences.json")).expect("the held-out set is valid")
+}
+
+impl Sentence {
+    /// The card named by a `card:` tag, else the language's example card.
+    pub(super) fn card(&self) -> &str {
+        self.tags
+            .iter()
+            .find_map(|tag| tag.strip_prefix("card:"))
+            .unwrap_or(&self.language)
+    }
+}
+
 impl SentenceSet {
     pub(super) fn input<'a>(&'a self, sentence: &'a Sentence) -> VoiceCommandInput<'a> {
-        let card = &self.cards[&sentence.language];
+        let card = &self.cards[sentence.card()];
         VoiceCommandInput {
             transcript: &sentence.text,
             language: &sentence.language,
@@ -60,7 +76,7 @@ fn the_sentence_set_covers_every_meaning_in_both_languages() {
         *counts
             .entry((sentence.language.clone(), sentence.meaning.wire_name()))
             .or_default() += 1;
-        let card = &set.cards[&sentence.language];
+        let card = &set.cards[sentence.card()];
         match sentence.meaning {
             VoiceMeaning::Repeat | VoiceMeaning::ReadText => {
                 let piece = sentence.piece_id.as_deref().expect("a piece is expected");
@@ -90,10 +106,10 @@ fn every_plain_sentence_is_matched_by_the_rules_alone() {
     let set = sentence_set();
     let mut misses = Vec::new();
     for sentence in set.sentences.iter().filter(|s| s.way == "plain") {
-        let found = rules::match_rules(&set.input(sentence));
+        let found = classify_by_rules(&set.input(sentence));
         let got = found
             .as_ref()
-            .map(|found| (found.meaning, found.piece_id.clone()));
+            .map(|found| (found.command.meaning, found.command.piece_id.clone()));
         if got != Some((sentence.meaning, sentence.piece_id.clone())) {
             misses.push(format!("{} {:?}: {got:?}", sentence.id, sentence.text));
         }
@@ -101,17 +117,20 @@ fn every_plain_sentence_is_matched_by_the_rules_alone() {
     assert!(misses.is_empty(), "{misses:#?}");
 }
 
-#[tokio::test]
-async fn the_rules_never_report_a_decision_that_is_not_meant() {
-    let set = sentence_set();
-    for sentence in &set.sentences {
-        let classified = classify(&set.input(sentence), None).await;
-        if classified.command.meaning.is_decision() {
-            assert_eq!(
-                classified.command.meaning, sentence.meaning,
-                "{} {:?}",
-                sentence.id, sentence.text
-            );
+#[test]
+fn the_rules_never_report_a_decision_that_is_not_meant_in_either_set() {
+    for set in [sentence_set(), heldout_set()] {
+        for sentence in &set.sentences {
+            let Some(classified) = classify_by_rules(&set.input(sentence)) else {
+                continue;
+            };
+            if classified.command.meaning.is_decision() {
+                assert_eq!(
+                    classified.command.meaning, sentence.meaning,
+                    "{} {:?}",
+                    sentence.id, sentence.text
+                );
+            }
         }
     }
 }
@@ -355,73 +374,190 @@ async fn the_models_piece_is_checked_and_filled_in() {
     );
 }
 
+async fn answered_by(
+    model: &ScriptedModel,
+    set: &SentenceSet,
+    sentence: &Sentence,
+) -> VoiceCommand {
+    let config = provider();
+    classify(
+        &set.input(sentence),
+        Some(VoiceModel {
+            client: model,
+            config: &config,
+            prompt: DEFAULT_PROMPT,
+            timeout: Duration::from_millis(200),
+        }),
+    )
+    .await
+    .command
+}
+
+/// Whatever a model answers, the guard lets only the decisions through that
+/// are meant: a model that always says approve, or always reject, never
+/// decides a sentence in either set that is not that decision.
 #[tokio::test]
-async fn a_model_never_turns_a_condition_a_change_or_a_question_into_approval() {
-    let set = sentence_set();
-    {
-        let decision = "approve";
-        let model = ScriptedModel::answering(decision, None);
-        // A misheard word that hides the change is left to the model.
-        for sentence in set.sentences.iter().filter(|sentence| {
-            (sentence.meaning == VoiceMeaning::Change && sentence.way != "misheard")
-                || sentence.text.contains('?')
-                || sentence
-                    .tags
-                    .iter()
-                    .any(|tag| tag == "hard:agreement_with_condition")
-        }) {
-            let input = set.input(sentence);
-            let config = provider();
-            let classified = classify(
-                &input,
-                Some(VoiceModel {
-                    client: &model,
-                    config: &config,
-                    prompt: DEFAULT_PROMPT,
-                    timeout: Duration::from_millis(200),
-                }),
-            )
-            .await;
-            assert_ne!(
-                classified.command.meaning,
-                VoiceMeaning::Approve,
-                "{decision} for {} {:?}",
-                sentence.id,
-                sentence.text
-            );
+async fn a_model_that_always_decides_decides_nothing_that_is_not_meant() {
+    for decision in [VoiceMeaning::Approve, VoiceMeaning::Reject] {
+        let model = ScriptedModel::answering(decision.wire_name(), None);
+        let mut wrong = Vec::new();
+        for set in [sentence_set(), heldout_set()] {
+            for sentence in &set.sentences {
+                let answer = answered_by(&model, &set, sentence).await;
+                if answer.meaning == decision && sentence.meaning != decision {
+                    wrong.push(format!("{} {:?}", sentence.id, sentence.text));
+                }
+            }
         }
+        assert!(wrong.is_empty(), "{}: {wrong:#?}", decision.wire_name());
     }
 }
 
 #[tokio::test]
 async fn words_that_could_be_a_change_are_never_sent_on_as_a_new_request() {
-    let set = sentence_set();
     let model = ScriptedModel::answering("new_request", None);
-    for sentence in set.sentences.iter().filter(|sentence| {
-        (sentence.meaning == VoiceMeaning::Change && sentence.way != "misheard")
-            || sentence
-                .tags
-                .iter()
-                .any(|tag| tag == "hard:change_or_new_request")
-    }) {
-        let input = set.input(sentence);
+    let mut wrong = Vec::new();
+    for set in [sentence_set(), heldout_set()] {
+        // A misheard word, or an English field name, hides the change from the
+        // guard; those are left to the model.
+        for sentence in set.sentences.iter().filter(|sentence| {
+            (sentence.meaning == VoiceMeaning::Change
+                && sentence.way != "misheard"
+                && !matches!(sentence.card(), "dyn" | "de-english-fields"))
+                || sentence
+                    .tags
+                    .iter()
+                    .any(|tag| tag == "hard:change_or_new_request")
+        }) {
+            if answered_by(&model, &set, sentence).await.meaning == VoiceMeaning::NewRequest {
+                wrong.push(format!("{} {:?}", sentence.id, sentence.text));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Review findings 1.1 to 1.5 and 1.10, and the decisions on 1.1 and 1.11.
+#[tokio::test]
+async fn the_review_cases_hold() {
+    let de = sentence_set().cards["de"].clone();
+    let asked = sentence_set().cards["de-asked"].clone();
+    let english_fields = sentence_set().cards["de-english-fields"].clone();
+    let rules = |words: &str, card: &Card| {
+        classify_by_rules(&VoiceCommandInput {
+            transcript: words,
+            language: "de",
+            pieces: &card.pieces,
+            current_piece_id: Some(&card.current_piece_id),
+        })
+        .map(|classified| classified.command.meaning)
+    };
+    let model_says = |meaning: VoiceMeaning, words: &'static str, card: Card| async move {
+        let model = ScriptedModel::answering(meaning.wire_name(), None);
         let config = provider();
-        let classified = classify(
-            &input,
-            Some(VoiceModel {
+        classify_by_model(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+            },
+            &VoiceModel {
                 client: &model,
                 config: &config,
                 prompt: DEFAULT_PROMPT,
                 timeout: Duration::from_millis(200),
-            }),
+            },
         )
-        .await;
+        .await
+        .command
+        .meaning
+    };
+
+    // 1.1: a yes before the card asked, or beside a backchannel, is noise.
+    assert_eq!(rules("ja", &de), Some(VoiceMeaning::Noise));
+    assert_eq!(rules("nein", &de), Some(VoiceMeaning::Noise));
+    assert_eq!(rules("ja", &asked), Some(VoiceMeaning::Approve));
+    assert_eq!(rules("nein", &asked), Some(VoiceMeaning::Reject));
+    assert_eq!(rules("mhm, ja", &asked), Some(VoiceMeaning::Noise));
+    assert_eq!(rules("ja ja", &asked), Some(VoiceMeaning::Noise));
+    assert_eq!(rules("Ja. Ja. Ja.", &asked), Some(VoiceMeaning::Approve));
+    assert_eq!(
+        model_says(VoiceMeaning::Approve, "ja, passt", de.clone()).await,
+        VoiceMeaning::Noise
+    );
+
+    // 1.2: refusals, questions without a question mark and thanks are no approval.
+    for words in [
+        "ja nee",
+        "yeah, nope",
+        "nö",
+        "nah",
+        "passt das",
+        "ist das so richtig",
+        "stimmt das so",
+        "kannst du das so machen",
+        "danke",
+        "thanks",
+    ] {
         assert_ne!(
-            classified.command.meaning,
-            VoiceMeaning::NewRequest,
-            "{} {:?}",
-            sentence.id,
-            sentence.text
+            model_says(VoiceMeaning::Approve, words, asked.clone()).await,
+            VoiceMeaning::Approve,
+            "{words}"
+        );
+    }
+
+    // 1.3: only refusal words make a rejection, whatever the field names.
+    for words in [
+        "nein, das Datum",
+        "das Datum ist falsch",
+        "nee, die Teilnehmer passen nicht",
+        "ja, das ist falsch",
+        "ja, nein",
+    ] {
+        for card in [&asked, &english_fields] {
+            assert_ne!(
+                model_says(VoiceMeaning::Reject, words, card.clone()).await,
+                VoiceMeaning::Reject,
+                "{words}"
+            );
+        }
+    }
+
+    // 1.4: unrelated words are left to the model.
+    for words in [
+        "was steht heute noch in meinem Kalender?",
+        "what else is on my calendar today?",
+        "ich hab noch eine Frage zu einem anderen Kunden",
+        "ich hab ne Frage",
+        "was ist der Unterschied zwischen mit und ohne Mehrwertsteuer?",
+        "ich möchte lieber zuerst meine Mails lesen",
+        "what's the difference between with and without VAT?",
+    ] {
+        assert_eq!(rules(words, &de), None, "{words}");
+    }
+    assert_eq!(rules("hab ich, was noch?", &de), Some(VoiceMeaning::Rest));
+    assert_eq!(rules("das kenn ich schon", &de), Some(VoiceMeaning::Skip));
+    assert_eq!(rules("ohne Anna", &de), Some(VoiceMeaning::Change));
+
+    // 1.5: a no taken back is the model's to judge.
+    assert_eq!(rules("nein, doch", &asked), None);
+    assert_eq!(rules("no, wait, yes", &asked), None);
+
+    // 1.10: decomposed Unicode is matched like composed.
+    assert_eq!(
+        rules("na\u{308}chster Punkt", &de),
+        Some(VoiceMeaning::Skip)
+    );
+    assert_eq!(rules("ho\u{308}r auf", &de), Some(VoiceMeaning::Stop));
+
+    // 1.11: a change that breaks off before it says what is unclear.
+    for words in ["nimm lieber den", "ohne die An-", "take the 2-"] {
+        assert_eq!(rules(words, &de), None, "{words}");
+        assert_eq!(
+            model_says(VoiceMeaning::Change, words, de.clone()).await,
+            VoiceMeaning::Unclear,
+            "{words}"
         );
     }
 }

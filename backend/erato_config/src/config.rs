@@ -2755,6 +2755,10 @@ impl AppConfig {
 
     pub fn validate_approval_voice_commands(&self) -> Result<(), eyre::Report> {
         let commands = &self.approval_voice_commands;
+        // Like `[tool_labels]`: a switched-off section never stops the server.
+        if !commands.enabled {
+            return Ok(());
+        }
         if !APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.contains(&commands.model_timeout_ms) {
             return Err(eyre!(
                 "approval_voice_commands.model_timeout_ms must be from {} to {} milliseconds",
@@ -2762,7 +2766,11 @@ impl AppConfig {
                 APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.end()
             ));
         }
-        if let Some(id) = commands.chat_provider_id.as_deref() {
+        if let Some(id) = commands
+            .chat_provider_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+        {
             self.resolve_chat_provider_id(id)?;
         }
         Ok(())
@@ -3791,6 +3799,34 @@ impl Default for ApprovalVoiceCommandsConfig {
             model_timeout_ms: 2500,
             prompt: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod approval_voice_commands_tests {
+    use super::*;
+
+    fn check(enabled: bool, provider: Option<&str>, timeout_ms: u32) -> Result<(), eyre::Report> {
+        let config = AppConfig {
+            approval_voice_commands: ApprovalVoiceCommandsConfig {
+                enabled,
+                chat_provider_id: provider.map(str::to_string),
+                model_timeout_ms: timeout_ms,
+                prompt: None,
+            },
+            ..AppConfig::default()
+        };
+        config.validate_approval_voice_commands()
+    }
+
+    #[test]
+    fn a_switched_off_section_or_a_blank_provider_never_stops_the_server() {
+        assert!(check(false, Some("removed"), 2500).is_ok());
+        assert!(check(false, None, 0).is_ok());
+        assert!(check(true, Some("  "), 2500).is_ok());
+        assert!(check(true, None, 2500).is_ok());
+        assert!(check(true, Some("removed"), 2500).is_err());
+        assert!(check(true, None, 0).is_err());
     }
 }
 

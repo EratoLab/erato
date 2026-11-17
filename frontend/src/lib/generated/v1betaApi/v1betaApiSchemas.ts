@@ -224,6 +224,18 @@ export type ApprovalScopeLineage = {
   scope_id: string;
 };
 
+/**
+ * What a client says about the approval it shows.
+ */
+export type ApprovalSpeechRequest = {
+  /**
+   * The spoken card's pieces in the order they are said: plain sentences,
+   * at most 16 of them, each at most 400 and all together at most 2000
+   * characters.
+   */
+  pieces: string[];
+};
+
 export type ApprovalVoiceCommand = {
   meaning: ApprovalVoiceMeaning;
   /**
@@ -271,18 +283,6 @@ export type ApprovalVoiceMeaning =
   | "reject"
   | "noise"
   | "unclear";
-
-/**
- * What a client says about the approval it shows.
- */
-export type ApprovalSpeechRequest = {
-  /**
-   * The spoken card's pieces in the order they are said: plain sentences,
-   * at most 16 of them, each at most 400 and all together at most 2000
-   * characters.
-   */
-  pieces: string[];
-};
 
 /**
  * Response from the archive all chats endpoint

@@ -1,14 +1,12 @@
 //! What the user said while an approval card waits, as one meaning from a
 //! closed list. The answer names no words to speak and decides nothing.
 
+use super::approval_access::check_waiting_approval_of_user;
 use super::me_profile_middleware::{MeProfile, normalize_supported_language};
-use super::message_streaming::parked_approval_state;
-use crate::models::chat::get_chat_by_message_id;
-use crate::models::message::{MessageSchema, get_message_by_id};
 use crate::policy::engine::PolicyEngine;
 use crate::services::approval_voice_commands::{
-    CardPiece, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput, VoiceModel,
-    check_input, classify,
+    CardPiece, Classified, DEFAULT_PROMPT, InputProblem, VoiceCommand, VoiceCommandInput,
+    VoiceModel, check_input, classify_by_model, classify_by_rules, classify_without_model,
 };
 use crate::services::delegation::TaskModelPermissions;
 use crate::services::sentry::log_internal_server_error;
@@ -46,7 +44,9 @@ pub struct ApprovalVoiceCommandRequest {
 /// rest, seeing the words and the pieces' roles and field names. The answer
 /// carries no text, approves nothing and is not stored. `approve` and
 /// `reject` are reported so the caller can say that decisions are made on
-/// screen.
+/// screen, and only once the card's request piece was heard (or the card has
+/// none): a yes or no before that, or beside a backchannel ("mhm, ja"), is
+/// `noise`.
 #[utoipa::path(
     post,
     path = "/me/messages/{message_id}/approval-voice-command",
@@ -87,99 +87,17 @@ pub async fn interpret_approval_voice_command(
         InputProblem::Invalid => StatusCode::BAD_REQUEST,
     })?;
 
-    policy
-        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
-        .await?;
-    let not_found = |error: eyre::Report| {
-        let text = error.to_string().to_lowercase();
-        if text.contains("not found") || text.contains("not authorized") {
-            StatusCode::NOT_FOUND
-        } else {
-            log_internal_server_error(error)
-        }
-    };
-    let subject = me_user.to_subject();
-    let message = get_message_by_id(&app_state.db, &policy, &subject, &message_id)
-        .await
-        .map_err(not_found)?;
-    // A chat shared for reading is not one the reader decides in.
-    let chat = get_chat_by_message_id(&app_state.db, &policy, &subject, &message_id)
-        .await
-        .map_err(not_found)?;
-    if chat.owner_user_id != me_user.id {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let parsed =
-        MessageSchema::validate(&message.raw_message).map_err(log_internal_server_error)?;
-    if parked_approval_state(&parsed.content).is_none_or(|state| state.decidable().is_empty()) {
-        return Err(StatusCode::CONFLICT);
-    }
-
-    let timeout = Duration::from_millis(u64::from(config.model_timeout_ms));
-    let prompt = config
-        .prompt
-        .as_deref()
-        .map(str::trim)
-        .filter(|prompt| !prompt.is_empty())
-        .unwrap_or(DEFAULT_PROMPT);
-    let provider = match app_state.chat_provider_for_approval_voice_commands() {
-        Some(Ok(provider)) => {
-            let permitted = tokio::time::timeout(
-                timeout,
-                TaskModelPermissions::for_user(&app_state, &policy, &subject, &me_user.groups),
-            )
-            .await;
-            match permitted {
-                Ok(Ok(permissions)) if permissions.may_use(&provider.chat_provider_id) => {
-                    Some(provider)
-                }
-                Ok(Ok(_)) => {
-                    tracing::info!(
-                        "Voice commands use the rules only: the user's model permissions do not include their provider"
-                    );
-                    None
-                }
-                Ok(Err(error)) => {
-                    tracing::warn!(%error, "Voice commands use the rules only: reading the user's model permissions failed");
-                    None
-                }
-                Err(_) => {
-                    tracing::warn!(
-                        "Voice commands use the rules only: reading the user's model permissions timed out"
-                    );
-                    None
-                }
-            }
-        }
-        Some(Err(error)) => {
-            tracing::warn!(%error, "Voice commands use the rules only: their provider is not usable");
-            None
-        }
-        None => None,
-    };
-    let client = match &provider {
-        Some(provider) => Some(
-            app_state
-                .genai_for_chat_provider_config_with_headers_context(
-                    provider.chat_provider_config.clone(),
-                    None,
-                )
-                .map_err(log_internal_server_error)?,
-        ),
-        None => None,
-    };
-    let model = provider
-        .as_ref()
-        .zip(client.as_deref())
-        .map(|(provider, client)| VoiceModel {
-            client,
-            config: &provider.chat_provider_config,
-            prompt,
-            timeout,
-        });
+    check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     let start = Instant::now();
-    let classified = classify(&input, model).await;
+    let classified = match classify_by_rules(&input) {
+        Some(classified) => classified,
+        None => {
+            let deadline = tokio::time::Instant::now()
+                + Duration::from_millis(u64::from(config.model_timeout_ms));
+            ask_model(&app_state, &policy, &me_user, &input, deadline).await?
+        }
+    };
     // The user's words stay out of the log.
     tracing::info!(
         %message_id,
@@ -189,4 +107,64 @@ pub async fn interpret_approval_voice_command(
         "Matched a voice command on a waiting approval"
     );
     Ok(Json(classified.command))
+}
+
+/// The model's answer, or "unclear" without one. Reading the user's model
+/// permissions and the model call share one deadline.
+async fn ask_model(
+    app_state: &AppState,
+    policy: &PolicyEngine,
+    me_user: &MeProfile,
+    input: &VoiceCommandInput<'_>,
+    deadline: tokio::time::Instant,
+) -> Result<Classified, StatusCode> {
+    let provider = match app_state.chat_provider_for_approval_voice_commands() {
+        Some(Ok(provider)) => provider,
+        Some(Err(error)) => {
+            tracing::warn!(%error, "Voice commands use the rules only: their provider is not usable");
+            return Ok(classify_without_model("no_model"));
+        }
+        None => return Ok(classify_without_model("no_model")),
+    };
+    let subject = me_user.to_subject();
+    let permitted = tokio::time::timeout_at(
+        deadline,
+        TaskModelPermissions::for_user(app_state, policy, &subject, &me_user.groups),
+    )
+    .await;
+    match permitted {
+        Ok(Ok(permissions)) if permissions.may_use(&provider.chat_provider_id) => {}
+        Ok(Ok(_)) => {
+            tracing::info!(
+                "Voice commands use the rules only: the user's model permissions do not include their provider"
+            );
+            return Ok(classify_without_model("not_permitted"));
+        }
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "Voice commands use the rules only: reading the user's model permissions failed");
+            return Ok(classify_without_model("permissions_failed"));
+        }
+        Err(_) => return Ok(classify_without_model("timeout")),
+    }
+    let client = app_state
+        .genai_for_chat_provider_config_with_headers_context(
+            provider.chat_provider_config.clone(),
+            None,
+        )
+        .map_err(log_internal_server_error)?;
+    let prompt = app_state
+        .config
+        .approval_voice_commands
+        .prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|prompt| !prompt.is_empty())
+        .unwrap_or(DEFAULT_PROMPT);
+    let model = VoiceModel {
+        client: client.as_ref(),
+        config: &provider.chat_provider_config,
+        prompt,
+        timeout: deadline.saturating_duration_since(tokio::time::Instant::now()),
+    };
+    Ok(classify_by_model(input, &model).await)
 }

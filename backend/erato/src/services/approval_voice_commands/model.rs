@@ -6,6 +6,7 @@
 use super::{CardPieceRole, CardPieceState, VoiceCommandInput, VoiceMeaning, VoiceModel};
 use crate::config::is_invisible_format_char;
 use crate::services::genai::build_chat_options_for_summary;
+use crate::services::tool_labeller::sends_json_schema;
 use genai::chat::{ChatMessage, ChatRequest, JsonSpec};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -40,14 +41,6 @@ pub const MAX_REPLY_BYTES: usize = 2 * 1024;
 pub(super) struct Answer {
     pub meaning: VoiceMeaning,
     pub piece_id: Option<String>,
-}
-
-/// Kinds whose adapter sends a reply schema, as for tool labels.
-fn sends_json_schema(provider_kind: &str) -> bool {
-    matches!(
-        provider_kind,
-        "openai" | "openai_responses" | "azure_openai_responses" | "gemini" | "vertex_ai"
-    )
 }
 
 /// A field name as a JSON string, without control or invisible characters.

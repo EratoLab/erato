@@ -46,7 +46,7 @@ const TRACE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Kinds whose adapter sends a reply schema. The `ollama` adapter would drop
 /// one without an error.
-fn sends_json_schema(provider_kind: &str) -> bool {
+pub(crate) fn sends_json_schema(provider_kind: &str) -> bool {
     matches!(
         provider_kind,
         "openai" | "openai_responses" | "azure_openai_responses" | "gemini" | "vertex_ai"

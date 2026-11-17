@@ -3633,6 +3633,67 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/approval-voice-command": {
+      "post": {
+        "tags": [
+          "approval_voice_commands"
+        ],
+        "summary": "Match what the user said while an approval card waits to one meaning.",
+        "description": "Built-in rules answer the plain words; a configured model may answer the\nrest, seeing the words and the pieces' roles and field names. The answer\ncarries no text, approves nothing and is not stored. `approve` and\n`reject` are reported so the caller can say that decisions are made on\nscreen, and only once the card's request piece was heard (or the card has\nnone): a yes or no before that, or beside a backchannel (\"mhm, ja\"), is\n`noise`.",
+        "operationId": "interpret_approval_voice_command",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message whose approval waits",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalVoiceCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalVoiceCommand"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty words, a piece id twice or empty, or a current piece that is not on the card"
+          },
+          "404": {
+            "description": "Voice commands are off, or the message does not exist or is not in a chat of the user"
+          },
+          "409": {
+            "description": "The message has no approval waiting for a decision"
+          },
+          "413": {
+            "description": "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/{message_id}/explain": {
       "post": {
         "tags": [
@@ -5630,6 +5691,57 @@
           }
         }
       },
+      "ApprovalCardPiece": {
+        "type": "object",
+        "description": "One piece of the spoken card, without what it says.",
+        "required": [
+          "id",
+          "role",
+          "state"
+        ],
+        "properties": {
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a detail or a long text: the field's name as the card shows it."
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ApprovalCardPieceRole"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ApprovalCardPieceState"
+          }
+        }
+      },
+      "ApprovalCardPieceRole": {
+        "type": "string",
+        "description": "What a piece of the spoken card is, as the card that speaks it names it.",
+        "enum": [
+          "count",
+          "what",
+          "item",
+          "detail",
+          "outside",
+          "more",
+          "text",
+          "consequence",
+          "request",
+          "pointer"
+        ]
+      },
+      "ApprovalCardPieceState": {
+        "type": "string",
+        "enum": [
+          "heard",
+          "cut_short",
+          "not_said"
+        ]
+      },
       "ApprovalDecisionItem": {
         "type": "object",
         "description": "One decision of a continuation, naming the approval it answers.",
@@ -5795,6 +5907,81 @@
             "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
+      },
+      "ApprovalVoiceCommand": {
+        "type": "object",
+        "required": [
+          "meaning",
+          "source"
+        ],
+        "properties": {
+          "meaning": {
+            "$ref": "#/components/schemas/ApprovalVoiceMeaning"
+          },
+          "piece_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `repeat` and `read_text`: the piece meant. Null when the words do\nnot say which and the card has no single candidate."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ApprovalVoiceCommandSource"
+          }
+        }
+      },
+      "ApprovalVoiceCommandRequest": {
+        "type": "object",
+        "required": [
+          "transcript",
+          "pieces"
+        ],
+        "properties": {
+          "current_piece_id": {
+            "type": "string",
+            "description": "The piece being spoken, or the last one spoken."
+          },
+          "language": {
+            "type": "string",
+            "description": "The language of the words as a tag such as `de`; the user's language\nwhen omitted."
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalCardPiece"
+            },
+            "description": "The spoken card's pieces in the order they are said, at most 16."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "What the user said, as transcribed. At most 300 characters."
+          }
+        }
+      },
+      "ApprovalVoiceCommandSource": {
+        "type": "string",
+        "description": "Where the meaning came from.",
+        "enum": [
+          "rules",
+          "model",
+          "none"
+        ]
+      },
+      "ApprovalVoiceMeaning": {
+        "type": "string",
+        "enum": [
+          "skip",
+          "rest",
+          "repeat",
+          "read_text",
+          "stop",
+          "change",
+          "new_request",
+          "approve",
+          "reject",
+          "noise",
+          "unclear"
+        ]
       },
       "ArchiveAllChatsResponse": {
         "type": "object",
