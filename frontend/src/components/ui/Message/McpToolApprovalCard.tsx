@@ -4,6 +4,8 @@ import { useContext, useEffect, useRef, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
+import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
   clientToolApprovalScopeAnchor,
@@ -22,6 +24,8 @@ import {
   buildContinueStreamBody,
   isApprovalDecision,
 } from "@/lib/toolApprovalDecisions";
+import { approvalDisplayOf } from "@/lib/toolCallGist/approvalCard";
+import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
 import { ChatContext } from "@/providers/ChatProvider";
 import { FrontendRequestError } from "@/utils/errorReport";
 
@@ -35,6 +39,7 @@ import { TaskPlanApprovalCard } from "./TaskPlanApprovalCard";
 import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import {
   approvalItemsOf,
+  approvalQueueOf,
   isWaitingItem,
   sameScope,
   scopeGroup,
@@ -374,6 +379,7 @@ export const McpToolApprovalCard = ({
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
   ) => {
+    stopApprovalSpeech();
     const answers: DecidedApproval[] =
       itemDecisions ??
       approvalItems.map((item) => ({
@@ -521,6 +527,7 @@ export const McpToolApprovalCard = ({
    * that asks per item cannot send per item.
    */
   const decideItem = (approvalId: string, decision: ToolApprovalDecision) => {
+    stopApprovalSpeech();
     const answers: StagedDecisions = { ...staged, [approvalId]: decision };
     setStaged(answers);
     if (approvalItems.some((item) => answers[item.approval_id] === undefined)) {
@@ -559,6 +566,7 @@ export const McpToolApprovalCard = ({
    * started asking, keeps the position already held for its scope.
    */
   const decideScope = (item: ApprovalItemPart) => {
+    stopApprovalSpeech();
     const scope = scopeOf(item);
     if (!scope) return;
     const anchor = scopeAnchor(item);
@@ -603,6 +611,39 @@ export const McpToolApprovalCard = ({
       isBuiltinTool ||
       kind === "tool_call_limit") &&
       (waiting.length > 0 || approvalItems.some((item) => item.child != null)));
+
+  // Spoken in the order the screen shows them: a queue one item at a time.
+  const spokenItems = isQueue
+    ? approvalQueueOf(request, approvalItems)
+    : approvalItems.slice(0, 1);
+  const spokenApprovals = (isQueue ? spokenItems : [request]).map((call) =>
+    spokenApprovalFor(kind, {
+      ...call,
+      display: approvalDisplayOf(call.display, call.tool_name),
+    }),
+  );
+  // A stop is told apart by when it was asked and its approval's id: a turn
+  // that goes on after a decision asks again in the same message.
+  const spokenKeys = (isQueue ? spokenItems : approvalItems.slice(0, 1)).map(
+    (item) => `${request.requested_at}:${item.approval_id}`,
+  );
+  const unanswered = spokenItems.findIndex(
+    (item) => staged[item.approval_id] === undefined,
+  );
+  useSpokenApprovalCard({
+    chatId,
+    messageId,
+    approvals: spokenApprovals,
+    keys: spokenKeys,
+    index: isQueue && unanswered > 0 ? unanswered : 0,
+    active:
+      isPending &&
+      !waitingOnly &&
+      isArchived === false &&
+      !isBusy &&
+      !isCoveredByParent,
+    responding: chatContext?.isPendingResponse ?? false,
+  });
 
   // Resolved decisions are represented beside the matching tool call in the
   // thinking trace. Keep this card solely for the pending decision UI.

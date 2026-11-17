@@ -2,6 +2,8 @@
 //! approval requests. Clients render it as plain text, never as trusted markup.
 
 pub mod label;
+#[cfg(test)]
+mod spoken_card_set;
 
 use crate::config::McpRuntimeConfig;
 use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};

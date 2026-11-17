@@ -128,6 +128,10 @@ export function IndexingSourceRow({
       id: "sidecar.indexing.status.disabled",
       message: "Disabled",
     }),
+    partial: t({
+      id: "sidecar.indexing.status.partialCoverage",
+      message: "Partial coverage",
+    }),
     scanFailed: t({
       id: "sidecar.indexing.status.scanFailed",
       message: "Scan failed",
@@ -182,6 +186,7 @@ export function IndexingSourceRow({
   };
   /* eslint-disable lingui/no-unlocalized-strings -- Internal indexing status keys. */
   const warning = [
+    "partial",
     "scanFailed",
     "sourceUnavailable",
     "indexingUnavailable",
@@ -324,6 +329,15 @@ export function IndexingSourceRow({
                   "Update the desktop sidecar to change indexing for this source.",
               })}
             </p>
+          )}
+          {summary.notices.partialInventory && (
+            <span>
+              {t({
+                id: "sidecar.indexing.partialInventory",
+                message:
+                  "Inventory is incomplete. Indexed items remain searchable; date coverage is incomplete.",
+              })}
+            </span>
           )}
           {summary.notices.unreadable && (
             <p className="text-theme-warning-fg">

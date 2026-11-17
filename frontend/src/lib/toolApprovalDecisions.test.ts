@@ -178,4 +178,25 @@ describe("buildContinueStreamBody", () => {
       shows_limit_and_builtin_child_items: true,
     });
   });
+
+  it("asks for the continued answer to be read back only when the turn was", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        approvalIds: ["a", "b"],
+        readBack: true,
+      }),
+    ).toMatchObject({ conversational_audio_back: true });
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "approve",
+        readBack: true,
+      }),
+    ).toMatchObject({ conversational_audio_back: true });
+    expect(
+      buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),
+    ).not.toHaveProperty("conversational_audio_back");
+  });
 });

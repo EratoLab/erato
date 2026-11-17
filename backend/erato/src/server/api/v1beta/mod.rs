@@ -254,6 +254,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             "/messages/{message_id}/speech",
             post(read_aloud::read_message_aloud),
         )
+        .route(
+            "/messages/{message_id}/approval-speech",
+            post(read_aloud::speak_approval),
+        )
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
         .route(
@@ -546,6 +550,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::token_usage_estimate,
         prompt_optimizer,
         read_aloud::read_message_aloud,
+        read_aloud::speak_approval,
         message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
         available_models,
@@ -606,6 +611,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chat_history_compaction::CompactChatRequest,
         chat_history_compaction::CompactChatResponse,
         read_aloud::ReadAloudStreamEvent,
+        read_aloud::ApprovalSpeechRequest,
         Chat,
         RecentChat,
         FacetInfo,

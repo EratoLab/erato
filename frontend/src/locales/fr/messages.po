@@ -1820,9 +1820,19 @@ msgid "chat.audio_failed"
 msgstr "Audio indisponible. Votre réponse textuelle reste disponible."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Lire la carte"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.audio_replay"
 msgstr "Réécouter la réponse audio"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Passer"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -2896,6 +2906,11 @@ msgstr "Recherche effectuée sur cet appareil : {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source} : {from} – {to}"
 
@@ -2908,6 +2923,11 @@ msgstr "{source} : depuis le {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source} : pas encore consultable"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -8079,6 +8099,11 @@ msgstr "Nombre maximal de documents traités simultanément."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Priorité d’indexation"
 
@@ -8246,6 +8271,11 @@ msgstr "Pas encore analysé"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Partiellement indexé"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -8523,6 +8553,11 @@ msgstr ""
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "Une validation attend à l'écran."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

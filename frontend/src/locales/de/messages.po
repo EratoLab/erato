@@ -1820,9 +1820,19 @@ msgid "chat.audio_failed"
 msgstr "Audio nicht verfügbar. Ihre Textantwort ist weiterhin verfügbar."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Karte vorlesen"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.audio_replay"
 msgstr "Audioantwort erneut abspielen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Weiter"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -2896,6 +2906,11 @@ msgstr "Auf diesem Gerät durchsucht: {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source}: {from} – {to}"
 
@@ -2908,6 +2923,11 @@ msgstr "{source}: seit {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source}: noch nicht durchsuchbar"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -8079,6 +8099,11 @@ msgstr "Maximale Anzahl gleichzeitig verarbeiteter Dokumente."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Indexierungspriorität"
 
@@ -8246,6 +8271,11 @@ msgstr "Noch nicht gescannt"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Teilweise indexiert"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -8523,6 +8553,11 @@ msgstr "Wartet auf deine Prüfung in der Erato-Desktop-App"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr "Starte die Erato-Desktop-App, um diese Prüfung fortzusetzen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "Auf dem Bildschirm wartet eine Entscheidung."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

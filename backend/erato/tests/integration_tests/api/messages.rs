@@ -11,6 +11,7 @@ mod mcp_surface_hints;
 mod model_labels;
 mod preparation_failures;
 mod reminder_tools;
+mod spoken_approvals;
 mod token_usage_tool_parts;
 mod tool_arguments;
 mod tool_call_budget;
