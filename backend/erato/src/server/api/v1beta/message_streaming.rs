@@ -2808,6 +2808,23 @@ pub struct ChildrenWaitingError {
 
 pub(crate) const CHILDREN_WAITING_CODE: &str = "children_waiting";
 
+/// Body of the `409` `continuestream` answers to a decision that names no
+/// approval while the open card is the corrected call of a change request.
+///
+/// A client that sends no `approval_id` may still show the card it replaced,
+/// on another tab or device, so its answer cannot be meant for this one. The
+/// client reloads the message and shows the card named here.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub struct CardChangedError {
+    /// Always `card_changed`.
+    pub code: String,
+    /// The approval that is open now.
+    pub approval_id: String,
+}
+
+pub(crate) const CARD_CHANGED_CODE: &str = "card_changed";
+
 /// Body of the `409` `continuestream` answers on a delegated child whose
 /// request is currently being asked about in the chat that started it.
 ///
@@ -2872,6 +2889,9 @@ pub enum StreamRouteError {
     /// `continuestream` only: nothing to decide while task children wait for a
     /// client.
     ChildrenWaiting(Box<ChildrenWaitingError>),
+    /// `continuestream` only: a decision that names no approval, while the
+    /// open card replaces one the user asked to change.
+    CardChanged(Box<CardChangedError>),
 }
 
 impl From<(axum::http::StatusCode, String)> for StreamRouteError {
@@ -2909,6 +2929,9 @@ impl axum::response::IntoResponse for StreamRouteError {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
             StreamRouteError::ChildrenWaiting(body) => {
+                (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
+            }
+            StreamRouteError::CardChanged(body) => {
                 (axum::http::StatusCode::CONFLICT, Json(*body)).into_response()
             }
         }
@@ -7102,16 +7125,23 @@ async fn stream_generate_chat_completion<'a>(
             }
         }
     }
-    let (mut unfinished_tool_calls, approved_task_call_ids, context_approved_calls): (
+    let (
+        mut unfinished_tool_calls,
+        approved_task_call_ids,
+        context_approved_calls,
+        mut ask_first_new_call,
+    ): (
         std::collections::VecDeque<genai::chat::ToolCall>,
         HashSet<String>,
         HashMap<String, Uuid>,
+        bool,
     ) = resume.map_or_else(
         || {
             (
                 std::collections::VecDeque::new(),
                 HashSet::new(),
                 HashMap::new(),
+                false,
             )
         },
         |resume| {
@@ -7119,9 +7149,14 @@ async fn stream_generate_chat_completion<'a>(
                 resume.initial_unfinished_tool_calls.into(),
                 resume.approved_task_call_ids,
                 resume.context_approved_calls,
+                resume.ask_first_new_call,
             )
         },
     );
+    let seeded_call_ids: HashSet<String> = unfinished_tool_calls
+        .iter()
+        .map(|call| call.call_id.clone())
+        .collect();
     let mut current_turn = consumption.model_turns;
     let mut current_tool_call_count = consumption.tool_calls;
     // Charged per class and never summed: a run that has spent its server
@@ -7548,6 +7583,11 @@ async fn stream_generate_chat_completion<'a>(
             .await;
             persist_operation_turn!();
             let unfinished_tool_call = unfinished_tool_calls.pop_front().expect("nonempty calls");
+            let ignore_standing_allow =
+                ask_first_new_call && !seeded_call_ids.contains(&unfinished_tool_call.call_id);
+            if ignore_standing_allow {
+                ask_first_new_call = false;
+            }
             let batch_position = {
                 let position = batch_position;
                 batch_position += 1;
@@ -8750,6 +8790,14 @@ async fn stream_generate_chat_completion<'a>(
                         let scope_key = policy.grant.as_ref().and_then(|grant| {
                             grant.approval_scope.as_ref().map(|key| (grant, key))
                         });
+                        let decision = match decision {
+                            Some(
+                                crate::models::user_preference::ClientToolDecision::AlwaysAllow,
+                            ) if ignore_standing_allow => {
+                                Some(crate::models::user_preference::ClientToolDecision::Ask)
+                            }
+                            decision => decision,
+                        };
                         let gate = gate_client_tool_call(
                             policy.config.namespace_or_default(),
                             &unfinished_tool_call,
@@ -9719,6 +9767,9 @@ async fn stream_generate_chat_completion<'a>(
                 }
                 Err(_) => None,
             };
+            let user_decision = user_decision.filter(|decision| {
+                !(ignore_standing_allow && *decision == UserToolDecision::AlwaysAllow)
+            });
             let gate = gate_mcp_tool_call(
                 approval_config,
                 &managed_tool_call.server_id,
@@ -21323,6 +21374,14 @@ fn resolve_submitted_decisions(
     }
 
     if let Some(decision) = request.decision {
+        if let [only_open] = open
+            && only_open.replaces_approval_id.is_some()
+        {
+            return Err(StreamRouteError::CardChanged(Box::new(CardChangedError {
+                code: CARD_CHANGED_CODE.to_string(),
+                approval_id: only_open.approval_id.clone(),
+            })));
+        }
         let [only_open] = open else {
             return Err((
                 axum::http::StatusCode::BAD_REQUEST,
@@ -22072,7 +22131,7 @@ pub(crate) async fn start_continuation(
         (status = OK, content_type = "text/event-stream", body = MessageSubmitStreamingResponseMessage),
         (status = BAD_REQUEST, body = ApprovalDecisionsError, description = "The message has no pending approval, the decision is invalid, or the submitted decisions do not cover the open approvals (JSON, code = decisions_mismatch)"),
         (status = NOT_FOUND, description = "When the chat does not exist or is not accessible"),
-        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
+        (status = CONFLICT, body = GenerationRunningError, description = "When the chat is archived (plain text), the chat's generation lease is already held and delegation.tasks.enabled is on (JSON, code = generation_running), every approval the row opened is already decided (JSON, code = already_continued, body = AlreadyContinuedError), a single `decision` without an `approval_id` names nothing while the open card is the corrected call of a change request (JSON, code = card_changed, body = CardChangedError), the chat that dispatched this delegated run is still asking the same question (JSON, code = covered_by_parent, body = CoveredByParentError), an empty body names a parked row whose only open items are task children waiting for a client (JSON, code = children_waiting, body = ChildrenWaitingError), or the stop carries open task children and the request did not set `shows_child_items` (on a `tool_call_limit` or `builtin_tool` stop, also `shows_limit_and_builtin_child_items`), names a waiting child, or sends a single `decision` while only waiting children are open (plain text)"),
         (status = UNAUTHORIZED, description = "When no valid JWT token is provided"),
         (status = INTERNAL_SERVER_ERROR, description = "When an internal server error occurs")
     ),
@@ -22141,6 +22200,11 @@ pub(crate) struct ParkedTurnResume {
     /// pass the gate again, which runs them under that approval while it is
     /// live and asks again once it ended.
     pub context_approved_calls: HashMap<String, Uuid>,
+    /// The user just asked for a change: the first call the model makes asks
+    /// even where a standing "always allow" would run it, so the user
+    /// confirms the version that results. Calls the policy never asks about
+    /// still run.
+    pub ask_first_new_call: bool,
 }
 
 /// How a continuation reached the worker, decided before the generation lease
@@ -24213,9 +24277,6 @@ pub(crate) async fn run_continuation(
         .await;
     }
 
-    let change_limit_reached = !change_requests.is_empty()
-        && crate::services::approval_change_requests::rounds(&parsed.content)
-            > app_state.config.approval_change_requests.max_rounds as usize;
     resume_parked_generation(
         task,
         tx,
@@ -24249,7 +24310,7 @@ pub(crate) async fn run_continuation(
             .collect(),
         &request.strict_mode_executors,
         assistant_config.and_then(|assistant| assistant.mcp_server_ids),
-        change_limit_reached,
+        !change_requests.is_empty(),
     )
     .await
 }
@@ -24431,10 +24492,14 @@ async fn resume_parked_generation(
     // may have changed since the turn began.
     continuing_strict_mode_executors: &[crate::services::client_operations::ExecutorBinding],
     assistant_mcp_server_ids: Option<Vec<String>>,
+    // The continuation carried a change request.
+    change_requested: bool,
+) -> Result<(), Report> {
     // A change request past the turn's limit ends the turn the way the
     // budget's "answer now" does, so a misunderstanding cannot loop.
-    change_limit_reached: bool,
-) -> Result<(), Report> {
+    let change_limit_reached = change_requested
+        && crate::services::approval_change_requests::rounds(&parsed.content)
+            > app_state.config.approval_change_requests.max_rounds as usize;
     let mcp = app_state.mcp_state().await;
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     let user_id = Uuid::parse_str(&me_user.id)?;
@@ -24926,6 +24991,7 @@ async fn resume_parked_generation(
         continuing_client_tools,
         continuing_executors,
         context_approved_calls,
+        ask_first_new_call: change_requested,
     });
 
     let chat_options =

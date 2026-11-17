@@ -882,6 +882,25 @@ export type CallLineage = {
 };
 
 /**
+ * Body of the `409` `continuestream` answers to a decision that names no
+ * approval while the open card is the corrected call of a change request.
+ *
+ * A client that sends no `approval_id` may still show the card it replaced,
+ * on another tab or device, so its answer cannot be meant for this one. The
+ * client reloads the message and shows the card named here.
+ */
+export type CardChangedError = {
+  /**
+   * The approval that is open now.
+   */
+  approval_id: string;
+  /**
+   * Always `card_changed`.
+   */
+  code: string;
+};
+
+/**
  * @deprecated true
  */
 export type Chat = {

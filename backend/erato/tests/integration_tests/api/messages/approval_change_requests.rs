@@ -4,6 +4,7 @@
 //! one it replaces.
 
 use super::*;
+use erato::models::user_tool_approval_setting::{UserToolDecision, upsert_active};
 use mock_mcp_server::RECORD_ID;
 
 const ASK: &str = "Set the record to Done";
@@ -189,7 +190,10 @@ async fn a_change_request_leads_to_a_corrected_card_that_names_the_one_it_replac
     let approved = server
         .post("/api/v1beta/me/messages/continuestream")
         .with_bearer_token(TEST_JWT_TOKEN)
-        .json(&json!({ "message_id": message_id, "decision": "approve" }))
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": third["approval_id"], "decision": "approve"}],
+        }))
         .await;
     approved.assert_status_ok();
     assert_eq!(extract_full_text(&parse_sse_events(&approved)), "DONE");
@@ -514,4 +518,196 @@ async fn a_denial_and_a_withdrawal_read_as_before(pool: Pool<Postgres>) {
             json!({"status": "rejected", "error": "The user denied this tool call."})
         );
     }
+}
+
+/// The user changes the card on one device; another tab still shows the old
+/// card and answers it the way a single card is answered, without naming it.
+/// That answer cannot be meant for the corrected card, so it is refused as a
+/// changed card and nothing runs; naming the corrected card works.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn an_unnamed_decision_on_a_corrected_card_is_refused(pool: Pool<Postgres>) {
+    let recorder = RequestBodyRecorder::new();
+    let mut mocks = MockSet::new();
+    {
+        let recorder = recorder.clone();
+        mocks.mock(move |when, then| {
+            when.post()
+                .path("/v1/chat/completions")
+                .matcher(BodyContainsMatcher::new(&["updated to"], &[]))
+                .matcher(recorder);
+            mock_llm_sse_response(then, build_openai_text_streaming_response(&["DONE"]));
+        });
+    }
+    answers_with(
+        &mut mocks,
+        &[ONE],
+        &["updated to"],
+        update("call_fix_one", "Review"),
+    );
+    answers_with(
+        &mut mocks,
+        &[ASK],
+        &["CHANGE-ONE"],
+        update("call_update", "Done"),
+    );
+    let app_state = records_app_state(pool, mocks).await;
+    let server = app_server(app_state.clone());
+    let (_chat_id, message_id) = park(&server).await;
+    let first = own_item(stops(&message_content(&app_state, message_id).await)[0]).clone();
+    ask_for_change(
+        &server,
+        message_id,
+        first["approval_id"].as_str().unwrap(),
+        ONE,
+    )
+    .await
+    .assert_status_ok();
+    let corrected = own_item(stops(&message_content(&app_state, message_id).await)[1]).clone();
+    assert_eq!(corrected["replaces_approval_id"], first["approval_id"]);
+
+    for decision in ["approve", "reject", "withdraw"] {
+        let stale = server
+            .post("/api/v1beta/me/messages/continuestream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "message_id": message_id, "decision": decision }))
+            .await;
+        assert_eq!(
+            stale.status_code(),
+            http::StatusCode::CONFLICT,
+            "{decision}"
+        );
+        assert_eq!(
+            stale.json::<Value>(),
+            json!({"code": "card_changed", "approval_id": corrected["approval_id"]})
+        );
+    }
+    let content = message_content(&app_state, message_id).await;
+    assert_eq!(
+        content.last().unwrap(),
+        stops(&content)[1],
+        "the corrected card still waits"
+    );
+    assert!(recorder.bodies().is_empty(), "nothing ran");
+
+    server
+        .post("/api/v1beta/me/messages/continuestream")
+        .with_bearer_token(TEST_JWT_TOKEN)
+        .json(&json!({
+            "message_id": message_id,
+            "decisions": [{"approval_id": corrected["approval_id"], "decision": "approve"}],
+        }))
+        .await
+        .assert_status_ok();
+    assert!(ran_with(&recorder.bodies(), "Review"));
+}
+
+/// After a change request the first call the model makes asks, even for a
+/// tool the user always allows: they are in the middle of deciding and
+/// confirm the version that results. A read the policy never asks about
+/// still runs at once.
+#[sqlx::test(migrator = "crate::MIGRATOR")]
+async fn the_first_call_after_a_change_request_asks_even_when_always_allowed(pool: Pool<Postgres>) {
+    const GIZMO_ASK: &str = "Set the gizmo to Done";
+    const RECORD_INSTEAD: &str = "CHANGE-ONE nicht das Gizmo, den Record";
+    const READ_FIRST: &str = "CHANGE-ONE lies erst den Record";
+    let gizmo = build_openai_tool_calls_streaming_response(&[(
+        "call_gizmo",
+        "update_gizmo",
+        json!({"id": RECORD_ID, "status": "Done"}),
+    )]);
+    for (words, answer) in [
+        (RECORD_INSTEAD, update("call_record", "Done")),
+        (
+            READ_FIRST,
+            build_openai_tool_calls_streaming_response(&[("call_read", "read_record", json!({}))]),
+        ),
+    ] {
+        let recorder = RequestBodyRecorder::new();
+        let mut mocks = MockSet::new();
+        {
+            let recorder = recorder.clone();
+            mocks.mock(move |when, then| {
+                when.post()
+                    .path("/v1/chat/completions")
+                    .matcher(BodyContainsMatcher::new(&["Quarterly plan"], &[]))
+                    .matcher(recorder);
+                mock_llm_sse_response(then, build_openai_text_streaming_response(&["READ"]));
+            });
+        }
+        answers_with(&mut mocks, &["CHANGE-ONE"], &["Quarterly plan"], answer);
+        answers_with(&mut mocks, &[GIZMO_ASK], &["CHANGE-ONE"], gizmo.clone());
+        let app_state = records_app_state_with(pool.clone(), mocks, |config| {
+            config.mcp_servers_global.approval.allow_always = true;
+        })
+        .await;
+        let user = get_or_create_user(&app_state.db, TEST_USER_ISSUER, TEST_USER_SUBJECT, None)
+            .await
+            .unwrap();
+        upsert_active(
+            &app_state.db,
+            user.id,
+            "records",
+            "update_record",
+            UserToolDecision::AlwaysAllow,
+        )
+        .await
+        .unwrap();
+        let server = app_server(app_state.clone());
+        let response = server
+            .post("/api/v1beta/me/messages/submitstream")
+            .with_bearer_token(TEST_JWT_TOKEN)
+            .json(&json!({ "user_message": GIZMO_ASK }))
+            .await;
+        response.assert_status_ok();
+        let message_id = Uuid::parse_str(&assistant_message_id_from_events(&parse_sse_events(
+            &response,
+        )))
+        .unwrap();
+        let first = own_item(stops(&message_content(&app_state, message_id).await)[0]).clone();
+        assert_eq!(first["tool_name"], "update_gizmo");
+
+        ask_for_change(
+            &server,
+            message_id,
+            first["approval_id"].as_str().unwrap(),
+            words,
+        )
+        .await
+        .assert_status_ok();
+        let content = message_content(&app_state, message_id).await;
+        let stops = stops(&content);
+        if words == RECORD_INSTEAD {
+            assert_eq!(
+                stops.len(),
+                2,
+                "the always-allowed update asks: {content:?}"
+            );
+            let asked = own_item(stops[1]);
+            assert_eq!(asked["tool_name"], "update_record");
+            assert!(asked.get("replaces_approval_id").is_none(), "another tool");
+            assert!(
+                !content.iter().any(|part| part["content_type"] == "tool_use"
+                    && part["tool_name"] == "update_record"),
+                "it did not run"
+            );
+        } else {
+            assert_eq!(stops.len(), 1, "a read runs without a card: {content:?}");
+            let read = content
+                .iter()
+                .find(|part| {
+                    part["content_type"] == "tool_use" && part["tool_name"] == "read_record"
+                })
+                .expect("the read ran");
+            assert_eq!(read["status"], "success");
+            assert_eq!(extract_full_text_from_content(&content), "READ");
+        }
+    }
+}
+
+fn extract_full_text_from_content(content: &[Value]) -> String {
+    content
+        .iter()
+        .filter(|part| part["content_type"] == "text")
+        .filter_map(|part| part["text"].as_str())
+        .collect()
 }

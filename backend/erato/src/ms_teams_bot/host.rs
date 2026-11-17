@@ -138,7 +138,9 @@ impl From<StreamRouteError> for StartError {
                 DELEGATED_RUN_RUNNING_MESSAGE => StartError::Refused(Msg::TaskStillRunning),
                 _ => StartError::Rejected(message),
             },
-            StreamRouteError::DecisionsMismatch(_) => StartError::DecisionsMismatch,
+            StreamRouteError::DecisionsMismatch(_) | StreamRouteError::CardChanged(_) => {
+                StartError::DecisionsMismatch
+            }
             StreamRouteError::AlreadyContinued(_) => StartError::AlreadyDecided,
             StreamRouteError::CoveredByParent(_) => StartError::Refused(Msg::ApprovalInParentChat),
             StreamRouteError::ChildrenWaiting(_) => StartError::Refused(Msg::ContinuesOnItsOwn),

@@ -71,6 +71,15 @@ TOOLS = [
         },
     },
     {
+        "name": "search_opportunities",
+        "description": "Finds opportunities by account or name. Read only.",
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
+    },
+    {
         "name": "send_email",
         "description": "Sends an email.",
         "parameters": {
@@ -178,6 +187,43 @@ CASES = [
 ]
 
 
+APPT_ASK = CASES[0][0]
+OPP_ASK = CASES[4][0]
+MAIL_ASK = CASES[8][0]
+
+
+def corrected(tool, original, changed):
+    def judge(calls, _text):
+        return len(calls) == 1 and calls[0][0] == tool and same_except(calls[0][1], original, changed)
+    return judge
+
+
+def no_call(calls, _text):
+    return not calls
+
+
+def leaves_the_record(calls, _text):
+    """Another record was meant: a search or a question, never an edit of this one."""
+    return not any(name == "update_opportunity" and args.get("id") == OPP["id"] for name, args in calls)
+
+
+# The review's case of another record and four controls (2026-11-17).
+REVIEW_CASES = [
+    (OPP_ASK, "update_opportunity", OPP, "nicht für Müller, für Schmidt", leaves_the_record),
+    (APPT_ASK, "create_appointment", APPT, "nimm den 22. und lass Anna weg", corrected(
+        "create_appointment", APPT,
+        {"start": lambda v: v and v.startswith("2026-12-22T10:00"),
+         "end": lambda v: v and v.startswith("2026-12-22T11:00"),
+         "attendees": lambda v: v == ["ben.kraus@example.com"]})),
+    (OPP_ASK, "update_opportunity", OPP, "den Wert nicht ändern", corrected(
+        "update_opportunity", OPP,
+        {"estimated_value": None, "name": lambda v: v in (None, OPP["name"])})),
+    (MAIL_ASK, "send_email", MAIL, "nur an Anna", corrected(
+        "send_email", MAIL, {"to": lambda v: v == ["anna.berg@example.com"]})),
+    (APPT_ASK, "create_appointment", APPT, "lass das lieber ganz", no_call),
+]
+
+
 def default_note():
     text = CONFIG_RS.read_text()
     match = re.search(r'const DEFAULT_APPROVAL_CHANGE_NOTE: &str = "((?:[^"\\]|\\.)*)";', text)
@@ -243,10 +289,36 @@ def main():
     parser.add_argument("--config", required=True)
     parser.add_argument("--provider", required=True)
     parser.add_argument("--mode", choices=["change_request", "new_message", "both"], default="both")
+    parser.add_argument("--set", choices=["basic", "review"], default="basic",
+                        help="basic: the ten corrections; review: another record and four controls")
+    parser.add_argument("--runs", type=int, default=1)
     args = parser.parse_args()
     provider = tomllib.load(open(args.config, "rb"))["chat_providers"]["providers"][args.provider]
     note = default_note()
     modes = ["change_request", "new_message"] if args.mode == "both" else [args.mode]
+    if args.set == "review":
+        for ask, tool, original, words, judge in REVIEW_CASES:
+            right = errors = 0
+            for _ in range(args.runs):
+                messages = [
+                    {"role": "system", "content": SYSTEM}, {"role": "user", "content": ask},
+                    {"role": "tool_call", "id": "call_1", "name": tool, "args": original},
+                    {"role": "tool", "id": "call_1", "content": json.dumps(
+                        {"status": "change_requested", "note": note, "user_request": words},
+                        ensure_ascii=False)},
+                ]
+                try:
+                    calls, text = call_provider(provider, messages, TOOLS)
+                except Exception as error:  # noqa: BLE001
+                    errors += 1
+                    print(f"{words!r}\tERROR {type(error).__name__}")
+                    continue
+                ok = judge(calls, text)
+                right += ok
+                shown = [[n, a] for n, a in calls] if calls else text[:120].replace("\n", " ")
+                print(f"{'ok' if ok else 'WRONG'}\t{words!r}\t{json.dumps(shown, ensure_ascii=False)}")
+            print(f"== {words!r}: right {right}/{args.runs - errors}" + (f" ({errors} errors)" if errors else ""))
+        return
     for mode in modes:
         same_tool = right = 0
         for ask, tool, original, words, changed in CASES:
