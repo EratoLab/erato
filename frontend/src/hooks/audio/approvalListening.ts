@@ -11,6 +11,12 @@ import {
 import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 
 import {
+  dropChange,
+  noteChangeSending,
+  noteChangeSent,
+} from "./approvalChanges";
+import {
+  announceApprovalNotice,
   approvalSpeechAllowed,
   spokenApprovalCardNow,
   steerApprovalCard,
@@ -25,20 +31,26 @@ import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type {
   SpokenCardEvent,
   SpokenCardFlow,
+  SpokenNotice,
 } from "@/lib/toolCallGist/spokenCardFlow";
 
 /**
  * Listening while a spoken approval card waits: what the user says is
  * matched by the voice command endpoint to one meaning of a closed list, and
- * the meaning steers what the voice says about the card. Nothing here decides
- * the card or sends a chat message; deciding and changing by voice are later
- * steps, which replace the sentences `stepForMeaning` says for them now.
+ * the meaning steers what the voice says about the card. A change is sent as
+ * a change request for that card, with the user's words; nothing here
+ * approves or rejects a card or sends a chat message. Deciding by voice is a
+ * later step, which replaces the sentence `stepForMeaning` says for it now.
  */
 
 /** The endpoint waits for its model up to 2.5 s by default; this leaves room for the way. */
 export const VOICE_COMMAND_TIMEOUT_MS = 8_000;
 /** What the endpoint takes of the user's words. */
 const MAX_TRANSCRIPT_CHARS = 300;
+/** What a change request takes of them: `max_chars` of `[approval_change_requests]` by default. */
+const MAX_CHANGE_CHARS = 1_000;
+/** The confirmation is short; past this the change goes out anyway. */
+export const CONFIRMATION_WAIT_MS = 5_000;
 
 interface ApprovalListeningState {
   /** The card whose words are being understood; it does not listen meanwhile. */
@@ -60,6 +72,8 @@ export const useApprovalListening = create<ApprovalListeningState>(() => ({
 export interface MeaningStep {
   event: SpokenCardEvent | null;
   listen: boolean;
+  /** The words ask for the card to be changed. */
+  change?: true;
 }
 
 const indexOf = (
@@ -72,10 +86,11 @@ const indexOf = (
 };
 
 /**
- * What the voice does for a meaning. Approving, rejecting, changing and a new
- * request are answered with a sentence and change nothing: the card keeps
- * waiting for a decision on screen. `voiceDecisionGate` is what a decision
- * by voice will have to pass once it exists.
+ * What the voice does for a meaning. Approving, rejecting and a new request
+ * are answered with a sentence and change nothing: the card keeps waiting
+ * for a decision on screen. A change is sent by `heardApprovalWords`.
+ * `voiceDecisionGate` is what a decision by voice will have to pass once it
+ * exists.
  */
 export const stepForMeaning = (
   meaning: ApprovalVoiceMeaning,
@@ -118,7 +133,7 @@ export const stepForMeaning = (
         notice: { kind: "decide_on_screen", decision: meaning },
       });
     case "change":
-      return listen({ type: "notice", notice: { kind: "change_on_screen" } });
+      return { event: null, listen: false, change: true };
     case "new_request":
       return listen({
         type: "notice",
@@ -235,8 +250,95 @@ export async function heardApprovalWords(
       useApprovalListening.setState({ pending: null });
   }
   if (!stillWaiting(key, flow)) return;
+  if (step.change) {
+    await changeByVoice(key, transcript);
+    return;
+  }
   if (step.event) steerApprovalCard(key, step.event);
   if (!step.listen) useApprovalListening.setState({ quiet: key });
+}
+
+/** Resolves once the voice is silent about `key`, or after `ms`. */
+const untilSilent = (key: string, ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    let stop = () => {};
+    const timer = setTimeout(() => {
+      stop();
+      resolve();
+    }, ms);
+    const check = () => {
+      const state = useApprovalSpeech.getState();
+      if (state.key === key && state.speaking) return false;
+      clearTimeout(timer);
+      stop();
+      resolve();
+      return true;
+    };
+    if (!check()) stop = useApprovalSpeech.subscribe(check);
+  });
+
+/**
+ * Sends what the user wants different about the card under `key`, after the
+ * voice said briefly that it changes it. Only the card the user listened to
+ * is changed, by its own approval id; if it was decided or left meanwhile,
+ * nothing goes out. A failure is said once, and the card keeps waiting.
+ */
+async function changeByVoice(key: string, transcript: string): Promise<void> {
+  const now = spokenApprovalCardNow();
+  if (now?.card.key !== key) return;
+  const { card, pieces, flow } = now;
+  // A card that was decided or replaced meanwhile cannot say it any more.
+  const notice = (said: SpokenNotice) => {
+    const current = spokenApprovalCardNow();
+    if (current?.card.key === key && !current.flow.closed)
+      steerApprovalCard(key, { type: "notice", notice: said });
+    else announceApprovalNotice(card.messageId, said, card.language ?? "en");
+  };
+  if (!card.change) {
+    notice({ kind: "change_on_screen", reason: "card" });
+    return;
+  }
+  if (!card.change.ready()) {
+    notice({ kind: "change_on_screen", reason: "others" });
+    return;
+  }
+  const { change } = card;
+  const heard = pieces.flatMap((piece, index) =>
+    flow.heard[index] ? [piece.id] : [],
+  );
+  notice({ kind: "changing" });
+  useApprovalListening.setState({ quiet: key });
+  await untilSilent(key, CONFIRMATION_WAIT_MS);
+  const still = spokenApprovalCardNow();
+  if (still?.card.key !== key || still.flow.closed || !approvalSpeechAllowed())
+    return;
+  noteChangeSending({
+    messageId: card.messageId,
+    approvalId: change.approvalId,
+    language: card.language,
+    approval: card.approval ?? { type: "pointer" },
+    heard,
+    words: transcript,
+  });
+  const words = Array.from(transcript.trim())
+    .slice(0, MAX_CHANGE_CHARS)
+    .join("");
+  let outcome: Awaited<ReturnType<typeof change.send>>;
+  try {
+    outcome = await change.send(words);
+  } catch {
+    outcome = "failed";
+  }
+  if (outcome === "sent") {
+    noteChangeSent(change.approvalId);
+    return;
+  }
+  dropChange(change.approvalId);
+  notice({
+    kind: outcome === "conflict" ? "change_conflict" : "change_failed",
+  });
+  // Said once: the card waits on screen, and is said again only on request.
+  useApprovalListening.setState({ quiet: key });
 }
 
 /** Ends listening for the card under `key` until it is said again. */

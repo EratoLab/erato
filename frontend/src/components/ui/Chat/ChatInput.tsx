@@ -32,6 +32,7 @@ import {
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
 import { useApprovalCardListening } from "@/hooks/audio/useApprovalCardListening";
+import { useApprovalChangeOutcome } from "@/hooks/audio/useApprovalChangeOutcome";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
@@ -976,6 +977,14 @@ export const ChatInput = ({
     open: openCardListening,
     close: closeCardListening,
     readTurn: readCardTurn,
+  });
+  // A change asked for by voice is answered before the microphone opens for
+  // a new message: by its corrected card, or by a sentence about what came.
+  const { holding: changeAwaited } = useApprovalChangeOutcome({
+    enabled: isAudioMode && Boolean(speechEnabled) && speech.enabled,
+    responding: isPendingResponse,
+    decisionWaiting,
+    voicePlaying: speech.playing,
   });
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
@@ -2998,6 +3007,8 @@ export const ChatInput = ({
       !isAudioMode ||
       isPendingResponse ||
       speech.playing ||
+      cardSpeaking ||
+      changeAwaited ||
       decisionWaiting
     ) {
       return;
@@ -3026,6 +3037,8 @@ export const ChatInput = ({
     toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
+    cardSpeaking,
+    changeAwaited,
     decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,

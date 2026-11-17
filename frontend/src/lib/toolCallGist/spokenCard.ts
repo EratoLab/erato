@@ -92,7 +92,7 @@ export interface SpokenReadOut {
 }
 
 /** A piece as it is composed, before the card gives it its id. */
-type ComposedPiece = Omit<SpokenPiece, "id">;
+export type ComposedPiece = Omit<SpokenPiece, "id">;
 
 /** Details read before the rest is counted. */
 export const MAX_SPOKEN_DETAILS = 3;
@@ -300,7 +300,10 @@ const words = (text: string): number =>
   text.split(/\s+/).filter((word) => word.length > 0).length;
 
 /** A glossary name carries the raw name in brackets for the eye only. */
-const fieldName = (effect: { name: string; rawName: string }): string => {
+export const fieldName = (effect: {
+  name: string;
+  rawName: string;
+}): string => {
   const suffix = ` (${effect.rawName})`;
   const name = effect.name.endsWith(suffix)
     ? effect.name.slice(0, -suffix.length)
@@ -312,7 +315,7 @@ const fieldName = (effect: { name: string; rawName: string }): string => {
 };
 
 /** A field as its row on the card names it. */
-const effectField = (effect: ChangeEffect): string =>
+export const effectField = (effect: ChangeEffect): string =>
   fieldName({ name: effectDisplayName(effect), rawName: effect.rawName });
 
 /** Field names that say a value is a share of a hundred. */
@@ -373,6 +376,7 @@ const detailsOf = (
   action: GistAction,
   naming: FieldNaming,
   timeZone?: string,
+  whole = false,
 ): Detailed => {
   const ear = (value: ChangeValue, field: string) =>
     sayable(valueOf(value, field, timeZone));
@@ -490,7 +494,10 @@ const detailsOf = (
   const others = values.filter((detail) => detail.type !== "named");
   let details: SpokenDetail[];
   let omitted: number;
-  if (losses.length > MAX_LISTED_LOSSES) {
+  if (whole) {
+    details = [...typed, ...losses, ...unreadable, ...others];
+    omitted = 0;
+  } else if (losses.length > MAX_LISTED_LOSSES) {
     const rest = [...typed, ...unreadable, ...others];
     const listed = rest.slice(
       0,
@@ -540,7 +547,7 @@ const detailsOf = (
           },
     );
   }
-  const spokenTexts = texts.slice(0, MAX_SPOKEN_TEXTS);
+  const spokenTexts = whole ? texts : texts.slice(0, MAX_SPOKEN_TEXTS);
   const all = [...losses, ...unreadable, ...values];
   const reschedule =
     action === "update" &&
@@ -560,7 +567,7 @@ const detailsOf = (
 };
 
 /** What a person calls a recipient written as an address: its name part. */
-const recipientName = (written: string): string => {
+export const recipientName = (written: string): string => {
   const named = /^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/.exec(written);
   if (named) return named[1].trim();
   const at = written.indexOf("@");
@@ -631,11 +638,16 @@ const spokenNames = (values: GistValue[]): string[] =>
 /** Verbs whose item is new, so the call's title is what it is called. */
 const CREATING_ACTIONS: readonly GistAction[] = ["create", "send", "upload"];
 
-/** The facts a gist card holds, read the way the voice needs them. */
+/**
+ * The facts a gist card holds, read the way the voice needs them. `whole`
+ * keeps every detail and text instead of the few a card says, for comparing
+ * two cards.
+ */
 export const spokenFactsOf = (
   gist: Gist,
   server?: string,
   timeZone?: string,
+  whole = false,
 ): SpokenFacts => {
   const lead = gist.items[0];
   const change = gist.change;
@@ -659,8 +671,9 @@ export const spokenFactsOf = (
             ? "names_new_item"
             : "beside_id",
         timeZone,
+        whole,
       )
-    : fieldDetailsOf(gist, timeZone);
+    : fieldDetailsOf(gist, timeZone, whole);
   const where = spokenNames(lead.where);
   return {
     action: gist.action,
@@ -705,7 +718,11 @@ const batchLosses = (change: GistChange): SpokenDetail[] =>
   );
 
 /** A label stored before change descriptions: its fields as the card lists them. */
-const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
+const fieldDetailsOf = (
+  gist: Gist,
+  timeZone?: string,
+  whole = false,
+): Detailed => {
   const lead = gist.items[0];
   const details: SpokenDetail[] = [];
   const texts: SpokenText[] = [];
@@ -746,8 +763,8 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     );
   }
   return {
-    details: details.slice(0, MAX_SPOKEN_DETAILS),
-    omitted: Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
+    details: whole ? details : details.slice(0, MAX_SPOKEN_DETAILS),
+    omitted: whole ? 0 : Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
     texts,
     reschedule: false,
   };
@@ -776,7 +793,7 @@ const number = (slot: SpokenSlot, value: number): SpokenSource => ({
   value: { kind: "number", value, percent: false },
 });
 
-const whatValues = (facts: SpokenFacts): SpokenSource[] => [
+export const whatValues = (facts: SpokenFacts): SpokenSource[] => [
   ...(facts.server ? [text("server", facts.server)] : []),
   ...(facts.count > 1 ? [number("count", facts.count)] : []),
   ...(facts.statement ? [text("statement", facts.statement)] : []),
@@ -792,7 +809,7 @@ const whatValues = (facts: SpokenFacts): SpokenSource[] => [
     : []),
 ];
 
-const detailValues = (detail: SpokenDetail): SpokenSource[] => {
+export const detailValues = (detail: SpokenDetail): SpokenSource[] => {
   if (detail.type === "losses") {
     return [number("count", detail.emptied), number("count", detail.lists)];
   }
@@ -909,6 +926,13 @@ export const spokenApprovalPieces = (
       spokenWordsFor(options.language, options).cut(),
     ),
   );
+
+/** Composed pieces as the endpoint takes them, with their ids. */
+export const spokenPiecesOf = (
+  pieces: ComposedPiece[],
+  options: SpokenOptions,
+): SpokenPiece[] =>
+  withIds(fitted(pieces, spokenWordsFor(options.language, options).cut()));
 
 const composedPieces = (
   approval: SpokenApproval,
