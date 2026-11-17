@@ -3,6 +3,7 @@ import { effectDisplayName } from "./cardLayout";
 import { addsOnToolsWord, changeLayout, listReplaceIsUnknown } from "./change";
 import { toolCallCardOf } from "./gist";
 import { spokenWordsFor } from "./spokenCardWords";
+import { spokenReadFactsOf, spokenReadPieces } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
 import type {
@@ -959,6 +960,15 @@ const composedPieces = (
     mustSay: false,
     values: [],
   };
+  const read = spokenReadFactsOf(
+    approval.label,
+    approval.server,
+    options.timeZone,
+  );
+  if (read) {
+    pieces.push(...spokenReadPieces(read, words.read, position), request);
+    return pieces;
+  }
   const card = toolCallCardOf(approval.label, approval.input);
   if (card.kind !== "gist") {
     pieces.push({

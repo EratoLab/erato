@@ -16,7 +16,7 @@ use super::rules;
 use super::{MAX_LABEL_VALUE_BYTES, MAX_LABEL_VALUE_CHARS};
 use crate::models::message::{
     ContentPart, GenerationInputMessages, MessageRole, ToolCallAction, ToolCallLabel,
-    ToolCallLabelItem, ToolCallStatus, ToolUse,
+    ToolCallLabelItem, ToolCallRead, ToolCallStatus, ToolUse,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use crate::services::prompt_composition::replay_policy;
@@ -501,6 +501,31 @@ impl ToolResultContext {
                     }));
                 }
             }
+        }
+    }
+
+    /// Names the records the values of a read's SQL statement identify, as
+    /// [`Self::resolve`] does for a label: the values sit inside the
+    /// statement, so they are looked up by their text.
+    pub fn resolve_query(&self, read: &mut ToolCallRead, server: &str) {
+        let mut budget = MAX_RESOLVED_BYTES;
+        let item_values = read
+            .item
+            .iter_mut()
+            .flat_map(|item| item.id.iter_mut())
+            .flat_map(|slot| slot.values.iter_mut());
+        let condition_values = read
+            .query
+            .iter_mut()
+            .flat_map(|query| query.conditions.iter_mut())
+            .flat_map(|condition| condition.values.iter_mut());
+        for value in item_values.chain(condition_values) {
+            value.resolved = text_key(&value.text)
+                .and_then(|key| self.record(server, key)?.name.clone())
+                .and_then(|name| {
+                    budget = budget.checked_sub(name.len())?;
+                    Some(name)
+                });
         }
     }
 

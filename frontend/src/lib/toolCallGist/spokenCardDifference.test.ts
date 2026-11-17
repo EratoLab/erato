@@ -1379,3 +1379,58 @@ describe("a field the user names", () => {
     ).toMatch(UNASKED);
   });
 });
+
+describe("a read replaced by a read", () => {
+  const reads = calls
+    .filter(
+      (call) =>
+        (call.display.label as unknown as { read?: unknown }).read !==
+        undefined,
+    )
+    .map((call) => call.id);
+
+  it("covers the reads of the set", () => {
+    expect(reads.length).toBeGreaterThan(5);
+  });
+
+  it.each(reads)(
+    "%s: another statement or condition is never the same, nor the rest as before",
+    (id) => {
+      for (const pointer of leaves(callOf(id).input)) {
+        const before = callOf(id);
+        const after = callOf(id);
+        const value = readOf(pointer, after.input);
+        setInput(
+          after,
+          pointer,
+          typeof value === "string"
+            ? value.replace(/(\d+)/, (digits) => String(Number(digits) + 1)) +
+                " AND statecode = 1"
+            : typeof value === "number"
+              ? value + 1
+              : "x",
+        );
+        const result = difference(withdrawn(before, "nicht diese"), after);
+        expect(result.intro, pointer).not.toBe("same");
+        expect(textsOf(result.pieces), pointer).not.toContain(REST);
+      }
+    },
+  );
+
+  it("a condition changed only in spacing is still told: nothing reads it plain", () => {
+    const before = callOf("read-02-query");
+    const after = callOf("read-02-query");
+    after.input.querytext = String(after.input.querytext).replace(
+      "WHERE statecode",
+      "WHERE\n  statecode",
+    );
+    expect(difference(withdrawn(before, "x"), after).intro).not.toBe("same");
+  });
+
+  it("the same read again is the same", () => {
+    const before = callOf("read-02-query");
+    expect(
+      difference(withdrawn(before, "x"), callOf("read-02-query")).intro,
+    ).toBe("same");
+  });
+});

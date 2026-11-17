@@ -5389,7 +5389,79 @@ export type ToolCallRead = {
   filtered?: boolean;
   item?: ToolCallLabelItem;
   object_kind: ToolCallObjectKind;
+  query?: ToolCallReadQuery;
   warnings?: ToolCallLabelWarning[];
+};
+
+export type ToolCallReadCondition = {
+  column: string;
+  operator: ToolCallReadOperator;
+  /**
+   * The table the column belongs to, when the statement reads several
+   * and names it.
+   */
+  table?: string;
+  /**
+   * The values it compares with, read as label values: a machine ID is
+   * named only by `resolved`. `between` has two.
+   */
+  values?: ToolCallLabelValue[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  values_omitted?: number;
+};
+
+export type ToolCallReadOperator =
+  | "equals"
+  | "not_equals"
+  | "less"
+  | "at_most"
+  | "greater"
+  | "at_least"
+  | "contains"
+  | "starts_with"
+  | "ends_with"
+  | "is_empty"
+  | "is_not_empty"
+  | "in"
+  | "not_in"
+  | "between"
+  | "other";
+
+/**
+ * The parts of a plain SQL read the voice says: the tables, the conditions
+ * simple enough to say, and a limit. Names are as the statement wrote them,
+ * display-cleaned.
+ */
+export type ToolCallReadQuery = {
+  /**
+   * Conditions joined by AND that compare one column with values, in the
+   * statement's order.
+   */
+  conditions?: ToolCallReadCondition[];
+  /**
+   * Conditions it applies beyond `conditions`: past the cap, or not a
+   * simple comparison.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  conditions_omitted?: number;
+  /**
+   * The most rows it returns, from TOP, LIMIT or FETCH.
+   *
+   * @format int64
+   * @minimum 0
+   */
+  limit?: number;
+  tables?: string[];
+  /**
+   * @format int32
+   * @minimum 0
+   */
+  tables_omitted?: number;
 };
 
 export type ToolCallRecipientGroup = {

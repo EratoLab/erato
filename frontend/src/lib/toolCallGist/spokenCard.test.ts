@@ -359,11 +359,11 @@ describe("spoken approval card", () => {
   });
 
   it("gives a call without a verb the tool's title and the server", () => {
-    expect(spoken("read-02-query")).toBe(
+    expect(spoken("read-12-sql-select-into")).toBe(
       "Ich möchte in Dynamics 365 das Tool read query verwenden. Bitte auf dem Bildschirm bestätigen.",
     );
-    expect(spoken("read-01-search", "en")).toBe(
-      "I'd like to use the tool search in Dynamics 365. Please confirm on screen.",
+    expect(spoken("read-12-sql-select-into", "en")).toBe(
+      "I'd like to use the tool read query in Dynamics 365. Please confirm on screen.",
     );
   });
 
@@ -674,7 +674,9 @@ describe("findings of the review of the base (2026-11-17)", () => {
   it("1.6: the German voice calls a tool a Tool, as the card does", () => {
     for (const call of calls)
       expect(spoken(call.id), call.id).not.toMatch(/Werkzeug/);
-    expect(spoken("read-02-query")).toContain("das Tool read query verwenden");
+    expect(spoken("read-12-sql-select-into")).toContain(
+      "das Tool read query verwenden",
+    );
   });
 
   it("1.8: the name a call typed beside an ID stays the first detail", () => {

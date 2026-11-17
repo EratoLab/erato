@@ -16,6 +16,11 @@ import type {
   SpokenWords,
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
+import type {
+  SpokenCondition,
+  SpokenReadFacts,
+  SpokenReadWords,
+} from "./spokenRead";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -105,6 +110,7 @@ export interface DifferenceWords {
 export type LanguageWords = SpokenWords & {
   /** Whether the language says the whole card, not only the pointer. */
   full: boolean;
+  read: SpokenReadWords;
   difference: DifferenceWords;
 };
 
@@ -1017,6 +1023,187 @@ const noticeSentence = (notice: SpokenNotice): string => {
 };
 
 // ---------------------------------------------------------------------------
+// Reads
+
+/** Things of a kind in general, as what a read looks at. */
+const readThings = (kind: GistKind): string =>
+  t({
+    id: "spokenCard.read.things",
+    message: select(kind, {
+      page: "pages",
+      row: "records",
+      database: "databases",
+      folder: "folders",
+      note: "notes",
+      comment: "comments",
+      paragraph: "paragraphs",
+      document: "documents",
+      email: "emails",
+      message: "messages",
+      event: "events",
+      file: "files",
+      task: "tasks",
+      other: "items",
+    }),
+  });
+
+/** The tables a statement reads from. */
+const readTables = (count: number, tables: string): string =>
+  t({
+    id: "spokenCard.read.tables",
+    message: plural(count, {
+      one: `from the table ${tables}`,
+      other: `from the tables ${tables}`,
+    }),
+  });
+
+type ReadShapeWord =
+  | "search"
+  | "searchIn"
+  | "searchLong"
+  | "searchInLong"
+  | "read"
+  | "list";
+
+/** What a read looks up, where, and by what. */
+const readWhatSentence = (
+  shape: ReadShapeWord,
+  parts: {
+    source: string;
+    thing: string;
+    tables: string;
+    text: string;
+    clause: string;
+  },
+): string =>
+  withParts(parts, ({ source, thing, tables, text, clause }) =>
+    t({
+      id: "spokenCard.read.what",
+      message: select(shape, {
+        search: `I'd like to search ${source} for ${text} ${clause}`,
+        searchIn: `I'd like to search ${thing} ${source} for ${text} ${clause}`,
+        searchLong: `I'd like to search ${source} for a text of about ${text} words, shown on screen ${clause}`,
+        searchInLong: `I'd like to search ${thing} ${source} for a text of about ${text} words, shown on screen ${clause}`,
+        read: `I'd like to read ${thing} ${tables} ${source} ${clause}`,
+        other: `I'd like to list ${thing} ${source} ${clause}`,
+      }),
+    }),
+  );
+
+const readConditionsLead = (): string =>
+  t({
+    id: "spokenCard.read.conditionsLead",
+    message: ", with these conditions:",
+  });
+
+const readWhereSentence = (places: string): string =>
+  t({ id: "spokenCard.read.where", message: `Where: ${places}.` });
+
+const readConditionSentence = (
+  operator: string,
+  kind: "date" | "other",
+  column: string,
+  value: string,
+  second: string,
+): string =>
+  t({
+    id: "spokenCard.read.condition",
+    message: select(operator, {
+      equals: `${column} is ${value}.`,
+      not_equals: `${column} is not ${value}.`,
+      less: select(kind, {
+        date: `${column} is before ${value}.`,
+        other: `${column} is less than ${value}.`,
+      }),
+      at_most: select(kind, {
+        date: `${column} is on or before ${value}.`,
+        other: `${column} is at most ${value}.`,
+      }),
+      greater: select(kind, {
+        date: `${column} is after ${value}.`,
+        other: `${column} is greater than ${value}.`,
+      }),
+      at_least: select(kind, {
+        date: `${column} is on or after ${value}.`,
+        other: `${column} is at least ${value}.`,
+      }),
+      contains: `${column} contains ${value}.`,
+      starts_with: `${column} starts with ${value}.`,
+      ends_with: `${column} ends with ${value}.`,
+      is_empty: `${column} is empty.`,
+      is_not_empty: `${column} is not empty.`,
+      in: `${column} is ${value}.`,
+      neither: `${column} is neither ${value} nor ${second}.`,
+      not_in: `${column} is not ${value}.`,
+      between: select(kind, {
+        date: `${column} is between ${value} and ${second}.`,
+        other: `${column} is between ${value} and ${second}.`,
+      }),
+      other: `${column} is compared with ${value}.`,
+    }),
+  });
+
+/** A column of one of several tables a statement reads. */
+const readColumnOf = (column: string, table: string): string =>
+  t({ id: "spokenCard.read.columnOf", message: `${column} of ${table}` });
+
+/** Tables past the ones said, counted, after "from the tables". */
+const readMoreTables = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.read.moreTables",
+    message: plural(count, {
+      one: "one more table",
+      other: `${countWord} more tables`,
+    }),
+  });
+
+/** Values of a condition past the ones said, counted. */
+const readMoreValues = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.read.moreValues",
+    message: plural(count, {
+      one: "one more value",
+      other: `${countWord} more values`,
+    }),
+  });
+
+/** A condition whose value is too long to say. */
+const readConditionLongSentence = (column: string, words: string): string =>
+  t({
+    id: "spokenCard.read.conditionLong",
+    message: `${column} is compared with a text of about ${words} words, shown on screen.`,
+  });
+
+const readMoreConditionsSentence = (
+  shape: "unknown" | "counted" | "after",
+  count: number,
+  countWord: string,
+): string =>
+  t({
+    id: "spokenCard.read.moreConditions",
+    message: select(shape, {
+      unknown: "With conditions shown on screen.",
+      counted: plural(count, {
+        one: "With one condition, shown on screen.",
+        other: `With ${countWord} conditions, shown on screen.`,
+      }),
+      other: plural(count, {
+        one: "And one more condition, shown on screen.",
+        other: `And ${countWord} more conditions, shown on screen.`,
+      }),
+    }),
+  });
+
+const readLimitSentence = (shape: "one" | "many", things: string): string =>
+  t({
+    id: "spokenCard.read.limit",
+    message: select(shape, {
+      one: "Only the first result.",
+      other: `At most ${things}.`,
+    }),
+  });
+
+// ---------------------------------------------------------------------------
 // Composing the card from the sentences
 
 const ACTIONS_ON_NEW: readonly string[] = ["create", "send", "upload"];
@@ -1233,8 +1420,145 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     }
   };
 
+  /** Values of a condition: said one by one, the rest counted. */
+  const someValues = (
+    values: EarValue[],
+    omitted: number,
+    type: "conjunction" | "disjunction",
+  ) => {
+    const said = values
+      .slice(0, MAX_LISTED_ENTRIES)
+      .map((entry) => value(entry));
+    const more = values.length - said.length + omitted;
+    return new Intl.ListFormat(code.locale, { type }).format(
+      more > 0 ? [...said, readMoreValues(more, count(more))] : said,
+    );
+  };
+
+  const readThing = (facts: SpokenReadFacts): string => {
+    const { kind, names } = facts;
+    if (facts.shape !== "items") return readThings(kind);
+    if (facts.count > 1) {
+      if (names.length === facts.count) return namedThings(kind, list(names));
+      return names.length > 0
+        ? countedThingsIncluding(kind, count(facts.count), list(names))
+        : countedThings(kind, count(facts.count));
+    }
+    return names.length > 0 ? namedThing(kind, names[0]) : oneThing(kind);
+  };
+
+  const read: SpokenReadWords = {
+    what(facts, conditionsFollow, position) {
+      const source = facts.server ? sourcePhrase("in", facts.server) : "";
+      const tables =
+        facts.tables.length > 0
+          ? readTables(
+              facts.tables.length + facts.tablesOmitted,
+              facts.tablesOmitted > 0
+                ? list([
+                    ...facts.tables,
+                    readMoreTables(
+                      facts.tablesOmitted,
+                      count(facts.tablesOmitted),
+                    ),
+                  ])
+                : list(facts.tables),
+            )
+          : "";
+      const typed = facts.kind !== "other" && facts.kind !== "row";
+      let shape: ReadShapeWord;
+      let text = "";
+      if (facts.shape === "search" && facts.search) {
+        const long = !("text" in facts.search);
+        /* eslint-disable lingui/no-unlocalized-strings -- select keys */
+        shape = typed
+          ? long
+            ? "searchInLong"
+            : "searchIn"
+          : long
+            ? "searchLong"
+            : "search";
+        /* eslint-enable lingui/no-unlocalized-strings */
+        text =
+          "text" in facts.search
+            ? facts.search.text
+            : String(roundWords(facts.search.words));
+      } else {
+        shape =
+          facts.shape === "items" || facts.tables.length > 0 ? "read" : "list";
+      }
+      const unnamed =
+        facts.shape === "items" &&
+        facts.count === 1 &&
+        facts.names.length === 0;
+      const clause = unnamed ? unnamedClause(facts.kind, facts.unread) : "";
+      const sentence = readWhatSentence(shape, {
+        source,
+        thing:
+          shape === "search" || shape === "searchLong" ? "" : readThing(facts),
+        tables,
+        text,
+        clause,
+      });
+      return `${ordinal(position)}${conditionsFollow ? `${sentence}${readConditionsLead()}` : endSentence(sentence)}`;
+    },
+    where: (places) => readWhereSentence(list(places)),
+    condition(condition: SpokenCondition) {
+      const first = condition.values.at(0);
+      const second = condition.values.at(1);
+      const column =
+        condition.table === undefined
+          ? condition.column
+          : readColumnOf(condition.column, condition.table);
+      if (condition.longWords !== undefined) {
+        return readConditionLongSentence(
+          column,
+          String(roundWords(condition.longWords)),
+        );
+      }
+      const neither = "neither";
+      const operator =
+        condition.operator === "not_in" &&
+        condition.values.length === 2 &&
+        condition.valuesOmitted === 0
+          ? neither
+          : condition.operator;
+      const many = operator === "in" || operator === "not_in";
+      const said = many
+        ? someValues(condition.values, condition.valuesOmitted, "disjunction")
+        : first
+          ? value(first)
+          : "";
+      const dated =
+        first !== undefined &&
+        (first.kind === "date" || first.kind === "datetime");
+      return readConditionSentence(
+        operator,
+        dated ? "date" : "other",
+        column,
+        said,
+        second ? value(second) : "",
+      );
+    },
+    moreConditions(unsaid, afterSaid) {
+      if (unsaid === "unknown") {
+        return readMoreConditionsSentence("unknown", 0, "");
+      }
+      return readMoreConditionsSentence(
+        afterSaid ? "after" : "counted",
+        unsaid,
+        count(unsaid),
+      );
+    },
+    limit: (limit, kind) =>
+      limit === 1
+        ? readLimitSentence("one", "")
+        : readLimitSentence("many", countedThings(kind, count(limit))),
+  };
+
   return {
     full: true,
+    read,
     cut: () => ` ${cutMark()}`,
     pointer: pointerSentence,
     count: (total) => countSentence(count(total)),

@@ -18,6 +18,7 @@ use super::recipients::{
     ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, RECIPIENT_NUMBER_WORDS,
     bare_member, is_contact_number_member, is_phone_shaped, is_recipient_member,
 };
+use super::sql::may_be_sql;
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
     ToolCallLabelMapping,
@@ -850,7 +851,7 @@ fn holds_write_text(arguments: &Value) -> bool {
         budget -= 1;
         match value {
             Value::String(text)
-                if is_sql_statement(text)
+                if may_be_sql(text)
                     || text_prefix(text, MAX_SEARCH_BYTES)
                         .to_ascii_lowercase()
                         .contains("$batch") =>
@@ -872,6 +873,259 @@ fn holds_write_text(arguments: &Value) -> bool {
         }
     }
     false
+}
+
+/// Verbs that read, in the name of a tool that runs the statement it is
+/// given; `download` is left out, as it may write the rows somewhere.
+const STATEMENT_READ_VERBS: [&str; 11] = [
+    "get", "list", "search", "fetch", "read", "query", "find", "retrieve", "view", "describe",
+    "select",
+];
+const RUN_WORDS: [&str; 3] = ["run", "execute", "exec"];
+/// Nouns for the statement or what it reads. They say nothing about what the
+/// tool does, so a name needs a read verb or a run word as well; `record`
+/// and `result` alone may mean saving.
+const STATEMENT_NOUNS: [&str; 7] = [
+    "sql",
+    "statement",
+    "data",
+    "rows",
+    "records",
+    "results",
+    "tables",
+];
+
+/// Whether a call may be described by the one SQL statement it carries: every
+/// word of the tool's name reads or runs the statement, and one of them is a
+/// read verb or a run word; the tool does not say it may change things; and
+/// nothing else in the arguments names a verb, a loss or a change of state.
+/// A server's name in the tool's name is not skipped: it can be any word,
+/// an action too, so a prefixed name keeps the generic sentence. A
+/// `readOnlyHint: true` does not open it: hints only cross-check a label,
+/// and a name that acts contradicts the hint. The statement itself is judged
+/// by `sql::plain_read`.
+pub fn may_read_by_statement(
+    tool_name: &str,
+    arguments: &Value,
+    annotations: Option<&ToolAnnotations>,
+) -> bool {
+    let own = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    let core = |word: &String| {
+        STATEMENT_READ_VERBS.contains(&word.as_str()) || RUN_WORDS.contains(&word.as_str())
+    };
+    let only_reads_or_runs = own.iter().any(core)
+        && own
+            .iter()
+            .all(|word| core(word) || STATEMENT_NOUNS.contains(&word.as_str()));
+    let may_change = annotations.is_some_and(|hints| {
+        hints.read_only_hint == Some(false) || hints.destructive_hint == Some(true)
+    });
+    only_reads_or_runs
+        && matches!(
+            verb(&own, Some(arguments)).action,
+            ToolCallAction::Other | ToolCallAction::Run
+        )
+        && !may_change
+        && !sounds_like_a_loss(tool_name, arguments)
+        && !sets_more_than_a_read(arguments)
+}
+
+/// What an argument beside a statement may hold, by its whole name.
+#[derive(Clone, Copy)]
+enum PagingValue {
+    /// A whole number, or digits as text.
+    Count,
+    /// An opaque continuation the tool reads the next page with.
+    Token,
+    /// Column names, as text or a list of texts.
+    Columns,
+    /// One of the closed list of output formats.
+    Format,
+    Flag,
+}
+
+/// Arguments that only page, sort or shape what a statement read returns,
+/// matched as the whole member name, case aside.
+const PAGING_MEMBERS: [(&str, PagingValue); 38] = [
+    ("limit", PagingValue::Count),
+    ("top", PagingValue::Count),
+    ("$top", PagingValue::Count),
+    ("offset", PagingValue::Count),
+    ("skip", PagingValue::Count),
+    ("$skip", PagingValue::Count),
+    ("page", PagingValue::Count),
+    ("page_size", PagingValue::Count),
+    ("pagesize", PagingValue::Count),
+    ("per_page", PagingValue::Count),
+    ("perpage", PagingValue::Count),
+    ("max_rows", PagingValue::Count),
+    ("maxrows", PagingValue::Count),
+    ("max_results", PagingValue::Count),
+    ("maxresults", PagingValue::Count),
+    ("cursor", PagingValue::Token),
+    ("skiptoken", PagingValue::Token),
+    ("$skiptoken", PagingValue::Token),
+    ("next_link", PagingValue::Token),
+    ("nextlink", PagingValue::Token),
+    ("page_token", PagingValue::Token),
+    ("pagetoken", PagingValue::Token),
+    ("continuation_token", PagingValue::Token),
+    ("order_by", PagingValue::Columns),
+    ("orderby", PagingValue::Columns),
+    ("$orderby", PagingValue::Columns),
+    ("sort", PagingValue::Columns),
+    ("sort_by", PagingValue::Columns),
+    ("sortby", PagingValue::Columns),
+    ("select", PagingValue::Columns),
+    ("$select", PagingValue::Columns),
+    ("fields", PagingValue::Columns),
+    ("columns", PagingValue::Columns),
+    ("format", PagingValue::Format),
+    ("output_format", PagingValue::Format),
+    ("outputformat", PagingValue::Format),
+    ("response_format", PagingValue::Format),
+    ("include_deleted", PagingValue::Flag),
+];
+
+const OUTPUT_FORMATS: [&str; 13] = [
+    "json", "csv", "tsv", "table", "text", "txt", "plain", "markdown", "md", "xml", "html", "yaml",
+    "yml",
+];
+
+/// A name of a table or column, or a short list of them, as people write
+/// them: no statement, path, address or call fits.
+fn is_identifier_text(text: &str, list: bool) -> bool {
+    let allowed = |c: char| {
+        c.is_alphanumeric()
+            || matches!(c, '_' | '.' | '[' | ']' | '"' | '`' | '$')
+            || (list && matches!(c, ' ' | ',' | '*'))
+    };
+    !text.trim().is_empty() && text.len() <= MAX_PAGING_TEXT_BYTES && text.chars().all(allowed)
+}
+
+const MAX_PAGING_TEXT_BYTES: usize = 512;
+
+fn paging_value_fits(kind: PagingValue, value: &Value) -> bool {
+    match (kind, value) {
+        (PagingValue::Count, Value::Number(number)) => number.is_u64(),
+        (PagingValue::Count, Value::String(text)) => {
+            !text.is_empty() && text.len() <= 20 && text.chars().all(|c| c.is_ascii_digit())
+        }
+        (PagingValue::Token, Value::String(text)) => text.len() <= 4 * MAX_PAGING_TEXT_BYTES,
+        (PagingValue::Token, Value::Number(number)) => number.is_u64(),
+        (PagingValue::Columns, Value::String(text)) => is_identifier_text(text, true),
+        (PagingValue::Columns, Value::Array(entries)) => {
+            !entries.is_empty()
+                && entries.len() <= MAX_LIST_ENTRIES
+                && entries.iter().all(|entry| {
+                    entry
+                        .as_str()
+                        .is_some_and(|text| is_identifier_text(text, true))
+                })
+        }
+        (PagingValue::Format, Value::String(text)) => OUTPUT_FORMATS
+            .iter()
+            .any(|format| text.trim().eq_ignore_ascii_case(format)),
+        (PagingValue::Flag, Value::Bool(_)) => true,
+        _ => false,
+    }
+}
+
+/// Whether every argument a call sets beside its statement at `statement`,
+/// at any level on the way to it, is the consent argument, names the table,
+/// or pages by its whole name with a plain value of the kind that name
+/// takes: what a statement read says cannot hold anything else, so anything
+/// else may change what the call does.
+pub fn only_the_statement_is_set(
+    arguments: &Value,
+    statement: &str,
+    approval_argument: Option<&str>,
+) -> bool {
+    let Some(path) = statement.strip_prefix('/') else {
+        return false;
+    };
+    let mut level = arguments;
+    for token in path.split('/') {
+        let member = pointer::unescape(token);
+        let Some(members) = level.as_object() else {
+            return false;
+        };
+        for (other, value) in members.iter().take(MAX_SEARCH_VALUES) {
+            if *other == *member || !is_set(value) {
+                continue;
+            }
+            let fits = if is_consent_member(other, approval_argument) {
+                matches!(value, Value::Bool(_) | Value::String(_) | Value::Number(_))
+            } else if is_one_of(other, &TABLE_MEMBERS) {
+                value
+                    .as_str()
+                    .is_some_and(|table| is_identifier_text(table, false))
+            } else {
+                PAGING_MEMBERS
+                    .iter()
+                    .find(|(name, _)| other.eq_ignore_ascii_case(name))
+                    .is_some_and(|(_, kind)| paging_value_fits(*kind, value))
+            };
+            if !fits {
+                return false;
+            }
+        }
+        let Some(next) = members.get(member.as_ref()) else {
+            return false;
+        };
+        level = next;
+    }
+    true
+}
+
+/// The one string in the arguments that has the shape of an SQL statement,
+/// whatever its member is called, with its pointer. `None` when there is
+/// none or more than one, when a string holds an OData batch, or when the
+/// arguments are too large to read through.
+pub fn the_sql_statement(arguments: &Value) -> Option<(String, &str)> {
+    let mut budget = MAX_SEARCH_VALUES;
+    let mut found = None;
+    let mut stack = vec![(arguments, String::new(), 0)];
+    while let Some((value, pointer, depth)) = stack.pop() {
+        budget = budget.checked_sub(1)?;
+        match value {
+            Value::String(text) => {
+                if text_prefix(text, MAX_SEARCH_BYTES)
+                    .to_ascii_lowercase()
+                    .contains("$batch")
+                {
+                    return None;
+                }
+                if may_be_sql(text) {
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some((pointer, text.as_str()));
+                }
+            }
+            Value::Object(members) if depth < MAX_SEARCH_DEPTH => {
+                for (member, child) in members {
+                    stack.push((child, child_pointer(&pointer, member)?, depth + 1));
+                }
+            }
+            Value::Array(entries) if depth < MAX_SEARCH_DEPTH => {
+                for (index, child) in entries.iter().enumerate() {
+                    stack.push((child, format!("{pointer}/{index}"), depth + 1));
+                }
+            }
+            Value::Object(_) | Value::Array(_) => return None,
+            _ => {}
+        }
+        if stack.len() > budget {
+            return None;
+        }
+    }
+    found
+}
+
+/// The kind a table's name gives its records: a task for `task`, else a row.
+pub(super) fn table_kind(table: &str) -> ToolCallObjectKind {
+    kind_of(&name_words(text_prefix(table, MAX_NAME_BYTES))).unwrap_or(ToolCallObjectKind::Row)
 }
 
 /// The values of the verb fields, top first.
