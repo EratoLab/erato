@@ -83,6 +83,7 @@ export function useSpokenApprovalCard({
     const card = {
       key,
       messageId,
+      language: options.language,
       pieces: spokenApprovalPieces(approval, options),
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
     };

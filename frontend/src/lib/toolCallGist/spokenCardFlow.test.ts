@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import data from "./fixtures/spokenCards/calls.json";
 import expectedPieces from "./fixtures/spokenCards/expected.json";
 import {
+  currentPiece,
+  heardStates,
   namesLongText,
   piecesAhead,
   spokenCardFlow,
   spokenCardStep,
+  voiceDecisionGate,
 } from "./spokenCardFlow";
 
 import type { SpokenPiece } from "./spokenCard";
@@ -29,7 +32,7 @@ const piece = (
   role: SpokenPiece["role"],
   text: string,
   mustSay = false,
-): SpokenPiece => ({ role, text, mustSay, values: [] });
+): SpokenPiece => ({ id: text, role, text, mustSay, values: [] });
 
 const CARD = [
   piece("what", "Ich möchte den Datensatz Line 4 Retrofit ändern."),
@@ -104,6 +107,16 @@ const checkRun = (
       case "rest":
         afterRest = true;
         requestAsked = true;
+        break;
+      case "skip":
+        // Quiet with nothing left of the reading, "go on" is the rest.
+        if (
+          before.playing === null &&
+          piecesAhead(pieces, before.states, before.heard).length === 0
+        ) {
+          afterRest = true;
+          requestAsked = true;
+        }
         break;
       case "repeat":
         target = event.index ?? pieceOf(before.playing) ?? before.last;
@@ -341,6 +354,158 @@ describe("what the voice says next", () => {
   });
 });
 
+describe("while the voice is quiet and listens", () => {
+  it("'go on' after a stop drops what was cut and says the rest of the reading", () => {
+    const { said, flow } = run(CARD, [
+      { type: "start" },
+      { type: "finished" },
+      { type: "finished" },
+      { type: "stop" },
+      { type: "skip" },
+      ...finished(2),
+    ]);
+    // Piece 2 was stopped and is dropped; only the request is left.
+    expect(indices(said)).toEqual([0, 1, 2, 3]);
+    expect(flow.states).toEqual(["heard", "heard", "cut", "heard"]);
+  });
+
+  it("'go on' with nothing left is 'that was all', and the request again", () => {
+    const { said } = run(CARD, [
+      { type: "start" },
+      ...finished(4),
+      { type: "skip" },
+      ...finished(2),
+    ]);
+    expect(indices(said).slice(4)).toEqual(["nothing_left", 3]);
+  });
+
+  it("a stopped loss is still said before the request", () => {
+    const { said } = run(CARD, [
+      { type: "start" },
+      { type: "finished" },
+      { type: "stop" },
+      { type: "skip" },
+      ...finished(3),
+    ]);
+    expect(indices(said)).toEqual([0, 1, 2, 1, 3]);
+  });
+
+  it("a notice is said, then the voice is quiet and nothing else changes", () => {
+    const before = run(CARD, [{ type: "start" }, ...finished(4)]).flow;
+    const notice = spokenCardStep(CARD, before, {
+      type: "notice",
+      notice: { kind: "decide_on_screen", decision: "approve" },
+    });
+    expect(notice.playing).toEqual({
+      type: "notice",
+      notice: { kind: "decide_on_screen", decision: "approve" },
+    });
+    const after = spokenCardStep(CARD, notice, { type: "finished" });
+    expect(after.playing).toBeNull();
+    expect(after.states).toEqual(before.states);
+    expect(after.heard).toEqual(before.heard);
+    expect(after.closed).toBe(false);
+  });
+
+  it("knows the piece said last, also when it was cut short", () => {
+    const stopped = run(CARD, [
+      { type: "start" },
+      { type: "finished" },
+      { type: "stop" },
+    ]).flow;
+    expect(stopped.last).toBe(0);
+    expect(currentPiece(stopped)).toBe(1);
+    expect(heardStates(stopped)).toEqual([
+      "heard",
+      "cut_short",
+      "not_said",
+      "not_said",
+    ]);
+  });
+
+  it("review 4: 'again' after a text was read out is the text, until other content is said", () => {
+    const withText = [
+      CARD[0],
+      {
+        ...piece("text", "Description: ein Text von etwa 70 Wörtern."),
+        values: [
+          {
+            slot: "words" as const,
+            value: { kind: "number" as const, value: 70, percent: false },
+          },
+        ],
+      },
+      CARD[2],
+      CARD[3],
+    ];
+    const read = run(withText, [
+      { type: "start" },
+      ...finished(4),
+      { type: "read" },
+      ...finished(2),
+    ]).flow;
+    // The text, then the request again: quiet, and the text is the last one.
+    expect(read.playing).toBeNull();
+    expect(read.lastRead).toBe(1);
+    expect(currentPiece(read)).toBe(1);
+    expect(spokenCardStep(withText, read, { type: "repeat" }).playing).toEqual({
+      type: "text",
+      index: 1,
+    });
+    expect(
+      spokenCardStep(withText, read, { type: "repeat", index: 1 }).playing,
+    ).toEqual({ type: "text", index: 1 });
+    // Stopped in the text: again is the text too.
+    const stopped = run(withText, [
+      { type: "start" },
+      ...finished(4),
+      { type: "read" },
+      { type: "stop" },
+    ]).flow;
+    expect(currentPiece(stopped)).toBe(1);
+    // Other content after it: again is that content.
+    const moved = spokenCardStep(
+      withText,
+      spokenCardStep(withText, read, { type: "repeat", index: 2 }),
+      { type: "finished" },
+    );
+    expect(moved.lastRead).toBeNull();
+    expect(spokenCardStep(withText, read, { type: "start" }).lastRead).toBe(
+      null,
+    );
+  });
+
+  it("a card withdrawn for a change is closed, but not decided", () => {
+    const withdrawn = run(CARD, [
+      { type: "start" },
+      { type: "closed", withdrawn: true },
+    ]).flow;
+    expect(withdrawn.closed).toBe(true);
+    expect(withdrawn.withdrawn).toBe(true);
+    expect(
+      run(CARD, [{ type: "start" }, { type: "closed" }]).flow.withdrawn,
+    ).toBe(false);
+  });
+
+  it("a decision by voice would wait for the request and every owed loss", () => {
+    const fresh = spokenCardFlow(CARD);
+    expect(voiceDecisionGate(CARD, fresh)).toEqual({
+      ready: false,
+      owed: [1],
+    });
+    const skipped = run(CARD, [
+      { type: "start" },
+      { type: "finished" },
+      { type: "stop" },
+    ]).flow;
+    expect(voiceDecisionGate(CARD, skipped).ready).toBe(false);
+    const heard = run(CARD, [{ type: "start" }, ...finished(4)]).flow;
+    expect(voiceDecisionGate(CARD, heard)).toEqual({ ready: true, owed: [] });
+    const closed = spokenCardStep(CARD, heard, { type: "closed" });
+    expect(voiceDecisionGate(CARD, closed).ready).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The scenario cards
 
@@ -470,8 +635,10 @@ const EVENTS = [
   "repeat_named",
   "read_text",
   "stop",
+  "notice",
   "decided",
   "replaced",
+  "withdrawn",
 ] as const;
 
 type Position = (typeof POSITIONS)[number];
@@ -539,9 +706,13 @@ const eventOf = (
     }
     case "read_text":
       return { type: "read" };
+    case "notice":
+      return { type: "notice", notice: { kind: "unclear", hasText: false } };
     case "decided":
     case "replaced":
       return { type: "closed" };
+    case "withdrawn":
+      return { type: "closed", withdrawn: true };
     default:
       return { type: value };
   }
@@ -631,14 +802,39 @@ describe("the card as a state machine, every pair of values at least once", () =
       switch (combination.event) {
         case "decided":
         case "replaced":
+        case "withdrawn":
           expect(after.closed).toBe(true);
+          expect(after.withdrawn).toBe(combination.event === "withdrawn");
           expect(said).toEqual([]);
+          break;
+        case "notice":
+          // The sentence, then quiet; no piece follows it.
+          expect(said).toEqual([event.type === "notice" && event]);
+          expect(said.map((utterance) => utterance.type)).toEqual(["notice"]);
           break;
         case "finished":
           if (before.flow.playing === null) expect(after).toBe(before.flow);
           break;
         case "skip": {
           const skipped = pieceOf(before.flow.playing);
+          if (before.flow.playing === null) {
+            const ahead = piecesAhead(
+              pieces,
+              before.flow.states,
+              before.flow.heard,
+            );
+            expect(said[0]).toEqual(
+              ahead.length === 0
+                ? { type: "nothing_left" }
+                : {
+                    type: "piece",
+                    index:
+                      ahead[0] === request && before.flow.owed.length > 0
+                        ? before.flow.owed[0]
+                        : ahead[0],
+                  },
+            );
+          }
           if (skipped !== null) {
             // A loss skipped before it was heard is said again first.
             expect(
@@ -731,6 +927,10 @@ const randomEvent = (
     () => ({ type: "read" }),
     () => ({ type: "read", index: anyPiece() }),
     () => ({ type: "stop" }),
+    () => ({
+      type: "notice",
+      notice: { kind: "decide_on_screen", decision: "approve" },
+    }),
     () => ({ type: "failed" }),
     () => ({ type: "start" }),
     () => (next() < 0.3 ? { type: "closed" } : { type: "finished" }),

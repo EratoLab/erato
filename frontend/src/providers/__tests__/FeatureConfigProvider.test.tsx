@@ -196,6 +196,7 @@ describe("FeatureConfigProvider", () => {
         },
         audioConversational: {
           speechEnabled: false,
+          voiceCommandsEnabled: false,
           enabled: false,
           maxRecordingDurationSeconds: 1200,
         },
@@ -863,6 +864,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         speechEnabled: false,
+        voiceCommandsEnabled: false,
         enabled: false,
         maxRecordingDurationSeconds: 1200,
       });
@@ -872,6 +874,7 @@ describe("FeatureConfigProvider", () => {
       mockEnv.mockReturnValue({
         audioConversationalEnabled: true,
         audioConversationalMaxRecordingDurationSeconds: 600,
+        approvalVoiceCommandsEnabled: true,
       });
 
       const { result } = renderHook(() => useAudioConversationalFeature(), {
@@ -880,6 +883,7 @@ describe("FeatureConfigProvider", () => {
 
       expect(result.current).toEqual({
         speechEnabled: false,
+        voiceCommandsEnabled: true,
         enabled: true,
         maxRecordingDurationSeconds: 600,
       });

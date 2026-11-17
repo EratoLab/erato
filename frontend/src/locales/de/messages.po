@@ -8676,6 +8676,41 @@ msgstr "{count, plural, one {Dazu kommt ein weiteres Feld, es steht auf dem Bild
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.nothingLeft"
+msgstr "Das war alles."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeOnScreen"
+msgstr "Ändern geht noch nicht per Sprache: bitte auf dem Bildschirm ablehnen und die Änderung schreiben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decideOnScreen"
+msgstr "{decision, select, approve {Zustimmen geht im Moment nur auf dem Bildschirm.} other {Ablehnen geht im Moment nur auf dem Bildschirm.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.newRequest"
+msgstr "Eine neue Anfrage geht erst, wenn über diese Karte entschieden ist."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.noText"
+msgstr "Diese Karte hat keinen langen Text."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unavailable"
+msgstr "Sprachbefehle gehen gerade nicht. Die Karte wartet auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unclear"
+msgstr "{commands, select, withText {Das habe ich nicht verstanden. Möglich sind: weiter, was noch, nochmal, Text vorlesen und stopp.} other {Das habe ich nicht verstanden. Möglich sind: weiter, was noch, nochmal und stopp.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.ordinal"
 msgstr "Die {ordinal}:"
 
@@ -8706,6 +8741,11 @@ msgstr "Bitte auf dem Bildschirm bestätigen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.rest"
+msgstr "{count, plural, one {Noch eine Sache:} other {Noch {countWord} Dinge:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.short.named"
 msgstr "{kind, select, page {die Seite {name}} row {der Datensatz {name}} database {die Datenbank {name}} folder {der Ordner {name}} note {die Notiz {name}} comment {der Kommentar {name}} paragraph {der Absatz {name}} document {das Dokument {name}} email {die E-Mail {name}} message {die Nachricht {name}} event {der Termin {name}} file {die Datei {name}} task {die Aufgabe {name}} other {der Eintrag {name}}}"
 
@@ -8728,6 +8768,11 @@ msgstr "{direction, select, other {in {server}}}"
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text"
 msgstr "{shape, select, field {{field}: ein Text von etwa {words} Wörtern, er steht auf dem Bildschirm.} other {Dazu ein Text von etwa {words} Wörtern, er steht auf dem Bildschirm.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.textCut"
+msgstr "Der Rest des Textes steht auf dem Bildschirm."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

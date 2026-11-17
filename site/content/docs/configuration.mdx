@@ -5394,7 +5394,9 @@ chat_provider_id = "gpt-4o-mini"
 
 {/* erato_toml_config_key: approval_voice_commands.enabled */}
 
-Offer the endpoint. **Default:** `false`.
+Offer the endpoint, and let the web app listen while a spoken card waits. **Default:** `false`.
+
+When on, conversational audio mode opens the microphone once the voice has said the card and is silent, and never while it speaks. What the user says goes to this endpoint, never into a chat message. Skip, the rest, repeat, read a long text and stop steer the voice; approve, reject, change and a new request are answered with a sentence that they are done on screen for now, and the card keeps waiting. When the endpoint fails or does not answer, the voice says so once and the card waits on screen. When off, the microphone stays closed while a card waits, as before.
 
 #### `approval_voice_commands.chat_provider_id`
 

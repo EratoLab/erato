@@ -8676,6 +8676,41 @@ msgstr "{count, plural, one {And one more field, shown on screen.} other {And {c
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.nothingLeft"
+msgstr "That was everything."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeOnScreen"
+msgstr "Changes can't be made by voice yet: please decline on screen and type the change."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.decideOnScreen"
+msgstr "{decision, select, approve {For now, approving is done on screen.} other {For now, declining is done on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.newRequest"
+msgstr "A new request has to wait until this card is decided."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.noText"
+msgstr "This card has no long text."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unavailable"
+msgstr "Voice commands aren't working right now. The card is waiting on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.unclear"
+msgstr "{commands, select, withText {I didn't catch that. You can say: go on, what else, again, read the text, or stop.} other {I didn't catch that. You can say: go on, what else, again, or stop.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.ordinal"
 msgstr "The {ordinal} one:"
 
@@ -8706,6 +8741,11 @@ msgstr "Please confirm on screen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.rest"
+msgstr "{count, plural, one {One more thing:} other {{countWord} more things:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.short.named"
 msgstr "{kind, select, page {the page {name}} row {the record {name}} database {the database {name}} folder {the folder {name}} note {the note {name}} comment {the comment {name}} paragraph {the paragraph {name}} document {the document {name}} email {the email {name}} message {the message {name}} event {the event {name}} file {the file {name}} task {the task {name}} other {the item {name}}}"
 
@@ -8728,6 +8768,11 @@ msgstr "{direction, select, from {from {server}} other {in {server}}}"
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text"
 msgstr "{shape, select, field {{field}: a text of about {words} words, shown on screen.} other {Plus a text of about {words} words, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.textCut"
+msgstr "The rest of the text is on screen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
