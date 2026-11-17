@@ -256,6 +256,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
             post(read_aloud::read_message_aloud),
         )
         .route(
+            "/messages/{message_id}/approval-speech",
+            post(read_aloud::speak_approval),
+        )
+        .route(
             "/messages/{message_id}/approval-voice-command",
             post(approval_voice_commands::interpret_approval_voice_command),
         )
@@ -551,6 +555,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         token_usage::token_usage_estimate,
         prompt_optimizer,
         read_aloud::read_message_aloud,
+        read_aloud::speak_approval,
         approval_voice_commands::interpret_approval_voice_command,
         message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
@@ -612,6 +617,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chat_history_compaction::CompactChatRequest,
         chat_history_compaction::CompactChatResponse,
         read_aloud::ReadAloudStreamEvent,
+        read_aloud::ApprovalSpeechRequest,
         approval_voice_commands::ApprovalVoiceCommandRequest,
         crate::services::approval_voice_commands::VoiceCommand,
         crate::services::approval_voice_commands::VoiceMeaning,

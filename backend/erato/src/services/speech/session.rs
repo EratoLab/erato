@@ -300,7 +300,10 @@ impl SpeechSession {
             channels: 1,
             encoding: "pcm_s16le".into(),
         };
-        let path = format!("speech/{chat_id}/{message_id}.wav");
+        // A continuation after an approval speaks into the same message, so
+        // each recording needs a path of its own.
+        let file_id = Uuid::new_v4();
+        let path = format!("speech/{chat_id}/{message_id}-{file_id}.wav");
         let storage = app.default_file_storage_provider();
         authorize!(
             policy,
@@ -318,7 +321,7 @@ impl SpeechSession {
             let transaction = app.db.begin().await?;
             let file = crate::models::file_upload::create_file_upload_record(
                 &transaction,
-                Uuid::new_v4(),
+                file_id,
                 subject.user_id().to_string(),
                 &chat_id,
                 format!("speech-{message_id}.wav"),

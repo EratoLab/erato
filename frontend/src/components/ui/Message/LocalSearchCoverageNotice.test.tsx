@@ -100,6 +100,30 @@ const renderContent = (content: ContentPart[], showRaw = false) =>
   );
 
 describe("LocalSearchCoverageNotice", () => {
+  it("describes searchable partial inventory without claiming a date period", () => {
+    renderContent([
+      searchPart({
+        coverage: coverage([
+          {
+            ...outlook,
+            from: null,
+            to: null,
+            status: "partial",
+            inventoryComplete: false,
+            searchableDocuments: 2,
+          },
+        ]),
+      }),
+      answer,
+    ]);
+    const notice = screen.getByTestId("local-search-coverage-notice");
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(notice).toHaveTextContent(
+      "indexed items searched; inventory and date coverage are incomplete",
+    );
+    expect(notice).not.toHaveTextContent("not searchable yet");
+  });
+
   it.each([false, true])(
     "states the searched period under the reply (raw: %s)",
     (showRaw) => {

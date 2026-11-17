@@ -3572,19 +3572,19 @@
         ]
       }
     },
-    "/api/v1beta/me/messages/{message_id}/approval-voice-command": {
+    "/api/v1beta/me/messages/{message_id}/approval-speech": {
       "post": {
         "tags": [
-          "approval_voice_commands"
+          "read_aloud"
         ],
-        "summary": "Match what the user said while an approval card waits to one meaning.",
-        "description": "Built-in rules answer the plain words; a configured model may answer the\nrest, seeing the words and the pieces' roles and field names. The answer\ncarries no text, approves nothing and is not stored. `approve` and\n`reject` are reported so the caller can say that decisions are made on\nscreen.",
-        "operationId": "interpret_approval_voice_command",
+        "summary": "Speak the approval a message of the user is waiting on.",
+        "description": "The client composes the sentences from the card it shows; this only speaks\nthem, with the voice and cleaning of conversational mode's replies, piece\nby piece. It answers only for a message of the user's own chat whose stop\nstill has a decision open, and stores nothing.",
+        "operationId": "speak_approval",
         "parameters": [
           {
             "name": "message_id",
             "in": "path",
-            "description": "The assistant message whose approval waits",
+            "description": "The assistant message whose approval is spoken",
             "required": true,
             "schema": {
               "type": "string",
@@ -3596,7 +3596,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ApprovalVoiceCommandRequest"
+                "$ref": "#/components/schemas/ApprovalSpeechRequest"
               }
             }
           },
@@ -3606,24 +3606,24 @@
           "200": {
             "description": "",
             "content": {
-              "application/json": {
+              "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApprovalVoiceCommand"
+                  "$ref": "#/components/schemas/ReadAloudStreamEvent"
                 }
               }
             }
           },
           "400": {
-            "description": "Empty words, a piece id twice or empty, or a current piece that is not on the card"
+            "description": "No pieces, or a piece with nothing to say"
           },
           "404": {
-            "description": "Voice commands are off, or the message does not exist or is not in a chat of the user"
+            "description": "Conversational speech is off, or the message does not exist or is not in a chat of the user"
           },
           "409": {
             "description": "The message has no approval waiting for a decision"
           },
           "413": {
-            "description": "Words over 300 characters, more than 16 pieces, a piece id over 64 or a field name over 100 characters"
+            "description": "More than 16 pieces, a piece over 400 characters, or more than 2000 characters in all"
           }
         },
         "security": [
@@ -5630,57 +5630,6 @@
           }
         }
       },
-      "ApprovalCardPiece": {
-        "type": "object",
-        "description": "One piece of the spoken card, without what it says.",
-        "required": [
-          "id",
-          "role",
-          "state"
-        ],
-        "properties": {
-          "field": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "For a detail or a long text: the field's name as the card shows it."
-          },
-          "id": {
-            "type": "string"
-          },
-          "role": {
-            "$ref": "#/components/schemas/ApprovalCardPieceRole"
-          },
-          "state": {
-            "$ref": "#/components/schemas/ApprovalCardPieceState"
-          }
-        }
-      },
-      "ApprovalCardPieceRole": {
-        "type": "string",
-        "description": "What a piece of the spoken card is, as the card that speaks it names it.",
-        "enum": [
-          "count",
-          "what",
-          "item",
-          "detail",
-          "outside",
-          "more",
-          "text",
-          "consequence",
-          "request",
-          "pointer"
-        ]
-      },
-      "ApprovalCardPieceState": {
-        "type": "string",
-        "enum": [
-          "heard",
-          "cut_short",
-          "not_said"
-        ]
-      },
       "ApprovalDecisionItem": {
         "type": "object",
         "description": "One decision of a continuation, naming the approval it answers.",
@@ -5831,80 +5780,21 @@
           }
         }
       },
-      "ApprovalVoiceCommand": {
+      "ApprovalSpeechRequest": {
         "type": "object",
+        "description": "What a client says about the approval it shows.",
         "required": [
-          "meaning",
-          "source"
-        ],
-        "properties": {
-          "meaning": {
-            "$ref": "#/components/schemas/ApprovalVoiceMeaning"
-          },
-          "piece_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "For `repeat` and `read_text`: the piece meant. Null when the words do\nnot say which and the card has no single candidate."
-          },
-          "source": {
-            "$ref": "#/components/schemas/ApprovalVoiceCommandSource"
-          }
-        }
-      },
-      "ApprovalVoiceCommandRequest": {
-        "type": "object",
-        "required": [
-          "transcript",
           "pieces"
         ],
         "properties": {
-          "current_piece_id": {
-            "type": "string",
-            "description": "The piece being spoken, or the last one spoken."
-          },
-          "language": {
-            "type": "string",
-            "description": "The language of the words as a tag such as `de`; the user's language\nwhen omitted."
-          },
           "pieces": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ApprovalCardPiece"
+              "type": "string"
             },
-            "description": "The spoken card's pieces in the order they are said, at most 16."
-          },
-          "transcript": {
-            "type": "string",
-            "description": "What the user said, as transcribed. At most 300 characters."
+            "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
-      },
-      "ApprovalVoiceCommandSource": {
-        "type": "string",
-        "description": "Where the meaning came from.",
-        "enum": [
-          "rules",
-          "model",
-          "none"
-        ]
-      },
-      "ApprovalVoiceMeaning": {
-        "type": "string",
-        "enum": [
-          "skip",
-          "rest",
-          "repeat",
-          "read_text",
-          "stop",
-          "change",
-          "new_request",
-          "approve",
-          "reject",
-          "noise",
-          "unclear"
-        ]
       },
       "ArchiveAllChatsResponse": {
         "type": "object",
@@ -8712,6 +8602,10 @@
           "message_id"
         ],
         "properties": {
+          "conversational_audio_back": {
+            "type": "boolean",
+            "description": "Read the continued answer back, as `conversational_audio_back` does on\na submitted message."
+          },
           "decision": {
             "oneOf": [
               {
@@ -12315,6 +12209,12 @@
                   "audio_delta"
                 ]
               },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
+                "description": "The piece of a spoken approval card the audio belongs to; absent\nwhen a message is read aloud.",
+                "minimum": 0
+              },
               "sample_rate": {
                 "type": "integer",
                 "format": "int32",
@@ -12323,6 +12223,27 @@
               "sequence": {
                 "type": "integer",
                 "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Every audio chunk of this piece of a spoken approval card was sent.",
+            "required": [
+              "piece",
+              "message_type"
+            ],
+            "properties": {
+              "message_type": {
+                "type": "string",
+                "enum": [
+                  "piece_done"
+                ]
+              },
+              "piece": {
+                "type": "integer",
+                "format": "int32",
                 "minimum": 0
               }
             }

@@ -1820,9 +1820,19 @@ msgid "chat.audio_failed"
 msgstr "Audio unavailable. Your text response is still available."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Read the card aloud"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.audio_replay"
 msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Skip"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -2896,6 +2906,11 @@ msgstr "Searched on this device: {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr "{source}: indexed items searched; inventory and date coverage are incomplete"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source}: {from} – {to}"
 
@@ -2908,6 +2923,11 @@ msgstr "{source}: since {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source}: not searchable yet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr "{source}: indexed items searched; document dates are unavailable"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -8079,6 +8099,11 @@ msgstr "Maximum number of documents processed at the same time."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr "Inventory is incomplete. Indexed items remain searchable; date coverage is incomplete."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Indexing priority"
 
@@ -8246,6 +8271,11 @@ msgstr "Not scanned yet"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Partially indexed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr "Partial coverage"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
@@ -8523,6 +8553,11 @@ msgstr "Waiting for your review in the Erato desktop app"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr "Start the Erato desktop app to continue this review."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "A decision is waiting on screen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

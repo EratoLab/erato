@@ -6393,73 +6393,70 @@ export const useMessageSubmitSse = (
   });
 };
 
-export type InterpretApprovalVoiceCommandPathParams = {
+export type SpeakApprovalPathParams = {
   /**
-   * The assistant message whose approval waits
+   * The assistant message whose approval is spoken
    *
    * @format uuid
    */
   messageId: string;
 };
 
-export type InterpretApprovalVoiceCommandError =
-  Fetcher.ErrorWrapper<undefined>;
+export type SpeakApprovalError = Fetcher.ErrorWrapper<undefined>;
 
-export type InterpretApprovalVoiceCommandVariables = {
-  body: Schemas.ApprovalVoiceCommandRequest;
-  pathParams: InterpretApprovalVoiceCommandPathParams;
+export type SpeakApprovalVariables = {
+  body: Schemas.ApprovalSpeechRequest;
+  pathParams: SpeakApprovalPathParams;
 } & V1betaApiContext["fetcherOptions"];
 
 /**
- * Built-in rules answer the plain words; a configured model may answer the
- * rest, seeing the words and the pieces' roles and field names. The answer
- * carries no text, approves nothing and is not stored. `approve` and
- * `reject` are reported so the caller can say that decisions are made on
- * screen.
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
  */
-export const fetchInterpretApprovalVoiceCommand = (
-  variables: InterpretApprovalVoiceCommandVariables,
+export const fetchSpeakApproval = (
+  variables: SpeakApprovalVariables,
   signal?: AbortSignal,
 ) =>
   v1betaApiFetch<
-    Schemas.ApprovalVoiceCommand,
-    InterpretApprovalVoiceCommandError,
-    Schemas.ApprovalVoiceCommandRequest,
+    undefined,
+    SpeakApprovalError,
+    Schemas.ApprovalSpeechRequest,
     {},
     {},
-    InterpretApprovalVoiceCommandPathParams
+    SpeakApprovalPathParams
   >({
-    url: "/api/v1beta/me/messages/{messageId}/approval-voice-command",
+    url: "/api/v1beta/me/messages/{messageId}/approval-speech",
     method: "post",
     ...variables,
     signal,
   });
 
 /**
- * Built-in rules answer the plain words; a configured model may answer the
- * rest, seeing the words and the pieces' roles and field names. The answer
- * carries no text, approves nothing and is not stored. `approve` and
- * `reject` are reported so the caller can say that decisions are made on
- * screen.
+ * The client composes the sentences from the card it shows; this only speaks
+ * them, with the voice and cleaning of conversational mode's replies, piece
+ * by piece. It answers only for a message of the user's own chat whose stop
+ * still has a decision open, and stores nothing.
  */
-export const useInterpretApprovalVoiceCommand = (
+export const useSpeakApproval = (
   options?: Omit<
     reactQuery.UseMutationOptions<
-      Schemas.ApprovalVoiceCommand,
-      InterpretApprovalVoiceCommandError,
-      InterpretApprovalVoiceCommandVariables
+      undefined,
+      SpeakApprovalError,
+      SpeakApprovalVariables
     >,
     "mutationFn"
   >,
 ) => {
   const { fetcherOptions } = useV1betaApiContext();
   return reactQuery.useMutation<
-    Schemas.ApprovalVoiceCommand,
-    InterpretApprovalVoiceCommandError,
-    InterpretApprovalVoiceCommandVariables
+    undefined,
+    SpeakApprovalError,
+    SpeakApprovalVariables
   >({
-    mutationFn: (variables: InterpretApprovalVoiceCommandVariables) =>
-      fetchInterpretApprovalVoiceCommand(deepMerge(fetcherOptions, variables)),
+    mutationFn: (variables: SpeakApprovalVariables) =>
+      fetchSpeakApproval(deepMerge(fetcherOptions, variables)),
     ...options,
   });
 };

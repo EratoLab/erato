@@ -46,6 +46,9 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * gain a question while the card is open, and only an enumerated body comes
  * back as `decisions_mismatch` naming it. An `approve_context` answer is
  * always enumerated, since only an item carries its position.
+ *
+ * `readBack` asks for the continued answer to be spoken; the caller sets it
+ * when the turn that stopped was spoken.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -53,13 +56,16 @@ export const buildContinueStreamBody = ({
   approvalIds,
   itemDecisions,
   enumerate = false,
+  readBack = false,
 }: {
   messageId: string;
   decision: ToolApprovalDecision;
   approvalIds?: string[];
   itemDecisions?: DecidedApproval[];
   enumerate?: boolean;
+  readBack?: boolean;
 }): ContinueStreamRequest => {
+  const spoken = readBack ? { conversational_audio_back: true } : {};
   const decided: DecidedApproval[] =
     itemDecisions && itemDecisions.length > 0
       ? itemDecisions
@@ -85,6 +91,7 @@ export const buildContinueStreamBody = ({
       decisions,
       shows_child_items: true,
       shows_limit_and_builtin_child_items: true,
+      ...spoken,
     };
   }
   // A single open item needs no enumeration, but it still has to be answered
@@ -95,5 +102,6 @@ export const buildContinueStreamBody = ({
     decision: decided[0]?.decision ?? decision,
     shows_child_items: true,
     shows_limit_and_builtin_child_items: true,
+    ...spoken,
   };
 };
