@@ -852,6 +852,15 @@ pub struct AppConfig {
     #[facet(erato_config::default_value_security(level = "more_secure"))]
     pub tool_labels: ToolLabelsConfig,
 
+    /// Understanding what the user says while an approval card waits in
+    /// conversational audio mode.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    #[facet(erato_config::security_relevance(level = "medium"))]
+    #[facet(erato_config::default_value_security(level = "more_secure"))]
+    pub approval_voice_commands: ApprovalVoiceCommandsConfig,
+
     // User preferences feature configuration.
     #[serde(default)]
     pub user_preferences: UserPreferencesConfig,
@@ -1660,6 +1669,10 @@ impl AppConfig {
 
         if let Err(e) = config.validate_tool_labels() {
             panic!("Invalid tool labels configuration: {}", e);
+        }
+
+        if let Err(e) = config.validate_approval_voice_commands() {
+            panic!("Invalid approval voice commands configuration: {}", e);
         }
 
         // Validate model permissions configuration
@@ -2740,6 +2753,29 @@ impl AppConfig {
         Ok(())
     }
 
+    pub fn validate_approval_voice_commands(&self) -> Result<(), eyre::Report> {
+        let commands = &self.approval_voice_commands;
+        // Like `[tool_labels]`: a switched-off section never stops the server.
+        if !commands.enabled {
+            return Ok(());
+        }
+        if !APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.contains(&commands.model_timeout_ms) {
+            return Err(eyre!(
+                "approval_voice_commands.model_timeout_ms must be from {} to {} milliseconds",
+                APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.start(),
+                APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE.end()
+            ));
+        }
+        if let Some(id) = commands
+            .chat_provider_id
+            .as_deref()
+            .filter(|id| !id.trim().is_empty())
+        {
+            self.resolve_chat_provider_id(id)?;
+        }
+        Ok(())
+    }
+
     /// Returns the maximum configured file upload size in bytes, if any.
     pub fn max_upload_size_bytes(&self) -> Option<u64> {
         self.file_storage_providers
@@ -3731,6 +3767,67 @@ pub struct ToolLabelsConfig {
     #[facet(erato_config::security_relevance(level = "high"))]
     #[facet(erato_config::default_value_security(level = "more_secure"))]
     pub allow_other_provider: bool,
+}
+
+/// Off by default. While an approval card waits in conversational audio mode,
+/// what the user says is matched to one meaning from a closed list (skip,
+/// repeat, stop, a change request, …). Built-in rules match the plain words;
+/// the optional model gets only the words that the rules do not match, with
+/// the card's piece roles and field names but none of its values.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ApprovalVoiceCommandsConfig {
+    pub enabled: bool,
+    /// Provider for free phrasing the rules do not match. Without one only the
+    /// rules answer. It receives the user's words.
+    #[facet(erato_config::security_relevance(level = "medium"))]
+    pub chat_provider_id: Option<String>,
+    /// How long the model may take before the answer is "unclear", in
+    /// milliseconds. Defaults to `2500`; allowed from `200` to `10000`.
+    pub model_timeout_ms: u32,
+    /// Replaces the model's built-in instruction. Unset or blank keeps it.
+    pub prompt: Option<String>,
+}
+
+pub const APPROVAL_VOICE_MODEL_TIMEOUT_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=10_000;
+
+impl Default for ApprovalVoiceCommandsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            chat_provider_id: None,
+            model_timeout_ms: 2500,
+            prompt: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod approval_voice_commands_tests {
+    use super::*;
+
+    fn check(enabled: bool, provider: Option<&str>, timeout_ms: u32) -> Result<(), eyre::Report> {
+        let config = AppConfig {
+            approval_voice_commands: ApprovalVoiceCommandsConfig {
+                enabled,
+                chat_provider_id: provider.map(str::to_string),
+                model_timeout_ms: timeout_ms,
+                prompt: None,
+            },
+            ..AppConfig::default()
+        };
+        config.validate_approval_voice_commands()
+    }
+
+    #[test]
+    fn a_switched_off_section_or_a_blank_provider_never_stops_the_server() {
+        assert!(check(false, Some("removed"), 2500).is_ok());
+        assert!(check(false, None, 0).is_ok());
+        assert!(check(true, Some("  "), 2500).is_ok());
+        assert!(check(true, None, 2500).is_ok());
+        assert!(check(true, Some("removed"), 2500).is_err());
+        assert!(check(true, None, 0).is_err());
+    }
 }
 
 /// Both actions are off by default: a toolbar on every selection changes how

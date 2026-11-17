@@ -1,4 +1,6 @@
 #![allow(deprecated)]
+pub(crate) mod approval_access;
+pub mod approval_voice_commands;
 pub mod assistant_hub;
 pub mod assistant_usage;
 pub mod assistants;
@@ -257,6 +259,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/messages/{message_id}/approval-speech",
             post(read_aloud::speak_approval),
+        )
+        .route(
+            "/messages/{message_id}/approval-voice-command",
+            post(approval_voice_commands::interpret_approval_voice_command),
         )
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
@@ -551,6 +557,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         prompt_optimizer,
         read_aloud::read_message_aloud,
         read_aloud::speak_approval,
+        approval_voice_commands::interpret_approval_voice_command,
         message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
         available_models,
@@ -612,6 +619,13 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         chat_history_compaction::CompactChatResponse,
         read_aloud::ReadAloudStreamEvent,
         read_aloud::ApprovalSpeechRequest,
+        approval_voice_commands::ApprovalVoiceCommandRequest,
+        crate::services::approval_voice_commands::VoiceCommand,
+        crate::services::approval_voice_commands::VoiceMeaning,
+        crate::services::approval_voice_commands::VoiceCommandSource,
+        crate::services::approval_voice_commands::CardPiece,
+        crate::services::approval_voice_commands::CardPieceRole,
+        crate::services::approval_voice_commands::CardPieceState,
         Chat,
         RecentChat,
         FacetInfo,

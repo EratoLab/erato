@@ -102,6 +102,36 @@ export type ApplyUserToolApprovalSettingsBatchRequest = {
 };
 
 /**
+ * One piece of the spoken card, without what it says.
+ */
+export type ApprovalCardPiece = {
+  /**
+   * For a detail or a long text: the field's name as the card shows it.
+   */
+  field?: null | undefined;
+  id: string;
+  role: ApprovalCardPieceRole;
+  state: ApprovalCardPieceState;
+};
+
+/**
+ * What a piece of the spoken card is, as the card that speaks it names it.
+ */
+export type ApprovalCardPieceRole =
+  | "count"
+  | "what"
+  | "item"
+  | "detail"
+  | "outside"
+  | "more"
+  | "text"
+  | "consequence"
+  | "request"
+  | "pointer";
+
+export type ApprovalCardPieceState = "heard" | "cut_short" | "not_said";
+
+/**
  * One decision of a continuation, naming the approval it answers.
  */
 export type ApprovalDecisionItem = {
@@ -205,6 +235,54 @@ export type ApprovalSpeechRequest = {
    */
   pieces: string[];
 };
+
+export type ApprovalVoiceCommand = {
+  meaning: ApprovalVoiceMeaning;
+  /**
+   * For `repeat` and `read_text`: the piece meant. Null when the words do
+   * not say which and the card has no single candidate.
+   */
+  piece_id?: null | undefined;
+  source: ApprovalVoiceCommandSource;
+};
+
+export type ApprovalVoiceCommandRequest = {
+  /**
+   * The piece being spoken, or the last one spoken.
+   */
+  current_piece_id?: string;
+  /**
+   * The language of the words as a tag such as `de`; the user's language
+   * when omitted.
+   */
+  language?: string;
+  /**
+   * The spoken card's pieces in the order they are said, at most 16.
+   */
+  pieces: ApprovalCardPiece[];
+  /**
+   * What the user said, as transcribed. At most 300 characters.
+   */
+  transcript: string;
+};
+
+/**
+ * Where the meaning came from.
+ */
+export type ApprovalVoiceCommandSource = "rules" | "model" | "none";
+
+export type ApprovalVoiceMeaning =
+  | "skip"
+  | "rest"
+  | "repeat"
+  | "read_text"
+  | "stop"
+  | "change"
+  | "new_request"
+  | "approve"
+  | "reject"
+  | "noise"
+  | "unclear";
 
 /**
  * Response from the archive all chats endpoint

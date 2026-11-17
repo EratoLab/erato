@@ -46,7 +46,7 @@ const TRACE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Kinds whose adapter sends a reply schema. The `ollama` adapter would drop
 /// one without an error.
-fn sends_json_schema(provider_kind: &str) -> bool {
+pub(crate) fn sends_json_schema(provider_kind: &str) -> bool {
     matches!(
         provider_kind,
         "openai" | "openai_responses" | "azure_openai_responses" | "gemini" | "vertex_ai"
@@ -533,7 +533,7 @@ fn shown_label(
 
 /// What kind of failure a provider error is, for logs that leave out the
 /// provider's own text.
-fn provider_failure(error: &genai::Error) -> &'static str {
+pub(crate) fn provider_failure(error: &genai::Error) -> &'static str {
     if let Some(status) = error.status() {
         return match status.as_u16() {
             401 | 403 => "unauthorized",

@@ -1,0 +1,361 @@
+//! While an approval card waits in conversational audio mode, what the user
+//! says is matched to one meaning from a closed list: skip, the rest, repeat,
+//! read a long text, stop, a change request, a new request, a decision,
+//! listening noise. Rules match the plain words; a configured model may pick
+//! for the rest. Neither writes anything to be spoken, nothing is decided
+//! here, and nothing is stored.
+
+mod model;
+mod rules;
+
+use crate::config::ChatProviderConfig;
+use crate::services::genai::GenAIClient;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use utoipa::ToSchema;
+
+pub use model::DEFAULT_PROMPT;
+
+pub const MAX_TRANSCRIPT_CHARS: usize = 300;
+pub const MAX_PIECES: usize = 16;
+pub const MAX_PIECE_ID_CHARS: usize = 64;
+pub const MAX_FIELD_CHARS: usize = 100;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalVoiceMeaning)]
+pub enum VoiceMeaning {
+    /// Go on with the next piece.
+    Skip,
+    /// Say only what is left of the card.
+    Rest,
+    /// Say a piece again: the one named by its field, or the current one.
+    Repeat,
+    /// Read a long text of the card aloud.
+    ReadText,
+    Stop,
+    /// The user wants the call done differently; their words are the request.
+    Change,
+    /// Something unrelated to the card.
+    NewRequest,
+    /// A clear, short agreement. Reported only; nothing acts on it.
+    Approve,
+    /// A clear, short refusal. Reported only; nothing acts on it.
+    Reject,
+    /// A backchannel or filler while listening, to be ignored.
+    Noise,
+    Unclear,
+}
+
+impl VoiceMeaning {
+    pub const ALL: [VoiceMeaning; 11] = [
+        Self::Skip,
+        Self::Rest,
+        Self::Repeat,
+        Self::ReadText,
+        Self::Stop,
+        Self::Change,
+        Self::NewRequest,
+        Self::Approve,
+        Self::Reject,
+        Self::Noise,
+        Self::Unclear,
+    ];
+
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Self::Skip => "skip",
+            Self::Rest => "rest",
+            Self::Repeat => "repeat",
+            Self::ReadText => "read_text",
+            Self::Stop => "stop",
+            Self::Change => "change",
+            Self::NewRequest => "new_request",
+            Self::Approve => "approve",
+            Self::Reject => "reject",
+            Self::Noise => "noise",
+            Self::Unclear => "unclear",
+        }
+    }
+
+    fn is_decision(self) -> bool {
+        matches!(self, Self::Approve | Self::Reject)
+    }
+}
+
+/// What a piece of the spoken card is, as the card that speaks it names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalCardPieceRole)]
+pub enum CardPieceRole {
+    Count,
+    What,
+    Item,
+    Detail,
+    Outside,
+    More,
+    Text,
+    Consequence,
+    Request,
+    Pointer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalCardPieceState)]
+pub enum CardPieceState {
+    Heard,
+    CutShort,
+    NotSaid,
+}
+
+/// One piece of the spoken card, without what it says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = ApprovalCardPiece)]
+pub struct CardPiece {
+    pub id: String,
+    pub role: CardPieceRole,
+    /// For a detail or a long text: the field's name as the card shows it.
+    #[serde(default)]
+    pub field: Option<String>,
+    pub state: CardPieceState,
+}
+
+/// Where the meaning came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[schema(as = ApprovalVoiceCommandSource)]
+pub enum VoiceCommandSource {
+    Rules,
+    Model,
+    /// Neither matched: no model, or it failed, was late or answered off the list.
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VoiceCommandInput<'a> {
+    pub transcript: &'a str,
+    pub language: &'a str,
+    pub pieces: &'a [CardPiece],
+    pub current_piece_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[schema(as = ApprovalVoiceCommand)]
+pub struct VoiceCommand {
+    pub meaning: VoiceMeaning,
+    /// For `repeat` and `read_text`: the piece meant. Null when the words do
+    /// not say which and the card has no single candidate.
+    pub piece_id: Option<String>,
+    pub source: VoiceCommandSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputProblem {
+    TooLarge,
+    Invalid,
+}
+
+/// The limits a request must keep. Ids must be unique and non-empty, and a
+/// current piece must be one of them.
+pub fn check_input(input: &VoiceCommandInput<'_>) -> Result<(), InputProblem> {
+    if input.transcript.chars().count() > MAX_TRANSCRIPT_CHARS
+        || input.pieces.len() > MAX_PIECES
+        || input.pieces.iter().any(|piece| {
+            piece.id.chars().count() > MAX_PIECE_ID_CHARS
+                || piece
+                    .field
+                    .as_ref()
+                    .is_some_and(|field| field.chars().count() > MAX_FIELD_CHARS)
+        })
+    {
+        return Err(InputProblem::TooLarge);
+    }
+    let mut ids = std::collections::HashSet::new();
+    if input.transcript.trim().is_empty()
+        || input
+            .pieces
+            .iter()
+            .any(|piece| piece.id.trim().is_empty() || !ids.insert(piece.id.as_str()))
+        || input
+            .current_piece_id
+            .is_some_and(|current| !ids.contains(current))
+    {
+        return Err(InputProblem::Invalid);
+    }
+    Ok(())
+}
+
+/// The configured model, for words the rules do not match.
+pub struct VoiceModel<'a> {
+    pub client: &'a dyn GenAIClient,
+    pub config: &'a ChatProviderConfig,
+    pub prompt: &'a str,
+    pub timeout: Duration,
+}
+
+/// The result, and for logs how it came about (never the user's words).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Classified {
+    pub command: VoiceCommand,
+    pub outcome: &'static str,
+}
+
+pub async fn classify(input: &VoiceCommandInput<'_>, model: Option<VoiceModel<'_>>) -> Classified {
+    if let Some(classified) = classify_by_rules(input) {
+        return classified;
+    }
+    match model {
+        Some(model) => classify_by_model(input, &model).await,
+        None => classify_without_model("no_model"),
+    }
+}
+
+/// The rules' answer, or `None` when they are not sure.
+pub fn classify_by_rules(input: &VoiceCommandInput<'_>) -> Option<Classified> {
+    let found = rules::match_rules(input)?;
+    Some(Classified {
+        command: guarded(
+            input,
+            found.meaning,
+            found.piece_id,
+            VoiceCommandSource::Rules,
+        ),
+        outcome: "rules",
+    })
+}
+
+pub async fn classify_by_model(
+    input: &VoiceCommandInput<'_>,
+    model: &VoiceModel<'_>,
+) -> Classified {
+    match model::ask(model, input).await {
+        Ok(answer) => from_answer(input, &answer),
+        Err(outcome) => classify_without_model(outcome),
+    }
+}
+
+/// "Unclear", for words the rules leave and no model answers.
+pub fn classify_without_model(outcome: &'static str) -> Classified {
+    Classified {
+        command: unclear(),
+        outcome,
+    }
+}
+
+/// The model's answer once its piece is on the card and the guards let it pass.
+fn from_answer(input: &VoiceCommandInput<'_>, answer: &model::Answer) -> Classified {
+    match resolve_piece(input, answer.meaning, answer.piece_id.as_deref()) {
+        Some(piece_id) => {
+            let command = guarded(input, answer.meaning, piece_id, VoiceCommandSource::Model);
+            let outcome = if command.meaning == answer.meaning {
+                "model"
+            } else {
+                "model_guarded"
+            };
+            Classified { command, outcome }
+        }
+        None => Classified {
+            command: unclear(),
+            outcome: "wrong_piece",
+        },
+    }
+}
+
+fn unclear() -> VoiceCommand {
+    VoiceCommand {
+        meaning: VoiceMeaning::Unclear,
+        piece_id: None,
+        source: VoiceCommandSource::None,
+    }
+}
+
+/// The piece a meaning refers to, from the piece the answer names. `None`
+/// when the named piece is not on the card or cannot be meant.
+fn resolve_piece(
+    input: &VoiceCommandInput<'_>,
+    meaning: VoiceMeaning,
+    named: Option<&str>,
+) -> Option<Option<String>> {
+    let piece = match named {
+        Some(id) => Some(input.pieces.iter().find(|piece| piece.id == id)?),
+        None => None,
+    };
+    match meaning {
+        VoiceMeaning::Repeat => Some(
+            piece
+                .map(|piece| piece.id.clone())
+                .or_else(|| input.current_piece_id.map(str::to_string)),
+        ),
+        VoiceMeaning::ReadText => match piece {
+            Some(piece) if piece.role == CardPieceRole::Text => Some(Some(piece.id.clone())),
+            Some(_) => None,
+            None => Some(default_text_piece(input)),
+        },
+        _ => Some(None),
+    }
+}
+
+/// The text meant when the words name none: the current piece when it is a
+/// text, else the card's only text.
+fn default_text_piece(input: &VoiceCommandInput<'_>) -> Option<String> {
+    let texts: Vec<&CardPiece> = input
+        .pieces
+        .iter()
+        .filter(|piece| piece.role == CardPieceRole::Text)
+        .collect();
+    if let Some(current) = input
+        .current_piece_id
+        .and_then(|id| texts.iter().find(|piece| piece.id == id))
+    {
+        return Some(current.id.clone());
+    }
+    match texts.as_slice() {
+        [only] => Some(only.id.clone()),
+        _ => None,
+    }
+}
+
+/// Whether the card has asked for a decision: its request piece was heard,
+/// or it has none.
+fn request_heard(pieces: &[CardPiece]) -> bool {
+    pieces
+        .iter()
+        .filter(|piece| piece.role == CardPieceRole::Request)
+        .all(|piece| piece.state == CardPieceState::Heard)
+}
+
+/// A decision only for a clear, short, unconditional sentence, a change only
+/// once it says what to change, and a new request only when it cannot be a
+/// change: otherwise "unclear". A yes or no said before the card asked, or
+/// beside a backchannel ("mhm, ja"), is listening noise.
+fn guarded(
+    input: &VoiceCommandInput<'_>,
+    meaning: VoiceMeaning,
+    piece_id: Option<String>,
+    source: VoiceCommandSource,
+) -> VoiceCommand {
+    let words = rules::Words::of(input.transcript);
+    let refused = (meaning.is_decision() && !words.could_be_plain_decision(meaning, input.pieces))
+        || (meaning == VoiceMeaning::Change && words.breaks_off())
+        || (meaning == VoiceMeaning::NewRequest && words.could_be_change(input.pieces));
+    if refused {
+        return unclear();
+    }
+    let meaning =
+        if meaning.is_decision() && (words.is_backchannel_yes() || !request_heard(input.pieces)) {
+            VoiceMeaning::Noise
+        } else {
+            meaning
+        };
+    VoiceCommand {
+        meaning,
+        piece_id,
+        source,
+    }
+}
+
+#[cfg(test)]
+mod eval;
+#[cfg(test)]
+mod tests;
