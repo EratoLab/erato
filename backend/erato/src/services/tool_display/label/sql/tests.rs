@@ -247,7 +247,7 @@ fn reads() -> Vec<(&'static str, &'static str, PlainRead)> {
 }
 
 /// Statements that are not certainly one plain read, by why.
-const NOT_READS: [(&str, &str); 52] = [
+const NOT_READS: [(&str, &str); 56] = [
     (
         "an exclusive table lock",
         "SELECT * FROM account WITH (TABLOCKX, HOLDLOCK)",
@@ -276,6 +276,22 @@ const NOT_READS: [(&str, &str); 52] = [
     (
         "a next line after a comment",
         "SELECT name FROM account -- note\u{85}DELETE FROM account",
+    ),
+    (
+        "a no-break space between two statements",
+        "SELECT name FROM account\u{a0}DELETE FROM account",
+    ),
+    (
+        "a vertical tab after a comment",
+        "SELECT name FROM account -- note\u{b}DELETE FROM account",
+    ),
+    (
+        "a form feed after a comment",
+        "SELECT name FROM account -- note\u{c}DELETE FROM account",
+    ),
+    (
+        "a hidden character in a value",
+        "SELECT name FROM account WHERE name = N'M\u{200B}üller'",
     ),
     ("empty", ""),
     ("blank", "  \n "),
@@ -628,18 +644,23 @@ fn the_call_around_the_statement_must_only_read_too() {
 }
 
 #[test]
-fn values_are_cleaned_and_named_by_earlier_results() {
+fn a_hidden_character_anywhere_in_the_statement_leaves_no_read() {
     let read = display_read(
         &tool("read_query", read_only()),
-        &json!({"querytext": "SELECT name FROM account WHERE name = N'M\u{200B}üller'"}),
+        &json!({"querytext": "SELECT name FROM [acc\u{200B}ount]"}),
+    );
+    // The statement itself holds the character, so it is not certain.
+    assert_eq!(read, None);
+    let read = display_read(
+        &tool("read_query", read_only()),
+        &json!({"querytext": "SELECT name FROM account WHERE name = N'Müller'"}),
     )
     .expect("a read");
-    let query = read.query.expect("a query");
-    assert_eq!(query.conditions[0].values[0].text, "Müller");
     assert_eq!(
-        read.warnings,
-        [crate::models::message::ToolCallLabelWarning::HiddenCharacters]
+        read.query.expect("a query").conditions[0].values[0].text,
+        "Müller"
     );
+    assert!(read.warnings.is_empty());
 }
 
 #[test]
@@ -864,7 +885,6 @@ fn a_tool_that_only_reads_or_runs_keeps_its_read() {
         "run_sql",
         "sql_query",
         "read_data",
-        "server_read_query",
     ] {
         let read = display_read(&tool(name, None), &json!({"sql": sql}));
         assert!(read.is_some_and(|read| read.query.is_some()), "{name}");
@@ -878,4 +898,131 @@ fn a_tool_that_only_reads_or_runs_keeps_its_read() {
         let read = display_read(&tool("run_query", None), &arguments);
         assert!(read.is_some_and(|read| read.query.is_some()), "{arguments}");
     }
+}
+
+fn display_read_on(server: &str, tool: &Tool, arguments: &Value) -> Option<ToolCallRead> {
+    crate::services::tool_display::mcp_tool_call_display(
+        &crate::config::McpRuntimeConfig::default(),
+        server,
+        tool,
+        arguments,
+        None,
+        &Default::default(),
+    )
+    .label?
+    .read
+}
+
+#[test]
+fn an_argument_is_paging_only_by_its_whole_name_and_a_plain_value() {
+    let sql = "SELECT name FROM account WHERE statecode = 0";
+    for arguments in [
+        json!({"sql": sql, "results_destination": "s3://bucket/x"}),
+        json!({"sql": sql, "results_table": "account_backup"}),
+        json!({"sql": sql, "select_into": "account_backup"}),
+        json!({"sql": sql, "results_webhook": "https://example.com/hook"}),
+        json!({"sql": sql, "results_channel": "C0123"}),
+        json!({"sql": sql, "link_to_case": "case-1"}),
+        json!({"sql": sql, "next": {"action": "deactivate"}}),
+        json!({"sql": sql, "page": {"callback": "https://example.com/cb"}}),
+        json!({"sql": sql, "results": {"export_to": "s3://bucket/x"}}),
+        json!({"params": {"sql": sql, "results_destination": "s3://bucket/x"}}),
+        json!({"sql": sql, "format": "s3://bucket/x.csv"}),
+        json!({"sql": sql, "output_format": "/tmp/out.csv"}),
+        json!({"sql": sql, "select": "name; DROP TABLE account"}),
+        json!({"sql": sql, "fields": ["name", {"into": "backup"}]}),
+        json!({"sql": sql, "columns": "https://example.com"}),
+        json!({"sql": sql, "limit": "all and export"}),
+        json!({"sql": sql, "tablename": "account; DELETE"}),
+        json!({"sql": sql, "include_deleted": "purge"}),
+        json!({"sql": sql, "next_page": 2}),
+        json!({"sql": sql, "per": 10}),
+    ] {
+        assert_eq!(
+            display_read(&tool("run_query", None), &arguments),
+            None,
+            "{arguments}"
+        );
+    }
+    for arguments in [
+        json!({"sql": sql, "limit": 10, "offset": "20", "skip": 0}),
+        json!({"sql": sql, "top": 10, "$top": 5}),
+        json!({"sql": sql, "page": 2, "page_size": 50, "per_page": 50}),
+        json!({"sql": sql, "cursor": "eyJvZmZzZXQiOjUwfQ==", "skiptoken": "abc"}),
+        json!({"sql": sql, "next_link": "https://crm.example.com/api/data?$skiptoken=abc"}),
+        json!({"sql": sql, "order_by": "name desc", "orderby": "name", "sort": ["name", "createdon"]}),
+        json!({"sql": sql, "format": "csv", "output_format": "json"}),
+        json!({"sql": sql, "fields": ["name", "accountid"], "columns": "name, accountid", "select": "name"}),
+        json!({"sql": sql, "include_deleted": false, "tablename": "account"}),
+        json!({"params": {"sql": sql, "limit": 5}}),
+    ] {
+        let read = display_read(&tool("run_query", None), &arguments);
+        assert!(read.is_some_and(|read| read.query.is_some()), "{arguments}");
+    }
+}
+
+#[test]
+fn a_server_named_after_an_action_unlocks_none_of_its_tools() {
+    let arguments = json!({"sql": "SELECT name FROM account WHERE statecode = 0"});
+    for (server, name) in [
+        ("deactivate", "deactivate_rows"),
+        ("deactivate", "deactivate_query"),
+        ("approve", "approve_records"),
+        ("export", "export_query"),
+        ("cleanup", "cleanup_run_query"),
+    ] {
+        assert_eq!(
+            display_read_on(server, &tool(name, None), &arguments),
+            None,
+            "{server} {name}"
+        );
+    }
+    // A server's name is any word, so it is never skipped: a prefixed name
+    // keeps the generic sentence.
+    assert_eq!(
+        display_read_on("crm", &tool("crm_read_query", None), &arguments),
+        None
+    );
+    assert!(display_read_on("crm", &tool("read_query", None), &arguments).is_some());
+}
+
+#[test]
+fn a_name_that_may_save_is_no_read() {
+    let arguments = json!({"sql": "SELECT name FROM account WHERE statecode = 0"});
+    for name in [
+        "record_query",
+        "record_results",
+        "record",
+        "results",
+        "records",
+        "data",
+        "download_query",
+    ] {
+        assert_eq!(display_read(&tool(name, None), &arguments), None, "{name}");
+    }
+    for name in [
+        "get_records",
+        "query_results",
+        "run_query_results",
+        "list_rows",
+        "select_query",
+    ] {
+        let read = display_read(&tool(name, None), &arguments);
+        assert!(read.is_some(), "{name}");
+    }
+}
+
+#[test]
+fn the_consent_argument_holds_a_plain_value_only() {
+    let sql = "SELECT name FROM account";
+    let read = display_read(
+        &tool("run_query", None),
+        &json!({"sql": sql, "hasUserApproved": true}),
+    );
+    assert!(read.is_some());
+    let read = display_read(
+        &tool("run_query", None),
+        &json!({"sql": sql, "hasUserApproved": {"export_to": "s3://bucket/x"}}),
+    );
+    assert_eq!(read, None);
 }

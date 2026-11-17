@@ -441,7 +441,6 @@ pub fn read_description(read: ToolCallLabel, filtered: bool) -> ToolCallRead {
 /// and the card holds that statement and no other change. Its values are
 /// read like a label's. A card never draws it.
 pub fn sql_read(
-    server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
     approval_argument: Option<&str>,
@@ -469,12 +468,7 @@ pub fn sql_read(
     });
     if !matches!(shown.action, ToolCallAction::Other | ToolCallAction::Run)
         || !only_the_statement
-        || !rules::may_read_by_statement(
-            server_id,
-            &tool.name,
-            arguments,
-            tool.annotations.as_ref(),
-        )
+        || !rules::may_read_by_statement(&tool.name, arguments, tool.annotations.as_ref())
         // The card's own verb, run or none: a name that runs is no read verb.
         || !rules::cross_check(tool, arguments, shown.action).is_empty()
     {

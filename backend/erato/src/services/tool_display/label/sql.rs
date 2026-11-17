@@ -221,6 +221,12 @@ pub(super) fn may_be_sql(text: &str) -> bool {
     is_sql_statement(text) || is_sql_statement(after_leading_comments(text))
 }
 
+/// Invisible characters that change how text reads: zero-width and
+/// direction marks, the byte order mark, soft hyphens.
+fn is_format_character(c: char) -> bool {
+    matches!(c, '\u{AD}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{206F}' | '\u{FEFF}')
+}
+
 fn after_leading_comments(text: &str) -> &str {
     let mut rest = text;
     loop {
@@ -242,11 +248,15 @@ fn after_leading_comments(text: &str) -> &str {
 /// SELECT, alone, that only reads tables and calls only functions on the
 /// pure list. `None` for anything else, including what no dialect parses.
 pub(super) fn plain_read(text: &str) -> Option<PlainRead> {
-    // Whether a `--` comment ends at a Unicode line separator differs
-    // between servers, so a statement holding one is not certain.
+    // Where a `--` comment or a token ends at other whitespace or a control
+    // or format character differs between servers, so only these are taken.
+    let plain_characters = text.chars().all(|c| {
+        matches!(c, ' ' | '\t' | '\n' | '\r')
+            || !(c.is_whitespace() || c.is_control() || is_format_character(c))
+    });
     if text.trim().is_empty()
         || text.len() > MAX_SQL_BYTES
-        || text.contains(['\u{2028}', '\u{2029}', '\u{85}'])
+        || !plain_characters
         || !only_read_words(text)
     {
         return None;
