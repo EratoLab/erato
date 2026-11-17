@@ -8671,8 +8671,18 @@ msgstr "{field} ist nicht mehr dabei."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.elsewhere"
+msgstr "Außerdem ist noch etwas anders; das steht auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.entry"
-msgstr "{shape, select, asked {Geändert: {sentence}} other {Außerdem anders als eben, ohne dass es verlangt war: {sentence}}}"
+msgstr "{shape, select, asked {Geändert: {sentence}} other {Außerdem ungefragt geändert: {sentence}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.field"
+msgstr "{field} ist jetzt anders; das steht auf dem Bildschirm."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8681,8 +8691,13 @@ msgstr "{kind, select, changed {Die neue Fassung: {what}} same {Die neue Karte i
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.more"
+msgstr "{shape, select, asked {{count, plural, one {Dazu ist noch ein weiteres Feld wie gewünscht geändert; es steht auf dem Bildschirm.} other {Dazu sind noch {countWord} weitere Felder wie gewünscht geändert; sie stehen auf dem Bildschirm.}}} other {{count, plural, one {Außerdem ist noch ein weiteres Feld ungefragt geändert; es steht auf dem Bildschirm.} other {Außerdem sind noch {countWord} weitere Felder ungefragt geändert; sie stehen auf dem Bildschirm.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.recipients"
-msgstr "Empfänger jetzt: {names}."
+msgstr "{kind, select, to {Jetzt an: {names}.} cc {Jetzt in Kopie: {names}.} bcc {Jetzt in Blindkopie: {names}.} other {{group} jetzt: {names}.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8691,13 +8706,28 @@ msgstr "Alles andere ist wie eben."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.rows"
+msgstr "{count, plural, one {Eine Zeile ist jetzt anders; sie steht auf dem Bildschirm.} other {{countWord} Zeilen sind jetzt anders; sie stehen auf dem Bildschirm.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.sameHint"
-msgstr "Geändert wurde nichts. Die Änderung lässt sich noch einmal anders sagen."
+msgstr "Geändert wurde nichts. Am besten die Änderung mit anderen Worten noch einmal sagen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.statement"
+msgstr "{kind, select, sql {Die Abfrage ist jetzt anders; sie steht auf dem Bildschirm.} other {Die Anweisung ist jetzt anders; sie steht auf dem Bildschirm.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.difference.title"
 msgstr "{shape, select, subject {Der Betreff ist jetzt {name}.} other {Der Titel ist jetzt {name}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.unreadable"
+msgstr "Die Karte ist in Einzelheiten anders, die ich nicht vorlesen kann; sie stehen auf dem Bildschirm."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8732,7 +8762,7 @@ msgstr "{shape, select, several {Nach mehreren Änderungen kam keine neue Karte,
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeOnScreen"
-msgstr "{reason, select, others {Bitte zuerst die anderen Freigaben auf dem Bildschirm entscheiden; dann lässt sich diese per Sprache ändern.} other {Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.}}"
+msgstr "{reason, select, others {Bitte zuerst über die anderen Freigaben auf dem Bildschirm entscheiden; dann lässt sich diese Karte per Sprache ändern.} other {Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8747,7 +8777,7 @@ msgstr "{decision, select, approve {Zustimmen geht im Moment nur auf dem Bildsch
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.newRequest"
-msgstr "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach geht es mit der neuen Bitte weiter."
+msgstr "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach die neue Bitte einfach noch einmal sagen."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

@@ -300,7 +300,10 @@ const words = (text: string): number =>
   text.split(/\s+/).filter((word) => word.length > 0).length;
 
 /** A glossary name carries the raw name in brackets for the eye only. */
-const fieldName = (effect: { name: string; rawName: string }): string => {
+export const fieldName = (effect: {
+  name: string;
+  rawName: string;
+}): string => {
   const suffix = ` (${effect.rawName})`;
   const name = effect.name.endsWith(suffix)
     ? effect.name.slice(0, -suffix.length)
@@ -312,7 +315,7 @@ const fieldName = (effect: { name: string; rawName: string }): string => {
 };
 
 /** A field as its row on the card names it. */
-const effectField = (effect: ChangeEffect): string =>
+export const effectField = (effect: ChangeEffect): string =>
   fieldName({ name: effectDisplayName(effect), rawName: effect.rawName });
 
 /** Field names that say a value is a share of a hundred. */
@@ -564,7 +567,7 @@ const detailsOf = (
 };
 
 /** What a person calls a recipient written as an address: its name part. */
-const recipientName = (written: string): string => {
+export const recipientName = (written: string): string => {
   const named = /^\s*"?([^"<]+?)"?\s*<[^>]+>\s*$/.exec(written);
   if (named) return named[1].trim();
   const at = written.indexOf("@");
@@ -670,7 +673,7 @@ export const spokenFactsOf = (
         timeZone,
         whole,
       )
-    : fieldDetailsOf(gist, timeZone);
+    : fieldDetailsOf(gist, timeZone, whole);
   const where = spokenNames(lead.where);
   return {
     action: gist.action,
@@ -715,7 +718,11 @@ const batchLosses = (change: GistChange): SpokenDetail[] =>
   );
 
 /** A label stored before change descriptions: its fields as the card lists them. */
-const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
+const fieldDetailsOf = (
+  gist: Gist,
+  timeZone?: string,
+  whole = false,
+): Detailed => {
   const lead = gist.items[0];
   const details: SpokenDetail[] = [];
   const texts: SpokenText[] = [];
@@ -756,8 +763,8 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     );
   }
   return {
-    details: details.slice(0, MAX_SPOKEN_DETAILS),
-    omitted: Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
+    details: whole ? details : details.slice(0, MAX_SPOKEN_DETAILS),
+    omitted: whole ? 0 : Math.max(details.length - MAX_SPOKEN_DETAILS, 0),
     texts,
     reschedule: false,
   };

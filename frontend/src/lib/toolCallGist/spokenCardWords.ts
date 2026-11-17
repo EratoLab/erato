@@ -77,9 +77,27 @@ export interface DifferenceWords {
   dropped(field: string): string;
   /** The new title of something being created. */
   title(kind: GistKind, name: string): string;
-  recipientsNow(recipients: SpokenRecipients): string;
+  /** Who a group of recipients (to, copy, blind copy) is now; `names` already listed. */
+  recipientsIn(
+    kind: string,
+    group: string,
+    names: readonly string[],
+    more: number,
+  ): string;
+  /** A statement the call runs (a query, a script) is different. */
+  statement(kind: string): string;
+  /** How many rows of a batch are different. */
+  rows(count: number): string;
+  /** A field that is different, where its value cannot be said. */
+  field(field: string): string;
+  /** Differences past the ones said, counted; marked like them. */
+  more(count: number, asked: boolean): string;
   /** After the differences: everything else stays. */
   rest(): string;
+  /** After the differences: the call differs in more than was said. */
+  elsewhere(): string;
+  /** The call differs only in what the voice cannot say. */
+  unreadable(): string;
   /** The card came back unchanged: what can be done. */
   sameHint(): string;
 }
@@ -777,7 +795,7 @@ const differenceIntro = (kind: DifferenceIntro, what: string): string =>
     message: select(kind, {
       changed: `The new version: ${what}`,
       same: `The new card is the same as before: ${what}`,
-      other_item: `Note, the new card is about something else than before: ${what}`,
+      other_item: `Careful, the new card is about something different: ${what}`,
       other: `The card was changed: ${what}`,
     }),
   });
@@ -788,7 +806,7 @@ const differenceEntry = (asked: boolean, sentence: string): string => {
     id: "spokenCard.difference.entry",
     message: select(shape, {
       asked: `Changed: ${sentence}`,
-      other: `Also different from before, not asked for: ${sentence}`,
+      other: `Also changed, without being asked: ${sentence}`,
     }),
   });
 };
@@ -810,10 +828,70 @@ const differenceTitle = (kind: GistKind, name: string): string => {
   });
 };
 
-const differenceRecipients = (names: string): string =>
+const differenceRecipients = (kind: string, group: string, names: string) =>
   t({
     id: "spokenCard.difference.recipients",
-    message: `Recipients now: ${names}.`,
+    message: select(kind, {
+      to: `Now to: ${names}.`,
+      cc: `Now in copy: ${names}.`,
+      bcc: `Now in blind copy: ${names}.`,
+      other: `${group} now: ${names}.`,
+    }),
+  });
+
+const differenceStatement = (kind: string): string =>
+  t({
+    id: "spokenCard.difference.statement",
+    message: select(kind, {
+      sql: "The query is different now; it's on screen.",
+      other: "The instruction is different now; it's on screen.",
+    }),
+  });
+
+const differenceRows = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.difference.rows",
+    message: plural(count, {
+      one: "One row is different now; it's on screen.",
+      other: `${countWord} rows are different now; they're on screen.`,
+    }),
+  });
+
+const differenceField = (field: string): string =>
+  t({
+    id: "spokenCard.difference.field",
+    message: `${field} is different now; it's on screen.`,
+  });
+
+const differenceMore = (
+  shape: "asked" | "unasked",
+  count: number,
+  countWord: string,
+): string =>
+  t({
+    id: "spokenCard.difference.more",
+    message: select(shape, {
+      asked: plural(count, {
+        one: "And one more field changed as asked; it's on screen.",
+        other: `And ${countWord} more fields changed as asked; they're on screen.`,
+      }),
+      other: plural(count, {
+        one: "And one more field changed without being asked; it's on screen.",
+        other: `And ${countWord} more fields changed without being asked; they're on screen.`,
+      }),
+    }),
+  });
+
+const differenceElsewhere = (): string =>
+  t({
+    id: "spokenCard.difference.elsewhere",
+    message: "Something else is different too; it's on screen.",
+  });
+
+const differenceUnreadable = (): string =>
+  t({
+    id: "spokenCard.difference.unreadable",
+    message: "The card changed in details I can't read out; they're on screen.",
   });
 
 const differenceRest = (): string =>
@@ -825,8 +903,7 @@ const differenceRest = (): string =>
 const differenceSameHint = (): string =>
   t({
     id: "spokenCard.difference.sameHint",
-    message:
-      "Nothing was changed. The change can be said again, in other words.",
+    message: "Nothing was changed. Try saying the change a different way.",
   });
 
 const requestSentence = (): string =>
@@ -871,7 +948,7 @@ const noticeSentence = (notice: SpokenNotice): string => {
         id: "spokenCard.notice.changeOnScreen",
         message: select(reason, {
           others:
-            "First decide the other approvals on screen; then this one can be changed by voice.",
+            "First decide on the other approvals on screen; then this card can be changed by voice.",
           other:
             "This card can't be changed by voice. Please decide it on screen.",
         }),
@@ -899,7 +976,7 @@ const noticeSentence = (notice: SpokenNotice): string => {
         id: "spokenCard.notice.changeNoCard",
         message: select(shape, {
           several:
-            "After several changes no new card came, and nothing was run. Best say again what should happen.",
+            "After several changes no new card came, and nothing was run. Please say again what should happen.",
           other:
             "No new card came, and nothing was run. Just say how to go on.",
         }),
@@ -909,7 +986,7 @@ const noticeSentence = (notice: SpokenNotice): string => {
       return t({
         id: "spokenCard.notice.newRequest",
         message:
-          "First this card: decide it on screen, or say what should be different. The new request can come after that.",
+          "First this card: decide on it on screen, or say what should be different. Then please say the new request again.",
       });
     case "unclear": {
       // eslint-disable-next-line lingui/no-unlocalized-strings -- select keys
@@ -1250,17 +1327,20 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
       differs: differenceEntry,
       dropped: differenceDropped,
       title: differenceTitle,
-      recipientsNow({ names, total }) {
-        const more = total - names.length;
-        return differenceRecipients(
-          names.length === 0
-            ? recipientsPhrase("unnamed", total, 0, "", count(total))
-            : list(
-                more > 0 ? [...names, moreEntries(more, count(more))] : names,
-              ),
-        );
-      },
+      recipientsIn: (kind, group, names, more) =>
+        differenceRecipients(
+          kind,
+          group,
+          list(more > 0 ? [...names, moreEntries(more, count(more))] : names),
+        ),
+      statement: differenceStatement,
+      rows: (rows) => differenceRows(rows, capitalised(count(rows))),
+      field: differenceField,
+      more: (more, asked) =>
+        differenceMore(asked ? "asked" : "unasked", more, count(more)),
       rest: differenceRest,
+      elsewhere: differenceElsewhere,
+      unreadable: differenceUnreadable,
       sameHint: differenceSameHint,
     },
   };

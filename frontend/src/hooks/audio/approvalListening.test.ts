@@ -956,7 +956,7 @@ describe("listening against the endpoint", () => {
       answer("change");
       await heardApprovalWords(KEY, "nimm den 22.");
       expect(sentences(connections[1])[0]).toMatch(
-        /^Bitte zuerst die anderen Freigaben/,
+        /^Bitte zuerst über die anderen Freigaben/,
       );
       expect(send).not.toHaveBeenCalled();
     });
@@ -1078,7 +1078,7 @@ describe("listening against the endpoint", () => {
       answer("new_request");
       await heardApprovalWords(KEY, "wie wird das Wetter morgen?");
       expect(sentences(connections[1])).toEqual([
-        "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach geht es mit der neuen Bitte weiter.",
+        "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach die neue Bitte einfach noch einmal sagen.",
       ]);
       expect(send).not.toHaveBeenCalled();
       expect(useApprovalListening.getState().quiet).toBeNull();

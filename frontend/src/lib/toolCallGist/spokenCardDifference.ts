@@ -1,14 +1,20 @@
-/* eslint-disable lingui/no-unlocalized-strings -- entry keys and piece roles of this module; the spoken words are in spokenCardWords */
+/* eslint-disable lingui/no-unlocalized-strings -- entry keys, paths and piece roles of this module; the spoken words are in spokenCardWords */
 import { toolCallCardOf } from "./gist";
 import {
   detailValues,
+  effectField,
+  fieldName,
+  recipientName,
+  shorten,
   spokenApprovalPieces,
   spokenFactsOf,
   spokenPiecesOf,
   whatValues,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
+import { earValue } from "./spokenValues";
 
+import type { ChangeEffect, ChangeValue } from "./change";
 import type { Gist } from "./gist";
 import type {
   ComposedPiece,
@@ -27,9 +33,13 @@ import type { EarValue } from "./spokenValues";
  * A corrected approval card as the voice says it after a change request:
  * the item, then only what differs from the card the user withdrew, then
  * that the rest is as before. Every difference is said, and one the user's
- * words do not mention is marked as not asked for, so nothing changes
- * unheard. A card about another item, or a withdrawn card the user hardly
- * heard, is said in full instead.
+ * words do not name is marked as not asked for. A card about another item,
+ * or a withdrawn card the user hardly heard, is said in full instead.
+ *
+ * The two calls are compared on their values, not on what the voice says
+ * about them, and their arguments are compared as well: whatever differs
+ * there without a sentence of its own is still told, so the voice never
+ * calls a changed call the same, or the rest unchanged.
  */
 
 /** The card the user asked to change, as the voice left it. */
@@ -49,20 +59,29 @@ export interface SpokenDifference {
 /** Differences said one by one; more are counted, and stay on screen. */
 const MAX_SAID_DIFFERENCES = 8;
 
-/** A thing a card says that a later card can say differently. */
+/** A thing a card holds that a later card can hold differently. */
 interface Entry {
   key: string;
   /** The id of the piece that said it on a card, for what was heard. */
   heardAs: string;
   role: SpokenPieceRole;
+  /** What the voice says when this differs. */
   sentence: string;
-  /** What has to be equal for the entry to be unchanged. */
+  /** What has to be equal for the entry to be unchanged: its whole values. */
   compare: string;
   /** The field it is about, for the sentence of an entry that is gone. */
   field?: string;
   mustSay: boolean;
   values: SpokenSource[];
   readOut?: SpokenReadOut;
+  /** Where in the call's arguments it sits; `#key` for any path through a key. */
+  paths: string[];
+  /** The values a user may name to ask for it. */
+  said: EarValue[];
+  /** A list, whose entries can be dropped by naming them. */
+  list: boolean;
+  /** For a long text: its words, to tell what was added or taken out. */
+  words?: string;
 }
 
 const pieceId = (role: SpokenPieceRole, field?: string) =>
@@ -72,25 +91,113 @@ const pieceId = (role: SpokenPieceRole, field?: string) =>
 
 const CREATING: readonly string[] = ["create", "send", "upload"];
 
+type Call = Extract<SpokenApproval, { type: "call" }>;
+
+interface LabelSlot {
+  values?: { path?: string | null; text?: string | null }[] | null;
+}
+interface LabelItems {
+  items?: { id?: LabelSlot | null; target?: LabelSlot | null }[] | null;
+}
+
+/**
+ * The raw identifiers the label gives the item: its IDs, which a card shows
+ * by name or not at all, and for anything that exists, its target.
+ */
+const identifiersOf = (call: Call, creating: boolean) =>
+  ((call.label as LabelItems | null | undefined)?.items ?? []).map((item) =>
+    [item.id, creating ? null : item.target].map((slot) =>
+      (slot?.values ?? []).map((value) => `${value.path}=${value.text}`),
+    ),
+  );
+
 /** What the call acts on: when this differs, the card is about another item. */
-const identityOf = (gist: Gist, server: string | undefined): string => {
+const identityOf = (gist: Gist, call: Call): string => {
   const lead = gist.items[0];
+  const creating = CREATING.includes(gist.action);
   const named = (values: typeof lead.names) =>
     values.map((value) => `${value.origin}:${value.written ?? value.text}`);
   return JSON.stringify([
     gist.action,
     gist.kind,
-    server ?? "",
+    call.server ?? "",
     lead.count,
     // Where a message goes is its recipients, compared on their own.
     gist.change?.recipients ? [] : named(lead.where),
     gist.change?.opaque[0]?.kind ?? "",
-    CREATING.includes(gist.action) ? [] : named(lead.names),
-    lead.hiddenIdPaths.length,
+    creating ? [] : named(lead.names),
+    lead.hiddenIdPaths,
+    identifiersOf(call, creating),
   ]);
 };
 
-const entriesOf = (facts: SpokenFacts, words: LanguageWords): Entry[] => {
+const textValue = (text: string): EarValue => ({ kind: "text", text });
+
+const sourceOf = (slot: SpokenSource["slot"], text: string): SpokenSource => ({
+  slot,
+  value: textValue(text),
+});
+
+/** A value as a user may say it. */
+const earOf = (value: ChangeValue, timeZone?: string): EarValue =>
+  value.meaning
+    ? textValue(value.meaning.label)
+    : value.machineId
+      ? textValue(value.text)
+      : earValue(value.text, { percent: false, timeZone });
+
+const wholeValue = (value: ChangeValue | undefined) =>
+  value === undefined
+    ? null
+    : [value.text, value.truncated, value.machineId, value.meaning?.label];
+
+const effectCompare = (effect: ChangeEffect) => [
+  effect.effect,
+  effect.values.map(wholeValue),
+  wholeValue(effect.old),
+  effect.removed.map(wholeValue),
+  effect.added.map(wholeValue),
+  effect.omitted,
+];
+
+const rowCompare = (row: {
+  name?: string;
+  action?: string;
+  effects: ChangeEffect[];
+  effectsOmitted: number;
+}) =>
+  JSON.stringify([
+    row.name,
+    row.action,
+    row.effects.map(effectCompare),
+    row.effectsOmitted,
+  ]);
+
+/** The arrays a batch's rows sit in: each row's path up to its index. */
+const batchPaths = (rows: readonly { effects: ChangeEffect[] }[]): string[] => [
+  ...new Set(
+    rows.flatMap((row) =>
+      row.effects.map((effect) => effect.path.replace(/\/\d+(\/.*)?$/, "")),
+    ),
+  ),
+];
+
+/** How many rows of a batch differ between two cards. */
+const rowsChanged = (before: string, after: string): number => {
+  const old = JSON.parse(before) as string[];
+  const now = JSON.parse(after) as string[];
+  let changed = Math.abs(old.length - now.length);
+  for (let index = 0; index < Math.min(old.length, now.length); index++)
+    if (old[index] !== now[index]) changed++;
+  return Math.max(changed, 1);
+};
+
+const entriesOf = (
+  gist: Gist,
+  facts: SpokenFacts,
+  words: LanguageWords,
+  timeZone: string | undefined,
+): Entry[] => {
   const entries: Entry[] = [];
   const seen = new Map<string, number>();
   const add = (entry: Entry) => {
@@ -102,90 +209,249 @@ const entriesOf = (facts: SpokenFacts, words: LanguageWords): Entry[] => {
         : { ...entry, key: `${entry.key}#${occurrence}` },
     );
   };
-  const text = (slot: SpokenSource["slot"], value: string): SpokenSource => ({
-    slot,
-    value: { kind: "text", text: value },
-  });
-  if (CREATING.includes(facts.action) && facts.count === 1) {
-    const name = facts.names.at(0);
-    if (name !== undefined) {
+  const detailFor = (field: string) =>
+    facts.details.find((detail) => "field" in detail && detail.field === field);
+  const textFor = (field: string) =>
+    facts.texts.find((text) => text.field === field);
+  /**
+   * A field as the voice says it: its detail, else its long text, else
+   * only that it differs. `found` is false when the card says neither.
+   */
+  const fieldEntry = (field: string) => {
+    const detail = detailFor(field);
+    const text = detail ? undefined : textFor(field);
+    const spoken: Pick<
+      Entry,
+      | "heardAs"
+      | "role"
+      | "sentence"
+      | "field"
+      | "mustSay"
+      | "values"
+      | "readOut"
+    > = detail
+      ? {
+          heardAs: pieceId("detail", field),
+          role: "detail",
+          sentence: words.detail(detail, facts),
+          field,
+          mustSay: detail.loss,
+          values: detailValues(detail),
+        }
+      : text
+        ? {
+            heardAs: pieceId("text", field),
+            role: "text",
+            sentence: words.text(text),
+            field,
+            mustSay: false,
+            values: [
+              sourceOf("field", field),
+              text.read === undefined
+                ? {
+                    slot: "words",
+                    value: {
+                      kind: "number",
+                      value: text.words,
+                      percent: false,
+                    },
+                  }
+                : sourceOf("text", text.read),
+            ],
+            ...(text.read === undefined && text.full
+              ? { readOut: text.full }
+              : {}),
+          }
+        : {
+            heardAs: pieceId("detail", field),
+            role: "detail",
+            sentence: words.difference.field(field),
+            field,
+            mustSay: false,
+            values: [sourceOf("field", field)],
+          };
+    return { found: detail !== undefined || text !== undefined, spoken };
+  };
+  const change = gist.change;
+  const lead = gist.items[0];
+  const name =
+    CREATING.includes(facts.action) && facts.count === 1
+      ? facts.names.at(0)
+      : undefined;
+  /** Effects that only give a new item its name, and so have no detail. */
+  const naming: string[] = [];
+
+  for (const effect of change?.effects ?? []) {
+    const { found, spoken } = fieldEntry(effectField(effect));
+    if (!found && name !== undefined && effect.effect !== "unchanged") {
+      naming.push(effect.path);
+      continue;
+    }
+    add({
+      key: `effect:${effect.path}`,
+      ...spoken,
+      compare: JSON.stringify(effectCompare(effect)),
+      paths: [effect.path],
+      said: [...effect.values, ...effect.added].map((value) =>
+        earOf(value, timeZone),
+      ),
+      list: effect.list || effect.values.length > 1,
+    });
+  }
+
+  for (const text of change?.texts ?? []) {
+    const { spoken } = fieldEntry(fieldName(text));
+    add({
+      key: `text:${text.path}`,
+      ...spoken,
+      mustSay: false,
+      compare: JSON.stringify([text.text, text.truncated, text.chars]),
+      paths: [text.path],
+      said: [],
+      list: false,
+      words: text.text,
+    });
+  }
+
+  // A label without a change description: its fields as the card lists them.
+  if (!change) {
+    for (const field of lead.fields) {
+      const { spoken } = fieldEntry(field.name);
       add({
-        key: "name",
-        heardAs: "item",
-        role: "item",
-        sentence: words.difference.title(facts.kind, name),
-        compare: name,
-        mustSay: true,
-        values: [text("name", name)],
+        key: `field:${field.pointer}`,
+        ...spoken,
+        compare: JSON.stringify([
+          field.values.map((entry) => [
+            entry.value.text,
+            entry.value.truncated,
+            entry.earlier?.text,
+          ]),
+          field.omitted,
+        ]),
+        paths: field.values.map((entry) => entry.value.path),
+        said: field.values.map((entry) =>
+          earValue(entry.value.text, { percent: false, timeZone }),
+        ),
+        list: field.values.length > 1,
       });
     }
   }
-  if (facts.recipients) {
-    const { recipients } = facts;
+  for (const after of change ? [] : lead.after) {
     add({
-      key: "recipients",
+      key: `after:${after.path}`,
+      heardAs: "text",
+      role: "text",
+      sentence: words.difference.field(""),
+      compare: JSON.stringify([after.text, after.truncated]),
+      mustSay: false,
+      values: [],
+      paths: [after.path],
+      said: [],
+      list: false,
+      words: after.text,
+    });
+  }
+
+  if (name !== undefined) {
+    add({
+      key: "name",
+      heardAs: "item",
+      role: "item",
+      sentence: words.difference.title(facts.kind, name),
+      compare: JSON.stringify(
+        lead.names.map((value) => [
+          value.written ?? value.text,
+          value.truncated,
+        ]),
+      ),
+      mustSay: true,
+      values: [sourceOf("name", name)],
+      paths: [...lead.names.map((value) => value.path), ...naming],
+      said: [textValue(name)],
+      list: false,
+    });
+  }
+
+  const groups = change?.recipients?.groups ?? [];
+  const sharedName = (person: string) =>
+    new Set(
+      groups
+        .flatMap((group) => group.values)
+        .filter((address) => recipientName(address) === person),
+    ).size > 1;
+  for (const group of groups) {
+    // An address a person would call the same as another is said in full.
+    const spoken = group.values.map((address) => {
+      const person = recipientName(address);
+      return shorten(sharedName(person) ? address : person);
+    });
+    add({
+      key: `recipients:${group.rawName}`,
       heardAs: "what",
       role: "detail",
-      sentence: words.difference.recipientsNow(recipients),
-      compare: JSON.stringify([recipients.names, recipients.total]),
+      sentence: words.difference.recipientsIn(
+        group.kind,
+        group.name,
+        spoken,
+        group.omitted,
+      ),
+      compare: JSON.stringify([group.kind, group.values, group.omitted]),
+      field: group.name,
       mustSay: true,
-      values: recipients.names.map((name) => text("recipient", name)),
+      values: spoken.map((recipient) => sourceOf("recipient", recipient)),
+      paths: [`#${group.rawName}`],
+      said: group.values.map(textValue),
+      list: true,
     });
-    const outside = words.outside(recipients);
+  }
+  if (facts.recipients) {
+    const outside = words.outside(facts.recipients);
     if (outside.length > 0) {
       add({
         key: "outside",
         heardAs: "outside",
         role: "outside",
         sentence: outside,
-        compare: outside,
+        compare: JSON.stringify(change?.recipients?.outside ?? []),
         mustSay: true,
         values: [],
+        paths: [],
+        said: [],
+        list: false,
       });
     }
   }
-  for (const detail of facts.details) {
-    const field = "field" in detail ? detail.field : undefined;
-    const sentence = words.detail(detail, facts);
+
+  for (const opaque of change?.opaque ?? []) {
     add({
-      key: pieceId("detail", field),
-      heardAs: pieceId("detail", field),
+      key: `opaque:${opaque.path}`,
+      heardAs: "what",
       role: "detail",
-      sentence,
-      compare: sentence,
-      field,
-      mustSay: detail.loss,
-      values: detailValues(detail),
+      sentence: words.difference.statement(opaque.kind),
+      compare: JSON.stringify([opaque.kind, opaque.text, opaque.truncated]),
+      mustSay: true,
+      values: [],
+      paths: [opaque.path],
+      said: [],
+      list: false,
     });
   }
-  for (const spokenText of facts.texts) {
-    const field = spokenText.field || undefined;
+
+  if (change?.batch) {
     add({
-      key: pieceId("text", field),
-      heardAs: pieceId("text", field),
-      role: "text",
-      sentence: words.text(spokenText),
-      compare: spokenText.full?.text ?? spokenText.read ?? "",
-      field,
-      mustSay: false,
-      values: [
-        ...(field ? [text("field", field)] : []),
-        spokenText.read === undefined
-          ? {
-              slot: "words",
-              value: {
-                kind: "number",
-                value: spokenText.words,
-                percent: false,
-              },
-            }
-          : text("text", spokenText.read),
-      ],
-      ...(spokenText.read === undefined && spokenText.full
-        ? { readOut: spokenText.full }
-        : {}),
+      key: "batch",
+      heardAs: "what",
+      role: "detail",
+      sentence: "",
+      compare: JSON.stringify(change.batch.rows.map(rowCompare)),
+      mustSay: true,
+      values: [],
+      paths: batchPaths(change.batch.rows),
+      said: [],
+      list: false,
     });
   }
+
   if (facts.consequences.length > 0) {
     const sentence = words.consequence(facts.consequences, facts);
     add({
@@ -196,12 +462,52 @@ const entriesOf = (facts: SpokenFacts, words: LanguageWords): Entry[] => {
       compare: sentence,
       mustSay: true,
       values: facts.consequences.map((consequence) =>
-        text("consequence", consequence),
+        sourceOf("consequence", consequence),
       ),
+      paths: [],
+      said: [],
+      list: false,
     });
   }
   return entries;
 };
+
+// Comparing the calls' arguments
+
+/** The leaf paths where two arguments differ, as JSON pointers. */
+export const changedPaths = (
+  before: unknown,
+  after: unknown,
+  at = "",
+): string[] => {
+  if (Object.is(before, after)) return [];
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+  if (
+    !isObject(before) ||
+    !isObject(after) ||
+    Array.isArray(before) !== Array.isArray(after)
+  )
+    return [at];
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...keys].flatMap((key) =>
+    changedPaths(
+      before[key],
+      after[key],
+      `${at}/${key.replaceAll("~", "~0").replaceAll("/", "~1")}`,
+    ),
+  );
+};
+
+/** Whether `path` lies within one of `covers`; `#key` covers any path through that key. */
+const covered = (path: string, covers: readonly string[]): boolean =>
+  covers.some((cover) =>
+    cover.startsWith("#")
+      ? path.split("/").includes(cover.slice(1))
+      : path === cover || path.startsWith(`${cover}/`),
+  );
+
+// Whether the user's words ask for a difference
 
 /** Words that say nothing about a value on their own. */
 const FILLERS = new Set([
@@ -238,76 +544,99 @@ const tokensOf = (text: string): string[] =>
     .split(/[^\p{L}\p{N}]+/u)
     .filter((token) => token.length > 0);
 
-const monthNames = (month: number): string[] =>
-  ["de-DE", "en-GB"].map((locale) =>
-    new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" })
-      .format(Date.UTC(2000, month - 1, 1))
+const LOCALES = ["de-DE", "en-GB"];
+const calendarNames = (option: "month" | "weekday", date: Date): string[] =>
+  LOCALES.map((locale) =>
+    new Intl.DateTimeFormat(locale, { [option]: "long", timeZone: "UTC" })
+      .format(date)
       .toLowerCase(),
   );
+const ALL_MONTHS = new Set(
+  Array.from({ length: 12 }, (_, month) =>
+    calendarNames("month", new Date(Date.UTC(2000, month, 1))),
+  ).flat(),
+);
 
-/** What a user may say to name a value: its words, numbers, day and month. */
-const termsOfValue = (value: EarValue): string[] => {
-  switch (value.kind) {
-    case "text":
-      return tokensOf(value.text);
-    case "number":
-      return [String(Math.trunc(value.value)), String(value.value)];
-    case "date":
-      return [
-        String(value.day),
-        String(value.year),
-        ...monthNames(value.month),
-      ];
-    case "datetime":
-      return [
-        String(value.day),
-        String(value.year),
-        String(value.hour),
-        ...monthNames(value.month),
-      ];
-    case "bool":
-    case "unread":
-    case "id":
-      return [];
-  }
-};
-
-const termsOf = (entry: Entry): string[] => [
-  ...(entry.field ? tokensOf(entry.field) : []),
-  ...entry.values.flatMap((source) =>
-    source.slot === "words" ? [] : termsOfValue(source.value),
-  ),
-];
-
-/** The words a long text gained or lost: what a user says to change it. */
-const textChange = (before: string | undefined, after: string): string[] => {
-  const old = new Set(tokensOf(before ?? ""));
-  const now = new Set(tokensOf(after));
-  return [
-    ...[...now].filter((token) => !old.has(token)),
-    ...[...old].filter((token) => !now.has(token)),
-  ];
+const wordMatches = (said: readonly string[], term: string): boolean => {
+  if (/^\d+$/.test(term)) return said.includes(term);
+  if (FILLERS.has(term) || term.length < 3) return false;
+  return said.some(
+    (token) =>
+      token === term ||
+      (term.length >= 4 &&
+        token.length >= 4 &&
+        (token.includes(term) || term.includes(token))),
+  );
 };
 
 /**
- * Whether the user's words name an entry: one of its values, or its field.
- * Numbers have to match exactly; a word of four letters or more may be part
- * of a longer one ("Müllers"). When in doubt a difference counts as not
- * asked for, which only makes the voice say more.
+ * Whether the user's words name a value. A date needs its day, and a month
+ * said with it must be its own; its weekday names it too. A month, a year
+ * or an hour alone names nothing.
  */
-const mentions = (said: readonly string[], terms: readonly string[]) =>
-  terms.some((term) => {
-    if (FILLERS.has(term)) return false;
-    if (/^\d+$/.test(term)) return said.includes(term);
-    if (term.length < 3) return false;
-    return said.some(
-      (token) =>
-        token === term ||
-        (term.length >= 4 &&
-          token.length >= 4 &&
-          (token.includes(term) || term.includes(token))),
-    );
-  });
+const names = (said: readonly string[], value: EarValue): boolean => {
+  switch (value.kind) {
+    case "text":
+      return tokensOf(value.text).some((term) => wordMatches(said, term));
+    case "number":
+      return (
+        said.includes(String(Math.trunc(value.value))) ||
+        said.includes(String(value.value))
+      );
+    case "date":
+    case "datetime": {
+      const date = new Date(Date.UTC(value.year, value.month - 1, value.day));
+      if (calendarNames("weekday", date).some((day) => said.includes(day)))
+        return true;
+      if (!said.includes(String(value.day))) return false;
+      const month = calendarNames("month", date);
+      return said
+        .filter((token) => ALL_MONTHS.has(token))
+        .every((token) => month.includes(token));
+    }
+    case "bool":
+    case "unread":
+    case "id":
+      return false;
+  }
+};
+
+/**
+ * Whether the user asked for a difference: they named its field or one of
+ * its new values, or, for something gone or a list that lost entries, one
+ * of the values it dropped. The old value of something replaced asks for
+ * nothing. When in doubt a difference counts as not asked for, which only
+ * makes the voice say more.
+ */
+const asks = (
+  said: readonly string[],
+  entry: Entry | undefined,
+  old: Entry | undefined,
+): boolean => {
+  const field = entry?.field ?? old?.field;
+  if (
+    field &&
+    tokensOf(field).some((term) => term.length >= 4 && wordMatches(said, term))
+  )
+    return true;
+  if (entry?.said.some((value) => names(said, value))) return true;
+  if (entry?.words !== undefined || old?.words !== undefined) {
+    const before = new Set(tokensOf(old?.words ?? ""));
+    const after = new Set(tokensOf(entry?.words ?? ""));
+    const changed = [
+      ...[...after].filter((token) => !before.has(token)),
+      ...[...before].filter((token) => !after.has(token)),
+    ];
+    if (changed.some((term) => wordMatches(said, term))) return true;
+  }
+  if (old && (!entry || entry.list || entry.said.length === 0)) {
+    const kept = new Set(entry?.said.map((value) => JSON.stringify(value)));
+    return old.said
+      .filter((value) => !kept.has(JSON.stringify(value)))
+      .some((value) => names(said, value));
+  }
+  return false;
+};
 
 const introduced = (
   pieces: SpokenPiece[],
@@ -330,6 +659,12 @@ const introduced = (
   };
 };
 
+interface Difference {
+  piece: ComposedPiece;
+  asked: boolean;
+  paths: string[];
+}
+
 /**
  * The pieces the voice says for `next`, the card that replaces `previous`.
  */
@@ -342,50 +677,60 @@ export const spokenDifference = (
   const whole = spokenApprovalPieces(next, options);
   if (!words.full) return { intro: "reread", pieces: whole };
   const heard = new Set(previous.heard);
-  if (previous.approval.type !== "call" || next.type !== "call") {
+  const before = previous.approval;
+  if (before.type !== "call" || next.type !== "call") {
     return introduced(whole, "reread", words);
   }
-  const before = toolCallCardOf(
-    previous.approval.label,
-    previous.approval.input,
-  );
-  const after = toolCallCardOf(next.label, next.input);
-  if (before.kind !== "gist" || after.kind !== "gist") {
+  const inputChanged = changedPaths(before.input, next.input);
+  const oldCard = toolCallCardOf(before.label, before.input);
+  const newCard = toolCallCardOf(next.label, next.input);
+  if (oldCard.kind !== "gist" || newCard.kind !== "gist") {
     const same =
-      previous.approval.toolTitle === next.toolTitle &&
-      previous.approval.server === next.server &&
-      JSON.stringify(previous.approval.input) === JSON.stringify(next.input);
+      before.toolTitle === next.toolTitle &&
+      before.server === next.server &&
+      inputChanged.length === 0;
     return introduced(whole, same ? "same" : "reread", words);
   }
   if (!heard.has("what")) return introduced(whole, "reread", words);
-  if (
-    identityOf(before.gist, previous.approval.server) !==
-    identityOf(after.gist, next.server)
-  ) {
+  if (identityOf(oldCard.gist, before) !== identityOf(newCard.gist, next)) {
     return introduced(whole, "other_item", words);
   }
 
   const { timeZone } = options;
   const oldEntries = entriesOf(
-    spokenFactsOf(before.gist, previous.approval.server, timeZone, true),
+    oldCard.gist,
+    spokenFactsOf(oldCard.gist, before.server, timeZone, true),
     words,
+    timeZone,
   );
-  const newFacts = spokenFactsOf(after.gist, next.server, timeZone, true);
-  const newEntries = entriesOf(newFacts, words);
-  const spokenWords = tokensOf(previous.words);
+  const newEntries = entriesOf(
+    newCard.gist,
+    spokenFactsOf(newCard.gist, next.server, timeZone, true),
+    words,
+    timeZone,
+  );
+  const said = tokensOf(previous.words);
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
   const newKeys = new Set(newEntries.map((entry) => entry.key));
 
-  const asked: ComposedPiece[] = [];
-  const unasked: ComposedPiece[] = [];
+  const differences: Difference[] = [];
   const owed: ComposedPiece[] = [];
-  const differs = (entry: Entry, sentence: string, wanted: boolean) =>
-    (wanted ? asked : unasked).push({
-      role: entry.role,
-      text: words.difference.differs(wanted, sentence),
-      mustSay: true,
-      values: entry.values,
-      ...(entry.readOut ? { readOut: entry.readOut } : {}),
+  const differs = (
+    entry: Entry,
+    sentence: string,
+    asked: boolean,
+    paths: string[],
+  ) =>
+    differences.push({
+      piece: {
+        role: entry.role,
+        text: words.difference.differs(asked, sentence),
+        mustSay: true,
+        values: entry.values,
+        ...(entry.readOut ? { readOut: entry.readOut } : {}),
+      },
+      asked,
+      paths,
     });
   let consequence: Entry | undefined;
   let nameChanged = false;
@@ -395,14 +740,13 @@ export const spokenDifference = (
       if (entry.key === "name") nameChanged = true;
       differs(
         entry,
-        entry.sentence,
-        mentions(spokenWords, [
-          ...termsOf(entry),
-          ...(old ? termsOf(old) : []),
-          ...(entry.role === "text"
-            ? textChange(old?.compare, entry.compare)
-            : []),
-        ]),
+        entry.key === "batch"
+          ? words.difference.rows(
+              rowsChanged(old?.compare ?? "[]", entry.compare),
+            )
+          : entry.sentence,
+        asks(said, entry, old),
+        [...entry.paths, ...(old?.paths ?? [])],
       );
     } else if (entry.key === "consequence") {
       consequence = entry;
@@ -417,15 +761,18 @@ export const spokenDifference = (
     }
   }
   for (const old of oldEntries) {
-    if (newKeys.has(old.key) || old.field === undefined) continue;
+    if (newKeys.has(old.key)) continue;
     differs(
       { ...old, values: [] },
-      words.difference.dropped(old.field),
-      mentions(spokenWords, termsOf(old)),
+      words.difference.dropped(old.field ?? ""),
+      asks(said, undefined, old),
+      old.paths,
     );
   }
+  // What the user asked for first, then what nobody asked for.
+  differences.sort((a, b) => Number(b.asked) - Number(a.asked));
 
-  const spoken = spokenFactsOf(after.gist, next.server, timeZone);
+  const spoken = spokenFactsOf(newCard.gist, next.server, timeZone);
   // A new title is said as a difference; the first sentence then ends there.
   const facts = nameChanged ? { ...spoken, names: [] } : spoken;
   const item = words.item(facts);
@@ -445,12 +792,9 @@ export const spokenDifference = (
             role: "item" as const,
             text: item,
             mustSay: true,
-            values: facts.names.slice(0, 1).map(
-              (name): SpokenSource => ({
-                slot: "name",
-                value: { kind: "text", text: name },
-              }),
-            ),
+            values: facts.names
+              .slice(0, 1)
+              .map((name): SpokenSource => sourceOf("name", name)),
           },
         ]
       : []),
@@ -469,8 +813,8 @@ export const spokenDifference = (
       : []),
     ...(request ? [request] : []),
   ];
-  const differences = [...asked, ...unasked];
-  if (differences.length === 0) {
+
+  if (differences.length === 0 && inputChanged.length === 0) {
     lead[0] = {
       ...lead[0],
       text: words.difference.intro("same", lead[0].text),
@@ -497,34 +841,52 @@ export const spokenDifference = (
     ...lead[0],
     text: words.difference.intro("changed", lead[0].text),
   };
-  const beyond = differences.length - MAX_SAID_DIFFERENCES;
+  const counted = differences.slice(MAX_SAID_DIFFERENCES - 1);
   const told =
-    beyond > 0
+    differences.length > MAX_SAID_DIFFERENCES
       ? [
-          ...differences.slice(0, MAX_SAID_DIFFERENCES - 1),
+          ...differences
+            .slice(0, MAX_SAID_DIFFERENCES - 1)
+            .map((difference) => difference.piece),
           {
             role: "more" as const,
-            text: words.more(beyond + 1),
+            text: words.difference.more(
+              counted.length,
+              counted.every((difference) => difference.asked),
+            ),
             mustSay: true,
             values: [],
           },
         ]
-      : differences;
+      : differences.map((difference) => difference.piece);
+  // What differs in the arguments with no difference saying it.
+  const covers = differences.flatMap((difference) => difference.paths);
+  const untold = inputChanged.filter((path) => !covered(path, covers));
+  const rest: ComposedPiece =
+    differences.length === 0
+      ? {
+          role: "more",
+          text: words.difference.unreadable(),
+          mustSay: true,
+          values: [],
+        }
+      : untold.length > 0
+        ? {
+            role: "more",
+            text: words.difference.elsewhere(),
+            mustSay: true,
+            values: [],
+          }
+        : {
+            role: "more",
+            text: words.difference.rest(),
+            mustSay: false,
+            values: [],
+          };
   return {
     intro: "changed",
     pieces: spokenPiecesOf(
-      [
-        ...lead,
-        ...told,
-        ...owed,
-        {
-          role: "more",
-          text: words.difference.rest(),
-          mustSay: false,
-          values: [],
-        },
-        ...closing,
-      ],
+      [...lead, ...told, ...owed, rest, ...closing],
       options,
     ),
   };
