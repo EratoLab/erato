@@ -40,6 +40,7 @@ import {
   beginSpeechResponse,
   moveSpeechStream,
   playSpeechChunk,
+  readsBackContinuation,
   speechFailed,
   stopSpeechPlayback,
   useSpeechPlayback,
@@ -2855,6 +2856,11 @@ export function useChatMessaging(
           .setStreaming({ content: seededContent }, activeStreamKey);
       };
 
+      // The answer after a decision is read back when the turn that stopped
+      // was, and the voice can still play it.
+      const readBack = !nothingToDecide && readsBackContinuation(streamKey);
+      if (readBack) beginSpeechResponse(streamKey);
+
       return new Promise<void>((resolve, reject) => {
         const connectionStreamKeyRef = { current: streamKey };
         let settled = false;
@@ -2977,6 +2983,7 @@ export function useChatMessaging(
                     approvalIds,
                     itemDecisions,
                     enumerate,
+                    readBack,
                   }),
             ),
           },

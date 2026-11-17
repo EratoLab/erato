@@ -8576,4 +8576,184 @@ describe("ChatInput", () => {
       expect(sentIds(onSendMessage)).toEqual(["t", "a1"]);
     });
   });
+
+  describe("conversational mode while a card waits for a decision", () => {
+    const CARD_CHAT = "chat-with-card";
+
+    const conversational = (toggleDictation: () => void, listening = false) => {
+      mockUseAudioDictationFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioConversationalFeature.mockReturnValue({
+        enabled: true,
+        maxRecordingDurationSeconds: 1200,
+      });
+      mockUseAudioDictationRecorder.mockReturnValue({
+        isDictating: listening,
+        isDictationStarting: false,
+        isDictationCompleting: false,
+        isCapturingAudio: listening,
+        dictationError: null,
+        setDictationError: vi.fn(),
+        dictationBars: [2, 2, 2, 2, 2],
+        toggleDictation,
+      });
+    };
+
+    /** The composer of the card's chat, in audio mode or not. */
+    const composer = async (
+      onSendMessage: (...args: unknown[]) => void = vi.fn(),
+    ) => {
+      const { i18n } = await import("@lingui/core");
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      function composerIn(audioMode: boolean) {
+        return (
+          <QueryClientProvider client={queryClient}>
+            <I18nProvider i18n={i18n}>
+              <ChatInput
+                onSendMessage={onSendMessage}
+                chatId={CARD_CHAT}
+                controlledIsAudioMode={audioMode}
+                onControlledIsAudioModeChange={vi.fn()}
+              />
+            </I18nProvider>
+          </QueryClientProvider>
+        );
+      }
+      return composerIn;
+    };
+
+    const showCard = () =>
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .registerConfirmation(CARD_CHAT, "card");
+      });
+    const decideCard = () =>
+      act(() => {
+        useConfirmationRegistryStore
+          .getState()
+          .unregisterConfirmation(CARD_CHAT, "card");
+      });
+
+    beforeEach(() => {
+      useConfirmationRegistryStore.setState({
+        pendingIdsByChatId: {},
+        waitingOnlyIds: {},
+      });
+    });
+
+    it("keeps the microphone closed until the card is decided", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation);
+      showCard();
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(toggleDictation).not.toHaveBeenCalled();
+
+      decideCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+    });
+
+    it("1.7: drops what it heard as a card appears, and listens again after the decision", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation);
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+      // The composer starts the capture, so its words have a place to go.
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      conversational(toggleDictation, true);
+      rerender(ui(true));
+
+      showCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      // The closed capture's last words arrive after the card.
+      const dictationOptions =
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+      await act(async () => {
+        dictationOptions.onTranscriptChunk({ chunkIndex: 0, transcript: "ja" });
+      });
+      conversational(toggleDictation, false);
+      rerender(ui(true));
+
+      decideCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+      rerender(ui(false));
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
+    });
+
+    it("closes a listening microphone when a card appears", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation, true);
+      const ui = await composer();
+      const { rerender } = render(ui(true));
+      expect(toggleDictation).not.toHaveBeenCalled();
+
+      showCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+    });
+
+    it("sends nothing it heard while a card waits", async () => {
+      const onSendMessage = vi.fn();
+      const requestSubmitSpy = vi.spyOn(
+        HTMLFormElement.prototype,
+        "requestSubmit",
+      );
+      conversational(vi.fn());
+      mockUseChatInputHandlers.mockReturnValue({
+        attachedFiles: [],
+        fileError: null,
+        setFileError: vi.fn(),
+        handleFilesUploaded: vi.fn(),
+        handleRemoveFile: vi.fn(),
+        handleRemoveAllFiles: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        createSubmitHandler:
+          (
+            message: string,
+            _files: FileUploadItem[],
+            send: (message: string) => void,
+          ) =>
+          (event: FormEvent) => {
+            event.preventDefault();
+            if (message.trim()) send(message.trim());
+          },
+      });
+      showCard();
+      const ui = await composer(onSendMessage);
+      const { rerender } = render(ui(false));
+      fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+        target: { value: "ja" },
+      });
+      rerender(ui(true));
+      const dictationOptions =
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+      await act(async () => {
+        dictationOptions.onVadAutoStop();
+      });
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+
+      expect(requestSubmitSpy).not.toHaveBeenCalled();
+      expect(onSendMessage).not.toHaveBeenCalled();
+      requestSubmitSpy.mockRestore();
+    });
+  });
 });

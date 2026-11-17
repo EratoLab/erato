@@ -2619,6 +2619,10 @@ pub struct ContinueStreamRequest {
     decisions: Vec<ApprovalDecisionItem>,
     #[serde(default)]
     decision: Option<ToolApprovalDecision>,
+    /// Read the continued answer back, as `conversational_audio_back` does on
+    /// a submitted message.
+    #[serde(default)]
+    conversational_audio_back: bool,
     /// Whether the client shows each task child an `mcp_tool` or `client_tool`
     /// part carries as an item of its own. Decisions on such a part are refused
     /// without it while a child is open: an older client shows only the turn's
@@ -2675,6 +2679,7 @@ impl ContinueStreamRequest {
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
@@ -12106,7 +12111,13 @@ async fn stream_generate_chat_completion<'a>(
                 .finish(app_state, policy, subject, chat_id, assistant_message_id)
                 .await
             {
-                Ok(Some(pointer)) => content.push(pointer),
+                Ok(Some(pointer)) => {
+                    // A stop on an approval stays the last part: that is what
+                    // marks the turn as waiting.
+                    let at = content.len()
+                        - usize::from(crate::models::message::is_durable_stop(content));
+                    content.insert(at, pointer);
+                }
                 Ok(None) => {}
                 Err(error) => {
                     tracing::warn!(%error, "Speech synthesis failed; keeping text response");
@@ -14213,6 +14224,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: Some(decision),
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -14236,6 +14248,7 @@ mod tests {
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -14829,6 +14842,7 @@ mod tests {
             message_id: Uuid::new_v4(),
             decisions,
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: true,
             shows_limit_and_builtin_child_items: true,
             registered_client_tools: None,
@@ -15506,6 +15520,7 @@ mod tests {
             message_id: Uuid::nil(),
             decisions: Vec::new(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             registered_client_tools: None,
@@ -18149,6 +18164,35 @@ pub(crate) async fn run_generation_after_user_message(
     .await
 }
 
+/// Turns on speech for the reply `task` generates when the client asked for it
+/// and conversational audio can speak, in the user's language. Returns whether
+/// the reply is read back.
+fn read_back_reply(
+    task: &StreamingTask,
+    app_state: &AppState,
+    me_user: &MeProfile,
+    requested: bool,
+) -> bool {
+    let read_back = requested
+        && app_state.config.audio_conversational.transcription.enabled
+        && app_state
+            .config
+            .audio_conversational
+            .speech_provider
+            .is_some();
+    task.speech_enabled
+        .store(read_back, std::sync::atomic::Ordering::Relaxed);
+    let _ = task
+        .speech_language
+        .set(crate::services::speech::spoken::SpeechLanguage::new(
+            super::me_profile_middleware::normalize_supported_language(
+                me_user.preference_language.as_deref(),
+            )
+            .unwrap_or(&me_user.preferred_language),
+        ));
+    read_back
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn run_generation_after_user_message_memory_inner(
     task: &Arc<StreamingTask>,
@@ -18163,23 +18207,8 @@ async fn run_generation_after_user_message_memory_inner(
     saved_user_message: &messages::Model,
     origin: GenerationOrigin,
 ) -> Result<(), Report> {
-    let reply_is_read_back = request.conversational_audio_back
-        && app_state.config.audio_conversational.transcription.enabled
-        && app_state
-            .config
-            .audio_conversational
-            .speech_provider
-            .is_some();
-    task.speech_enabled
-        .store(reply_is_read_back, std::sync::atomic::Ordering::Relaxed);
-    let _ = task
-        .speech_language
-        .set(crate::services::speech::spoken::SpeechLanguage::new(
-            super::me_profile_middleware::normalize_supported_language(
-                me_user.preference_language.as_deref(),
-            )
-            .unwrap_or(&me_user.preferred_language),
-        ));
+    let reply_is_read_back =
+        read_back_reply(task, app_state, me_user, request.conversational_audio_back);
     // Prepare chat request
     let me_profile_input = MeProfileChatRequestInput::from_me_profile(me_user);
     // No persisted fallback: this request just persisted its own value, so
@@ -21808,6 +21837,9 @@ pub(crate) async fn start_continuation(
     };
 
     let client_stream_guard = task.client_stream_guard();
+    // The turn instruction for a spoken reply is in the stored prompt the
+    // continuation reuses, so only the speech itself is decided here.
+    read_back_reply(&task, app_state, me_user, request.conversational_audio_back);
 
     tokio::spawn(async move {
         let mut cleanup_guard = TaskCleanupGuard::new(
@@ -22169,6 +22201,7 @@ async fn resume_parked_child(
                 })
                 .collect(),
             decision: None,
+            conversational_audio_back: false,
             shows_child_items: false,
             shows_limit_and_builtin_child_items: false,
             // None on purpose: the child goes on with the binding it was

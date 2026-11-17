@@ -1820,9 +1820,19 @@ msgid "chat.audio_failed"
 msgstr "Audio unavailable. Your text response is still available."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Read the card aloud"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.audio_replay"
 msgstr "Replay audio response"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_skip"
+msgstr "Skip"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatInput.tsx
@@ -8523,6 +8533,11 @@ msgstr "Waiting for your review in the Erato desktop app"
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr "Start the Erato desktop app to continue this review."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "A decision is waiting on screen."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

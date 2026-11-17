@@ -18,9 +18,16 @@ import {
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
+import {
+  replayApprovalCard,
+  skipApprovalPiece,
+  stopApprovalSpeech,
+  useApprovalSpeech,
+} from "@/hooks/audio/approvalSpeech";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
+  quietSpokenTurn,
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
@@ -909,6 +916,12 @@ export const ChatInput = ({
   >(false);
   const hasPendingConfirmation = useHasPendingConfirmation(chatId);
   const onlyWaitingConfirmations = useOnlyWaitingConfirmations(chatId);
+  // A card asks the user something. Conversational mode then keeps the
+  // microphone closed: words spoken now would be sent as a new message and
+  // take the turn away from the card.
+  const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
+  const cardSpeaking = useApprovalSpeech((state) => state.speaking);
+  const cardAvailable = useApprovalSpeech((state) => state.available !== null);
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
@@ -2554,7 +2567,8 @@ export const ChatInput = ({
       pendingConversationalStartRef.current = false;
       return;
     }
-    if (!isAudioMode) {
+    // Held until a card waiting for a decision is decided.
+    if (!isAudioMode || decisionWaiting) {
       return;
     }
     if (
@@ -2583,6 +2597,7 @@ export const ChatInput = ({
     attachedFiles.length,
     audioConversationalEnabled,
     conversationStartSignal,
+    decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,
     isAnyTokenLimitExceeded,
@@ -2765,6 +2780,13 @@ export const ChatInput = ({
     if (isPendingResponse) {
       return;
     }
+    // Nothing is sent over a card that waits for a decision; the words stay
+    // in the composer.
+    if (decisionWaiting) {
+      clearPendingAutoSendTimeout();
+      pendingAutoSendRef.current = false;
+      return;
+    }
     if (
       disabled ||
       isLoading ||
@@ -2800,6 +2822,7 @@ export const ChatInput = ({
     isDictationStarting,
     isDictationCompleting,
     isPendingResponse,
+    decisionWaiting,
     disabled,
     isLoading,
     isUploading,
@@ -2817,11 +2840,43 @@ export const ChatInput = ({
     }
   }, [isPendingResponse]);
 
+  // A card that appears while the microphone listens closes it; it opens
+  // again once the card is decided and the answer has played. What it heard
+  // is dropped: in audio mode nobody sees the composer, and words left there
+  // would keep the microphone from opening again.
+  useEffect(() => {
+    if (!isAudioMode || !decisionWaiting) {
+      return;
+    }
+    if (!isDictating && !isDictationStarting) {
+      return;
+    }
+    shouldRestartAudioModeAfterResponseRef.current = true;
+    audioModeRestartSawPendingResponseRef.current = true;
+    clearPendingAutoSendTimeout();
+    pendingAutoSendRef.current = false;
+    toggleDictation();
+    dictationTargetRef.current = null;
+    setMessage("");
+  }, [
+    clearPendingAutoSendTimeout,
+    decisionWaiting,
+    isAudioMode,
+    isDictating,
+    isDictationStarting,
+    setMessage,
+    toggleDictation,
+  ]);
+
   useEffect(() => {
     if (!shouldRestartAudioModeAfterResponseRef.current) {
       return;
     }
-    if (!isPendingResponse || (speechEnabled && speech.enabled)) {
+    if (
+      !isPendingResponse ||
+      (speechEnabled && speech.enabled) ||
+      decisionWaiting
+    ) {
       return;
     }
     if (
@@ -2848,6 +2903,7 @@ export const ChatInput = ({
     toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
+    decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,
     isAnyTokenLimitExceeded,
@@ -2876,7 +2932,12 @@ export const ChatInput = ({
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
-    if (!isAudioMode || isPendingResponse || speech.playing) {
+    if (
+      !isAudioMode ||
+      isPendingResponse ||
+      speech.playing ||
+      decisionWaiting
+    ) {
       return;
     }
     if (
@@ -2903,6 +2964,7 @@ export const ChatInput = ({
     toggleDictationForCurrentTarget();
   }, [
     attachedFiles.length,
+    decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,
     isAnyTokenLimitExceeded,
@@ -3553,16 +3615,47 @@ export const ChatInput = ({
                   >
                     {t({ id: "chat.audio_back", message: "Audio-back" })}
                   </Button>
-                  {speech.playing && (
+                  {(speech.playing || cardSpeaking) && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => stopSpeechPlayback()}
+                      onClick={() => {
+                        quietSpokenTurn();
+                        stopApprovalSpeech();
+                      }}
                     >
                       {t({ id: "chat.audio_stop", message: "Stop playback" })}
                     </Button>
                   )}
+                  {cardSpeaking && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={skipApprovalPiece}
+                      data-testid="chat-input-audio-skip"
+                    >
+                      {t({ id: "chat.audio_skip", message: "Skip" })}
+                    </Button>
+                  )}
+                  {speech.enabled &&
+                    decisionWaiting &&
+                    cardAvailable &&
+                    !cardSpeaking && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={replayApprovalCard}
+                        data-testid="chat-input-audio-read-card"
+                      >
+                        {t({
+                          id: "chat.audio_read_card",
+                          message: "Read the card aloud",
+                        })}
+                      </Button>
+                    )}
                   {speech.blocked && (
                     <span role="status">
                       {t({
