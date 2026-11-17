@@ -8,7 +8,7 @@
 //! its resolved annotations.
 
 use super::arguments::{MAX_INLINE_CHARS, MAX_LIST_ENTRIES, names_an_id};
-use super::change::{BODY_MEMBERS, VALUE_KEYS, is_sql_statement};
+use super::change::{BODY_MEMBERS, FILTER_MEMBERS, VALUE_KEYS, is_sql_statement};
 use super::context::{
     is_id_member, is_link, is_lookup, is_name_member, link_id_member, name_words, text_prefix,
 };
@@ -56,6 +56,8 @@ pub(super) const MAX_NAME_BYTES: usize = 256;
 const MAX_VERB_FIELDS: usize = 32;
 const MAX_SEARCH_DEPTH: usize = 6;
 const MAX_FIELD_DEPTH: usize = 4;
+/// Bytes of one argument's text searched for a statement.
+const MAX_SEARCH_BYTES: usize = 64 * 1024;
 
 const VERBS: [(ToolCallAction, &[&str]); 11] = [
     (
@@ -161,14 +163,17 @@ const SEARCH_MEMBERS: [&str; 13] = [
 ];
 /// Words of a member that pages, sorts or shapes what a read returns without
 /// narrowing which items it reads.
-const PAGING_WORDS: [&str; 19] = [
+const PAGING_WORDS: [&str; 22] = [
     "limit",
     "top",
     "cursor",
     "offset",
     "page",
     "skip",
+    "skiptoken",
     "token",
+    "next",
+    "link",
     "results",
     "sort",
     "order",
@@ -184,6 +189,30 @@ const PAGING_WORDS: [&str; 19] = [
 ];
 /// Members holding where a read reads from, as `fetch` does.
 const WEB_ADDRESS_MEMBERS: [&str; 2] = ["url", "uri"];
+/// Members holding several records a read reads.
+const READ_ID_MEMBERS: [&str; 2] = ["ids", "record_ids"];
+/// Words, in a tool's name or a set argument, for a change of state that a
+/// read does not make, though no verb names it.
+const STATE_WORDS: [&str; 12] = [
+    "mark",
+    "marks",
+    "acknowledge",
+    "acknowledges",
+    "ack",
+    "acks",
+    "claim",
+    "claims",
+    "commit",
+    "truncate",
+    "consume",
+    "consumes",
+];
+/// Words of a tool's name that read one thing, not a list or a search.
+const ONE_ITEM_VERBS: [&str; 7] = [
+    "get", "read", "fetch", "retrieve", "view", "describe", "download",
+];
+const HTTP_METHOD_MEMBERS: [&str; 3] = ["method", "http_method", "httpmethod"];
+const HTTP_READ_METHODS: [&str; 3] = ["get", "head", "options"];
 /// Words that, next to `comment`, mean writing one.
 const ADD_VERBS: [&str; 4] = ["add", "reply", "create", "post"];
 const COMMENT_NOUNS: [&str; 2] = ["comment", "comments"];
@@ -612,23 +641,29 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
 }
 
 /// The mapping of a call that only reads, for words spoken aloud, or `None`
-/// when it may do more or the rules cannot tell: its name or a verb field
-/// names another verb or a loss, it holds a statement, or the tool says it
-/// may destroy. The label a card draws never comes from it.
+/// when it may do more or the rules cannot tell: its name or an argument
+/// names another verb, a loss or a change of state, it holds a statement,
+/// asks HTTP for more than a read, or the tool says it may change or destroy
+/// something. The label a card draws never comes from it.
 pub fn read_mapping(
     tool_name: &str,
     arguments: &Value,
     annotations: Option<&ToolAnnotations>,
 ) -> Option<ToolCallLabelMapping> {
     let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
-    let destructive = annotations.and_then(|hints| hints.destructive_hint) == Some(true);
+    // The MCP specification reads an explicit `readOnlyHint: false` as "may
+    // change things"; the hint is the server's word either way.
+    let may_change = annotations.is_some_and(|hints| {
+        hints.read_only_hint == Some(false) || hints.destructive_hint == Some(true)
+    });
     if verb(&name, Some(arguments)).action != ToolCallAction::Other
         || !has(&name, &READ_VERBS)
-        || destructive
+        || has(&name, &STATE_WORDS)
+        || may_change
         || sounds_like_a_loss(tool_name, arguments)
-        || sets_a_verb(arguments)
+        || sets_more_than_a_read(arguments)
         || holds_a_statement(arguments)
-        || holds_sql(arguments)
+        || holds_write_text(arguments)
     {
         return None;
     }
@@ -666,15 +701,25 @@ pub fn read_mapping(
     })
 }
 
-/// The one record a read reads: a member that by its name holds a record's
-/// own ID, a path or an address, or an ID the tool's name names, as
+/// Whether the tool's name reads one thing, as `get_email` does, rather than
+/// a list or a search: `get_comments` reads the comments on what its ID names.
+pub fn reads_one_item(tool_name: &str) -> bool {
+    let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    let plural = name
+        .last()
+        .is_some_and(|last| last.ends_with('s') && !last.ends_with("ss") && !last.ends_with("us"));
+    has(&name, &ONE_ITEM_VERBS) && !has(&name, &["list", "search", "find", "query"]) && !plural
+}
+
+/// The records a read reads: a member that by its name holds a record's own
+/// ID or several, a path or an address, or an ID the tool's name names, as
 /// `issue_id` in `get_issue`. Any other ID, as `assignee_id` in
 /// `list_issues`, narrows a list.
 fn read_id_pointer(name: &[String], arguments: &Value) -> Option<String> {
     find(
         arguments,
         Skip::Targets,
-        id_member(|member| is_one_of(member, &ID_MEMBERS)),
+        id_member(|member| is_one_of(member, &ID_MEMBERS) || is_one_of(member, &READ_ID_MEMBERS)),
     )
     .or_else(|| {
         find(
@@ -703,57 +748,98 @@ fn read_id_pointer(name: &[String], arguments: &Value) -> Option<String> {
     })
 }
 
-/// A top-level flag set to true whose name names a verb, as `publish` or
-/// `send_notification`: the call does that too.
-fn sets_a_verb(arguments: &Value) -> bool {
-    arguments.as_object().is_some_and(|members| {
-        members
-            .iter()
-            .take(MAX_SEARCH_VALUES)
-            .any(|(member, value)| {
-                value == &Value::Bool(true)
-                    && !actions_of(&name_words(text_prefix(member, MAX_NAME_BYTES))).is_empty()
-            })
+/// Whether a value is set: not null, false, zero, empty or `"false"`.
+fn is_set(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64() != Some(0.0),
+        Value::String(text) => {
+            let text = text.trim();
+            !text.is_empty() && text != "0" && !text.eq_ignore_ascii_case("false")
+        }
+        Value::Array(entries) => !entries.is_empty(),
+        Value::Object(members) => !members.is_empty(),
+    }
+}
+
+/// The arguments' members at the top and one level down, each with its value.
+fn top_members(arguments: &Value) -> impl Iterator<Item = (&String, &Value)> {
+    let top = arguments.as_object().into_iter().flatten();
+    let below = arguments
+        .as_object()
+        .into_iter()
+        .flat_map(|members| members.values())
+        .filter_map(Value::as_object)
+        .flatten();
+    top.chain(below).take(MAX_SEARCH_VALUES)
+}
+
+/// A member set to any value whose name names a verb, a loss or a change of
+/// state, as `publish`, `delete: 1`, `move_to` or `mark_as_read`, or asks
+/// HTTP for more than a read: the call does that too. A member holding an ID,
+/// as `post_id`, only names a record.
+fn sets_more_than_a_read(arguments: &Value) -> bool {
+    top_members(arguments).any(|(member, value)| {
+        if is_one_of(member, &HTTP_METHOD_MEMBERS) {
+            return value.as_str().is_some_and(|method| {
+                !HTTP_READ_METHODS
+                    .iter()
+                    .any(|read| method.trim().eq_ignore_ascii_case(read))
+            });
+        }
+        if !is_set(value) || names_an_id(member) {
+            return false;
+        }
+        let words = name_words(text_prefix(member, MAX_NAME_BYTES));
+        !actions_of(&words).is_empty() || has(&words, &STATE_WORDS)
     })
 }
 
-/// Whether a read's arguments narrow what it reads beyond the members at
-/// `named`: a top-level member with a value that is not the consent
-/// argument, a verb field, the table or one that pages, sorts or shapes the
-/// result.
-pub fn read_narrowed(arguments: &Value, named: &[&str], approval_argument: Option<&str>) -> bool {
-    arguments.as_object().is_some_and(|members| {
-        members
+/// Whether every argument a read sets is one the rules understand, and if
+/// so whether one narrows what it reads: `named` are the read's own
+/// pointers. Paging, the table, the consent argument and a second search
+/// text are understood and narrow nothing; a filter, another record's ID or
+/// another place narrow a list, never one item.
+pub fn read_arguments(
+    arguments: &Value,
+    named: &[&str],
+    reads_items: bool,
+    approval_argument: Option<&str>,
+) -> Option<bool> {
+    let mut narrowed = false;
+    for (member, value) in arguments.as_object()?.iter().take(MAX_SEARCH_VALUES) {
+        if !is_set(value) || is_consent_member(member, approval_argument) {
+            continue;
+        }
+        let pointer = child_pointer("", member)?;
+        let names_it = named
             .iter()
-            .take(MAX_SEARCH_VALUES)
-            .any(|(member, value)| {
-                let holds = match value {
-                    Value::Null | Value::Bool(false) => false,
-                    Value::String(text) => !text.trim().is_empty(),
-                    Value::Array(entries) => !entries.is_empty(),
-                    Value::Object(members) => !members.is_empty(),
-                    Value::Bool(true) | Value::Number(_) => true,
-                };
-                let pointer = child_pointer("", member);
-                holds
-                    && !pointer.as_deref().is_some_and(|pointer| {
-                        named.iter().any(|named| {
-                            *named == pointer || named.starts_with(&format!("{pointer}/"))
-                        })
-                    })
-                    && !is_consent_member(member, approval_argument)
-                    && !is_one_of(member, &VERB_FIELDS)
-                    && !is_one_of(member, &TABLE_MEMBERS)
-                    && !name_words(text_prefix(member, MAX_NAME_BYTES))
-                        .iter()
-                        .any(|word| PAGING_WORDS.contains(&word.as_str()))
-            })
-    })
+            .any(|named| *named == pointer || named.starts_with(&format!("{pointer}/")));
+        let words = name_words(text_prefix(member, MAX_NAME_BYTES));
+        let shapes = has(&words, &PAGING_WORDS)
+            || is_one_of(member, &TABLE_MEMBERS)
+            || is_one_of(member, &SEARCH_MEMBERS);
+        if names_it || shapes {
+            continue;
+        }
+        let narrows = is_one_of(member, &FILTER_MEMBERS)
+            || is_one_of(member, &TARGET_MEMBERS)
+            || is_one_of(member, &PLACE_MEMBERS)
+            || names_an_id(member)
+            || value.as_object().is_some_and(is_lookup);
+        if !narrows {
+            return None;
+        }
+        narrowed = true;
+    }
+    Some(narrowed && !reads_items)
 }
 
 /// A string anywhere in the arguments that has the shape of an SQL
-/// statement, whatever its member is called, as Dataverse's `querytext`.
-fn holds_sql(arguments: &Value) -> bool {
+/// statement, whatever its member is called, as Dataverse's `querytext`, or
+/// that holds an OData batch.
+fn holds_write_text(arguments: &Value) -> bool {
     let mut budget = MAX_SEARCH_VALUES;
     let mut stack = vec![(arguments, 0)];
     while let Some((value, depth)) = stack.pop() {
@@ -763,7 +849,14 @@ fn holds_sql(arguments: &Value) -> bool {
         }
         budget -= 1;
         match value {
-            Value::String(text) if is_sql_statement(text) => return true,
+            Value::String(text)
+                if is_sql_statement(text)
+                    || text_prefix(text, MAX_SEARCH_BYTES)
+                        .to_ascii_lowercase()
+                        .contains("$batch") =>
+            {
+                return true;
+            }
             Value::Object(members) if depth < MAX_SEARCH_DEPTH => {
                 stack.extend(
                     members

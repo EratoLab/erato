@@ -5264,7 +5264,8 @@ export type ToolCallOpaqueKind = "sql" | "shell" | "instruction" | "code";
  * for, one or a few items when `item.id` names them, otherwise a list.
  * Values are read and resolved as on a label, so a machine ID is named only
  * by `resolved`, and a consent flag or a name the model typed next to an ID
- * is never in it.
+ * is never in it. Its verb, `read`, is in the closed list of actions but is
+ * never sent on a label: a read's label keeps `other`.
  */
 export type ToolCallRead = {
   /**

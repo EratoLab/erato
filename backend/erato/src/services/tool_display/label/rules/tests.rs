@@ -2251,9 +2251,9 @@ fn the_test_sets_reads_get_a_read_and_every_other_call_none() {
     assert_eq!(
         counts,
         [
-            ("testset", 5, 1),
+            ("testset", 4, 2),
             ("testset_dynamics", 4, 2),
-            ("testset_reads", 6, 9),
+            ("testset_reads", 11, 28),
         ]
     );
 }
@@ -2290,10 +2290,18 @@ fn a_search_a_get_and_a_list_each_say_what_they_read() {
         reads("list_records", json!({"tablename": "task", "top": 50})),
         some(Task, None, None, None, false)
     );
+    // An argument the rules do not understand might change something.
     assert_eq!(
         reads(
             "list_tasks",
             json!({"status": "open", "limit": 20, "cursor": null})
+        ),
+        None
+    );
+    assert_eq!(
+        reads(
+            "list_tasks",
+            json!({"filter": {"status": "open"}, "limit": 20})
         ),
         some(Task, None, None, None, true)
     );
@@ -2401,7 +2409,7 @@ fn any_arguments_give_a_small_read_or_none() {
             let read = read_of(&tool(name, None, &[]), &arguments);
             let size = serde_json::to_string(&read).unwrap().len();
             assert!(
-                size <= 2 * super::super::MAX_LABEL_VALUE_BYTES,
+                size <= 2 * super::super::MAX_READ_VALUE_BYTES,
                 "{name}: {size}"
             );
         }

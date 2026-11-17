@@ -235,13 +235,13 @@ fn labelled_display(
         }
         let shown = &label;
         label.read = label::guarded_read(|| {
-            let mut read = label::read_label(tool, arguments, consent, shown)?;
+            let (mut read, filtered) = label::read_label(tool, arguments, consent, shown)?;
             if let Some(server) = &scope {
                 context.resolve(&mut read, arguments, server);
             }
-            Some(read)
+            Some((read, filtered))
         })
-        .map(|read| label::read_description(read, arguments, consent));
+        .map(|(read, filtered)| label::read_description(read, filtered));
         label
     })
     .or_else(|| {

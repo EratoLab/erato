@@ -84,7 +84,7 @@ const LONG_TEXT_CHARS: usize = 240;
 /// Bytes of a tool's description read for what it says about itself.
 const MAX_DESCRIPTION_BYTES: usize = 8 * 1024;
 
-const FILTER_MEMBERS: [&str; 9] = [
+pub(super) const FILTER_MEMBERS: [&str; 9] = [
     "where",
     "filter",
     "filters",

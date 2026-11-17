@@ -664,7 +664,8 @@ pub struct ToolCallLabel {
 /// for, one or a few items when `item.id` names them, otherwise a list.
 /// Values are read and resolved as on a label, so a machine ID is named only
 /// by `resolved`, and a consent flag or a name the model typed next to an ID
-/// is never in it.
+/// is never in it. Its verb, `read`, is in the closed list of actions but is
+/// never sent on a label: a read's label keeps `other`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolCallRead {
     pub object_kind: ToolCallObjectKind,
@@ -1201,8 +1202,10 @@ pub enum ToolCallAction {
     /// Moves to an archive rather than deleting; a move to the trash is a delete.
     Archive,
     Upload,
-    /// Only looks: a search, a get or a list. Never a label's own verb, so a
-    /// card draws a read as it did before; see [`ToolCallLabel::read`].
+    /// Only looks: a search, a get or a list. In the closed list for the
+    /// rules' own checks, but never sent on a label: a read keeps the verb
+    /// `other`, so a card draws it as before, and its description is
+    /// [`ToolCallLabel::read`].
     Read,
     /// Also what a value from a newer version reads as.
     #[default]

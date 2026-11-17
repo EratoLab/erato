@@ -39,6 +39,8 @@ pub const MAX_FIELD_POINTERS: usize = 16;
 /// Bytes of value text and paths in one label; values past it are counted
 /// as omitted, so the stored label stays small whatever the mapping says.
 pub const MAX_LABEL_VALUE_BYTES: usize = 16 * 1024;
+/// The same for a read's description: the voice says a few short values.
+pub const MAX_READ_VALUE_BYTES: usize = 1024;
 
 /// Where a label's parts sit in a call's arguments: pointers and closed-list
 /// choices, never values, so one mapping fits every call of the same shape
@@ -352,50 +354,72 @@ pub fn filtered_label(
     }
 }
 
-/// The label of a call that only reads, for words spoken aloud: the rules'
-/// read mapping through the cross-check and the checks every label passes.
-/// `None` when the label a card draws for the call has a verb, when its
-/// change description holds a statement or a batch, or when any check
-/// fails. A card never draws it.
+/// The label of a call that only reads, for words spoken aloud, and whether
+/// its arguments narrow what it reads: the rules' read mapping through the
+/// cross-check and the checks every label passes. `None` when the label a
+/// card draws for the call has a verb, when its change description holds a
+/// statement, a batch or a flag that changes what the call does, when it
+/// sets an argument the rules do not understand, or when any check fails. A
+/// card never draws it.
 pub fn read_label(
     tool: &rmcp::model::Tool,
     arguments: &Value,
     approval_argument: Option<&str>,
     shown: &ToolCallLabel,
-) -> Option<ToolCallLabel> {
+) -> Option<(ToolCallLabel, bool)> {
     let does_more = shown.change.as_ref().is_some_and(|change| {
-        !change.opaque.is_empty() || change.opaque_omitted > 0 || change.batch.is_some()
+        !change.opaque.is_empty()
+            || change.opaque_omitted > 0
+            || change.batch.is_some()
+            || change.flags.iter().any(|flag| !flag.dry_run)
     });
     if shown.action != ToolCallAction::Other || does_more {
         return None;
     }
-    let mapping = rules::read_mapping(&tool.name, arguments, tool.annotations.as_ref())?;
+    let mut mapping = rules::read_mapping(&tool.name, arguments, tool.annotations.as_ref())?;
+    // A tool that reads one thing reads the record its card names, as
+    // `get_email` with `message_id`, when the read rules name none.
+    let shown_id = shown
+        .items
+        .first()
+        .and_then(|item| item.id.as_ref())
+        .map(|slot| slot.pointer.clone())
+        .filter(|_| rules::reads_one_item(&tool.name));
+    if let Some(id) = shown_id {
+        let item = mapping.items.first();
+        let names_none = item.is_none_or(|item| item.id.is_none() && item.title.is_none());
+        if names_none && item.and_then(|item| item.target.as_deref()) != Some(id.as_str()) {
+            if mapping.items.is_empty() {
+                mapping.items.push(ToolCallLabelItemMapping::default());
+            }
+            mapping.items[0].id = Some(id);
+        }
+    }
+    let item = mapping.items.first();
+    let named: Vec<&str> = item
+        .into_iter()
+        .flat_map(|item| [&item.title, &item.id, &item.target])
+        .flatten()
+        .map(String::as_str)
+        .collect();
+    let reads_items = item.is_some_and(|item| item.id.is_some() && item.title.is_none());
+    let filtered = rules::read_arguments(arguments, &named, reads_items, approval_argument)?;
     if !rules::cross_check(tool, arguments, ToolCallAction::Read).is_empty() {
         return None;
     }
     let recipients = rules::recipient_members(arguments);
     let mapping = rules::with_every_recipient(&mapping, &recipients);
-    let label = resolve_label(&mapping, arguments, approval_argument).ok()?;
-    rules::shows_every_recipient(&label, &recipients).then_some(label)
+    let label =
+        resolve_within(&mapping, arguments, approval_argument, MAX_READ_VALUE_BYTES).ok()?;
+    rules::shows_every_recipient(&label, &recipients).then_some((label, filtered))
 }
 
 /// What a [`read_label`] says, once names from earlier results are on it.
-pub fn read_description(
-    read: ToolCallLabel,
-    arguments: &Value,
-    approval_argument: Option<&str>,
-) -> ToolCallRead {
+pub fn read_description(read: ToolCallLabel, filtered: bool) -> ToolCallRead {
     let item = read.items.into_iter().next().map(|item| ToolCallLabelItem {
         fields: Vec::new(),
         ..item
     });
-    let named: Vec<&str> = item
-        .iter()
-        .flat_map(|item| [&item.title, &item.id, &item.target])
-        .flatten()
-        .map(|slot| slot.pointer.as_str())
-        .collect();
-    let filtered = rules::read_narrowed(arguments, &named, approval_argument);
     ToolCallRead {
         object_kind: read.object_kind,
         item,
@@ -409,7 +433,9 @@ pub fn read_description(
 }
 
 /// Runs [`read_label`] so that a bug in it costs only the read.
-pub fn guarded_read(read: impl FnOnce() -> Option<ToolCallLabel>) -> Option<ToolCallLabel> {
+pub fn guarded_read(
+    read: impl FnOnce() -> Option<(ToolCallLabel, bool)>,
+) -> Option<(ToolCallLabel, bool)> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
         .inspect_err(|_| {
             tracing::error!("Describing a tool call without a read: reading it panicked")
@@ -426,7 +452,15 @@ pub fn resolve_label(
     arguments: &Value,
     approval_argument: Option<&str>,
 ) -> Result<ToolCallLabel, UnresolvedPointer> {
-    let mut budget = MAX_LABEL_VALUE_BYTES;
+    resolve_within(mapping, arguments, approval_argument, MAX_LABEL_VALUE_BYTES)
+}
+
+fn resolve_within(
+    mapping: &ToolCallLabelMapping,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    mut budget: usize,
+) -> Result<ToolCallLabel, UnresolvedPointer> {
     let mut hidden = false;
     let mut reader = Reader {
         arguments,

@@ -6354,7 +6354,21 @@
               }
             ]
           },
-          "source": "generic"
+          "source": "generic",
+          "read": {
+            "object_kind": "other",
+            "item": {
+              "title": {
+                "pointer": "/query",
+                "values": [
+                  {
+                    "path": "/query",
+                    "text": "Müller GmbH"
+                  }
+                ]
+              }
+            }
+          }
         },
         "read_only": true
       }
