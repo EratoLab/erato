@@ -1,0 +1,39 @@
+{"id":"r01-get-record","tool":"get_record","annotations":null,"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"object_kind":"row","id":"/recordId"}}
+{"id":"r02-list-open-tasks","tool":"list_tasks","annotations":null,"arguments":{"status":"open","limit":20,"cursor":null},"expected_read":{"generic":"sets an argument the rules do not understand (status)"}}
+{"id":"r03-list-by-assignee","tool":"list_issues","annotations":{"readOnlyHint":true},"arguments":{"assignee_id":"u-1","project_id":"p-1"},"expected_read":{"object_kind":"task","target":"/project_id","filtered":true}}
+{"id":"r04-retrieve-row","tool":"retrieve_record","annotations":{"readOnlyHint":true},"arguments":{"tablename":"opportunity","recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"object_kind":"row","id":"/recordId","target":"/tablename"}}
+{"id":"r05-fetch-page","tool":"fetch","annotations":null,"arguments":{"url":"https://example.com/handbook"},"expected_read":{"object_kind":"other","id":"/url"}}
+{"id":"r06-search-consent-flag","tool":"search","annotations":null,"arguments":{"query":"Müller GmbH","limit":10,"hasUserApproved":true},"expected_read":{"object_kind":"other","title":"/query"}}
+{"id":"r07-get-and-update","tool":"get_and_update_record","annotations":null,"arguments":{"id":"5f0c2a10-0000-4000-8000-00000000a001","status":"won"},"expected_read":{"generic":"the name also updates"}}
+{"id":"r08-fetch-in-update-mode","tool":"fetch_page","annotations":null,"arguments":{"page_id":"5f0c2a10-0000-4000-8000-00000000a001","mode":"update"},"expected_read":{"generic":"a verb field updates"}}
+{"id":"r09-search-and-publish","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","publish":true},"expected_read":{"generic":"a flag publishes"}}
+{"id":"r10-sql-in-querytext","tool":"read_query","annotations":{"readOnlyHint":true},"arguments":{"querytext":"SELECT name FROM account WHERE name = 'Müller GmbH'"},"expected_read":{"generic":"holds an SQL statement"}}
+{"id":"r11-sql-in-a-search","tool":"search","annotations":{"readOnlyHint":true},"arguments":{"query":"DELETE FROM user_sessions;"},"expected_read":{"generic":"holds an SQL statement"}}
+{"id":"r12-read-only-delete","tool":"delete_record","annotations":{"readOnlyHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the name deletes, whatever the hint says"}}
+{"id":"r13-destructive-get","tool":"get_record","annotations":{"destructiveHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the tool says it may destroy"}}
+{"id":"r14-loss-in-a-kind","tool":"get_items","annotations":null,"arguments":{"kind":"HardDelete"},"expected_read":{"generic":"a verb field names a loss"}}
+{"id":"r15-shell-command","tool":"list_files","annotations":null,"arguments":{"command":"ls -la /srv"},"expected_read":{"generic":"holds a shell command"}}
+{"id":"r16-notify-flag","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","notify":true},"expected_read":{"generic":"a flag the card lists as changing what the call does"}}
+{"id":"r17-delete-as-text","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","delete":"true"},"expected_read":{"generic":"a loss word with a set value"}}
+{"id":"r18-delete-as-number","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","delete":1},"expected_read":{"generic":"a loss word with a set value"}}
+{"id":"r19-delete-one-level-down","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","options":{"delete":true}},"expected_read":{"generic":"a loss word one level down"}}
+{"id":"r20-move-to","tool":"get_messages","annotations":null,"arguments":{"folder":"Inbox","move_to":"Archive"},"expected_read":{"generic":"a verb word with a set value"}}
+{"id":"r21-update-object","tool":"get_record","annotations":null,"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001","update":{"status":"won"}},"expected_read":{"generic":"a verb word with a set value"}}
+{"id":"r22-mark-as-read-flag","tool":"list_messages","annotations":null,"arguments":{"folder":"Inbox","mark_as_read":true},"expected_read":{"generic":"a set flag changes state"}}
+{"id":"r23-mark-read-camel","tool":"list_messages","annotations":null,"arguments":{"folder":"Inbox","markRead":true},"expected_read":{"generic":"a set flag changes state"}}
+{"id":"r24-commit-flag","tool":"read_queue","annotations":null,"arguments":{"limit":10,"commit":true},"expected_read":{"generic":"a set flag changes state"}}
+{"id":"r25-truncate-flag","tool":"read_file","annotations":null,"arguments":{"path":"logs/app.log","truncate":true},"expected_read":{"generic":"a set flag changes state"}}
+{"id":"r26-name-mark-as-read","tool":"mark_as_read","annotations":null,"arguments":{"message_id":"m-1"},"expected_read":{"generic":"the name changes state"}}
+{"id":"r27-name-mark-messages-read","tool":"mark_messages_read","annotations":null,"arguments":{"ids":["m-1","m-2"]},"expected_read":{"generic":"the name changes state"}}
+{"id":"r28-name-read-and-acknowledge","tool":"read_and_acknowledge","annotations":null,"arguments":{"alert_id":"al-1"},"expected_read":{"generic":"the name changes state"}}
+{"id":"r29-name-get-and-claim","tool":"get_and_claim_task","annotations":null,"arguments":{"queue":"support"},"expected_read":{"generic":"the name changes state"}}
+{"id":"r30-http-put","tool":"fetch","annotations":null,"arguments":{"url":"https://example.com/api/items/7","method":"PUT"},"expected_read":{"generic":"an HTTP method other than GET, HEAD or OPTIONS"}}
+{"id":"r31-odata-batch","tool":"query_odata","annotations":null,"arguments":{"request":"POST /api/data/v9.2/$batch\nDELETE accounts(1)"},"expected_read":{"generic":"text holding a batch request"}}
+{"id":"r32-read-only-false","tool":"get_record","annotations":{"readOnlyHint":false},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the tool says it is not read-only"}}
+{"id":"r33-several-ids","tool":"get_records","annotations":null,"arguments":{"ids":["5f0c2a10-0000-4000-8000-00000000a001","5f0c2a10-0000-4000-8000-00000000c001"]},"expected_read":{"object_kind":"row","id":"/ids/*"}}
+{"id":"r34-several-record-ids","tool":"get_records","annotations":null,"arguments":{"record_ids":["5f0c2a10-0000-4000-8000-00000000a001","5f0c2a10-0000-4000-8000-00000000c001"]},"expected_read":{"object_kind":"row","id":"/record_ids/*"}}
+{"id":"r35-email-by-message-id","tool":"get_email","annotations":null,"arguments":{"message_id":"AAMkAGI2THVSAAA="},"expected_read":{"object_kind":"email","id":"/message_id"}}
+{"id":"r36-paging-link","tool":"list_messages","annotations":null,"arguments":{"folder_id":"inbox","nextLink":"https://graph.example.com/v1.0/me/messages?$skiptoken=abc"},"expected_read":{"object_kind":"message","target":"/folder_id"}}
+{"id":"r37-typed-name-beside-id","tool":"get_record","annotations":null,"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001","regarding":{"name":"Typed by the model","recordId":"5f0c2a10-0000-4000-8000-00000000c001","relatedTable":"account"}},"expected_read":{"object_kind":"row","id":"/recordId"}}
+{"id":"r38-id-of-another-kind-names-a-record","tool":"get_comments","annotations":null,"arguments":{"post_id":5},"expected_read":{"object_kind":"comment","filtered":true}}
+{"id":"r39-unknown-argument","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","mode":"fuzzy"},"expected_read":{"generic":"sets an argument the rules do not understand"}}

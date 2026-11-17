@@ -5291,7 +5291,8 @@ async fn park_a_turn_and_keep_its_events(
 /// well as the gated one, and a call's live updates, the first running one as
 /// well as the final one, carry the display its row is stored with. The rules
 /// label the gated call from its name and arguments; the read gives them
-/// nothing to say and stays generic. The readable view names the arguments by
+/// nothing to say and stays generic, with only a read description beside it
+/// for the voice. The readable view names the arguments by
 /// path without copying their values, and the approval fields stay what the
 /// gate decided.
 ///
@@ -5337,6 +5338,7 @@ async fn every_mcp_call_is_stored_with_a_label(pool: Pool<Postgres>) {
             "object_kind": "other",
             "arguments": {"path": "", "kind": "group"},
             "source": "generic",
+            "read": {"object_kind": "other"},
         })
     );
     let read_updates: Vec<_> = terminal_tool_call_update_events(&events)

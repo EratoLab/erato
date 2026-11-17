@@ -14126,6 +14126,7 @@
           "upsert",
           "archive",
           "upload",
+          "read",
           "other"
         ]
       },
@@ -14707,6 +14708,10 @@
           "object_kind": {
             "$ref": "#/components/schemas/ToolCallObjectKind"
           },
+          "read": {
+            "$ref": "#/components/schemas/ToolCallRead",
+            "description": "What a call that only reads looks at, for words spoken aloud. No card\nreads it: a read keeps the label it had before reads had a verb."
+          },
           "source": {
             "$ref": "#/components/schemas/ToolCallLabelSource"
           },
@@ -14901,6 +14906,32 @@
           "instruction",
           "code"
         ]
+      },
+      "ToolCallRead": {
+        "type": "object",
+        "description": "A call that only reads, by the rules alone and only where every check a\nlabel passes agrees: a search when `item.title` holds the text it looks\nfor, one or a few items when `item.id` names them, otherwise a list.\nValues are read and resolved as on a label, so a machine ID is named only\nby `resolved`, and a consent flag or a name the model typed next to an ID\nis never in it. Its verb, `read`, is in the closed list of actions but is\nnever sent on a label: a read's label keeps `other`.",
+        "required": [
+          "object_kind"
+        ],
+        "properties": {
+          "filtered": {
+            "type": "boolean",
+            "description": "Conditions narrow what it reads beyond the item, other than paging or\nsorting."
+          },
+          "item": {
+            "$ref": "#/components/schemas/ToolCallLabelItem",
+            "description": "`title`: the text it searches for; `id`: what it reads; `target`:\nwhere it looks, such as a folder, a parent or a table. Never fields."
+          },
+          "object_kind": {
+            "$ref": "#/components/schemas/ToolCallObjectKind"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelWarning"
+            }
+          }
+        }
       },
       "ToolCallRecipientGroup": {
         "type": "object",

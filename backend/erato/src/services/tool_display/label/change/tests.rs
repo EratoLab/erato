@@ -112,6 +112,7 @@ fn a_call_with_no_verb_has_no_change_description() {
         warnings: Vec::new(),
         source: ToolCallLabelSource::Rules,
         change: None,
+        read: None,
     };
     let arguments = json!({});
     let context = ToolResultContext::default();

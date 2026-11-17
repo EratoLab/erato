@@ -4679,6 +4679,7 @@ export type ToolCallAction =
   | "upsert"
   | "archive"
   | "upload"
+  | "read"
   | "other";
 
 /**
@@ -5122,6 +5123,7 @@ export type ToolCallLabel = {
    */
   items?: ToolCallLabelItem[];
   object_kind: ToolCallObjectKind;
+  read?: ToolCallRead;
   source: ToolCallLabelSource;
   warnings?: ToolCallLabelWarning[];
 };
@@ -5255,6 +5257,26 @@ export type ToolCallOpaque = {
 };
 
 export type ToolCallOpaqueKind = "sql" | "shell" | "instruction" | "code";
+
+/**
+ * A call that only reads, by the rules alone and only where every check a
+ * label passes agrees: a search when `item.title` holds the text it looks
+ * for, one or a few items when `item.id` names them, otherwise a list.
+ * Values are read and resolved as on a label, so a machine ID is named only
+ * by `resolved`, and a consent flag or a name the model typed next to an ID
+ * is never in it. Its verb, `read`, is in the closed list of actions but is
+ * never sent on a label: a read's label keeps `other`.
+ */
+export type ToolCallRead = {
+  /**
+   * Conditions narrow what it reads beyond the item, other than paging or
+   * sorting.
+   */
+  filtered?: boolean;
+  item?: ToolCallLabelItem;
+  object_kind: ToolCallObjectKind;
+  warnings?: ToolCallLabelWarning[];
+};
 
 export type ToolCallRecipientGroup = {
   /**
