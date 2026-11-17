@@ -1702,6 +1702,25 @@ fn the_index_and_each_labels_resolved_text_stay_within_their_byte_caps() {
 struct Fixture {
     history: Vec<FixtureCall>,
     writes: Vec<FixtureWrite>,
+    reads: Vec<FixtureRead>,
+}
+
+#[derive(serde::Deserialize)]
+struct FixtureRead {
+    case: String,
+    tool_name: String,
+    arguments: Value,
+    /// `None`: the call stays generic.
+    expect: Option<ExpectedRead>,
+}
+
+/// Search texts and targets as written, IDs by the names results gave them.
+#[derive(serde::Deserialize, Default, Debug, PartialEq)]
+#[serde(default)]
+struct ExpectedRead {
+    title: Option<Vec<String>>,
+    id: Option<Vec<Option<String>>>,
+    target: Option<Vec<String>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -1772,6 +1791,72 @@ fn a_dataverse_style_chat_resolves_its_writes_from_its_reads() {
         assert_eq!(fields, write.expect.fields, "{}", write.case);
     }
     assert_eq!(checked, 8);
+}
+
+/// The same chat's reads: a search says what it looks for, and a record is
+/// named as the chat's results called it, never by its ID.
+#[test]
+fn a_dataverse_style_chat_names_what_its_reads_read() {
+    let fixture: Fixture =
+        serde_json::from_str(include_str!("fixtures/dataverse_chat.json")).unwrap();
+    let context = after(
+        fixture
+            .history
+            .into_iter()
+            .enumerate()
+            .map(|(index, step)| {
+                call(
+                    &format!("call-{index}"),
+                    &step.tool_name,
+                    step.input,
+                    step.output,
+                )
+            })
+            .collect(),
+    );
+    let config: crate::config::McpRuntimeConfig = serde_json::from_value(json!({
+        "mcp_servers": {
+            "crm": {
+                "display_name": SERVER,
+                "transport_type": "streamable_http",
+                "url": "http://localhost/mcp",
+            },
+        }
+    }))
+    .unwrap();
+    let texts = |slot: &Option<ToolCallLabelSlot>| {
+        slot.as_ref()
+            .map(|slot| slot.values.iter().map(|value| value.text.clone()).collect())
+    };
+    let mut checked = 0;
+    for read in fixture.reads {
+        checked += 1;
+        let tool =
+            rmcp::model::Tool::new(read.tool_name.clone(), "", rmcp::model::JsonObject::new());
+        let display = crate::services::tool_display::mcp_tool_call_display(
+            &config,
+            "crm",
+            &tool,
+            &read.arguments,
+            None,
+            &context,
+        );
+        let got = display.label.and_then(|label| label.read).map(|read| {
+            let item = read.item.unwrap_or_default();
+            ExpectedRead {
+                title: texts(&item.title),
+                id: item.id.as_ref().map(|slot| {
+                    resolved(slot)
+                        .into_iter()
+                        .map(|name| name.map(str::to_string))
+                        .collect()
+                }),
+                target: texts(&item.target),
+            }
+        });
+        assert_eq!(got, read.expect, "{}", read.case);
+    }
+    assert_eq!(checked, 6);
 }
 
 #[test]
@@ -2779,6 +2864,7 @@ fn option_sets_go_once_a_call_may_have_changed_them() {
                 warnings: Vec::new(),
                 source: ToolCallLabelSource::Rules,
                 change: None,
+                read: None,
             });
         }
         write

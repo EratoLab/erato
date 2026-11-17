@@ -648,6 +648,37 @@ pub struct ToolCallLabel {
     )]
     #[schema(nullable = false)]
     pub change: Option<ToolCallChange>,
+    /// What a call that only reads looks at, for words spoken aloud. No card
+    /// reads it: a read keeps the label it had before reads had a verb.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub read: Option<ToolCallRead>,
+}
+
+/// A call that only reads, by the rules alone and only where every check a
+/// label passes agrees: a search when `item.title` holds the text it looks
+/// for, one or a few items when `item.id` names them, otherwise a list.
+/// Values are read and resolved as on a label, so a machine ID is named only
+/// by `resolved`, and a consent flag or a name the model typed next to an ID
+/// is never in it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallRead {
+    pub object_kind: ToolCallObjectKind,
+    /// `title`: the text it searches for; `id`: what it reads; `target`:
+    /// where it looks, such as a folder, a parent or a table. Never fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub item: Option<ToolCallLabelItem>,
+    /// Conditions narrow what it reads beyond the item, other than paging or
+    /// sorting.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub filtered: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<ToolCallLabelWarning>,
 }
 
 /// What a call changes, described the same way for every server and computed
@@ -1170,6 +1201,9 @@ pub enum ToolCallAction {
     /// Moves to an archive rather than deleting; a move to the trash is a delete.
     Archive,
     Upload,
+    /// Only looks: a search, a get or a list. Never a label's own verb, so a
+    /// card draws a read as it did before; see [`ToolCallLabel::read`].
+    Read,
     /// Also what a value from a newer version reads as.
     #[default]
     #[serde(other)]

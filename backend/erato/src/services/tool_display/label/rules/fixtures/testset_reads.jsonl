@@ -1,0 +1,15 @@
+{"id":"r01-get-record","tool":"get_record","annotations":null,"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"object_kind":"row","id":"/recordId"}}
+{"id":"r02-list-open-tasks","tool":"list_tasks","annotations":null,"arguments":{"status":"open","limit":20,"cursor":null},"expected_read":{"object_kind":"task","filtered":true}}
+{"id":"r03-list-by-assignee","tool":"list_issues","annotations":{"readOnlyHint":true},"arguments":{"assignee_id":"u-1","project_id":"p-1"},"expected_read":{"object_kind":"task","target":"/project_id","filtered":true}}
+{"id":"r04-retrieve-row","tool":"retrieve_record","annotations":{"readOnlyHint":true},"arguments":{"tablename":"opportunity","recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"object_kind":"row","id":"/recordId","target":"/tablename"}}
+{"id":"r05-fetch-page","tool":"fetch","annotations":null,"arguments":{"url":"https://example.com/handbook"},"expected_read":{"object_kind":"other","id":"/url"}}
+{"id":"r06-search-consent-flag","tool":"search","annotations":null,"arguments":{"query":"Müller GmbH","limit":10,"hasUserApproved":true},"expected_read":{"object_kind":"other","title":"/query"}}
+{"id":"r07-get-and-update","tool":"get_and_update_record","annotations":null,"arguments":{"id":"5f0c2a10-0000-4000-8000-00000000a001","status":"won"},"expected_read":{"generic":"the name also updates"}}
+{"id":"r08-fetch-in-update-mode","tool":"fetch_page","annotations":null,"arguments":{"page_id":"5f0c2a10-0000-4000-8000-00000000a001","mode":"update"},"expected_read":{"generic":"a verb field updates"}}
+{"id":"r09-search-and-publish","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","publish":true},"expected_read":{"generic":"a flag publishes"}}
+{"id":"r10-sql-in-querytext","tool":"read_query","annotations":{"readOnlyHint":true},"arguments":{"querytext":"SELECT name FROM account WHERE name = 'Müller GmbH'"},"expected_read":{"generic":"holds an SQL statement"}}
+{"id":"r11-sql-in-a-search","tool":"search","annotations":{"readOnlyHint":true},"arguments":{"query":"DELETE FROM user_sessions;"},"expected_read":{"generic":"holds an SQL statement"}}
+{"id":"r12-read-only-delete","tool":"delete_record","annotations":{"readOnlyHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the name deletes, whatever the hint says"}}
+{"id":"r13-destructive-get","tool":"get_record","annotations":{"destructiveHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the tool says it may destroy"}}
+{"id":"r14-loss-in-a-kind","tool":"get_items","annotations":null,"arguments":{"kind":"HardDelete"},"expected_read":{"generic":"a verb field names a loss"}}
+{"id":"r15-shell-command","tool":"list_files","annotations":null,"arguments":{"command":"ls -la /srv"},"expected_read":{"generic":"holds a shell command"}}

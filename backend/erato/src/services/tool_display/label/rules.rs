@@ -143,6 +143,47 @@ pub(super) const READ_VERBS: [&str; 11] = [
     "get", "list", "search", "fetch", "read", "query", "find", "retrieve", "view", "download",
     "describe",
 ];
+/// Members holding the text a read searches for.
+const SEARCH_MEMBERS: [&str; 13] = [
+    "query",
+    "q",
+    "search",
+    "searchtext",
+    "search_text",
+    "searchterm",
+    "search_term",
+    "searchquery",
+    "search_query",
+    "keyword",
+    "keywords",
+    "term",
+    "terms",
+];
+/// Words of a member that pages, sorts or shapes what a read returns without
+/// narrowing which items it reads.
+const PAGING_WORDS: [&str; 19] = [
+    "limit",
+    "top",
+    "cursor",
+    "offset",
+    "page",
+    "skip",
+    "token",
+    "results",
+    "sort",
+    "order",
+    "orderby",
+    "direction",
+    "format",
+    "select",
+    "fields",
+    "columns",
+    "expand",
+    "include",
+    "per",
+];
+/// Members holding where a read reads from, as `fetch` does.
+const WEB_ADDRESS_MEMBERS: [&str; 2] = ["url", "uri"];
 /// Words that, next to `comment`, mean writing one.
 const ADD_VERBS: [&str; 4] = ["add", "reply", "create", "post"];
 const COMMENT_NOUNS: [&str; 2] = ["comment", "comments"];
@@ -518,7 +559,8 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
     // A read-only claim never overrules a name that says something is lost.
     let name_loses = matches!(action, ToolCallAction::Delete | ToolCallAction::Archive)
         && name_sounds_like_a_loss(&name);
-    if hint(|hints| hints.read_only_hint) && action != ToolCallAction::Other && !name_loses {
+    let reads = matches!(action, ToolCallAction::Other | ToolCallAction::Read);
+    if hint(|hints| hints.read_only_hint) && !reads && !name_loses {
         flags.push(CrossCheckFlag::ReadOnlyAnnotation);
     }
     // A delete or archive that the name or a verb field's words state,
@@ -556,7 +598,7 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
         && !name
             .iter()
             .any(|word| word != "query" && READ_VERBS.contains(&word.as_str()));
-    if action != ToolCallAction::Other && !names_a_run && has(&name, &READ_VERBS) {
+    if !reads && !names_a_run && has(&name, &READ_VERBS) {
         flags.push(CrossCheckFlag::ReadName);
     }
     if declared {
@@ -567,6 +609,176 @@ pub fn cross_check(tool: &Tool, arguments: &Value, action: ToolCallAction) -> Ve
         flags.push(CrossCheckFlag::NameVerb);
     }
     flags
+}
+
+/// The mapping of a call that only reads, for words spoken aloud, or `None`
+/// when it may do more or the rules cannot tell: its name or a verb field
+/// names another verb or a loss, it holds a statement, or the tool says it
+/// may destroy. The label a card draws never comes from it.
+pub fn read_mapping(
+    tool_name: &str,
+    arguments: &Value,
+    annotations: Option<&ToolAnnotations>,
+) -> Option<ToolCallLabelMapping> {
+    let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    let destructive = annotations.and_then(|hints| hints.destructive_hint) == Some(true);
+    if verb(&name, Some(arguments)).action != ToolCallAction::Other
+        || !has(&name, &READ_VERBS)
+        || destructive
+        || sounds_like_a_loss(tool_name, arguments)
+        || sets_a_verb(arguments)
+        || holds_a_statement(arguments)
+        || holds_sql(arguments)
+    {
+        return None;
+    }
+    let (object_kind, table) = kind(&name, arguments);
+    let mut item = ToolCallLabelItemMapping {
+        id: read_id_pointer(&name, arguments),
+        ..Default::default()
+    };
+    item.target =
+        target_pointer(arguments, ToolCallAction::Read, item.id.as_deref()).or_else(|| {
+            table.filter(|pointer| {
+                arguments
+                    .pointer(pointer)
+                    .and_then(Value::as_str)
+                    .is_some_and(|table| !table_repeats_kind(table, object_kind))
+            })
+        });
+    item.title = find(arguments, Skip::Lookups, |pointer, member, values| {
+        (is_one_of(member, &SEARCH_MEMBERS)
+            && values
+                .iter()
+                .any(|value| value.as_str().is_some_and(|text| !text.trim().is_empty())))
+        .then(|| pointer.to_string())
+    });
+    // A search reads what it finds: an ID beside it says where it looks.
+    if item.title.is_some() && item.target.is_none() {
+        item.target = item.id.take();
+    }
+    let empty = item == ToolCallLabelItemMapping::default();
+    Some(ToolCallLabelMapping {
+        action: ToolCallAction::Read,
+        object_kind,
+        items: if empty { Vec::new() } else { vec![item] },
+        source: ToolCallLabelSource::Rules,
+    })
+}
+
+/// The one record a read reads: a member that by its name holds a record's
+/// own ID, a path or an address, or an ID the tool's name names, as
+/// `issue_id` in `get_issue`. Any other ID, as `assignee_id` in
+/// `list_issues`, narrows a list.
+fn read_id_pointer(name: &[String], arguments: &Value) -> Option<String> {
+    find(
+        arguments,
+        Skip::Targets,
+        id_member(|member| is_one_of(member, &ID_MEMBERS)),
+    )
+    .or_else(|| {
+        find(
+            arguments,
+            Skip::Targets,
+            id_member(|member| {
+                is_one_of(member, &PATH_MEMBERS) || is_one_of(member, &WEB_ADDRESS_MEMBERS)
+            }),
+        )
+    })
+    .or_else(|| {
+        find(arguments, Skip::Targets, |pointer, member, values| {
+            let words: Vec<String> = name_words(text_prefix(member, MAX_NAME_BYTES))
+                .into_iter()
+                .filter(|word| !matches!(word.as_str(), "id" | "ids" | "key" | "number"))
+                .collect();
+            let named = names_an_id(member)
+                && !is_one_of(member, &TARGET_MEMBERS)
+                && !words.is_empty()
+                && words.iter().all(|word| name.contains(word));
+            if !named {
+                return None;
+            }
+            id_member(|_| true)(pointer, member, values)
+        })
+    })
+}
+
+/// A top-level flag set to true whose name names a verb, as `publish` or
+/// `send_notification`: the call does that too.
+fn sets_a_verb(arguments: &Value) -> bool {
+    arguments.as_object().is_some_and(|members| {
+        members
+            .iter()
+            .take(MAX_SEARCH_VALUES)
+            .any(|(member, value)| {
+                value == &Value::Bool(true)
+                    && !actions_of(&name_words(text_prefix(member, MAX_NAME_BYTES))).is_empty()
+            })
+    })
+}
+
+/// Whether a read's arguments narrow what it reads beyond the members at
+/// `named`: a top-level member with a value that is not the consent
+/// argument, a verb field, the table or one that pages, sorts or shapes the
+/// result.
+pub fn read_narrowed(arguments: &Value, named: &[&str], approval_argument: Option<&str>) -> bool {
+    arguments.as_object().is_some_and(|members| {
+        members
+            .iter()
+            .take(MAX_SEARCH_VALUES)
+            .any(|(member, value)| {
+                let holds = match value {
+                    Value::Null | Value::Bool(false) => false,
+                    Value::String(text) => !text.trim().is_empty(),
+                    Value::Array(entries) => !entries.is_empty(),
+                    Value::Object(members) => !members.is_empty(),
+                    Value::Bool(true) | Value::Number(_) => true,
+                };
+                let pointer = child_pointer("", member);
+                holds
+                    && !pointer.as_deref().is_some_and(|pointer| {
+                        named.iter().any(|named| {
+                            *named == pointer || named.starts_with(&format!("{pointer}/"))
+                        })
+                    })
+                    && !is_consent_member(member, approval_argument)
+                    && !is_one_of(member, &VERB_FIELDS)
+                    && !is_one_of(member, &TABLE_MEMBERS)
+                    && !name_words(text_prefix(member, MAX_NAME_BYTES))
+                        .iter()
+                        .any(|word| PAGING_WORDS.contains(&word.as_str()))
+            })
+    })
+}
+
+/// A string anywhere in the arguments that has the shape of an SQL
+/// statement, whatever its member is called, as Dataverse's `querytext`.
+fn holds_sql(arguments: &Value) -> bool {
+    let mut budget = MAX_SEARCH_VALUES;
+    let mut stack = vec![(arguments, 0)];
+    while let Some((value, depth)) = stack.pop() {
+        if budget == 0 {
+            // Too large to read through: not known to be a plain read.
+            return true;
+        }
+        budget -= 1;
+        match value {
+            Value::String(text) if is_sql_statement(text) => return true,
+            Value::Object(members) if depth < MAX_SEARCH_DEPTH => {
+                stack.extend(
+                    members
+                        .values()
+                        .take(budget)
+                        .map(|child| (child, depth + 1)),
+                );
+            }
+            Value::Array(entries) if depth < MAX_SEARCH_DEPTH => {
+                stack.extend(entries.iter().take(budget).map(|child| (child, depth + 1)));
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// The values of the verb fields, top first.

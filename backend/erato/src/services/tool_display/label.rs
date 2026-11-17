@@ -21,7 +21,7 @@ pub use context::ToolResultContext;
 
 use crate::models::message::{
     ToolCallAction, ToolCallLabel, ToolCallLabelItem, ToolCallLabelSlot, ToolCallLabelSource,
-    ToolCallLabelValue, ToolCallLabelWarning, ToolCallObjectKind,
+    ToolCallLabelValue, ToolCallLabelWarning, ToolCallObjectKind, ToolCallRead,
 };
 use crate::services::display_text::{MAX_DISPLAY_NAME_CHARS, sanitize_display_text};
 use serde::{Deserialize, Serialize};
@@ -100,6 +100,7 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
             .collect(),
         source: ToolCallLabelSource::Generic,
         change: None,
+        read: None,
     }
 }
 
@@ -349,6 +350,72 @@ pub fn filtered_label(
             generic_label(arguments)
         }
     }
+}
+
+/// The label of a call that only reads, for words spoken aloud: the rules'
+/// read mapping through the cross-check and the checks every label passes.
+/// `None` when the label a card draws for the call has a verb, when its
+/// change description holds a statement or a batch, or when any check
+/// fails. A card never draws it.
+pub fn read_label(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    shown: &ToolCallLabel,
+) -> Option<ToolCallLabel> {
+    let does_more = shown.change.as_ref().is_some_and(|change| {
+        !change.opaque.is_empty() || change.opaque_omitted > 0 || change.batch.is_some()
+    });
+    if shown.action != ToolCallAction::Other || does_more {
+        return None;
+    }
+    let mapping = rules::read_mapping(&tool.name, arguments, tool.annotations.as_ref())?;
+    if !rules::cross_check(tool, arguments, ToolCallAction::Read).is_empty() {
+        return None;
+    }
+    let recipients = rules::recipient_members(arguments);
+    let mapping = rules::with_every_recipient(&mapping, &recipients);
+    let label = resolve_label(&mapping, arguments, approval_argument).ok()?;
+    rules::shows_every_recipient(&label, &recipients).then_some(label)
+}
+
+/// What a [`read_label`] says, once names from earlier results are on it.
+pub fn read_description(
+    read: ToolCallLabel,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+) -> ToolCallRead {
+    let item = read.items.into_iter().next().map(|item| ToolCallLabelItem {
+        fields: Vec::new(),
+        ..item
+    });
+    let named: Vec<&str> = item
+        .iter()
+        .flat_map(|item| [&item.title, &item.id, &item.target])
+        .flatten()
+        .map(|slot| slot.pointer.as_str())
+        .collect();
+    let filtered = rules::read_narrowed(arguments, &named, approval_argument);
+    ToolCallRead {
+        object_kind: read.object_kind,
+        item,
+        filtered,
+        warnings: read
+            .warnings
+            .into_iter()
+            .filter(|warning| *warning == ToolCallLabelWarning::HiddenCharacters)
+            .collect(),
+    }
+}
+
+/// Runs [`read_label`] so that a bug in it costs only the read.
+pub fn guarded_read(read: impl FnOnce() -> Option<ToolCallLabel>) -> Option<ToolCallLabel> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
+        .inspect_err(|_| {
+            tracing::error!("Describing a tool call without a read: reading it panicked")
+        })
+        .ok()
+        .flatten()
 }
 
 /// The mapping's label for one call. A core pointer that reaches nothing

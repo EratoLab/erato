@@ -2745,7 +2745,7 @@ fn action_rank(action: ToolCallAction) -> u8 {
         ToolCallAction::Comment => 8,
         ToolCallAction::Upload => 9,
         ToolCallAction::Run => 10,
-        ToolCallAction::Other => 11,
+        ToolCallAction::Read | ToolCallAction::Other => 11,
     }
 }
 

@@ -349,6 +349,42 @@ describe("gistOf", () => {
     expect(toolCallCardOf(undefined, {}).kind).toBe("legacy");
     expect(toolCallCardOf(createRow, {}).kind).toBe("gist");
   });
+
+  it("draws a read as before: its read description is only for the voice", () => {
+    const input = { query: "Müller GmbH", limit: 10 };
+    const plain: ToolCallLabel = {
+      action: "other",
+      object_kind: "other",
+      source: "generic",
+      arguments: {
+        path: "",
+        kind: "group",
+        children: [
+          { path: "/query", kind: "value" },
+          { path: "/limit", kind: "value" },
+        ],
+      },
+    };
+    const read: ToolCallLabel = {
+      ...plain,
+      read: {
+        object_kind: "other",
+        item: {
+          title: {
+            pointer: "/query",
+            values: [{ path: "/query", text: "Müller GmbH" }],
+          },
+        },
+      },
+    };
+    const { label: _drawn, ...card } = toolCallCardOf(plain, input) as {
+      label: ToolCallLabel;
+    };
+    for (const label of [read, { ...read, action: "read" as const }]) {
+      expect(gistOf(label, input)).toBeUndefined();
+      expect(toolCallCardOf(label, input)).toEqual({ ...card, label });
+    }
+  });
 });
 
 describe("gist warnings", () => {

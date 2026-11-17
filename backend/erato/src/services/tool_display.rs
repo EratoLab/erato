@@ -231,6 +231,15 @@ fn labelled_display(
                 label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
             }
         }
+        let shown = &label;
+        label.read = label::guarded_read(|| {
+            let mut read = label::read_label(tool, arguments, consent, shown)?;
+            if let Some(server) = &scope {
+                context.resolve(&mut read, arguments, server);
+            }
+            Some(read)
+        })
+        .map(|read| label::read_description(read, arguments, consent));
         label
     })
     .or_else(|| {
