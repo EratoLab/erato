@@ -12,6 +12,7 @@ import {
   whatValues,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
+import { spokenReadFactsOf } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
 import type { ChangeEffect, ChangeValue } from "./change";
@@ -684,7 +685,12 @@ export const spokenDifference = (
   const inputChanged = changedPaths(before.input, next.input);
   const oldCard = toolCallCardOf(before.label, before.input);
   const newCard = toolCallCardOf(next.label, next.input);
-  if (oldCard.kind !== "gist" || newCard.kind !== "gist") {
+  // A read is said by its own sentence, not the card's, so its pieces have
+  // no entries to compare: it is read again whole.
+  const readSaid =
+    spokenReadFactsOf(before.label) !== undefined ||
+    spokenReadFactsOf(next.label) !== undefined;
+  if (oldCard.kind !== "gist" || newCard.kind !== "gist" || readSaid) {
     const same =
       before.toolTitle === next.toolTitle &&
       before.server === next.server &&

@@ -680,6 +680,82 @@ pub struct ToolCallRead {
     pub filtered: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<ToolCallLabelWarning>,
+    /// What a call's one SQL statement reads, when parsing it shows it is
+    /// certainly a single plain read; then `item.id` holds the record a
+    /// condition on the table's own key names.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "readable_or_none"
+    )]
+    #[schema(nullable = false)]
+    pub query: Option<ToolCallReadQuery>,
+}
+
+/// The parts of a plain SQL read the voice says: the tables, the conditions
+/// simple enough to say, and a limit. Names are as the statement wrote them,
+/// display-cleaned.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallReadQuery {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tables: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tables_omitted: u32,
+    /// Conditions joined by AND that compare one column with values, in the
+    /// statement's order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<ToolCallReadCondition>,
+    /// Conditions it applies beyond `conditions`: past the cap, or not a
+    /// simple comparison.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub conditions_omitted: u32,
+    /// The most rows it returns, from TOP, LIMIT or FETCH.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub limit: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
+pub struct ToolCallReadCondition {
+    pub column: String,
+    /// The table the column belongs to, when the statement reads several
+    /// and names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub table: Option<String>,
+    pub operator: ToolCallReadOperator,
+    /// The values it compares with, read as label values: a machine ID is
+    /// named only by `resolved`. `between` has two.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<ToolCallLabelValue>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub values_omitted: u32,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, ToSchema, erato_memory::HeapSize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallReadOperator {
+    Equals,
+    NotEquals,
+    Less,
+    AtMost,
+    Greater,
+    AtLeast,
+    Contains,
+    StartsWith,
+    EndsWith,
+    IsEmpty,
+    IsNotEmpty,
+    In,
+    NotIn,
+    Between,
+    /// What an operator from a newer version reads as; never sent.
+    #[serde(other)]
+    Other,
 }
 
 /// What a call changes, described the same way for every server and computed

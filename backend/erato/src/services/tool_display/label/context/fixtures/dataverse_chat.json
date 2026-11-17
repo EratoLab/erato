@@ -325,12 +325,20 @@
       "expect": { "id": [null] }
     },
     {
-      "case": "a query in SQL stays generic",
+      "case": "a plain SQL read is described by its statement and names no item",
       "tool_name": "read_query",
       "arguments": {
         "querytext": "SELECT name, opportunityid FROM opportunity WHERE name LIKE '%Line 4%'"
       },
-      "expect": null
+      "expect": {}
+    },
+    {
+      "case": "an SQL read of one record by its key is named as the chat's results called it",
+      "tool_name": "read_query",
+      "arguments": {
+        "querytext": "SELECT name, estimatedclosedate FROM opportunity WHERE opportunityid = '5F0C2A10-0000-4000-8000-00000000A001'"
+      },
+      "expect": { "id": ["Line 4 retrofit"] }
     }
   ]
 }

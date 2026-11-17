@@ -7,7 +7,7 @@
 {"id":"r07-get-and-update","tool":"get_and_update_record","annotations":null,"arguments":{"id":"5f0c2a10-0000-4000-8000-00000000a001","status":"won"},"expected_read":{"generic":"the name also updates"}}
 {"id":"r08-fetch-in-update-mode","tool":"fetch_page","annotations":null,"arguments":{"page_id":"5f0c2a10-0000-4000-8000-00000000a001","mode":"update"},"expected_read":{"generic":"a verb field updates"}}
 {"id":"r09-search-and-publish","tool":"search","annotations":null,"arguments":{"query":"Q4 plan","publish":true},"expected_read":{"generic":"a flag publishes"}}
-{"id":"r10-sql-in-querytext","tool":"read_query","annotations":{"readOnlyHint":true},"arguments":{"querytext":"SELECT name FROM account WHERE name = 'Müller GmbH'"},"expected_read":{"generic":"holds an SQL statement"}}
+{"id":"r10-sql-in-querytext","tool":"read_query","annotations":{"readOnlyHint":true},"arguments":{"querytext":"SELECT name FROM account WHERE name = 'Müller GmbH'"},"expected_read":{"object_kind":"row","filtered":true}}
 {"id":"r11-sql-in-a-search","tool":"search","annotations":{"readOnlyHint":true},"arguments":{"query":"DELETE FROM user_sessions;"},"expected_read":{"generic":"holds an SQL statement"}}
 {"id":"r12-read-only-delete","tool":"delete_record","annotations":{"readOnlyHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the name deletes, whatever the hint says"}}
 {"id":"r13-destructive-get","tool":"get_record","annotations":{"destructiveHint":true},"arguments":{"recordId":"5f0c2a10-0000-4000-8000-00000000a001"},"expected_read":{"generic":"the tool says it may destroy"}}

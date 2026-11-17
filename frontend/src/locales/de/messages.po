@@ -8816,6 +8816,66 @@ msgstr "Auf dem Bildschirm wartet eine Entscheidung."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.columnOf"
+msgstr "{column} von {table}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.condition"
+msgstr "{operator, select, equals {{column} ist {value}.} not_equals {{column} ist nicht {value}.} less {{kind, select, date {{column} liegt vor dem {value}.} other {{column} ist kleiner als {value}.}}} at_most {{kind, select, date {{column} liegt spätestens am {value}.} other {{column} ist höchstens {value}.}}} greater {{kind, select, date {{column} liegt nach dem {value}.} other {{column} ist größer als {value}.}}} at_least {{kind, select, date {{column} liegt frühestens am {value}.} other {{column} ist mindestens {value}.}}} contains {{column} enthält {value}.} starts_with {{column} beginnt mit {value}.} ends_with {{column} endet auf {value}.} is_empty {{column} ist leer.} is_not_empty {{column} ist nicht leer.} in {{column} ist {value}.} neither {{column} ist weder {value} noch {second}.} not_in {{column} ist nicht {value}.} between {{kind, select, date {{column} liegt zwischen dem {value} und dem {second}.} other {{column} liegt zwischen {value} und {second}.}}} other {{column} wird mit {value} verglichen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.conditionLong"
+msgstr "{column} wird mit einem Text von etwa {words} Wörtern verglichen, er steht auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.conditionsLead"
+msgstr ", mit diesen Bedingungen:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.limit"
+msgstr "{shape, select, one {Nur das erste Ergebnis.} other {Höchstens {things}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreConditions"
+msgstr "{shape, select, unknown {Mit Bedingungen, die auf dem Bildschirm stehen.} counted {{count, plural, one {Mit einer Bedingung, sie steht auf dem Bildschirm.} other {Mit {countWord} Bedingungen, sie stehen auf dem Bildschirm.}}} other {{count, plural, one {Dazu kommt eine weitere Bedingung, sie steht auf dem Bildschirm.} other {Dazu kommen {countWord} weitere Bedingungen, sie stehen auf dem Bildschirm.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreTables"
+msgstr "{count, plural, one {einer weiteren Tabelle} other {{countWord} weiteren Tabellen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreValues"
+msgstr "{count, plural, one {ein weiterer Wert} other {{countWord} weitere Werte}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.tables"
+msgstr "{count, plural, one {aus der Tabelle {tables}} other {aus den Tabellen {tables}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.things"
+msgstr "{kind, select, page {Seiten} row {Datensätze} database {Datenbanken} folder {Ordner} note {Notizen} comment {Kommentare} paragraph {Absätze} document {Dokumente} email {E-Mails} message {Nachrichten} event {Termine} file {Dateien} task {Aufgaben} other {Einträge}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.what"
+msgstr "{shape, select, search {Ich möchte {source} nach {text} suchen{clause}} searchIn {Ich möchte {source} {thing} nach {text} durchsuchen{clause}} searchLong {Ich möchte {source} nach einem Text von etwa {text} Wörtern suchen, er steht auf dem Bildschirm{clause}} searchInLong {Ich möchte {source} {thing} nach einem Text von etwa {text} Wörtern durchsuchen, er steht auf dem Bildschirm{clause}} read {Ich möchte {source} {tables} {thing} lesen{clause}} other {Ich möchte {source} {thing} auflisten{clause}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.where"
+msgstr "Wo: {places}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.recipients"
 msgstr "{shape, select, unnamed {{total, plural, one {einen Empfänger} other {{countWord} Empfänger}}} other {{rest, plural, one {{name} und eine weitere Person} other {{name} und {countWord} weitere}}}}"
 
