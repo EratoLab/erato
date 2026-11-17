@@ -25,12 +25,17 @@ const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_TIME =
   /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
+/**
+ * Digits that are a code rather than an amount: a leading zero, as in a
+ * postcode or a phone number, or a long run of them. Said as written.
+ */
+const CODE_DIGITS = /^-?(0\d|\d{10,})/;
 
 const validDate = (year: number, month: number, day: number): boolean =>
   month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1000;
 
 /** The wall-clock fields of `instant` in `timeZone`. */
-const inZone = (instant: Date, timeZone: string) => {
+export const inZone = (instant: Date, timeZone: string) => {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- a locale whose parts are plain numbers
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -90,7 +95,7 @@ export const earValue = (
       }
     }
   }
-  if (NUMBER.test(text))
+  if (NUMBER.test(text) && !CODE_DIGITS.test(text))
     return { kind: "number", value: Number(text), percent };
   if (text === "true" || text === "false") {
     return { kind: "bool", value: text === "true" };

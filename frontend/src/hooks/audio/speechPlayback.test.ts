@@ -116,3 +116,19 @@ it("keeps a new chat's stream active when its permanent ID arrives", async () =>
   p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "created-chat");
   expect(starts).toHaveLength(1);
 });
+
+it("1.10: reads the answer after a decision back when the stopped turn was spoken", async () => {
+  const p = await import("./speechPlayback");
+  p.useSpeechPlayback.setState({ conversational: true, enabled: true });
+  // A typed turn, approved after conversational mode was switched on.
+  expect(p.readsBackContinuation("chat-1")).toBe(false);
+  p.beginSpeechResponse("chat-1");
+  expect(p.readsBackContinuation("chat-1")).toBe(true);
+  expect(p.readsBackContinuation("chat-2")).toBe(false);
+  // A stop keeps the turn spoken; the quiet ends with the next response.
+  p.quietSpokenTurn();
+  expect(p.useSpeechPlayback.getState().quietTurn).toBe("chat-1");
+  expect(p.readsBackContinuation("chat-1")).toBe(true);
+  p.beginSpeechResponse("chat-1");
+  expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
+});

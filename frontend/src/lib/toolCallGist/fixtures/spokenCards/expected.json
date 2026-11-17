@@ -2391,6 +2391,130 @@
       ]
     ]
   },
+  "create-13-long-title": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … gekürzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner…"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 12. Januar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 12
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … shortened.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner…"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 12 January 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 12
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
@@ -3995,6 +4119,176 @@
       ]
     ]
   },
+  "update-11-fifteen-emptied": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Dabei werden 15 Felder geleert.",
+          "mustSay": true,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 15,
+                "percent": false
+              }
+            },
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Probability: von 10 auf 20 Prozent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Probability"
+              }
+            },
+            {
+              "slot": "from",
+              "value": {
+                "kind": "number",
+                "value": 10,
+                "percent": true
+              }
+            },
+            {
+              "slot": "to",
+              "value": {
+                "kind": "number",
+                "value": 20,
+                "percent": true
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "15 fields will be emptied.",
+          "mustSay": true,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 15,
+                "percent": false
+              }
+            },
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Probability: from 10 to 20 percent.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Probability"
+              }
+            },
+            {
+              "slot": "from",
+              "value": {
+                "kind": "number",
+                "value": 10,
+                "percent": true
+              }
+            },
+            {
+              "slot": "to",
+              "value": {
+                "kind": "number",
+                "value": 20,
+                "percent": true
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "delete-01-task-created-earlier": {
     "de": [
       [
@@ -4594,7 +4888,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Google Drive die Datei Angebot Linie 4 v3.docx löschen.",
+          "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
           "mustSay": true,
           "values": [
             {
@@ -4603,9 +4897,23 @@
                 "kind": "text",
                 "text": "Google Drive"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name laut Aufruf: Angebot Linie 4 v3.docx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Angebot Linie 4 v3.docx"
@@ -4640,7 +4948,7 @@
       [
         {
           "role": "what",
-          "text": "I'd like to delete the file Angebot Linie 4 v3.docx in Google Drive.",
+          "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
           "mustSay": true,
           "values": [
             {
@@ -4649,9 +4957,23 @@
                 "kind": "text",
                 "text": "Google Drive"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name as given in the call: Angebot Linie 4 v3.docx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Angebot Linie 4 v3.docx"
@@ -4688,7 +5010,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Google Drive die Datei Entwurf Zeitplan.xlsx löschen.",
+          "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
           "mustSay": true,
           "values": [
             {
@@ -4697,9 +5019,23 @@
                 "kind": "text",
                 "text": "Google Drive"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name laut Aufruf: Entwurf Zeitplan.xlsx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Entwurf Zeitplan.xlsx"
@@ -4734,7 +5070,7 @@
       [
         {
           "role": "what",
-          "text": "I'd like to delete the file Entwurf Zeitplan.xlsx in Google Drive.",
+          "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
           "mustSay": true,
           "values": [
             {
@@ -4743,9 +5079,23 @@
                 "kind": "text",
                 "text": "Google Drive"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name as given in the call: Entwurf Zeitplan.xlsx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Entwurf Zeitplan.xlsx"
@@ -5396,7 +5746,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Notion die Notiz Kickoff Line 4 archivieren.",
+          "text": "Ich möchte in Notion eine Notiz archivieren, deren Kennung auf dem Bildschirm steht.",
           "mustSay": false,
           "values": [
             {
@@ -5405,9 +5755,23 @@
                 "kind": "text",
                 "text": "Notion"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Title laut Aufruf: Kickoff Line 4.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Title"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Kickoff Line 4"
@@ -5441,7 +5805,7 @@
       [
         {
           "role": "what",
-          "text": "I'd like to archive the note Kickoff Line 4 in Notion.",
+          "text": "I'd like to archive a note in Notion whose ID is shown on screen.",
           "mustSay": false,
           "values": [
             {
@@ -5450,9 +5814,23 @@
                 "kind": "text",
                 "text": "Notion"
               }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Title as given in the call: Kickoff Line 4.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Title"
+              }
             },
             {
-              "slot": "name",
+              "slot": "value",
               "value": {
                 "kind": "text",
                 "text": "Kickoff Line 4"
@@ -5488,7 +5866,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Google Drive die Datei Zeitplan Linie 4.xlsx für Planer freigeben.",
+          "text": "Ich möchte in Google Drive eine Datei für Planer freigeben, deren Kennung auf dem Bildschirm steht.",
           "mustSay": false,
           "values": [
             {
@@ -5496,13 +5874,6 @@
               "value": {
                 "kind": "text",
                 "text": "Google Drive"
-              }
-            },
-            {
-              "slot": "name",
-              "value": {
-                "kind": "text",
-                "text": "Zeitplan Linie 4.xlsx"
               }
             },
             {
@@ -5541,6 +5912,27 @@
                 "kind": "number",
                 "value": 1,
                 "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name laut Aufruf: Zeitplan Linie 4.xlsx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Zeitplan Linie 4.xlsx"
               }
             }
           ]
@@ -5599,7 +5991,7 @@
       [
         {
           "role": "what",
-          "text": "I'd like to share the file Zeitplan Linie 4.xlsx with Planer in Google Drive.",
+          "text": "I'd like to share a file with Planer in Google Drive whose ID is shown on screen.",
           "mustSay": false,
           "values": [
             {
@@ -5607,13 +5999,6 @@
               "value": {
                 "kind": "text",
                 "text": "Google Drive"
-              }
-            },
-            {
-              "slot": "name",
-              "value": {
-                "kind": "text",
-                "text": "Zeitplan Linie 4.xlsx"
               }
             },
             {
@@ -5652,6 +6037,27 @@
                 "kind": "number",
                 "value": 1,
                 "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "File name as given in the call: Zeitplan Linie 4.xlsx.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "File name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Zeitplan Linie 4.xlsx"
               }
             }
           ]
@@ -6373,7 +6779,805 @@
       ]
     ]
   },
-  "queue-01-three-tasks": {
+  "stops-01-three-tasks-one-at-a-time": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Zeichnungen anfordern"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 10. Januar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 10
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Angebot nachfassen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 20. Januar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 20
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Schulung planen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Schulung planen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 3. Februar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 2,
+                "day": 3
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Zeichnungen anfordern"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 10 January 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 10
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Angebot nachfassen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 20 January 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 20
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Schulung planen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Schulung planen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 3 February 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 2,
+                "day": 3
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "stops-02-search-then-create": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 das Werkzeug search verwenden.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "tool",
+              "value": {
+                "kind": "text",
+                "text": "search"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Technisches Layout abstimmen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 15. Januar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 15
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Priority code: 2.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "text",
+          "text": "Description: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Description"
+              }
+            },
+            {
+              "slot": "words",
+              "value": {
+                "kind": "number",
+                "value": 74,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to use the tool search in Dynamics 365.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "tool",
+              "value": {
+                "kind": "text",
+                "text": "search"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ],
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Technisches Layout abstimmen"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled end: 15 January 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled end"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 15
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Priority code: 2.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "text",
+          "text": "Description: a text of about 70 words, shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Description"
+              }
+            },
+            {
+              "slot": "words",
+              "value": {
+                "kind": "number",
+                "value": 74,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "queue-01-three-task-children": {
     "de": [
       [
         {

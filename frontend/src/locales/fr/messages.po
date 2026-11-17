@@ -1820,6 +1820,11 @@ msgid "chat.audio_failed"
 msgstr "Audio indisponible. Votre réponse textuelle reste disponible."
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio_read_card"
+msgstr "Lire la carte"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Message/MessageContent.tsx
 msgid "chat.audio_replay"
 msgstr "Réécouter la réponse audio"
@@ -8528,6 +8533,11 @@ msgstr ""
 #: src/components/ui/Message/SidecarReviewItem.tsx
 msgid "sidecarReview.unreachable"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.pointer"
+msgstr "Une validation attend à l'écran."
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

@@ -7,27 +7,26 @@ import {
 } from "@/lib/toolCallGist/spokenCard";
 
 import {
+  approvalSpoken,
+  forgetApprovalCards,
+  offerApprovalCard,
   speakApprovalCard,
-  stopApprovalSpeech,
-  useApprovalSpeech,
 } from "./approvalSpeech";
 import { useSpeechPlayback } from "./speechPlayback";
 
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 
-/** Approvals already spoken, so a remount or a re-render does not repeat one. */
-const spoken = new Set<string>();
-
 /**
  * Speaks the approval a card shows when conversational mode reads back and
  * the turn that stopped on it was a spoken one, once the model's own words
  * of that turn have played. Several approvals are spoken one at a time, as
- * the screen shows them.
+ * the screen shows them. After a stop the card waits to be asked for.
  */
 export function useSpokenApprovalCard({
   chatId,
   messageId,
   approvals,
+  keys,
   index,
   active,
   responding,
@@ -36,6 +35,12 @@ export function useSpokenApprovalCard({
   messageId: string;
   /** The open approvals in the order the screen shows them. */
   approvals: readonly SpokenApproval[];
+  /**
+   * Each approval's own identity. A turn that goes on after a decision stops
+   * again in the same message, so neither the message nor the position tells
+   * one stop from the next.
+   */
+  keys: readonly string[];
   /** The one on screen now. */
   index: number;
   /** The card asks for a decision and none is on its way. */
@@ -50,33 +55,41 @@ export function useSpokenApprovalCard({
       state.enabled &&
       state.spokenTurn === chatId,
   );
+  const quiet = useSpeechPlayback(
+    (state) => chatId !== null && state.quietTurn === chatId,
+  );
   const modelSpeaking = useSpeechPlayback((state) => state.playing);
   const approval = approvals[index] as SpokenApproval | undefined;
-  const key = `${messageId}:${index}`;
+  const key = `${messageId}:${keys[index] ?? index}`;
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
       return;
-    if (spoken.has(key)) return;
-    spoken.add(key);
+    if (approvalSpoken(key)) return;
     const total = approvals.length;
-    speakApprovalCard(
+    const options = {
+      language: i18n.locale,
+      now: new Date(),
+      position:
+        total > 1
+          ? {
+              index,
+              total,
+              sameAsPrevious:
+                index > 0 && sameSpokenKind(approvals[index - 1], approval),
+            }
+          : undefined,
+    };
+    const card = {
       key,
       messageId,
-      spokenApprovalPieces(approval, {
-        language: i18n.locale,
-        now: new Date(),
-        position:
-          total > 1
-            ? {
-                index,
-                total,
-                sameAsPrevious:
-                  index > 0 && sameSpokenKind(approvals[index - 1], approval),
-              }
-            : undefined,
-      }),
-    );
+      pieces: spokenApprovalPieces(approval, options),
+      fallback: spokenApprovalPieces({ type: "pointer" }, options),
+    };
+    // A stop during the turn's own words means quiet: the card waits to be
+    // asked for.
+    if (quiet) offerApprovalCard(card);
+    else speakApprovalCard(card);
   }, [
     active,
     approval,
@@ -85,21 +98,14 @@ export function useSpokenApprovalCard({
     key,
     messageId,
     modelSpeaking,
+    quiet,
     responding,
     spokenTurn,
   ]);
 
   // A decision, or the card going away, ends its voice.
   useEffect(() => {
-    if (active) return;
-    if (useApprovalSpeech.getState().key?.startsWith(`${messageId}:`))
-      stopApprovalSpeech();
+    if (!active) forgetApprovalCards(messageId);
   }, [active, messageId]);
-  useEffect(
-    () => () => {
-      if (useApprovalSpeech.getState().key?.startsWith(`${messageId}:`))
-        stopApprovalSpeech();
-    },
-    [messageId],
-  );
+  useEffect(() => () => forgetApprovalCards(messageId), [messageId]);
 }

@@ -22,9 +22,23 @@ export interface PlayedPiece extends SpokenPiece {
   state: SpokenPieceState;
 }
 
+/** A card the voice can say: on its own, or again when asked. */
+interface SpeakableCard {
+  key: string;
+  messageId: string;
+  pieces: SpokenPiece[];
+  /** Said instead when the card cannot be: the pointer sentence. */
+  fallback?: SpokenPiece[];
+}
+
 interface ApprovalSpeechState {
   /** The card being spoken: its message and approval. */
   key: string | null;
+  /**
+   * The waiting card the voice can say on request: after a stop, after a
+   * failure, or when it was not started on its own.
+   */
+  available: SpeakableCard | null;
   pieces: PlayedPiece[];
   /** The piece being said, or null between pieces and when nothing plays. */
   current: number | null;
@@ -34,6 +48,7 @@ interface ApprovalSpeechState {
 
 export const useApprovalSpeech = create<ApprovalSpeechState>(() => ({
   key: null,
+  available: null,
   pieces: [],
   current: null,
   speaking: false,
@@ -78,9 +93,17 @@ export const nextPiece = (
   return null;
 };
 
+/** Cards already started, by key, so a re-render does not start one again. */
+const started = new Set<string>();
+
+/** Whether the card under `key` was started; a failed one counts as not. */
+export const approvalSpoken = (key: string): boolean => started.has(key);
+
 // Bumped whenever a card starts or stops, so callbacks of an earlier card
 // recognise that they are stale.
 let run = 0;
+let speaking: SpeakableCard | null = null;
+let fellBack = false;
 let closeStream: (() => void) | undefined;
 let buffers: Buffered[] = [];
 let repeated = new Set<number>();
@@ -161,11 +184,26 @@ function settle() {
   play(nextPiece(useApprovalSpeech.getState().pieces, current, repeated));
 }
 
+/**
+ * The card could not be spoken. Its pointer sentence is tried once; if that
+ * fails too, the "audio unavailable" notice shows. Either way the card is not
+ * counted as spoken, and the control that reads it stays.
+ */
 function fail() {
-  const { current } = useApprovalSpeech.getState();
+  const { current, pieces } = useApprovalSpeech.getState();
+  const card = speaking;
   finish();
   if (current !== null) setPieceState(current, "cut");
   useApprovalSpeech.setState({ current: null, speaking: false, failed: true });
+  if (!card) return;
+  started.delete(card.key);
+  const heard = pieces.some((piece) => piece.state === "heard");
+  if (!fellBack && !heard && card.fallback) {
+    fellBack = true;
+    play_(card, card.fallback);
+    return;
+  }
+  useSpeechPlayback.setState({ failed: true });
 }
 
 /** Stops the voice; the card keeps waiting and nothing is decided. */
@@ -198,17 +236,42 @@ export const approvalSpeechAllowed = (): boolean => {
  * Speaks one approval of `messageId`, replacing whatever card was spoken.
  * `key` names the approval, so the same one is not started twice.
  */
-export function speakApprovalCard(
-  key: string,
-  messageId: string,
-  pieces: SpokenPiece[],
-) {
+export function speakApprovalCard(card: SpeakableCard) {
+  fellBack = false;
+  started.add(card.key);
+  play_(card, card.pieces);
+}
+
+/** Keeps a waiting card ready to be said on request, without saying it. */
+export function offerApprovalCard(card: SpeakableCard) {
+  started.add(card.key);
+  useApprovalSpeech.setState({ available: card });
+}
+
+/** Says the waiting card again, from its start: the control a user taps. */
+export function replayApprovalCard() {
+  const { available } = useApprovalSpeech.getState();
+  if (available) speakApprovalCard(available);
+}
+
+/** Forgets the cards of a message that no longer waits. */
+export function forgetApprovalCards(messageId: string) {
+  const { available, key } = useApprovalSpeech.getState();
+  if (key?.startsWith(`${messageId}:`)) stopApprovalSpeech();
+  if (available?.messageId === messageId)
+    useApprovalSpeech.setState({ available: null });
+}
+
+function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
+  const { key, messageId } = card;
   finish();
+  speaking = card;
   const current = run;
   buffers = pieces.map(() => ({ chunks: [], queued: 0, done: false }));
   repeated = new Set();
   useApprovalSpeech.setState({
     key,
+    available: card,
     pieces: pieces.map((piece) => ({ ...piece, state: "pending" })),
     current: null,
     speaking: true,

@@ -19,6 +19,7 @@ import {
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
 import {
+  replayApprovalCard,
   skipApprovalPiece,
   stopApprovalSpeech,
   useApprovalSpeech,
@@ -26,6 +27,7 @@ import {
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
+  quietSpokenTurn,
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
@@ -919,6 +921,7 @@ export const ChatInput = ({
   // take the turn away from the card.
   const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
   const cardSpeaking = useApprovalSpeech((state) => state.speaking);
+  const cardAvailable = useApprovalSpeech((state) => state.available !== null);
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
@@ -2838,7 +2841,9 @@ export const ChatInput = ({
   }, [isPendingResponse]);
 
   // A card that appears while the microphone listens closes it; it opens
-  // again once the card is decided and the answer has played.
+  // again once the card is decided and the answer has played. What it heard
+  // is dropped: in audio mode nobody sees the composer, and words left there
+  // would keep the microphone from opening again.
   useEffect(() => {
     if (!isAudioMode || !decisionWaiting) {
       return;
@@ -2848,13 +2853,19 @@ export const ChatInput = ({
     }
     shouldRestartAudioModeAfterResponseRef.current = true;
     audioModeRestartSawPendingResponseRef.current = true;
-    toggleDictationForCurrentTarget();
+    clearPendingAutoSendTimeout();
+    pendingAutoSendRef.current = false;
+    toggleDictation();
+    dictationTargetRef.current = null;
+    setMessage("");
   }, [
+    clearPendingAutoSendTimeout,
     decisionWaiting,
     isAudioMode,
     isDictating,
     isDictationStarting,
-    toggleDictationForCurrentTarget,
+    setMessage,
+    toggleDictation,
   ]);
 
   useEffect(() => {
@@ -3610,7 +3621,7 @@ export const ChatInput = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        stopSpeechPlayback();
+                        quietSpokenTurn();
                         stopApprovalSpeech();
                       }}
                     >
@@ -3628,6 +3639,23 @@ export const ChatInput = ({
                       {t({ id: "chat.audio_skip", message: "Skip" })}
                     </Button>
                   )}
+                  {speech.enabled &&
+                    decisionWaiting &&
+                    cardAvailable &&
+                    !cardSpeaking && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={replayApprovalCard}
+                        data-testid="chat-input-audio-read-card"
+                      >
+                        {t({
+                          id: "chat.audio_read_card",
+                          message: "Read the card aloud",
+                        })}
+                      </Button>
+                    )}
                   {speech.blocked && (
                     <span role="status">
                       {t({

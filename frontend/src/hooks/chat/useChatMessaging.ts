@@ -40,6 +40,7 @@ import {
   beginSpeechResponse,
   moveSpeechStream,
   playSpeechChunk,
+  readsBackContinuation,
   speechFailed,
   stopSpeechPlayback,
   useSpeechPlayback,
@@ -2855,11 +2856,9 @@ export function useChatMessaging(
           .setStreaming({ content: seededContent }, activeStreamKey);
       };
 
-      // The answer after a decision is read back the way a sent message's
-      // is, while conversational mode reads back.
-      const speech = useSpeechPlayback.getState();
-      const readBack =
-        !nothingToDecide && speech.conversational && speech.enabled;
+      // The answer after a decision is read back when the turn that stopped
+      // was, and the voice can still play it.
+      const readBack = !nothingToDecide && readsBackContinuation(streamKey);
       if (readBack) beginSpeechResponse(streamKey);
 
       return new Promise<void>((resolve, reject) => {

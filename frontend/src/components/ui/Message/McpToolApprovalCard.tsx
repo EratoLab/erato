@@ -622,6 +622,11 @@ export const McpToolApprovalCard = ({
       display: approvalDisplayOf(call.display, call.tool_name),
     }),
   );
+  // A stop is told apart by when it was asked and its approval's id: a turn
+  // that goes on after a decision asks again in the same message.
+  const spokenKeys = (isQueue ? spokenItems : approvalItems.slice(0, 1)).map(
+    (item) => `${request.requested_at}:${item.approval_id}`,
+  );
   const unanswered = spokenItems.findIndex(
     (item) => staged[item.approval_id] === undefined,
   );
@@ -629,6 +634,7 @@ export const McpToolApprovalCard = ({
     chatId,
     messageId,
     approvals: spokenApprovals,
+    keys: spokenKeys,
     index: isQueue && unanswered > 0 ? unanswered : 0,
     active:
       isPending &&

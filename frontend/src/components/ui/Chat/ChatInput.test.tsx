@@ -8665,6 +8665,37 @@ describe("ChatInput", () => {
       await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
     });
 
+    it("1.7: drops what it heard as a card appears, and listens again after the decision", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation);
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+      // The composer starts the capture, so its words have a place to go.
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      conversational(toggleDictation, true);
+      rerender(ui(true));
+
+      showCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      // The closed capture's last words arrive after the card.
+      const dictationOptions =
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+      await act(async () => {
+        dictationOptions.onTranscriptChunk({ chunkIndex: 0, transcript: "ja" });
+      });
+      conversational(toggleDictation, false);
+      rerender(ui(true));
+
+      decideCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+      rerender(ui(false));
+      expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
+    });
+
     it("closes a listening microphone when a card appears", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation, true);

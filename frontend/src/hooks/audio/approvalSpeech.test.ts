@@ -87,7 +87,14 @@ async function speak(pieces = CARD) {
   const module = await import("./approvalSpeech");
   const { useSpeechPlayback } = await import("./speechPlayback");
   useSpeechPlayback.setState({ conversational: true, enabled: true });
-  module.speakApprovalCard("message-1:0", "message-1", pieces);
+  module.speakApprovalCard({
+    key: "message-1:stop-1",
+    messageId: "message-1",
+    pieces,
+    fallback: [
+      piece("pointer", "Auf dem Bildschirm wartet eine Entscheidung."),
+    ],
+  });
   await vi.waitFor(() => expect(connections).toHaveLength(1));
   const connection = connections[0];
   return {
@@ -210,6 +217,36 @@ describe("speaking an approval card", () => {
     const before = sources.length;
     audio(connection, 1);
     expect(sources).toHaveLength(before);
+  });
+
+  it("1.6: a card that cannot be spoken falls back, then says so, and stays to be asked for", async () => {
+    const {
+      connection,
+      useApprovalSpeech,
+      approvalSpoken,
+      replayApprovalCard,
+    } = await speak();
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    // The endpoint refuses the card: the pointer sentence is asked for.
+    connection.options.onError?.(new Error("413"));
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string)).toEqual({
+      pieces: ["Auf dem Bildschirm wartet eine Entscheidung."],
+    });
+    expect(useSpeechPlayback.getState().failed).toBe(false);
+    // The voice is down: the notice shows, and nothing counts as spoken.
+    connections[1].options.onError?.(new Error("502"));
+    expect(useSpeechPlayback.getState().failed).toBe(true);
+    expect(approvalSpoken("message-1:stop-1")).toBe(false);
+    expect(useApprovalSpeech.getState().available?.key).toBe(
+      "message-1:stop-1",
+    );
+    // The control that reads the card tries the whole card again.
+    replayApprovalCard();
+    await vi.waitFor(() => expect(connections).toHaveLength(3));
+    expect(
+      JSON.parse(connections[2].options.body as string).pieces,
+    ).toHaveLength(CARD.length);
   });
 
   it("ends when conversational mode stops reading back", async () => {

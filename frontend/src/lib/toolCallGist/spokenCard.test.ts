@@ -4,6 +4,9 @@ import { i18n } from "@lingui/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { messages as deMessages } from "@/locales/de/messages.json";
+import { messages as esMessages } from "@/locales/es/messages.json";
+import { messages as frMessages } from "@/locales/fr/messages.json";
+import { messages as plMessages } from "@/locales/pl/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
 import expectedPieces from "./fixtures/spokenCards/expected.json";
@@ -16,8 +19,10 @@ import {
   spokenApprovalFor,
   spokenApprovalPieces,
 } from "./spokenCard";
+import { spokenWordsFor } from "./spokenCardWords";
+import { earValue } from "./spokenValues";
 
-import type { SpokenApproval, SpokenPiece } from "./spokenCard";
+import type { SpokenApproval, SpokenFacts, SpokenPiece } from "./spokenCard";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -40,6 +45,8 @@ interface Scenario {
   kind: string[];
   holds: string[];
   approval_kind?: string;
+  /** `consecutive_stops`: each call stops the turn on its own, one after another. */
+  shape?: string;
   calls: string[];
 }
 
@@ -51,6 +58,24 @@ const expected = expectedPieces as unknown as Partial<
   Record<string, Record<string, SpokenPiece[][]>>
 >;
 const NOW = new Date("2026-11-17T09:00:00Z");
+
+i18n.load({
+  de: deMessages as unknown as Messages,
+  fr: frMessages as unknown as Messages,
+  es: esMessages as unknown as Messages,
+  pl: plMessages as unknown as Messages,
+});
+
+/** Composes in `language` with its catalog active, as the app does. */
+const inLanguage = <T>(language: string, compose: () => T): T => {
+  const previous = i18n.locale;
+  i18n.activate(language);
+  try {
+    return compose();
+  } finally {
+    i18n.activate(previous);
+  }
+};
 const ZONE = "Europe/Berlin";
 
 const callOf = (id: string): SetCall => {
@@ -80,12 +105,14 @@ const pieces = (
   language = "de",
   position?: Parameters<typeof spokenApprovalPieces>[1]["position"],
 ) =>
-  spokenApprovalPieces(approvalOf(callOf(id)), {
-    language,
-    now: NOW,
-    timeZone: ZONE,
-    position,
-  }).map(said);
+  inLanguage(language, () =>
+    spokenApprovalPieces(approvalOf(callOf(id)), {
+      language,
+      now: NOW,
+      timeZone: ZONE,
+      position,
+    }),
+  ).map(said);
 
 const spoken = (id: string, language = "de") =>
   pieces(id, language)
@@ -110,26 +137,29 @@ const scenarioPieces = (
             input: null,
           }),
         ];
-  return approvals.map((approval, index) =>
-    spokenApprovalPieces(approval, {
-      language,
-      now: NOW,
-      timeZone: ZONE,
-      position:
-        approvals.length > 1
-          ? {
-              index,
-              total: approvals.length,
-              sameAsPrevious:
-                index > 0 && sameSpokenKind(approvals[index - 1], approval),
-            }
-          : undefined,
-    }),
+  const together = scenario.shape !== "consecutive_stops";
+  return inLanguage(language, () =>
+    approvals.map((approval, index) =>
+      spokenApprovalPieces(approval, {
+        language,
+        now: NOW,
+        timeZone: ZONE,
+        position:
+          together && approvals.length > 1
+            ? {
+                index,
+                total: approvals.length,
+                sameAsPrevious:
+                  index > 0 && sameSpokenKind(approvals[index - 1], approval),
+              }
+            : undefined,
+      }),
+    ),
   );
 };
 
 const QUEUE = scenarios.find(
-  (scenario) => scenario.id === "queue-01-three-tasks",
+  (scenario) => scenario.id === "queue-01-three-task-children",
 ) as Scenario;
 const queuePieces = (language: string) =>
   scenarioPieces(QUEUE, language).map((card) => card.map(said));
@@ -280,8 +310,8 @@ describe("spoken approval card", () => {
         },
       )[2].pauseBeforeMs,
     ).toBeGreaterThan(0);
-    expect(spoken("delete-07-file-permanent")).toBe(
-      "Ich möchte in Google Drive die Datei Angebot Linie 4 v3.docx löschen. Das lässt sich nicht rückgängig machen. Bitte auf dem Bildschirm bestätigen.",
+    expect(spoken("delete-09-single-page")).toBe(
+      "Ich möchte in Notion die Seite Kickoff Line 4 löschen. Sie lässt sich wiederherstellen. Bitte auf dem Bildschirm bestätigen.",
     );
     expect(spoken("delete-06-batch-pages")).toBe(
       "Ich möchte in Notion zwölf Seiten, darunter Kickoff Line 4, Wochenbericht KW 44 und Wochenbericht KW 45, löschen. Sie lassen sich wiederherstellen. Bitte auf dem Bildschirm bestätigen.",
@@ -336,28 +366,22 @@ describe("spoken approval card", () => {
     expect(
       spokenApprovalPieces(
         { type: "pointer" },
-        { language: "de", now: NOW },
+        { language: "en", now: NOW },
       ).map(said),
     ).toEqual([
       {
         role: "pointer",
-        text: "Auf dem Bildschirm wartet eine Entscheidung.",
+        text: "A decision is waiting on screen.",
         mustSay: false,
       },
     ]);
-    expect(pieces("create-01-task-long-description", "fr")).toEqual([
-      {
-        role: "pointer",
-        text: "Une validation attend à l'écran.",
-        mustSay: false,
-      },
-    ]);
-    expect(pieces("update-01-date-and-probability", "pl")[0].text).toBe(
-      "Na ekranie czeka prośba o zatwierdzenie.",
-    );
-    expect(pieces("delete-01-task-created-earlier", "es")[0].text).toBe(
-      "Hay una aprobación pendiente en la pantalla.",
-    );
+    for (const language of ["fr", "es", "pl"]) {
+      expect(
+        pieces("update-01-date-and-probability", language).map(
+          (piece) => piece.role,
+        ),
+      ).toEqual(["pointer"]);
+    }
   });
 
   it("reads a queue one at a time, the count first, shorter from the second", () => {
@@ -400,6 +424,138 @@ describe("spoken approval card", () => {
       }
     }
     expect(roles("update-08-long-text")).toEqual(["what", "text", "request"]);
+  });
+});
+
+describe("findings of the review of 2026-11-17", () => {
+  const words = (language: string, now = NOW) =>
+    spokenWordsFor(language, { now, timeZone: ZONE });
+  const facts = { action: "update" } as SpokenFacts;
+  const set = (field: string, written: string, language = "de") =>
+    words(language).detail(
+      { type: "set", field, value: earValue(written), loss: false },
+      { action: "create" } as SpokenFacts,
+    );
+
+  it("1.3: an item that exists is never named from a field the call typed", () => {
+    expect(
+      pieces("delete-07-file-permanent").map((piece) => piece.text),
+    ).toEqual([
+      "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+      "File name laut Aufruf: Angebot Linie 4 v3.docx.",
+      "Das lässt sich nicht rückgängig machen.",
+      "Bitte auf dem Bildschirm bestätigen.",
+    ]);
+    // Another typed name, the same ID: the item said stays the same.
+    const call = JSON.parse(
+      JSON.stringify(callOf("delete-07-file-permanent")),
+    ) as SetCall;
+    const label = call.display.label as {
+      change: { effects: { values: { text: string }[] }[] };
+    };
+    label.change.effects[0].values[0].text = "Gehaltsliste 2026.xlsx";
+    const said = inLanguage("de", () =>
+      spokenApprovalPieces(approvalOf(call), { language: "de", now: NOW }),
+    ).map((piece) => piece.text);
+    expect(said[0]).toBe(
+      "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+    );
+    expect(said[1]).toBe("File name laut Aufruf: Gehaltsliste 2026.xlsx.");
+    expect(spoken("archive-01-note")).toContain(
+      "eine Notiz archivieren, deren Kennung auf dem Bildschirm steht",
+    );
+    // Something new is still called by its title.
+    expect(spoken("upload-01-file")).toContain(
+      "Zeichnungen-Foerdertechnik.pdf",
+    );
+  });
+
+  it("1.4: digits that are not amounts are said as written, decimals whole", () => {
+    expect(set("Postcode", "01067")).toBe("Postcode: 01067.");
+    expect(set("Phone", "0891234500")).toBe("Phone: 0891234500.");
+    expect(set("Account", "12345678901")).toBe("Account: 12345678901.");
+    expect(set("Share", "0.0005")).toBe("Share: 0,0005.");
+    expect(set("Value", "12345.6789")).toBe("Value: 12.345,6789.");
+    expect(set("Value", "12345.6789", "en")).toBe("Value: 12,345.6789.");
+    expect(set("Amount", "185000")).toBe("Amount: 185.000.");
+  });
+
+  it("1.5: the year is left out only for the coming eleven months", () => {
+    const late = new Date("2026-12-30T10:00:00Z");
+    const change = (from: string, to: string, language = "de") =>
+      words(language, late).detail(
+        {
+          type: "changed",
+          field: "Estimated close date",
+          from: earValue(from),
+          to: earValue(to),
+          loss: false,
+        },
+        facts,
+      );
+    expect(change("2026-12-01", "2026-01-15")).toBe(
+      "Estimated close date: vom 1. Dezember 2026 auf den 15. Januar 2026.",
+    );
+    expect(change("2026-12-31", "2027-01-15")).toBe(
+      "Estimated close date: vom 31. Dezember auf den 15. Januar.",
+    );
+    expect(change("2027-11-01", "2027-12-15", "en")).toBe(
+      "Estimated close date: from 1 November to 15 December 2027.",
+    );
+  });
+
+  it("1.6: a card too long for the voice is cut by rule, never left silent", () => {
+    const title = pieces("create-13-long-title");
+    expect(title[1].text.length).toBeLessThanOrEqual(400);
+    expect(title[1].text).toMatch(/… gekürzt\.$/);
+    const emptied = pieces("update-11-fifteen-emptied");
+    expect(emptied.length).toBeLessThanOrEqual(16);
+    expect(emptied.find((piece) => piece.role === "detail")).toEqual({
+      role: "detail",
+      text: "Dabei werden 15 Felder geleert.",
+      mustSay: true,
+    });
+    expect(
+      pieces("update-11-fifteen-emptied", "en").find(
+        (piece) => piece.role === "detail",
+      )?.text,
+    ).toBe("15 fields will be emptied.");
+  });
+
+  it("question 2: the pointer sentence comes from the catalogs", () => {
+    const previous = i18n.locale;
+    try {
+      for (const [language, catalog, sentence] of [
+        ["fr", frMessages, "Une validation attend à l'écran."],
+        ["es", esMessages, "Hay una aprobación pendiente en la pantalla."],
+        ["pl", plMessages, "Na ekranie czeka prośba o zatwierdzenie."],
+        ["de", deMessages, "Auf dem Bildschirm wartet eine Entscheidung."],
+      ] as const) {
+        void catalog;
+        i18n.activate(language);
+        expect(
+          spokenApprovalPieces({ type: "pointer" }, { language, now: NOW })[0]
+            .text,
+        ).toBe(sentence);
+        if (language !== "de") {
+          expect(pieces("create-01-task-long-description", language)).toEqual([
+            { role: "pointer", text: sentence, mustSay: false },
+          ]);
+        }
+      }
+      // A catalog's wording is the one said.
+      i18n.load("fr", {
+        ...(frMessages as unknown as Messages),
+        "spokenCard.pointer": "Une décision attend.",
+      });
+      i18n.activate("fr");
+      expect(pieces("create-01-task-long-description", "fr")[0].text).toBe(
+        "Une décision attend.",
+      );
+    } finally {
+      i18n.load("fr", frMessages as unknown as Messages);
+      i18n.activate(previous);
+    }
   });
 });
 
@@ -449,9 +605,20 @@ describe("every scenario of the set", () => {
           const texts = card.map((piece) => piece.text);
           expect(new Set(texts).size, where).toBe(texts.length);
           expect(order.at(-1), where).toBe("request");
+          // Only approvals asked together are counted first.
           expect(order.includes("count"), where).toBe(
-            index === 0 && cards.length > 1,
+            index === 0 &&
+              cards.length > 1 &&
+              scenario.shape !== "consecutive_stops",
           );
+          // Every card fits what the voice endpoint takes.
+          expect(card.length, where).toBeLessThanOrEqual(16);
+          expect(
+            texts.reduce((sum, piece) => sum + piece.length, 0),
+            where,
+          ).toBeLessThanOrEqual(2000);
+          for (const piece of texts)
+            expect(piece.length, where).toBeLessThanOrEqual(400);
           // The consequence is said, and before the request to decide.
           const consequence = order.indexOf("consequence");
           if (
@@ -464,47 +631,55 @@ describe("every scenario of the set", () => {
             expect(consequence, where).toBeLessThan(order.indexOf("request"));
             expect(card[consequence].mustSay, where).toBe(true);
           }
-          // What the card holds shows in what is said.
-          if (scenario.holds.includes("many_fields"))
-            expect(order, where).toContain("more");
-          if (scenario.holds.includes("short_fields"))
-            expect(order, where).not.toContain("more");
-          if (scenario.holds.includes("long_text")) {
-            expect(
-              card.some(
-                (piece) =>
-                  piece.role === "text" &&
-                  piece.values?.some(
-                    (source) =>
-                      source.slot === "words" &&
-                      source.value.kind === "number" &&
-                      source.value.value > MAX_READ_WORDS,
-                  ),
-              ),
-              where,
-            ).toBe(true);
-          }
-          if (scenario.holds.includes("loss"))
-            expect(
-              card.some((piece) => piece.role === "detail" && piece.mustSay),
-              where,
-            ).toBe(true);
-          if (scenario.holds.includes("outside_recipients"))
-            expect(
-              card.find((piece) => piece.role === "outside")?.mustSay,
-              where,
-            ).toBe(true);
-          if (scenario.holds.includes("unread_record"))
-            expect(texts.join(" "), where).toMatch(
-              language === "de" ? /nicht gelesen/ : /haven't read/,
-            );
-          if (scenario.holds.includes("permanent_delete"))
-            expect(texts.join(" "), where).toMatch(
-              language === "de" ? /nicht rückgängig/ : /cannot be undone/,
-            );
           // Every value a piece says is kept beside its text.
           for (const piece of card) expect(piece.values, where).toBeDefined();
         });
+        // What the scenario holds shows in what is said, on some card of it.
+        const all = cards.flat();
+        const roles = all.map((piece) => piece.role);
+        const said = all.map((piece) => piece.text).join(" ");
+        const where = `${scenario.id} ${language}`;
+        const counted = (piece: SpokenPiece) =>
+          piece.role === "more" ||
+          (piece.role === "detail" &&
+            piece.mustSay &&
+            piece.values?.every((source) => source.slot === "count") === true);
+        if (scenario.holds.includes("many_fields"))
+          expect(all.some(counted), where).toBe(true);
+        if (scenario.holds.includes("short_fields"))
+          expect(roles, where).not.toContain("more");
+        if (scenario.holds.includes("long_text"))
+          expect(
+            all.some(
+              (piece) =>
+                piece.role === "text" &&
+                piece.values?.some(
+                  (source) =>
+                    source.slot === "words" &&
+                    source.value.kind === "number" &&
+                    source.value.value > MAX_READ_WORDS,
+                ),
+            ),
+            where,
+          ).toBe(true);
+        if (scenario.holds.includes("loss"))
+          expect(
+            all.some((piece) => piece.role === "detail" && piece.mustSay),
+            where,
+          ).toBe(true);
+        if (scenario.holds.includes("outside_recipients"))
+          expect(
+            all.find((piece) => piece.role === "outside")?.mustSay,
+            where,
+          ).toBe(true);
+        if (scenario.holds.includes("unread_record"))
+          expect(said, where).toMatch(
+            language === "de" ? /nicht gelesen/ : /haven't read/,
+          );
+        if (scenario.holds.includes("permanent_delete"))
+          expect(said, where).toMatch(
+            language === "de" ? /nicht rückgängig/ : /cannot be undone/,
+          );
       }
       for (const language of ["fr", "es", "pl"]) {
         for (const card of scenarioPieces(scenario, language))

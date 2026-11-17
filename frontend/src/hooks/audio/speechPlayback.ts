@@ -27,6 +27,11 @@ interface SpeechState {
    * it stops on is spoken too. Unlike playback it survives a stop.
    */
   spokenTurn?: string;
+  /**
+   * The stream whose voice the user stopped: a card it stops on is not
+   * spoken on its own then, but waits to be asked for.
+   */
+  quietTurn?: string;
 }
 export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
@@ -77,12 +82,29 @@ export function beginSpeechResponse(streamKey?: string) {
   useSpeechPlayback.setState({
     failed: false,
     spokenTurn: accepting ? streamKey : undefined,
+    quietTurn: undefined,
   });
+}
+
+/**
+ * Whether the answer after a decision in `streamKey` is read back: when the
+ * turn that stopped was, and the voice can still play it.
+ */
+export function readsBackContinuation(streamKey: string): boolean {
+  const { spokenTurn, conversational, enabled } = useSpeechPlayback.getState();
+  return spokenTurn === streamKey && conversational && enabled;
+}
+
+/** The user stopped the voice: quiet for the rest of this turn. */
+export function quietSpokenTurn() {
+  stopSpeechPlayback();
+  useSpeechPlayback.setState((state) => ({ quietTurn: state.spokenTurn }));
 }
 export function moveSpeechStream(from: string, to: string) {
   if (acceptingStream === from) acceptingStream = to;
-  if (useSpeechPlayback.getState().spokenTurn === from)
-    useSpeechPlayback.setState({ spokenTurn: to });
+  const { spokenTurn, quietTurn } = useSpeechPlayback.getState();
+  if (spokenTurn === from) useSpeechPlayback.setState({ spokenTurn: to });
+  if (quietTurn === from) useSpeechPlayback.setState({ quietTurn: to });
 }
 export function speechFailed(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;

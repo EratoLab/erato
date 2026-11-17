@@ -43,6 +43,10 @@ struct Scenario {
     holds: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     approval_kind: Option<String>,
+    /// `consecutive_stops`: the calls stop the turn one after another, as
+    /// parallel calls of the model do; else they are asked together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shape: Option<String>,
     calls: Vec<String>,
 }
 

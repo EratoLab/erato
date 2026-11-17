@@ -47,8 +47,8 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  * back as `decisions_mismatch` naming it. An `approve_context` answer is
  * always enumerated, since only an item carries its position.
  *
- * `readBack` asks for the continued answer to be spoken, as the turn that
- * stopped was.
+ * `readBack` asks for the continued answer to be spoken; the caller sets it
+ * when the turn that stopped was spoken.
  */
 export const buildContinueStreamBody = ({
   messageId,

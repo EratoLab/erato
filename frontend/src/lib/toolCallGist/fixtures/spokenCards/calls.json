@@ -149,6 +149,18 @@
       ]
     },
     {
+      "id": "create-13-long-title",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-13-long-title"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -267,6 +279,19 @@
       ],
       "calls": [
         "update-10-contact-two-fields"
+      ]
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "many_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-11-fifteen-emptied"
       ]
     },
     {
@@ -520,7 +545,39 @@
       ]
     },
     {
-      "id": "queue-01-three-tasks",
+      "id": "stops-01-three-tasks-one-at-a-time",
+      "kind": [
+        "several_stops",
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "queue-01-task",
+        "queue-02-task",
+        "queue-03-task"
+      ]
+    },
+    {
+      "id": "stops-02-search-then-create",
+      "kind": [
+        "several_stops",
+        "read",
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "read-01-search",
+        "create-01-task-long-description"
+      ]
+    },
+    {
+      "id": "queue-01-three-task-children",
       "kind": [
         "queue",
         "create"
@@ -528,6 +585,7 @@
       "holds": [
         "short_fields"
       ],
+      "approval_kind": "delegated_task",
       "calls": [
         "queue-01-task",
         "queue-02-task",
@@ -2823,6 +2881,104 @@
       }
     },
     {
+      "id": "create-13-long-title",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "task",
+        "item": {
+          "subject": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner und dem Einkauf, einschließlich der Frage, ob die Schaltschränke am bisherigen Platz bleiben können oder in den neuen Anbau verlegt werden müssen, und der Abschätzung der Stillstandszeit getrennt nach mechanischem Umbau, Verdrahtung, Inbetriebnahme und Schulung der Mitarbeiter aus der Frühschicht und der Spätschicht.",
+          "scheduledend": "2030-01-12"
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "task",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/subject",
+                "values": [
+                  {
+                    "path": "/item/subject",
+                    "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner und dem Einkauf, einschließlich der Frage, ob die Schaltschränke am bisherigen Platz bleiben können oder in den",
+                    "truncated": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/scheduledend",
+                  "name": "scheduledend",
+                  "values": [
+                    {
+                      "path": "/item/scheduledend",
+                      "text": "2030-01-12"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/subject",
+                    "kind": "text"
+                  },
+                  {
+                    "path": "/item/scheduledend",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/scheduledend",
+                "name": "Scheduled end",
+                "raw_name": "scheduledend",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "2030-01-12"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "complete": true
+          }
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "tool_name": "update_record",
       "server_id": "dynamics",
@@ -4163,6 +4319,281 @@
               "unreadable": 0
             },
             "table": "contact",
+            "notes": [
+              "old_values_from_earlier"
+            ],
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "tool_name": "update_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "telephone1": null,
+          "description": null,
+          "stepname": null,
+          "budgetamount": null,
+          "customerneed": null,
+          "proposedsolution": null,
+          "currentsituation": null,
+          "qualificationcomments": null,
+          "quotecomments": null,
+          "decisionmaker": null,
+          "pursuitdecision": null,
+          "purchaseprocess": null,
+          "timeline": null,
+          "new_competitor": null,
+          "new_region": null,
+          "closeprobability": 20
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a001",
+                    "resolved": "Line 4 Retrofit",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/closeprobability",
+                  "name": "closeprobability",
+                  "values": [
+                    {
+                      "path": "/item/closeprobability",
+                      "text": "20",
+                      "resolved": "10"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/telephone1",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/description",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/stepname",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/budgetamount",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/customerneed",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/proposedsolution",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/currentsituation",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/qualificationcomments",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/quotecomments",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/decisionmaker",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/pursuitdecision",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/purchaseprocess",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/timeline",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/new_competitor",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/new_region",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/closeprobability",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/telephone1",
+                "name": "Telephone 1",
+                "raw_name": "telephone1",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/description",
+                "name": "Description",
+                "raw_name": "description",
+                "effect": "emptied",
+                "old": {
+                  "text": "Umbau der Linie 4 auf die neue Steuerung."
+                }
+              },
+              {
+                "path": "/item/stepname",
+                "name": "Step name",
+                "raw_name": "stepname",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/budgetamount",
+                "name": "Budget amount",
+                "raw_name": "budgetamount",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/customerneed",
+                "name": "Customerneed",
+                "raw_name": "customerneed",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/proposedsolution",
+                "name": "Proposedsolution",
+                "raw_name": "proposedsolution",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/currentsituation",
+                "name": "Currentsituation",
+                "raw_name": "currentsituation",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/qualificationcomments",
+                "name": "Qualificationcomments",
+                "raw_name": "qualificationcomments",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/quotecomments",
+                "name": "Quote comments",
+                "raw_name": "quotecomments",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/decisionmaker",
+                "name": "Decisionmaker",
+                "raw_name": "decisionmaker",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/pursuitdecision",
+                "name": "Pursuitdecision",
+                "raw_name": "pursuitdecision",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/purchaseprocess",
+                "name": "Purchase process",
+                "raw_name": "purchaseprocess",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/timeline",
+                "name": "Time line",
+                "raw_name": "timeline",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/new_competitor",
+                "name": "New competitor",
+                "raw_name": "new_competitor",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/new_region",
+                "name": "New region",
+                "raw_name": "new_region",
+                "effect": "emptied"
+              },
+              {
+                "path": "/item/closeprobability",
+                "name": "Probability (closeprobability)",
+                "raw_name": "closeprobability",
+                "effect": "changed",
+                "values": [
+                  {
+                    "text": "20"
+                  }
+                ],
+                "old": {
+                  "text": "10"
+                }
+              }
+            ],
+            "counts": {
+              "emptied": 15,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 1,
+              "set": 0,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "opportunity",
             "notes": [
               "old_values_from_earlier"
             ],

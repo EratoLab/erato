@@ -10,6 +10,7 @@
       "run",
       "batch",
       "queue",
+      "several_stops",
       "builtin_tool",
       "task_plan",
       "tool_call_limit",
@@ -183,6 +184,18 @@
       ]
     },
     {
+      "id": "create-13-long-title",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-13-long-title"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -301,6 +314,19 @@
       ],
       "calls": [
         "update-10-contact-two-fields"
+      ]
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "many_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-11-fifteen-emptied"
       ]
     },
     {
@@ -554,7 +580,39 @@
       ]
     },
     {
-      "id": "queue-01-three-tasks",
+      "id": "stops-01-three-tasks-one-at-a-time",
+      "kind": [
+        "several_stops",
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "queue-01-task",
+        "queue-02-task",
+        "queue-03-task"
+      ]
+    },
+    {
+      "id": "stops-02-search-then-create",
+      "kind": [
+        "several_stops",
+        "read",
+        "create"
+      ],
+      "holds": [
+        "long_text"
+      ],
+      "shape": "consecutive_stops",
+      "calls": [
+        "read-01-search",
+        "create-01-task-long-description"
+      ]
+    },
+    {
+      "id": "queue-01-three-task-children",
       "kind": [
         "queue",
         "create"
@@ -562,6 +620,7 @@
       "holds": [
         "short_fields"
       ],
+      "approval_kind": "delegated_task",
       "calls": [
         "queue-01-task",
         "queue-02-task",
@@ -1064,6 +1123,22 @@
       }
     },
     {
+      "id": "create-13-long-title",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "item": {
+          "subject": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner und dem Einkauf, einschließlich der Frage, ob die Schaltschränke am bisherigen Platz bleiben können oder in den neuen Anbau verlegt werden müssen, und der Abschätzung der Stillstandszeit getrennt nach mechanischem Umbau, Verdrahtung, Inbetriebnahme und Schulung der Mitarbeiter aus der Frühschicht und der Spätschicht.",
+          "scheduledend": "2030-01-12"
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "server": "dynamics",
       "tool": "update_record",
@@ -1236,6 +1311,37 @@
         "item": {
           "jobtitle": "Technische Leiterin",
           "telephone1": "+49 89 1234 510"
+        }
+      }
+    },
+    {
+      "id": "update-11-fifteen-emptied",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001",
+        "item": {
+          "telephone1": null,
+          "description": null,
+          "stepname": null,
+          "budgetamount": null,
+          "customerneed": null,
+          "proposedsolution": null,
+          "currentsituation": null,
+          "qualificationcomments": null,
+          "quotecomments": null,
+          "decisionmaker": null,
+          "pursuitdecision": null,
+          "purchaseprocess": null,
+          "timeline": null,
+          "new_competitor": null,
+          "new_region": null,
+          "closeprobability": 20
         }
       }
     },

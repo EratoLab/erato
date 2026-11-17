@@ -77,6 +77,44 @@ export interface SpokenPiece {
 
 /** Details read before the rest is counted. */
 export const MAX_SPOKEN_DETAILS = 3;
+/** Losses listed one by one; more are said as one counted piece. */
+export const MAX_LISTED_LOSSES = 4;
+/** Long texts named one by one; more are counted with the other fields. */
+const MAX_SPOKEN_TEXTS = 3;
+/** A name or value is cut after this many words, or characters. */
+const MAX_VALUE_WORDS = 12;
+const MAX_VALUE_CHARS = 90;
+const MAX_FIELD_WORDS = 6;
+/** What the voice endpoint takes; see `speak_approval` in the backend. */
+const MAX_PIECES = 16;
+const MAX_PIECE_CHARS = 400;
+const MAX_CARD_CHARS = 2_000;
+
+/**
+ * Marks where a name or value was cut; each language says it its own way
+ * ("… gekürzt"). Private use, so it never occurs in a value.
+ */
+export const SPOKEN_CUT = "\uE010";
+
+/** A name or value cut by rule, so no card is too long to be spoken. */
+export const shorten = (
+  text: string,
+  maxWords = MAX_VALUE_WORDS,
+  maxChars = MAX_VALUE_CHARS,
+): string => {
+  const all = text.trim().split(/\s+/);
+  if (all.length <= maxWords && text.length <= maxChars) return text;
+  const kept: string[] = [];
+  let length = 0;
+  for (const word of all) {
+    if (kept.length >= maxWords || length + word.length > maxChars) break;
+    kept.push(word);
+    length += word.length + 1;
+  }
+  const head =
+    kept.length > 0 ? kept.join(" ") : (all[0] ?? "").slice(0, maxChars);
+  return `${head}${SPOKEN_CUT}`;
+};
 /** Above this a text is named with its size instead of read. */
 export const MAX_READ_WORDS = 15;
 
@@ -93,7 +131,11 @@ export type SpokenDetail =
   | { type: "list_replaced"; field: string; values: EarValue[]; loss: true }
   | { type: "list_removed"; field: string; values: EarValue[]; loss: true }
   | { type: "list_added"; field: string; values: EarValue[]; loss: false }
-  | { type: "unreadable"; field: string; loss: false };
+  | { type: "unreadable"; field: string; loss: false }
+  /** A name a field of the call gives an item the card names only by its ID. */
+  | { type: "named"; field: string; value: EarValue; loss: false }
+  /** Many losses at once, counted instead of listed. */
+  | { type: "losses"; emptied: number; lists: number; loss: true };
 
 export interface SpokenText {
   field: string;
@@ -173,6 +215,8 @@ export interface SpokenOptions {
 }
 
 export interface SpokenWords {
+  /** How a cut name or value ends ("… gekürzt"). */
+  cut(): string;
   /** The sentence the voice says when it does not read the card. */
   pointer(): string;
   count(total: number): string;
@@ -200,7 +244,10 @@ const fieldName = (effect: { name: string; rawName: string }): string => {
   const name = effect.name.endsWith(suffix)
     ? effect.name.slice(0, -suffix.length)
     : effect.name;
-  return name.trim().length > 0 ? name.trim() : effect.rawName;
+  return shorten(
+    name.trim().length > 0 ? name.trim() : effect.rawName,
+    MAX_FIELD_WORDS,
+  );
 };
 
 /** A link shows the linked record's name, so its field drops a last "ID". */
@@ -221,11 +268,17 @@ const valueOf = (
 ): EarValue =>
   value.machineId
     ? value.text.length > 0
-      ? { kind: "text", text: value.text }
+      ? { kind: "text", text: shorten(value.text) }
       : { kind: "unread" }
     : value.meaning
-      ? { kind: "text", text: value.meaning.label }
+      ? { kind: "text", text: shorten(value.meaning.label) }
       : earValue(value.text, { percent: PERCENT_FIELD.test(field), timeZone });
+
+/** A text value as said: long ones are named by size elsewhere, the rest cut by rule. */
+const sayable = (value: EarValue): EarValue =>
+  value.kind === "text" && !isLong(value)
+    ? { kind: "text", text: shorten(value.text) }
+    : value;
 
 const isLong = (value: EarValue): boolean =>
   value.kind === "text" && words(value.text) > MAX_READ_WORDS;
@@ -257,30 +310,50 @@ interface Detailed {
   reschedule: boolean;
 }
 
+/**
+ * Whether a field may name the item: only for something being created, whose
+ * title the call writes. An item that exists is named by what the card names
+ * it by, and a name the call types beside its ID is only a detail.
+ */
+type FieldNaming = "names_new_item" | "beside_id" | "none";
+
 const detailsOf = (
   change: GistChange,
   action: GistAction,
-  needsName: boolean,
+  naming: FieldNaming,
   timeZone?: string,
 ): Detailed => {
   const ear = (value: ChangeValue, field: string) =>
-    valueOf(value, field, timeZone);
+    sayable(valueOf(value, field, timeZone));
   const ranked: { detail: SpokenDetail; rank: number; order: number }[] = [];
   const texts: SpokenText[] = [];
-  let naming: string | undefined;
+  let named: string | undefined;
+  let typedName = false;
   change.effects.forEach((effect, order) => {
     const field = linkFieldName(effect);
     if (effect.effect === "unchanged") return;
     const first = effect.values[0] as ChangeValue | undefined;
-    if (
-      needsName &&
-      naming === undefined &&
+    const namesItem =
       effect.effect === "set" &&
-      first &&
+      first !== undefined &&
       !first.machineId &&
-      NAME_FIELD.test(effect.rawName)
-    ) {
-      naming = first.text;
+      NAME_FIELD.test(effect.rawName);
+    if (naming === "names_new_item" && named === undefined && namesItem) {
+      named = shorten(first.text);
+      return;
+    }
+    if (naming === "beside_id" && !typedName && namesItem) {
+      typedName = true;
+      ranked.push({
+        detail: {
+          type: "named",
+          field,
+          value: { kind: "text", text: shorten(first.text) },
+          loss: false,
+        },
+        rank: -1.5,
+        order,
+      });
       return;
     }
     let detail: SpokenDetail;
@@ -346,8 +419,27 @@ const detailsOf = (
   });
   ranked.sort((a, b) => a.rank - b.rank || a.order - b.order);
   const losses = ranked.filter(({ detail }) => detail.loss);
-  const kept = Math.max(MAX_SPOKEN_DETAILS, losses.length);
-  const details = ranked.slice(0, kept).map(({ detail }) => detail);
+  let details: SpokenDetail[];
+  let omitted: number;
+  if (losses.length > MAX_LISTED_LOSSES) {
+    const rest = ranked.filter(({ detail }) => !detail.loss);
+    const listed = rest.slice(0, MAX_SPOKEN_DETAILS - 1);
+    details = [
+      {
+        type: "losses",
+        emptied: losses.filter(({ detail }) => detail.type === "emptied")
+          .length,
+        lists: losses.filter(({ detail }) => detail.type !== "emptied").length,
+        loss: true,
+      },
+      ...listed.map(({ detail }) => detail),
+    ];
+    omitted = rest.length - listed.length;
+  } else {
+    const kept = Math.max(MAX_SPOKEN_DETAILS, losses.length);
+    details = ranked.slice(0, kept).map(({ detail }) => detail);
+    omitted = ranked.length - details.length;
+  }
   for (const text of change.texts) {
     const field = fieldName(text);
     // A truncated text is counted by its length; a whole one by its words.
@@ -357,9 +449,14 @@ const detailsOf = (
     texts.push(
       count > MAX_READ_WORDS || text.truncated
         ? { field, words: count }
-        : { field, words: count, read: text.text },
+        : {
+            field,
+            words: count,
+            read: shorten(text.text, MAX_READ_WORDS, 200),
+          },
     );
   }
+  const spokenTexts = texts.slice(0, MAX_SPOKEN_TEXTS);
   const reschedule =
     action === "update" &&
     ranked.length > 0 &&
@@ -370,9 +467,9 @@ const detailsOf = (
     );
   return {
     details,
-    omitted: ranked.length - details.length + change.textsOmitted,
-    texts,
-    naming,
+    omitted: omitted + change.textsOmitted + texts.length - spokenTexts.length,
+    texts: spokenTexts,
+    naming: named,
     reschedule,
   };
 };
@@ -395,7 +492,8 @@ const recipientsOf = (recipients: ChangeRecipients): SpokenRecipients => {
   const names = recipients.groups
     .flatMap((group) => group.values)
     .map(recipientName)
-    .filter((name) => name.length > 0);
+    .filter((name) => name.length > 0)
+    .map((name) => shorten(name));
   const outsideCount = recipients.outside.length + recipients.outsideOmitted;
   return {
     names,
@@ -441,9 +539,12 @@ const spokenNames = (values: GistValue[]): string[] =>
     value.origin === "resolved" ||
     value.origin === "written" ||
     value.origin === "place"
-      ? [value.text]
+      ? [shorten(value.text)]
       : [],
   );
+
+/** Verbs whose item is new, so the call's title is what it is called. */
+const CREATING_ACTIONS: readonly GistAction[] = ["create", "send", "upload"];
 
 /** The facts a gist card holds, read the way the voice needs them. */
 export const spokenFactsOf = (
@@ -455,7 +556,7 @@ export const spokenFactsOf = (
   const change = gist.change;
   const batch = change?.batch;
   const rowNames = (batch?.rows ?? []).flatMap((row) =>
-    row.name ? [row.name] : [],
+    row.name ? [shorten(row.name)] : [],
   );
   const names = rowNames.length > 0 ? rowNames : spokenNames(lead.names);
   const count = batch ? batch.total : lead.count;
@@ -467,7 +568,11 @@ export const spokenFactsOf = (
     ? detailsOf(
         change,
         gist.action,
-        names.length === 0 && count === 1,
+        names.length > 0 || count !== 1
+          ? "none"
+          : CREATING_ACTIONS.includes(gist.action)
+            ? "names_new_item"
+            : "beside_id",
         timeZone,
       )
     : fieldDetailsOf(gist, timeZone);
@@ -593,6 +698,9 @@ const whatValues = (facts: SpokenFacts): SpokenSource[] => [
 ];
 
 const detailValues = (detail: SpokenDetail): SpokenSource[] => {
+  if (detail.type === "losses") {
+    return [number("count", detail.emptied), number("count", detail.lists)];
+  }
   const field = text("field", detail.field);
   switch (detail.type) {
     case "set":
@@ -610,14 +718,74 @@ const detailValues = (detail: SpokenDetail): SpokenSource[] => {
         field,
         ...detail.values.map((value) => ({ slot: "value" as const, value })),
       ];
+    case "named":
+      return [field, { slot: "value", value: detail.value }];
     case "emptied":
     case "unreadable":
       return [field];
   }
 };
 
+/** A value as the source beside a piece: a cut shown as "…". */
+const sourceText = (value: EarValue): EarValue =>
+  value.kind === "text"
+    ? { ...value, text: value.text.replaceAll(SPOKEN_CUT, "…") }
+    : value;
+
+/** Pieces a card can lose to fit the endpoint, the last ones first. */
+const DROPPABLE: readonly SpokenPieceRole[] = ["text", "more", "detail"];
+
+/**
+ * The card as the endpoint takes it: each cut said in the language, a piece
+ * too long for one request cut by rule, and if the card is still too long,
+ * details and texts left to the screen from the last one on. Losses, the
+ * consequence and the request always stay.
+ */
+const fitted = (pieces: SpokenPiece[], cut: string): SpokenPiece[] => {
+  let card = pieces.map((piece) => {
+    const text = piece.text.replaceAll(SPOKEN_CUT, cut);
+    return {
+      ...piece,
+      text:
+        text.length <= MAX_PIECE_CHARS
+          ? text
+          : shorten(
+              text,
+              Number.MAX_SAFE_INTEGER,
+              MAX_PIECE_CHARS - cut.length - 1,
+            ).replaceAll(SPOKEN_CUT, cut),
+      values: piece.values?.map((source) => ({
+        ...source,
+        value: sourceText(source.value),
+      })),
+    };
+  });
+  const total = () => card.reduce((sum, piece) => sum + piece.text.length, 0);
+  while (card.length > MAX_PIECES || total() > MAX_CARD_CHARS) {
+    let drop = -1;
+    for (let index = card.length - 1; index >= 0; index--) {
+      if (!card[index].mustSay && DROPPABLE.includes(card[index].role)) {
+        drop = index;
+        break;
+      }
+    }
+    if (drop === -1) break;
+    card = card.filter((_, index) => index !== drop);
+  }
+  return card;
+};
+
 /** The pieces for one approval in the language given. */
 export const spokenApprovalPieces = (
+  approval: SpokenApproval,
+  options: SpokenOptions,
+): SpokenPiece[] =>
+  fitted(
+    composedPieces(approval, options),
+    spokenWordsFor(options.language, options).cut(),
+  );
+
+const composedPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
 ): SpokenPiece[] => {
