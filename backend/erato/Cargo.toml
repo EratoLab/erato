@@ -137,6 +137,8 @@ chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 url = "2.5.8"
 unicode-normalization = "0.1.25"
+# Parses SQL a tool call reads with, so the voice can say what it looks up.
+sqlparser = { version = "0.64.0", default-features = false, features = ["std"] }
 
 # Dependencies: Optional feature: tokio-console / profiling
 # Tokio console for async debugging

@@ -15149,11 +15149,98 @@
           "object_kind": {
             "$ref": "#/components/schemas/ToolCallObjectKind"
           },
+          "query": {
+            "$ref": "#/components/schemas/ToolCallReadQuery",
+            "description": "What a call's one SQL statement reads, when parsing it shows it is\ncertainly a single plain read; then `item.id` holds the record a\ncondition on the table's own key names."
+          },
           "warnings": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ToolCallLabelWarning"
             }
+          }
+        }
+      },
+      "ToolCallReadCondition": {
+        "type": "object",
+        "required": [
+          "column",
+          "operator"
+        ],
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/components/schemas/ToolCallReadOperator"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallLabelValue"
+            },
+            "description": "The values it compares with, read as label values: a machine ID is\nnamed only by `resolved`. `between` has two."
+          },
+          "values_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ToolCallReadOperator": {
+        "type": "string",
+        "enum": [
+          "equals",
+          "not_equals",
+          "less",
+          "at_most",
+          "greater",
+          "at_least",
+          "contains",
+          "starts_with",
+          "ends_with",
+          "is_empty",
+          "is_not_empty",
+          "in",
+          "not_in",
+          "between",
+          "other"
+        ]
+      },
+      "ToolCallReadQuery": {
+        "type": "object",
+        "description": "The parts of a plain SQL read the voice says: the tables, the conditions\nsimple enough to say, and a limit. Names are as the statement wrote them,\ndisplay-cleaned.",
+        "properties": {
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCallReadCondition"
+            },
+            "description": "Conditions joined by AND that compare one column with values, in the\nstatement's order."
+          },
+          "conditions_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Conditions it applies beyond `conditions`: past the cap, or not a\nsimple comparison.",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The most rows it returns, from TOP, LIMIT or FETCH.",
+            "minimum": 0
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tables_omitted": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

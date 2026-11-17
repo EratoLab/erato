@@ -14,6 +14,7 @@ pub mod own;
 pub mod pointer;
 mod recipients;
 pub mod rules;
+mod sql;
 mod words;
 
 pub use arguments::{json_strings_read, readable_arguments};
@@ -429,13 +430,152 @@ pub fn read_description(read: ToolCallLabel, filtered: bool) -> ToolCallRead {
             .into_iter()
             .filter(|warning| *warning == ToolCallLabelWarning::HiddenCharacters)
             .collect(),
+        query: None,
     }
 }
 
-/// Runs [`read_label`] so that a bug in it costs only the read.
-pub fn guarded_read(
-    read: impl FnOnce() -> Option<(ToolCallLabel, bool)>,
-) -> Option<(ToolCallLabel, bool)> {
+/// What a call says it reads by its one SQL statement, when the statement is
+/// certainly a single plain read and nothing else in the call or the label a
+/// card draws for it does more: the tool's name, hints and other arguments
+/// pass the read checks, every other argument is one the rules understand,
+/// and the card holds that statement and no other change. Its values are
+/// read like a label's. A card never draws it.
+pub fn sql_read(
+    tool: &rmcp::model::Tool,
+    arguments: &Value,
+    approval_argument: Option<&str>,
+    shown: &ToolCallLabel,
+    glossary: Option<&erato_config::config::McpGlossaryConfig>,
+) -> Option<ToolCallRead> {
+    use crate::models::message::{ToolCallOpaqueKind, ToolCallReadCondition, ToolCallReadQuery};
+    let (pointer, text) = rules::the_sql_statement(arguments)?;
+    // A card that does not know the member as SQL shows a long statement as
+    // a text block; that block is the statement itself.
+    let only_the_statement = shown.change.as_ref().is_none_or(|change| {
+        change.effects.is_empty()
+            && change.texts.iter().all(|block| block.path == pointer)
+            && change.texts_omitted == 0
+            && change.recipients.is_none()
+            && change.batch.is_none()
+            && change.opaque.len() <= 1
+            && change.opaque_omitted == 0
+            && change
+                .opaque
+                .iter()
+                .all(|opaque| opaque.kind == ToolCallOpaqueKind::Sql && opaque.path == pointer)
+            && change.flags.iter().all(|flag| flag.dry_run)
+    });
+    if !matches!(shown.action, ToolCallAction::Other | ToolCallAction::Run)
+        || !only_the_statement
+        || !rules::may_read_by_statement(&tool.name, arguments, tool.annotations.as_ref())
+        // The card's own verb, run or none: a name that runs is no read verb.
+        || !rules::cross_check(tool, arguments, shown.action).is_empty()
+    {
+        return None;
+    }
+    rules::read_arguments(arguments, &[pointer.as_str()], false, approval_argument)?;
+    let mut plain = sql::plain_read(text)?;
+    // A statement that reads no table has nothing to say beyond the tool.
+    if plain.tables.is_empty() {
+        return None;
+    }
+    let key = sql::take_key_lookup(&mut plain);
+
+    let mut budget = MAX_READ_VALUE_BYTES;
+    let mut hidden = false;
+    let mut name = |text: &str| {
+        let cleaned = sanitize_display_text(text, MAX_DISPLAY_NAME_CHARS);
+        hidden |= cleaned.hidden_characters;
+        budget = budget.saturating_sub(cleaned.text.len());
+        cleaned.text
+    };
+    let tables: Vec<String> = plain.tables.iter().map(|table| name(table)).collect();
+    // The operator's names for fields and coded values, as on a write card.
+    let columns: Vec<String> = plain
+        .conditions
+        .iter()
+        .map(|condition| {
+            name(
+                glossary
+                    .and_then(|glossary| glossary.field_names.get(&condition.column))
+                    .unwrap_or(&condition.column),
+            )
+        })
+        .collect();
+    let choice = |column: &str, text: &str| {
+        glossary
+            .and_then(|glossary| glossary.choice_labels.get(column)?.get(text))
+            .cloned()
+    };
+    let mut value = |text: &str| -> Option<ToolCallLabelValue> {
+        let cleaned = sanitize_display_text(text, MAX_LABEL_VALUE_CHARS);
+        hidden |= cleaned.hidden_characters;
+        budget = budget.checked_sub(cleaned.text.len() + pointer.len())?;
+        Some(ToolCallLabelValue {
+            path: pointer.clone(),
+            machine_id: machine_id::is_machine_id(&cleaned.text),
+            text: cleaned.text,
+            truncated: cleaned.truncated,
+            resolved: None,
+        })
+    };
+    let looks_up = key.is_some();
+    let item = key.and_then(|key| {
+        Some(ToolCallLabelItem {
+            id: Some(ToolCallLabelSlot {
+                pointer: pointer.clone(),
+                name: None,
+                values: vec![value(&key)?],
+                omitted: 0,
+            }),
+            ..ToolCallLabelItem::default()
+        })
+    });
+    let mut omitted = plain.undescribed + u32::from(looks_up && item.is_none());
+    let mut conditions = Vec::new();
+    for (condition, column) in plain.conditions.into_iter().zip(columns) {
+        let values: Option<Vec<_>> = condition
+            .values
+            .iter()
+            .map(|text| value(&choice(&condition.column, text).unwrap_or_else(|| text.clone())))
+            .collect();
+        match values {
+            Some(values) if !column.is_empty() => {
+                conditions.push(ToolCallReadCondition {
+                    column,
+                    operator: condition.operator,
+                    values,
+                    values_omitted: condition.values_omitted,
+                });
+            }
+            _ => omitted += 1,
+        }
+    }
+    let object_kind = match tables.as_slice() {
+        [table] => rules::table_kind(table),
+        _ => ToolCallObjectKind::Row,
+    };
+    Some(ToolCallRead {
+        object_kind,
+        filtered: !conditions.is_empty() || omitted > 0,
+        item,
+        warnings: if hidden {
+            vec![ToolCallLabelWarning::HiddenCharacters]
+        } else {
+            Vec::new()
+        },
+        query: Some(ToolCallReadQuery {
+            tables,
+            tables_omitted: plain.tables_omitted,
+            conditions,
+            conditions_omitted: omitted,
+            limit: plain.limit,
+        }),
+    })
+}
+
+/// Runs [`read_label`] or [`sql_read`] so that a bug in it costs only the read.
+pub fn guarded_read<T>(read: impl FnOnce() -> Option<T>) -> Option<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(read))
         .inspect_err(|_| {
             tracing::error!("Describing a tool call without a read: reading it panicked")

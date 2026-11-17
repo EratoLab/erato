@@ -7355,7 +7355,7 @@
         {
           "id": "what",
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
+          "text": "Ich möchte in Dynamics 365 nach Müller GmbH suchen.",
           "mustSay": false,
           "values": [
             {
@@ -7366,10 +7366,10 @@
               }
             },
             {
-              "slot": "tool",
+              "slot": "text",
               "value": {
                 "kind": "text",
-                "text": "search"
+                "text": "Müller GmbH"
               }
             }
           ]
@@ -7388,7 +7388,7 @@
         {
           "id": "what",
           "role": "what",
-          "text": "I'd like to use the tool search in Dynamics 365.",
+          "text": "I'd like to search in Dynamics 365 for Müller GmbH.",
           "mustSay": false,
           "values": [
             {
@@ -7399,10 +7399,10 @@
               }
             },
             {
-              "slot": "tool",
+              "slot": "text",
               "value": {
                 "kind": "text",
-                "text": "search"
+                "text": "Müller GmbH"
               }
             }
           ]
@@ -7418,6 +7418,1240 @@
     ]
   },
   "read-02-query": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus der Tabelle opportunity Datensätze lesen, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode ist 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the table opportunity in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode is 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-03-sql-several-filters": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode ist 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "prioritycode ist 2.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "prioritycode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:scheduledend",
+          "role": "detail",
+          "text": "scheduledend liegt vor dem 31. Januar 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "scheduledend"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 31
+              }
+            }
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommt eine weitere Bedingung, sie steht auf dem Bildschirm.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode is 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "prioritycode is 2.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "prioritycode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:scheduledend",
+          "role": "detail",
+          "text": "scheduledend is before 31 January 2030.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "scheduledend"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2030,
+                "month": 1,
+                "day": 31
+              }
+            }
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And one more condition, shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-04-sql-record-by-id": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus der Tabelle opportunity den Datensatz Line 4 Retrofit lesen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read the record Line 4 Retrofit from the table opportunity in Dynamics 365.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-05-sql-no-filter": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus der Tabelle account Datensätze lesen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Höchstens 50 Datensätze.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 50,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the table account in Dynamics 365.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "At most 50 records.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "count",
+              "value": {
+                "kind": "number",
+                "value": 50,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-06-sql-long-values": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:description",
+          "role": "detail",
+          "text": "description wird mit einem Text von etwa 20 Wörtern verglichen, er steht auf dem Bildschirm.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "description"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "prioritycode ist 0, 1, 2 oder drei weitere.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "prioritycode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 3,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 4,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:description",
+          "role": "detail",
+          "text": "description is compared with a text of about 20 words, shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "description"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "prioritycode is 0, 1, 2 or three more.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "prioritycode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 2,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 3,
+                "percent": false
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 4,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-07-retrieve-record": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit lesen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Wo: opportunity.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read the record Line 4 Retrofit in Dynamics 365.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Where: opportunity.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-08-sql-join": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus den Tabellen opportunity und account Datensätze lesen, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:name",
+          "role": "detail",
+          "text": "name ist Beispiel Industrie GmbH.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the tables opportunity and account in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:name",
+          "role": "detail",
+          "text": "name is Beispiel Industrie GmbH.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-09-sql-record-nobody-read": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus der Tabelle opportunity einen Datensatz lesen, den ich in diesem Chat nicht gelesen habe.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read a record from the table opportunity in Dynamics 365 that I haven't read in this chat.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-10-list-filtered": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM Aufgaben auflisten.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Mit Bedingungen, die auf dem Bildschirm stehen.",
+          "mustSay": false,
+          "values": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in CRM.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "With conditions shown on screen.",
+          "mustSay": false,
+          "values": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-11-sql-related-record": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:regardingobjectid",
+          "role": "detail",
+          "text": "regardingobjectid ist Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode ist 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:regardingobjectid",
+          "role": "detail",
+          "text": "regardingobjectid is Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "statecode is 0.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "statecode"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 0,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-12-sql-select-into": {
     "de": [
       [
         {
@@ -7471,6 +8705,236 @@
               "value": {
                 "kind": "text",
                 "text": "read_query"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-13-search-long-text": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion nach einem Text von etwa 20 Wörtern suchen, er steht auf dem Bildschirm.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Notion"
+              }
+            },
+            {
+              "slot": "words",
+              "value": {
+                "kind": "number",
+                "value": 24,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to search in Notion for a text of about 20 words, shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Notion"
+              }
+            },
+            {
+              "slot": "words",
+              "value": {
+                "kind": "number",
+                "value": 24,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-14-sql-glossary": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus der Tabelle opportunity Datensätze lesen, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level ist High.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Risk level"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "High"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date liegt spätestens am 31. Dezember.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Estimated close date"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2026,
+                "month": 12,
+                "day": 31
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the table opportunity in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level is High.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Risk level"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "High"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date is on or before 31 December.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Estimated close date"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "date",
+                "year": 2026,
+                "month": 12,
+                "day": 31
               }
             }
           ]
@@ -8143,7 +9607,7 @@
         {
           "id": "what",
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
+          "text": "Ich möchte in Dynamics 365 nach Müller GmbH suchen.",
           "mustSay": false,
           "values": [
             {
@@ -8154,10 +9618,10 @@
               }
             },
             {
-              "slot": "tool",
+              "slot": "text",
               "value": {
                 "kind": "text",
-                "text": "search"
+                "text": "Müller GmbH"
               }
             }
           ]
@@ -8311,7 +9775,7 @@
         {
           "id": "what",
           "role": "what",
-          "text": "I'd like to use the tool search in Dynamics 365.",
+          "text": "I'd like to search in Dynamics 365 for Müller GmbH.",
           "mustSay": false,
           "values": [
             {
@@ -8322,10 +9786,10 @@
               }
             },
             {
-              "slot": "tool",
+              "slot": "text",
               "value": {
                 "kind": "text",
-                "text": "search"
+                "text": "Müller GmbH"
               }
             }
           ]

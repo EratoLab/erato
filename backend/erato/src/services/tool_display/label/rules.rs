@@ -18,6 +18,7 @@ use super::recipients::{
     ADDRESS_MEMBERS, COPY_RECIPIENT_MEMBERS, RECIPIENT_MEMBERS, RECIPIENT_NUMBER_WORDS,
     bare_member, is_contact_number_member, is_phone_shaped, is_recipient_member,
 };
+use super::sql::may_be_sql;
 use super::{
     MAX_FIELD_POINTERS, MAX_LABEL_FIELDS, MAX_LABEL_ITEMS, ToolCallLabelItemMapping,
     ToolCallLabelMapping,
@@ -850,7 +851,7 @@ fn holds_write_text(arguments: &Value) -> bool {
         budget -= 1;
         match value {
             Value::String(text)
-                if is_sql_statement(text)
+                if may_be_sql(text)
                     || text_prefix(text, MAX_SEARCH_BYTES)
                         .to_ascii_lowercase()
                         .contains("$batch") =>
@@ -872,6 +873,78 @@ fn holds_write_text(arguments: &Value) -> bool {
         }
     }
     false
+}
+
+/// Whether a call may be described by the one SQL statement it carries: the
+/// tool does not say it may change things, and neither its name nor another
+/// argument names a verb other than running, a loss or a change of state.
+/// The statement itself is judged by `sql::plain_read`.
+pub fn may_read_by_statement(
+    tool_name: &str,
+    arguments: &Value,
+    annotations: Option<&ToolAnnotations>,
+) -> bool {
+    let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    let may_change = annotations.is_some_and(|hints| {
+        hints.read_only_hint == Some(false) || hints.destructive_hint == Some(true)
+    });
+    matches!(
+        verb(&name, Some(arguments)).action,
+        ToolCallAction::Other | ToolCallAction::Run
+    ) && !has(&name, &STATE_WORDS)
+        && !may_change
+        && !sounds_like_a_loss(tool_name, arguments)
+        && !sets_more_than_a_read(arguments)
+}
+
+/// The one string in the arguments that has the shape of an SQL statement,
+/// whatever its member is called, with its pointer. `None` when there is
+/// none or more than one, when a string holds an OData batch, or when the
+/// arguments are too large to read through.
+pub fn the_sql_statement(arguments: &Value) -> Option<(String, &str)> {
+    let mut budget = MAX_SEARCH_VALUES;
+    let mut found = None;
+    let mut stack = vec![(arguments, String::new(), 0)];
+    while let Some((value, pointer, depth)) = stack.pop() {
+        budget = budget.checked_sub(1)?;
+        match value {
+            Value::String(text) => {
+                if text_prefix(text, MAX_SEARCH_BYTES)
+                    .to_ascii_lowercase()
+                    .contains("$batch")
+                {
+                    return None;
+                }
+                if may_be_sql(text) {
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some((pointer, text.as_str()));
+                }
+            }
+            Value::Object(members) if depth < MAX_SEARCH_DEPTH => {
+                for (member, child) in members {
+                    stack.push((child, child_pointer(&pointer, member)?, depth + 1));
+                }
+            }
+            Value::Array(entries) if depth < MAX_SEARCH_DEPTH => {
+                for (index, child) in entries.iter().enumerate() {
+                    stack.push((child, format!("{pointer}/{index}"), depth + 1));
+                }
+            }
+            Value::Object(_) | Value::Array(_) => return None,
+            _ => {}
+        }
+        if stack.len() > budget {
+            return None;
+        }
+    }
+    found
+}
+
+/// The kind a table's name gives its records: a task for `task`, else a row.
+pub(super) fn table_kind(table: &str) -> ToolCallObjectKind {
+    kind_of(&name_words(text_prefix(table, MAX_NAME_BYTES))).unwrap_or(ToolCallObjectKind::Row)
 }
 
 /// The values of the verb fields, top first.

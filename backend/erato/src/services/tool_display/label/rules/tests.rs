@@ -2252,8 +2252,8 @@ fn the_test_sets_reads_get_a_read_and_every_other_call_none() {
         counts,
         [
             ("testset", 4, 2),
-            ("testset_dynamics", 4, 2),
-            ("testset_reads", 11, 28),
+            ("testset_dynamics", 6, 0),
+            ("testset_reads", 12, 27),
         ]
     );
 }
@@ -2334,7 +2334,11 @@ fn calls_that_may_do_more_than_read_get_no_read() {
         ("get_items", json!({"kind": "HardDelete"})),
         (
             "read_query",
-            json!({"querytext": "SELECT name FROM account WHERE name = 'x'"}),
+            json!({"querytext": "UPDATE account SET name = 'x'"}),
+        ),
+        (
+            "search",
+            json!({"query": "/* note */ DELETE FROM user_sessions"}),
         ),
         ("search", json!({"query": "DELETE FROM user_sessions;"})),
         ("query_rows", json!({"sql": "select 1"})),

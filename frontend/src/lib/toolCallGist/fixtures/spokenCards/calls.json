@@ -546,7 +546,9 @@
       "kind": [
         "read"
       ],
-      "holds": [],
+      "holds": [
+        "search_text"
+      ],
       "calls": [
         "read-01-search"
       ]
@@ -556,9 +558,160 @@
       "kind": [
         "read"
       ],
-      "holds": [],
+      "holds": [
+        "one_filter",
+        "limit"
+      ],
       "calls": [
         "read-02-query"
+      ]
+    },
+    {
+      "id": "read-03-sql-several-filters",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-03-sql-several-filters"
+      ]
+    },
+    {
+      "id": "read-04-sql-record-by-id",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id"
+      ],
+      "calls": [
+        "read-04-sql-record-by-id"
+      ]
+    },
+    {
+      "id": "read-05-sql-no-filter",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "no_filter",
+        "limit"
+      ],
+      "calls": [
+        "read-05-sql-no-filter"
+      ]
+    },
+    {
+      "id": "read-06-sql-long-values",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "long_values",
+        "several_filters"
+      ],
+      "calls": [
+        "read-06-sql-long-values"
+      ]
+    },
+    {
+      "id": "read-07-retrieve-record",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id"
+      ],
+      "calls": [
+        "read-07-retrieve-record"
+      ]
+    },
+    {
+      "id": "read-08-sql-join",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-08-sql-join"
+      ]
+    },
+    {
+      "id": "read-09-sql-record-nobody-read",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "record_by_id",
+        "unread_record"
+      ],
+      "calls": [
+        "read-09-sql-record-nobody-read"
+      ]
+    },
+    {
+      "id": "read-10-list-filtered",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-10-list-filtered"
+      ]
+    },
+    {
+      "id": "read-11-sql-related-record",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "one_filter"
+      ],
+      "calls": [
+        "read-11-sql-related-record"
+      ]
+    },
+    {
+      "id": "read-12-sql-select-into",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "not_a_plain_read"
+      ],
+      "calls": [
+        "read-12-sql-select-into"
+      ]
+    },
+    {
+      "id": "read-13-search-long-text",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "search_text",
+        "long_values"
+      ],
+      "calls": [
+        "read-13-search-long-text"
+      ]
+    },
+    {
+      "id": "read-14-sql-glossary",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-14-sql-glossary"
       ]
     },
     {
@@ -6773,7 +6926,750 @@
               }
             ]
           },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "opportunity"
+              ],
+              "conditions": [
+                {
+                  "column": "statecode",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-03-sql-several-filters",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT subject, scheduledend FROM task WHERE statecode = 0 AND prioritycode = 2 AND scheduledend < '2030-01-31' AND subject LIKE '%Angebot%'"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "task",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "task"
+              ],
+              "conditions": [
+                {
+                  "column": "statecode",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "0"
+                    }
+                  ]
+                },
+                {
+                  "column": "prioritycode",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "2"
+                    }
+                  ]
+                },
+                {
+                  "column": "scheduledend",
+                  "operator": "less",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "2030-01-31"
+                    }
+                  ]
+                },
+                {
+                  "column": "subject",
+                  "operator": "contains",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "Angebot"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-04-sql-record-by-id",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT name, estimatedclosedate, closeprobability FROM opportunity WHERE opportunityid = '5f0c2a10-0000-4000-8000-00000000a001'"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "item": {
+              "id": {
+                "pointer": "/querytext",
+                "values": [
+                  {
+                    "path": "/querytext",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a001",
+                    "resolved": "Line 4 Retrofit",
+                    "machine_id": true
+                  }
+                ]
+              }
+            },
+            "query": {
+              "tables": [
+                "opportunity"
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-05-sql-no-filter",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT TOP 50 name, telephone1 FROM account ORDER BY name"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "value"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "query": {
+              "tables": [
+                "account"
+              ],
+              "limit": 50
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-06-sql-long-values",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT subject FROM task WHERE description = 'Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal' AND prioritycode IN (0, 1, 2, 3, 4, 5)"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "change": {
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 0,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "texts": [
+              {
+                "path": "/querytext",
+                "name": "Query text",
+                "raw_name": "querytext",
+                "text": "SELECT subject FROM task WHERE description = 'Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal' AND prioritycode IN (0, 1, 2, 3, 4, 5)",
+                "lines": 1,
+                "chars": 258
+              }
+            ],
+            "complete": true
+          },
+          "read": {
+            "object_kind": "task",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "task"
+              ],
+              "conditions": [
+                {
+                  "column": "description",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+                    }
+                  ]
+                },
+                {
+                  "column": "prioritycode",
+                  "operator": "in",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "0"
+                    },
+                    {
+                      "path": "/querytext",
+                      "text": "1"
+                    },
+                    {
+                      "path": "/querytext",
+                      "text": "2"
+                    },
+                    {
+                      "path": "/querytext",
+                      "text": "3"
+                    },
+                    {
+                      "path": "/querytext",
+                      "text": "4"
+                    }
+                  ],
+                  "values_omitted": 1
+                }
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-07-retrieve-record",
+      "tool_name": "retrieve_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "opportunity",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a001"
+      },
+      "display": {
+        "title": "retrieve_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a001",
+                    "resolved": "Line 4 Retrofit",
+                    "machine_id": true
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              }
+            ]
+          },
+          "source": "rules",
+          "read": {
+            "object_kind": "row",
+            "item": {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a001",
+                    "resolved": "Line 4 Retrofit",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "target": {
+                "pointer": "/tablename",
+                "values": [
+                  {
+                    "path": "/tablename",
+                    "text": "opportunity"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-08-sql-join",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT o.name, o.estimatedclosedate FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE a.name = N'Beispiel Industrie GmbH'"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "opportunity",
+                "account"
+              ],
+              "conditions": [
+                {
+                  "column": "name",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "Beispiel Industrie GmbH"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-09-sql-record-nobody-read",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT * FROM opportunity WHERE opportunityid = '5f0c2a10-0000-4000-8000-00000000a009'"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "item": {
+              "id": {
+                "pointer": "/querytext",
+                "values": [
+                  {
+                    "path": "/querytext",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a009",
+                    "machine_id": true
+                  }
+                ]
+              }
+            },
+            "query": {
+              "tables": [
+                "opportunity"
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-10-list-filtered",
+      "tool_name": "list_tasks",
+      "server_id": "crm",
+      "input": {
+        "filter": {
+          "status": "open"
+        },
+        "limit": 20
+      },
+      "display": {
+        "title": "list_tasks",
+        "description_truncated": false,
+        "server_name": "CRM",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/filter",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/filter/status",
+                    "kind": "value"
+                  }
+                ]
+              },
+              {
+                "path": "/limit",
+                "kind": "value"
+              }
+            ]
+          },
+          "source": "generic",
+          "change": {
+            "effects": [
+              {
+                "path": "/limit",
+                "name": "Limit",
+                "raw_name": "limit",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "20"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "filter": {
+              "path": "/filter",
+              "every_record": false,
+              "parts": [
+                {
+                  "name": "Status",
+                  "value": {
+                    "text": "open"
+                  }
+                }
+              ]
+            },
+            "notes": [
+              "row_count_unknown"
+            ],
+            "complete": true
+          },
+          "read": {
+            "object_kind": "task",
+            "filtered": true
+          }
+        }
+      }
+    },
+    {
+      "id": "read-11-sql-related-record",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT subject, scheduledend FROM task WHERE regardingobjectid = '5f0c2a10-0000-4000-8000-00000000a001' AND statecode = 0"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "task",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "task"
+              ],
+              "conditions": [
+                {
+                  "column": "regardingobjectid",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "5f0c2a10-0000-4000-8000-00000000a001",
+                      "resolved": "Line 4 Retrofit",
+                      "machine_id": true
+                    }
+                  ]
+                },
+                {
+                  "column": "statecode",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "0"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-12-sql-select-into",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT name INTO #kopie FROM account"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "value"
+              }
+            ]
+          },
           "source": "generic"
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-13-search-long-text",
+      "tool_name": "notion-search",
+      "server_id": "notion",
+      "input": {
+        "query": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+      },
+      "display": {
+        "title": "notion-search",
+        "description_truncated": false,
+        "server_name": "Notion",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/query",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "other",
+            "item": {
+              "title": {
+                "pointer": "/query",
+                "values": [
+                  {
+                    "path": "/query",
+                    "text": "Kunde wünscht ein Angebot für die Modernisierung der gesamten Linie 4 inklusive Steuerung, Antriebe, Sicherheitstechnik und Schulung des Personals vor Ort im ersten Quartal"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-14-sql-glossary",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT name FROM opportunity WHERE risklevel = 3 AND estimatedclosedate <= '2026-12-31'"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "opportunity"
+              ],
+              "conditions": [
+                {
+                  "column": "Risk level",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "High"
+                    }
+                  ]
+                },
+                {
+                  "column": "Estimated close date",
+                  "operator": "at_most",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "2026-12-31"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
         },
         "read_only": true
       }
