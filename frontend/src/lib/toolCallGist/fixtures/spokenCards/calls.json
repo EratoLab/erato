@@ -295,6 +295,19 @@
       ]
     },
     {
+      "id": "update-12-list-replace-unknown",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-12-list-replace-unknown"
+      ]
+    },
+    {
       "id": "delete-01-task-created-earlier",
       "kind": [
         "delete"
@@ -4596,6 +4609,134 @@
             "table": "opportunity",
             "notes": [
               "old_values_from_earlier"
+            ],
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "tool_name": "update_record",
+      "server_id": "crm",
+      "input": {
+        "id": "c_17",
+        "fields": {
+          "tags": [
+            "Retrofit",
+            "Linie 4"
+          ],
+          "stage": "Angebot"
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "CRM",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/id",
+                "values": [
+                  {
+                    "path": "/id",
+                    "text": "c_17"
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/fields/stage",
+                  "name": "stage",
+                  "values": [
+                    {
+                      "path": "/fields/stage",
+                      "text": "Angebot"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/id",
+                "kind": "id"
+              },
+              {
+                "path": "/fields",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/fields/tags",
+                    "kind": "list",
+                    "children": [
+                      {
+                        "path": "/fields/tags/0",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/fields/tags/1",
+                        "kind": "value"
+                      }
+                    ]
+                  },
+                  {
+                    "path": "/fields/stage",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/fields/tags",
+                "name": "Tags",
+                "raw_name": "tags",
+                "effect": "list_replaced",
+                "values": [
+                  {
+                    "text": "Retrofit"
+                  },
+                  {
+                    "text": "Linie 4"
+                  }
+                ],
+                "list": true
+              },
+              {
+                "path": "/fields/stage",
+                "name": "Stage",
+                "raw_name": "stage",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Angebot"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 1,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "notes": [
+              "list_replace_unknown"
             ],
             "complete": true
           }

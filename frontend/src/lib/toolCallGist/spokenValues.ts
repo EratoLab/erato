@@ -1,3 +1,5 @@
+import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
+
 /**
  * A value as the voice says it: a date with the month's name, a time, a
  * number, yes or no, or text. Read off the value as the call wrote it; how
@@ -34,29 +36,6 @@ const CODE_DIGITS = /^-?(0\d|\d{10,})/;
 const validDate = (year: number, month: number, day: number): boolean =>
   month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1000;
 
-/** The wall-clock fields of `instant` in `timeZone`. */
-export const inZone = (instant: Date, timeZone: string) => {
-  // eslint-disable-next-line lingui/no-unlocalized-strings -- a locale whose parts are plain numbers
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-  }).formatToParts(instant);
-  const part = (type: string) =>
-    Number(parts.find((entry) => entry.type === type)?.value ?? "0");
-  return {
-    year: part("year"),
-    month: part("month"),
-    day: part("day"),
-    hour: part("hour"),
-    minute: part("minute"),
-  };
-};
-
 /**
  * Reads a value written by a call. A time with an offset is said in
  * `timeZone`, the user's; a time without one as written. A midnight without
@@ -80,13 +59,11 @@ export const earValue = (
       if (zone) {
         const instant = new Date(text);
         if (!Number.isNaN(instant.getTime())) {
-          return {
-            kind: "datetime",
-            ...inZone(
-              instant,
-              timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
-            ),
-          };
+          const { year, month, day, hour, minute } = wallClockParts(
+            instant,
+            timeZone,
+          );
+          return { kind: "datetime", year, month, day, hour, minute };
         }
       } else if (hour === 0 && minute === 0) {
         return { kind: "date", year, month, day };

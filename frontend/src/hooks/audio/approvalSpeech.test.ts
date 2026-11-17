@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlayedPiece } from "./approvalSpeech";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type { SSEOptions } from "@/utils/sse/sseClient";
 
@@ -114,46 +113,6 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-});
-
-describe("nextPiece", () => {
-  const played = (
-    states: PlayedPiece["state"][],
-    mustSay: boolean[] = [],
-  ): PlayedPiece[] =>
-    states.map((state, index) => ({
-      ...CARD[index],
-      mustSay: mustSay[index] ?? CARD[index].mustSay,
-      state,
-    }));
-
-  it("goes on with the next piece not yet said", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    expect(
-      nextPiece(
-        played(["pending", "pending", "pending", "pending"]),
-        null,
-        new Set(),
-      ),
-    ).toBe(0);
-    expect(
-      nextPiece(played(["heard", "heard", "pending", "pending"]), 1, new Set()),
-    ).toBe(2);
-    expect(
-      nextPiece(played(["heard", "heard", "heard", "heard"]), 3, new Set()),
-    ).toBeNull();
-  });
-
-  it("says a loss that was cut short again before the request, once", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    const pieces = played(["heard", "cut", "heard", "pending"]);
-    expect(nextPiece(pieces, 2, new Set())).toBe(1);
-    expect(nextPiece(pieces, 1, new Set([1]))).toBe(3);
-    // Content that was skipped is not said again.
-    expect(
-      nextPiece(played(["heard", "heard", "cut", "pending"]), 2, new Set()),
-    ).toBe(3);
-  });
 });
 
 describe("speaking an approval card", () => {

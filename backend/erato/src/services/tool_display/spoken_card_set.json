@@ -330,6 +330,19 @@
       ]
     },
     {
+      "id": "update-12-list-replace-unknown",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-12-list-replace-unknown"
+      ]
+    },
+    {
       "id": "delete-01-task-created-earlier",
       "kind": [
         "delete"
@@ -1342,6 +1355,25 @@
           "new_competitor": null,
           "new_region": null,
           "closeprobability": 20
+        }
+      }
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "server": "crm",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "id": "c_17",
+        "fields": {
+          "tags": [
+            "Retrofit",
+            "Linie 4"
+          ],
+          "stage": "Angebot"
         }
       }
     },

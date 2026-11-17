@@ -6888,29 +6888,15 @@ async fn stream_generate_chat_completion<'a>(
                 .load(std::sync::atomic::Ordering::Relaxed)
         })
         .and_then(|task| {
-            app_state
-                .config
-                .audio_conversational
-                .speech_provider
-                .as_ref()
-                .and_then(|id| {
-                    let id = app_state.config.resolve_speech_provider_id(id).ok()?;
-                    app_state
-                        .config
-                        .speech_providers
-                        .provider
-                        .get(id)
-                        .map(|config| {
-                            crate::services::speech::session::SpeechSession::start(
-                                config.clone(),
-                                id.to_string(),
-                                task.speech_language.get().cloned().unwrap_or_default(),
-                                (*task).clone(),
-                                tx.clone(),
-                                assistant_message_id,
-                            )
-                        })
-                })
+            let (id, config) = app_state.config.conversational_speech_provider()?;
+            Some(crate::services::speech::session::SpeechSession::start(
+                config.clone(),
+                id.to_string(),
+                task.speech_language.get().cloned().unwrap_or_default(),
+                (*task).clone(),
+                tx.clone(),
+                assistant_message_id,
+            ))
         });
     let mcp = app_state.mcp_state().await;
     let mut tool_result_context = Arc::new(tool_result_context);
@@ -18173,13 +18159,7 @@ fn read_back_reply(
     me_user: &MeProfile,
     requested: bool,
 ) -> bool {
-    let read_back = requested
-        && app_state.config.audio_conversational.transcription.enabled
-        && app_state
-            .config
-            .audio_conversational
-            .speech_provider
-            .is_some();
+    let read_back = requested && app_state.config.conversational_speech_provider().is_some();
     task.speech_enabled
         .store(read_back, std::sync::atomic::Ordering::Relaxed);
     let _ = task
