@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import {
   afterEach,
   beforeAll,
@@ -12,7 +12,11 @@ import {
   vi,
 } from "vitest";
 
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { defaultTheme } from "@/config/theme";
+import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
 import { setClientPlatform } from "@/lib/clientPlatform";
+import { viewStyleVariables } from "@/lib/mcpApps/hostContext";
 import { messages as enMessages } from "@/locales/en/messages.json";
 
 import { McpAppView } from "./McpAppView";
@@ -65,17 +69,71 @@ const json = (body: unknown, status = 200) =>
     headers: { "content-type": "application/json" },
   });
 
-const renderView = (part: ToolUse) => {
+const renderView = (
+  part: ToolUse,
+  {
+    onShown,
+    withTheme = false,
+  }: { onShown?: () => void; withTheme?: boolean } = {},
+) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  const view = (
+    <QueryClientProvider client={queryClient}>
+      <McpAppView part={part} onShown={onShown} />
+    </QueryClientProvider>
+  );
   return render(
     <I18nProvider i18n={i18n}>
-      <QueryClientProvider client={queryClient}>
-        <McpAppView part={part} />
-      </QueryClientProvider>
+      {withTheme ? (
+        <ThemeProvider
+          enableCustomTheme={false}
+          initialThemeMode="light"
+          persistThemeMode={false}
+        >
+          {view}
+        </ThemeProvider>
+      ) : (
+        view
+      )}
     </I18nProvider>,
   );
+};
+
+/**
+ * Stands in for the browser's ResizeObserver: `resize` reports a new width
+ * for every observed frame.
+ */
+const stubResizeObserver = () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {
+        // Reports only through `resize`.
+      }
+      unobserve() {
+        // Nothing observed.
+      }
+      disconnect() {
+        // Nothing observed.
+      }
+    },
+  );
+  return (width: number) => {
+    act(() => {
+      callbacks.forEach((callback) => {
+        callback(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      });
+    });
+  };
 };
 
 /**
@@ -212,6 +270,9 @@ describe("McpAppView", () => {
             hostContext: expect.objectContaining({
               theme: "light",
               displayMode: "inline",
+              containerDimensions: { maxHeight: 6000 },
+              locale: "en",
+              timeZone: browserTimeZone(),
             }),
           }),
         }),
@@ -242,6 +303,8 @@ describe("McpAppView", () => {
     );
     expect(frame).toHaveAttribute("aria-hidden", "false");
     expect(frame.style.height).toBe("150px");
+    // On the message's background: no border, padding or card around it.
+    expect(frame.className).toBe("block w-full my-2");
 
     fromFrame({
       jsonrpc: "2.0",
@@ -275,6 +338,75 @@ describe("McpAppView", () => {
           },
         }),
       );
+    });
+  });
+
+  it("tells the view the message column's width, the theme's colours and font, and every width it changes to", async () => {
+    const resize = stubResizeObserver();
+    renderView(call(), { withTheme: true });
+    const { sent, fromFrame } = await loadedFrame();
+    const contextChanges = () =>
+      sent().filter(
+        (message) => message.method === "ui/notifications/host-context-changed",
+      );
+
+    // Measured before the view's handshake: it gets the width right after it.
+    resize(640);
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    await waitFor(() => {
+      expect(sent()).toContainEqual(
+        expect.objectContaining({
+          id: 1,
+          result: expect.objectContaining({
+            hostContext: expect.objectContaining({
+              theme: "light",
+              styles: { variables: viewStyleVariables(defaultTheme) },
+              locale: "en",
+            }),
+          }),
+        }),
+      );
+    });
+    expect(contextChanges()).toEqual([]);
+
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+    await waitFor(() => {
+      expect(contextChanges()).toEqual([
+        expect.objectContaining({
+          params: {
+            containerDimensions: { width: 640, maxHeight: 6000 },
+          },
+        }),
+      ]);
+    });
+
+    resize(480);
+    await waitFor(() => {
+      expect(contextChanges()).toHaveLength(2);
+    });
+    expect(contextChanges()[1]).toMatchObject({
+      params: { containerDimensions: { width: 480, maxHeight: 6000 } },
+    });
+
+    // The same width again is nothing new.
+    resize(480);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(contextChanges()).toHaveLength(2);
+  });
+
+  it("says when the view shows, once it has initialized", async () => {
+    const onShown = vi.fn();
+    renderView(call(), { onShown });
+    const { fromFrame } = await loadedFrame();
+    fromFrame(PROXY_READY);
+    fromFrame(initialize);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(onShown).not.toHaveBeenCalled();
+
+    fromFrame({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+    await waitFor(() => {
+      expect(onShown).toHaveBeenCalledTimes(1);
     });
   });
 

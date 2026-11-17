@@ -1,15 +1,14 @@
 import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
 import { AppBridge } from "@modelcontextprotocol/ext-apps/app-bridge";
 
+import { MAX_VIEW_HEIGHT } from "./hostContext";
+
 import type {
   CallToolResult,
   JSONRPCMessage,
   Transport,
 } from "@modelcontextprotocol/client";
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps/app-bridge";
-
-/** The tallest a view may make its frame, in CSS pixels. */
-export const MAX_VIEW_HEIGHT = 6000;
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- protocol identity, not UI text
 const HOST_INFO = { name: "Erato", version: "1.0.0" };
@@ -76,6 +75,17 @@ export interface ViewCall {
   result: CallToolResult;
 }
 
+export interface ViewConnection {
+  /**
+   * Hands the view a new host context. The view is told what changed once it
+   * has initialized; before that, it gets the latest context right after its
+   * handshake.
+   */
+  setHostContext: (hostContext: McpUiHostContext) => void;
+  /** Disconnects the view. */
+  disconnect: () => void;
+}
+
 export interface ViewEvents {
   /** The view finished its handshake and was sent the call. */
   onInitialized: () => void;
@@ -91,7 +101,6 @@ export interface ViewEvents {
  * capabilities and drops the two requests the SDK answers on its own (`ping`
  * and `ui/request-display-mode`), so every request the view makes (tool
  * calls, messages, links, and anything else) is refused with an error.
- * Returns a function that disconnects the view.
  */
 export function connectView(
   frame: HTMLIFrameElement,
@@ -99,13 +108,15 @@ export function connectView(
   call: ViewCall,
   hostContext: McpUiHostContext,
   events: ViewEvents,
-): () => void {
+): ViewConnection {
   const bridge = new AppBridge(null, HOST_INFO, {}, { hostContext });
   bridge.removeRequestHandler("ping");
   // eslint-disable-next-line lingui/no-unlocalized-strings -- protocol method
   bridge.removeRequestHandler("ui/request-display-mode");
   let initialized = false;
   let closed = false;
+  // A context handed over before the handshake, sent once it is done.
+  let pending: McpUiHostContext | undefined;
 
   bridge.onsandboxready = () => {
     void bridge
@@ -114,6 +125,8 @@ export function connectView(
   };
   bridge.oninitialized = () => {
     initialized = true;
+    if (pending) bridge.setHostContext(pending);
+    pending = undefined;
     events.onInitialized();
     void bridge
       .sendToolInput({ arguments: call.input })
@@ -140,11 +153,19 @@ export function connectView(
     })
     .catch(() => undefined);
 
-  return () => {
-    closed = true;
-    if (initialized) {
-      void bridge.teardownResource({}).catch(() => undefined);
-    }
-    void bridge.close();
+  return {
+    setHostContext: (next) => {
+      if (closed) return;
+      // Sends only the fields that changed, as host-context-changed.
+      if (initialized) bridge.setHostContext(next);
+      else pending = next;
+    },
+    disconnect: () => {
+      closed = true;
+      if (initialized) {
+        void bridge.teardownResource({}).catch(() => undefined);
+      }
+      void bridge.close();
+    },
   };
 }

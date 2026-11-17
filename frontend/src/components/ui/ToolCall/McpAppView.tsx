@@ -1,13 +1,17 @@
 import { t } from "@lingui/core/macro";
+import { useLingui } from "@lingui/react";
 import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useOptionalTheme } from "@/components/providers/ThemeProvider";
+import { browserTimeZone } from "@/hooks/profile/useClientLocaleReport";
 import { getClientPlatform } from "@/lib/clientPlatform";
 import { useGetMcpServerAppView } from "@/lib/generated/v1betaApi/v1betaApiComponents";
+import { viewHostContext } from "@/lib/mcpApps/hostContext";
 import { isRecord } from "@/lib/toolCallGist/serverText";
 
 import type { ToolUse } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
+import type { ViewConnection } from "@/lib/mcpApps/viewHost";
 import type { CallToolResult } from "@modelcontextprotocol/client";
 
 /**
@@ -59,20 +63,38 @@ interface McpAppFrameProps {
   part: ToolUse;
   serverId: string;
   uri: string;
+  onShown?: () => void;
 }
 
-const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
+const McpAppFrame = ({ part, serverId, uri, onShown }: McpAppFrameProps) => {
   const { data } = useGetMcpServerAppView(
     { pathParams: { serverId }, queryParams: { uri } },
     { staleTime: Infinity, retry: false },
   );
-  const theme = useOptionalTheme()?.effectiveTheme ?? "light";
+  const themeContext = useOptionalTheme();
+  const theme = themeContext?.effectiveTheme ?? "light";
+  const appTheme = themeContext?.theme;
+  const { i18n } = useLingui();
+  const locale = i18n.locale || undefined;
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Unset until the view has initialized: a view that never does stays out
   // of sight, and the call's files show as they always have.
   const [height, setHeight] = useState<number>();
   const [failed, setFailed] = useState(false);
+  // The width the message column gives the view, followed as it changes.
+  const [width, setWidth] = useState<number>();
   const pageUrl = data ? sandboxPageUrl(data.sandbox_origin) : undefined;
+  const hostContext = useMemo(
+    () =>
+      viewHostContext({
+        theme,
+        appTheme,
+        width,
+        locale,
+        timeZone: browserTimeZone(),
+      }),
+    [theme, appTheme, width, locale],
+  );
   // The call has settled by the time it names a view; what it was called
   // with and returned is read once, when the view connects.
   const structuredContent = part.result_details?.view?.structured_content;
@@ -80,28 +102,47 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
     input: part.input,
     output: part.output,
     structuredContent,
-    theme,
+    hostContext,
+    onShown,
   });
   call.current = {
     input: part.input,
     output: part.output,
     structuredContent,
-    theme,
+    hostContext,
+    onShown,
   };
+  const connection = useRef<ViewConnection>(undefined);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const measure = (next: number) => {
+      if (next > 0) setWidth(Math.round(next));
+    };
+    measure(frame.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => {
+      measure(entry.contentRect.width);
+    });
+    observer.observe(frame);
+    return () => {
+      observer.disconnect();
+    };
+  }, [data, pageUrl]);
 
   useEffect(() => {
     const frame = frameRef.current;
     if (!data || !pageUrl || !frame) return;
-    let disconnect: (() => void) | undefined;
+    let connected: ViewConnection | undefined;
     let cancelled = false;
     // Loaded with the first view, so the SDK stays out of the main bundle.
     // eslint-disable-next-line lingui/no-unlocalized-strings -- module path
     import("@/lib/mcpApps/viewHost")
-      .then(({ connectView, MAX_VIEW_HEIGHT }) => {
+      .then(({ connectView }) => {
         if (cancelled) return;
-        const { input, output, structuredContent, theme } = call.current;
+        const { input, output, structuredContent, hostContext } = call.current;
         const csp: unknown = data.ui?.csp;
-        disconnect = connectView(
+        connected = connectView(
           frame,
           pageUrl,
           {
@@ -110,29 +151,31 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
             input: isRecord(input) ? input : {},
             result: toolResultOf(output, structuredContent),
           },
-          {
-            theme,
-            platform: "web",
-            displayMode: "inline",
-            availableDisplayModes: ["inline"],
-            containerDimensions: { maxHeight: MAX_VIEW_HEIGHT },
-          },
+          hostContext,
           {
             onInitialized: () => {
               setHeight((current) => current ?? DEFAULT_VIEW_HEIGHT);
+              call.current.onShown?.();
             },
             onHeight: setHeight,
           },
         );
+        connection.current = connected;
       })
       .catch(() => {
         setFailed(true);
       });
     return () => {
       cancelled = true;
-      disconnect?.();
+      connected?.disconnect();
+      if (connection.current === connected) connection.current = undefined;
     };
   }, [data, pageUrl]);
+
+  // The width, theme or language changed: the view is told.
+  useEffect(() => {
+    connection.current?.setHostContext(hostContext);
+  }, [hostContext]);
 
   if (!data || !pageUrl || failed) return null;
 
@@ -151,15 +194,21 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
       // The sandbox page takes messages from, and sends them to, this origin.
       referrerPolicy="origin"
       aria-hidden={height === undefined}
-      className={clsx(
-        "block w-full",
-        height !== undefined &&
-          "card-geometry my-2 border border-[var(--theme-border-attachment)]",
-      )}
-      style={{ height: height ?? 0 }}
+      // On the message's own background like its text: no frame, padding or
+      // card around the view. No color scheme either, as the sandbox page
+      // has none: with the app's dark one the browser paints an opaque
+      // backdrop behind the page.
+      className={clsx("block w-full", height !== undefined && "my-2")}
+      style={{ height: height ?? 0, colorScheme: "normal" }}
     />
   );
 };
+
+export interface McpAppViewProps {
+  part: ToolUse;
+  /** Called once the view has initialized and shows. */
+  onShown?: () => void;
+}
 
 /**
  * The interactive view (MCP Apps) a tool call names in
@@ -167,8 +216,15 @@ const McpAppFrame = ({ part, serverId, uri }: McpAppFrameProps) => {
  * origin. Only the web app shows it; elsewhere, and when the view cannot be
  * fetched or loaded, nothing shows here and the call's files stay as they are.
  */
-export const McpAppView = ({ part }: { part: ToolUse }) => {
+export const McpAppView = ({ part, onShown }: McpAppViewProps) => {
   const view = part.result_details?.view;
   if (!view || getClientPlatform() !== "web") return null;
-  return <McpAppFrame part={part} serverId={view.server_id} uri={view.uri} />;
+  return (
+    <McpAppFrame
+      part={part}
+      serverId={view.server_id}
+      uri={view.uri}
+      onShown={onShown}
+    />
+  );
 };

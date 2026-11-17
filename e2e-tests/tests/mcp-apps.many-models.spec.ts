@@ -1,10 +1,18 @@
-import { Browser, expect, Locator, Page, test } from "@playwright/test";
+import {
+  Browser,
+  BrowserContextOptions,
+  expect,
+  Locator,
+  Page,
+  test,
+} from "@playwright/test";
+import Sharp from "sharp";
 import { chatIsReadyToChat, login } from "./shared";
 import { TAG_CI } from "./tags";
 
 // The scenario's `mock_mcp_apps` server enables MCP Apps for the group of
-// mcp-apps@example.com; `mock_mcp_apps_off` serves the same tools without it
-// for mcp-apps-off@example.com.
+// mcp-apps@example.com and mcp-apps-approval@example.com; `mock_mcp_apps_off`
+// serves the same tools without it for mcp-apps-off@example.com.
 const SANDBOX_PAGE =
   "https://mcp-apps.erato.internal:8443/public/common/mcp-apps-sandbox.html";
 
@@ -21,9 +29,11 @@ const selectMockModel = async (page: Page) => {
 const createDexAuthenticatedContext = async (
   browser: Browser,
   email: string,
+  options: BrowserContextOptions = {},
 ) => {
   const context = await browser.newContext({
     storageState: { cookies: [], origins: [] },
+    ...options,
   });
   const page = await context.newPage();
 
@@ -34,21 +44,32 @@ const createDexAuthenticatedContext = async (
   return { context, page };
 };
 
-/** Asks the mock LLM to call `show_counter` with `start` 41. */
-const callCounterTool = async (page: Page) => {
+/** Sends `prompt` to the mock LLM in a new chat. */
+const sendPrompt = async (page: Page, prompt: string) => {
   await page.goto("/");
   await chatIsReadyToChat(page);
   await selectMockModel(page);
 
   const textbox = page.getByRole("textbox", { name: "Type a message..." });
   await expect(textbox).toBeVisible();
-  await textbox.fill("mcp apps counter");
+  await textbox.fill(prompt);
   await textbox.press("Enter");
+};
+
+/**
+ * Asks the mock LLM to call `show_counter` with `start` 41, or with
+ * `prompt` another tool of the apps server, and waits for the turn to end.
+ */
+const callCounterTool = async (
+  page: Page,
+  { prompt = "mcp apps counter", toolName = "show_counter" } = {},
+) => {
+  await sendPrompt(page, prompt);
 
   const latestAssistantMessage = page.getByTestId("message-assistant").last();
   await expect(latestAssistantMessage).toBeVisible({ timeout: 15000 });
   const toolCallCard = latestAssistantMessage.locator(
-    `[data-testid="tool-call-item"][data-tool-name="show_counter"]`,
+    `[data-testid="tool-call-item"][data-tool-name="${toolName}"]`,
   );
   await expect(toolCallCard).toHaveAttribute("data-tool-status", "success", {
     timeout: 15000,
@@ -66,6 +87,32 @@ const viewCount = (message: Locator) =>
     .frameLocator('[data-testid="mcp-app-view"]')
     .frameLocator("iframe")
     .locator("#count");
+
+/**
+ * The colour of the message just inside the view's frame, at its bottom
+ * right where the counter view draws nothing, and just below the frame.
+ */
+const coloursInsideAndBelowView = async (message: Locator) => {
+  const shot = await message.screenshot();
+  const [messageBox, frameBox] = await Promise.all([
+    message.boundingBox(),
+    message.getByTestId("mcp-app-view").boundingBox(),
+  ]);
+  if (!messageBox || !frameBox) throw new Error("The view is not shown");
+  const { data, info } = await Sharp(shot)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const scale = info.width / messageBox.width;
+  const at = (x: number, y: number) => {
+    const offset =
+      (Math.round(y * scale) * info.width + Math.round(x * scale)) *
+      info.channels;
+    return [...data.subarray(offset, offset + 3)];
+  };
+  const right = frameBox.x - messageBox.x + frameBox.width - 4;
+  const bottom = frameBox.y - messageBox.y + frameBox.height;
+  return { inside: at(right, bottom - 4), below: at(right, bottom + 3) };
+};
 
 /** A domain a view may declare; the test answers its requests itself. */
 const THIRD_PARTY = "https://third-party.example.net";
@@ -171,6 +218,10 @@ test(
       );
       await expect(frame).toHaveAttribute("src", SANDBOX_PAGE);
       await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      // On the message's background like its text: no box around the view.
+      await expect(frame).toHaveCSS("border-top-width", "0px");
+      await expect(frame).toHaveCSS("padding-top", "0px");
+      await expect(frame).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
       await page.reload();
       await chatIsReadyToChat(page, { expectAssistantResponse: true });
@@ -181,6 +232,132 @@ test(
       await expect(viewCount(reopened)).toHaveText("41", { timeout: 15000 });
     } finally {
       await context.close();
+    }
+  },
+);
+
+test(
+  "In dark mode, an MCP Apps view sits on the message's background too, with no backdrop behind it",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    // Dark from the system, and the app's own dark theme on a light system.
+    const darkModes = [
+      { colorScheme: "dark", appThemeMode: undefined },
+      { colorScheme: "light", appThemeMode: "dark" },
+    ] as const;
+    for (const { colorScheme, appThemeMode } of darkModes) {
+      const { context, page } = await createDexAuthenticatedContext(
+        browser,
+        "mcp-apps@example.com",
+        { colorScheme },
+      );
+      try {
+        if (appThemeMode) {
+          await page.evaluate((mode) => {
+            localStorage.setItem("theme-mode", mode);
+          }, appThemeMode);
+        }
+        const message = await callCounterTool(page);
+        await expect(page.locator("html")).toHaveAttribute(
+          "data-theme",
+          "dark",
+        );
+        await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+
+        const { inside, below } = await coloursInsideAndBelowView(message);
+        expect(inside).toEqual(below);
+      } finally {
+        await context.close();
+      }
+    }
+  },
+);
+
+test(
+  "An MCP Apps view renders in the live turn when its call waited for approval",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    // A user of its own: the tool stays on "ask" for this user, so the other
+    // tests, which share theirs, never meet an approval card.
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps-approval@example.com",
+    );
+    try {
+      const ask = await page.request.post(
+        "/api/v1beta/me/mcp-tool-approval-settings",
+        {
+          data: {
+            mcp_server_id: "mock_mcp_apps",
+            tool_name: "show_counter",
+            decision: "ask",
+          },
+        },
+      );
+      expect(ask.ok()).toBe(true);
+
+      await sendPrompt(page, "mcp apps counter");
+      const approval = page.getByTestId("mcp-tool-approval");
+      await expect(approval).toBeVisible({ timeout: 15000 });
+      await expect(approval).toHaveAttribute("data-tool-name", "show_counter");
+      await page
+        .getByRole("button", { name: "Allow once", exact: true })
+        .click();
+
+      // Without a reload.
+      const message = page.getByTestId("message-assistant").last();
+      await expect(message.getByTestId("mcp-app-view")).toBeVisible({
+        timeout: 15000,
+      });
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  "Once a call's view renders, the call's files show as file chips instead of a second full image; without views the image shows",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const image = {
+      prompt: "mcp apps image",
+      toolName: "show_counter_with_image",
+    };
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const message = await callCounterTool(page, image);
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      const chip = message.locator('[data-ui="attachment-tile"]');
+      await expect(chip).toContainText("counter.png");
+      await expect(
+        message.getByRole("img", { name: "Message attachment" }),
+      ).toHaveCount(0);
+
+      // The chip opens the file.
+      await chip.click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+    } finally {
+      await context.close();
+    }
+
+    const off = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps-off@example.com",
+    );
+    try {
+      const message = await callCounterTool(off.page, image);
+      await expect(
+        message.getByRole("img", { name: "Message attachment" }),
+      ).toBeVisible({ timeout: 15000 });
+      await expect(message.locator('[data-ui="attachment-tile"]')).toHaveCount(
+        0,
+      );
+    } finally {
+      await off.context.close();
     }
   },
 );

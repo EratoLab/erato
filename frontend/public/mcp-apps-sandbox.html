@@ -15,8 +15,12 @@
   settings to the <head> of the pages it serves, and this page carries none.
 -->
 <meta charset="utf-8" />
-<meta name="color-scheme" content="light dark" />
 <title>MCP Apps sandbox</title>
+<!--
+  No color scheme at any frame level: where a frame's scheme and its page's
+  differ, the browser paints an opaque backdrop behind the page. A view takes
+  light or dark from the host context's theme.
+-->
 <style>
   html,
   body {
@@ -34,7 +38,7 @@
     border: 0;
     padding: 0;
     background-color: transparent;
-    color-scheme: inherit;
+    color-scheme: normal;
   }
 </style>
 <script>

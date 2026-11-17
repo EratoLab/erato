@@ -13,6 +13,7 @@ import { Alert } from "@/components/ui/Feedback/Alert";
 import { ReminderConfirmationCard } from "@/components/ui/Scheduled/ReminderConfirmationCard";
 import { reminderConfirmationOf } from "@/components/ui/Scheduled/reminderConfirmation";
 import { McpAppView } from "@/components/ui/ToolCall/McpAppView";
+import { McpAppViewFiles } from "@/components/ui/ToolCall/McpAppViewFiles";
 import {
   Trace,
   durationFromTraceParts,
@@ -906,6 +907,24 @@ const extractReferencedEratoFileIds = (text: string): Set<string> => {
 };
 
 /**
+ * The files a tool call returned: its stored output names each one with an
+ * `erato-file://` link where the server's result carried the bytes.
+ */
+const eratoFileIdsIn = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    const fileId = getEratoFileIdFromUrl(value);
+    return fileId ? [fileId] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(eratoFileIdsIn);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flatMap(eratoFileIdsIn);
+  }
+  return [];
+};
+
+/**
  * Every id a decision part can be found by. The generated schema loses the type
  * of the optional ones, so they are read through a narrowing accessor.
  */
@@ -1661,6 +1680,46 @@ export const MessageContent = memo(function MessageContent({
     return fileIds;
   }, [content]);
 
+  // Calls whose view shows: their images, which the stored output names as
+  // links, show as chips under the view instead of as full images. Their
+  // other files stay in the message's attachments.
+  const [shownViews, setShownViews] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const markViewShown = React.useCallback((toolCallId: string) => {
+    setShownViews((shown) =>
+      shown.has(toolCallId) ? shown : new Set(shown).add(toolCallId),
+    );
+  }, []);
+  const viewFileIds = React.useMemo(() => {
+    const byCall = new Map<string, string[]>();
+    content.forEach((part) => {
+      if (
+        part.content_type === "tool_use" &&
+        part.tool_call_id &&
+        part.result_details?.view
+      ) {
+        byCall.set(part.tool_call_id, [
+          ...new Set(
+            eratoFileIdsIn(part.output).filter((fileId) =>
+              generatedImageFileIds.has(fileId),
+            ),
+          ),
+        ]);
+      }
+    });
+    return byCall;
+  }, [content, generatedImageFileIds]);
+  const chippedFileIds = React.useMemo(
+    () =>
+      new Set(
+        [...shownViews].flatMap(
+          (toolCallId) => viewFileIds.get(toolCallId) ?? [],
+        ),
+      ),
+    [shownViews, viewFileIds],
+  );
+
   const textReferencedEratoFileIds = React.useMemo(() => {
     const fileIds = new Set<string>();
 
@@ -1982,15 +2041,36 @@ export const MessageContent = memo(function MessageContent({
                   />
                 ) : null;
               })}
-              {cluster.parts.map((tracePart, partIndex) =>
-                tracePart.content_type === "tool_use" &&
-                tracePart.result_details?.view ? (
-                  <McpAppView
-                    key={`mcp-app-${tracePart.tool_call_id ?? partIndex}`}
-                    part={tracePart}
-                  />
-                ) : null,
-              )}
+              {cluster.parts.map((tracePart, partIndex) => {
+                if (
+                  tracePart.content_type !== "tool_use" ||
+                  !tracePart.result_details?.view
+                ) {
+                  return null;
+                }
+                const toolCallId = tracePart.tool_call_id;
+                return (
+                  <React.Fragment key={`mcp-app-${toolCallId ?? partIndex}`}>
+                    <McpAppView
+                      part={tracePart}
+                      onShown={
+                        toolCallId
+                          ? () => {
+                              markViewShown(toolCallId);
+                            }
+                          : undefined
+                      }
+                    />
+                    {toolCallId && shownViews.has(toolCallId) && (
+                      <McpAppViewFiles
+                        fileIds={viewFileIds.get(toolCallId) ?? []}
+                        filesById={filesById}
+                        onFilePreview={onFileLinkPreview}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </React.Fragment>
           );
         }
@@ -2107,7 +2187,8 @@ export const MessageContent = memo(function MessageContent({
         if (image) {
           if (
             part.content_type === "image_file_pointer" &&
-            textReferencedEratoFileIds.has(part.file_upload_id)
+            (textReferencedEratoFileIds.has(part.file_upload_id) ||
+              chippedFileIds.has(part.file_upload_id))
           ) {
             return null;
           }

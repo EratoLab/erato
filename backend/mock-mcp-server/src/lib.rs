@@ -1201,6 +1201,9 @@ pub const OVERSIZED_VIEW_BYTES: usize = 9 * 1024 * 1024;
 pub const SLOW_VIEW_URI: &str = "ui://mock/slow";
 /// The tool that shows the counter view.
 pub const COUNTER_TOOL_NAME: &str = "show_counter";
+/// The counter view's tool that also returns a picture as a file, as a chart
+/// tool returns its static image beside its view.
+pub const COUNTER_IMAGE_TOOL_NAME: &str = "show_counter_with_image";
 /// Text that only the counter view's document holds.
 pub const COUNTER_VIEW_MARKER: &str = "mock-counter-view";
 pub const COUNTER_VIEW_HTML: &str = r#"<!doctype html>
@@ -1235,6 +1238,16 @@ const APP_TOOLS: [(&str, &str); 4] = [
     ("show_slow_view", SLOW_VIEW_URI),
 ];
 
+/// `show_counter_with_image`: the counter view, and a PNG file in its
+/// structured content, declared the way `generate_image` declares its images.
+fn counter_image_tool() -> rmcp::model::Tool {
+    let mut tool = app_tool(COUNTER_IMAGE_TOOL_NAME, COUNTER_VIEW_URI);
+    tool.output_schema = Some(rmcp::handler::server::tool::schema_for_type::<
+        ImageGenerationResponse,
+    >());
+    tool
+}
+
 fn app_tool(name: &str, view_uri: &str) -> rmcp::model::Tool {
     let schema = json!({"type": "object", "properties": {"start": {"type": "integer"}}});
     let mut tool = rmcp::model::Tool::new(
@@ -1265,6 +1278,26 @@ impl ServerHandler for AppsServer {
             .and_then(|arguments| arguments.get("start"))
             .and_then(serde_json::Value::as_i64)
             .unwrap_or(0);
+        if request.name == COUNTER_IMAGE_TOOL_NAME {
+            let response = ImageGenerationResponse {
+                images: vec![GeneratedImage {
+                    data_base64: CAT_IMAGE_BASE64.trim().to_string(),
+                    file_name: "counter.png".to_string(),
+                    width: 500,
+                    height: 500,
+                    mime_type: "image/png".to_string(),
+                }],
+            };
+            let result: Result<CallToolResponse, McpError> = serde_json::to_value(&response)
+                .map(|structured| CallToolResult::structured(structured).into())
+                .map_err(|err| {
+                    McpError::internal_error(
+                        format!("Failed to serialize the counter image: {err}"),
+                        None,
+                    )
+                });
+            return std::future::ready(result);
+        }
         let mut result = CallToolResult::success(vec![ContentBlock::text(format!(
             "Counter started at {start}."
         ))]);
@@ -1281,6 +1314,7 @@ impl ServerHandler for AppsServer {
             tools: APP_TOOLS
                 .iter()
                 .map(|(name, view_uri)| app_tool(name, view_uri))
+                .chain([counter_image_tool()])
                 .collect(),
             ..Default::default()
         }))
@@ -1705,10 +1739,11 @@ fn builtin_mechanisms() -> Vec<MechanismSummary> {
         },
         MechanismSummary {
             name: "Apps server",
-            description: "Tools that declare MCP Apps views: ui://mock/counter, one served as plain HTML, one too large and one that never answers",
+            description: "Tools that declare MCP Apps views: ui://mock/counter, also with a PNG file, one served as plain HTML, one too large and one that never answers",
             endpoint: "Streamable HTTP /mcp/apps",
             tools: &[
                 COUNTER_TOOL_NAME,
+                COUNTER_IMAGE_TOOL_NAME,
                 "show_wrong_type_view",
                 "show_oversized_view",
                 "show_slow_view",

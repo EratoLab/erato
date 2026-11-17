@@ -324,7 +324,7 @@ async fn with_mcp_apps_off_nothing_changes(pool: Pool<Postgres>) {
     assert!(
         offered_tools(&on.recorder)
             .as_array()
-            .is_some_and(|tools| tools.len() == 4)
+            .is_some_and(|tools| tools.len() == 5)
     );
 }
 
