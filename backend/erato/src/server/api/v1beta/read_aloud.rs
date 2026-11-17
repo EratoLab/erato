@@ -1,7 +1,6 @@
+use super::approval_access::check_waiting_approval_of_user;
 use super::me_profile_middleware::{MeProfile, normalize_supported_language};
-use super::message_streaming::parked_approval_state;
 use crate::config::SpeechProviderConfig;
-use crate::models::chat::get_chat_by_message_id;
 use crate::models::message::{ContentPart, MessageRole, MessageSchema, get_message_by_id};
 use crate::policy::engine::PolicyEngine;
 use crate::services::sentry::log_internal_server_error;
@@ -290,33 +289,7 @@ pub async fn speak_approval(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    policy
-        .rebuild_data_if_needed_req(&app_state.db, &app_state.config)
-        .await?;
-    let not_found = |error: eyre::Report| {
-        let text = error.to_string().to_lowercase();
-        if text.contains("not found") || text.contains("not authorized") {
-            StatusCode::NOT_FOUND
-        } else {
-            log_internal_server_error(error)
-        }
-    };
-    let subject = me_user.to_subject();
-    let message = get_message_by_id(&app_state.db, &policy, &subject, &message_id)
-        .await
-        .map_err(not_found)?;
-    // A chat shared for reading is not one the reader decides in.
-    let chat = get_chat_by_message_id(&app_state.db, &policy, &subject, &message_id)
-        .await
-        .map_err(not_found)?;
-    if chat.owner_user_id != me_user.id {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let parsed =
-        MessageSchema::validate(&message.raw_message).map_err(log_internal_server_error)?;
-    if parked_approval_state(&parsed.content).is_none_or(|state| state.decidable().is_empty()) {
-        return Err(StatusCode::CONFLICT);
-    }
+    check_waiting_approval_of_user(&app_state, &policy, &me_user, &message_id).await?;
 
     speech_response(provider_config, &pieces, &language, true, message_id)
 }

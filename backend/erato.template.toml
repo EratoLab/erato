@@ -119,6 +119,14 @@ chat_provider_ids = ["test-token-limit"]
 # chat_provider_id = "test-token-limit"
 # allow_other_provider = false
 
+# Voice commands on a waiting approval card (conversational audio mode).
+# Without chat_provider_id only the built-in rules answer.
+# [approval_voice_commands]
+# enabled = false
+# chat_provider_id = "test-token-limit"
+# model_timeout_ms = 2500
+# prompt = "..."
+
 # From ./run_mcp_server.sh
 # Global default idle timeout for MCP sessions in seconds (default: 3600)
 # [mcp_servers_global]

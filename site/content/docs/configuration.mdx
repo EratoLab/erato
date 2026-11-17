@@ -5374,6 +5374,48 @@ chat_provider_id = "gpt-4o-mini"
 allow_other_provider = true
 ```
 
+### `approval_voice_commands`
+
+{/* erato_toml_config_key: approval_voice_commands */}
+
+While an approval card waits in conversational audio mode, the user may say something: "weiter", "hab ich, was wird sonst noch geändert?", "wie war das Datum?", "lies mir die Beschreibung vor", "stopp", or "nimm den 22.". This section turns those words into one meaning from a closed list, through `POST /api/v1beta/me/messages/{message_id}/approval-voice-command`, which only answers for a message of the user's own chat with an approval waiting. The meanings are: skip the current piece, say the rest, repeat a piece, read a long text, stop, change the call, a new unrelated request, approve, reject, listening noise, and unclear. The answer is the meaning and, for repeat and read text, the piece meant; it carries no text to speak, decides nothing, and nothing is stored. Approve and reject are only reported, so the caller can say that decisions are made on screen.
+
+Built-in rules match the plain words and short phrases in German and English without a model. Words the rules do not match go to the configured model, if any. The model answers with one meaning and one piece id from closed lists; any other answer, an error, or an answer after `model_timeout_ms` gives "unclear". Approve or reject is only reported once the card's request to decide has been heard (or the card has none): a "ja" while the card is still being read, or beside a backchannel ("mhm, ja", "ja ja"), is listening noise. It also needs a short sentence made only of words of agreement or of refusal, without a question (also without a question mark: "passt das"), a condition, a change, a number or a field of the card ("ja, aber nimm den 22." is a change; "ja nee" and "danke" are no approval). A change that breaks off before it says what to change ("nimm lieber den") is "unclear", and words that could be a change are never reported as a new request.
+
+**What leaves Erato.** For words the rules do not match, the model receives the words, the language, and the card's pieces as their id, role (what, item, detail, text, consequence, …), the field name the card shows for details and texts, and whether each was heard, cut short or not yet said. The card's values, the tool call and the chat stay in Erato. The model is not used for a user whose [`model_permissions`](#model_permissions) do not include its provider; the rules still answer. Requests are not traced in Langfuse and their tokens are not counted against user budgets. The log names the meaning and how it was found, never the words.
+
+```toml
+[approval_voice_commands]
+enabled = true
+chat_provider_id = "gpt-4o-mini"
+```
+
+#### `approval_voice_commands.enabled`
+
+{/* erato_toml_config_key: approval_voice_commands.enabled */}
+
+Offer the endpoint. **Default:** `false`.
+
+#### `approval_voice_commands.chat_provider_id`
+
+{/* erato_toml_config_key: approval_voice_commands.chat_provider_id */}
+
+Provider for the words the rules do not match. While the section is enabled it must identify a configured chat provider; a switched-off section is not checked. Unset or blank, only the rules answer and everything else is "unclear". Point it at a small, fast model whose provider entry has low or no `reasoning_effort`, since the provider's model settings carry over; the reply schema is sent to the same provider kinds as for [`tool_labels`](#tool_labelschat_provider_id).
+
+#### `approval_voice_commands.model_timeout_ms`
+
+{/* erato_toml_config_key: approval_voice_commands.model_timeout_ms */}
+
+How long the model may take before the answer is "unclear", in milliseconds. **Default:** `2500`. **Range:** `200–10000`.
+
+#### `approval_voice_commands.prompt`
+
+{/* erato_toml_config_key: approval_voice_commands.prompt */}
+
+Replaces the model's built-in instruction, for example from subscription content. Unset or blank, the built-in one applies. The answer is checked against the closed lists whatever the instruction says.
+
+**Type:** `string`
+
 ### `prompt_optimizer`
 
 {/* erato_toml_config_key: prompt_optimizer */}
