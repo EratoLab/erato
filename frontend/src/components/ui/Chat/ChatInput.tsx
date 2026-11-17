@@ -953,9 +953,10 @@ export const ChatInput = ({
     };
     toggleDictation();
   }, [getActiveSessionId, toggleDictation]);
+  // The card's target stays after a close: its late words are dropped with
+  // it, and a late error is still known to be the card's.
   const closeCardListening = useCallback(() => {
     if (isDictating || isDictationStarting) toggleDictation();
-    dictationTargetRef.current = null;
   }, [isDictating, isDictationStarting, toggleDictation]);
   const readCardTurn = useCallback(
     () => dictationTargetRef.current?.card ?? { words: "", ended: false },
@@ -2801,6 +2802,9 @@ export const ChatInput = ({
       clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
       pendingConversationalStartRef.current = false;
+      // A card's own recording failing ends listening for that card only;
+      // the conversation still listens again after the card's answer.
+      if (!recordingError && dictationTargetRef.current?.card) return;
       shouldRestartAudioModeAfterResponseRef.current = false;
       audioModeRestartSawPendingResponseRef.current = false;
     }

@@ -125,7 +125,7 @@ describe("listening while a spoken card waits", () => {
     }
   });
 
-  it("waits briefly for the last words of a turn, and listens again after no words at all", async () => {
+  it("review 5: listens again at once after a turn with no words", () => {
     vi.useFakeTimers();
     try {
       const mic = recorder();
@@ -136,12 +136,11 @@ describe("listening while a spoken card waits", () => {
       mic.state.open = false;
       mic.state.idle = true;
       rerender({ on: true });
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(3_200);
-      });
       rerender({ on: true });
+      // No time passes: the recorder is idle only once every word arrived.
       expect(heardApprovalWords).not.toHaveBeenCalled();
       expect(mic.open).toHaveBeenCalledTimes(2);
+      expect(useApprovalListening.getState().quiet).toBeNull();
     } finally {
       vi.useRealTimers();
     }

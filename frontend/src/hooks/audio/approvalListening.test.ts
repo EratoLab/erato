@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import expectedPieces from "@/lib/toolCallGist/fixtures/spokenCards/expected.json";
 import {
+  currentPiece,
   namesLongText,
   piecesAhead,
   spokenCardFlow,
@@ -45,16 +46,27 @@ const expected = expectedPieces as unknown as Record<
   Record<string, SpokenPiece[][]>
 >;
 
-const KINDS = ["read", "create", "update", "delete"] as const;
+/** Kinds a card is said in full for; the first four also with a long text added. */
+const KINDS = [
+  "read",
+  "create",
+  "update",
+  "delete",
+  "send",
+  "batch",
+  "queue",
+  "builtin_tool",
+] as const;
 type Kind = (typeof KINDS)[number];
+const SINGLE_KINDS: readonly Kind[] = ["read", "create", "update", "delete"];
 
 const LONG_TEXT: SpokenPiece = {
-  id: "text:Description",
+  id: "text:Meeting notes",
   role: "text",
-  text: "Description: ein Text von etwa 120 Wörtern, er steht auf dem Bildschirm.",
+  text: "Meeting notes: ein Text von etwa 120 Wörtern, er steht auf dem Bildschirm.",
   mustSay: false,
   values: [
-    { slot: "field", value: { kind: "text", text: "Description" } },
+    { slot: "field", value: { kind: "text", text: "Meeting notes" } },
     { slot: "words", value: { kind: "number", value: 120, percent: false } },
   ],
   readOut: { text: "Ein langer Text. ".repeat(40).trim(), cut: false },
@@ -69,23 +81,32 @@ const withLongText = (pieces: SpokenPiece[]): SpokenPiece[] => {
   return [...pieces.slice(0, at), LONG_TEXT, ...pieces.slice(at)];
 };
 
+/**
+ * The set's cards of `kind`: a single kind alone, or any scenario that has
+ * it (a send, a batch, each card of a queue, a built-in tool's pointer).
+ */
 const cardsOf = (kind: Kind, longText: boolean) =>
   scenarios
-    .filter(
-      (scenario) => scenario.kind.length === 1 && scenario.kind[0] === kind,
+    .filter((scenario) =>
+      SINGLE_KINDS.includes(kind)
+        ? scenario.kind.length === 1 && scenario.kind[0] === kind
+        : scenario.kind.includes(kind),
     )
     .flatMap((scenario) =>
-      (["de", "en"] as const).map((language) => {
-        const pieces = expected[scenario.id][language][0];
-        return {
-          name: `${scenario.id} ${language}`,
+      (["de", "en"] as const).flatMap((language) =>
+        expected[scenario.id][language].map((pieces, index) => ({
+          name: `${scenario.id}#${index} ${language}`,
           pieces: longText
             ? withLongText(pieces)
             : pieces.filter((piece) => !namesLongText(piece)),
-        };
-      }),
+        })),
+      ),
     )
-    .filter(({ pieces }) => pieces[0].role !== "pointer");
+    .filter(({ pieces }) =>
+      pieces[0].role === "pointer"
+        ? kind === "builtin_tool" && !longText
+        : true,
+    );
 
 // ---------------------------------------------------------------------------
 // Where the voice fell silent, the only times the microphone is open
@@ -197,7 +218,7 @@ describe("what a meaning does to a waiting card", () => {
   );
 
   it("covers every kind with and without a long text, every meaning and every place", () => {
-    for (const kind of KINDS)
+    for (const kind of [...SINGLE_KINDS, "send"])
       for (const longText of [false, true])
         expect(
           combinations.some(
@@ -205,6 +226,11 @@ describe("what a meaning does to a waiting card", () => {
           ),
           `${kind} ${longText}`,
         ).toBe(true);
+    for (const kind of KINDS)
+      expect(
+        combinations.some((entry) => entry.kind === kind),
+        kind,
+      ).toBe(true);
     expect(new Set(combinations.map((entry) => entry.position)).size).toBe(
       POSITIONS.length,
     );
@@ -240,7 +266,7 @@ describe("what a meaning does to a waiting card", () => {
     const before = quietAt(pieces, position) as SpokenCardFlow;
     const request = pieces.findIndex((piece) => piece.role === "request");
     // The endpoint names the piece the voice stopped in, or the last one.
-    const current = before.previous;
+    const current = currentPiece(before);
     const pieceId = current === null ? null : pieces[current].id;
     const { event, listen } = stepForMeaning(meaning, pieceId, pieces);
 
@@ -325,13 +351,15 @@ describe("what a meaning does to a waiting card", () => {
         expect(said[0]).toEqual(
           current === null
             ? { type: "piece", index: 0 }
-            : {
-                type: "piece",
-                index:
-                  current === request && before.owed.length > 0
-                    ? before.owed[0]
-                    : current,
-              },
+            : current === before.lastRead
+              ? { type: "text", index: current }
+              : {
+                  type: "piece",
+                  index:
+                    current === request && before.owed.length > 0
+                      ? before.owed[0]
+                      : current,
+                },
         );
         break;
       case "rest": {
@@ -730,6 +758,107 @@ describe("listening against the endpoint", () => {
     fetchCommand.mockRejectedValue({ status: 409, payload: "" });
     await heardApprovalWords(KEY, "nochmal");
     expect(connections).toHaveLength(1);
+  });
+
+  it.each([
+    ["unclear", null],
+    ["stop", null],
+    ["skip", null],
+    ["repeat", "request"],
+  ] as const)(
+    "review 3: a late %s does not steer a reading restarted by tap",
+    async (meaning, piece) => {
+      const {
+        heardApprovalWords,
+        replayApprovalCard,
+        useApprovalListening,
+        useApprovalSpeech,
+      } = await heardCard();
+      let answer: (value: unknown) => void = () => {};
+      fetchCommand.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+      const heard = heardApprovalWords(KEY, "hm, wie bitte");
+      replayApprovalCard();
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      audio(connections[1], 0);
+      answer({
+        meaning,
+        piece_id: piece === null ? null : CARD.at(-1)?.id,
+        source: "model",
+      });
+      await heard;
+      // The new reading goes on from its first piece, nothing else is said.
+      expect(connections).toHaveLength(2);
+      expect(useApprovalSpeech.getState().current).toBe(0);
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+      expect(useApprovalListening.getState().quiet).toBeNull();
+    },
+  );
+
+  it("review 3: a timeout after a restarted reading says nothing and keeps listening on", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const {
+      heardApprovalWords,
+      replayApprovalCard,
+      useApprovalListening,
+      VOICE_COMMAND_TIMEOUT_MS,
+    } = await heardCard();
+    fetchCommand.mockImplementation(
+      (_variables: unknown, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () =>
+            reject(new Error("Network error (aborted)")),
+          );
+        }),
+    );
+    const heard = heardApprovalWords(KEY, "was noch?");
+    replayApprovalCard();
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    await vi.advanceTimersByTimeAsync(VOICE_COMMAND_TIMEOUT_MS);
+    await heard;
+    expect(connections).toHaveLength(2);
+    expect(useApprovalListening.getState()).toEqual({
+      pending: null,
+      quiet: null,
+    });
+  });
+
+  it("review 4: 'again' right after a read-out text reads the text again", async () => {
+    const { heardApprovalWords, useApprovalSpeech } = await heardCard();
+    const text = CARD.findIndex(namesLongText);
+    fetchCommand.mockResolvedValueOnce({
+      meaning: "read_text",
+      piece_id: CARD[text].id,
+      source: "rules",
+    });
+    await heardApprovalWords(KEY, "lies den Text vor");
+    // The text is read, then the request again; the voice falls quiet.
+    sentences(connections[1]).forEach((_, part) => {
+      audio(connections[1], part);
+      playOut();
+    });
+    audio(connections[0], CARD.length - 1);
+    playOut();
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+
+    fetchCommand.mockImplementationOnce(
+      (variables: { body: { current_piece_id: string } }) =>
+        Promise.resolve({
+          meaning: "repeat",
+          piece_id: variables.body.current_piece_id,
+          source: "rules",
+        }),
+    );
+    await heardApprovalWords(KEY, "nochmal");
+    const [variables] = fetchCommand.mock.calls[1] as [
+      { body: { current_piece_id: string } },
+    ];
+    expect(variables.body.current_piece_id).toBe(CARD[text].id);
+    expect(connections).toHaveLength(3);
+    expect(sentences(connections[2])).toEqual(sentences(connections[1]));
   });
 
   it("words for another card do nothing", async () => {

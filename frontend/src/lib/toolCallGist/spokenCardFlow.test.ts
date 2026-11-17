@@ -423,6 +423,58 @@ describe("while the voice is quiet and listens", () => {
     ]);
   });
 
+  it("review 4: 'again' after a text was read out is the text, until other content is said", () => {
+    const withText = [
+      CARD[0],
+      {
+        ...piece("text", "Description: ein Text von etwa 70 Wörtern."),
+        values: [
+          {
+            slot: "words" as const,
+            value: { kind: "number" as const, value: 70, percent: false },
+          },
+        ],
+      },
+      CARD[2],
+      CARD[3],
+    ];
+    const read = run(withText, [
+      { type: "start" },
+      ...finished(4),
+      { type: "read" },
+      ...finished(2),
+    ]).flow;
+    // The text, then the request again: quiet, and the text is the last one.
+    expect(read.playing).toBeNull();
+    expect(read.lastRead).toBe(1);
+    expect(currentPiece(read)).toBe(1);
+    expect(spokenCardStep(withText, read, { type: "repeat" }).playing).toEqual({
+      type: "text",
+      index: 1,
+    });
+    expect(
+      spokenCardStep(withText, read, { type: "repeat", index: 1 }).playing,
+    ).toEqual({ type: "text", index: 1 });
+    // Stopped in the text: again is the text too.
+    const stopped = run(withText, [
+      { type: "start" },
+      ...finished(4),
+      { type: "read" },
+      { type: "stop" },
+    ]).flow;
+    expect(currentPiece(stopped)).toBe(1);
+    // Other content after it: again is that content.
+    const moved = spokenCardStep(
+      withText,
+      spokenCardStep(withText, read, { type: "repeat", index: 2 }),
+      { type: "finished" },
+    );
+    expect(moved.lastRead).toBeNull();
+    expect(spokenCardStep(withText, read, { type: "start" }).lastRead).toBe(
+      null,
+    );
+  });
+
   it("a card withdrawn for a change is closed, but not decided", () => {
     const withdrawn = run(CARD, [
       { type: "start" },

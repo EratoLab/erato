@@ -169,12 +169,19 @@ const statusOf = (error: unknown): number | undefined => {
   return typeof error.status === "number" ? error.status : undefined;
 };
 
-const stillWaiting = (key: string): boolean => {
+/**
+ * Whether the answer still belongs to what the user heard: the same card, in
+ * the same reading and quiet, as when the words were sent. A reading the user
+ * restarted meanwhile, by the control that reads the card, is not steered by
+ * words said about the earlier one.
+ */
+const stillWaiting = (key: string, asked: SpokenCardFlow): boolean => {
   const now = spokenApprovalCardNow();
   return (
-    now !== null &&
-    now.card.key === key &&
+    now?.card.key === key &&
+    now.flow === asked &&
     !now.flow.closed &&
+    !useApprovalSpeech.getState().speaking &&
     approvalSpeechAllowed()
   );
 };
@@ -227,7 +234,7 @@ export async function heardApprovalWords(
     if (useApprovalListening.getState().pending === key)
       useApprovalListening.setState({ pending: null });
   }
-  if (!stillWaiting(key)) return;
+  if (!stillWaiting(key, flow)) return;
   if (step.event) steerApprovalCard(key, step.event);
   if (!step.listen) useApprovalListening.setState({ quiet: key });
 }

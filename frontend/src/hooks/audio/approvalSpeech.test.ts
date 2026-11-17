@@ -186,6 +186,56 @@ describe("speaking an approval card", () => {
     expect(sources).toHaveLength(before + 1);
   });
 
+  it("review 2: a break in the card's audio after a stop says nothing; going on asks again", async () => {
+    const {
+      connection,
+      states,
+      stopApprovalSpeech,
+      steerApprovalCard,
+      useApprovalSpeech,
+    } = await speak();
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    audio(connection, 0);
+    stopApprovalSpeech();
+    connection.options.onError?.(new Error("network"));
+    // No fallback, no notice, the card still waits and can be steered.
+    expect(connections).toHaveLength(1);
+    expect(connection.close).toHaveBeenCalled();
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().failed).toBe(false);
+    expect(useSpeechPlayback.getState().failed).toBe(false);
+
+    // "weiter": the pieces that did not load are asked for again.
+    steerApprovalCard("message-1:stop-1", { type: "skip" });
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string)).toEqual({
+      pieces: CARD.slice(1).map((entry) => entry.text),
+    });
+    expect(states()).toEqual(["cut", "playing", "pending", "pending"]);
+    const before = sources.length;
+    audio(connections[1], 0);
+    expect(sources).toHaveLength(before + 1);
+
+    // A break while a piece that did not load plays fails, as before.
+    playOut();
+    expect(states()).toEqual(["cut", "heard", "playing", "pending"]);
+    connections[1].options.onClose?.();
+    expect(useApprovalSpeech.getState().failed).toBe(true);
+  });
+
+  it("review 2: a break while a loaded piece plays goes on; a later piece is asked for again", async () => {
+    const { connection, states, useApprovalSpeech } = await speak();
+    audio(connection, 0);
+    connection.options.onClose?.();
+    expect(useApprovalSpeech.getState().failed).toBe(false);
+    expect(states()[0]).toBe("playing");
+    playOut();
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    expect(JSON.parse(connections[1].options.body as string).pieces).toEqual(
+      CARD.slice(1).map((entry) => entry.text),
+    );
+  });
+
   it("1.6: a card that cannot be spoken falls back, then says so, and stays to be asked for", async () => {
     const {
       connection,

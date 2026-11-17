@@ -87,6 +87,11 @@ export interface SpokenCardFlow {
   last: number | null;
   /** The last piece that was being said, to its end or cut short. */
   previous: number | null;
+  /**
+   * The piece whose long text was read out last, while nothing but the
+   * request was said after it: "again" then means that text.
+   */
+  lastRead: number | null;
   /** The voice failed: nothing was heard, so the pointer sentence can stand in. */
   failed: "fallback" | "notice" | null;
   /** Decided or replaced: no event says anything any more. */
@@ -115,6 +120,7 @@ export const spokenCardFlow = (
     started: 0,
     last: null,
     previous: null,
+    lastRead: null,
     failed: null,
     closed: false,
     withdrawn: false,
@@ -328,8 +334,12 @@ const step = (
       );
     }
     case "repeat": {
-      const target = event.index ?? pieceOf(flow.playing) ?? flow.last;
+      const target =
+        event.index ?? pieceOf(flow.playing) ?? flow.lastRead ?? flow.last;
       if (target === null || !(target in pieces)) return flow;
+      // Again, right after a text was read out, is the text.
+      if (target === flow.lastRead && flow.playing === null)
+        return step(pieces, flow, { type: "read", index: target });
       return begin(pieces, interrupt(flow, target), {
         type: "piece",
         index: target,
@@ -377,7 +387,30 @@ export const spokenCardStep = (
 ): SpokenCardFlow => {
   if (flow.closed) return flow;
   const next = step(pieces, flow, event);
-  return next === flow ? flow : { ...next, owed: owedOf(pieces, next.heard) };
+  if (next === flow) return flow;
+  return {
+    ...next,
+    owed: owedOf(pieces, next.heard),
+    lastRead: lastReadAfter(pieces, flow, next, event),
+  };
+};
+
+/** A text read out stays "the last one" until other content is said. */
+const lastReadAfter = (
+  pieces: readonly SpokenPiece[],
+  before: SpokenCardFlow,
+  after: SpokenCardFlow,
+  event: SpokenCardEvent,
+): number | null => {
+  if (event.type === "start") return null;
+  const started = after.started !== before.started;
+  const now = pieceOf(after.playing);
+  if (started && now !== null && now !== requestOf(pieces)) return null;
+  const left =
+    before.playing?.type === "text" && after.playing !== before.playing
+      ? before.playing.index
+      : null;
+  return left ?? after.lastRead;
 };
 
 /** A piece's state as the voice command endpoint takes it. */
@@ -392,9 +425,12 @@ export const heardStates = (flow: SpokenCardFlow): HeardState[] =>
     flow.heard[index] ? "heard" : state === "cut" ? "cut_short" : "not_said",
   );
 
-/** The piece being said, or else the last one that was. */
+/** The piece being said or read out, or else the last one that was. */
 export const currentPiece = (flow: SpokenCardFlow): number | null =>
-  pieceOf(flow.playing) ?? flow.previous;
+  pieceOf(flow.playing) ??
+  (flow.playing?.type === "text" ? flow.playing.index : null) ??
+  flow.lastRead ??
+  flow.previous;
 
 /**
  * Whether a decision said by voice may count: the card is waiting, its

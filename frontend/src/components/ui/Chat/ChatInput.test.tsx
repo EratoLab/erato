@@ -8771,8 +8771,21 @@ describe("ChatInput", () => {
         toggleDictation: () => void,
         listening: boolean,
         voiceCommandsEnabled = true,
+        dictationError: string | null = null,
       ) => {
         conversational(toggleDictation, listening);
+        if (dictationError) {
+          mockUseAudioDictationRecorder.mockReturnValue({
+            isDictating: false,
+            isDictationStarting: false,
+            isDictationCompleting: false,
+            isCapturingAudio: false,
+            dictationError,
+            setDictationError: vi.fn(),
+            dictationBars: [2, 2, 2, 2, 2],
+            toggleDictation,
+          });
+        }
         mockUseAudioConversationalFeature.mockReturnValue({
           enabled: true,
           speechEnabled: true,
@@ -8857,6 +8870,44 @@ describe("ChatInput", () => {
         await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
         expect(mockHeardApprovalWords).not.toHaveBeenCalled();
       });
+
+      it.each([
+        null,
+        "Dictation stopped automatically after the configured maximum duration.",
+      ])(
+        "review 1: after the card's recording ends (error: %s), the conversation listens again once the card is decided",
+        async (error) => {
+          const toggleDictation = vi.fn();
+          withVoice(toggleDictation, false);
+          const ui = await composer();
+          const { rerender } = render(ui(false));
+          // Normal listening, then a card closes the microphone.
+          fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+          withVoice(toggleDictation, true);
+          rerender(ui(true));
+          showCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+          // The card's voice is silent: the microphone listens for the card,
+          // and that recording ends, with or without an error.
+          withVoice(toggleDictation, false);
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+          withVoice(toggleDictation, true);
+          rerender(ui(true));
+          withVoice(toggleDictation, false, true, error);
+          rerender(ui(true));
+          expect(toggleDictation).toHaveBeenCalledTimes(3);
+
+          // Decided on screen, the answer played: listening again.
+          act(() => useApprovalSpeech.setState({ closed: true }));
+          decideCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(4));
+        },
+      );
 
       it("keeps the microphone closed over the card with voice commands off", async () => {
         const toggleDictation = vi.fn();

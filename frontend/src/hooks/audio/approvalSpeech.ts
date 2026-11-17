@@ -178,12 +178,13 @@ const openSpeech = (
     audio: (index: number, chunk: AudioDelta) => void;
     done: (index: number) => void;
     ended: () => void;
+    failed: () => void;
   },
 ): (() => void) => {
   let lastSequence = -1;
   let ended = false;
   const failIfCurrent = () => {
-    if (!handlers.stale()) fail();
+    if (!handlers.stale()) handlers.failed();
   };
   return createSSEConnection(
     // eslint-disable-next-line lingui/no-unlocalized-strings -- request path
@@ -198,7 +199,7 @@ const openSpeech = (
           try {
             chunk = JSON.parse(event.data) as AudioDelta;
           } catch {
-            fail();
+            failIfCurrent();
             return;
           }
           if (chunk.sequence <= lastSequence) return;
@@ -209,7 +210,7 @@ const openSpeech = (
           try {
             done = JSON.parse(event.data) as { piece: number };
           } catch {
-            fail();
+            failIfCurrent();
             return;
           }
           handlers.done(done.piece);
@@ -217,7 +218,7 @@ const openSpeech = (
           ended = true;
           handlers.ended();
         } else if (event.type === "error") {
-          fail();
+          failIfCurrent();
         }
       },
       onError: failIfCurrent,
@@ -253,7 +254,54 @@ const sayExtra = (sentences: string[]) => {
       if (current.at === index) feed();
     },
     ended: () => {},
+    failed: fail,
   });
+};
+
+/**
+ * Asks for the card's pieces at `indices`. A break while the voice is quiet,
+ * or plays something already loaded, fails nothing: the pieces that did not
+ * load are asked for again when they are said, and fail only then.
+ */
+const loadPieces = (indices: number[]) => {
+  const card = speaking;
+  if (!card || indices.length === 0) return;
+  const thisCard = cardRun;
+  const loaded = buffers;
+  for (const index of indices) loaded[index] = emptyBuffer();
+  let thisStream: (() => void) | undefined;
+  const pieceAt = (part: number) => indices.at(part);
+  thisStream = openSpeech(
+    card.messageId,
+    indices.map((index) => said[index].text),
+    {
+      stale: () => thisCard !== cardRun || closeStream !== thisStream,
+      audio: (part, chunk) => {
+        const index = pieceAt(part);
+        if (index === undefined) return;
+        pushChunk(loaded.at(index), chunk);
+        if (currentPiece() === index) feed();
+      },
+      done: (part) => {
+        const index = pieceAt(part);
+        const buffer = index === undefined ? undefined : loaded.at(index);
+        if (!buffer) return;
+        buffer.done = true;
+        if (currentPiece() === index) feed();
+      },
+      ended: () => {
+        closeStream = undefined;
+      },
+      failed: () => {
+        const close = closeStream;
+        closeStream = undefined;
+        close?.();
+        const playing = currentPiece();
+        if (playing !== null && !loaded[playing].done) fail();
+      },
+    },
+  );
+  closeStream = thisStream;
 };
 
 /** Plays what the card's logic says is being said now. */
@@ -270,6 +318,11 @@ const startPlaying = () => {
     return;
   }
   const current = playing.index;
+  // The card's audio broke off while the voice was quiet: ask again.
+  if (!buffers[current].done && closeStream === undefined)
+    loadPieces(
+      buffers.flatMap((buffer, index) => (buffer.done ? [] : [index])),
+    );
   buffers[current].queued = 0;
   const pause = said[current].pauseBeforeMs ?? 0;
   if (pause > 0) {
@@ -324,6 +377,8 @@ function fail() {
   publish({ speaking: false, failed: true });
   if (!card) return;
   started.delete(card.key);
+  // Audio mode was left or read-back turned off: nothing is said or shown.
+  if (!approvalSpeechAllowed()) return;
   if (!fellBack && flow.failed === "fallback" && card.fallback) {
     fellBack = true;
     play_(card, card.fallback);
@@ -409,7 +464,7 @@ export function forgetApprovalCards(keys: readonly string[]) {
 }
 
 function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
-  const { key, messageId } = card;
+  const { key } = card;
   finish();
   speaking = card;
   const current = cardRun;
@@ -425,27 +480,7 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
         return;
       }
       context = resumed;
-      const loaded = buffers;
-      closeStream = openSpeech(
-        messageId,
-        pieces.map((piece) => piece.text),
-        {
-          stale: () => current !== cardRun,
-          audio: (index, chunk) => {
-            pushChunk(loaded.at(index), chunk);
-            if (currentPiece() === index) feed();
-          },
-          done: (index) => {
-            const buffer = loaded[index] as Buffered | undefined;
-            if (!buffer) return;
-            buffer.done = true;
-            if (currentPiece() === index) feed();
-          },
-          ended: () => {
-            closeStream = undefined;
-          },
-        },
-      );
+      loadPieces(pieces.map((_, index) => index));
       apply({ type: "start" });
     },
     () => {

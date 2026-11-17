@@ -8,10 +8,6 @@ import {
 } from "./approvalListening";
 import { useApprovalSpeech } from "./approvalSpeech";
 
-/** How long the last words of a turn may still be on their way. */
-const LAST_WORDS_GRACE_MS = 3_000;
-const LAST_WORDS_POLL_MS = 100;
-
 /**
  * Opens the microphone for a spoken approval card once the voice has said
  * something about it and fallen silent, and closes it whenever the voice
@@ -82,8 +78,10 @@ export function useApprovalCardListening({
     setListeningFor(null);
   }, [close, key, listeningFor, recorderOpen, want]);
 
-  // The turn is over: its words go to the card. A recording that ended on
-  // its own (the time limit, silence, an error) ends listening for the card.
+  // The turn is over: its words go to the card. The recorder is idle only
+  // after the last transcript arrived, so the words are complete; none at all
+  // (a cough) listens again at once. A recording that ended on its own (the
+  // time limit, an error) ends listening for the card.
   useEffect(() => {
     if (listeningFor === null || !recorderIdle || !opened.current) return;
     const card = listeningFor;
@@ -92,20 +90,9 @@ export function useApprovalCardListening({
       quietApprovalListening(card);
       return;
     }
-    let waited = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const hand = () => {
-      const { words } = readTurn();
-      if (words.trim().length === 0 && waited < LAST_WORDS_GRACE_MS) {
-        waited += LAST_WORDS_POLL_MS;
-        timer = setTimeout(hand, LAST_WORDS_POLL_MS);
-        return;
-      }
-      setListeningFor(null);
-      if (words.trim().length > 0) void heardApprovalWords(card, words);
-    };
-    hand();
-    return () => clearTimeout(timer);
+    const { words } = readTurn();
+    setListeningFor(null);
+    if (words.trim().length > 0) void heardApprovalWords(card, words);
   }, [listeningFor, readTurn, recorderIdle]);
 
   return { listeningFor };
