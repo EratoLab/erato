@@ -2503,6 +2503,168 @@
       ]
     ]
   },
+  "create-14-list-entries": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 5 Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteile"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a record in CRM:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 5 Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service and one more.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteile"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
@@ -4412,6 +4574,112 @@
               "value": {
                 "kind": "text",
                 "text": "Angebot"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "update-13-list-only-adds": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Labels"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to change a record in CRM whose ID is shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Retrofit and Service will be added to Labels, the tool says.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Labels"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
               }
             }
           ]
@@ -6664,7 +6932,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug search verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6728,7 +6996,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug read query verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool read query verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6792,7 +7060,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Word das Werkzeug word submit comment changes verwenden.",
+          "text": "Ich möchte in Word das Tool word submit comment changes verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6856,7 +7124,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Notion das Werkzeug sync page verwenden.",
+          "text": "Ich möchte in Notion das Tool sync page verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -7406,7 +7674,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug search verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
           "values": [
             {

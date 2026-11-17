@@ -359,7 +359,7 @@ describe("spoken approval card", () => {
 
   it("gives a call without a verb the tool's title and the server", () => {
     expect(spoken("read-02-query")).toBe(
-      "Ich möchte in Dynamics 365 das Werkzeug read query verwenden. Bitte auf dem Bildschirm bestätigen.",
+      "Ich möchte in Dynamics 365 das Tool read query verwenden. Bitte auf dem Bildschirm bestätigen.",
     );
     expect(spoken("read-01-search", "en")).toBe(
       "I'd like to use the tool search in Dynamics 365. Please confirm on screen.",
@@ -565,6 +565,147 @@ describe("findings of the review of 2026-11-17", () => {
       i18n.load("fr", frMessages as unknown as Messages);
       i18n.activate(previous);
     }
+  });
+});
+
+describe("findings of the review of the base (2026-11-17)", () => {
+  /** A copy of a call of the set whose change description `edit` adjusts. */
+  const edited = (
+    id: string,
+    edit: (change: {
+      effects: Record<string, unknown>[];
+      counts: Record<string, number>;
+    }) => void,
+  ): SetCall => {
+    const call = JSON.parse(JSON.stringify(callOf(id))) as SetCall;
+    edit((call.display.label as { change: Parameters<typeof edit>[0] }).change);
+    return call;
+  };
+  const say = (call: SetCall, language = "de") =>
+    inLanguage(language, () =>
+      spokenApprovalPieces(approvalOf(call), {
+        language,
+        now: NOW,
+        timeZone: ZONE,
+      }),
+    ).map((piece) => piece.text);
+  const detail = (
+    language: string,
+    entry: Parameters<ReturnType<typeof spokenWordsFor>["detail"]>[0],
+    action = "update",
+  ) =>
+    inLanguage(language, () =>
+      spokenWordsFor(language, { now: NOW, timeZone: ZONE }).detail(entry, {
+        action,
+      } as SpokenFacts),
+    );
+
+  it("1.4: a list is said with its entries, and the tool's word is hedged", () => {
+    expect(pieces("create-14-list-entries").map((p) => p.text)).toContain(
+      "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
+    );
+    expect(spoken("create-14-list-entries", "en")).toContain(
+      "Tags: Retrofit, Linie 4, Service and one more.",
+    );
+    expect(spoken("update-13-list-only-adds")).toContain(
+      "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+    );
+    expect(spoken("update-13-list-only-adds", "en")).toContain(
+      "Retrofit and Service will be added to Labels, the tool says.",
+    );
+    const removed = {
+      type: "list_removed" as const,
+      field: "Tags",
+      values: [
+        { kind: "text" as const, text: "Alt" },
+        { kind: "text" as const, text: "Veraltet" },
+      ],
+      omitted: 0,
+      loss: true as const,
+    };
+    expect(detail("de", removed)).toBe(
+      "Aus Tags werden laut Tool Alt und Veraltet entfernt.",
+    );
+    expect(detail("en", removed)).toBe(
+      "Alt and Veraltet will be removed from Tags, the tool says.",
+    );
+  });
+
+  it("1.5: an unread record as the old or the new value reads as a sentence", () => {
+    const unread = { kind: "unread" as const };
+    const anna = { kind: "text" as const, text: "Anna" };
+    expect(
+      detail("de", {
+        type: "changed",
+        field: "Owner",
+        from: unread,
+        to: anna,
+        loss: false,
+      }),
+    ).toBe(
+      "Owner: von einem Datensatz, den ich in diesem Chat nicht gelesen habe, auf Anna.",
+    );
+    expect(
+      detail("de", { type: "set", field: "Owner", value: unread, loss: false }),
+    ).toBe(
+      "Owner wird auf einen Datensatz, den ich in diesem Chat nicht gelesen habe, gesetzt.",
+    );
+    expect(
+      detail("en", {
+        type: "changed",
+        field: "Owner",
+        from: unread,
+        to: anna,
+        loss: false,
+      }),
+    ).toBe("Owner: from a record I haven't read in this chat to Anna.");
+    expect(
+      inLanguage("de", () =>
+        spokenWordsFor("de", { now: NOW }).consequence(["restore_unknown"], {
+          count: 1,
+          kind: "other",
+          statement: "sql",
+        } as SpokenFacts),
+      ),
+    ).toBe("Ob sich das wiederherstellen lässt, ist nicht bekannt.");
+  });
+
+  it("1.6: the German voice calls a tool a Tool, as the card does", () => {
+    for (const call of calls)
+      expect(spoken(call.id), call.id).not.toMatch(/Werkzeug/);
+    expect(spoken("read-02-query")).toContain("das Tool read query verwenden");
+  });
+
+  it("1.8: the name a call typed beside an ID stays the first detail", () => {
+    const call = edited("delete-07-file-permanent", (change) => {
+      change.effects.unshift(
+        ...["Mode", "Notify", "Role"].map((name) => ({
+          path: `/${name.toLowerCase()}`,
+          name,
+          raw_name: name.toLowerCase(),
+          effect: "set",
+          values: [{ text: "ja" }],
+        })),
+      );
+      change.counts.set += 3;
+    });
+    expect(say(call).slice(0, 3)).toEqual([
+      "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+      "File name laut Aufruf: Angebot Linie 4 v3.docx.",
+      "Mode: ja.",
+    ]);
+  });
+
+  it("1.2: values the label could not keep are counted with the rest", () => {
+    const call = edited("update-06-many-fields", (change) => {
+      change.counts.set += 5;
+    });
+    expect(spoken("update-06-many-fields")).toContain(
+      "Dazu kommen vier weitere Felder",
+    );
+    expect(say(call)).toContain(
+      "Dazu kommen neun weitere Felder, sie stehen auf dem Bildschirm.",
+    );
   });
 });
 

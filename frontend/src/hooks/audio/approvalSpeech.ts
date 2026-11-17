@@ -249,15 +249,19 @@ export function replayApprovalCard() {
   if (available) speakApprovalCard(available);
 }
 
-/** Forgets the cards of a message that no longer waits. */
-export function forgetApprovalCards(messageId: string) {
+/**
+ * Forgets the approvals under `keys`, which no longer wait: their voice ends,
+ * and they can no longer be read again. Another approval of the same message,
+ * such as the card that replaces one, keeps its voice.
+ */
+export function forgetApprovalCards(keys: readonly string[]) {
   const { available, key } = useApprovalSpeech.getState();
-  if (key?.startsWith(`${messageId}:`)) {
+  if (key !== null && keys.includes(key)) {
     finish();
     flow = spokenCardStep(said, flow, { type: "closed" });
     publish({ speaking: false });
   }
-  if (available?.messageId === messageId)
+  if (available && keys.includes(available.key))
     useApprovalSpeech.setState({ available: null });
 }
 

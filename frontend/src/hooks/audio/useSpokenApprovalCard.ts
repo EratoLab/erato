@@ -103,9 +103,13 @@ export function useSpokenApprovalCard({
     spokenTurn,
   ]);
 
-  // A decision, or the card going away, ends its voice.
+  // A decision, or the card going away, ends the voice of its own approvals
+  // only: another card of the message may be speaking.
+  const cardKeys = (keys.length > 0 ? keys : [String(index)])
+    .map((entry) => `${messageId}:${entry}`)
+    .join("\n");
   useEffect(() => {
-    if (!active) forgetApprovalCards(messageId);
-  }, [active, messageId]);
-  useEffect(() => () => forgetApprovalCards(messageId), [messageId]);
+    if (!active) forgetApprovalCards(cardKeys.split("\n"));
+  }, [active, cardKeys]);
+  useEffect(() => () => forgetApprovalCards(cardKeys.split("\n")), [cardKeys]);
 }

@@ -208,6 +208,20 @@ describe("speaking an approval card", () => {
     ).toHaveLength(CARD.length);
   });
 
+  it("4.1: forgetting one approval keeps another card of the same message speaking", async () => {
+    const { forgetApprovalCards, useApprovalSpeech } = await speak();
+    // An earlier card of the same message goes away, say the one a change
+    // replaced: the card being spoken keeps its voice.
+    forgetApprovalCards(["message-1:stop-0"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(true);
+    expect(useApprovalSpeech.getState().available?.key).toBe(
+      "message-1:stop-1",
+    );
+    forgetApprovalCards(["message-1:stop-1"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().available).toBeNull();
+  });
+
   it("ends when conversational mode stops reading back", async () => {
     const { useApprovalSpeech } = await speak();
     const { useSpeechPlayback } = await import("./speechPlayback");

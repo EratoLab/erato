@@ -8621,11 +8621,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listAdded"
-msgstr ""
-
-#. js-lingui-explicit-id
-#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.detail.listAddedClaim"
 msgstr ""
 
@@ -8636,7 +8631,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listRemoved"
+msgid "spokenCard.detail.listRemovedClaim"
 msgstr ""
 
 #. js-lingui-explicit-id
@@ -8767,6 +8762,11 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.value.dateTime"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.moreEntries"
 msgstr ""
 
 #. js-lingui-explicit-id

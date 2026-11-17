@@ -149,6 +149,9 @@ const capitalised = (text: string): string =>
 const endSentence = (text: string): string =>
   /[.!?…:]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 
+/** Entries of a list said before the rest are counted. */
+const MAX_LISTED_ENTRIES = 3;
+
 const roundWords = (count: number): number =>
   count < 20
     ? count
@@ -494,10 +497,12 @@ const outsideSentence = (
     }),
   });
 
+type ValueKind = "date" | "unread" | "id" | "other";
+
 /** A value with what it plays in its sentence: what it was, what it becomes. */
 const valueInRole = (
   role: "from" | "to" | "plain",
-  kind: "date" | "unread" | "id" | "other",
+  kind: ValueKind,
   value: string,
 ): string =>
   t({
@@ -538,10 +543,11 @@ const dateTimeValue = (date: string, time: string): string =>
 const fieldValue = (field: string, value: string): string =>
   t({ id: "spokenCard.detail.value", message: `${field}: ${value}` });
 
-const detailSetTo = (field: string, value: string): string =>
+/** A value set; `kind` says whether it ends in a clause of its own. */
+const detailSetTo = (kind: ValueKind, field: string, value: string): string =>
   t({
     id: "spokenCard.detail.setTo",
-    message: `${field} will be set to ${value}.`,
+    message: select(kind, { other: `${field} will be set to ${value}.` }),
   });
 
 const detailChanged = (field: string, from: string, to: string): string =>
@@ -583,34 +589,22 @@ const detailListMaybeReplaced = (
     }),
   });
 
+/** Entries the tool says it removes from a list: on its word, as the card says. */
 const detailListRemoved = (
   count: number,
   field: string,
   values: string,
 ): string =>
   t({
-    id: "spokenCard.detail.listRemoved",
+    id: "spokenCard.detail.listRemovedClaim",
     message: plural(count, {
-      one: `${values} will be removed from ${field}.`,
-      other: `${values} will be removed from ${field}.`,
+      one: `${values} will be removed from ${field}, the tool says.`,
+      other: `${values} will be removed from ${field}, the tool says.`,
     }),
   });
 
+/** Entries the tool says it adds to a list: on its word, as the card says. */
 const detailListAdded = (
-  count: number,
-  field: string,
-  values: string,
-): string =>
-  t({
-    id: "spokenCard.detail.listAdded",
-    message: plural(count, {
-      one: `${values} will be added to ${field}.`,
-      other: `${values} will be added to ${field}.`,
-    }),
-  });
-
-/** Items the tool says it adds to a list: whose word that is, as the card says. */
-const detailListAddedClaim = (
   count: number,
   field: string,
   values: string,
@@ -620,6 +614,16 @@ const detailListAddedClaim = (
     message: plural(count, {
       one: `${values} will be added to ${field}, the tool says.`,
       other: `${values} will be added to ${field}, the tool says.`,
+    }),
+  });
+
+/** Entries past the ones a list says, counted: "and two more". */
+const moreEntries = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.value.moreEntries",
+    message: plural(count, {
+      one: "one more",
+      other: `${countWord} more`,
     }),
   });
 
@@ -881,15 +885,41 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
       : endSentence(facts.names[0]);
   };
 
-  const listValues = (values: EarValue[]) =>
-    list(values.map((entry) => value(entry)));
+  /** A list's entries, the first few said and the rest counted. */
+  const listValues = (values: EarValue[], omitted = 0) => {
+    const said = values
+      .slice(0, MAX_LISTED_ENTRIES)
+      .map((entry) => value(entry));
+    const more = values.length - said.length + omitted;
+    return list(more > 0 ? [...said, moreEntries(more, count(more))] : said);
+  };
+  const kindOf = (ear: EarValue): ValueKind =>
+    ear.kind === "date" || ear.kind === "datetime"
+      ? "date"
+      : ear.kind === "unread" || ear.kind === "id"
+        ? ear.kind
+        : "other";
 
   const detail = (entry: SpokenDetail, facts: SpokenFacts): string => {
     switch (entry.type) {
       case "set":
         return facts.action === "update"
-          ? detailSetTo(entry.field, value(entry.value, "to"))
+          ? detailSetTo(
+              kindOf(entry.value),
+              entry.field,
+              value(entry.value, "to"),
+            )
           : endSentence(fieldValue(entry.field, value(entry.value)));
+      case "list_set": {
+        const entries = listValues(entry.values, entry.omitted);
+        return facts.action === "update"
+          ? detailSetTo(
+              "other",
+              entry.field,
+              valueInRole("to", "other", entries),
+            )
+          : endSentence(fieldValue(entry.field, entries));
+      }
       case "changed":
         return endSentence(
           detailChanged(
@@ -904,19 +934,19 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         return (entry.unknown ? detailListMaybeReplaced : detailListReplaced)(
           entry.values.length > 0 ? "values" : "none",
           entry.field,
-          listValues(entry.values),
+          listValues(entry.values, entry.omitted),
         );
       case "list_removed":
         return detailListRemoved(
-          entry.values.length,
+          entry.values.length + entry.omitted,
           entry.field,
-          listValues(entry.values),
+          listValues(entry.values, entry.omitted),
         );
       case "list_added":
-        return (entry.claimed ? detailListAddedClaim : detailListAdded)(
-          entry.values.length,
+        return detailListAdded(
+          entry.values.length + entry.omitted,
           entry.field,
-          listValues(entry.values),
+          listValues(entry.values, entry.omitted),
         );
       case "unreadable":
         return detailUnreadable(entry.field);

@@ -20,9 +20,9 @@ import type {
 /**
  * Layer 1 of design section 9: the card as a state machine. The scenarios
  * are the spoken-card set (each card of each scenario, as expected.json says
- * it); two dimensions are added, where the voice is when the listener acts
- * and what they ask for, and the combinations are generated so every pair of
- * values occurs at least once.
+ * it). Two kinds of runs check the design's rules: one event at each place
+ * the voice can be, generated so every pair of values occurs at least once,
+ * and random sequences of several events in a row.
  */
 
 const piece = (
@@ -58,31 +58,147 @@ const indices = (said: SpokenUtterance[]) =>
 const finished = (count: number): SpokenCardEvent[] =>
   Array.from({ length: count }, () => ({ type: "finished" }));
 
+const pieceOf = (utterance: SpokenUtterance | null): number | null =>
+  utterance?.type === "piece" ? utterance.index : null;
+
+/**
+ * Runs `events` and then lets the voice finish, checking the design's rules
+ * at every step:
+ *
+ * - the card closes only on a decision or a replacement, and nothing moves
+ *   after that;
+ * - in one reading, a piece heard to its end is said again only when asked
+ *   for; after "the rest", nothing heard in full before is said unless asked;
+ * - a piece heard in full stays heard;
+ * - the request starts only when every loss and consequence was heard;
+ * - the run ends once only "finished" follows.
+ */
+const checkRun = (
+  pieces: readonly SpokenPiece[],
+  events: readonly SpokenCardEvent[],
+  where: string,
+) => {
+  const request = pieces.findIndex((entry) => entry.role === "request");
+  let flow = spokenCardFlow(pieces);
+  const said: SpokenUtterance[] = [];
+  let heardInReading = new Set<number>();
+  let afterRest = false;
+  let requestAsked = false;
+  let closed = false;
+  const apply = (event: SpokenCardEvent) => {
+    const before = flow;
+    const next = spokenCardStep(pieces, before, event);
+    if (event.type === "closed") closed = true;
+    if (before.closed) expect(next, where).toBe(before);
+    expect(next.closed, `${where}: closed`).toBe(closed);
+    before.heard.forEach((wasHeard, index) => {
+      if (wasHeard) expect(next.heard[index], `${where}: unheard`).toBe(true);
+    });
+    let target: number | null = null;
+    switch (event.type) {
+      case "start":
+        heardInReading = new Set();
+        afterRest = false;
+        requestAsked = false;
+        break;
+      case "rest":
+        afterRest = true;
+        requestAsked = true;
+        break;
+      case "repeat":
+        target = event.index ?? pieceOf(before.playing) ?? before.last;
+        if (target === request) requestAsked = true;
+        break;
+      case "finished":
+        if (before.playing?.type === "piece")
+          heardInReading.add(before.playing.index);
+        if (before.playing?.type === "text")
+          heardInReading.add(before.playing.index);
+        break;
+    }
+    if (next.started !== before.started && next.playing) {
+      said.push(next.playing);
+      const index = pieceOf(next.playing);
+      if (index !== null) {
+        const asked = index === target || (index === request && requestAsked);
+        if (heardInReading.has(index) || (afterRest && before.heard[index])) {
+          expect(asked, `${where}: piece ${index} said again`).toBe(true);
+        }
+        if (index === request) {
+          expect(next.owed, `${where}: request before a consequence`).toEqual(
+            [],
+          );
+          requestAsked = false;
+        }
+      }
+    }
+    flow = next;
+  };
+  for (const event of events) apply(event);
+  for (let steps = 0; flow.playing !== null; steps++) {
+    expect(steps, `${where}: never ends`).toBeLessThan(4 * pieces.length + 4);
+    apply({ type: "finished" });
+  }
+  expect(flow.states, where).not.toContain("playing");
+  return { flow, said };
+};
+
 describe("piecesAhead", () => {
   const states = (...list: SpokenPieceState[]) => list;
+  const none = [false, false, false, false];
 
   it("goes on with the next piece not yet said", () => {
     expect(
-      piecesAhead(CARD, states("pending", "pending", "pending", "pending"), []),
+      piecesAhead(
+        CARD,
+        states("pending", "pending", "pending", "pending"),
+        none,
+      ),
     ).toEqual([0, 1, 2, 3]);
     expect(
-      piecesAhead(CARD, states("heard", "heard", "pending", "pending"), []),
+      piecesAhead(CARD, states("heard", "heard", "pending", "pending"), [
+        true,
+        true,
+        false,
+        false,
+      ]),
     ).toEqual([2, 3]);
     expect(
-      piecesAhead(CARD, states("heard", "heard", "heard", "heard"), []),
+      piecesAhead(CARD, states("heard", "heard", "heard", "heard"), [
+        true,
+        true,
+        true,
+        true,
+      ]),
     ).toEqual([]);
   });
 
-  it("says a loss that was cut short again before the request, once", () => {
+  it("says a loss cut short again before the request, until it was heard", () => {
     expect(
-      piecesAhead(CARD, states("heard", "cut", "heard", "pending"), []),
+      piecesAhead(CARD, states("heard", "cut", "heard", "pending"), [
+        true,
+        false,
+        true,
+        false,
+      ]),
     ).toEqual([1, 3]);
+    // Heard in full once, a loss cut short later is not owed.
     expect(
-      piecesAhead(CARD, states("heard", "cut", "heard", "pending"), [1]),
+      piecesAhead(CARD, states("heard", "cut", "heard", "pending"), [
+        true,
+        true,
+        true,
+        false,
+      ]),
     ).toEqual([3]);
     // Content that was skipped is not said again.
     expect(
-      piecesAhead(CARD, states("heard", "heard", "cut", "pending"), []),
+      piecesAhead(CARD, states("heard", "heard", "cut", "pending"), [
+        true,
+        true,
+        false,
+        false,
+      ]),
     ).toEqual([3]);
   });
 });
@@ -96,25 +212,31 @@ describe("what the voice says next", () => {
     expect(flow.closed).toBe(false);
   });
 
-  it("skipping a loss says it once more before the request", () => {
-    const { said, flow } = run(CARD, [
+  it("a skipped loss is said again before the request, until it was heard", () => {
+    const once = run(CARD, [
       { type: "start" },
       { type: "finished" },
       { type: "skip" },
       ...finished(3),
     ]);
-    expect(indices(said)).toEqual([0, 1, 2, 1, 3]);
-    expect(flow.repeated).toEqual([1]);
-    // Cut again, it is not owed a third time.
+    expect(indices(once.said)).toEqual([0, 1, 2, 1, 3]);
     const twice = run(CARD, [
       { type: "start" },
       { type: "finished" },
       { type: "skip" },
       { type: "finished" },
       { type: "skip" },
-      { type: "finished" },
+      ...finished(2),
     ]);
-    expect(indices(twice.said)).toEqual([0, 1, 2, 1, 3]);
+    expect(indices(twice.said)).toEqual([0, 1, 2, 1, 1, 3]);
+  });
+
+  it("says what is owed, so a decision by voice can wait for it", () => {
+    const flow = spokenCardFlow(CARD);
+    expect(flow.owed).toEqual([1]);
+    expect(run(CARD, [{ type: "start" }, ...finished(2)]).flow.owed).toEqual(
+      [],
+    );
   });
 
   it("the rest is counted first, then only what was not heard", () => {
@@ -131,12 +253,6 @@ describe("what the voice says next", () => {
       { type: "piece", index: 2 },
       { type: "piece", index: 3 },
     ]);
-    const all = run(CARD, [
-      { type: "start" },
-      ...finished(4),
-      { type: "rest" },
-    ]);
-    expect(all.said.slice(4)).toEqual([{ type: "nothing_left" }]);
     expect(
       indices(
         run(CARD, [
@@ -226,7 +342,7 @@ describe("what the voice says next", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Generated combinations
+// The scenario cards
 
 interface Scenario {
   id: string;
@@ -241,6 +357,98 @@ const expected = expectedPieces as unknown as Record<
 >;
 
 const LANGUAGES = ["de", "en"] as const;
+
+const cards = scenarios.flatMap((scenario) =>
+  expected[scenario.id].de.map((_, index) => `${scenario.id}#${index}`),
+);
+
+const piecesOf = (card: string, language: string): SpokenPiece[] => {
+  const [id, index] = card.split("#");
+  return expected[id][language][Number(index)];
+};
+
+describe("findings of the review of 2026-11-17 (base)", () => {
+  const card = (id: string) => piecesOf(`${id}#0`, "de");
+
+  it("2.1: after the rest, a repeat says nothing twice and no loss after the request", () => {
+    const contact = card("delete-04-contact");
+    const repeated = checkRun(
+      contact,
+      [
+        { type: "start" },
+        { type: "rest" },
+        { type: "finished" },
+        { type: "repeat", index: 0 },
+      ],
+      "delete-04",
+    );
+    // The consequence the repeat interrupted follows from its start, before
+    // the request; the item is said once more, as asked.
+    expect(indices(repeated.said)).toEqual([0, "count", 1, 0, 1, 2]);
+
+    const emptied = card("update-04-emptied-fields");
+    const losses = checkRun(
+      emptied,
+      [
+        { type: "start" },
+        { type: "rest" },
+        { type: "finished" },
+        { type: "repeat", index: 0 },
+      ],
+      "update-04",
+    );
+    expect(indices(losses.said)).toEqual([0, "count", 1, 0, 1, 2, 3, 4]);
+
+    const text = card("update-08-long-text");
+    const read = checkRun(
+      text,
+      [{ type: "start" }, { type: "rest" }, { type: "read" }],
+      "update-08",
+    );
+    // The text is read; the piece that names it is not said after it.
+    expect(indices(read.said)).toEqual([0, "count", "text", 2]);
+  });
+
+  it("2.2: a piece heard in full stays heard, also when its repeat is cut", () => {
+    const contact = card("delete-04-contact");
+    for (const cut of ["failed", "stop"] as const) {
+      const { said, flow } = checkRun(
+        contact,
+        [
+          { type: "start" },
+          { type: "finished" },
+          { type: cut },
+          { type: "repeat" },
+          { type: "rest" },
+        ],
+        `delete-04 ${cut}`,
+      );
+      expect(indices(said)).toEqual([0, 1, 0, "count", 1, 2]);
+      expect(flow.heard).toEqual([true, true, true]);
+    }
+  });
+
+  it("2.3: the request waits for an owed consequence, also when asked for by name", () => {
+    const contact = card("delete-04-contact");
+    const stopped = run(contact, [
+      { type: "start" },
+      { type: "finished" },
+      { type: "stop" },
+    ]).flow;
+    expect(stopped.owed).toEqual([1]);
+    const asked = spokenCardStep(contact, stopped, {
+      type: "repeat",
+      index: 2,
+    });
+    expect(asked.playing).toEqual({ type: "piece", index: 1 });
+    const consequence = spokenCardStep(contact, asked, { type: "finished" });
+    expect(consequence.owed).toEqual([]);
+    expect(consequence.playing).toEqual({ type: "piece", index: 2 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// One event at each place the voice can be, every pair of values
 
 /** Where the voice is when the listener acts. */
 const POSITIONS = [
@@ -276,62 +484,45 @@ interface Combination {
   event: EventValue;
 }
 
-const cards = scenarios.flatMap((scenario) =>
-  expected[scenario.id].de.map((_, index) => `${scenario.id}#${index}`),
-);
-
-const piecesOf = (card: string, language: string): SpokenPiece[] => {
-  const [id, index] = card.split("#");
-  return expected[id][language][Number(index)];
+const playingRole = (pieces: readonly SpokenPiece[], flow: SpokenCardFlow) => {
+  const index = pieceOf(flow.playing);
+  return index === null ? undefined : pieces[index].role;
 };
 
-/** Plays the card until `reached` holds; the listener has not acted yet. */
-const playUntil = (
-  pieces: readonly SpokenPiece[],
-  reached: (flow: SpokenCardFlow) => boolean,
-): SpokenCardFlow | undefined => {
-  let flow = spokenCardStep(pieces, spokenCardFlow(pieces), { type: "start" });
-  for (let steps = 0; steps <= pieces.length; steps++) {
-    if (reached(flow)) return flow;
-    if (flow.playing === null) return undefined;
-    flow = spokenCardStep(pieces, flow, { type: "finished" });
-  }
-  return undefined;
-};
-
-const playingRole = (pieces: readonly SpokenPiece[], flow: SpokenCardFlow) =>
-  flow.playing?.type === "piece" ? pieces[flow.playing.index].role : undefined;
-
-/** The card at `position`, or undefined where the card has no such place. */
-const flowAt = (
+/** The events that bring the card to `position`, or undefined where it has no such place. */
+const eventsTo = (
   pieces: readonly SpokenPiece[],
   position: Position,
-): SpokenCardFlow | undefined => {
+): SpokenCardEvent[] | undefined => {
+  const until = (reached: (flow: SpokenCardFlow) => boolean) => {
+    const events: SpokenCardEvent[] = [{ type: "start" }];
+    let flow = spokenCardStep(pieces, spokenCardFlow(pieces), events[0]);
+    for (let steps = 0; steps <= pieces.length; steps++) {
+      if (reached(flow)) return events;
+      if (flow.playing === null) return undefined;
+      events.push({ type: "finished" });
+      flow = spokenCardStep(pieces, flow, { type: "finished" });
+    }
+    return undefined;
+  };
   switch (position) {
     case "before_start":
-      return spokenCardFlow(pieces);
+      return [];
     case "in_detail":
-      return playUntil(
-        pieces,
-        (flow) => playingRole(pieces, flow) === "detail",
-      );
-    case "in_long_text": {
-      if (!pieces.some(namesLongText)) return undefined;
-      const flow = playUntil(pieces, () => true);
-      return flow && spokenCardStep(pieces, flow, { type: "read" });
-    }
+      return until((flow) => playingRole(pieces, flow) === "detail");
+    case "in_long_text":
+      return pieces.some(namesLongText)
+        ? [{ type: "start" }, { type: "read" }]
+        : undefined;
     case "in_consequence":
-      return playUntil(
-        pieces,
-        (flow) => playingRole(pieces, flow) === "consequence",
-      );
+      return until((flow) => playingRole(pieces, flow) === "consequence");
     case "between_pieces":
       // The first piece has ended; the next has just begun.
       return pieces.length < 2
         ? undefined
-        : playUntil(pieces, (flow) => flow.states[0] === "heard");
+        : until((flow) => flow.states[0] === "heard");
     case "after_request":
-      return playUntil(pieces, (flow) => flow.playing === null);
+      return until((flow) => flow.playing === null);
   }
 };
 
@@ -357,7 +548,7 @@ const eventOf = (
 };
 
 const valid = (combination: Combination): boolean =>
-  flowAt(
+  eventsTo(
     piecesOf(combination.card, combination.language),
     combination.position,
   ) !== undefined;
@@ -413,7 +604,6 @@ describe("the card as a state machine, every pair of values at least once", () =
     const covered = new Set(COMBINATIONS.flatMap(pairsOf));
     for (const pair of REQUIRED_PAIRS)
       expect(covered.has(pair), pair).toBe(true);
-    // Every card, position and event value occurs.
     expect(new Set(COMBINATIONS.map((c) => c.card)).size).toBe(cards.length);
     expect(new Set(COMBINATIONS.map((c) => c.position)).size).toBe(
       POSITIONS.length,
@@ -423,131 +613,42 @@ describe("the card as a state machine, every pair of values at least once", () =
 
   it.each(COMBINATIONS.map((combination) => [name(combination), combination]))(
     "%s",
-    (_name, combination) => {
+    (where, combination) => {
       const pieces = piecesOf(combination.card, combination.language);
-      const before = flowAt(pieces, combination.position) as SpokenCardFlow;
+      const to = eventsTo(pieces, combination.position) as SpokenCardEvent[];
+      const before = run(pieces, to);
       const event = eventOf(pieces, combination.event);
-      const after = spokenCardStep(pieces, before, event);
-
-      // What is said from the event on, until the voice falls quiet.
-      const said: SpokenUtterance[] = [];
-      const startsOf: SpokenCardFlow[] = [];
-      let flow = after;
-      if (after.started !== before.started && after.playing) {
-        said.push(after.playing);
-        startsOf.push(after);
-      }
-      for (let steps = 0; flow.playing !== null; steps++) {
-        expect(steps).toBeLessThan(4 * pieces.length + 4);
-        const next = spokenCardStep(pieces, flow, { type: "finished" });
-        if (next.playing) {
-          said.push(next.playing);
-          startsOf.push(next);
-        }
-        flow = next;
-      }
-      const saidPieces = said.flatMap((utterance) =>
-        utterance.type === "piece" ? [utterance.index] : [],
+      const after = spokenCardStep(pieces, before.flow, event);
+      const said = checkRun(pieces, [...to, event], where).said.slice(
+        before.said.length,
       );
-
-      // No event decides the card: only a decision or a replacement closes it.
-      const closes =
-        combination.event === "decided" || combination.event === "replaced";
-      expect(after.closed).toBe(closes);
-      if (closes) {
-        expect(said).toEqual([]);
-        expect(after.states).not.toContain("playing");
-        expect(spokenCardStep(pieces, after, { type: "start" })).toBe(after);
-        return;
-      }
-      expect(flow.closed).toBe(false);
-      expect(flow.states).not.toContain("playing");
-
-      // Nothing twice unless asked for: a piece heard before the event is
-      // said again only as the piece asked to repeat, or as the request that
-      // closes "what else" when nothing is left.
+      const saidPieces = said.flatMap((utterance) => {
+        const index = pieceOf(utterance);
+        return index === null ? [] : [index];
+      });
       const request = pieces.findIndex((entry) => entry.role === "request");
-      const target =
-        event.type === "repeat"
-          ? (event.index ??
-            (before.playing?.type === "piece"
-              ? before.playing.index
-              : before.last))
-          : null;
-      const allowed = new Set<number>();
-      if (target !== null) allowed.add(target);
-      if (said[0]?.type === "nothing_left") allowed.add(request);
-      for (const index of saidPieces) {
-        if (before.states[index] === "heard") {
-          expect(allowed.has(index), `${index} said again`).toBe(true);
-        }
-      }
-      const counts = new Map<number, number>();
-      for (const index of saidPieces)
-        counts.set(index, (counts.get(index) ?? 0) + 1);
-      for (const [index, count] of counts) {
-        const extra =
-          (allowed.has(index) ? 1 : 0) + (pieces[index].mustSay ? 1 : 0);
-        expect(count, `${index} said ${count} times`).toBeLessThanOrEqual(
-          1 + extra,
-        );
-      }
-
-      // In the card's order, apart from what was asked for and a loss said
-      // again before the request.
-      const inOrder = saidPieces.filter(
-        (index, at) =>
-          !(at === 0 && target !== null) &&
-          !(
-            pieces[index].mustSay &&
-            startsOf
-              .find(
-                (start) =>
-                  start.playing?.type === "piece" &&
-                  start.playing.index === index,
-              )
-              ?.repeated.includes(index)
-          ),
-      );
-      for (let at = 1; at < inOrder.length; at++) {
-        expect(inOrder[at], `order ${inOrder.join(",")}`).toBeGreaterThan(
-          inOrder[at - 1],
-        );
-      }
-
-      // Every loss and consequence is heard before the request: whatever was
-      // skipped, a cut one is said again first.
-      for (const start of startsOf) {
-        if (
-          start.playing?.type !== "piece" ||
-          pieces[start.playing.index].role !== "request"
-        )
-          continue;
-        pieces.forEach((entry, index) => {
-          if (!entry.mustSay) return;
-          const state = start.states[index];
-          expect(
-            state === "heard" ||
-              (state === "cut" && start.repeated.includes(index)),
-            `${entry.role} ${index} is ${state} when the request starts`,
-          ).toBe(true);
-        });
-      }
 
       switch (combination.event) {
-        case "finished":
-          if (before.playing === null) expect(after).toBe(before);
+        case "decided":
+        case "replaced":
+          expect(after.closed).toBe(true);
+          expect(said).toEqual([]);
           break;
-        case "skip":
-          if (before.playing?.type === "piece") {
-            const skipped = before.playing.index;
-            // A loss skipped right before the request is said again at once.
+        case "finished":
+          if (before.flow.playing === null) expect(after).toBe(before.flow);
+          break;
+        case "skip": {
+          const skipped = pieceOf(before.flow.playing);
+          if (skipped !== null) {
+            // A loss skipped before it was heard is said again first.
             expect(
               after.states[skipped] === "cut" ||
-                (pieces[skipped].mustSay && after.repeated.includes(skipped)),
+                after.states[skipped] === "heard" ||
+                (pieces[skipped].mustSay && pieceOf(after.playing) === skipped),
             ).toBe(true);
           }
           break;
+        }
         case "rest": {
           const content = saidPieces.filter((index) => index !== request);
           expect(said[0]).toEqual(
@@ -559,16 +660,27 @@ describe("the card as a state machine, every pair of values at least once", () =
           break;
         }
         case "repeat_current":
-        case "repeat_named":
-          if (target === null) expect(after).toBe(before);
-          else expect(said[0]).toEqual({ type: "piece", index: target });
+        case "repeat_named": {
+          const target =
+            event.type === "repeat"
+              ? (event.index ??
+                pieceOf(before.flow.playing) ??
+                before.flow.last)
+              : null;
+          if (target === null) expect(after).toBe(before.flow);
+          else
+            expect(said[0]).toEqual({
+              type: "piece",
+              index:
+                target === request && before.flow.owed.length > 0
+                  ? before.flow.owed[0]
+                  : target,
+            });
           break;
+        }
         case "read_text":
-          if (pieces.some(namesLongText)) {
-            expect(said[0]?.type).toBe("text");
-          } else {
-            expect(after).toBe(before);
-          }
+          if (pieces.some(namesLongText)) expect(said[0]?.type).toBe("text");
+          else expect(after).toBe(before.flow);
           break;
         case "stop":
           expect(after.playing).toBeNull();
@@ -578,10 +690,70 @@ describe("the card as a state machine, every pair of values at least once", () =
           expect(after.playing).toBeNull();
           expect(said).toEqual([]);
           expect(after.failed).toBe(
-            after.states.includes("heard") ? "notice" : "fallback",
+            after.heard.some(Boolean) ? "notice" : "fallback",
           );
           break;
       }
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// Several events in a row
+
+/** A small seeded generator, so a failing sequence can be run again. */
+const seeded = (seed: number) => () => {
+  seed = (seed + 0x6d2b79f5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+const SEQUENCES_PER_CARD = 12;
+const MAX_EVENTS = 10;
+
+const randomEvent = (
+  next: () => number,
+  pieces: readonly SpokenPiece[],
+): SpokenCardEvent => {
+  const pick = <T>(list: readonly T[]): T =>
+    list[Math.floor(next() * list.length)];
+  const anyPiece = () => Math.floor(next() * pieces.length);
+  return pick<() => SpokenCardEvent>([
+    () => ({ type: "finished" }),
+    () => ({ type: "finished" }),
+    () => ({ type: "finished" }),
+    () => ({ type: "skip" }),
+    () => ({ type: "skip" }),
+    () => ({ type: "rest" }),
+    () => ({ type: "repeat" }),
+    () => ({ type: "repeat", index: anyPiece() }),
+    () => ({ type: "read" }),
+    () => ({ type: "read", index: anyPiece() }),
+    () => ({ type: "stop" }),
+    () => ({ type: "failed" }),
+    () => ({ type: "start" }),
+    () => (next() < 0.3 ? { type: "closed" } : { type: "finished" }),
+  ])();
+};
+
+describe("several events in a row, on every scenario card", () => {
+  it.each(
+    cards.flatMap((card) => LANGUAGES.map((language) => [card, language])),
+  )("%s %s", (card, language) => {
+    const pieces = piecesOf(card, language);
+    const next = seeded(
+      [...`${card}${language}`].reduce(
+        (sum, char) => (sum * 31 + char.charCodeAt(0)) | 0,
+        7,
+      ),
+    );
+    for (let sequence = 0; sequence < SEQUENCES_PER_CARD; sequence++) {
+      const length = 2 + Math.floor(next() * (MAX_EVENTS - 1));
+      const events: SpokenCardEvent[] = [{ type: "start" }];
+      for (let at = 1; at < length; at++)
+        events.push(randomEvent(next, pieces));
+      checkRun(pieces, events, `${card} ${language} ${JSON.stringify(events)}`);
+    }
+  });
 });

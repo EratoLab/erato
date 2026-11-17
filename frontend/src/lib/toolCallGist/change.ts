@@ -649,6 +649,17 @@ export const toolSaysOnlyAdds = (change: GistChange): boolean =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API enum value
   change.notes.includes("tool_says_adds_to_list");
 
+/**
+ * Whether what a value adds to a list is only the tool's word: items it says
+ * it adds, or a list under the tool's note that it only adds.
+ */
+export const addsOnToolsWord = (
+  change: GistChange,
+  effect: ChangeEffect,
+): boolean =>
+   
+  effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list);
+
 /** Whether the description says something a card should show. */
 export const changeSaysSomething = (change: GistChange): boolean =>
   change.effects.length > 0 ||

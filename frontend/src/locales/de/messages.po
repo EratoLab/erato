@@ -8587,7 +8587,7 @@ msgstr "{subject, select, many {Sie lassen sich wiederherstellen.} statement {Da
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.consequence.restoreUnknown"
-msgstr "{subject, select, many {Ob sie sich wiederherstellen lassen, ist nicht bekannt.} statement {Ob das sich wiederherstellen lässt, ist nicht bekannt.} page {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} row {Ob er sich wiederherstellen lässt, ist nicht bekannt.} database {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} folder {Ob er sich wiederherstellen lässt, ist nicht bekannt.} note {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} comment {Ob er sich wiederherstellen lässt, ist nicht bekannt.} paragraph {Ob er sich wiederherstellen lässt, ist nicht bekannt.} document {Ob es sich wiederherstellen lässt, ist nicht bekannt.} email {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} message {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} event {Ob er sich wiederherstellen lässt, ist nicht bekannt.} file {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} task {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} other {Ob er sich wiederherstellen lässt, ist nicht bekannt.}}"
+msgstr "{subject, select, many {Ob sie sich wiederherstellen lassen, ist nicht bekannt.} statement {Ob sich das wiederherstellen lässt, ist nicht bekannt.} page {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} row {Ob er sich wiederherstellen lässt, ist nicht bekannt.} database {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} folder {Ob er sich wiederherstellen lässt, ist nicht bekannt.} note {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} comment {Ob er sich wiederherstellen lässt, ist nicht bekannt.} paragraph {Ob er sich wiederherstellen lässt, ist nicht bekannt.} document {Ob es sich wiederherstellen lässt, ist nicht bekannt.} email {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} message {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} event {Ob er sich wiederherstellen lässt, ist nicht bekannt.} file {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} task {Ob sie sich wiederherstellen lässt, ist nicht bekannt.} other {Ob er sich wiederherstellen lässt, ist nicht bekannt.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8621,13 +8621,8 @@ msgstr "Das Feld {field} wird geleert."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listAdded"
-msgstr "{count, plural, one {Zu {field} kommt {values} dazu.} other {Zu {field} kommen {values} dazu.}}"
-
-#. js-lingui-explicit-id
-#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.detail.listAddedClaim"
-msgstr "{count, plural, one {Zu {field} kommt laut Werkzeug {values} dazu.} other {Zu {field} kommen laut Werkzeug {values} dazu.}}"
+msgstr "{count, plural, one {Zu {field} kommt laut Tool {values} dazu.} other {Zu {field} kommen laut Tool {values} dazu.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8636,8 +8631,8 @@ msgstr "{shape, select, values {Die Liste {field} bekommt {values}. Ob das die L
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listRemoved"
-msgstr "{count, plural, one {Aus {field} wird {values} entfernt.} other {Aus {field} werden {values} entfernt.}}"
+msgid "spokenCard.detail.listRemovedClaim"
+msgstr "{count, plural, one {Aus {field} wird laut Tool {values} entfernt.} other {Aus {field} werden laut Tool {values} entfernt.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8657,7 +8652,7 @@ msgstr "{field} laut Aufruf: {value}."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.detail.setTo"
-msgstr "{field} wird {value} gesetzt."
+msgstr "{kind, select, unread {{field} wird {value}, gesetzt.} id {{field} wird {value}, gesetzt.} other {{field} wird {value} gesetzt.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8762,12 +8757,17 @@ msgstr "{kind, select, page {eine Seite} row {einen Datensatz} database {eine Da
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.value"
-msgstr "{role, select, from {{kind, select, date {vom {value}} unread {ein Datensatz, den ich in diesem Chat nicht gelesen habe} id {ein Eintrag, dessen Kennung auf dem Bildschirm steht} other {von {value}}}} to {{kind, select, date {auf den {value}} unread {auf einen Datensatz, den ich in diesem Chat nicht gelesen habe} id {auf einen Eintrag, dessen Kennung auf dem Bildschirm steht} other {auf {value}}}} other {{kind, select, unread {ein Datensatz, den ich in diesem Chat nicht gelesen habe} id {ein Eintrag, dessen Kennung auf dem Bildschirm steht} other {{value}}}}}"
+msgstr "{role, select, from {{kind, select, date {vom {value}} unread {von einem Datensatz, den ich in diesem Chat nicht gelesen habe,} id {von einem Eintrag, dessen Kennung auf dem Bildschirm steht,} other {von {value}}}} to {{kind, select, date {auf den {value}} unread {auf einen Datensatz, den ich in diesem Chat nicht gelesen habe} id {auf einen Eintrag, dessen Kennung auf dem Bildschirm steht} other {auf {value}}}} other {{kind, select, unread {ein Datensatz, den ich in diesem Chat nicht gelesen habe} id {ein Eintrag, dessen Kennung auf dem Bildschirm steht} other {{value}}}}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.value.dateTime"
 msgstr "{date} um {time}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.moreEntries"
+msgstr "{count, plural, one {ein weiterer Eintrag} other {{countWord} weitere}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8792,7 +8792,7 @@ msgstr "{action, select, create {Ich möchte {source} {thing} {destination} anle
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.what.generic"
-msgstr "Ich möchte {source} das Werkzeug {tool} verwenden."
+msgstr "Ich möchte {source} das Tool {tool} verwenden."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

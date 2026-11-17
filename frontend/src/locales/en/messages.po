@@ -8621,11 +8621,6 @@ msgstr "The field {field} will be emptied."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listAdded"
-msgstr "{count, plural, one {{values} will be added to {field}.} other {{values} will be added to {field}.}}"
-
-#. js-lingui-explicit-id
-#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.detail.listAddedClaim"
 msgstr "{count, plural, one {{values} will be added to {field}, the tool says.} other {{values} will be added to {field}, the tool says.}}"
 
@@ -8636,8 +8631,8 @@ msgstr "{shape, select, values {The list {field} gets {values}. Whether that rep
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
-msgid "spokenCard.detail.listRemoved"
-msgstr "{count, plural, one {{values} will be removed from {field}.} other {{values} will be removed from {field}.}}"
+msgid "spokenCard.detail.listRemovedClaim"
+msgstr "{count, plural, one {{values} will be removed from {field}, the tool says.} other {{values} will be removed from {field}, the tool says.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8657,7 +8652,7 @@ msgstr "{field} as given in the call: {value}."
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.detail.setTo"
-msgstr "{field} will be set to {value}."
+msgstr "{kind, select, other {{field} will be set to {value}.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8768,6 +8763,11 @@ msgstr "{role, select, from {{kind, select, unread {a record I haven't read in t
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.value.dateTime"
 msgstr "{date} at {time}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.moreEntries"
+msgstr "{count, plural, one {one more} other {{countWord} more}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
