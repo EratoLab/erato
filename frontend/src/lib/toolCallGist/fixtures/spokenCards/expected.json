@@ -3,6 +3,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -17,6 +18,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Technisches Layout abstimmen.",
           "mustSay": false,
@@ -31,6 +33,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -52,6 +55,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 15. Januar 2030.",
           "mustSay": false,
@@ -75,6 +79,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -97,6 +102,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -116,9 +122,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -129,6 +140,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -143,6 +155,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Technisches Layout abstimmen.",
           "mustSay": false,
@@ -157,6 +170,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -178,6 +192,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 15 January 2030.",
           "mustSay": false,
@@ -201,6 +216,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -223,6 +239,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: a text of about 70 words, shown on screen.",
           "mustSay": false,
@@ -242,9 +259,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -257,6 +279,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Termin anlegen:",
           "mustSay": false,
@@ -271,6 +294,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Begehung Linie 4.",
           "mustSay": false,
@@ -285,6 +309,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -306,6 +331,7 @@
           ]
         },
         {
+          "id": "detail:Location",
           "role": "detail",
           "text": "Location: Werk Augsburg.",
           "mustSay": false,
@@ -327,6 +353,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled start",
           "role": "detail",
           "text": "Scheduled start: 20. Januar 2030 um 10:30 Uhr.",
           "mustSay": false,
@@ -352,6 +379,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
           "mustSay": false,
@@ -367,6 +395,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -377,6 +406,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create an event in Dynamics 365:",
           "mustSay": false,
@@ -391,6 +421,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Begehung Linie 4.",
           "mustSay": false,
@@ -405,6 +436,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -426,6 +458,7 @@
           ]
         },
         {
+          "id": "detail:Location",
           "role": "detail",
           "text": "Location: Werk Augsburg.",
           "mustSay": false,
@@ -447,6 +480,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled start",
           "role": "detail",
           "text": "Scheduled start: 20 January 2030 at 10:30 am.",
           "mustSay": false,
@@ -472,6 +506,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "And one more field, shown on screen.",
           "mustSay": false,
@@ -487,6 +522,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -499,6 +535,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
           "mustSay": false,
@@ -513,6 +550,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Weber.",
           "mustSay": false,
@@ -527,6 +565,7 @@
           ]
         },
         {
+          "id": "detail:Parent customer",
           "role": "detail",
           "text": "Parent customer: Beispiel Industrie GmbH.",
           "mustSay": false,
@@ -548,6 +587,7 @@
           ]
         },
         {
+          "id": "detail:First name",
           "role": "detail",
           "text": "First name: Clara.",
           "mustSay": false,
@@ -569,6 +609,7 @@
           ]
         },
         {
+          "id": "detail:Job title",
           "role": "detail",
           "text": "Job title: Projektleiterin.",
           "mustSay": false,
@@ -590,6 +631,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
           "mustSay": false,
@@ -605,6 +647,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -615,6 +658,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a record in Dynamics 365:",
           "mustSay": false,
@@ -629,6 +673,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Weber.",
           "mustSay": false,
@@ -643,6 +688,7 @@
           ]
         },
         {
+          "id": "detail:Parent customer",
           "role": "detail",
           "text": "Parent customer: Beispiel Industrie GmbH.",
           "mustSay": false,
@@ -664,6 +710,7 @@
           ]
         },
         {
+          "id": "detail:First name",
           "role": "detail",
           "text": "First name: Clara.",
           "mustSay": false,
@@ -685,6 +732,7 @@
           ]
         },
         {
+          "id": "detail:Job title",
           "role": "detail",
           "text": "Job title: Projektleiterin.",
           "mustSay": false,
@@ -706,6 +754,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "And one more field, shown on screen.",
           "mustSay": false,
@@ -721,6 +770,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -733,6 +783,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine E-Mail an zwei Empfänger anlegen:",
           "mustSay": false,
@@ -755,6 +806,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Betreff: Termin für die Begehung.",
           "mustSay": false,
@@ -769,6 +821,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -790,6 +843,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: ein Text von etwa 30 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -809,9 +863,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -822,6 +881,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create an email to two recipients in Dynamics 365:",
           "mustSay": false,
@@ -844,6 +904,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Subject: Termin für die Begehung.",
           "mustSay": false,
@@ -858,6 +919,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -879,6 +941,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: a text of about 30 words, shown on screen.",
           "mustSay": false,
@@ -898,9 +961,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Guten Tag Frau Müller, guten Tag Herr Schmidt, wie besprochen schlagen wir für die Begehung der Linie 4 den 20. Januar vor. Bitte geben Sie uns kurz Bescheid, ob der Termin passt.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -913,6 +981,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -927,6 +996,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot nachfassen.",
           "mustSay": false,
@@ -941,6 +1011,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Ersatzteil-Rahmenvertrag.",
           "mustSay": false,
@@ -962,6 +1033,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 22. Januar 2030.",
           "mustSay": false,
@@ -985,6 +1057,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -1007,6 +1080,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "Dazu kommen fünf weitere Felder, sie stehen auf dem Bildschirm.",
           "mustSay": false,
@@ -1022,6 +1096,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -1032,6 +1107,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -1046,6 +1122,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot nachfassen.",
           "mustSay": false,
@@ -1060,6 +1137,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Ersatzteil-Rahmenvertrag.",
           "mustSay": false,
@@ -1081,6 +1159,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 22 January 2030.",
           "mustSay": false,
@@ -1104,6 +1183,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -1126,6 +1206,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "And five more fields, shown on screen.",
           "mustSay": false,
@@ -1141,6 +1222,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -1153,6 +1235,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -1167,6 +1250,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Rückruf vereinbaren.",
           "mustSay": false,
@@ -1181,6 +1265,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 16. Januar 2030.",
           "mustSay": false,
@@ -1204,6 +1289,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: ein Datensatz, den ich in diesem Chat nicht gelesen habe.",
           "mustSay": false,
@@ -1224,6 +1310,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -1234,6 +1321,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -1248,6 +1336,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Rückruf vereinbaren.",
           "mustSay": false,
@@ -1262,6 +1351,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 16 January 2030.",
           "mustSay": false,
@@ -1285,6 +1375,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: a record I haven't read in this chat.",
           "mustSay": false,
@@ -1305,6 +1396,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -1317,6 +1409,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Termin anlegen:",
           "mustSay": false,
@@ -1331,6 +1424,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Rückfrage zur Stillstandszeit.",
           "mustSay": false,
@@ -1345,6 +1439,7 @@
           ]
         },
         {
+          "id": "detail:Phone number",
           "role": "detail",
           "text": "Phone number: +49 89 1234 500.",
           "mustSay": false,
@@ -1366,6 +1461,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 14. Januar 2030 um 15 Uhr.",
           "mustSay": false,
@@ -1391,6 +1487,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: Kurz klären, ob zwei Tage Stillstand reichen.",
           "mustSay": false,
@@ -1412,6 +1509,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -1422,6 +1520,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create an event in Dynamics 365:",
           "mustSay": false,
@@ -1436,6 +1535,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Rückfrage zur Stillstandszeit.",
           "mustSay": false,
@@ -1450,6 +1550,7 @@
           ]
         },
         {
+          "id": "detail:Phone number",
           "role": "detail",
           "text": "Phone number: +49 89 1234 500.",
           "mustSay": false,
@@ -1471,6 +1572,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 14 January 2030 at 3 pm.",
           "mustSay": false,
@@ -1496,6 +1598,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: Kurz klären, ob zwei Tage Stillstand reichen.",
           "mustSay": false,
@@ -1517,6 +1620,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -1529,6 +1633,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
           "mustSay": false,
@@ -1543,6 +1648,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Linie 5 Modernisierung.",
           "mustSay": false,
@@ -1557,6 +1663,7 @@
           ]
         },
         {
+          "id": "detail:Customer",
           "role": "detail",
           "text": "Customer: Beispiel Industrie GmbH.",
           "mustSay": false,
@@ -1578,6 +1685,7 @@
           ]
         },
         {
+          "id": "detail:Estimated value",
           "role": "detail",
           "text": "Estimated value: 185.000.",
           "mustSay": false,
@@ -1600,6 +1708,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: 30. Juni 2030.",
           "mustSay": false,
@@ -1623,6 +1732,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
           "mustSay": false,
@@ -1638,6 +1748,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -1648,6 +1759,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a record in Dynamics 365:",
           "mustSay": false,
@@ -1662,6 +1774,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Linie 5 Modernisierung.",
           "mustSay": false,
@@ -1676,6 +1789,7 @@
           ]
         },
         {
+          "id": "detail:Customer",
           "role": "detail",
           "text": "Customer: Beispiel Industrie GmbH.",
           "mustSay": false,
@@ -1697,6 +1811,7 @@
           ]
         },
         {
+          "id": "detail:Estimated value",
           "role": "detail",
           "text": "Estimated value: 185,000.",
           "mustSay": false,
@@ -1719,6 +1834,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: 30 June 2030.",
           "mustSay": false,
@@ -1742,6 +1858,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "And one more field, shown on screen.",
           "mustSay": false,
@@ -1757,6 +1874,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -1769,6 +1887,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Notiz anlegen:",
           "mustSay": false,
@@ -1783,6 +1902,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Gesprächsnotiz Werksbesuch.",
           "mustSay": false,
@@ -1797,6 +1917,7 @@
           ]
         },
         {
+          "id": "detail:Object",
           "role": "detail",
           "text": "Object: Line 4 Retrofit.",
           "mustSay": false,
@@ -1818,6 +1939,7 @@
           ]
         },
         {
+          "id": "text:Note text",
           "role": "text",
           "text": "Note text: ein Text von etwa 170 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -1837,9 +1959,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -1850,6 +1977,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a note in Dynamics 365:",
           "mustSay": false,
@@ -1864,6 +1992,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Gesprächsnotiz Werksbesuch.",
           "mustSay": false,
@@ -1878,6 +2007,7 @@
           ]
         },
         {
+          "id": "detail:Object",
           "role": "detail",
           "text": "Object: Line 4 Retrofit.",
           "mustSay": false,
@@ -1899,6 +2029,7 @@
           ]
         },
         {
+          "id": "text:Note text",
           "role": "text",
           "text": "Note text: a text of about 170 words, shown on screen.",
           "mustSay": false,
@@ -1918,9 +2049,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Teilnehmer waren Frau Müller, Herr Schmidt und zwei Kollegen aus der Instandhaltung. Wir haben die Linie 4 vollständig begangen und die Engstellen an der Übergabe zwischen Presse und Förderband besprochen. Die bestehende Steuerung ist zwölf Jahre alt, Ersatzteile sind nur noch über Dritthändler zu bekommen. Frau Müller möchte den Umbau in die Betriebsferien legen, also in die erste Augustwoche. Herr Schmidt hat darauf hingewiesen, dass der Einkauf ein verbindliches Angebot bis Ende Februar braucht, damit das Budget im ersten Quartal freigegeben werden kann. Offen ist, ob die Schaltschränke am bisherigen Platz bleiben. Dafür brauchen wir die Zeichnungen der Fördertechnik, die Frau Müller bis Ende November schickt. Außerdem wurde vereinbart, dass wir eine Abschätzung der Stillstandszeit liefern, getrennt nach mechanischem Umbau und Inbetriebnahme. Die Instandhaltung wünscht eine Schulung für drei Personen vor der Inbetriebnahme. Als nächster Schritt schicken wir einen Terminvorschlag für eine zweite Begehung mit unserem Elektroplaner. Die Stimmung war gut, das Projekt hat hohe Priorität, weil die Linie 4 im Moment der Engpass im Werk ist.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -1933,6 +2069,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
           "mustSay": false,
@@ -1947,6 +2084,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Muster Maschinenbau AG.",
           "mustSay": false,
@@ -1961,6 +2099,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "Telephone 1: +49 821 555 0100.",
           "mustSay": false,
@@ -1982,6 +2121,7 @@
           ]
         },
         {
+          "id": "detail:Website URL",
           "role": "detail",
           "text": "Website URL: https://www.muster-maschinenbau.example.",
           "mustSay": false,
@@ -2003,6 +2143,7 @@
           ]
         },
         {
+          "id": "detail:Address 1 city",
           "role": "detail",
           "text": "Address 1 city: Augsburg.",
           "mustSay": false,
@@ -2024,6 +2165,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2034,6 +2176,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a record in Dynamics 365:",
           "mustSay": false,
@@ -2048,6 +2191,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Muster Maschinenbau AG.",
           "mustSay": false,
@@ -2062,6 +2206,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "Telephone 1: +49 821 555 0100.",
           "mustSay": false,
@@ -2083,6 +2228,7 @@
           ]
         },
         {
+          "id": "detail:Website URL",
           "role": "detail",
           "text": "Website URL: https://www.muster-maschinenbau.example.",
           "mustSay": false,
@@ -2104,6 +2250,7 @@
           ]
         },
         {
+          "id": "detail:Address 1 city",
           "role": "detail",
           "text": "Address 1 city: Augsburg.",
           "mustSay": false,
@@ -2125,6 +2272,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2137,6 +2285,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion fünf Seiten, darunter Zeichnungen prüfen, Stillstand abschätzen und Schulung planen, in Projekte 2026 anlegen.",
           "mustSay": false,
@@ -2187,6 +2336,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2197,6 +2347,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create five pages, including Zeichnungen prüfen, Stillstand abschätzen and Schulung planen, in Projekte 2026 in Notion.",
           "mustSay": false,
@@ -2247,6 +2398,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2259,6 +2411,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -2273,6 +2426,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot freigeben.",
           "mustSay": false,
@@ -2287,6 +2441,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 12. Januar 2030.",
           "mustSay": false,
@@ -2310,6 +2465,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2320,6 +2476,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -2334,6 +2491,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot freigeben.",
           "mustSay": false,
@@ -2348,6 +2506,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 12 January 2030.",
           "mustSay": false,
@@ -2371,6 +2530,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2383,6 +2543,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -2397,6 +2558,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … gekürzt.",
           "mustSay": false,
@@ -2411,6 +2573,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 12. Januar 2030.",
           "mustSay": false,
@@ -2434,6 +2597,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2444,6 +2608,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -2458,6 +2623,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … shortened.",
           "mustSay": false,
@@ -2472,6 +2638,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 12 January 2030.",
           "mustSay": false,
@@ -2495,6 +2662,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2507,6 +2675,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in CRM einen Datensatz anlegen:",
           "mustSay": false,
@@ -2521,6 +2690,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Linie 5 Service.",
           "mustSay": false,
@@ -2535,6 +2705,7 @@
           ]
         },
         {
+          "id": "detail:Tags",
           "role": "detail",
           "text": "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
           "mustSay": false,
@@ -2577,6 +2748,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2587,6 +2759,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a record in CRM:",
           "mustSay": false,
@@ -2601,6 +2774,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Linie 5 Service.",
           "mustSay": false,
@@ -2615,6 +2789,7 @@
           ]
         },
         {
+          "id": "detail:Tags",
           "role": "detail",
           "text": "Tags: Retrofit, Linie 4, Service and one more.",
           "mustSay": false,
@@ -2657,6 +2832,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2669,6 +2845,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -2690,6 +2867,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: vom 1. Dezember auf den 15. Januar 2030.",
           "mustSay": false,
@@ -2722,6 +2900,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: von 10 auf 60 Prozent.",
           "mustSay": false,
@@ -2752,6 +2931,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2762,6 +2942,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -2783,6 +2964,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: from 1 December to 15 January 2030.",
           "mustSay": false,
@@ -2815,6 +2997,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: from 10 to 60 percent.",
           "mustSay": false,
@@ -2845,6 +3028,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2857,6 +3041,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -2878,6 +3063,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level: von Low auf High.",
           "mustSay": false,
@@ -2906,6 +3092,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -2916,6 +3103,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -2937,6 +3125,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level: from Low to High.",
           "mustSay": false,
@@ -2965,6 +3154,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -2977,6 +3167,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -2998,6 +3189,7 @@
           ]
         },
         {
+          "id": "detail:Parent contact",
           "role": "detail",
           "text": "Parent contact: von Anna Müller auf Ben Schmidt.",
           "mustSay": false,
@@ -3026,6 +3218,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3036,6 +3229,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -3057,6 +3251,7 @@
           ]
         },
         {
+          "id": "detail:Parent contact",
           "role": "detail",
           "text": "Parent contact: from Anna Müller to Ben Schmidt.",
           "mustSay": false,
@@ -3085,6 +3280,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3097,6 +3293,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -3118,6 +3315,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "Das Feld Telephone 1 wird geleert.",
           "mustSay": true,
@@ -3132,6 +3330,7 @@
           ]
         },
         {
+          "id": "detail:Description",
           "role": "detail",
           "text": "Das Feld Description wird geleert.",
           "mustSay": true,
@@ -3146,6 +3345,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: von 10 auf 50 Prozent.",
           "mustSay": false,
@@ -3176,6 +3376,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3186,6 +3387,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -3207,6 +3409,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "The field Telephone 1 will be emptied.",
           "mustSay": true,
@@ -3221,6 +3424,7 @@
           ]
         },
         {
+          "id": "detail:Description",
           "role": "detail",
           "text": "The field Description will be emptied.",
           "mustSay": true,
@@ -3235,6 +3439,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: from 10 to 50 percent.",
           "mustSay": false,
@@ -3265,6 +3470,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3277,6 +3483,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Datensatz ändern, den ich in diesem Chat nicht gelesen habe.",
           "mustSay": false,
@@ -3291,6 +3498,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level wird auf Medium gesetzt.",
           "mustSay": false,
@@ -3312,6 +3520,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3322,6 +3531,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change a record in Dynamics 365 that I haven't read in this chat.",
           "mustSay": false,
@@ -3336,6 +3546,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level will be set to Medium.",
           "mustSay": false,
@@ -3357,6 +3568,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3369,6 +3581,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -3390,6 +3603,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level: von Low auf Medium.",
           "mustSay": false,
@@ -3418,6 +3632,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: vom 1. Dezember auf den 31. März 2030.",
           "mustSay": false,
@@ -3450,6 +3665,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: von 10 auf 75 Prozent.",
           "mustSay": false,
@@ -3480,6 +3696,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "Dazu kommen vier weitere Felder, sie stehen auf dem Bildschirm.",
           "mustSay": false,
@@ -3495,6 +3712,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3505,6 +3723,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -3526,6 +3745,7 @@
           ]
         },
         {
+          "id": "detail:Risk level",
           "role": "detail",
           "text": "Risk level: from Low to Medium.",
           "mustSay": false,
@@ -3554,6 +3774,7 @@
           ]
         },
         {
+          "id": "detail:Estimated close date",
           "role": "detail",
           "text": "Estimated close date: from 1 December to 31 March 2030.",
           "mustSay": false,
@@ -3586,6 +3807,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: from 10 to 75 percent.",
           "mustSay": false,
@@ -3616,6 +3838,7 @@
           ]
         },
         {
+          "id": "more",
           "role": "more",
           "text": "And four more fields, shown on screen.",
           "mustSay": false,
@@ -3631,6 +3854,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3643,6 +3867,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Termin Werksbesuch Linie 4 verschieben.",
           "mustSay": false,
@@ -3664,6 +3889,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled start",
           "role": "detail",
           "text": "Scheduled start: vom 24. November um 9 Uhr auf den 26. November um 14 Uhr.",
           "mustSay": false,
@@ -3700,6 +3926,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: vom 24. November um 11 Uhr auf den 26. November um 16 Uhr.",
           "mustSay": false,
@@ -3736,6 +3963,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3746,6 +3974,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to reschedule the event Werksbesuch Linie 4 in Dynamics 365.",
           "mustSay": false,
@@ -3767,6 +3996,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled start",
           "role": "detail",
           "text": "Scheduled start: from 24 November at 9 am to 26 November at 2 pm.",
           "mustSay": false,
@@ -3803,6 +4033,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: from 24 November at 11 am to 26 November at 4 pm.",
           "mustSay": false,
@@ -3839,6 +4070,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3851,6 +4083,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -3872,6 +4105,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: ein Text von etwa 90 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -3891,9 +4125,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -3904,6 +4143,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -3925,6 +4165,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: a text of about 90 words, shown on screen.",
           "mustSay": false,
@@ -3944,9 +4185,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Umbau der Linie 4 auf die neue Steuerung, geplant für die erste Augustwoche während der Betriebsferien. Der Kunde braucht ein verbindliches Angebot bis Ende Februar, damit das Budget im ersten Quartal freigegeben wird. Offen sind der Platz der Schaltschränke und die genaue Stillstandszeit. Zeichnungen der Fördertechnik kommen von Frau Müller bis Ende November. Die Instandhaltung wünscht eine Schulung für drei Personen. Nächster Schritt ist eine zweite Begehung mit dem Elektroplaner, danach folgt das Angebot mit Zeitplan und Abschätzung der Stillstandszeit, getrennt nach mechanischem Umbau und Inbetriebnahme.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -3959,6 +4205,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 die Aufgabe Technisches Layout abstimmen ändern.",
           "mustSay": false,
@@ -3980,6 +4227,7 @@
           ]
         },
         {
+          "id": "detail:State code",
           "role": "detail",
           "text": "State code wird auf 1 gesetzt.",
           "mustSay": false,
@@ -4002,6 +4250,7 @@
           ]
         },
         {
+          "id": "detail:Status code",
           "role": "detail",
           "text": "Status code wird auf 5 gesetzt.",
           "mustSay": false,
@@ -4024,6 +4273,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4034,6 +4284,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the task Technisches Layout abstimmen in Dynamics 365.",
           "mustSay": false,
@@ -4055,6 +4306,7 @@
           ]
         },
         {
+          "id": "detail:State code",
           "role": "detail",
           "text": "State code will be set to 1.",
           "mustSay": false,
@@ -4077,6 +4329,7 @@
           ]
         },
         {
+          "id": "detail:Status code",
           "role": "detail",
           "text": "Status code will be set to 5.",
           "mustSay": false,
@@ -4099,6 +4352,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4111,6 +4365,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Anna Müller ändern.",
           "mustSay": false,
@@ -4132,6 +4387,7 @@
           ]
         },
         {
+          "id": "detail:Job title",
           "role": "detail",
           "text": "Job title: von Werksleiterin auf Technische Leiterin.",
           "mustSay": false,
@@ -4160,6 +4416,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "Telephone 1 wird auf +49 89 1234 510 gesetzt.",
           "mustSay": false,
@@ -4181,6 +4438,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4191,6 +4449,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Anna Müller in Dynamics 365.",
           "mustSay": false,
@@ -4212,6 +4471,7 @@
           ]
         },
         {
+          "id": "detail:Job title",
           "role": "detail",
           "text": "Job title: from Werksleiterin to Technische Leiterin.",
           "mustSay": false,
@@ -4240,6 +4500,7 @@
           ]
         },
         {
+          "id": "detail:Telephone 1",
           "role": "detail",
           "text": "Telephone 1 will be set to +49 89 1234 510.",
           "mustSay": false,
@@ -4261,6 +4522,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4273,6 +4535,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
           "mustSay": false,
@@ -4294,6 +4557,7 @@
           ]
         },
         {
+          "id": "detail",
           "role": "detail",
           "text": "Dabei werden 15 Felder geleert.",
           "mustSay": true,
@@ -4317,6 +4581,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: von 10 auf 20 Prozent.",
           "mustSay": false,
@@ -4347,6 +4612,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4357,6 +4623,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
           "mustSay": false,
@@ -4378,6 +4645,7 @@
           ]
         },
         {
+          "id": "detail",
           "role": "detail",
           "text": "15 fields will be emptied.",
           "mustSay": true,
@@ -4401,6 +4669,7 @@
           ]
         },
         {
+          "id": "detail:Probability",
           "role": "detail",
           "text": "Probability: from 10 to 20 percent.",
           "mustSay": false,
@@ -4431,6 +4700,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4443,6 +4713,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
           "mustSay": false,
@@ -4457,6 +4728,7 @@
           ]
         },
         {
+          "id": "detail:Tags",
           "role": "detail",
           "text": "Die Liste Tags bekommt Retrofit und Linie 4. Ob das die Liste ersetzt oder ergänzt, ist nicht bekannt.",
           "mustSay": true,
@@ -4485,6 +4757,7 @@
           ]
         },
         {
+          "id": "detail:Stage",
           "role": "detail",
           "text": "Stage wird auf Angebot gesetzt.",
           "mustSay": false,
@@ -4506,6 +4779,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4516,6 +4790,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change a record in CRM whose ID is shown on screen.",
           "mustSay": false,
@@ -4530,6 +4805,7 @@
           ]
         },
         {
+          "id": "detail:Tags",
           "role": "detail",
           "text": "The list Tags gets Retrofit and Linie 4. Whether that replaces the list or adds to it is not known.",
           "mustSay": true,
@@ -4558,6 +4834,7 @@
           ]
         },
         {
+          "id": "detail:Stage",
           "role": "detail",
           "text": "Stage will be set to Angebot.",
           "mustSay": false,
@@ -4579,6 +4856,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4591,6 +4869,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
           "mustSay": false,
@@ -4605,6 +4884,7 @@
           ]
         },
         {
+          "id": "detail:Labels",
           "role": "detail",
           "text": "Zu Labels kommen laut Tool Retrofit und Service dazu.",
           "mustSay": false,
@@ -4633,6 +4913,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4643,6 +4924,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to change a record in CRM whose ID is shown on screen.",
           "mustSay": false,
@@ -4657,6 +4939,7 @@
           ]
         },
         {
+          "id": "detail:Labels",
           "role": "detail",
           "text": "Retrofit and Service will be added to Labels, the tool says.",
           "mustSay": false,
@@ -4685,6 +4968,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4697,6 +4981,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 die Aufgabe Technisches Layout abstimmen löschen.",
           "mustSay": true,
@@ -4718,6 +5003,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -4732,6 +5018,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4743,6 +5030,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete the task Technisches Layout abstimmen in Dynamics 365.",
           "mustSay": true,
@@ -4764,6 +5052,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -4778,6 +5067,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4791,6 +5081,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Termin Werksbesuch Linie 4 löschen.",
           "mustSay": true,
@@ -4812,6 +5103,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -4826,6 +5118,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4837,6 +5130,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete the event Werksbesuch Linie 4 in Dynamics 365.",
           "mustSay": true,
@@ -4858,6 +5152,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -4872,6 +5167,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4885,6 +5181,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 einen Datensatz löschen, den ich in diesem Chat nicht gelesen habe.",
           "mustSay": true,
@@ -4899,6 +5196,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -4913,6 +5211,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -4924,6 +5223,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete a record in Dynamics 365 that I haven't read in this chat.",
           "mustSay": true,
@@ -4938,6 +5238,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -4952,6 +5253,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -4965,6 +5267,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Ben Schmidt löschen.",
           "mustSay": true,
@@ -4986,6 +5289,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -5000,6 +5304,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5011,6 +5316,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete the record Ben Schmidt in Dynamics 365.",
           "mustSay": true,
@@ -5032,6 +5338,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -5046,6 +5353,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5059,6 +5367,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 den Datensatz Beispiel Industrie GmbH löschen.",
           "mustSay": true,
@@ -5080,6 +5389,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -5094,6 +5404,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5105,6 +5416,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete the record Beispiel Industrie GmbH in Dynamics 365.",
           "mustSay": true,
@@ -5126,6 +5438,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -5140,6 +5453,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5153,6 +5467,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion zwölf Seiten, darunter Kickoff Line 4, Wochenbericht KW 44 und Wochenbericht KW 45, löschen.",
           "mustSay": true,
@@ -5196,6 +5511,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Sie lassen sich wiederherstellen.",
           "mustSay": true,
@@ -5210,6 +5526,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5221,6 +5538,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete twelve pages, including Kickoff Line 4, Wochenbericht KW 44 and Wochenbericht KW 45, in Notion.",
           "mustSay": true,
@@ -5264,6 +5582,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "They can be restored.",
           "mustSay": true,
@@ -5278,6 +5597,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5291,6 +5611,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
           "mustSay": true,
@@ -5305,6 +5626,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name laut Aufruf: Angebot Linie 4 v3.docx.",
           "mustSay": false,
@@ -5326,6 +5648,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Das lässt sich nicht rückgängig machen.",
           "mustSay": true,
@@ -5340,6 +5663,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5351,6 +5675,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
           "mustSay": true,
@@ -5365,6 +5690,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name as given in the call: Angebot Linie 4 v3.docx.",
           "mustSay": false,
@@ -5386,6 +5712,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "This cannot be undone.",
           "mustSay": true,
@@ -5400,6 +5727,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5413,6 +5741,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
           "mustSay": true,
@@ -5427,6 +5756,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name laut Aufruf: Entwurf Zeitplan.xlsx.",
           "mustSay": false,
@@ -5448,6 +5778,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Sie lässt sich wiederherstellen.",
           "mustSay": true,
@@ -5462,6 +5793,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5473,6 +5805,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
           "mustSay": true,
@@ -5487,6 +5820,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name as given in the call: Entwurf Zeitplan.xlsx.",
           "mustSay": false,
@@ -5508,6 +5842,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "It can be restored.",
           "mustSay": true,
@@ -5522,6 +5857,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5535,6 +5871,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion die Seite Kickoff Line 4 löschen.",
           "mustSay": true,
@@ -5556,6 +5893,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Sie lässt sich wiederherstellen.",
           "mustSay": true,
@@ -5570,6 +5908,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5581,6 +5920,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete the page Kickoff Line 4 in Notion.",
           "mustSay": true,
@@ -5602,6 +5942,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "It can be restored.",
           "mustSay": true,
@@ -5616,6 +5957,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5629,6 +5971,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
           "mustSay": true,
@@ -5643,6 +5986,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -5657,6 +6001,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5668,6 +6013,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
           "mustSay": true,
@@ -5682,6 +6028,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -5696,6 +6043,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5709,6 +6057,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Outlook eine E-Mail an Anna Mueller und drei weitere senden:",
           "mustSay": false,
@@ -5752,6 +6101,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Betreff: Zusammenfassung Werksbesuch Linie 4.",
           "mustSay": false,
@@ -5766,6 +6116,7 @@
           ]
         },
         {
+          "id": "outside",
           "role": "outside",
           "text": "Zwei der Empfänger sind außerhalb der Firma.",
           "mustSay": true,
@@ -5789,6 +6140,7 @@
           ]
         },
         {
+          "id": "text:Body",
           "role": "text",
           "text": "Body: ein Text von etwa 50 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -5808,9 +6160,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Hallo zusammen, anbei die Zusammenfassung unseres Werksbesuchs. Wir haben die Engstellen an der Übergabe zwischen Presse und Förderband besprochen und vereinbart, dass wir bis Mitte Januar eine Abschätzung der Stillstandszeit liefern. Die Zeichnungen der Fördertechnik kommen bis Ende November. Bitte gebt Bescheid, wenn etwas fehlt oder falsch ist. Viele Grüße",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5821,6 +6178,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to send an email to Anna Mueller and three others from Outlook:",
           "mustSay": false,
@@ -5864,6 +6222,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Subject: Zusammenfassung Werksbesuch Linie 4.",
           "mustSay": false,
@@ -5878,6 +6237,7 @@
           ]
         },
         {
+          "id": "outside",
           "role": "outside",
           "text": "Two of the recipients are outside the organisation.",
           "mustSay": true,
@@ -5901,6 +6261,7 @@
           ]
         },
         {
+          "id": "text:Body",
           "role": "text",
           "text": "Body: a text of about 50 words, shown on screen.",
           "mustSay": false,
@@ -5920,9 +6281,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Hallo zusammen, anbei die Zusammenfassung unseres Werksbesuchs. Wir haben die Engstellen an der Übergabe zwischen Presse und Förderband besprochen und vereinbart, dass wir bis Mitte Januar eine Abschätzung der Stillstandszeit liefern. Die Zeichnungen der Fördertechnik kommen bis Ende November. Bitte gebt Bescheid, wenn etwas fehlt oder falsch ist. Viele Grüße",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -5935,6 +6301,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Slack eine Nachricht in vertrieb-sued senden.",
           "mustSay": false,
@@ -5956,6 +6323,7 @@
           ]
         },
         {
+          "id": "text:Text",
           "role": "text",
           "text": "Text: Begehung Linie 4 ist am 20. Januar bestätigt.",
           "mustSay": false,
@@ -5977,6 +6345,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -5987,6 +6356,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to send a message to vertrieb-sued from Slack.",
           "mustSay": false,
@@ -6008,6 +6378,7 @@
           ]
         },
         {
+          "id": "text:Text",
           "role": "text",
           "text": "Text: Begehung Linie 4 ist am 20. Januar bestätigt.",
           "mustSay": false,
@@ -6029,6 +6400,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6041,6 +6413,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion die Seiten Wochenbericht KW 44 und Wochenbericht KW 45 nach Archiv verschieben.",
           "mustSay": false,
@@ -6084,6 +6457,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6094,6 +6468,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to move the pages Wochenbericht KW 44 and Wochenbericht KW 45 to Archiv in Notion.",
           "mustSay": false,
@@ -6137,6 +6512,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6149,6 +6525,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion eine Notiz archivieren, deren Kennung auf dem Bildschirm steht.",
           "mustSay": false,
@@ -6163,6 +6540,7 @@
           ]
         },
         {
+          "id": "detail:Title",
           "role": "detail",
           "text": "Title laut Aufruf: Kickoff Line 4.",
           "mustSay": false,
@@ -6184,6 +6562,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
           "mustSay": true,
@@ -6198,6 +6577,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6208,6 +6588,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to archive a note in Notion whose ID is shown on screen.",
           "mustSay": false,
@@ -6222,6 +6603,7 @@
           ]
         },
         {
+          "id": "detail:Title",
           "role": "detail",
           "text": "Title as given in the call: Kickoff Line 4.",
           "mustSay": false,
@@ -6243,6 +6625,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Whether it can be restored is not known.",
           "mustSay": true,
@@ -6257,6 +6640,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6269,6 +6653,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Google Drive eine Datei für Planer freigeben, deren Kennung auf dem Bildschirm steht.",
           "mustSay": false,
@@ -6298,6 +6683,7 @@
           ]
         },
         {
+          "id": "outside",
           "role": "outside",
           "text": "Der Empfänger ist außerhalb der Firma.",
           "mustSay": true,
@@ -6321,6 +6707,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name laut Aufruf: Zeitplan Linie 4.xlsx.",
           "mustSay": false,
@@ -6342,6 +6729,7 @@
           ]
         },
         {
+          "id": "detail:Role",
           "role": "detail",
           "text": "Role: writer.",
           "mustSay": false,
@@ -6363,6 +6751,7 @@
           ]
         },
         {
+          "id": "detail:Send notification email",
           "role": "detail",
           "text": "Send notification email: ja.",
           "mustSay": false,
@@ -6384,6 +6773,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6394,6 +6784,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to share a file with Planer in Google Drive whose ID is shown on screen.",
           "mustSay": false,
@@ -6423,6 +6814,7 @@
           ]
         },
         {
+          "id": "outside",
           "role": "outside",
           "text": "The recipient is outside the organisation.",
           "mustSay": true,
@@ -6446,6 +6838,7 @@
           ]
         },
         {
+          "id": "detail:File name",
           "role": "detail",
           "text": "File name as given in the call: Zeitplan Linie 4.xlsx.",
           "mustSay": false,
@@ -6467,6 +6860,7 @@
           ]
         },
         {
+          "id": "detail:Role",
           "role": "detail",
           "text": "Role: writer.",
           "mustSay": false,
@@ -6488,6 +6882,7 @@
           ]
         },
         {
+          "id": "detail:Send notification email",
           "role": "detail",
           "text": "Send notification email: yes.",
           "mustSay": false,
@@ -6509,6 +6904,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6521,6 +6917,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in CRM den Datensatz Muster Maschinenbau AG anlegen oder aktualisieren.",
           "mustSay": false,
@@ -6542,6 +6939,7 @@
           ]
         },
         {
+          "id": "detail:Company",
           "role": "detail",
           "text": "Company: Der Wert steht auf dem Bildschirm.",
           "mustSay": false,
@@ -6556,6 +6954,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6566,6 +6965,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create or update the record Muster Maschinenbau AG in CRM.",
           "mustSay": false,
@@ -6587,6 +6987,7 @@
           ]
         },
         {
+          "id": "detail:Company",
           "role": "detail",
           "text": "Company: the value is shown on screen.",
           "mustSay": false,
@@ -6601,6 +7002,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6613,6 +7015,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion die Seite Kickoff Line 4 kommentieren.",
           "mustSay": false,
@@ -6634,6 +7037,7 @@
           ]
         },
         {
+          "id": "text:Markdown",
           "role": "text",
           "text": "Markdown: Bitte bis Freitag die Zeichnungen ergänzen.",
           "mustSay": false,
@@ -6655,6 +7059,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6665,6 +7070,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to comment on the page Kickoff Line 4 in Notion.",
           "mustSay": false,
@@ -6686,6 +7092,7 @@
           ]
         },
         {
+          "id": "text:Markdown",
           "role": "text",
           "text": "Markdown: Bitte bis Freitag die Zeichnungen ergänzen.",
           "mustSay": false,
@@ -6707,6 +7114,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6719,6 +7127,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion eine Datei anlegen:",
           "mustSay": false,
@@ -6733,6 +7142,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen-Foerdertechnik.pdf.",
           "mustSay": false,
@@ -6747,6 +7157,7 @@
           ]
         },
         {
+          "id": "detail:Content type",
           "role": "detail",
           "text": "Content type: application/pdf.",
           "mustSay": false,
@@ -6768,6 +7179,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6778,6 +7190,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a file in Notion:",
           "mustSay": false,
@@ -6792,6 +7205,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen-Foerdertechnik.pdf.",
           "mustSay": false,
@@ -6806,6 +7220,7 @@
           ]
         },
         {
+          "id": "detail:Content type",
           "role": "detail",
           "text": "Content type: application/pdf.",
           "mustSay": false,
@@ -6827,6 +7242,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6839,6 +7255,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Data warehouse eine SQL-Abfrage ausführen. Sie steht auf dem Bildschirm.",
           "mustSay": false,
@@ -6860,6 +7277,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "Wie viele Datensätze das betrifft, ist nicht bekannt.",
           "mustSay": true,
@@ -6874,6 +7292,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6884,6 +7303,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to run an SQL query in Data warehouse. It's shown on screen.",
           "mustSay": false,
@@ -6905,6 +7325,7 @@
           ]
         },
         {
+          "id": "consequence",
           "role": "consequence",
           "text": "How many records this affects is not known.",
           "mustSay": true,
@@ -6919,6 +7340,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6931,6 +7353,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
@@ -6952,6 +7375,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -6962,6 +7386,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to use the tool search in Dynamics 365.",
           "mustSay": false,
@@ -6983,6 +7408,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -6995,6 +7421,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 das Tool read query verwenden.",
           "mustSay": false,
@@ -7016,6 +7443,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7026,6 +7454,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to use the tool read query in Dynamics 365.",
           "mustSay": false,
@@ -7047,6 +7476,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7059,6 +7489,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Word das Tool word submit comment changes verwenden.",
           "mustSay": false,
@@ -7080,6 +7511,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7090,6 +7522,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to use the tool word submit comment changes in Word.",
           "mustSay": false,
@@ -7111,6 +7544,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7123,6 +7557,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Notion das Tool sync page verwenden.",
           "mustSay": false,
@@ -7144,6 +7579,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7154,6 +7590,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to use the tool sync page in Notion.",
           "mustSay": false,
@@ -7175,6 +7612,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7187,6 +7625,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -7201,6 +7640,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen anfordern.",
           "mustSay": false,
@@ -7215,6 +7655,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7236,6 +7677,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 10. Januar 2030.",
           "mustSay": false,
@@ -7259,6 +7701,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7267,6 +7710,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -7281,6 +7725,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot nachfassen.",
           "mustSay": false,
@@ -7295,6 +7740,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7316,6 +7762,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 20. Januar 2030.",
           "mustSay": false,
@@ -7339,6 +7786,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7347,6 +7795,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -7361,6 +7810,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Schulung planen.",
           "mustSay": false,
@@ -7375,6 +7825,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7396,6 +7847,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 3. Februar 2030.",
           "mustSay": false,
@@ -7419,6 +7871,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7429,6 +7882,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -7443,6 +7897,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen anfordern.",
           "mustSay": false,
@@ -7457,6 +7912,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7478,6 +7934,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 10 January 2030.",
           "mustSay": false,
@@ -7501,6 +7958,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7509,6 +7967,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -7523,6 +7982,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Angebot nachfassen.",
           "mustSay": false,
@@ -7537,6 +7997,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7558,6 +8019,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 20 January 2030.",
           "mustSay": false,
@@ -7581,6 +8043,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7589,6 +8052,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -7603,6 +8067,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Schulung planen.",
           "mustSay": false,
@@ -7617,6 +8082,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7638,6 +8104,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 3 February 2030.",
           "mustSay": false,
@@ -7661,6 +8128,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7673,6 +8141,7 @@
     "de": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
@@ -7694,6 +8163,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7702,6 +8172,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -7716,6 +8187,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Technisches Layout abstimmen.",
           "mustSay": false,
@@ -7730,6 +8202,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7751,6 +8224,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 15. Januar 2030.",
           "mustSay": false,
@@ -7774,6 +8248,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -7796,6 +8271,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
           "mustSay": false,
@@ -7815,9 +8291,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -7828,6 +8309,7 @@
     "en": [
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to use the tool search in Dynamics 365.",
           "mustSay": false,
@@ -7849,6 +8331,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7857,6 +8340,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -7871,6 +8355,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Technisches Layout abstimmen.",
           "mustSay": false,
@@ -7885,6 +8370,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -7906,6 +8392,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 15 January 2030.",
           "mustSay": false,
@@ -7929,6 +8416,7 @@
           ]
         },
         {
+          "id": "detail:Priority code",
           "role": "detail",
           "text": "Priority code: 2.",
           "mustSay": false,
@@ -7951,6 +8439,7 @@
           ]
         },
         {
+          "id": "text:Description",
           "role": "text",
           "text": "Description: a text of about 70 words, shown on screen.",
           "mustSay": false,
@@ -7970,9 +8459,14 @@
                 "percent": false
               }
             }
-          ]
+          ],
+          "readOut": {
+            "text": "Im Gespräch mit Frau Müller wurde vereinbart, dass wir das technische Layout der Linie 4 bis Mitte Januar abstimmen. Dafür brauchen wir die aktuellen Zeichnungen der Fördertechnik, die Liste der Schnittstellen zur bestehenden Steuerung und eine Abschätzung der Stillstandszeit. Frau Müller stellt die Zeichnungen bis Ende November bereit. Wir prüfen danach, ob die Schaltschränke am bisherigen Platz bleiben können oder verlegt werden müssen, und melden uns mit einem Terminvorschlag für die Begehung vor Ort.",
+            "cut": false
+          }
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7985,6 +8479,7 @@
     "de": [
       [
         {
+          "id": "count",
           "role": "count",
           "text": "Dafür brauche ich drei Freigaben.",
           "mustSay": false,
@@ -8000,6 +8495,7 @@
           ]
         },
         {
+          "id": "what",
           "role": "what",
           "text": "Die erste: Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
           "mustSay": false,
@@ -8014,6 +8510,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen anfordern.",
           "mustSay": false,
@@ -8028,6 +8525,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8049,6 +8547,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 10. Januar 2030.",
           "mustSay": false,
@@ -8072,6 +8571,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -8080,6 +8580,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Die zweite: eine Aufgabe, Angebot nachfassen.",
           "mustSay": false,
@@ -8101,6 +8602,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8122,6 +8624,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 20. Januar 2030.",
           "mustSay": false,
@@ -8145,6 +8648,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -8153,6 +8657,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "Die dritte: eine Aufgabe, Schulung planen.",
           "mustSay": false,
@@ -8174,6 +8679,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8195,6 +8701,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 3. Februar 2030.",
           "mustSay": false,
@@ -8218,6 +8725,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Bitte auf dem Bildschirm bestätigen.",
           "mustSay": false,
@@ -8228,6 +8736,7 @@
     "en": [
       [
         {
+          "id": "count",
           "role": "count",
           "text": "I need three approvals for this.",
           "mustSay": false,
@@ -8243,6 +8752,7 @@
           ]
         },
         {
+          "id": "what",
           "role": "what",
           "text": "The first one: I'd like to create a task in Dynamics 365:",
           "mustSay": false,
@@ -8257,6 +8767,7 @@
           ]
         },
         {
+          "id": "item",
           "role": "item",
           "text": "Zeichnungen anfordern.",
           "mustSay": false,
@@ -8271,6 +8782,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8292,6 +8804,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 10 January 2030.",
           "mustSay": false,
@@ -8315,6 +8828,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -8323,6 +8837,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "The second one: a task, Angebot nachfassen.",
           "mustSay": false,
@@ -8344,6 +8859,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8365,6 +8881,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 20 January 2030.",
           "mustSay": false,
@@ -8388,6 +8905,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -8396,6 +8914,7 @@
       ],
       [
         {
+          "id": "what",
           "role": "what",
           "text": "The third one: a task, Schulung planen.",
           "mustSay": false,
@@ -8417,6 +8936,7 @@
           ]
         },
         {
+          "id": "detail:Regardingobjectid",
           "role": "detail",
           "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
@@ -8438,6 +8958,7 @@
           ]
         },
         {
+          "id": "detail:Scheduled end",
           "role": "detail",
           "text": "Scheduled end: 3 February 2030.",
           "mustSay": false,
@@ -8461,6 +8982,7 @@
           ]
         },
         {
+          "id": "request",
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -8473,6 +8995,7 @@
     "de": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "Auf dem Bildschirm wartet eine Entscheidung.",
           "mustSay": false,
@@ -8483,6 +9006,7 @@
     "en": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "A decision is waiting on screen.",
           "mustSay": false,
@@ -8495,6 +9019,7 @@
     "de": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "Auf dem Bildschirm wartet eine Entscheidung.",
           "mustSay": false,
@@ -8505,6 +9030,7 @@
     "en": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "A decision is waiting on screen.",
           "mustSay": false,
@@ -8517,6 +9043,7 @@
     "de": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "Auf dem Bildschirm wartet eine Entscheidung.",
           "mustSay": false,
@@ -8527,6 +9054,7 @@
     "en": [
       [
         {
+          "id": "pointer",
           "role": "pointer",
           "text": "A decision is waiting on screen.",
           "mustSay": false,

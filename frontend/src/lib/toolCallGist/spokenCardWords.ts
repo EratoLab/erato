@@ -15,6 +15,7 @@ import type {
   SpokenText,
   SpokenWords,
 } from "./spokenCard";
+import type { SpokenNotice } from "./spokenCardFlow";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -747,6 +748,74 @@ const requestSentence = (): string =>
 const cutMark = (): string =>
   t({ id: "spokenCard.cut", message: "… shortened" });
 
+const restSentence = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.rest",
+    message: plural(count, {
+      one: "One more thing:",
+      other: `${countWord} more things:`,
+    }),
+  });
+
+const nothingLeftSentence = (): string =>
+  t({ id: "spokenCard.nothingLeft", message: "That was everything." });
+
+const textCutSentence = (): string =>
+  t({
+    id: "spokenCard.textCut",
+    message: "The rest of the text is on screen.",
+  });
+
+const noticeSentence = (notice: SpokenNotice): string => {
+  switch (notice.kind) {
+    case "decide_on_screen": {
+      const { decision } = notice;
+      return t({
+        id: "spokenCard.notice.decideOnScreen",
+        message: select(decision, {
+          approve: "For now, approving is done on screen.",
+          other: "For now, declining is done on screen.",
+        }),
+      });
+    }
+    case "change_on_screen":
+      return t({
+        id: "spokenCard.notice.changeOnScreen",
+        message:
+          "Changes can't be made by voice yet: please decline on screen and type the change.",
+      });
+    case "new_request_on_screen":
+      return t({
+        id: "spokenCard.notice.newRequest",
+        message: "A new request has to wait until this card is decided.",
+      });
+    case "unclear": {
+      // eslint-disable-next-line lingui/no-unlocalized-strings -- select keys
+      const commands = notice.hasText ? "withText" : "withoutText";
+      return t({
+        id: "spokenCard.notice.unclear",
+        message: select(commands, {
+          withText:
+            "I didn't catch that. You can say: go on, what else, again, read the text, or stop.",
+          other:
+            "I didn't catch that. You can say: go on, what else, again, or stop.",
+        }),
+      });
+    }
+    case "no_text":
+      return t({
+        id: "spokenCard.notice.noText",
+        message: "This card has no long text.",
+      });
+    case "unavailable":
+      return t({
+        id: "spokenCard.notice.unavailable",
+        message:
+          "Voice commands aren't working right now. The card is waiting on screen.",
+      });
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Composing the card from the sentences
 
@@ -1049,6 +1118,11 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         spokenToolTitle(toolTitle),
         server ? sourcePhrase("in", server) : "",
       ),
+    rest: (more) => capitalised(restSentence(more, count(more))),
+    nothingLeft: nothingLeftSentence,
+    readText: (field, passage) => fieldValue(field, passage),
+    textCut: textCutSentence,
+    notice: noticeSentence,
   };
 };
 

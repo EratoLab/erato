@@ -21,6 +21,7 @@ import {
   sameSpokenKind,
   spokenApprovalFor,
   spokenApprovalPieces,
+  spokenUtteranceSentences,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
@@ -1049,6 +1050,123 @@ describe.runIf(Boolean(process.env.SPOKEN_CARD_RENDER))("rendered set", () => {
     writeFileSync(
       process.env.SPOKEN_CARD_RENDER as string,
       `${lines.join("\n")}\n`,
+    );
+  });
+});
+
+describe("what the voice says besides the pieces", () => {
+  const card = () =>
+    inLanguage("de", () =>
+      spokenApprovalPieces(approvalOf(callOf("update-08-long-text")), {
+        language: "de",
+        now: NOW,
+      }),
+    );
+  const say = (
+    language: string,
+    utterance: Parameters<typeof spokenUtteranceSentences>[0],
+    pieces = card(),
+  ) =>
+    inLanguage(language, () =>
+      spokenUtteranceSentences(utterance, pieces, { language, now: NOW }),
+    );
+
+  it("counts the rest and says when nothing is left, in German and English", () => {
+    expect(say("de", { type: "count", count: 1 })).toEqual([
+      "Noch eine Sache:",
+    ]);
+    expect(say("de", { type: "count", count: 3 })).toEqual([
+      "Noch drei Dinge:",
+    ]);
+    expect(say("en", { type: "count", count: 1 })).toEqual(["One more thing:"]);
+    expect(say("en", { type: "count", count: 2 })).toEqual([
+      "Two more things:",
+    ]);
+    expect(say("de", { type: "nothing_left" })).toEqual(["Das war alles."]);
+    expect(say("en", { type: "nothing_left" })).toEqual([
+      "That was everything.",
+    ]);
+  });
+
+  it("says what is done on screen for now, and what it did not understand", () => {
+    expect(
+      say("de", {
+        type: "notice",
+        notice: { kind: "decide_on_screen", decision: "approve" },
+      }),
+    ).toEqual(["Zustimmen geht im Moment nur auf dem Bildschirm."]);
+    expect(
+      say("en", {
+        type: "notice",
+        notice: { kind: "decide_on_screen", decision: "reject" },
+      }),
+    ).toEqual(["For now, declining is done on screen."]);
+    expect(
+      say("de", { type: "notice", notice: { kind: "change_on_screen" } }),
+    ).toEqual([
+      "Ändern geht noch nicht per Sprache: bitte auf dem Bildschirm ablehnen und die Änderung schreiben.",
+    ]);
+    expect(
+      say("de", {
+        type: "notice",
+        notice: { kind: "unclear", hasText: true },
+      })[0],
+    ).toContain("Text vorlesen");
+    expect(
+      say("en", {
+        type: "notice",
+        notice: { kind: "unclear", hasText: false },
+      })[0],
+    ).not.toContain("read the text");
+    for (const kind of [
+      "new_request_on_screen",
+      "no_text",
+      "unavailable",
+    ] as const)
+      for (const language of ["de", "en"])
+        expect(
+          say(language, { type: "notice", notice: { kind } })[0].length,
+        ).toBeGreaterThan(10);
+  });
+
+  it("reads a long text after its field, in passages the voice takes", () => {
+    const pieces = card();
+    const index = pieces.findIndex((piece) => piece.readOut);
+    const read = say("de", { type: "text", index }, pieces);
+    expect(read[0]).toMatch(/^[^:]+: /);
+    expect(read.join(" ")).toContain(
+      pieces[index].readOut?.text.split(" ").slice(0, 5).join(" ") ?? "-",
+    );
+    for (const passage of read) expect(passage.length).toBeLessThan(301 + 40);
+  });
+
+  it("points to the screen for a text longer than one request, or held only in part", () => {
+    const pieces = card();
+    const index = pieces.findIndex((piece) => piece.readOut);
+    const long = pieces.map((piece, at) =>
+      at === index
+        ? {
+            ...piece,
+            readOut: {
+              text: "Ein ziemlich langer Satz über die Linie vier. ".repeat(80),
+              cut: false,
+            },
+          }
+        : piece,
+    );
+    const read = say("de", { type: "text", index }, long);
+    expect(read.at(-1)).toBe("Der Rest des Textes steht auf dem Bildschirm.");
+    expect(read.length).toBeLessThan(17);
+    expect(read.join("").length).toBeLessThan(2001);
+    for (const passage of read) expect(passage.length).toBeLessThan(401);
+
+    const held = pieces.map((piece, at) =>
+      at === index
+        ? { ...piece, readOut: { text: "Nur der Anfang.", cut: true } }
+        : piece,
+    );
+    expect(say("en", { type: "text", index }, held).at(-1)).toBe(
+      "The rest of the text is on screen.",
     );
   });
 });

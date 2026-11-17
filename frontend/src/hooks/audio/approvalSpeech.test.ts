@@ -52,7 +52,7 @@ const piece = (
   role: SpokenPiece["role"],
   text: string,
   mustSay = false,
-): SpokenPiece => ({ role, text, mustSay });
+): SpokenPiece => ({ id: text, role, text, mustSay });
 
 const CARD = [
   piece("what", "Ich möchte den Datensatz Line 4 Retrofit ändern."),
@@ -142,7 +142,6 @@ describe("speaking an approval card", () => {
     playOut();
     expect(states()).toEqual(["heard", "heard", "heard", "heard"]);
     expect(useApprovalSpeech.getState().speaking).toBe(false);
-    expect(connection.close).toHaveBeenCalled();
   });
 
   it("skips the piece being said and goes on with the rest", async () => {
@@ -164,18 +163,27 @@ describe("speaking an approval card", () => {
     expect(states()).toEqual(["heard", "heard", "heard", "playing"]);
   });
 
-  it("stops at once and decides nothing", async () => {
-    const { connection, states, stopApprovalSpeech, useApprovalSpeech } =
-      await speak();
+  it("stops at once and decides nothing; the card's audio keeps loading", async () => {
+    const {
+      connection,
+      states,
+      stopApprovalSpeech,
+      steerApprovalCard,
+      useApprovalSpeech,
+    } = await speak();
     audio(connection, 0);
     stopApprovalSpeech();
     expect(states()).toEqual(["cut", "pending", "pending", "pending"]);
     expect(useApprovalSpeech.getState().speaking).toBe(false);
-    expect(connection.close).toHaveBeenCalled();
-    // Audio that still arrives is not played.
+    expect(useApprovalSpeech.getState().closed).toBe(false);
+    expect(connection.close).not.toHaveBeenCalled();
+    // Audio that still arrives is not played, but kept: "go on" plays it.
     const before = sources.length;
     audio(connection, 1);
     expect(sources).toHaveLength(before);
+    steerApprovalCard("message-1:stop-1", { type: "skip" });
+    expect(states()).toEqual(["cut", "playing", "pending", "pending"]);
+    expect(sources).toHaveLength(before + 1);
   });
 
   it("1.6: a card that cannot be spoken falls back, then says so, and stays to be asked for", async () => {

@@ -74,6 +74,7 @@ describe("useSpokenApprovalCard", () => {
     };
     expect(card.pieces).toEqual([
       {
+        id: "pointer",
         role: "pointer",
         text: "A decision is waiting on screen.",
         mustSay: false,

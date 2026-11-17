@@ -27,7 +27,22 @@ export type SpokenUtterance =
   /** The rest was asked for and nothing is left ("Das war alles"). */
   | { type: "nothing_left" }
   /** A long text the piece at `index` names, read out on request. */
-  | { type: "text"; index: number };
+  | { type: "text"; index: number }
+  /** A sentence about what the voice cannot do (yet); the card stays as it is. */
+  | { type: "notice"; notice: SpokenNotice };
+
+/**
+ * What the voice says instead of acting: a decision or a change asked for by
+ * voice, which are made on screen for now; words it did not understand; a
+ * long text asked for on a card without one; listening that is not available.
+ */
+export type SpokenNotice =
+  | { kind: "decide_on_screen"; decision: "approve" | "reject" }
+  | { kind: "change_on_screen" }
+  | { kind: "new_request_on_screen" }
+  | { kind: "unclear"; hasText: boolean }
+  | { kind: "no_text" }
+  | { kind: "unavailable" };
 
 export type SpokenCardEvent =
   /** Say the card from its start: on its own, or when asked to again. */
@@ -46,8 +61,13 @@ export type SpokenCardEvent =
   | { type: "read"; index?: number }
   /** Quiet; the card keeps waiting. */
   | { type: "stop" }
-  /** A decision was taken, or the card was replaced: the voice ends. */
-  | { type: "closed" };
+  /** Say `notice`; afterwards the voice is quiet and the card waits. */
+  | { type: "notice"; notice: SpokenNotice }
+  /**
+   * A decision was taken, or the card was replaced: the voice ends.
+   * `withdrawn` is a card taken back for a change, which no decision closed.
+   */
+  | { type: "closed"; withdrawn?: boolean };
 
 export interface SpokenCardFlow {
   /** Where each piece stands in the current reading. */
@@ -65,10 +85,14 @@ export interface SpokenCardFlow {
   started: number;
   /** The last piece said to its end, for "again" while nothing plays. */
   last: number | null;
+  /** The last piece that was being said, to its end or cut short. */
+  previous: number | null;
   /** The voice failed: nothing was heard, so the pointer sentence can stand in. */
   failed: "fallback" | "notice" | null;
   /** Decided or replaced: no event says anything any more. */
   closed: boolean;
+  /** Closed because it was taken back for a change, not decided. */
+  withdrawn: boolean;
 }
 
 const owedOf = (
@@ -90,8 +114,10 @@ export const spokenCardFlow = (
     playing: null,
     started: 0,
     last: null,
+    previous: null,
     failed: null,
     closed: false,
+    withdrawn: false,
   };
 };
 
@@ -157,7 +183,7 @@ const leave = (
     outcome === "heard"
       ? { ...flow, heard: flow.heard.map((value, at) => value || at === index) }
       : flow;
-  return withState(next, index, outcome);
+  return withState({ ...next, previous: index }, index, outcome);
 };
 
 /**
@@ -242,6 +268,7 @@ const step = (
     case "finished": {
       const { playing } = flow;
       if (playing === null) return flow;
+      if (playing.type === "notice") return { ...flow, playing: null };
       let next = leave(flow, "heard");
       if (playing.type === "text") {
         next = withState(
@@ -260,7 +287,13 @@ const step = (
     }
     case "skip": {
       const { playing } = flow;
-      if (playing === null) return flow;
+      // Quiet, "go on" says what is left of this reading; with nothing left
+      // it is the rest: "that was all", and the request again.
+      if (playing === null) {
+        return piecesAhead(pieces, flow.states, flow.heard).length === 0
+          ? step(pieces, flow, { type: "rest" })
+          : advance(pieces, flow);
+      }
       let next = leave(flow, "cut");
       // A text read on request is skipped to its end; its piece is done.
       if (playing.type === "text" && next.states[playing.index] === "pending") {
@@ -313,6 +346,11 @@ const step = (
     }
     case "stop":
       return { ...leave(flow, "cut"), playing: null };
+    case "notice":
+      return begin(pieces, interrupt(flow, null), {
+        type: "notice",
+        notice: event.notice,
+      });
     case "failed": {
       const next = leave(flow, "cut");
       return {
@@ -322,7 +360,12 @@ const step = (
       };
     }
     case "closed":
-      return { ...leave(flow, "cut"), playing: null, closed: true };
+      return {
+        ...leave(flow, "cut"),
+        playing: null,
+        closed: true,
+        withdrawn: event.withdrawn === true,
+      };
   }
 };
 
@@ -335,4 +378,38 @@ export const spokenCardStep = (
   if (flow.closed) return flow;
   const next = step(pieces, flow, event);
   return next === flow ? flow : { ...next, owed: owedOf(pieces, next.heard) };
+};
+
+/** A piece's state as the voice command endpoint takes it. */
+export type HeardState = "heard" | "cut_short" | "not_said";
+
+/**
+ * What the listener has heard of each piece: heard in full once, in any
+ * reading; cut short; or not said yet, which includes the piece being said.
+ */
+export const heardStates = (flow: SpokenCardFlow): HeardState[] =>
+  flow.states.map((state, index) =>
+    flow.heard[index] ? "heard" : state === "cut" ? "cut_short" : "not_said",
+  );
+
+/** The piece being said, or else the last one that was. */
+export const currentPiece = (flow: SpokenCardFlow): number | null =>
+  pieceOf(flow.playing) ?? flow.previous;
+
+/**
+ * Whether a decision said by voice may count: the card is waiting, its
+ * request to decide was heard, and no loss or consequence is owed. `owed`
+ * lists what must be said first. Nothing decides by voice yet; this is the
+ * gate that step plugs into.
+ */
+export const voiceDecisionGate = (
+  pieces: readonly SpokenPiece[],
+  flow: SpokenCardFlow,
+): { ready: boolean; owed: number[] } => {
+  const request = requestOf(pieces);
+  const asked = request === -1 || flow.heard[request];
+  return {
+    ready: !flow.closed && asked && flow.owed.length === 0,
+    owed: flow.owed,
+  };
 };

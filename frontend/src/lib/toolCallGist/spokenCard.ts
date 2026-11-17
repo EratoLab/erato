@@ -12,6 +12,7 @@ import type {
   GistChange,
 } from "./change";
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
+import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
 import type { EarValue } from "./spokenValues";
 import type {
   ToolCallLabel,
@@ -67,6 +68,11 @@ export interface SpokenSource {
 }
 
 export interface SpokenPiece {
+  /**
+   * Stable within a card and between a card and the one that replaces it:
+   * the role, and for a detail or a text the field it is about.
+   */
+  id: string;
   role: SpokenPieceRole;
   text: string;
   /** A loss or a consequence: said even when the listener skips ahead. */
@@ -75,7 +81,18 @@ export interface SpokenPiece {
   pauseBeforeMs?: number;
   /** The values the text says, in the order it says them. */
   values?: SpokenSource[];
+  /** The long text a piece only names, for reading it out on request. */
+  readOut?: SpokenReadOut;
 }
+
+export interface SpokenReadOut {
+  text: string;
+  /** The card holds only the start of the text. */
+  cut: boolean;
+}
+
+/** A piece as it is composed, before the card gives it its id. */
+type ComposedPiece = Omit<SpokenPiece, "id">;
 
 /** Details read before the rest is counted. */
 export const MAX_SPOKEN_DETAILS = 3;
@@ -175,6 +192,8 @@ export interface SpokenText {
   words: number;
   /** The text itself when it is short enough to read. */
   read?: string;
+  /** The whole text as the card holds it, read out only on request. */
+  full?: SpokenReadOut;
 }
 
 export type SpokenConsequence =
@@ -266,6 +285,15 @@ export interface SpokenWords {
   request(): string;
   /** A call the card has no verb for: the tool's title and its server. */
   generic(toolTitle: string, server?: string): string;
+  /** Before the rest of the card: how many pieces follow. */
+  rest(count: number): string;
+  /** The rest was asked for and everything was heard. */
+  nothingLeft(): string;
+  /** The first passage of a long text read out, after its field. */
+  readText(field: string, passage: string): string;
+  /** After a long text read only in part. */
+  textCut(): string;
+  notice(notice: SpokenNotice): string;
 }
 
 const words = (text: string): number =>
@@ -429,6 +457,9 @@ const detailsOf = (
           texts.push({
             field,
             words: to.kind === "text" ? words(to.text) : 0,
+            ...(to.kind === "text"
+              ? { full: { text: first.text, cut: first.truncated } }
+              : {}),
           });
           return undefined;
         }
@@ -497,7 +528,11 @@ const detailsOf = (
       : words(text.text);
     texts.push(
       count > MAX_READ_WORDS || text.truncated
-        ? { field, words: count }
+        ? {
+            field,
+            words: count,
+            full: { text: text.text, cut: text.truncated },
+          }
         : {
             field,
             words: count,
@@ -679,7 +714,11 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     if (!(entry as (typeof field.values)[number] | undefined)) continue;
     const to = earOf(entry.value, field.name, timeZone);
     if (isLong(to)) {
-      texts.push({ field: field.name, words: words(entry.value.text) });
+      texts.push({
+        field: field.name,
+        words: words(entry.value.text),
+        full: { text: entry.value.text, cut: entry.value.truncated },
+      });
       continue;
     }
     details.push(
@@ -698,7 +737,11 @@ const fieldDetailsOf = (gist: Gist, timeZone?: string): Detailed => {
     const count = words(after.text);
     texts.push(
       count > MAX_READ_WORDS || after.truncated
-        ? { field: "", words: count }
+        ? {
+            field: "",
+            words: count,
+            full: { text: after.text, cut: after.truncated },
+          }
         : { field: "", words: count, read: after.text },
     );
   }
@@ -794,7 +837,7 @@ const DROPPABLE: readonly SpokenPieceRole[] = ["text", "more", "detail"];
  * details and texts left to the screen from the last one on. Losses, the
  * consequence and the request always stay.
  */
-const fitted = (pieces: SpokenPiece[], cut: string): SpokenPiece[] => {
+const fitted = (pieces: ComposedPiece[], cut: string): ComposedPiece[] => {
   let card = pieces.map((piece) => {
     const text = piece.text.replaceAll(SPOKEN_CUT, cut);
     return {
@@ -828,27 +871,56 @@ const fitted = (pieces: SpokenPiece[], cut: string): SpokenPiece[] => {
   return card;
 };
 
+/** The field a detail or a text piece is about, as the card shows it. */
+export const spokenPieceField = (piece: ComposedPiece): string | undefined => {
+  const field = piece.values?.find((source) => source.slot === "field")?.value;
+  return field?.kind === "text" && field.text.length > 0
+    ? field.text
+    : undefined;
+};
+
+/** Ids the voice command endpoint takes: unique, at most 64 characters. */
+const MAX_ID_CHARS = 60;
+
+const withIds = (pieces: readonly ComposedPiece[]): SpokenPiece[] => {
+  const seen = new Map<string, number>();
+  return pieces.map((piece) => {
+    const field = spokenPieceField(piece);
+    const base = Array.from(field ? `${piece.role}:${field}` : piece.role)
+      .slice(0, MAX_ID_CHARS)
+      .join("");
+    const occurrence = (seen.get(base) ?? 0) + 1;
+    seen.set(base, occurrence);
+    return {
+      id: occurrence === 1 ? base : `${base}#${occurrence}`,
+      ...piece,
+    };
+  });
+};
+
 /** The pieces for one approval in the language given. */
 export const spokenApprovalPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
 ): SpokenPiece[] =>
-  fitted(
-    composedPieces(approval, options),
-    spokenWordsFor(options.language, options).cut(),
+  withIds(
+    fitted(
+      composedPieces(approval, options),
+      spokenWordsFor(options.language, options).cut(),
+    ),
   );
 
 const composedPieces = (
   approval: SpokenApproval,
   options: SpokenOptions,
-): SpokenPiece[] => {
+): ComposedPiece[] => {
   const words = spokenWordsFor(options.language, options);
-  const pointer: SpokenPiece[] = [
+  const pointer: ComposedPiece[] = [
     { role: "pointer", text: words.pointer(), mustSay: false, values: [] },
   ];
   if (!words.full || approval.type === "pointer") return pointer;
   const { position } = options;
-  const pieces: SpokenPiece[] = [];
+  const pieces: ComposedPiece[] = [];
   if (position?.index === 0 && position.total > 1) {
     pieces.push({
       role: "count",
@@ -857,7 +929,7 @@ const composedPieces = (
       values: [number("count", position.total)],
     });
   }
-  const request: SpokenPiece = {
+  const request: ComposedPiece = {
     role: "request",
     text: words.request(),
     mustSay: false,
@@ -934,6 +1006,9 @@ const composedPieces = (
           ? number("words", spokenText.words)
           : text("text", spokenText.read),
       ],
+      ...(spokenText.read === undefined && spokenText.full
+        ? { readOut: spokenText.full }
+        : {}),
     });
   }
   if (facts.consequences.length > 0) {
@@ -1002,4 +1077,92 @@ export const sameSpokenKind = (
     left.gist.kind === right.gist.kind &&
     a.server === b.server
   );
+};
+
+/** A passage of a long text read out; short, so stopping it is quick. */
+const MAX_PASSAGE_CHARS = 300;
+
+/** `text` in passages that end at a sentence, or at a word when one is too long. */
+const passagesOf = (text: string): string[] => {
+  const sentences = text
+    .trim()
+    .split(/(?<=[.!?…])\s+/)
+    .flatMap((sentence) =>
+      sentence.length <= MAX_PASSAGE_CHARS
+        ? [sentence]
+        : sentence.split(/\s+/).reduce<string[]>((parts, word) => {
+            const last = parts.at(-1);
+            if (
+              last !== undefined &&
+              `${last} ${word}`.length <= MAX_PASSAGE_CHARS
+            )
+              parts[parts.length - 1] = `${last} ${word}`;
+            else parts.push(word.slice(0, MAX_PASSAGE_CHARS));
+            return parts;
+          }, []),
+    );
+  return sentences.reduce<string[]>((passages, sentence) => {
+    const last = passages.at(-1);
+    if (last !== undefined && `${last} ${sentence}`.length <= MAX_PASSAGE_CHARS)
+      passages[passages.length - 1] = `${last} ${sentence}`;
+    else passages.push(sentence);
+    return passages;
+  }, []);
+};
+
+/**
+ * A long text read out on request: its field, then the text in passages, as
+ * much as one request to the voice takes; a text the card holds only in part,
+ * or that is longer than that, ends by pointing to the screen.
+ */
+const readOutSentences = (piece: SpokenPiece, words: SpokenWords): string[] => {
+  if (!piece.readOut) return [];
+  const field = spokenPieceField(piece) ?? "";
+  const ending = words.textCut();
+  const budget = MAX_CARD_CHARS - ending.length;
+  const said: string[] = [];
+  let used = 0;
+  let cut = piece.readOut.cut;
+  for (const passage of passagesOf(piece.readOut.text)) {
+    const sentence =
+      said.length === 0 && field.length > 0
+        ? words.readText(field, passage)
+        : passage;
+    if (
+      sentence.length > MAX_PIECE_CHARS ||
+      used + sentence.length > budget ||
+      said.length === MAX_PIECES - 1
+    ) {
+      cut = true;
+      break;
+    }
+    said.push(sentence);
+    used += sentence.length;
+  }
+  return cut ? [...said, ending] : said;
+};
+
+/**
+ * What the voice says for an utterance that is not one of the card's
+ * pieces: how much is left, that nothing is, a long text, or a notice. Each
+ * entry is one sentence for the voice endpoint, within its limits.
+ */
+export const spokenUtteranceSentences = (
+  utterance: SpokenUtterance,
+  pieces: readonly SpokenPiece[],
+  options: Pick<SpokenOptions, "language" | "now" | "timeZone">,
+): string[] => {
+  const words = spokenWordsFor(options.language, options);
+  switch (utterance.type) {
+    case "piece":
+      return [pieces[utterance.index].text];
+    case "count":
+      return [words.rest(utterance.count)];
+    case "nothing_left":
+      return [words.nothingLeft()];
+    case "text":
+      return readOutSentences(pieces[utterance.index], words);
+    case "notice":
+      return [words.notice(utterance.notice)];
+  }
 };

@@ -31,6 +31,7 @@ import {
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
+import { useApprovalCardListening } from "@/hooks/audio/useApprovalCardListening";
 import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
@@ -336,6 +337,11 @@ interface DictationTarget {
   nextChunkIndex: number;
   chunkTranscripts: Map<number, string>;
   hasAppendedVisibleText: boolean;
+  /**
+   * Listening for a waiting approval card: what is heard goes to the card,
+   * never into the composer, and the end of the turn sends nothing.
+   */
+  card?: { words: string; ended: boolean };
 }
 
 function isScrolledToEnd(element: HTMLElement): boolean {
@@ -520,6 +526,11 @@ export const ChatInput = ({
   }, []);
 
   const handleConversationVadAutoStop = useCallback(() => {
+    const card = dictationTargetRef.current?.card;
+    if (card) {
+      card.ended = true;
+      return;
+    }
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = true;
     setConversationAutoSendSignal((signal) => signal + 1);
@@ -546,6 +557,7 @@ export const ChatInput = ({
   const {
     enabled: audioConversationalEnabled,
     speechEnabled,
+    voiceCommandsEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
     endOfTurnSilenceMs,
   } = useAudioConversationalFeature();
@@ -733,6 +745,14 @@ export const ChatInput = ({
           target.chunkTranscripts.get(target.nextChunkIndex) ?? "";
         target.chunkTranscripts.delete(target.nextChunkIndex);
         target.nextChunkIndex += 1;
+
+        if (target.card) {
+          target.card.words = appendDictationText(
+            target.card.words,
+            nextTranscript,
+          );
+          continue;
+        }
 
         if (target.sessionId === getActiveSessionId()) {
           if (nextTranscript.trim()) {
@@ -922,6 +942,40 @@ export const ChatInput = ({
   const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
   const cardSpeaking = useApprovalSpeech((state) => state.speaking);
   const cardAvailable = useApprovalSpeech((state) => state.available !== null);
+
+  const openCardListening = useCallback(() => {
+    dictationTargetRef.current = {
+      sessionId: getActiveSessionId(),
+      nextChunkIndex: 0,
+      chunkTranscripts: new Map(),
+      hasAppendedVisibleText: false,
+      card: { words: "", ended: false },
+    };
+    toggleDictation();
+  }, [getActiveSessionId, toggleDictation]);
+  const closeCardListening = useCallback(() => {
+    if (isDictating || isDictationStarting) toggleDictation();
+    dictationTargetRef.current = null;
+  }, [isDictating, isDictationStarting, toggleDictation]);
+  const readCardTurn = useCallback(
+    () => dictationTargetRef.current?.card ?? { words: "", ended: false },
+    [],
+  );
+  useApprovalCardListening({
+    enabled:
+      isAudioMode &&
+      decisionWaiting &&
+      audioConversationalEnabled &&
+      Boolean(voiceCommandsEnabled) &&
+      Boolean(speechEnabled) &&
+      speech.enabled,
+    recorderOpen: isDictating || isDictationStarting,
+    recorderIdle:
+      !isDictating && !isDictationStarting && !isDictationCompleting,
+    open: openCardListening,
+    close: closeCardListening,
+    readTurn: readCardTurn,
+  });
 
   // Enter-while-a-turn-is-generating queues the draft instead of sending.
   // Gated on isPendingResponse specifically (a turn is in flight) — not the
@@ -2849,6 +2903,10 @@ export const ChatInput = ({
       return;
     }
     if (!isDictating && !isDictationStarting) {
+      return;
+    }
+    // The microphone listens for the card itself.
+    if (dictationTargetRef.current?.card) {
       return;
     }
     shouldRestartAudioModeAfterResponseRef.current = true;

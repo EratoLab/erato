@@ -44,6 +44,27 @@ describe("env readAloudEnabled", () => {
   );
 });
 
+describe("env approvalVoiceCommandsEnabled", () => {
+  afterEach(() => {
+    delete window.APPROVAL_VOICE_COMMANDS_ENABLED;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to off", () => {
+    expect(env().approvalVoiceCommandsEnabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.APPROVAL_VOICE_COMMANDS_ENABLED = value;
+      expect(env().approvalVoiceCommandsEnabled).toBe(value);
+      vi.stubEnv("VITE_APPROVAL_VOICE_COMMANDS_ENABLED", String(!value));
+      expect(env().approvalVoiceCommandsEnabled).toBe(!value);
+    },
+  );
+});
+
 describe("env audioConversationalEndOfTurnSilenceMs", () => {
   afterEach(() => {
     delete window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
