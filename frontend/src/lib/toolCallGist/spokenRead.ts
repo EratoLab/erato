@@ -28,6 +28,8 @@ export type SpokenReadShape = "search" | "items" | "list";
 
 export interface SpokenCondition {
   column: string;
+  /** The column's table, when the statement reads several. */
+  table?: string;
   operator: Exclude<ToolCallReadOperator, "other">;
   values: EarValue[];
   valuesOmitted: number;
@@ -188,9 +190,13 @@ const conditionsOf = (
       0,
       ...values.map((value) => (value.machineId ? 0 : words(value.text))),
     );
+    const table = isRecord(entry)
+      ? cleanServerText(entry.table, MAX_NAME_CHARS).text
+      : "";
     return [
       {
         column,
+        ...(table.length > 0 ? { table } : {}),
         operator: known,
         values: values.map((value) => earOf(value, timeZone)),
         valuesOmitted: omitted + extra,
@@ -328,6 +334,7 @@ export const spokenReadPieces = (
     pieces.push(
       piece("detail", readWords.condition(condition), [
         text("field", condition.column),
+        ...(condition.table ? [text("place", condition.table)] : []),
         ...condition.values.map((value) => ({ slot: "value" as const, value })),
       ]),
     );

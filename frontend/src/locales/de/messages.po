@@ -8731,8 +8731,13 @@ msgstr "Auf dem Bildschirm wartet eine Entscheidung."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.columnOf"
+msgstr "{column} von {table}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.read.condition"
-msgstr "{operator, select, equals {{column} ist {value}.} not_equals {{column} ist nicht {value}.} less {{kind, select, date {{column} liegt vor dem {value}.} other {{column} ist kleiner als {value}.}}} at_most {{kind, select, date {{column} liegt spätestens am {value}.} other {{column} ist höchstens {value}.}}} greater {{kind, select, date {{column} liegt nach dem {value}.} other {{column} ist größer als {value}.}}} at_least {{kind, select, date {{column} liegt frühestens am {value}.} other {{column} ist mindestens {value}.}}} contains {{column} enthält {value}.} starts_with {{column} beginnt mit {value}.} ends_with {{column} endet auf {value}.} is_empty {{column} ist leer.} is_not_empty {{column} ist nicht leer.} in {{column} ist {value}.} not_in {{column} ist keiner dieser Werte: {value}.} between {{column} liegt zwischen {value} und {second}.} other {{column} wird mit {value} verglichen.}}"
+msgstr "{operator, select, equals {{column} ist {value}.} not_equals {{column} ist nicht {value}.} less {{kind, select, date {{column} liegt vor dem {value}.} other {{column} ist kleiner als {value}.}}} at_most {{kind, select, date {{column} liegt spätestens am {value}.} other {{column} ist höchstens {value}.}}} greater {{kind, select, date {{column} liegt nach dem {value}.} other {{column} ist größer als {value}.}}} at_least {{kind, select, date {{column} liegt frühestens am {value}.} other {{column} ist mindestens {value}.}}} contains {{column} enthält {value}.} starts_with {{column} beginnt mit {value}.} ends_with {{column} endet auf {value}.} is_empty {{column} ist leer.} is_not_empty {{column} ist nicht leer.} in {{column} ist {value}.} neither {{column} ist weder {value} noch {second}.} not_in {{column} ist nicht {value}.} between {{kind, select, date {{column} liegt zwischen dem {value} und dem {second}.} other {{column} liegt zwischen {value} und {second}.}}} other {{column} wird mit {value} verglichen.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8753,6 +8758,16 @@ msgstr "{shape, select, one {Nur das erste Ergebnis.} other {Höchstens {things}
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.read.moreConditions"
 msgstr "{shape, select, unknown {Mit Bedingungen, die auf dem Bildschirm stehen.} counted {{count, plural, one {Mit einer Bedingung, sie steht auf dem Bildschirm.} other {Mit {countWord} Bedingungen, sie stehen auf dem Bildschirm.}}} other {{count, plural, one {Dazu kommt eine weitere Bedingung, sie steht auf dem Bildschirm.} other {Dazu kommen {countWord} weitere Bedingungen, sie stehen auf dem Bildschirm.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreTables"
+msgstr "{count, plural, one {einer weiteren Tabelle} other {{countWord} weiteren Tabellen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.read.moreValues"
+msgstr "{count, plural, one {ein weiterer Wert} other {{countWord} weitere Werte}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

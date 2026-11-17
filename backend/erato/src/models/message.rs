@@ -720,6 +720,11 @@ pub struct ToolCallReadQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize)]
 pub struct ToolCallReadCondition {
     pub column: String,
+    /// The table the column belongs to, when the statement reads several
+    /// and names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub table: Option<String>,
     pub operator: ToolCallReadOperator,
     /// The values it compares with, read as label values: a machine ID is
     /// named only by `resolved`. `between` has two.

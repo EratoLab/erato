@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 fn condition(column: &str, operator: Op, values: &[&str]) -> PlainCondition {
     PlainCondition {
         column: column.to_string(),
+        table: None,
         operator,
         values: values.iter().map(|value| value.to_string()).collect(),
         values_omitted: 0,
@@ -126,7 +127,10 @@ fn reads() -> Vec<(&'static str, &'static str, PlainRead)> {
             "SELECT o.name, a.name FROM opportunity o INNER JOIN account a ON o.parentaccountid = a.accountid WHERE a.name = N'Müller GmbH'",
             read(
                 &["opportunity", "account"],
-                vec![condition("name", Op::Equals, &["Müller GmbH"])],
+                vec![PlainCondition {
+                    table: Some("account".to_string()),
+                    ..condition("name", Op::Equals, &["Müller GmbH"])
+                }],
                 0,
                 None,
             ),
@@ -243,7 +247,36 @@ fn reads() -> Vec<(&'static str, &'static str, PlainRead)> {
 }
 
 /// Statements that are not certainly one plain read, by why.
-const NOT_READS: [(&str, &str); 44] = [
+const NOT_READS: [(&str, &str); 52] = [
+    (
+        "an exclusive table lock",
+        "SELECT * FROM account WITH (TABLOCKX, HOLDLOCK)",
+    ),
+    (
+        "an exclusive row lock",
+        "SELECT * FROM account WITH (XLOCK)",
+    ),
+    (
+        "an update lock",
+        "SELECT * FROM account a WITH (UPDLOCK, HOLDLOCK) WHERE a.statecode = 0",
+    ),
+    ("a hold lock", "SELECT * FROM account WITH (HOLDLOCK)"),
+    (
+        "a read hint beside a lock",
+        "SELECT * FROM account WITH (NOLOCK, XLOCK)",
+    ),
+    (
+        "a line separator after a comment",
+        "SELECT name FROM account -- note\u{2028}DELETE FROM account",
+    ),
+    (
+        "a paragraph separator after a comment",
+        "SELECT name FROM account -- note\u{2029}DELETE FROM account",
+    ),
+    (
+        "a next line after a comment",
+        "SELECT name FROM account -- note\u{85}DELETE FROM account",
+    ),
     ("empty", ""),
     ("blank", "  \n "),
     ("malformed", "SELEC name FROM account"),
@@ -662,4 +695,187 @@ fn a_long_statement_the_card_shows_as_text_is_still_the_statement() {
         ),
         None
     );
+}
+
+#[test]
+fn read_hints_that_take_no_lock_stay_a_read() {
+    for hint in [
+        "NOLOCK",
+        "READUNCOMMITTED",
+        "READCOMMITTED",
+        "READPAST",
+        "NOWAIT",
+        "NOEXPAND",
+    ] {
+        let sql = format!("SELECT name FROM account WITH ({hint})");
+        assert!(plain_read(&sql).is_some(), "{sql}");
+    }
+}
+
+/// Each CTE refers to the one before it four times; read again at every
+/// reference, twenty of them would take hours.
+fn chained_ctes(count: usize) -> String {
+    let mut sql = String::from("WITH c0 AS (SELECT a FROM t)");
+    for index in 1..=count {
+        let previous = index - 1;
+        sql.push_str(&format!(
+            ", c{index} AS (SELECT a FROM c{previous} JOIN c{previous} x1 ON 1=1 JOIN c{previous} x2 ON 1=1 JOIN c{previous} x3 ON 1=1)"
+        ));
+    }
+    sql.push_str(&format!(" SELECT a FROM c{count}"));
+    sql
+}
+
+#[test]
+fn a_cte_named_many_times_is_read_once() {
+    let sql = chained_ctes(20);
+    let started = std::time::Instant::now();
+    let read = plain_read(&sql).expect("a read");
+    assert!(
+        started.elapsed() < std::time::Duration::from_millis(500),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(read.tables, ["t"]);
+    // Each ON 1=1 is a join condition beyond a key; they are counted.
+    assert!(read.undescribed > 0);
+}
+
+#[test]
+fn a_statement_longer_than_the_walk_counts_the_rest() {
+    // Larger than a call may hold, so the walk itself is what stops it.
+    let joins: String = (0..MAX_DESCRIBE_STEPS + 500)
+        .map(|index| format!(" JOIN t{index} ON a.x = t{index}.x"))
+        .collect();
+    let sql = format!("SELECT a.x FROM a{joins} WHERE a.x = 1");
+    let Statement::Query(query) = Parser::new(&MSSQL)
+        .try_with_sql(&sql)
+        .unwrap()
+        .parse_statements()
+        .unwrap()
+        .remove(0)
+    else {
+        unreachable!()
+    };
+    let read = describe(&query);
+    assert_eq!(read.tables.len(), MAX_TABLES);
+    // The rest of the statement, its condition included, counts as one.
+    assert!(read.conditions.is_empty());
+    assert_eq!(read.undescribed, 1);
+}
+
+#[test]
+fn join_conditions_beyond_the_key_are_counted_and_conditions_name_their_table() {
+    let read = plain_read(
+        "SELECT * FROM account a JOIN contact c ON c.parentcustomerid = a.accountid AND c.statecode = 1",
+    )
+    .expect("a read");
+    assert_eq!(read.tables, ["account", "contact"]);
+    assert!(read.conditions.is_empty());
+    assert_eq!(read.undescribed, 1);
+    let read = plain_read(
+        "SELECT * FROM opportunity JOIN account ON opportunity.customerid = account.accountid \
+         WHERE account.name = 'Müller GmbH' AND statecode = 0",
+    )
+    .expect("a read");
+    assert_eq!(read.conditions[0].table.as_deref(), Some("account"));
+    // A column that names no table keeps none: which one is not certain.
+    assert_eq!(read.conditions[1].table, None);
+    let read = plain_read("SELECT * FROM account a WHERE a.name = 'x'").expect("a read");
+    assert_eq!(read.conditions[0].table, None);
+}
+
+#[test]
+fn a_tool_that_acts_on_the_rows_a_statement_picks_is_no_read() {
+    let sql = "SELECT name FROM account WHERE statecode = 0";
+    for name in [
+        "deactivate_matching",
+        "approve_records",
+        "win_opportunities",
+        "qualify_leads",
+        "fulfill_orders",
+        "dedupe",
+        "cleanup",
+        "migrate",
+        "import_records",
+        "process_records",
+        "bulk_operation",
+        "schedule_query",
+        "subscribe",
+        "watch_query",
+        "cache_query",
+        "store_query",
+        "snapshot",
+        "materialize_view",
+        "define_view",
+        "export_query",
+        "log_query",
+        "queue_query",
+        "enqueue",
+        "trigger",
+    ] {
+        for member in ["query", "sql"] {
+            let read = display_read(&tool(name, None), &json!({ member: sql }));
+            assert_eq!(read, None, "{name} {member}");
+            // The server's word does not open it either.
+            let read = display_read(&tool(name, read_only()), &json!({ member: sql }));
+            assert_eq!(read, None, "{name} {member} read-only hint");
+        }
+    }
+    for (name, arguments) in [
+        (
+            "export_query",
+            json!({"sql": sql, "destination": "s3://bucket/x"}),
+        ),
+        (
+            "run_query",
+            json!({"sql": sql, "destination": "https://example.com/upload"}),
+        ),
+        ("run_query", json!({"sql": sql, "channel": "C0123"})),
+        ("run_query", json!({"sql": sql, "snapshot": "s1"})),
+        ("run_query", json!({"sql": sql, "parent": "p1"})),
+        ("run_query", json!({"sql": sql, "branch": "b1"})),
+        (
+            "run_query",
+            json!({"sql": sql, "filter": "x'; EXEC purge; --"}),
+        ),
+        ("execute_sql", json!({"project_id": "p1", "query": sql})),
+        (
+            "run_query",
+            json!({"params": {"sql": sql, "destination": "s3://x"}}),
+        ),
+    ] {
+        assert_eq!(
+            display_read(&tool(name, None), &arguments),
+            None,
+            "{name} {arguments}"
+        );
+    }
+}
+
+#[test]
+fn a_tool_that_only_reads_or_runs_keeps_its_read() {
+    let sql = "SELECT name FROM account WHERE statecode = 0";
+    for name in [
+        "read_query",
+        "query",
+        "execute_sql",
+        "run_query",
+        "run_sql",
+        "sql_query",
+        "read_data",
+        "server_read_query",
+    ] {
+        let read = display_read(&tool(name, None), &json!({"sql": sql}));
+        assert!(read.is_some_and(|read| read.query.is_some()), "{name}");
+    }
+    for arguments in [
+        json!({"sql": sql, "top": 10, "cursor": "abc"}),
+        json!({"sql": sql, "tablename": "account"}),
+        json!({"sql": sql, "hasUserApproved": true}),
+        json!({"params": {"sql": sql, "limit": 5}}),
+    ] {
+        let read = display_read(&tool("run_query", None), &arguments);
+        assert!(read.is_some_and(|read| read.query.is_some()), "{arguments}");
+    }
 }

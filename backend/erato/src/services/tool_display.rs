@@ -248,7 +248,8 @@ fn labelled_display(
                     .mcp_servers
                     .get(server_id)
                     .map(|server| &server.glossary);
-                let mut read = label::sql_read(tool, arguments, consent, shown, glossary)?;
+                let mut read =
+                    label::sql_read(server_id, tool, arguments, consent, shown, glossary)?;
                 if let Some(server) = &scope {
                     context.resolve_query(&mut read, server);
                 }

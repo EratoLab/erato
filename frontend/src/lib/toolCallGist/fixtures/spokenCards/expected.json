@@ -7982,7 +7982,7 @@
         {
           "id": "detail:prioritycode",
           "role": "detail",
-          "text": "prioritycode ist 0, 1, 2 oder drei weitere.",
+          "text": "prioritycode ist 0, 1, 2 oder drei weitere Werte.",
           "mustSay": false,
           "values": [
             {
@@ -8085,7 +8085,7 @@
         {
           "id": "detail:prioritycode",
           "role": "detail",
-          "text": "prioritycode is 0, 1, 2 or three more.",
+          "text": "prioritycode is 0, 1, 2 or three more values.",
           "mustSay": false,
           "values": [
             {
@@ -8280,7 +8280,7 @@
         {
           "id": "detail:name",
           "role": "detail",
-          "text": "name ist Beispiel Industrie GmbH.",
+          "text": "name von account ist Beispiel Industrie GmbH.",
           "mustSay": false,
           "values": [
             {
@@ -8288,6 +8288,13 @@
               "value": {
                 "kind": "text",
                 "text": "name"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
               }
             },
             {
@@ -8342,7 +8349,7 @@
         {
           "id": "detail:name",
           "role": "detail",
-          "text": "name is Beispiel Industrie GmbH.",
+          "text": "name of account is Beispiel Industrie GmbH.",
           "mustSay": false,
           "values": [
             {
@@ -8350,6 +8357,13 @@
               "value": {
                 "kind": "text",
                 "text": "name"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
               }
             },
             {

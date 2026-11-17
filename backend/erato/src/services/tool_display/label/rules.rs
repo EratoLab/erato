@@ -875,26 +875,99 @@ fn holds_write_text(arguments: &Value) -> bool {
     false
 }
 
-/// Whether a call may be described by the one SQL statement it carries: the
-/// tool does not say it may change things, and neither its name nor another
-/// argument names a verb other than running, a loss or a change of state.
-/// The statement itself is judged by `sql::plain_read`.
+/// Words a tool that only runs the statement it is given may hold in its
+/// name: read verbs, run words, and nouns for the statement or what it reads.
+/// Any other word may say what the tool does with the rows the statement
+/// picks, as `deactivate_matching` or `export_query` do.
+const STATEMENT_TOOL_WORDS: [&str; 15] = [
+    "run",
+    "execute",
+    "exec",
+    "query",
+    "sql",
+    "statement",
+    "data",
+    "row",
+    "rows",
+    "record",
+    "records",
+    "result",
+    "results",
+    "table",
+    "tables",
+];
+
+/// Whether a call may be described by the one SQL statement it carries: every
+/// word of the tool's name, after the words of its server's id, reads or runs
+/// the statement; the tool does not say it may change things; and nothing
+/// else in the arguments names a verb, a loss or a change of state. A
+/// `readOnlyHint: true` does not open it: hints only cross-check a label, and
+/// a name that acts contradicts the hint. The statement itself is judged by
+/// `sql::plain_read`.
 pub fn may_read_by_statement(
+    server_id: &str,
     tool_name: &str,
     arguments: &Value,
     annotations: Option<&ToolAnnotations>,
 ) -> bool {
     let name = name_words(text_prefix(tool_name, MAX_NAME_BYTES));
+    let server = name_words(text_prefix(server_id, MAX_NAME_BYTES));
+    let prefix = name
+        .iter()
+        .zip(&server)
+        .take_while(|(word, server)| word == server)
+        .count();
+    let own = &name[prefix..];
+    let only_reads_or_runs = !own.is_empty()
+        && own.iter().all(|word| {
+            READ_VERBS.contains(&word.as_str()) || STATEMENT_TOOL_WORDS.contains(&word.as_str())
+        });
     let may_change = annotations.is_some_and(|hints| {
         hints.read_only_hint == Some(false) || hints.destructive_hint == Some(true)
     });
-    matches!(
-        verb(&name, Some(arguments)).action,
-        ToolCallAction::Other | ToolCallAction::Run
-    ) && !has(&name, &STATE_WORDS)
+    only_reads_or_runs
+        && matches!(
+            verb(&name, Some(arguments)).action,
+            ToolCallAction::Other | ToolCallAction::Run
+        )
         && !may_change
         && !sounds_like_a_loss(tool_name, arguments)
         && !sets_more_than_a_read(arguments)
+}
+
+/// Whether every argument a call sets beside its statement at `statement`,
+/// at any level on the way to it, pages, names the table or is the consent
+/// argument: what a statement read says cannot hold anything else, so
+/// anything else may change what the call does.
+pub fn only_the_statement_is_set(
+    arguments: &Value,
+    statement: &str,
+    approval_argument: Option<&str>,
+) -> bool {
+    let Some(path) = statement.strip_prefix('/') else {
+        return false;
+    };
+    let mut level = arguments;
+    for token in path.split('/') {
+        let member = pointer::unescape(token);
+        let Some(members) = level.as_object() else {
+            return false;
+        };
+        for (other, value) in members.iter().take(MAX_SEARCH_VALUES) {
+            if *other == *member || !is_set(value) || is_consent_member(other, approval_argument) {
+                continue;
+            }
+            let words = name_words(text_prefix(other, MAX_NAME_BYTES));
+            if !(has(&words, &PAGING_WORDS) || is_one_of(other, &TABLE_MEMBERS)) {
+                return false;
+            }
+        }
+        let Some(next) = members.get(member.as_ref()) else {
+            return false;
+        };
+        level = next;
+    }
+    true
 }
 
 /// The one string in the arguments that has the shape of an SQL statement,

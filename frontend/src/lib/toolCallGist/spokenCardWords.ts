@@ -933,9 +933,37 @@ const readConditionSentence = (
       is_empty: `${column} is empty.`,
       is_not_empty: `${column} is not empty.`,
       in: `${column} is ${value}.`,
-      not_in: `${column} is none of ${value}.`,
-      between: `${column} is between ${value} and ${second}.`,
+      neither: `${column} is neither ${value} nor ${second}.`,
+      not_in: `${column} is not ${value}.`,
+      between: select(kind, {
+        date: `${column} is between ${value} and ${second}.`,
+        other: `${column} is between ${value} and ${second}.`,
+      }),
       other: `${column} is compared with ${value}.`,
+    }),
+  });
+
+/** A column of one of several tables a statement reads. */
+const readColumnOf = (column: string, table: string): string =>
+  t({ id: "spokenCard.read.columnOf", message: `${column} of ${table}` });
+
+/** Tables past the ones said, counted, after "from the tables". */
+const readMoreTables = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.read.moreTables",
+    message: plural(count, {
+      one: "one more table",
+      other: `${countWord} more tables`,
+    }),
+  });
+
+/** Values of a condition past the ones said, counted. */
+const readMoreValues = (count: number, countWord: string): string =>
+  t({
+    id: "spokenCard.read.moreValues",
+    message: plural(count, {
+      one: "one more value",
+      other: `${countWord} more values`,
     }),
   });
 
@@ -1203,7 +1231,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
       .map((entry) => value(entry));
     const more = values.length - said.length + omitted;
     return new Intl.ListFormat(code.locale, { type }).format(
-      more > 0 ? [...said, moreEntries(more, count(more))] : said,
+      more > 0 ? [...said, readMoreValues(more, count(more))] : said,
     );
   };
 
@@ -1229,7 +1257,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
               facts.tablesOmitted > 0
                 ? list([
                     ...facts.tables,
-                    moreEntries(
+                    readMoreTables(
                       facts.tablesOmitted,
                       count(facts.tablesOmitted),
                     ),
@@ -1278,20 +1306,26 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     condition(condition: SpokenCondition) {
       const first = condition.values.at(0);
       const second = condition.values.at(1);
+      const column =
+        condition.table === undefined
+          ? condition.column
+          : readColumnOf(condition.column, condition.table);
       if (condition.longWords !== undefined) {
         return readConditionLongSentence(
-          condition.column,
+          column,
           String(roundWords(condition.longWords)),
         );
       }
-      const many =
-        condition.operator === "in" || condition.operator === "not_in";
+      const neither = "neither";
+      const operator =
+        condition.operator === "not_in" &&
+        condition.values.length === 2 &&
+        condition.valuesOmitted === 0
+          ? neither
+          : condition.operator;
+      const many = operator === "in" || operator === "not_in";
       const said = many
-        ? someValues(
-            condition.values,
-            condition.valuesOmitted,
-            condition.operator === "in" ? "disjunction" : "conjunction",
-          )
+        ? someValues(condition.values, condition.valuesOmitted, "disjunction")
         : first
           ? value(first)
           : "";
@@ -1299,9 +1333,9 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         first !== undefined &&
         (first.kind === "date" || first.kind === "datetime");
       return readConditionSentence(
-        condition.operator,
+        operator,
         dated ? "date" : "other",
-        condition.column,
+        column,
         said,
         second ? value(second) : "",
       );

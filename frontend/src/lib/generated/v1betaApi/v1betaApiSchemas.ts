@@ -5397,6 +5397,11 @@ export type ToolCallReadCondition = {
   column: string;
   operator: ToolCallReadOperator;
   /**
+   * The table the column belongs to, when the statement reads several
+   * and names it.
+   */
+  table?: string;
+  /**
    * The values it compares with, read as label values: a machine ID is
    * named only by `resolved`. `between` has two.
    */

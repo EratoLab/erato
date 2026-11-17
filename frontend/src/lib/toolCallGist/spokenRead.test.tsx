@@ -114,8 +114,8 @@ describe("the spoken sentence for reads, across read shapes", () => {
     [
       "a long value named, many values counted",
       "read-06-sql-long-values",
-      "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen: description wird mit einem Text von etwa 20 Wörtern verglichen, er steht auf dem Bildschirm. prioritycode ist 0, 1, 2 oder drei weitere.",
-      "I'd like to list tasks in Dynamics 365, with these conditions: description is compared with a text of about 20 words, shown on screen. prioritycode is 0, 1, 2 or three more.",
+      "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen: description wird mit einem Text von etwa 20 Wörtern verglichen, er steht auf dem Bildschirm. prioritycode ist 0, 1, 2 oder drei weitere Werte.",
+      "I'd like to list tasks in Dynamics 365, with these conditions: description is compared with a text of about 20 words, shown on screen. prioritycode is 0, 1, 2 or three more values.",
     ],
     [
       "a generic lookup by ID",
@@ -126,8 +126,8 @@ describe("the spoken sentence for reads, across read shapes", () => {
     [
       "a join",
       "read-08-sql-join",
-      "Ich möchte in Dynamics 365 aus den Tabellen opportunity und account Datensätze lesen, mit diesen Bedingungen: name ist Beispiel Industrie GmbH.",
-      "I'd like to read records from the tables opportunity and account in Dynamics 365, with these conditions: name is Beispiel Industrie GmbH.",
+      "Ich möchte in Dynamics 365 aus den Tabellen opportunity und account Datensätze lesen, mit diesen Bedingungen: name von account ist Beispiel Industrie GmbH.",
+      "I'd like to read records from the tables opportunity and account in Dynamics 365, with these conditions: name of account is Beispiel Industrie GmbH.",
     ],
     [
       "a record nobody read",
@@ -213,6 +213,66 @@ describe("the spoken sentence for reads, across read shapes", () => {
     );
     expect(said).toContain(
       "link ist ein Eintrag, dessen Kennung auf dem Bildschirm steht.",
+    );
+  });
+
+  it("says more tables, more values, two excluded values and a date range as people do", () => {
+    const value = (text: string) => ({ path: "/q", text });
+    const label: ToolCallLabel = {
+      action: "other",
+      object_kind: "row",
+      source: "generic",
+      read: {
+        object_kind: "row",
+        query: {
+          tables: ["a", "b", "c", "d"],
+          tables_omitted: 1,
+          conditions: [
+            {
+              column: "city",
+              operator: "not_in",
+              values: [value("Berlin"), value("Köln")],
+            },
+            {
+              column: "region",
+              operator: "not_in",
+              values: [value("Nord"), value("Süd"), value("Ost")],
+            },
+            {
+              column: "createdon",
+              operator: "between",
+              values: [value("2026-01-01"), value("2026-03-31")],
+            },
+          ],
+        },
+      },
+    };
+    expect(sayLabel(label, {})).toBe(
+      "Ich möchte in CRM aus den Tabellen a, b, c, d und einer weiteren Tabelle Datensätze lesen, mit diesen Bedingungen: city ist weder Berlin noch Köln. region ist nicht Nord, Süd oder Ost. createdon liegt zwischen dem 1. Januar 2026 und dem 31. März 2026. Bitte auf dem Bildschirm bestätigen.",
+    );
+    expect(sayLabel(label, {}, "en")).toBe(
+      "I'd like to read records from the tables a, b, c, d and one more table in CRM, with these conditions: city is neither Berlin nor Köln. region is not Nord, Süd or Ost. createdon is between 1 January 2026 and 31 March 2026. Please confirm on screen.",
+    );
+    const more = {
+      ...label,
+      read: {
+        object_kind: "row",
+        query: {
+          tables: ["a", "b", "c", "d"],
+          tables_omitted: 3,
+          conditions: [
+            {
+              column: "code",
+              operator: "in",
+              values: [value("1"), value("2"), value("3")],
+              values_omitted: 1,
+            },
+          ],
+        },
+      },
+    } as ToolCallLabel;
+    expect(sayLabel(more, {})).toBe(
+      "Ich möchte in CRM aus den Tabellen a, b, c, d und drei weiteren Tabellen Datensätze lesen, mit diesen Bedingungen: code ist 1, 2, 3 oder ein weiterer Wert. Bitte auf dem Bildschirm bestätigen.",
     );
   });
 

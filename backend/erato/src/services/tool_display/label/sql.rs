@@ -16,6 +16,7 @@ use sqlparser::dialect::{
 };
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::{Token, Tokenizer};
+use std::collections::HashSet;
 
 /// Longer statements are not parsed.
 const MAX_SQL_BYTES: usize = 16 * 1024;
@@ -98,6 +99,16 @@ const NOT_A_READ_WORDS: [&str; 56] = [
     "RECEIVE",
     "LOCK",
     "COPY",
+];
+
+/// Table hints that take no update or exclusive lock.
+const READ_HINTS: [&str; 6] = [
+    "NOLOCK",
+    "READUNCOMMITTED",
+    "READCOMMITTED",
+    "READPAST",
+    "NOWAIT",
+    "NOEXPAND",
 ];
 
 /// Functions that only compute a value from their arguments. Any other
@@ -195,6 +206,9 @@ pub(super) struct PlainRead {
 #[derive(Debug, PartialEq)]
 pub(super) struct PlainCondition {
     pub column: String,
+    /// The table the column belongs to, when the statement reads several and
+    /// the column names its table or alias.
+    pub table: Option<String>,
     pub operator: ToolCallReadOperator,
     pub values: Vec<String>,
     pub values_omitted: u32,
@@ -228,7 +242,13 @@ fn after_leading_comments(text: &str) -> &str {
 /// SELECT, alone, that only reads tables and calls only functions on the
 /// pure list. `None` for anything else, including what no dialect parses.
 pub(super) fn plain_read(text: &str) -> Option<PlainRead> {
-    if text.trim().is_empty() || text.len() > MAX_SQL_BYTES || !only_read_words(text) {
+    // Whether a `--` comment ends at a Unicode line separator differs
+    // between servers, so a statement holding one is not certain.
+    if text.trim().is_empty()
+        || text.len() > MAX_SQL_BYTES
+        || text.contains(['\u{2028}', '\u{2029}', '\u{85}'])
+        || !only_read_words(text)
+    {
         return None;
     }
     let statement = dialects().into_iter().find_map(|dialect| {
@@ -456,10 +476,13 @@ fn table_reads(table: &TableFactor) -> bool {
         } => {
             plain_name(name)
                 && args.is_none()
-                // Table hints such as `WITH (NOLOCK)` are bare words.
-                && with_hints
-                    .iter()
-                    .all(|hint| matches!(hint, Expr::Identifier(_)))
+                // `WITH (NOLOCK)` reads; `XLOCK`, `UPDLOCK` or `TABLOCKX`
+                // lock as `FOR UPDATE` does.
+                && with_hints.iter().all(|hint| {
+                    matches!(hint, Expr::Identifier(ident) if READ_HINTS
+                        .iter()
+                        .any(|read| ident.value.eq_ignore_ascii_case(read)))
+                })
                 && version.is_none()
                 && !with_ordinality
                 && partitions.is_empty()
@@ -660,28 +683,57 @@ fn arguments_read(arguments: &FunctionArguments) -> bool {
 /// A CTE by its name, with what it reads.
 type Ctes<'a> = Vec<(&'a str, &'a Query)>;
 
+/// Steps the description takes at most; the rest of a statement counts as
+/// one condition not said. The allow-list above is linear, but a CTE named
+/// in several places would otherwise be read again at every place.
+const MAX_DESCRIBE_STEPS: usize = 2_000;
+
+/// What reading a statement for its description shares.
+#[derive(Default)]
+struct Walk {
+    read: PlainRead,
+    /// CTEs read already, by address: each is read once per statement.
+    expanded: HashSet<usize>,
+    steps: usize,
+    cut: bool,
+    /// Table aliases of the outermost SELECT, lower case, with their tables.
+    aliases: Vec<(String, String)>,
+}
+
+impl Walk {
+    /// Whether the budget allows one more step.
+    fn step(&mut self) -> bool {
+        self.steps += 1;
+        if self.steps > MAX_DESCRIBE_STEPS {
+            self.cut = true;
+        }
+        !self.cut
+    }
+}
+
 fn describe(query: &Query) -> PlainRead {
-    let mut read = PlainRead {
-        limit: limit_of(query),
-        ..PlainRead::default()
-    };
+    let mut walk = Walk::default();
+    walk.read.limit = limit_of(query);
     let ctes = ctes_of(query);
     match query.body.as_ref() {
         SetExpr::Select(select) => {
-            if read.limit.is_none() {
-                read.limit = top_of(select);
+            if walk.read.limit.is_none() {
+                walk.read.limit = top_of(select);
             }
-            select_tables(select, &ctes, &mut read, 0);
+            select_tables(select, &ctes, &mut walk, 0, true);
             if let Some(selection) = &select.selection {
-                add_conditions(selection, &mut read);
+                add_conditions(selection, &mut walk);
             }
             if select.having.is_some() {
-                read.undescribed += 1;
+                walk.read.undescribed += 1;
             }
         }
-        other => set_tables(other, &ctes, &mut read, 0),
+        other => set_tables(other, &ctes, &mut walk, 0),
     }
-    read
+    if walk.cut {
+        walk.read.undescribed += 1;
+    }
+    walk.read
 }
 
 fn ctes_of(query: &Query) -> Ctes<'_> {
@@ -733,66 +785,119 @@ fn whole_number(expr: &Expr) -> Option<u64> {
 }
 
 /// The tables of a query nested somewhere; its conditions count as one.
-fn query_tables(query: &Query, ctes: &Ctes<'_>, read: &mut PlainRead, depth: usize) {
+fn query_tables(query: &Query, ctes: &Ctes<'_>, walk: &mut Walk, depth: usize) {
     let mut inner = ctes_of(query);
     inner.extend(ctes.iter().copied());
-    set_tables(&query.body, &inner, read, depth + 1);
+    set_tables(&query.body, &inner, walk, depth + 1);
 }
 
-fn set_tables(body: &SetExpr, ctes: &Ctes<'_>, read: &mut PlainRead, depth: usize) {
-    if depth > MAX_DEPTH {
-        read.undescribed += 1;
+fn set_tables(body: &SetExpr, ctes: &Ctes<'_>, walk: &mut Walk, depth: usize) {
+    if depth > MAX_DEPTH || !walk.step() {
         return;
     }
     match body {
         SetExpr::Select(select) => {
-            select_tables(select, ctes, read, depth);
-            if select.selection.is_some() || select.having.is_some() {
-                read.undescribed += 1;
+            let joined = select_tables(select, ctes, walk, depth, false);
+            if select.selection.is_some() || select.having.is_some() || joined > 0 {
+                walk.read.undescribed += 1;
             }
         }
-        SetExpr::Query(query) => query_tables(query, ctes, read, depth),
+        SetExpr::Query(query) => query_tables(query, ctes, walk, depth),
         SetExpr::SetOperation { left, right, .. } => {
-            set_tables(left, ctes, read, depth + 1);
-            set_tables(right, ctes, read, depth + 1);
+            set_tables(left, ctes, walk, depth + 1);
+            set_tables(right, ctes, walk, depth + 1);
         }
         _ => {}
     }
 }
 
-fn select_tables(select: &Select, ctes: &Ctes<'_>, read: &mut PlainRead, depth: usize) {
+/// Reads the tables of a SELECT, and returns how many conditions its joins
+/// add beyond a plain equality of two columns. The outermost SELECT counts
+/// each of them and keeps its table aliases.
+fn select_tables(
+    select: &Select,
+    ctes: &Ctes<'_>,
+    walk: &mut Walk,
+    depth: usize,
+    outermost: bool,
+) -> u32 {
+    let mut joined = 0;
     for tables in &select.from {
-        table_names(&tables.relation, ctes, read, depth);
+        table_names(&tables.relation, ctes, walk, depth, outermost);
         for join in &tables.joins {
-            table_names(&join.relation, ctes, read, depth);
+            table_names(&join.relation, ctes, walk, depth, outermost);
+            joined += join_conditions(join);
         }
     }
+    if outermost {
+        walk.read.undescribed += joined;
+    }
+    joined
 }
 
-fn table_names(table: &TableFactor, ctes: &Ctes<'_>, read: &mut PlainRead, depth: usize) {
+/// Conditions of a join's ON beyond plain equalities of two columns.
+fn join_conditions(join: &Join) -> u32 {
+    let on = match &join.join_operator {
+        JoinOperator::Join(JoinConstraint::On(on))
+        | JoinOperator::Inner(JoinConstraint::On(on))
+        | JoinOperator::Left(JoinConstraint::On(on))
+        | JoinOperator::LeftOuter(JoinConstraint::On(on))
+        | JoinOperator::Right(JoinConstraint::On(on))
+        | JoinOperator::RightOuter(JoinConstraint::On(on))
+        | JoinOperator::FullOuter(JoinConstraint::On(on))
+        | JoinOperator::CrossJoin(JoinConstraint::On(on)) => on,
+        _ => return 0,
+    };
+    let mut parts = Vec::new();
+    conjuncts(on, &mut parts);
+    let keys = |part: &&Expr| {
+        matches!(part, Expr::BinaryOp { left, op: BinaryOperator::Eq, right }
+            if column(left).is_some() && column(right).is_some())
+    };
+    u32::try_from(parts.iter().filter(|part| !keys(part)).count()).unwrap_or(u32::MAX)
+}
+
+fn table_names(
+    table: &TableFactor,
+    ctes: &Ctes<'_>,
+    walk: &mut Walk,
+    depth: usize,
+    outermost: bool,
+) {
+    if depth > MAX_DEPTH || !walk.step() {
+        return;
+    }
     match table {
-        TableFactor::Table { name, .. } => {
+        TableFactor::Table { name, alias, .. } => {
             let Some(ObjectNamePart::Identifier(last)) = name.0.last() else {
                 return;
             };
             let cte = match name.0.as_slice() {
                 [_] => ctes
                     .iter()
-                    .position(|(alias, _)| alias.eq_ignore_ascii_case(&last.value)),
+                    .find(|(cte, _)| cte.eq_ignore_ascii_case(&last.value)),
                 _ => None,
             };
-            if let Some(at) = cte {
-                // A CTE reads the tables it is made of; one that names itself
-                // is read once.
-                let (_, query) = ctes[at];
-                let rest: Ctes<'_> = ctes
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, _)| *index != at)
-                    .map(|(_, cte)| *cte)
-                    .collect();
-                query_tables(query, &rest, read, depth);
-            } else if !read
+            if let Some((_, query)) = cte {
+                // A CTE reads the tables it is made of, read once however
+                // often it is named, itself included.
+                if walk
+                    .expanded
+                    .insert(std::ptr::from_ref::<Query>(query) as usize)
+                {
+                    query_tables(query, ctes, walk, depth);
+                }
+                return;
+            }
+            if outermost {
+                let named = alias
+                    .as_ref()
+                    .map_or(&last.value, |alias| &alias.name.value);
+                walk.aliases
+                    .push((named.to_lowercase(), last.value.clone()));
+            }
+            let read = &mut walk.read;
+            if !read
                 .tables
                 .iter()
                 .any(|seen| seen.eq_ignore_ascii_case(&last.value))
@@ -804,26 +909,47 @@ fn table_names(table: &TableFactor, ctes: &Ctes<'_>, read: &mut PlainRead, depth
                 }
             }
         }
-        TableFactor::Derived { subquery, .. } => query_tables(subquery, ctes, read, depth),
+        TableFactor::Derived { subquery, .. } => query_tables(subquery, ctes, walk, depth),
         TableFactor::NestedJoin {
             table_with_joins, ..
         } => {
-            table_names(&table_with_joins.relation, ctes, read, depth + 1);
+            table_names(&table_with_joins.relation, ctes, walk, depth + 1, outermost);
             for join in &table_with_joins.joins {
-                table_names(&join.relation, ctes, read, depth + 1);
+                table_names(&join.relation, ctes, walk, depth + 1, outermost);
+                let joined = join_conditions(join);
+                walk.read.undescribed += if outermost {
+                    joined
+                } else {
+                    u32::from(joined > 0)
+                };
             }
         }
         _ => {}
     }
 }
 
-fn add_conditions(selection: &Expr, read: &mut PlainRead) {
+fn add_conditions(selection: &Expr, walk: &mut Walk) {
     let mut parts = Vec::new();
     conjuncts(selection, &mut parts);
+    let several = walk.read.tables.len() + walk.read.tables_omitted as usize > 1;
     for part in parts {
+        if !walk.step() {
+            return;
+        }
         match condition(part) {
-            Some(found) if read.conditions.len() < MAX_CONDITIONS => read.conditions.push(found),
-            _ => read.undescribed += 1,
+            Some(mut found) if walk.read.conditions.len() < MAX_CONDITIONS => {
+                if several {
+                    let named = condition_column(part).and_then(qualifier);
+                    found.table = named.and_then(|named| {
+                        walk.aliases
+                            .iter()
+                            .find(|(alias, _)| *alias == named)
+                            .map(|(_, table)| table.clone())
+                    });
+                }
+                walk.read.conditions.push(found);
+            }
+            _ => walk.read.undescribed += 1,
         }
     }
 }
@@ -857,6 +983,7 @@ fn conjuncts<'a>(expr: &'a Expr, parts: &mut Vec<&'a Expr>) {
 fn condition(expr: &Expr) -> Option<PlainCondition> {
     let one = |column: String, operator, value: String| PlainCondition {
         column,
+        table: None,
         operator,
         values: vec![value],
         values_omitted: 0,
@@ -892,12 +1019,14 @@ fn condition(expr: &Expr) -> Option<PlainCondition> {
         }
         Expr::IsNull(inner) => Some(PlainCondition {
             column: column(inner)?,
+            table: None,
             operator: ToolCallReadOperator::IsEmpty,
             values: Vec::new(),
             values_omitted: 0,
         }),
         Expr::IsNotNull(inner) => Some(PlainCondition {
             column: column(inner)?,
+            table: None,
             operator: ToolCallReadOperator::IsNotEmpty,
             values: Vec::new(),
             values_omitted: 0,
@@ -916,6 +1045,7 @@ fn condition(expr: &Expr) -> Option<PlainCondition> {
             let omitted = values.len().saturating_sub(MAX_CONDITION_VALUES);
             Some(PlainCondition {
                 column,
+                table: None,
                 operator: if *negated {
                     ToolCallReadOperator::NotIn
                 } else {
@@ -932,6 +1062,7 @@ fn condition(expr: &Expr) -> Option<PlainCondition> {
             high,
         } => Some(PlainCondition {
             column: column(expr)?,
+            table: None,
             operator: ToolCallReadOperator::Between,
             values: vec![literal(low)?, literal(high)?],
             values_omitted: 0,
@@ -968,6 +1099,31 @@ fn like_pattern(pattern: &str) -> Option<(ToolCallReadOperator, String)> {
         (false, false) => ToolCallReadOperator::Equals,
     };
     Some((operator, middle.to_string()))
+}
+
+/// The expression of the column a simple condition compares.
+fn condition_column(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::Nested(inner) => condition_column(inner),
+        Expr::BinaryOp { left, right, .. } => [left, right]
+            .into_iter()
+            .map(Box::as_ref)
+            .find(|side| column(side).is_some()),
+        Expr::IsNull(inner) | Expr::IsNotNull(inner) => Some(inner),
+        Expr::In { expr, .. } | Expr::Between { expr, .. } | Expr::Like { expr, .. } => Some(expr),
+        _ => None,
+    }
+}
+
+/// The table or alias a column names before its own name, lower case.
+fn qualifier(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
+            Some(parts[parts.len() - 2].value.to_lowercase())
+        }
+        Expr::Nested(inner) => qualifier(inner),
+        _ => None,
+    }
 }
 
 fn column(expr: &Expr) -> Option<String> {

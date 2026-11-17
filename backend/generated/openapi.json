@@ -15174,6 +15174,10 @@
           "operator": {
             "$ref": "#/components/schemas/ToolCallReadOperator"
           },
+          "table": {
+            "type": "string",
+            "description": "The table the column belongs to, when the statement reads several\nand names it."
+          },
           "values": {
             "type": "array",
             "items": {

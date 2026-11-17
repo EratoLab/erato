@@ -7330,6 +7330,7 @@
               "conditions": [
                 {
                   "column": "name",
+                  "table": "account",
                   "operator": "equals",
                   "values": [
                     {

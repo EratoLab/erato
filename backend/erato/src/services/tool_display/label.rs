@@ -441,6 +441,7 @@ pub fn read_description(read: ToolCallLabel, filtered: bool) -> ToolCallRead {
 /// and the card holds that statement and no other change. Its values are
 /// read like a label's. A card never draws it.
 pub fn sql_read(
+    server_id: &str,
     tool: &rmcp::model::Tool,
     arguments: &Value,
     approval_argument: Option<&str>,
@@ -451,9 +452,10 @@ pub fn sql_read(
     let (pointer, text) = rules::the_sql_statement(arguments)?;
     // A card that does not know the member as SQL shows a long statement as
     // a text block; that block is the statement itself.
+    // Values the card lists are arguments, which `only_the_statement_is_set`
+    // holds to paging, the table and consent.
     let only_the_statement = shown.change.as_ref().is_none_or(|change| {
-        change.effects.is_empty()
-            && change.texts.iter().all(|block| block.path == pointer)
+        change.texts.iter().all(|block| block.path == pointer)
             && change.texts_omitted == 0
             && change.recipients.is_none()
             && change.batch.is_none()
@@ -467,13 +469,20 @@ pub fn sql_read(
     });
     if !matches!(shown.action, ToolCallAction::Other | ToolCallAction::Run)
         || !only_the_statement
-        || !rules::may_read_by_statement(&tool.name, arguments, tool.annotations.as_ref())
+        || !rules::may_read_by_statement(
+            server_id,
+            &tool.name,
+            arguments,
+            tool.annotations.as_ref(),
+        )
         // The card's own verb, run or none: a name that runs is no read verb.
         || !rules::cross_check(tool, arguments, shown.action).is_empty()
     {
         return None;
     }
-    rules::read_arguments(arguments, &[pointer.as_str()], false, approval_argument)?;
+    if !rules::only_the_statement_is_set(arguments, &pointer, approval_argument) {
+        return None;
+    }
     let mut plain = sql::plain_read(text)?;
     // A statement that reads no table has nothing to say beyond the tool.
     if plain.tables.is_empty() {
@@ -543,6 +552,10 @@ pub fn sql_read(
             Some(values) if !column.is_empty() => {
                 conditions.push(ToolCallReadCondition {
                     column,
+                    table: condition
+                        .table
+                        .as_deref()
+                        .map(|table| sanitize_display_text(table, MAX_DISPLAY_NAME_CHARS).text),
                     operator: condition.operator,
                     values,
                     values_omitted: condition.values_omitted,
