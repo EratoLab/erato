@@ -46,7 +46,7 @@ export function daysBetweenDateKeys(fromKey: string, toKey: string): number {
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
-function wallClockParts(date: Date, timeZone: string | undefined) {
+export function wallClockParts(date: Date, timeZone: string | undefined) {
   // eslint-disable-next-line lingui/no-unlocalized-strings -- format locale, not copy
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,

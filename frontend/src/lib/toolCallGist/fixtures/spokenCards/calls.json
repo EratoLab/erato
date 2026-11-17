@@ -161,6 +161,18 @@
       ]
     },
     {
+      "id": "create-14-list-entries",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-14-list-entries"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -292,6 +304,31 @@
       ],
       "calls": [
         "update-11-fifteen-emptied"
+      ]
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-12-list-replace-unknown"
+      ]
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-13-list-only-adds"
       ]
     },
     {
@@ -2979,6 +3016,119 @@
       }
     },
     {
+      "id": "create-14-list-entries",
+      "tool_name": "create_record",
+      "server_id": "crm",
+      "input": {
+        "fields": {
+          "name": "Linie 5 Service",
+          "tags": [
+            "Retrofit",
+            "Linie 4",
+            "Service",
+            "Ersatzteile"
+          ]
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "CRM",
+        "label": {
+          "action": "create",
+          "object_kind": "row",
+          "items": [
+            {
+              "title": {
+                "pointer": "/fields/name",
+                "values": [
+                  {
+                    "path": "/fields/name",
+                    "text": "Linie 5 Service"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/fields",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/fields/name",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/fields/tags",
+                    "kind": "list",
+                    "children": [
+                      {
+                        "path": "/fields/tags/0",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/fields/tags/1",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/fields/tags/2",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/fields/tags/3",
+                        "kind": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/fields/tags",
+                "name": "Tags",
+                "raw_name": "tags",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Retrofit"
+                  },
+                  {
+                    "text": "Linie 4"
+                  },
+                  {
+                    "text": "Service"
+                  },
+                  {
+                    "text": "Ersatzteile"
+                  }
+                ],
+                "list": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "complete": true
+          }
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "tool_name": "update_record",
       "server_id": "dynamics",
@@ -4596,6 +4746,227 @@
             "table": "opportunity",
             "notes": [
               "old_values_from_earlier"
+            ],
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "tool_name": "update_record",
+      "server_id": "crm",
+      "input": {
+        "id": "c_17",
+        "fields": {
+          "tags": [
+            "Retrofit",
+            "Linie 4"
+          ],
+          "stage": "Angebot"
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "CRM",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/id",
+                "values": [
+                  {
+                    "path": "/id",
+                    "text": "c_17"
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/fields/stage",
+                  "name": "stage",
+                  "values": [
+                    {
+                      "path": "/fields/stage",
+                      "text": "Angebot"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/id",
+                "kind": "id"
+              },
+              {
+                "path": "/fields",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/fields/tags",
+                    "kind": "list",
+                    "children": [
+                      {
+                        "path": "/fields/tags/0",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/fields/tags/1",
+                        "kind": "value"
+                      }
+                    ]
+                  },
+                  {
+                    "path": "/fields/stage",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/fields/tags",
+                "name": "Tags",
+                "raw_name": "tags",
+                "effect": "list_replaced",
+                "values": [
+                  {
+                    "text": "Retrofit"
+                  },
+                  {
+                    "text": "Linie 4"
+                  }
+                ],
+                "list": true
+              },
+              {
+                "path": "/fields/stage",
+                "name": "Stage",
+                "raw_name": "stage",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Angebot"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 1,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "notes": [
+              "list_replace_unknown"
+            ],
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "tool_name": "update_record",
+      "server_id": "crm",
+      "input": {
+        "id": "c_17",
+        "labels": [
+          "Retrofit",
+          "Service"
+        ]
+      },
+      "display": {
+        "title": "update_record",
+        "description": "Updates a record. It only adds labels.",
+        "description_truncated": false,
+        "server_name": "CRM",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/id",
+                "values": [
+                  {
+                    "path": "/id",
+                    "text": "c_17"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/id",
+                "kind": "id"
+              },
+              {
+                "path": "/labels",
+                "kind": "list",
+                "children": [
+                  {
+                    "path": "/labels/0",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/labels/1",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/labels",
+                "name": "Labels",
+                "raw_name": "labels",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Retrofit"
+                  },
+                  {
+                    "text": "Service"
+                  }
+                ],
+                "list": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "notes": [
+              "tool_says_adds_to_list"
             ],
             "complete": true
           }

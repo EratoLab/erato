@@ -1,4 +1,6 @@
 /* eslint-disable lingui/no-unlocalized-strings -- effect, note and piece names from the API and this module; the spoken words are in spokenCardWords */
+import { effectDisplayName } from "./cardLayout";
+import { addsOnToolsWord, changeLayout, listReplaceIsUnknown } from "./change";
 import { toolCallCardOf } from "./gist";
 import { spokenWordsFor } from "./spokenCardWords";
 import { earValue } from "./spokenValues";
@@ -128,9 +130,40 @@ export type SpokenDetail =
       loss: false;
     }
   | { type: "emptied"; field: string; loss: true }
-  | { type: "list_replaced"; field: string; values: EarValue[]; loss: true }
-  | { type: "list_removed"; field: string; values: EarValue[]; loss: true }
-  | { type: "list_added"; field: string; values: EarValue[]; loss: false }
+  | {
+      type: "list_replaced";
+      field: string;
+      values: EarValue[];
+      /** Entries the label could not keep. */
+      omitted: number;
+      /** The card cannot tell whether the list is replaced or added to. */
+      unknown: boolean;
+      loss: true;
+    }
+  /** Entries the tool says it removes: its word, as the card says. */
+  | {
+      type: "list_removed";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: true;
+    }
+  /** Entries the tool says it adds: its word, as the card says. */
+  | {
+      type: "list_added";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: false;
+    }
+  /** A list a call sets, with every entry. */
+  | {
+      type: "list_set";
+      field: string;
+      values: EarValue[];
+      omitted: number;
+      loss: false;
+    }
   | { type: "unreadable"; field: string; loss: false }
   /** A name a field of the call gives an item the card names only by its ID. */
   | { type: "named"; field: string; value: EarValue; loss: false }
@@ -250,13 +283,9 @@ const fieldName = (effect: { name: string; rawName: string }): string => {
   );
 };
 
-/** A link shows the linked record's name, so its field drops a last "ID". */
-const linkFieldName = (effect: ChangeEffect): string => {
-  const name = fieldName(effect);
-  if (!effect.link) return name;
-  const match = /^(.*\S)\s+id$/i.exec(name);
-  return match ? match[1] : name;
-};
+/** A field as its row on the card names it. */
+const effectField = (effect: ChangeEffect): string =>
+  fieldName({ name: effectDisplayName(effect), rawName: effect.rawName });
 
 /** Field names that say a value is a share of a hundred. */
 const PERCENT_FIELD = /percent|probability|prozent|wahrscheinlichkeit/i;
@@ -283,19 +312,6 @@ const sayable = (value: EarValue): EarValue =>
 const isLong = (value: EarValue): boolean =>
   value.kind === "text" && words(value.text) > MAX_READ_WORDS;
 
-/** Dates first, then numbers and choices, then short text, then linked records. */
-const setRank = (detail: SpokenDetail, effect: ChangeEffect): number => {
-  if (detail.type !== "set") return 4;
-  const kind = detail.value.kind;
-  if (kind === "date" || kind === "datetime") return 0;
-  if (kind === "number" || kind === "bool" || effect.values[0]?.meaning)
-    return 1;
-  if (effect.link) return 3;
-  return 2;
-};
-
-const LOSS_EFFECTS = new Set(["emptied", "list_replaced", "list_removed"]);
-
 const DATE_KINDS = new Set(["date", "datetime"]);
 
 /** The name a nameless item gets from a field that names it, as a card shows it. */
@@ -317,6 +333,13 @@ interface Detailed {
  */
 type FieldNaming = "names_new_item" | "beside_id" | "none";
 
+/**
+ * The details in the order the card's first view shows them, from the
+ * card's own layout: what is lost, then what cannot be read, then the values
+ * as the card ranks them. Losses and unreadable values are always said, as
+ * the card always shows them; of the values, the card's first ones are said
+ * up to three details in all, and the rest are counted.
+ */
 const detailsOf = (
   change: GistChange,
   action: GistAction,
@@ -325,13 +348,14 @@ const detailsOf = (
 ): Detailed => {
   const ear = (value: ChangeValue, field: string) =>
     sayable(valueOf(value, field, timeZone));
-  const ranked: { detail: SpokenDetail; rank: number; order: number }[] = [];
+  const layout = changeLayout(change);
+  const replaceUnknown = listReplaceIsUnknown(change);
   const texts: SpokenText[] = [];
   let named: string | undefined;
   let typedName = false;
-  change.effects.forEach((effect, order) => {
-    const field = linkFieldName(effect);
-    if (effect.effect === "unchanged") return;
+  const detailOf = (effect: ChangeEffect): SpokenDetail | undefined => {
+    const field = effectField(effect);
+    const entries = () => effect.values.map((value) => ear(value, field));
     const first = effect.values[0] as ChangeValue | undefined;
     const namesItem =
       effect.effect === "set" &&
@@ -340,106 +364,131 @@ const detailsOf = (
       NAME_FIELD.test(effect.rawName);
     if (naming === "names_new_item" && named === undefined && namesItem) {
       named = shorten(first.text);
-      return;
+      return undefined;
     }
     if (naming === "beside_id" && !typedName && namesItem) {
       typedName = true;
-      ranked.push({
-        detail: {
-          type: "named",
-          field,
-          value: { kind: "text", text: shorten(first.text) },
-          loss: false,
-        },
-        rank: -1.5,
-        order,
-      });
-      return;
+      return {
+        type: "named",
+        field,
+        value: { kind: "text", text: shorten(first.text) },
+        loss: false,
+      };
     }
-    let detail: SpokenDetail;
     switch (effect.effect) {
+      case "unchanged":
+        return undefined;
       case "emptied":
-        detail = { type: "emptied", field, loss: true };
-        break;
+        return { type: "emptied", field, loss: true };
       case "list_replaced":
-        detail = {
+        return {
           type: "list_replaced",
           field,
-          values: effect.values.map((value) => ear(value, field)),
+          values: entries(),
+          omitted: effect.omitted,
+          unknown: replaceUnknown,
           loss: true,
         };
-        break;
       case "list_removed":
-        detail = {
+        return {
           type: "list_removed",
           field,
-          values: effect.removed.map((value) => ear(value, field)),
+          values: entries(),
+          omitted: effect.omitted,
           loss: true,
         };
-        break;
-      case "list_added":
-        detail = {
-          type: "list_added",
-          field,
-          values: effect.added.map((value) => ear(value, field)),
-          loss: false,
-        };
-        break;
       case "unreadable":
-        detail = { type: "unreadable", field, loss: false };
-        break;
+        return { type: "unreadable", field, loss: false };
       default: {
-        if (!first) return;
+        if (!first) return undefined;
+        // A list is said with its entries; what the tool only says it adds,
+        // on its word, as the card marks it.
+        if (addsOnToolsWord(change, effect)) {
+          return {
+            type: "list_added",
+            field,
+            values: entries(),
+            omitted: effect.omitted,
+            loss: false,
+          };
+        }
+        if (
+          effect.effect === "set" &&
+          (effect.list || effect.values.length > 1)
+        ) {
+          return {
+            type: "list_set",
+            field,
+            values: entries(),
+            omitted: effect.omitted,
+            loss: false,
+          };
+        }
         const to = ear(first, field);
         if (isLong(to)) {
           texts.push({
             field,
             words: to.kind === "text" ? words(to.text) : 0,
           });
-          return;
+          return undefined;
         }
-        detail =
-          effect.effect === "changed" && effect.old
-            ? {
-                type: "changed",
-                field,
-                from: ear(effect.old, field),
-                to,
-                loss: false,
-              }
-            : { type: "set", field, value: to, loss: false };
+        return effect.effect === "changed" && effect.old
+          ? {
+              type: "changed",
+              field,
+              from: ear(effect.old, field),
+              to,
+              loss: false,
+            }
+          : { type: "set", field, value: to, loss: false };
       }
     }
-    const rank = LOSS_EFFECTS.has(effect.effect)
-      ? -2
-      : detail.type === "changed"
-        ? -1
-        : setRank(detail, effect);
-    ranked.push({ detail, rank, order });
-  });
-  ranked.sort((a, b) => a.rank - b.rank || a.order - b.order);
-  const losses = ranked.filter(({ detail }) => detail.loss);
+  };
+  const of = (effects: readonly ChangeEffect[]) =>
+    effects.flatMap((effect) => detailOf(effect) ?? []);
+  const losses = of([
+    ...layout.emptied,
+    ...layout.lists,
+    ...layout.removedFromLists,
+  ]);
+  const unreadable = of(layout.unreadable);
+  const values = of([...layout.firstRows, ...layout.collapsed]);
+  // The name the call typed beside an ID is the listener's only hint which
+  // item is meant: it comes first, the one exception to the card's order.
+  const typed = values.filter((detail) => detail.type === "named");
+  const others = values.filter((detail) => detail.type !== "named");
   let details: SpokenDetail[];
   let omitted: number;
   if (losses.length > MAX_LISTED_LOSSES) {
-    const rest = ranked.filter(({ detail }) => !detail.loss);
-    const listed = rest.slice(0, MAX_SPOKEN_DETAILS - 1);
+    const rest = [...typed, ...unreadable, ...others];
+    const listed = rest.slice(
+      0,
+      Math.max(MAX_SPOKEN_DETAILS - 1, typed.length + unreadable.length),
+    );
     details = [
       {
         type: "losses",
-        emptied: losses.filter(({ detail }) => detail.type === "emptied")
-          .length,
-        lists: losses.filter(({ detail }) => detail.type !== "emptied").length,
+        emptied: losses.filter((detail) => detail.type === "emptied").length,
+        lists: losses.filter((detail) => detail.type !== "emptied").length,
         loss: true,
       },
-      ...listed.map(({ detail }) => detail),
+      ...listed,
     ];
     omitted = rest.length - listed.length;
   } else {
-    const kept = Math.max(MAX_SPOKEN_DETAILS, losses.length);
-    details = ranked.slice(0, kept).map(({ detail }) => detail);
-    omitted = ranked.length - details.length;
+    const ordered = [...typed, ...losses, ...unreadable, ...others];
+    details = ordered.slice(
+      0,
+      Math.max(
+        MAX_SPOKEN_DETAILS,
+        typed.length + losses.length + unreadable.length,
+      ),
+    );
+    omitted = ordered.length - details.length;
   }
+  // Values the label could not keep are on the card too, in its technical
+  // details, and counted with the rest.
+  omitted += layout.beyondCap;
   for (const text of change.texts) {
     const field = fieldName(text);
     // A truncated text is counted by its length; a whole one by its words.
@@ -457,11 +506,12 @@ const detailsOf = (
     );
   }
   const spokenTexts = texts.slice(0, MAX_SPOKEN_TEXTS);
+  const all = [...losses, ...unreadable, ...values];
   const reschedule =
     action === "update" &&
-    ranked.length > 0 &&
-    ranked.every(
-      ({ detail }) =>
+    all.length > 0 &&
+    all.every(
+      (detail) =>
         (detail.type === "changed" && DATE_KINDS.has(detail.to.kind)) ||
         (detail.type === "set" && DATE_KINDS.has(detail.value.kind)),
     );
@@ -611,6 +661,8 @@ const batchLosses = (change: GistChange): SpokenDetail[] =>
               type: "list_replaced",
               field: fieldName(field),
               values: [],
+              omitted: 0,
+              unknown: false,
               loss: true,
             },
           ]
@@ -714,6 +766,7 @@ const detailValues = (detail: SpokenDetail): SpokenSource[] => {
     case "list_replaced":
     case "list_removed":
     case "list_added":
+    case "list_set":
       return [
         field,
         ...detail.values.map((value) => ({ slot: "value" as const, value })),

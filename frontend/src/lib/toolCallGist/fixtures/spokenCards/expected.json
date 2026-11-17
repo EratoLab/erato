@@ -32,6 +32,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 15. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -71,27 +92,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -158,6 +158,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 15 January 2030.",
           "mustSay": false,
           "values": [
@@ -197,27 +218,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -286,50 +286,21 @@
         },
         {
           "role": "detail",
-          "text": "Scheduled start: 20. Januar 2030 um 10:30 Uhr.",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Scheduled start"
+                "text": "Regardingobjectid"
               }
             },
             {
               "slot": "value",
-              "value": {
-                "kind": "datetime",
-                "year": 2030,
-                "month": 1,
-                "day": 20,
-                "hour": 10,
-                "minute": 30
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Scheduled end: 20. Januar 2030 um 12 Uhr.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Scheduled end"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "datetime",
-                "year": 2030,
-                "month": 1,
-                "day": 20,
-                "hour": 12,
-                "minute": 0
+                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -351,6 +322,31 @@
               "value": {
                 "kind": "text",
                 "text": "Werk Augsburg"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled start: 20. Januar 2030 um 10:30 Uhr.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled start"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "datetime",
+                "year": 2030,
+                "month": 1,
+                "day": 20,
+                "hour": 10,
+                "minute": 30
               }
             }
           ]
@@ -410,50 +406,21 @@
         },
         {
           "role": "detail",
-          "text": "Scheduled start: 20 January 2030 at 10:30 am.",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Scheduled start"
+                "text": "Regardingobjectid"
               }
             },
             {
               "slot": "value",
-              "value": {
-                "kind": "datetime",
-                "year": 2030,
-                "month": 1,
-                "day": 20,
-                "hour": 10,
-                "minute": 30
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Scheduled end: 20 January 2030 at 12 pm.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Scheduled end"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "datetime",
-                "year": 2030,
-                "month": 1,
-                "day": 20,
-                "hour": 12,
-                "minute": 0
+                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -475,6 +442,31 @@
               "value": {
                 "kind": "text",
                 "text": "Werk Augsburg"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Scheduled start: 20 January 2030 at 10:30 am.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Scheduled start"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "datetime",
+                "year": 2030,
+                "month": 1,
+                "day": 20,
+                "hour": 10,
+                "minute": 30
               }
             }
           ]
@@ -536,6 +528,27 @@
         },
         {
           "role": "detail",
+          "text": "Parent customer: Beispiel Industrie GmbH.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent customer"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "First name: Clara.",
           "mustSay": false,
           "values": [
@@ -572,27 +585,6 @@
               "value": {
                 "kind": "text",
                 "text": "Projektleiterin"
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Email address 1: clara.weber@beispiel-industrie.de.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Email address 1"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "clara.weber@beispiel-industrie.de"
               }
             }
           ]
@@ -652,6 +644,27 @@
         },
         {
           "role": "detail",
+          "text": "Parent customer: Beispiel Industrie GmbH.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent customer"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "First name: Clara.",
           "mustSay": false,
           "values": [
@@ -688,27 +701,6 @@
               "value": {
                 "kind": "text",
                 "text": "Projektleiterin"
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Email address 1: clara.weber@beispiel-industrie.de.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Email address 1"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "clara.weber@beispiel-industrie.de"
               }
             }
           ]
@@ -950,6 +942,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Ersatzteil-Rahmenvertrag.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteil-Rahmenvertrag"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 22. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -989,28 +1002,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Percentcomplete: 0 Prozent.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Percentcomplete"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "number",
-                "value": 0,
-                "percent": true
               }
             }
           ]
@@ -1070,6 +1061,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Ersatzteil-Rahmenvertrag.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteil-Rahmenvertrag"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 22 January 2030.",
           "mustSay": false,
           "values": [
@@ -1109,28 +1121,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Percentcomplete: 0 percent.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Percentcomplete"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "number",
-                "value": 0,
-                "percent": true
               }
             }
           ]
@@ -1356,6 +1346,27 @@
         },
         {
           "role": "detail",
+          "text": "Phone number: +49 89 1234 500.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Phone number"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "+49 89 1234 500"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 14. Januar 2030 um 15 Uhr.",
           "mustSay": false,
           "values": [
@@ -1375,27 +1386,6 @@
                 "day": 14,
                 "hour": 15,
                 "minute": 0
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Phone number: +49 89 1234 500.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Phone number"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "+49 89 1234 500"
               }
             }
           ]
@@ -1461,6 +1451,27 @@
         },
         {
           "role": "detail",
+          "text": "Phone number: +49 89 1234 500.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Phone number"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "+49 89 1234 500"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 14 January 2030 at 3 pm.",
           "mustSay": false,
           "values": [
@@ -1480,27 +1491,6 @@
                 "day": 14,
                 "hour": 15,
                 "minute": 0
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Phone number: +49 89 1234 500.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Phone number"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "+49 89 1234 500"
               }
             }
           ]
@@ -1568,23 +1558,21 @@
         },
         {
           "role": "detail",
-          "text": "Estimated close date: 30. Juni 2030.",
+          "text": "Customer: Beispiel Industrie GmbH.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Estimated close date"
+                "text": "Customer"
               }
             },
             {
               "slot": "value",
               "value": {
-                "kind": "date",
-                "year": 2030,
-                "month": 6,
-                "day": 30
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
               }
             }
           ]
@@ -1613,22 +1601,23 @@
         },
         {
           "role": "detail",
-          "text": "Probability: 40 Prozent.",
+          "text": "Estimated close date: 30. Juni 2030.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Probability"
+                "text": "Estimated close date"
               }
             },
             {
               "slot": "value",
               "value": {
-                "kind": "number",
-                "value": 40,
-                "percent": true
+                "kind": "date",
+                "year": 2030,
+                "month": 6,
+                "day": 30
               }
             }
           ]
@@ -1688,23 +1677,21 @@
         },
         {
           "role": "detail",
-          "text": "Estimated close date: 30 June 2030.",
+          "text": "Customer: Beispiel Industrie GmbH.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Estimated close date"
+                "text": "Customer"
               }
             },
             {
               "slot": "value",
               "value": {
-                "kind": "date",
-                "year": 2030,
-                "month": 6,
-                "day": 30
+                "kind": "text",
+                "text": "Beispiel Industrie GmbH"
               }
             }
           ]
@@ -1733,22 +1720,23 @@
         },
         {
           "role": "detail",
-          "text": "Probability: 40 percent.",
+          "text": "Estimated close date: 30 June 2030.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Probability"
+                "text": "Estimated close date"
               }
             },
             {
               "slot": "value",
               "value": {
-                "kind": "number",
-                "value": 40,
-                "percent": true
+                "kind": "date",
+                "year": 2030,
+                "month": 6,
+                "day": 30
               }
             }
           ]
@@ -2515,6 +2503,168 @@
       ]
     ]
   },
+  "create-14-list-entries": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 5 Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteile"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to create a record in CRM:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 5 Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service and one more.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Ersatzteile"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
@@ -3241,6 +3391,34 @@
         },
         {
           "role": "detail",
+          "text": "Risk level: von Low auf Medium.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Risk level"
+              }
+            },
+            {
+              "slot": "from",
+              "value": {
+                "kind": "text",
+                "text": "Low"
+              }
+            },
+            {
+              "slot": "to",
+              "value": {
+                "kind": "text",
+                "text": "Medium"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Estimated close date: vom 1. Dezember auf den 31. März 2030.",
           "mustSay": false,
           "values": [
@@ -3302,34 +3480,6 @@
           ]
         },
         {
-          "role": "detail",
-          "text": "Risk level: von Low auf Medium.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Risk level"
-              }
-            },
-            {
-              "slot": "from",
-              "value": {
-                "kind": "text",
-                "text": "Low"
-              }
-            },
-            {
-              "slot": "to",
-              "value": {
-                "kind": "text",
-                "text": "Medium"
-              }
-            }
-          ]
-        },
-        {
           "role": "more",
           "text": "Dazu kommen vier weitere Felder, sie stehen auf dem Bildschirm.",
           "mustSay": false,
@@ -3371,6 +3521,34 @@
               "value": {
                 "kind": "text",
                 "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Risk level: from Low to Medium.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Risk level"
+              }
+            },
+            {
+              "slot": "from",
+              "value": {
+                "kind": "text",
+                "text": "Low"
+              }
+            },
+            {
+              "slot": "to",
+              "value": {
+                "kind": "text",
+                "text": "Medium"
               }
             }
           ]
@@ -3433,34 +3611,6 @@
                 "kind": "number",
                 "value": 75,
                 "percent": true
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Risk level: from Low to Medium.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Risk level"
-              }
-            },
-            {
-              "slot": "from",
-              "value": {
-                "kind": "text",
-                "text": "Low"
-              }
-            },
-            {
-              "slot": "to",
-              "value": {
-                "kind": "text",
-                "text": "Medium"
               }
             }
           ]
@@ -4276,6 +4426,260 @@
                 "kind": "number",
                 "value": 20,
                 "percent": true
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "update-12-list-replace-unknown": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Die Liste Tags bekommt Retrofit und Linie 4. Ob das die Liste ersetzt oder ergänzt, ist nicht bekannt.",
+          "mustSay": true,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Stage wird auf Angebot gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Stage"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Angebot"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to change a record in CRM whose ID is shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "The list Tags gets Retrofit and Linie 4. Whether that replaces the list or adds to it is not known.",
+          "mustSay": true,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Tags"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 4"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Stage will be set to Angebot.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Stage"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Angebot"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "update-13-list-only-adds": {
+    "de": [
+      [
+        {
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Labels"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
+              }
+            }
+          ]
+        },
+        {
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "role": "what",
+          "text": "I'd like to change a record in CRM whose ID is shown on screen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "CRM"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Retrofit and Service will be added to Labels, the tool says.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Labels"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Retrofit"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Service"
               }
             }
           ]
@@ -5939,27 +6343,6 @@
         },
         {
           "role": "detail",
-          "text": "Send notification email: ja.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Send notification email"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "bool",
-                "value": true
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
           "text": "Role: writer.",
           "mustSay": false,
           "values": [
@@ -5975,6 +6358,27 @@
               "value": {
                 "kind": "text",
                 "text": "writer"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Send notification email: ja.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Send notification email"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "bool",
+                "value": true
               }
             }
           ]
@@ -6064,27 +6468,6 @@
         },
         {
           "role": "detail",
-          "text": "Send notification email: yes.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Send notification email"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "bool",
-                "value": true
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
           "text": "Role: writer.",
           "mustSay": false,
           "values": [
@@ -6100,6 +6483,27 @@
               "value": {
                 "kind": "text",
                 "text": "writer"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
+          "text": "Send notification email: yes.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Send notification email"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "bool",
+                "value": true
               }
             }
           ]
@@ -6528,7 +6932,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug search verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6592,7 +6996,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug read query verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool read query verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6656,7 +7060,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Word das Werkzeug word submit comment changes verwenden.",
+          "text": "Ich möchte in Word das Tool word submit comment changes verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6720,7 +7124,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Notion das Werkzeug sync page verwenden.",
+          "text": "Ich möchte in Notion das Tool sync page verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -6812,6 +7216,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 10. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -6829,27 +7254,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 10
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -6892,6 +7296,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 20. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -6909,27 +7334,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 20
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -6972,6 +7376,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 3. Februar 2030.",
           "mustSay": false,
           "values": [
@@ -6989,27 +7414,6 @@
                 "year": 2030,
                 "month": 2,
                 "day": 3
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7054,6 +7458,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 10 January 2030.",
           "mustSay": false,
           "values": [
@@ -7071,27 +7496,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 10
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7134,6 +7538,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 20 January 2030.",
           "mustSay": false,
           "values": [
@@ -7151,27 +7576,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 20
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7214,6 +7618,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 3 February 2030.",
           "mustSay": false,
           "values": [
@@ -7236,27 +7661,6 @@
           ]
         },
         {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
-              }
-            }
-          ]
-        },
-        {
           "role": "request",
           "text": "Please confirm on screen.",
           "mustSay": false,
@@ -7270,7 +7674,7 @@
       [
         {
           "role": "what",
-          "text": "Ich möchte in Dynamics 365 das Werkzeug search verwenden.",
+          "text": "Ich möchte in Dynamics 365 das Tool search verwenden.",
           "mustSay": false,
           "values": [
             {
@@ -7327,6 +7731,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 15. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -7366,27 +7791,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7482,6 +7886,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 15 January 2030.",
           "mustSay": false,
           "values": [
@@ -7521,27 +7946,6 @@
                 "kind": "number",
                 "value": 2,
                 "percent": false
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7625,6 +8029,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 10. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -7642,27 +8067,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 10
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7698,6 +8102,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 20. Januar 2030.",
           "mustSay": false,
           "values": [
@@ -7715,27 +8140,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 20
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7771,6 +8175,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 3. Februar 2030.",
           "mustSay": false,
           "values": [
@@ -7788,27 +8213,6 @@
                 "year": 2030,
                 "month": 2,
                 "day": 3
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7868,6 +8272,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 10 January 2030.",
           "mustSay": false,
           "values": [
@@ -7885,27 +8310,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 10
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -7941,6 +8345,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 20 January 2030.",
           "mustSay": false,
           "values": [
@@ -7958,27 +8383,6 @@
                 "year": 2030,
                 "month": 1,
                 "day": 20
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]
@@ -8014,6 +8418,27 @@
         },
         {
           "role": "detail",
+          "text": "Regardingobjectid: Line 4 Retrofit.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Line 4 Retrofit"
+              }
+            }
+          ]
+        },
+        {
+          "role": "detail",
           "text": "Scheduled end: 3 February 2030.",
           "mustSay": false,
           "values": [
@@ -8031,27 +8456,6 @@
                 "year": 2030,
                 "month": 2,
                 "day": 3
-              }
-            }
-          ]
-        },
-        {
-          "role": "detail",
-          "text": "Regardingobjectid: Line 4 Retrofit.",
-          "mustSay": false,
-          "values": [
-            {
-              "slot": "field",
-              "value": {
-                "kind": "text",
-                "text": "Regardingobjectid"
-              }
-            },
-            {
-              "slot": "value",
-              "value": {
-                "kind": "text",
-                "text": "Line 4 Retrofit"
               }
             }
           ]

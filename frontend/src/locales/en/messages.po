@@ -8556,8 +8556,248 @@ msgstr "Start the Erato desktop app to continue this review."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.clause.id"
+msgstr "{kind, select, other {whose ID is shown on screen}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.clause.unread"
+msgstr "{kind, select, other {that I haven't read in this chat}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.instructionUnknown"
+msgstr "What exactly happens is not known."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.nothingChanges"
+msgstr "Nothing seems to change."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.permanent"
+msgstr "This cannot be undone."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.restorable"
+msgstr "{subject, select, many {They can be restored.} other {It can be restored.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.restoreUnknown"
+msgstr "{subject, select, many {Whether they can be restored is not known.} other {Whether it can be restored is not known.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.consequence.rowsUnknown"
+msgstr "How many records this affects is not known."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.count"
+msgstr "I need {countWord} approvals for this."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.cut"
+msgstr "… shortened"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.destination"
+msgstr "{shape, select, recipients {to {target}} sendPlace {{kind, select, other {to {target}}}} share {with {target}} move {to {target}} other {in {target}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.changed"
+msgstr "{field}: from {from} to {to}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.emptied"
+msgstr "The field {field} will be emptied."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listAddedClaim"
+msgstr "{count, plural, one {{values} will be added to {field}, the tool says.} other {{values} will be added to {field}, the tool says.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listMaybeReplaced"
+msgstr "{shape, select, values {The list {field} gets {values}. Whether that replaces the list or adds to it is not known.} other {Whether the list {field} is replaced or added to is not known.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listRemovedClaim"
+msgstr "{count, plural, one {{values} will be removed from {field}, the tool says.} other {{values} will be removed from {field}, the tool says.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.listReplaced"
+msgstr "{shape, select, values {The list {field} will be replaced with {values}.} other {The list {field} will be replaced.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.losses"
+msgstr "{shape, select, emptied {{emptied, plural, one {{emptiedWord} field will be emptied.} other {{emptiedWord} fields will be emptied.}}} both {{emptied, plural, one {{emptiedWord} field} other {{emptiedWord} fields}} will be emptied and {lists, plural, one {{listsWord} list} other {{listsWord} lists}} replaced or cut down.} other {{lists, plural, one {{listsWord} list will be replaced or cut down.} other {{listsWord} lists will be replaced or cut down.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.named"
+msgstr "{field} as given in the call: {value}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.setTo"
+msgstr "{kind, select, other {{field} will be set to {value}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.unreadable"
+msgstr "{field}: the value is shown on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.detail.value"
+msgstr "{field}: {value}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.item.subject"
+msgstr "Subject: {name}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.more"
+msgstr "{count, plural, one {And one more field, shown on screen.} other {And {countWord} more fields, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.ordinal"
+msgstr "The {ordinal} one:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.ordinal.next"
+msgstr "The next one:"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.outside"
+msgstr "{shape, select, single {The recipient is outside the organisation.} all {All recipients are outside the organisation.} other {{outside, plural, one {One recipient is outside the organisation.} other {{countWord} of the recipients are outside the organisation.}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.pointer"
 msgstr "A decision is waiting on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.recipients"
+msgstr "{shape, select, unnamed {{total, plural, one {one recipient} other {{countWord} recipients}}} other {{rest, plural, one {{name} and one other} other {{name} and {countWord} others}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.request"
+msgstr "Please confirm on screen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.named"
+msgstr "{kind, select, page {the page {name}} row {the record {name}} database {the database {name}} folder {the folder {name}} note {the note {name}} comment {the comment {name}} paragraph {the paragraph {name}} document {the document {name}} email {the email {name}} message {the message {name}} event {the event {name}} file {the file {name}} task {the task {name}} other {the item {name}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.one"
+msgstr "{kind, select, page {a page} row {a record} database {a database} folder {a folder} note {a note} comment {a comment} paragraph {a paragraph} document {a document} email {an email} message {a message} event {an event} file {a file} task {a task} other {an item}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.short.titled"
+msgstr "{thing}, {name}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.source"
+msgstr "{direction, select, from {from {server}} other {in {server}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text"
+msgstr "{shape, select, field {{field}: a text of about {words} words, shown on screen.} other {Plus a text of about {words} words, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.counted"
+msgstr "{kind, select, page {{countWord} pages} row {{countWord} records} database {{countWord} databases} folder {{countWord} folders} note {{countWord} notes} comment {{countWord} comments} paragraph {{countWord} paragraphs} document {{countWord} documents} email {{countWord} emails} message {{countWord} messages} event {{countWord} events} file {{countWord} files} task {{countWord} tasks} other {{countWord} items}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.including"
+msgstr "{kind, select, page {{countWord} pages, including {names},} row {{countWord} records, including {names},} database {{countWord} databases, including {names},} folder {{countWord} folders, including {names},} note {{countWord} notes, including {names},} comment {{countWord} comments, including {names},} paragraph {{countWord} paragraphs, including {names},} document {{countWord} documents, including {names},} email {{countWord} emails, including {names},} message {{countWord} messages, including {names},} event {{countWord} events, including {names},} file {{countWord} files, including {names},} task {{countWord} tasks, including {names},} other {{countWord} items, including {names},}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.named"
+msgstr "{kind, select, page {the page {name}} row {the record {name}} database {the database {name}} folder {the folder {name}} note {the note {name}} comment {the comment {name}} paragraph {the paragraph {name}} document {the document {name}} email {the email {name}} message {the message {name}} event {the event {name}} file {the file {name}} task {the task {name}} other {the item {name}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.namedMany"
+msgstr "{kind, select, page {the pages {names}} row {the records {names}} database {the databases {names}} folder {the folders {names}} note {the notes {names}} comment {the comments {names}} paragraph {the paragraphs {names}} document {the documents {names}} email {the emails {names}} message {the messages {names}} event {the events {names}} file {the files {names}} task {the tasks {names}} other {the items {names}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.thing.one"
+msgstr "{kind, select, page {a page} row {a record} database {a database} folder {a folder} note {a note} comment {a comment} paragraph {a paragraph} document {a document} email {an email} message {a message} event {an event} file {a file} task {a task} other {an item}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value"
+msgstr "{role, select, from {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}} to {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}} other {{kind, select, unread {a record I haven't read in this chat} id {an item whose ID is shown on screen} other {{value}}}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.dateTime"
+msgstr "{date} at {time}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.moreEntries"
+msgstr "{count, plural, one {one more} other {{countWord} more}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.no"
+msgstr "no"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.percent"
+msgstr "{number} percent"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.value.yes"
+msgstr "yes"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what"
+msgstr "{action, select, create {I'd like to create {thing} {destination} {source} {clause}} update {I'd like to change {thing} {destination} {source} {clause}} reschedule {I'd like to reschedule {thing} {destination} {source} {clause}} delete {I'd like to delete {thing} {destination} {source} {clause}} send {I'd like to send {thing} {destination} {source} {clause}} move {I'd like to move {thing} {destination} {source} {clause}} comment {I'd like to comment on {thing} {destination} {source} {clause}} share {I'd like to share {thing} {destination} {source} {clause}} run {I'd like to run {thing} {destination} {source} {clause}} upsert {I'd like to create or update {thing} {destination} {source} {clause}} archive {I'd like to archive {thing} {destination} {source} {clause}} upload {I'd like to upload {thing} {destination} {source} {clause}} other {I'd like to work on {thing} {destination} {source} {clause}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what.generic"
+msgstr "I'd like to use the tool {tool} {source}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.what.statement"
+msgstr "{statement, select, sql {I'd like to run an SQL query {source}. It's shown on screen.} shell {I'd like to run a shell command {source}. It's shown on screen.} code {I'd like to run a piece of code {source}. It's shown on screen.} other {I'd like to run an instruction {source}. It's shown on screen.}}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/StopWaitingAction.tsx

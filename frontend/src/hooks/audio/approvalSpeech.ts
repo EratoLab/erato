@@ -1,5 +1,9 @@
 import { create } from "zustand";
 
+import {
+  spokenCardFlow,
+  spokenCardStep,
+} from "@/lib/toolCallGist/spokenCardFlow";
 import { createSSEConnection } from "@/utils/sse/sseClient";
 
 import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
@@ -7,16 +11,20 @@ import { useSpeechPlayback } from "./speechPlayback";
 
 import type { ReadAloudStreamEvent } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
+import type {
+  SpokenCardEvent,
+  SpokenCardFlow,
+  SpokenPieceState,
+} from "@/lib/toolCallGist/spokenCardFlow";
 
 /**
  * Plays a spoken approval card piece by piece, on the read aloud stream and
- * the same PCM queue as every other speech. Each piece remembers whether it
- * was heard, cut short or not yet said, so a listener can skip one and the
- * rest follows; a loss or consequence that was cut short is said once more
- * before the request to decide.
+ * the same PCM queue as every other speech. Which piece is said next, and
+ * what was heard, is `spokenCardStep`'s: this module only turns its answers
+ * into audio and the controls' taps and the audio's ends into its events.
  */
 
-export type SpokenPieceState = "pending" | "playing" | "heard" | "cut";
+export type { SpokenPieceState };
 
 export interface PlayedPiece extends SpokenPiece {
   state: SpokenPieceState;
@@ -67,32 +75,6 @@ interface Buffered {
   done: boolean;
 }
 
-/**
- * The piece to say after `after`: the next one not yet said, except that the
- * request waits until every must-say piece that was cut short is said again,
- * once. Returns null when nothing is left.
- */
-export const nextPiece = (
-  pieces: readonly PlayedPiece[],
-  after: number | null,
-  repeated: ReadonlySet<number>,
-): number | null => {
-  const start = after === null ? 0 : after + 1;
-  for (let index = start; index < pieces.length; index++) {
-    const piece = pieces[index];
-    if (piece.state !== "pending") continue;
-    if (piece.role === "request") {
-      const owed = pieces.findIndex(
-        (other, at) =>
-          other.mustSay && other.state === "cut" && !repeated.has(at),
-      );
-      if (owed !== -1) return owed;
-    }
-    return index;
-  }
-  return null;
-};
-
 /** Cards already started, by key, so a re-render does not start one again. */
 const started = new Set<string>();
 
@@ -106,18 +88,32 @@ let speaking: SpeakableCard | null = null;
 let fellBack = false;
 let closeStream: (() => void) | undefined;
 let buffers: Buffered[] = [];
-let repeated = new Set<number>();
+let said: SpokenPiece[] = [];
+let flow: SpokenCardFlow = spokenCardFlow([]);
 let pauseTimer: ReturnType<typeof setTimeout> | undefined;
 let context: AudioContext | undefined;
 
 const queue = createPcmQueue(() => settle());
 
-const setPieceState = (index: number, state: SpokenPieceState) => {
-  useApprovalSpeech.setState((previous) => ({
-    pieces: previous.pieces.map((piece, at) =>
-      at === index ? { ...piece, state } : piece,
-    ),
-  }));
+const currentPiece = (): number | null =>
+  flow.playing?.type === "piece" ? flow.playing.index : null;
+
+const publish = (extra: Partial<ApprovalSpeechState> = {}) => {
+  useApprovalSpeech.setState({
+    pieces: said.map((piece, index) => ({
+      ...piece,
+      state: flow.states[index],
+    })),
+    current: currentPiece(),
+    speaking: flow.playing !== null,
+    ...extra,
+  });
+};
+
+const silence = () => {
+  clearTimeout(pauseTimer);
+  pauseTimer = undefined;
+  queue.stop();
 };
 
 const finish = () => {
@@ -125,14 +121,12 @@ const finish = () => {
   const close = closeStream;
   closeStream = undefined;
   close?.();
-  clearTimeout(pauseTimer);
-  pauseTimer = undefined;
-  queue.stop();
+  silence();
 };
 
 /** Hands the current piece's buffered audio to the queue. */
 const feed = () => {
-  const { current } = useApprovalSpeech.getState();
+  const current = currentPiece();
   if (current === null || !context || pauseTimer) return;
   const buffer = buffers[current] as Buffered | undefined;
   if (!buffer) return;
@@ -147,58 +141,65 @@ const feed = () => {
   settle();
 };
 
-const play = (index: number | null) => {
-  const { pieces } = useApprovalSpeech.getState();
-  if (index === null) {
-    finish();
-    useApprovalSpeech.setState({ current: null, speaking: false });
+/** Plays what the card's logic says is being said now. */
+const startPlaying = () => {
+  const current = currentPiece();
+  if (current === null) {
+    // Only pieces the endpoint was asked for can be played.
+    if (flow.playing !== null) apply({ type: "finished" });
     return;
   }
-  const replay = pieces[index].state === "cut";
-  if (replay) {
-    repeated.add(index);
-    buffers[index].queued = 0;
-  }
-  setPieceState(index, "playing");
-  useApprovalSpeech.setState({ current: index, speaking: true });
-  const pause = pieces[index].pauseBeforeMs ?? 0;
+  buffers[current].queued = 0;
+  const pause = said[current].pauseBeforeMs ?? 0;
   if (pause > 0) {
-    const current = run;
+    const thisRun = run;
     pauseTimer = setTimeout(() => {
       pauseTimer = undefined;
-      if (current === run) feed();
+      if (thisRun === run) feed();
     }, pause);
     return;
   }
   feed();
 };
 
+/** Moves the card's logic on by `event` and plays what it says. */
+function apply(event: SpokenCardEvent) {
+  const before = flow;
+  flow = spokenCardStep(said, flow, event);
+  publish();
+  if (flow.started !== before.started) {
+    silence();
+    startPlaying();
+  } else if (flow.playing === null && before.playing !== null) {
+    // Everything is said, or the voice was stopped.
+    finish();
+  }
+}
+
 /** Moves on once the current piece is complete and has played out. */
 function settle() {
-  const { current } = useApprovalSpeech.getState();
+  const current = currentPiece();
   if (current === null || pauseTimer || queue.active) return;
   const buffer = buffers[current] as Buffered | undefined;
   // The voice is faster than the network: wait for the rest of the piece.
   if (!buffer?.done || buffer.queued < buffer.chunks.length) return;
-  setPieceState(current, "heard");
-  play(nextPiece(useApprovalSpeech.getState().pieces, current, repeated));
+  apply({ type: "finished" });
 }
 
 /**
- * The card could not be spoken. Its pointer sentence is tried once; if that
- * fails too, the "audio unavailable" notice shows. Either way the card is not
- * counted as spoken, and the control that reads it stays.
+ * The card could not be spoken. Its pointer sentence is tried once if
+ * nothing of it was heard; otherwise the "audio unavailable" notice shows.
+ * Either way the card is not counted as spoken, and the control that reads
+ * it stays.
  */
 function fail() {
-  const { current, pieces } = useApprovalSpeech.getState();
   const card = speaking;
   finish();
-  if (current !== null) setPieceState(current, "cut");
-  useApprovalSpeech.setState({ current: null, speaking: false, failed: true });
+  flow = spokenCardStep(said, flow, { type: "failed" });
+  publish({ speaking: false, failed: true });
   if (!card) return;
   started.delete(card.key);
-  const heard = pieces.some((piece) => piece.state === "heard");
-  if (!fellBack && !heard && card.fallback) {
+  if (!fellBack && flow.failed === "fallback" && card.fallback) {
     fellBack = true;
     play_(card, card.fallback);
     return;
@@ -211,19 +212,13 @@ export function stopApprovalSpeech() {
   const { current, speaking } = useApprovalSpeech.getState();
   if (!speaking && current === null && !closeStream) return;
   finish();
-  if (current !== null) setPieceState(current, "cut");
-  useApprovalSpeech.setState({ current: null, speaking: false });
+  flow = spokenCardStep(said, flow, { type: "stop" });
+  publish({ speaking: false });
 }
 
 /** Cuts the piece being said short and goes on with the next. */
 export function skipApprovalPiece() {
-  const { current } = useApprovalSpeech.getState();
-  if (current === null) return;
-  queue.stop();
-  clearTimeout(pauseTimer);
-  pauseTimer = undefined;
-  setPieceState(current, "cut");
-  play(nextPiece(useApprovalSpeech.getState().pieces, current, repeated));
+  apply({ type: "skip" });
 }
 
 /** Whether conversational mode reads back, so a card may be spoken. */
@@ -254,11 +249,19 @@ export function replayApprovalCard() {
   if (available) speakApprovalCard(available);
 }
 
-/** Forgets the cards of a message that no longer waits. */
-export function forgetApprovalCards(messageId: string) {
+/**
+ * Forgets the approvals under `keys`, which no longer wait: their voice ends,
+ * and they can no longer be read again. Another approval of the same message,
+ * such as the card that replaces one, keeps its voice.
+ */
+export function forgetApprovalCards(keys: readonly string[]) {
   const { available, key } = useApprovalSpeech.getState();
-  if (key?.startsWith(`${messageId}:`)) stopApprovalSpeech();
-  if (available?.messageId === messageId)
+  if (key !== null && keys.includes(key)) {
+    finish();
+    flow = spokenCardStep(said, flow, { type: "closed" });
+    publish({ speaking: false });
+  }
+  if (available && keys.includes(available.key))
     useApprovalSpeech.setState({ available: null });
 }
 
@@ -268,15 +271,9 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
   speaking = card;
   const current = run;
   buffers = pieces.map(() => ({ chunks: [], queued: 0, done: false }));
-  repeated = new Set();
-  useApprovalSpeech.setState({
-    key,
-    available: card,
-    pieces: pieces.map((piece) => ({ ...piece, state: "pending" })),
-    current: null,
-    speaking: true,
-    failed: false,
-  });
+  said = pieces;
+  flow = spokenCardFlow(pieces);
+  publish({ key, available: card, speaking: true, failed: false });
   void resumePlaybackContext().then(
     (resumed) => {
       if (current !== run) return;
@@ -310,7 +307,7 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
                 audio: chunk.audio,
                 sampleRate: chunk.sample_rate,
               });
-              if (useApprovalSpeech.getState().current === index) feed();
+              if (currentPiece() === index) feed();
             } else if (event.type === "piece_done") {
               let done: { piece: number };
               try {
@@ -322,7 +319,7 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
               const buffer = buffers[done.piece] as Buffered | undefined;
               if (!buffer) return;
               buffer.done = true;
-              if (useApprovalSpeech.getState().current === done.piece) feed();
+              if (currentPiece() === done.piece) feed();
             } else if (event.type === "done") {
               ended = true;
             } else if (event.type === "error") {
@@ -337,7 +334,7 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
           },
         },
       );
-      play(nextPiece(useApprovalSpeech.getState().pieces, null, repeated));
+      apply({ type: "start" });
     },
     () => {
       if (current === run) fail();

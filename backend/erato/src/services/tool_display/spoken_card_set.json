@@ -196,6 +196,18 @@
       ]
     },
     {
+      "id": "create-14-list-entries",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-14-list-entries"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -327,6 +339,31 @@
       ],
       "calls": [
         "update-11-fifteen-emptied"
+      ]
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields",
+        "loss"
+      ],
+      "calls": [
+        "update-12-list-replace-unknown"
+      ]
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-13-list-only-adds"
       ]
     },
     {
@@ -1139,6 +1176,26 @@
       }
     },
     {
+      "id": "create-14-list-entries",
+      "server": "crm",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "fields": {
+          "name": "Linie 5 Service",
+          "tags": [
+            "Retrofit",
+            "Linie 4",
+            "Service",
+            "Ersatzteile"
+          ]
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "server": "dynamics",
       "tool": "update_record",
@@ -1343,6 +1400,42 @@
           "new_region": null,
           "closeprobability": 20
         }
+      }
+    },
+    {
+      "id": "update-12-list-replace-unknown",
+      "server": "crm",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "id": "c_17",
+        "fields": {
+          "tags": [
+            "Retrofit",
+            "Linie 4"
+          ],
+          "stage": "Angebot"
+        }
+      }
+    },
+    {
+      "id": "update-13-list-only-adds",
+      "server": "crm",
+      "tool": "update_record",
+      "description": "Updates a record. It only adds labels.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "id": "c_17",
+        "labels": [
+          "Retrofit",
+          "Service"
+        ]
       }
     },
     {

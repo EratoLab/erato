@@ -20,6 +20,7 @@ import {
   MAX_FIRST_VIEW_ROWS,
   TEXT_LINES,
   toolSaysOnlyAdds,
+  addsOnToolsWord,
 } from "@/lib/toolCallGist/change";
 import {
   batchDeletionsLine,
@@ -1241,9 +1242,7 @@ const LossesPart = ({ change }: { change: GistChange }) => {
 
 /** What the tool claims about a value, so the card says whose word it is. */
 const claimOf = (change: GistChange, effect: ChangeEffect) =>
-  effect.effect === "list_added" || (toolSaysOnlyAdds(change) && effect.list)
-    ? listAddsClaim()
-    : undefined;
+  addsOnToolsWord(change, effect) ? listAddsClaim() : undefined;
 
 const ValuesPart = ({ change }: { change: GistChange }) => {
   const { firstRows } = changeLayout(change);

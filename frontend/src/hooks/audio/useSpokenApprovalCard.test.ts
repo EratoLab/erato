@@ -21,7 +21,7 @@ vi.mock("./approvalSpeech", () => ({
     started.add(card.key);
     offerApprovalCard(card);
   },
-  forgetApprovalCards: (messageId: string) => forgetApprovalCards(messageId),
+  forgetApprovalCards: (keys: readonly string[]) => forgetApprovalCards(keys),
 }));
 
 const POINTER: SpokenApproval = { type: "pointer" };
@@ -129,7 +129,11 @@ describe("useSpokenApprovalCard", () => {
       `${queue.messageId}:t:b`,
     ]);
     rerender({ ...queue, index: 1, active: false });
-    expect(forgetApprovalCards).toHaveBeenCalledWith(queue.messageId);
+    expect(forgetApprovalCards).toHaveBeenCalledWith([
+      `${queue.messageId}:t:a`,
+      `${queue.messageId}:t:b`,
+      `${queue.messageId}:t:c`,
+    ]);
   });
 
   it("1.9: after Stop during the turn's words the card waits to be asked for", () => {

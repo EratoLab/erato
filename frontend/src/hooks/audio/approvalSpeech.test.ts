@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlayedPiece } from "./approvalSpeech";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type { SSEOptions } from "@/utils/sse/sseClient";
 
@@ -116,46 +115,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("nextPiece", () => {
-  const played = (
-    states: PlayedPiece["state"][],
-    mustSay: boolean[] = [],
-  ): PlayedPiece[] =>
-    states.map((state, index) => ({
-      ...CARD[index],
-      mustSay: mustSay[index] ?? CARD[index].mustSay,
-      state,
-    }));
-
-  it("goes on with the next piece not yet said", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    expect(
-      nextPiece(
-        played(["pending", "pending", "pending", "pending"]),
-        null,
-        new Set(),
-      ),
-    ).toBe(0);
-    expect(
-      nextPiece(played(["heard", "heard", "pending", "pending"]), 1, new Set()),
-    ).toBe(2);
-    expect(
-      nextPiece(played(["heard", "heard", "heard", "heard"]), 3, new Set()),
-    ).toBeNull();
-  });
-
-  it("says a loss that was cut short again before the request, once", async () => {
-    const { nextPiece } = await import("./approvalSpeech");
-    const pieces = played(["heard", "cut", "heard", "pending"]);
-    expect(nextPiece(pieces, 2, new Set())).toBe(1);
-    expect(nextPiece(pieces, 1, new Set([1]))).toBe(3);
-    // Content that was skipped is not said again.
-    expect(
-      nextPiece(played(["heard", "heard", "cut", "pending"]), 2, new Set()),
-    ).toBe(3);
-  });
-});
-
 describe("speaking an approval card", () => {
   it("asks for the pieces of the card's message and plays them one after another", async () => {
     const { connection, states, useApprovalSpeech } = await speak();
@@ -247,6 +206,20 @@ describe("speaking an approval card", () => {
     expect(
       JSON.parse(connections[2].options.body as string).pieces,
     ).toHaveLength(CARD.length);
+  });
+
+  it("4.1: forgetting one approval keeps another card of the same message speaking", async () => {
+    const { forgetApprovalCards, useApprovalSpeech } = await speak();
+    // An earlier card of the same message goes away, say the one a change
+    // replaced: the card being spoken keeps its voice.
+    forgetApprovalCards(["message-1:stop-0"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(true);
+    expect(useApprovalSpeech.getState().available?.key).toBe(
+      "message-1:stop-1",
+    );
+    forgetApprovalCards(["message-1:stop-1"]);
+    expect(useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useApprovalSpeech.getState().available).toBeNull();
   });
 
   it("ends when conversational mode stops reading back", async () => {
