@@ -15,6 +15,7 @@ import { messages as deMessages } from "@/locales/de/messages.json";
 
 import { commandPieces, stepForMeaning } from "./approvalListening";
 
+import type { VoiceChange, VoiceChangeOutcome } from "./approvalChanges";
 import type { ApprovalVoiceMeaning } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 import type {
@@ -268,7 +269,7 @@ describe("what a meaning does to a waiting card", () => {
     // The endpoint names the piece the voice stopped in, or the last one.
     const current = currentPiece(before);
     const pieceId = current === null ? null : pieces[current].id;
-    const { event, listen } = stepForMeaning(meaning, pieceId, pieces);
+    const { event, listen, change } = stepForMeaning(meaning, pieceId, pieces);
 
     const after = event ? step(pieces, before, event) : before;
     const said: SpokenUtterance[] =
@@ -278,7 +279,10 @@ describe("what a meaning does to a waiting card", () => {
 
     // Nothing a listener says decides or withdraws the card.
     expect(end.flow.closed).toBe(false);
-    expect(listen).toBe(meaning !== "stop");
+    // A change is sent by the listener and listens no more: the next card,
+    // or a sentence about what came of it, follows.
+    expect(listen).toBe(meaning !== "stop" && meaning !== "change");
+    expect(change === true).toBe(meaning === "change");
     before.heard.forEach((heard, index) => {
       if (heard) expect(end.flow.heard[index]).toBe(true);
     });
@@ -308,17 +312,12 @@ describe("what a meaning does to a waiting card", () => {
         expect(end.flow.states).toEqual(before.states);
         break;
       case "change":
+        expect(said).toEqual([]);
+        expect(end.flow.states).toEqual(before.states);
+        break;
       case "new_request":
         expect(said).toEqual([
-          {
-            type: "notice",
-            notice: {
-              kind:
-                meaning === "change"
-                  ? "change_on_screen"
-                  : "new_request_on_screen",
-            },
-          },
+          { type: "notice", notice: { kind: "new_request_on_screen" } },
         ]);
         expect(end.flow.states).toEqual(before.states);
         break;
@@ -540,9 +539,10 @@ const KEY = "message-1:stop-1";
 const CARD = expected["update-08-long-text"].de[0];
 
 /** A card read to its end; the voice is quiet and the microphone would open. */
-async function heardCard() {
+async function heardCard(change?: VoiceChange) {
   const speech = await import("./approvalSpeech");
   const listening = await import("./approvalListening");
+  const changes = await import("./approvalChanges");
   const { useSpeechPlayback } = await import("./speechPlayback");
   useSpeechPlayback.setState({ conversational: true, enabled: true });
   speech.speakApprovalCard({
@@ -550,6 +550,8 @@ async function heardCard() {
     messageId: "message-1",
     pieces: CARD,
     language: "de",
+    approval: { type: "pointer" },
+    ...(change ? { change } : {}),
   });
   await vi.waitFor(() => expect(connections).toHaveLength(1));
   CARD.forEach((_, index) => {
@@ -557,8 +559,22 @@ async function heardCard() {
     playOut();
   });
   expect(speech.useApprovalSpeech.getState().speaking).toBe(false);
-  return { ...speech, ...listening, useSpeechPlayback };
+  return { ...speech, ...listening, ...changes, useSpeechPlayback };
 }
+
+/** A card the screen lets change, recording what it was asked to send. */
+const changeable = (
+  outcome: VoiceChangeOutcome | Promise<VoiceChangeOutcome> = "sent",
+  ready = true,
+) => {
+  const send = vi.fn((_words: string) => Promise.resolve(outcome));
+  const change: VoiceChange = {
+    approvalId: "call-7",
+    ready: () => ready,
+    send,
+  };
+  return { change, send };
+};
 
 describe("listening against the endpoint", () => {
   let locale = "en";
@@ -859,6 +875,225 @@ describe("listening against the endpoint", () => {
     expect(variables.body.current_piece_id).toBe(CARD[text].id);
     expect(connections).toHaveLength(3);
     expect(sentences(connections[2])).toEqual(sentences(connections[1]));
+  });
+
+  describe("a change asked for by voice", () => {
+    const answer = (meaning: string) =>
+      fetchCommand.mockResolvedValue({
+        meaning,
+        piece_id: null,
+        source: "model",
+      });
+    /** Plays the confirmation out, so the change goes out. */
+    const confirm = async () => {
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      expect(sentences(connections[1])).toEqual([
+        "In Ordnung, ich ändere das.",
+      ]);
+      audio(connections[1], 0);
+      playOut();
+    };
+
+    it("confirms, then sends the change for this card's approval with the user's words", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const { change, send } = changeable();
+      const { heardApprovalWords, useApprovalChanges, useApprovalListening } =
+        await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "  nimm den 22.  ");
+      await confirm();
+      await heard;
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith("nimm den 22.");
+      const record = useApprovalChanges.getState().records["call-7"];
+      expect(record).toMatchObject({
+        messageId: "message-1",
+        approvalId: "call-7",
+        words: "  nimm den 22.  ",
+        state: "sent",
+        round: 1,
+      });
+      expect(record.heard).toEqual(CARD.map((piece) => piece.id));
+      expect(useApprovalListening.getState().quiet).toBe(KEY);
+      // No decision went anywhere but through the card's own change.
+      expect(fetchSpy).not.toHaveBeenCalled();
+      for (const connection of connections)
+        expect(connection.url).toMatch(/\/approval-speech$/);
+      fetchSpy.mockRestore();
+    });
+
+    it("sends long dictated words up to the change request's limit", async () => {
+      const { change, send } = changeable();
+      const { heardApprovalWords } = await heardCard(change);
+      answer("change");
+      const words = `nimm den 22. ${"und noch etwas dazu ".repeat(80)}`;
+      const heard = heardApprovalWords(KEY, words);
+      await confirm();
+      await heard;
+      const [{ body }] = fetchCommand.mock.calls[0] as [
+        { body: { transcript: string } },
+      ];
+      expect(body.transcript).toHaveLength(300);
+      expect(send.mock.calls[0][0]).toHaveLength(1000);
+      expect(send.mock.calls[0][0]).toBe(words.slice(0, 1000));
+    });
+
+    it("a card the voice cannot change says so and keeps listening", async () => {
+      const { heardApprovalWords, useApprovalListening, useApprovalChanges } =
+        await heardCard();
+      answer("change");
+      await heardApprovalWords(KEY, "nimm den 22.");
+      expect(sentences(connections[1])).toEqual([
+        "Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.",
+      ]);
+      expect(useApprovalListening.getState().quiet).toBeNull();
+      expect(useApprovalChanges.getState().records).toEqual({});
+    });
+
+    it("with other approvals still open, asks for those first and sends nothing", async () => {
+      const { change, send } = changeable("sent", false);
+      const { heardApprovalWords } = await heardCard(change);
+      answer("change");
+      await heardApprovalWords(KEY, "nimm den 22.");
+      expect(sentences(connections[1])[0]).toMatch(
+        /^Bitte zuerst die anderen Freigaben/,
+      );
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("a failed request is said once; the card keeps waiting and stops listening", async () => {
+      const { change, send } = changeable("failed");
+      const {
+        heardApprovalWords,
+        useApprovalChanges,
+        useApprovalListening,
+        useApprovalSpeech,
+      } = await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await confirm();
+      await heard;
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(connections).toHaveLength(3);
+      expect(sentences(connections[2])).toEqual([
+        "Die Änderung ließ sich nicht senden. Die Karte wartet auf dem Bildschirm.",
+      ]);
+      expect(useApprovalSpeech.getState().closed).toBe(false);
+      expect(useApprovalListening.getState().quiet).toBe(KEY);
+      expect(useApprovalChanges.getState().records).toEqual({});
+    });
+
+    it("a request that throws counts as failed", async () => {
+      const { change } = changeable();
+      change.send = () => Promise.reject(new Error("offline"));
+      const { heardApprovalWords } = await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await confirm();
+      await heard;
+      expect(sentences(connections[2])[0]).toMatch(/^Die Änderung ließ sich/);
+    });
+
+    it("a card changed elsewhere meanwhile (409) says so, though the card is gone", async () => {
+      const { change } = changeable();
+      const { heardApprovalWords, forgetApprovalCards } =
+        await heardCard(change);
+      change.send = () => {
+        forgetApprovalCards([KEY]);
+        return Promise.resolve("conflict");
+      };
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await confirm();
+      await heard;
+      expect(sentences(connections[2])).toEqual([
+        "Die Karte hat sich inzwischen geändert. Bitte auf dem Bildschirm nachsehen.",
+      ]);
+    });
+
+    it("sends nothing for a card decided on screen during the confirmation", async () => {
+      const { change, send } = changeable();
+      const { heardApprovalWords, forgetApprovalCards, useApprovalChanges } =
+        await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      forgetApprovalCards([KEY]);
+      await heard;
+      expect(send).not.toHaveBeenCalled();
+      expect(useApprovalChanges.getState().records).toEqual({});
+    });
+
+    it("sends nothing once audio mode was left during the confirmation", async () => {
+      const { change, send } = changeable();
+      const { heardApprovalWords, useSpeechPlayback } = await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      useSpeechPlayback.setState({ conversational: false });
+      await heard;
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("goes out after a confirmation that never ends", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { change, send } = changeable();
+      const { heardApprovalWords, CONFIRMATION_WAIT_MS } =
+        await heardCard(change);
+      answer("change");
+      const heard = heardApprovalWords(KEY, "nimm den 22.");
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      await vi.advanceTimersByTimeAsync(CONFIRMATION_WAIT_MS);
+      await heard;
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it("a change said before any piece was heard records nothing as heard", async () => {
+      const { change } = changeable();
+      const speech = await import("./approvalSpeech");
+      const listening = await import("./approvalListening");
+      const { useApprovalChanges } = await import("./approvalChanges");
+      const { useSpeechPlayback } = await import("./speechPlayback");
+      useSpeechPlayback.setState({ conversational: true, enabled: true });
+      speech.speakApprovalCard({
+        key: KEY,
+        messageId: "message-1",
+        pieces: CARD,
+        language: "de",
+        change,
+      });
+      await vi.waitFor(() => expect(connections).toHaveLength(1));
+      speech.stopApprovalSpeech();
+      answer("change");
+      const heard = listening.heardApprovalWords(KEY, "nimm den 22.");
+      await confirm();
+      await heard;
+      expect(useApprovalChanges.getState().records["call-7"].heard).toEqual([]);
+    });
+
+    it("a new request keeps the card waiting and says what can be done", async () => {
+      const { change, send } = changeable();
+      const { heardApprovalWords, useApprovalListening } =
+        await heardCard(change);
+      answer("new_request");
+      await heardApprovalWords(KEY, "wie wird das Wetter morgen?");
+      expect(sentences(connections[1])).toEqual([
+        "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach geht es mit der neuen Bitte weiter.",
+      ]);
+      expect(send).not.toHaveBeenCalled();
+      expect(useApprovalListening.getState().quiet).toBeNull();
+    });
+
+    it.each(["approve", "reject"] as const)(
+      "%s on a changeable card sends nothing through it",
+      async (meaning) => {
+        const { change, send } = changeable();
+        const { heardApprovalWords } = await heardCard(change);
+        answer(meaning);
+        await heardApprovalWords(KEY, meaning === "approve" ? "ja" : "nein");
+        expect(send).not.toHaveBeenCalled();
+      },
+    );
   });
 
   it("words for another card do nothing", async () => {

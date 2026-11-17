@@ -12,6 +12,8 @@ export interface DecidedApproval {
    * position at the click, sent as `scope_position`.
    */
   scopePosition?: unknown;
+  /** For `request_change`: what the user wants different, in their words. */
+  changeRequest?: string;
 }
 
 /**
@@ -49,6 +51,9 @@ export const isApprovalDecision = (decision: ToolApprovalDecision): boolean =>
  *
  * `readBack` asks for the continued answer to be spoken; the caller sets it
  * when the turn that stopped was spoken.
+ *
+ * A change request is always enumerated: it names its approval and carries
+ * the user's words.
  */
 export const buildContinueStreamBody = ({
   messageId,
@@ -73,7 +78,11 @@ export const buildContinueStreamBody = ({
   if (
     decided.length > 1 ||
     (enumerate && decided.length > 0) ||
-    decided.some((item) => item.decision === "approve_context")
+    decided.some(
+      (item) =>
+        item.decision === "approve_context" ||
+        item.decision === "request_change",
+    )
   ) {
     const decisions: ApprovalDecisionItem[] = decided.map((item) => ({
       approval_id: item.approvalId,
@@ -85,6 +94,9 @@ export const buildContinueStreamBody = ({
               ApprovalDecisionItem["scope_position"]
             >,
           }),
+      ...(item.decision === "request_change" && item.changeRequest
+        ? { change_request: item.changeRequest }
+        : {}),
     }));
     return {
       message_id: messageId,

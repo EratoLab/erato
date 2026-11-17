@@ -56,9 +56,38 @@ const leavesOutYear = (value: CalendarDay, today: CalendarDay): boolean => {
   return days >= 0 && days <= YEAR_LEFT_OUT_DAYS;
 };
 
+/** How a corrected card is introduced, by what is said after it. */
+export type DifferenceIntro =
+  /** Only what differs from the withdrawn card follows. */
+  | "changed"
+  /** Nothing differs. */
+  | "same"
+  /** The card is about another item; it is said in full. */
+  | "other_item"
+  /** The withdrawn card was hardly heard; the new one is said in full. */
+  | "reread";
+
+/** The sentences that compare a corrected card with the one it replaces. */
+export interface DifferenceWords {
+  /** `what`, the new card's own first sentence, after its introduction. */
+  intro(kind: DifferenceIntro, what: string): string;
+  /** A difference, marked when the user did not ask for it. */
+  differs(asked: boolean, sentence: string): string;
+  /** A field the withdrawn card had and the new one leaves out. */
+  dropped(field: string): string;
+  /** The new title of something being created. */
+  title(kind: GistKind, name: string): string;
+  recipientsNow(recipients: SpokenRecipients): string;
+  /** After the differences: everything else stays. */
+  rest(): string;
+  /** The card came back unchanged: what can be done. */
+  sameHint(): string;
+}
+
 export type LanguageWords = SpokenWords & {
   /** Whether the language says the whole card, not only the pointer. */
   full: boolean;
+  difference: DifferenceWords;
 };
 
 /** What a language says as code: number words, ordinals, times. */
@@ -742,6 +771,64 @@ const consequenceSentence = (
   }
 };
 
+const differenceIntro = (kind: DifferenceIntro, what: string): string =>
+  t({
+    id: "spokenCard.difference.intro",
+    message: select(kind, {
+      changed: `The new version: ${what}`,
+      same: `The new card is the same as before: ${what}`,
+      other_item: `Note, the new card is about something else than before: ${what}`,
+      other: `The card was changed: ${what}`,
+    }),
+  });
+
+const differenceEntry = (asked: boolean, sentence: string): string => {
+  const shape = asked ? "asked" : "unasked";
+  return t({
+    id: "spokenCard.difference.entry",
+    message: select(shape, {
+      asked: `Changed: ${sentence}`,
+      other: `Also different from before, not asked for: ${sentence}`,
+    }),
+  });
+};
+
+const differenceDropped = (field: string): string =>
+  t({
+    id: "spokenCard.difference.dropped",
+    message: `${field} is no longer part of it.`,
+  });
+
+const differenceTitle = (kind: GistKind, name: string): string => {
+  const shape = kind === "email" ? "subject" : "title";
+  return t({
+    id: "spokenCard.difference.title",
+    message: select(shape, {
+      subject: `The subject is now ${name}.`,
+      other: `The title is now ${name}.`,
+    }),
+  });
+};
+
+const differenceRecipients = (names: string): string =>
+  t({
+    id: "spokenCard.difference.recipients",
+    message: `Recipients now: ${names}.`,
+  });
+
+const differenceRest = (): string =>
+  t({
+    id: "spokenCard.difference.rest",
+    message: "Everything else is as before.",
+  });
+
+const differenceSameHint = (): string =>
+  t({
+    id: "spokenCard.difference.sameHint",
+    message:
+      "Nothing was changed. The change can be said again, in other words.",
+  });
+
 const requestSentence = (): string =>
   t({ id: "spokenCard.request", message: "Please confirm on screen." });
 
@@ -778,16 +865,51 @@ const noticeSentence = (notice: SpokenNotice): string => {
         }),
       });
     }
-    case "change_on_screen":
+    case "change_on_screen": {
+      const { reason } = notice;
       return t({
         id: "spokenCard.notice.changeOnScreen",
-        message:
-          "Changes can't be made by voice yet: please decline on screen and type the change.",
+        message: select(reason, {
+          others:
+            "First decide the other approvals on screen; then this one can be changed by voice.",
+          other:
+            "This card can't be changed by voice. Please decide it on screen.",
+        }),
       });
+    }
+    case "changing":
+      return t({
+        id: "spokenCard.notice.changing",
+        message: "All right, I'll change that.",
+      });
+    case "change_failed":
+      return t({
+        id: "spokenCard.notice.changeFailed",
+        message: "The change couldn't be sent. The card is waiting on screen.",
+      });
+    case "change_conflict":
+      return t({
+        id: "spokenCard.notice.changeConflict",
+        message:
+          "The card has changed in the meantime. Please check the screen.",
+      });
+    case "change_no_card": {
+      const shape = notice.several ? "several" : "once";
+      return t({
+        id: "spokenCard.notice.changeNoCard",
+        message: select(shape, {
+          several:
+            "After several changes no new card came, and nothing was run. Best say again what should happen.",
+          other:
+            "No new card came, and nothing was run. Just say how to go on.",
+        }),
+      });
+    }
     case "new_request_on_screen":
       return t({
         id: "spokenCard.notice.newRequest",
-        message: "A new request has to wait until this card is decided.",
+        message:
+          "First this card: decide it on screen, or say what should be different. The new request can come after that.",
       });
     case "unclear": {
       // eslint-disable-next-line lingui/no-unlocalized-strings -- select keys
@@ -1123,6 +1245,24 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
     notice: noticeSentence,
+    difference: {
+      intro: differenceIntro,
+      differs: differenceEntry,
+      dropped: differenceDropped,
+      title: differenceTitle,
+      recipientsNow({ names, total }) {
+        const more = total - names.length;
+        return differenceRecipients(
+          names.length === 0
+            ? recipientsPhrase("unnamed", total, 0, "", count(total))
+            : list(
+                more > 0 ? [...names, moreEntries(more, count(more))] : names,
+              ),
+        );
+      },
+      rest: differenceRest,
+      sameHint: differenceSameHint,
+    },
   };
 };
 

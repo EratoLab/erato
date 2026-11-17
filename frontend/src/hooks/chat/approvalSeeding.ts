@@ -23,10 +23,12 @@ export interface SeedableApprovalItem {
 export interface SettledApproval {
   item: SeedableApprovalItem;
   decision: ToolApprovalDecision;
+  /** The user's words for a `request_change`. */
+  changeRequest?: string;
 }
 
 const decisionPart = (
-  { item, decision }: SettledApproval,
+  { item, decision, changeRequest }: SettledApproval,
   now: string,
 ): ContentPart =>
   // The generated schema collapses both `serde_json::Value` and
@@ -51,7 +53,16 @@ const decisionPart = (
         rejected_at: now,
         approval_id: item.approval_id,
         child_chat_id: item.child?.child_chat_id ?? null,
-        reason: decision === "withdraw" ? "withdrawn" : null,
+        reason:
+          decision === "withdraw"
+            ? "withdrawn"
+            : decision === "request_change"
+              ? // eslint-disable-next-line lingui/no-unlocalized-strings -- API wire value
+                "change_requested"
+              : null,
+        ...(decision === "request_change"
+          ? { change_request: changeRequest ?? null }
+          : {}),
       }) as unknown as ContentPart;
 
 const toolUsePart = (item: SeedableApprovalItem, approved: boolean) =>

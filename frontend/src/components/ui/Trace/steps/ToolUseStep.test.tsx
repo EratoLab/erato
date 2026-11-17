@@ -556,6 +556,15 @@ describe("ToolUseStep decision row", () => {
       { status: "denied", neverAllow: false, withdrawn: true },
       "Not run: you no longer allow this tool",
     ],
+    [
+      {
+        status: "denied",
+        neverAllow: false,
+        withdrawn: false,
+        changeRequested: true,
+      },
+      "Not run: you asked for a change",
+    ],
   ] as [ToolDecision, string][])("words the decision %o", (decision, text) => {
     settled({}, decision.status === "denied" ? "error" : "done", decision);
 

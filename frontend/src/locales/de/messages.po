@@ -8666,6 +8666,41 @@ msgstr "{field}: {value}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.dropped"
+msgstr "{field} ist nicht mehr dabei."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.entry"
+msgstr "{shape, select, asked {Geändert: {sentence}} other {Außerdem anders als eben, ohne dass es verlangt war: {sentence}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.intro"
+msgstr "{kind, select, changed {Die neue Fassung: {what}} same {Die neue Karte ist genau wie eben: {what}} other_item {Achtung, die neue Karte betrifft etwas anderes als eben: {what}} other {Die Karte wurde geändert: {what}}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.recipients"
+msgstr "Empfänger jetzt: {names}."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.rest"
+msgstr "Alles andere ist wie eben."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.sameHint"
+msgstr "Geändert wurde nichts. Die Änderung lässt sich noch einmal anders sagen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.difference.title"
+msgstr "{shape, select, subject {Der Betreff ist jetzt {name}.} other {Der Titel ist jetzt {name}.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.item.subject"
 msgstr "Betreff: {name}"
 
@@ -8681,8 +8716,28 @@ msgstr "Das war alles."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeConflict"
+msgstr "Die Karte hat sich inzwischen geändert. Bitte auf dem Bildschirm nachsehen."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeFailed"
+msgstr "Die Änderung ließ sich nicht senden. Die Karte wartet auf dem Bildschirm."
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changeNoCard"
+msgstr "{shape, select, several {Nach mehreren Änderungen kam keine neue Karte, ausgeführt wurde nichts. Am besten noch einmal sagen, was passieren soll.} other {Es kam keine neue Karte, ausgeführt wurde nichts. Einfach sagen, wie es weitergehen soll.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.changeOnScreen"
-msgstr "Ändern geht noch nicht per Sprache: bitte auf dem Bildschirm ablehnen und die Änderung schreiben."
+msgstr "{reason, select, others {Bitte zuerst die anderen Freigaben auf dem Bildschirm entscheiden; dann lässt sich diese per Sprache ändern.} other {Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.notice.changing"
+msgstr "In Ordnung, ich ändere das."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8692,7 +8747,7 @@ msgstr "{decision, select, approve {Zustimmen geht im Moment nur auf dem Bildsch
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.notice.newRequest"
-msgstr "Eine neue Anfrage geht erst, wenn über diese Karte entschieden ist."
+msgstr "Zuerst diese Karte: auf dem Bildschirm entscheiden oder sagen, was anders sein soll. Danach geht es mit der neuen Bitte weiter."
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -10806,6 +10861,11 @@ msgstr "Sie haben das einmal erlaubt"
 #: src/lib/trace/toolDecisionLabel.ts
 msgid "trace.tool.decision.alwaysAllowed"
 msgstr "Sie haben „Immer erlauben“ gewählt"
+
+#. js-lingui-explicit-id
+#: src/lib/trace/toolDecisionLabel.ts
+msgid "trace.tool.decision.changeRequested"
+msgstr "Nicht ausgeführt: Sie haben eine Änderung gewünscht"
 
 #. js-lingui-explicit-id
 #: src/lib/trace/toolDecisionLabel.ts

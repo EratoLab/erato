@@ -56,6 +56,15 @@ export const toolDecisionLabel = (
     };
   }
   if (decision?.status === "denied") {
+    if (decision.changeRequested === true) {
+      return {
+        tone: "denied",
+        label: t({
+          id: "trace.tool.decision.changeRequested",
+          message: "Not run: you asked for a change",
+        }),
+      };
+    }
     if (decision.withdrawn) {
       return {
         tone: "denied",

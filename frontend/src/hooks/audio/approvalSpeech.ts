@@ -10,11 +10,16 @@ import { createSSEConnection } from "@/utils/sse/sseClient";
 import { createPcmQueue, resumePlaybackContext } from "./pcmPlayback";
 import { useSpeechPlayback } from "./speechPlayback";
 
+import type { VoiceChange } from "./approvalChanges";
 import type { ReadAloudStreamEvent } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
+import type {
+  SpokenApproval,
+  SpokenPiece,
+} from "@/lib/toolCallGist/spokenCard";
 import type {
   SpokenCardEvent,
   SpokenCardFlow,
+  SpokenNotice,
   SpokenPieceState,
 } from "@/lib/toolCallGist/spokenCardFlow";
 
@@ -45,6 +50,10 @@ export interface SpeakableCard {
   fallback?: SpokenPiece[];
   /** The language the pieces are in, for the sentences said about them. */
   language?: string;
+  /** What the card shows, kept for comparing it with a card that replaces it. */
+  approval?: SpokenApproval;
+  /** How the card is changed by voice; absent where it cannot be. */
+  change?: VoiceChange;
 }
 
 interface ApprovalSpeechState {
@@ -435,6 +444,31 @@ export function speakApprovalCard(card: SpeakableCard) {
   play_(card, card.pieces);
 }
 
+/**
+ * Says `notice` about `messageId` when no card waits, such as what came of
+ * a change request. It is not a card: it cannot be asked for again, and the
+ * microphone does not listen for it.
+ */
+export function announceApprovalNotice(
+  messageId: string,
+  notice: SpokenNotice,
+  language: string,
+) {
+  if (!approvalSpeechAllowed()) return;
+  const text = spokenUtteranceSentences({ type: "notice", notice }, [], {
+    language,
+    now: new Date(),
+  }).join(" ");
+  fellBack = true;
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- a key and a piece id, not copy
+  const key = `${messageId}:notice:${notice.kind}`;
+  play_(
+    { key, messageId, pieces: [] },
+    [{ id: key, role: "pointer", text, mustSay: false }],
+    false,
+  );
+}
+
 /** Keeps a waiting card ready to be said on request, without saying it. */
 export function offerApprovalCard(card: SpeakableCard) {
   started.add(card.key);
@@ -463,7 +497,7 @@ export function forgetApprovalCards(keys: readonly string[]) {
     useApprovalSpeech.setState({ available: null });
 }
 
-function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
+function play_(card: SpeakableCard, pieces: SpokenPiece[], offer = true) {
   const { key } = card;
   finish();
   speaking = card;
@@ -471,7 +505,12 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[]) {
   buffers = pieces.map(emptyBuffer);
   said = pieces;
   flow = spokenCardFlow(pieces);
-  publish({ key, available: card, speaking: true, failed: false });
+  publish({
+    key,
+    available: offer ? card : null,
+    speaking: true,
+    failed: false,
+  });
   void resumePlaybackContext().then(
     (resumed) => {
       if (current !== cardRun) return;

@@ -1,6 +1,6 @@
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
@@ -40,6 +40,7 @@ import { ToolCallLimitItem } from "./ToolCallLimitItem";
 import {
   approvalItemsOf,
   approvalQueueOf,
+  isChildItem,
   isWaitingItem,
   sameScope,
   scopeGroup,
@@ -52,6 +53,10 @@ import type {
   StagedDecisions,
 } from "./approvalItems";
 import type { ToolApprovalStatus } from "../Trace/Trace";
+import type {
+  VoiceChange,
+  VoiceChangeOutcome,
+} from "@/hooks/audio/approvalChanges";
 import type {
   ContentPartToolApprovalRequest,
   ToolApprovalDecision,
@@ -69,11 +74,13 @@ const ALREADY_CONTINUED = "already_continued";
 
 /**
  * `409`s that only say the row moved on without this card: another turn holds
- * the chat, or nothing is left to decide while tasks wait. The refetched row
- * says what is left.
+ * the chat, nothing is left to decide while tasks wait, or the card was
+ * changed on another device. The refetched row says what is left.
  */
 const SILENT_REFUSALS: ReadonlySet<string | undefined> = new Set([
   ALREADY_CONTINUED,
+  // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
+  "card_changed",
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
   "generation_running",
   // eslint-disable-next-line lingui/no-unlocalized-strings -- API refusal code
@@ -85,6 +92,9 @@ const DECISIONS_MISMATCH = "decisions_mismatch";
 
 // eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
 const APPROVE_CONTEXT: ToolApprovalDecision = "approve_context";
+
+// eslint-disable-next-line lingui/no-unlocalized-strings -- API decision value
+const REQUEST_CHANGE: ToolApprovalDecision = "request_change";
 
 /** How often a card that shows waiting tasks reads the row again. */
 const WAITING_REFRESH_MS = 5_000;
@@ -215,6 +225,12 @@ export const McpToolApprovalCard = ({
     : (waitingItems ?? approvalItemsOf(request).filter(isWaitingItem));
   const approvalIds = approvalItems.map((item) => item.approval_id);
   const openItemCount = approvalItems.length;
+  // A corrected card is answered by name: the server refuses an unnamed
+  // decision on it, which a stale tab could otherwise send for a version it
+  // never showed.
+  const enumerate =
+    waiting.length > 0 ||
+    approvalItems.some((item) => item.replaces_approval_id != null);
   // Nothing to decide: the stop waits for its tasks alone.
   const waitingOnly = openItemCount === 0 && waiting.length > 0;
   const queryClient = useQueryClient();
@@ -325,7 +341,7 @@ export const McpToolApprovalCard = ({
         mcpServerId: request.mcp_server_id,
         approvalIds,
         itemDecisions,
-        enumerate: waiting.length > 0,
+        enumerate,
         items: approvalItems,
         kind,
       });
@@ -351,7 +367,7 @@ export const McpToolApprovalCard = ({
           decision,
           approvalIds,
           itemDecisions,
-          enumerate: waiting.length > 0,
+          enumerate,
         }),
       ),
     });
@@ -378,7 +394,7 @@ export const McpToolApprovalCard = ({
   const decide = async (
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
-  ) => {
+  ): Promise<VoiceChangeOutcome> => {
     stopApprovalSpeech();
     const answers: DecidedApproval[] =
       itemDecisions ??
@@ -392,7 +408,7 @@ export const McpToolApprovalCard = ({
     try {
       await submitDecision(decision, itemDecisions);
       if (chatContext?.continueToolApproval) {
-        return;
+        return "sent";
       }
       setLocalResolution(isApprovalDecision(decision) ? "approved" : "denied");
       // Standing wherever it was given, not only on the row that happened to be
@@ -433,6 +449,7 @@ export const McpToolApprovalCard = ({
           }),
         ]);
       }
+      return "sent";
     } catch (cause) {
       // A task that waited stopped on a question meanwhile, and the answers
       // given so far did not cover it. They are kept, and the refetched row
@@ -445,9 +462,13 @@ export const McpToolApprovalCard = ({
         mismatch.missing.every((id) => waitingIds.has(id))
       ) {
         setError(null);
+        // A change request is not held: its words would be lost, and the
+        // voice says that it did not go out.
         setStaged(
           Object.fromEntries(
-            answers.map((answer) => [answer.approvalId, answer.decision]),
+            answers
+              .filter((answer) => answer.decision !== REQUEST_CHANGE)
+              .map((answer) => [answer.approvalId, answer.decision]),
           ),
         );
         setStagedPositions(
@@ -458,7 +479,7 @@ export const McpToolApprovalCard = ({
           ),
         );
         await chatContext?.refetchMessages();
-        return;
+        return "conflict";
       }
       const refusal = readConflictRefusal(cause);
       // Nothing is wrong with this card: the same question is open in the chat
@@ -489,6 +510,7 @@ export const McpToolApprovalCard = ({
       if (alreadyContinued) {
         await chatContext?.refetchMessages();
       }
+      return covered || alreadyContinued ? "conflict" : "failed";
     } finally {
       setIsBusy(false);
     }
@@ -598,6 +620,63 @@ export const McpToolApprovalCard = ({
     );
   };
 
+  /**
+   * A change asked for by voice, for the turn's own call: sent like a
+   * decision on screen, together with the answers held for the stop's other
+   * items, which have to be given first. Never an approval or a rejection.
+   */
+  const voiceChange = useRef<{
+    ready: (approvalId: string) => boolean;
+    send: (approvalId: string, words: string) => Promise<VoiceChangeOutcome>;
+  }>(null);
+  voiceChange.current = {
+    ready: (approvalId) =>
+      approvalItems.some((item) => item.approval_id === approvalId) &&
+      approvalItems.every(
+        (item) =>
+          item.approval_id === approvalId ||
+          staged[item.approval_id] !== undefined,
+      ),
+    send: (approvalId, words) => {
+      if (!voiceChange.current?.ready(approvalId))
+        return Promise.resolve("conflict");
+      const answers = itemAnswers(
+        { ...staged, [approvalId]: REQUEST_CHANGE },
+        stagedPositions,
+        REQUEST_CHANGE,
+      ).map((answer) =>
+        answer.approvalId === approvalId
+          ? { approvalId, decision: REQUEST_CHANGE, changeRequest: words }
+          : answer,
+      );
+      setStaged({});
+      setStagedPositions({});
+      return decide(REQUEST_CHANGE, answers);
+    },
+  };
+  const changeByVoice = useCallback(
+    (approvalId: string): VoiceChange | undefined => {
+      const item = approvalItems.find(
+        (entry) => entry.approval_id === approvalId,
+      );
+      if (
+        !item ||
+        isChildItem(item, kind) ||
+        (kind !== "mcp_tool" && kind !== "client_tool")
+      )
+        return undefined;
+      return {
+        approvalId,
+        ready: () => voiceChange.current?.ready(approvalId) ?? false,
+        send: (words) =>
+          voiceChange.current?.send(approvalId, words) ??
+          Promise.resolve("failed"),
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the items are read through the ref; their ids and kind decide
+    [approvalIds.join("\n"), kind],
+  );
+
   const isClientTool = kind === "client_tool";
   const isBuiltinTool = kind === "builtin_tool";
   // The turn's own gated call, and its tool-call limit, carry its parked tasks
@@ -635,6 +714,11 @@ export const McpToolApprovalCard = ({
     messageId,
     approvals: spokenApprovals,
     keys: spokenKeys,
+    items: (isQueue ? spokenItems : approvalItems.slice(0, 1)).map((item) => ({
+      approvalId: item.approval_id,
+      replaces: item.replaces_approval_id ?? null,
+    })),
+    change: changeByVoice,
     index: isQueue && unanswered > 0 ? unanswered : 0,
     active:
       isPending &&
