@@ -6,6 +6,7 @@ export type SearchCoverageSourceStatus =
   | "complete"
   | "indexing"
   | "newest_pending"
+  | "partial"
   | "unavailable";
 
 /** One source of a `search_sidecar_index` result, as the model receives it. */
@@ -23,6 +24,9 @@ export interface SearchCoverageSource {
   /** The sidecar's `unavailableReason`, only when `status` is unavailable. */
   reason?: string;
   partialCache: boolean;
+  inventoryComplete?: boolean;
+  searchableDocuments?: number;
+  pendingDatedDocuments?: number;
   /** Items in the period that are only partly on this device or not indexable. */
   unsearchable?: number;
   requestedFromBeforeCoverage: boolean;

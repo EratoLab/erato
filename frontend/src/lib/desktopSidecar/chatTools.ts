@@ -656,6 +656,13 @@ function coverageNotice(
         `${names(unscanned)} ${unscanned.length > 1 ? "have" : "has"} not been scanned yet`,
       );
     }
+    const incomplete = coverage.sources.filter(
+      (source) => source.inventoryComplete === false,
+    );
+    if (incomplete.length)
+      clauses.push(
+        `inventory in ${names(incomplete)} is incomplete; unreadable or undiscovered items may be missing`,
+      );
     clauses.push(
       "items not stored on this device were not listed, so do not conclude that missing items do not exist",
     );
@@ -672,7 +679,9 @@ function coverageNotice(
             `${numberedLabel(source)} from ${day(source.from)}${source.to === null ? "" : ` to ${day(source.to)}`}`,
           ],
     );
-    const unranged = coverage.sources.filter((source) => source.from === null);
+    const unranged = coverage.sources.filter(
+      (source) => source.from === null && source.status !== "partial",
+    );
     const pending = coverage.sources.filter(
       (source) =>
         source.from !== null &&
@@ -703,6 +712,31 @@ function coverageNotice(
         `items in ${joinList(after)} are still being indexed and were not searched`,
       );
     }
+    const incomplete = coverage.sources.filter(
+      (source) =>
+        source.inventoryComplete === false &&
+        (source.searchableDocuments ?? 0) > 0,
+    );
+    if (incomplete.length) {
+      clauses.push(
+        `${names(incomplete)} has incomplete inventory; successfully indexed items were searched, but no contiguous date coverage is guaranteed and missing items may still exist`,
+      );
+    }
+    const undated = coverage.sources.filter(
+      (source) => source.reason === "no_dated_searchable_documents",
+    );
+    if (undated.length)
+      clauses.push(
+        `indexed items in ${names(undated)} were searched, but their document dates are unavailable`,
+      );
+    const remaining = incomplete.reduce(
+      (sum, source) => sum + (source.pendingDatedDocuments ?? 0),
+      0,
+    );
+    if (remaining > 0)
+      clauses.push(
+        `${remaining} known dated items are still awaiting indexing`,
+      );
     const cached = coverage.sources.filter((source) => source.partialCache);
     if (cached.length) {
       clauses.push(
@@ -775,15 +809,30 @@ function searchCoverageForModel(
         kinds: PRODUCT_KINDS[source.product] ?? [],
         from: from === null ? null : isoSeconds(from),
         to: to === null ? null : isoSeconds(to),
-        status: source.unavailableReason
-          ? "unavailable"
-          : (source.pendingNewer ?? 0) > 0
-            ? "newest_pending"
-            : (source.olderPending ?? 0) > 0
-              ? "indexing"
-              : "complete",
+        status:
+          (source.unavailableReason === "inventory_incomplete" ||
+            source.unavailableReason === "no_dated_searchable_documents") &&
+          (source.searchableDocuments ?? 0) > 0
+            ? "partial"
+            : source.unavailableReason
+              ? "unavailable"
+              : (source.pendingNewer ?? 0) > 0
+                ? "newest_pending"
+                : (source.olderPending ?? 0) > 0
+                  ? "indexing"
+                  : "complete",
         ...(source.unavailableReason && { reason: source.unavailableReason }),
+        ...(source.inventoryComplete === false && {
+          pendingDatedDocuments:
+            (source.olderPending ?? 0) + (source.pendingNewer ?? 0),
+        }),
         partialCache: source.inventory !== "localStore",
+        ...(source.inventoryComplete !== undefined && {
+          inventoryComplete: source.inventoryComplete,
+        }),
+        ...(source.searchableDocuments !== undefined && {
+          searchableDocuments: source.searchableDocuments,
+        }),
         ...(!source.unavailableReason &&
           (source.unsearchable ?? 0) > 0 && {
             unsearchable: source.unsearchable ?? 0,

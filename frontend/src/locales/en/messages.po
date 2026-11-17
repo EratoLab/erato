@@ -2906,6 +2906,11 @@ msgstr "Searched on this device: {source}"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourcePartial"
+msgstr "{source}: indexed items searched; inventory and date coverage are incomplete"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceRange"
 msgstr "{source}: {from} – {to}"
 
@@ -2918,6 +2923,11 @@ msgstr "{source}: since {from}"
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
 msgid "chat.message.localSearchCoverage.sourceUnavailable"
 msgstr "{source}: not searchable yet"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Message/LocalSearchCoverageNotice.tsx
+msgid "chat.message.localSearchCoverage.sourceUndated"
+msgstr "{source}: indexed items searched; document dates are unavailable"
 
 #. js-lingui-explicit-id
 #: src/components/ui/Message/LocalSearchCoverageNotice.tsx
@@ -8089,6 +8099,11 @@ msgstr "Maximum number of documents processed at the same time."
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.partialInventory"
+msgstr "Inventory is incomplete. Indexed items remain searchable; date coverage is incomplete."
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 msgid "sidecar.indexing.priority"
 msgstr "Indexing priority"
 
@@ -8256,6 +8271,11 @@ msgstr "Not scanned yet"
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
 #~ msgid "sidecar.indexing.status.partial"
 #~ msgstr "Partially indexed"
+
+#. js-lingui-explicit-id
+#: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx
+msgid "sidecar.indexing.status.partialCoverage"
+msgstr "Partial coverage"
 
 #. js-lingui-explicit-id
 #: src/components/ui/DesktopSidecar/IndexingSourceRow.tsx

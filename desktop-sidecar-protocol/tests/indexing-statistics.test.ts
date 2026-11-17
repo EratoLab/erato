@@ -47,6 +47,28 @@ const sourceFixture = JSON.parse(
 );
 
 describe("indexing statistics contract", () => {
+  it("accepts searchable partial inventory without a complete enumeration", () => {
+    const current = structuredClone(fixture);
+    Object.assign(current.discovery[0], {
+      state: "partial",
+      lifecycle: "partial",
+      discoveryComplete: false,
+      lastEnumeratedAt: null,
+    });
+    Object.assign(current.discovery[0].indexedRange!, {
+      from: null,
+      through: null,
+      inventoryComplete: false,
+      searchableDocuments: 2,
+      unavailableReason: "inventory_incomplete",
+    });
+    expect(validateIndexingStatusV1Result(current)).toBe(true);
+    Object.assign(current.discovery[0].indexedRange!, {
+      searchableDocuments: -1,
+    });
+    expect(validateIndexingStatusV1Result(current)).toBe(false);
+  });
+
   it("accepts source policies and optional missing-cache coverage alongside previous v1 snapshots", () => {
     expect(validateSidecarConfigureV1Params(sourceFixture.configuration)).toBe(
       true,
