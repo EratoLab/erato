@@ -199,4 +199,56 @@ describe("buildContinueStreamBody", () => {
       buildContinueStreamBody({ messageId: "message-1", decision: "approve" }),
     ).not.toHaveProperty("conversational_audio_back");
   });
+
+  it("names the approval of a change request and carries the user's words", () => {
+    expect(
+      buildContinueStreamBody({
+        messageId: "message-1",
+        decision: "request_change",
+        itemDecisions: [
+          {
+            approvalId: "call-a",
+            decision: "request_change",
+            changeRequest: "nimm den 22.",
+          },
+        ],
+        readBack: true,
+      }),
+    ).toEqual({
+      message_id: "message-1",
+      decisions: [
+        {
+          approval_id: "call-a",
+          decision: "request_change",
+          change_request: "nimm den 22.",
+        },
+      ],
+      shows_child_items: true,
+      shows_limit_and_builtin_child_items: true,
+      conversational_audio_back: true,
+    });
+  });
+
+  it("sends the words with a change request only", () => {
+    const body = buildContinueStreamBody({
+      messageId: "message-1",
+      decision: "approve",
+      itemDecisions: [
+        { approvalId: "call-a", decision: "approve", changeRequest: "x" },
+        {
+          approvalId: "call-b",
+          decision: "request_change",
+          changeRequest: "ohne Anna",
+        },
+      ],
+    });
+    expect(body.decisions).toEqual([
+      { approval_id: "call-a", decision: "approve" },
+      {
+        approval_id: "call-b",
+        decision: "request_change",
+        change_request: "ohne Anna",
+      },
+    ]);
+  });
 });

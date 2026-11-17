@@ -32,13 +32,21 @@ export type SpokenUtterance =
   | { type: "notice"; notice: SpokenNotice };
 
 /**
- * What the voice says instead of acting: a decision or a change asked for by
- * voice, which are made on screen for now; words it did not understand; a
- * long text asked for on a card without one; listening that is not available.
+ * What the voice says instead of acting: a decision asked for by voice,
+ * which is made on screen for now; a change it is making, or cannot make;
+ * what came of a change; words it did not understand; a long text asked for
+ * on a card without one; listening that is not available.
  */
 export type SpokenNotice =
   | { kind: "decide_on_screen"; decision: "approve" | "reject" }
-  | { kind: "change_on_screen" }
+  /** `others`: other approvals of the stop are still open on screen. */
+  | { kind: "change_on_screen"; reason: "card" | "others" }
+  | { kind: "changing" }
+  | { kind: "change_failed" }
+  /** The card was decided or replaced meanwhile, elsewhere. */
+  | { kind: "change_conflict" }
+  /** The answer to a change came without a card; `several`: after many rounds. */
+  | { kind: "change_no_card"; several: boolean }
   | { kind: "new_request_on_screen" }
   | { kind: "unclear"; hasText: boolean }
   | { kind: "no_text" }

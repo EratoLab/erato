@@ -1,9 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
+import { spokenApprovalFor } from "@/lib/toolCallGist/spokenCard";
+
+import { noteChangeSending, useApprovalChanges } from "./approvalChanges";
 import { quietSpokenTurn, useSpeechPlayback } from "./speechPlayback";
 import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
+import type { VoiceChange } from "./approvalChanges";
+import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 
 const speakApprovalCard = vi.fn();
@@ -144,5 +150,98 @@ describe("useSpokenApprovalCard", () => {
     renderHook(() => useSpokenApprovalCard(props()));
     expect(speakApprovalCard).not.toHaveBeenCalled();
     expect(offerApprovalCard).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a card that corrects one changed by voice", () => {
+    const { calls } = data as unknown as {
+      calls: {
+        id: string;
+        tool_name: string;
+        input: unknown;
+        display: { title: string; server_name?: string; label?: unknown };
+      }[];
+    };
+    const approval = (id: string): SpokenApproval => {
+      const call = calls.find((entry) => entry.id === id);
+      if (!call) throw new Error(id);
+      return spokenApprovalFor("mcp_tool", {
+        ...call,
+        display: {
+          ...call.display,
+          label: call.display.label as ToolCallLabel,
+        },
+      });
+    };
+    const UPDATE = approval("update-01-date-and-probability");
+
+    beforeEach(() => useApprovalChanges.setState({ records: {} }));
+
+    const cardOf = (call: number) =>
+      speakApprovalCard.mock.calls[call][0] as {
+        pieces: { text: string }[];
+        approval: SpokenApproval;
+        change?: VoiceChange;
+      };
+
+    it("is said as the difference to the withdrawn card, which is taken once", () => {
+      noteChangeSending({
+        messageId: "message-1",
+        approvalId: "call-1",
+        approval: UPDATE,
+        heard: [
+          "what",
+          "detail:Estimated close date",
+          "detail:Probability",
+          "request",
+        ],
+        words: "nimm 75",
+      });
+      const next = props({
+        messageId: "message-1",
+        approvals: [UPDATE],
+        keys: ["t2:call-2"],
+        items: [{ approvalId: "call-2", replaces: "call-1" }],
+      });
+      renderHook(() => useSpokenApprovalCard(next));
+      const card = cardOf(0);
+      expect(card.pieces[0].text).toMatch(
+        /^The new card is the same as before: /,
+      );
+      expect(card.approval).toBe(UPDATE);
+      expect(useApprovalChanges.getState().records).toEqual({});
+    });
+
+    it("without a withdrawn card, a replacement is said in full", () => {
+      const next = props({
+        approvals: [UPDATE],
+        keys: ["t2:call-2"],
+        items: [{ approvalId: "call-2", replaces: "call-1" }],
+      });
+      renderHook(() => useSpokenApprovalCard(next));
+      expect(cardOf(0).pieces[0].text).toMatch(/^I'd like to /);
+    });
+
+    it("hands the card how it is changed by voice, for its own approval", () => {
+      const change = vi.fn(
+        (approvalId: string): VoiceChange => ({
+          approvalId,
+          ready: () => true,
+          send: () => Promise.resolve("sent"),
+        }),
+      );
+      const queue = props({
+        approvals: [UPDATE, UPDATE],
+        keys: ["t:a", "t:b"],
+        items: [
+          { approvalId: "a", replaces: null },
+          { approvalId: "b", replaces: null },
+        ],
+        change,
+        index: 1,
+      });
+      renderHook(() => useSpokenApprovalCard(queue));
+      expect(change).toHaveBeenCalledWith("b");
+      expect(cardOf(0).change?.approvalId).toBe("b");
+    });
   });
 });

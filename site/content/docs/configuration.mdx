@@ -5452,7 +5452,7 @@ How many change requests one turn may take. The next one ends the turn as descri
 
 {/* erato_toml_config_key: approval_change_requests.max_chars */}
 
-The longest change request accepted, in characters; a longer one is refused with `400`. `0` is refused and stops the server at startup. **Default:** `1000`.
+The longest change request accepted, in characters; a longer one is refused with `400`. `0` is refused and stops the server at startup. The web app's voice sends at most the first 1000 characters of a spoken change; with a lower value here, a longer spoken change is refused, and the voice says it could not be sent while the card keeps waiting. **Default:** `1000`.
 
 ### `prompt_optimizer`
 

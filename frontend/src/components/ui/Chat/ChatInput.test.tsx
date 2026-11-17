@@ -17,6 +17,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { useTeamsTranscriptContextItems } from "@/components/ui/Teams/useTeamsTranscriptContextItems";
 import { componentRegistry } from "@/config/componentRegistry";
+import {
+  dropChange,
+  noteChangeSending,
+  noteChangeSent,
+  useApprovalChanges,
+} from "@/hooks/audio/approvalChanges";
 import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
@@ -8702,6 +8708,57 @@ describe("ChatInput", () => {
       await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
       rerender(ui(false));
       expect(screen.getByPlaceholderText("Type a message...")).toHaveValue("");
+    });
+
+    it("keeps the microphone closed while a change asked for by voice waits for its answer", async () => {
+      const toggleDictation = vi.fn();
+      const voiced = (listening: boolean) => {
+        conversational(toggleDictation, listening);
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          voiceCommandsEnabled: false,
+          maxRecordingDurationSeconds: 1200,
+        });
+      };
+      useSpeechPlayback.setState({ enabled: true, playing: false });
+      useApprovalChanges.setState({ records: {} });
+      voiced(false);
+      const ui = await composer();
+      const { rerender } = render(ui(false));
+      fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+      voiced(true);
+      rerender(ui(true));
+
+      showCard();
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+      voiced(false);
+      rerender(ui(true));
+
+      // The card was withdrawn for a change; its answer is still to come.
+      act(() => {
+        noteChangeSending({
+          messageId: "message-1",
+          approvalId: "call-1",
+          approval: { type: "pointer" },
+          heard: [],
+          words: "nimm den 22.",
+        });
+        noteChangeSent("call-1");
+      });
+      decideCard();
+      rerender(ui(true));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+      expect(toggleDictation).toHaveBeenCalledTimes(2);
+
+      act(() => dropChange("call-1"));
+      rerender(ui(true));
+      await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
     });
 
     it("closes a listening microphone when a card appears", async () => {

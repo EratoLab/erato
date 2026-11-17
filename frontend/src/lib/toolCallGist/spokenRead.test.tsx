@@ -9,8 +9,10 @@ import { messages as deMessages } from "@/locales/de/messages.json";
 import data from "./fixtures/spokenCards/calls.json";
 import { toolCallCardOf } from "./gist";
 import { spokenApprovalFor, spokenApprovalPieces } from "./spokenCard";
+import { spokenDifference } from "./spokenCardDifference";
 import { spokenReadFactsOf } from "./spokenRead";
 
+import type { SpokenApproval } from "./spokenCard";
 import type {
   ToolCallLabel,
   ToolDisplayMetadata,
@@ -320,6 +322,92 @@ describe("the spoken sentence for reads, across read shapes", () => {
     });
     expect(what.text).toBe(
       "Die zweite: Ich möchte in Dynamics 365 aus der Tabelle opportunity den Datensatz Line 4 Retrofit lesen.",
+    );
+  });
+});
+
+describe("a read withdrawn for a change and replaced", () => {
+  const options = { language: "de", now: NOW, timeZone: "Europe/Berlin" };
+  const corrected = (before: SpokenApproval, after: SpokenApproval) => {
+    i18n.activate("de");
+    const heard = spokenApprovalPieces(before, options).map(
+      (piece) => piece.id,
+    );
+    const difference = spokenDifference(
+      { approval: before, heard, words: "nimm Status 1" },
+      after,
+      options,
+    );
+    return `${difference.intro}: ${difference.pieces.map((piece) => piece.text).join(" ")}`;
+  };
+  const setCall = (id: string) => spokenApprovalFor("mcp_tool", callOf(id));
+
+  it("is read again whole, in the read's own words", () => {
+    expect(
+      corrected(setCall("read-02-query"), setCall("read-14-sql-glossary")),
+    ).toBe(
+      "reread: Die Karte wurde geändert: Ich möchte in Dynamics 365 aus der Tabelle opportunity Datensätze lesen, mit diesen Bedingungen: Risk level ist High. Estimated close date liegt spätestens am 31. Dezember. Bitte auf dem Bildschirm bestätigen.",
+    );
+    expect(corrected(setCall("read-02-query"), setCall("read-02-query"))).toBe(
+      "same: Die neue Karte ist genau wie eben: Ich möchte in Dynamics 365 aus der Tabelle opportunity Datensätze lesen, mit diesen Bedingungen: statecode ist 0. Bitte auf dem Bildschirm bestätigen.",
+    );
+  });
+
+  it("is never compared as the statement a run card shows", () => {
+    const run = (code: string): SpokenApproval => {
+      const sql = `SELECT name FROM account WHERE statecode = ${code}`;
+      return {
+        type: "call",
+        toolTitle: "execute_sql",
+        server: "CRM",
+        input: { sql },
+        label: {
+          action: "run",
+          object_kind: "other",
+          source: "rules",
+          change: {
+            counts: {
+              emptied: 0,
+              list_replaced: 0,
+              list_removed: 0,
+              list_added: 0,
+              changed: 0,
+              set: 0,
+              unchanged: 0,
+              unreadable: 0,
+            },
+            opaque: [
+              {
+                kind: "sql",
+                name: "Sql",
+                raw_name: "sql",
+                path: "/sql",
+                text: sql,
+                lines: 1,
+              },
+            ],
+            complete: true,
+            notes: ["row_count_unknown"],
+          },
+          read: {
+            object_kind: "row",
+            filtered: true,
+            query: {
+              tables: ["account"],
+              conditions: [
+                {
+                  column: "statecode",
+                  operator: "equals",
+                  values: [{ path: "/sql", text: code }],
+                },
+              ],
+            },
+          },
+        },
+      };
+    };
+    expect(corrected(run("0"), run("1"))).toBe(
+      "reread: Die Karte wurde geändert: Ich möchte in CRM aus der Tabelle account Datensätze lesen, mit diesen Bedingungen: statecode ist 1. Bitte auf dem Bildschirm bestätigen.",
     );
   });
 });

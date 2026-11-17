@@ -1104,9 +1104,12 @@ describe("what the voice says besides the pieces", () => {
       }),
     ).toEqual(["For now, declining is done on screen."]);
     expect(
-      say("de", { type: "notice", notice: { kind: "change_on_screen" } }),
+      say("de", {
+        type: "notice",
+        notice: { kind: "change_on_screen", reason: "card" },
+      }),
     ).toEqual([
-      "Ändern geht noch nicht per Sprache: bitte auf dem Bildschirm ablehnen und die Änderung schreiben.",
+      "Diese Karte lässt sich nicht per Sprache ändern. Bitte auf dem Bildschirm entscheiden.",
     ]);
     expect(
       say("de", {

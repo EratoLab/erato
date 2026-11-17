@@ -309,4 +309,44 @@ describe("speaking an approval card", () => {
       vi.useRealTimers();
     }
   });
+
+  it("says what came of a change without offering a card to listen to", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: true, enabled: true });
+    module.announceApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "en",
+    );
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    expect(connections[0].url).toMatch(/message-1\/approval-speech$/);
+    expect(
+      (
+        JSON.parse(connections[0].options.body as string) as {
+          pieces: string[];
+        }
+      ).pieces,
+    ).toEqual([
+      "No new card came, and nothing was run. Just say how to go on.",
+    ]);
+    expect(module.useApprovalSpeech.getState().available).toBeNull();
+    expect(module.useApprovalSpeech.getState().speaking).toBe(true);
+    audio(connections[0], 0);
+    playOut();
+    expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("says nothing of a change once audio mode was left", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: false, enabled: true });
+    module.announceApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "en",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(connections).toHaveLength(0);
+  });
 });
