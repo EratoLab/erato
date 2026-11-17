@@ -139,6 +139,11 @@ export type ApprovalDecisionItem = {
    * @example call_abc123
    */
   approval_id: string;
+  /**
+   * The user's words for `request_change`, as they typed or said them.
+   * Refused on any other decision.
+   */
+  change_request?: string;
   decision: ToolApprovalDecision;
   /**
    * The host's position at the click, for `approve_context` on a scope the
@@ -180,6 +185,12 @@ export type ApprovalItem = {
   child?: null | ChildApprovalRef;
   display?: null | ToolDisplayMetadata;
   input: Value;
+  /**
+   * The item of an earlier stop on the same message this one replaces: the
+   * user asked for that call to be changed and this is the model's
+   * corrected call of the same tool on the same server.
+   */
+  replaces_approval_id?: string | null | undefined;
   tool_call_id: string;
   tool_name: string;
 };
@@ -868,6 +879,25 @@ export type CallLineage = {
    * @format uuid
    */
   requesting_message_id: string;
+};
+
+/**
+ * Body of the `409` `continuestream` answers to a decision that names no
+ * approval while the open card is the corrected call of a change request.
+ *
+ * A client that sends no `approval_id` may still show the card it replaced,
+ * on another tab or device, so its answer cannot be meant for this one. The
+ * client reloads the message and shows the card named here.
+ */
+export type CardChangedError = {
+  /**
+   * The approval that is open now.
+   */
+  approval_id: string;
+  /**
+   * Always `card_changed`.
+   */
+  code: string;
 };
 
 /**
@@ -1713,6 +1743,10 @@ export type ContentPartToolApprovalRequest = {
 export type ContentPartToolRejection = {
   approval_id?: null | undefined;
   /**
+   * The user's words when `reason` is `change_requested`.
+   */
+  change_request?: string | null | undefined;
+  /**
    * @format uuid
    */
   child_chat_id?: null | undefined;
@@ -1722,8 +1756,9 @@ export type ContentPartToolRejection = {
    */
   never_allow?: boolean;
   /**
-   * Why the call was rejected when the user did not decide it directly.
-   * The only value is `withdrawn`.
+   * Why the call was rejected when the user did not simply deny it:
+   * `withdrawn` when the user took the question back, `change_requested`
+   * when they asked for the call to be different.
    */
   reason?: string | null | undefined;
   rejected_at: string;
@@ -4689,7 +4724,8 @@ export type ToolApprovalDecision =
   | "approve_always"
   | "reject_always"
   | "withdraw"
-  | "approve_context";
+  | "approve_context"
+  | "request_change";
 
 /**
  * Which surface a durable approval stop belongs to. `McpTool` is the

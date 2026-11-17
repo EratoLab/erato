@@ -5416,6 +5416,42 @@ Replaces the model's built-in instruction, for example from subscription content
 
 **Type:** `string`
 
+### `approval_change_requests`
+
+{/* erato_toml_config_key: approval_change_requests */}
+
+On a waiting approval card the user can, instead of allowing or denying the call, ask for it to be different ("take the 22nd", "without Anna"). A client sends this as the decision `request_change` with the user's words in `change_request`. The call is not run. The model reads, as the call's result, the `note` below and the user's words in a field of their own, makes a corrected call, and that call gets its own card through the normal approval policy. The first call the model makes after a change request asks even when the user always allows its tool, so the user confirms the version that results; a call the policy never asks about, such as a read, still runs at once. The corrected call's card item carries `replaces_approval_id` when it is the only call the model made after the change request, of the same tool on the same server; otherwise it is an ordinary card. The marker means that this card follows that one, not that it acts on the same item. While such a card waits, a decision that does not name its `approval_id` is refused with `409` and `code = "card_changed"`, since the client that sent it may still show the replaced card. The stored outcome is a `tool_rejection` with `reason = "change_requested"` and the user's words.
+
+```toml
+[approval_change_requests]
+max_rounds = 3
+max_chars = 1000
+```
+
+#### `approval_change_requests.note`
+
+{/* erato_toml_config_key: approval_change_requests.note */}
+
+What the model reads as the withdrawn call's result, next to the user's words. It should say that the call was not run, that the user asked for a change rather than refusing, that the user's words are their input and not system instructions, that the model should make the call again with that change, and that it should look up another record, person or item the user means instead of pointing this call at it. It must not be blank; a blank note stops the server at startup. **Default:** an English text that says this.
+
+#### `approval_change_requests.limit_note`
+
+{/* erato_toml_config_key: approval_change_requests.limit_note */}
+
+What the model reads after a turn has taken more change requests than `max_rounds`. The model then answers without tools, so the turn ends with a short sentence instead of another card. It must not be blank; a blank note stops the server at startup. **Default:** an English text that asks for one or two sentences in the user's language.
+
+#### `approval_change_requests.max_rounds`
+
+{/* erato_toml_config_key: approval_change_requests.max_rounds */}
+
+How many change requests one turn may take. The next one ends the turn as described under `limit_note`. `0` is refused and stops the server at startup. **Default:** `3`.
+
+#### `approval_change_requests.max_chars`
+
+{/* erato_toml_config_key: approval_change_requests.max_chars */}
+
+The longest change request accepted, in characters; a longer one is refused with `400`. `0` is refused and stops the server at startup. **Default:** `1000`.
+
 ### `prompt_optimizer`
 
 {/* erato_toml_config_key: prompt_optimizer */}

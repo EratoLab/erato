@@ -137,6 +137,30 @@
     "security_relevance": "unknown",
     "stability": "deprecated"
   },
+  "approval_change_requests.limit_note": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_change_requests.max_chars": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_change_requests.max_rounds": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_change_requests.note": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
   "approval_voice_commands.chat_provider_id": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",
