@@ -363,6 +363,34 @@ test(
 );
 
 test(
+  "An answer's image of the call's file shows as the same file chip once the call's view renders",
+  { tag: TAG_CI },
+  async ({ browser }) => {
+    const { context, page } = await createDexAuthenticatedContext(
+      browser,
+      "mcp-apps@example.com",
+    );
+    try {
+      const message = await callCounterTool(page, {
+        prompt: "mcp apps image in answer",
+        toolName: "show_counter_with_image",
+      });
+      await expect(viewCount(message)).toHaveText("41", { timeout: 15000 });
+      await expect(message).toContainText("Here is the file:");
+      // One chip under the view, one where the answer placed the image.
+      const chips = message.locator('[data-ui="attachment-tile"]');
+      await expect(chips).toHaveCount(2);
+      await expect(chips.last()).toContainText("counter.png");
+      await expect(
+        message.getByRole("img", { name: "File", exact: true }),
+      ).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
   "A view's policy drops every declared domain on the app's host, so the view cannot fetch from the app, and keeps a declared third-party domain",
   { tag: TAG_CI },
   async ({ browser }) => {

@@ -154,6 +154,50 @@ describe("MessageContent with a tool call's view", () => {
     ).toEqual([CSV_ID]);
   });
 
+  it("shows an image of the call's file in the answer as the same chip once the view shows", () => {
+    const onFileLinkPreview = vi.fn();
+    render(
+      ui({
+        content: [
+          callWithView(),
+          chartImage,
+          {
+            content_type: "text",
+            text: `Here is the chart.\n\n![Revenue chart](erato-file://${CHART_ID})`,
+          },
+        ],
+        onFileLinkPreview,
+      }),
+    );
+
+    expect(
+      document.querySelectorAll(`img[src="${chart.preview_url}"]`),
+    ).toHaveLength(1);
+
+    fireEvent.click(screen.getByTestId("mcp-app-view"));
+
+    expect(fullImage()).toBeNull();
+    const chips = screen.getAllByRole("button", { name: /chart\.png/ });
+    // One under the view, one where the answer placed the image.
+    expect(chips).toHaveLength(2);
+    expect(chips[1].closest("p")).toBeNull();
+    fireEvent.click(chips[1]);
+    expect(onFileLinkPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ id: CHART_ID }),
+    );
+  });
+
+  it("keeps an image of the call's file in the answer full while no view shows", () => {
+    const answer: ContentPart = {
+      content_type: "text",
+      text: `Here is the chart.\n\n![Revenue chart](erato-file://${CHART_ID})`,
+    };
+    render(ui({ content: [callWithView(false), chartImage, answer] }));
+
+    expect(fullImage()).not.toBeNull();
+    expect(screen.queryByText("chart.png")).not.toBeInTheDocument();
+  });
+
   it("keeps the full image for a call without a view", () => {
     render(
       ui({

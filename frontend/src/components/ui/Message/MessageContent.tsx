@@ -980,6 +980,9 @@ interface MarkdownMessageContextValue {
   onImageClick?: (image: UiImagePart) => void;
   imageAdvisory: string | null;
   generatedImageFileIds: ReadonlySet<string>;
+  filesById: Record<string, FileUploadItem>;
+  /** The images of calls whose view shows, which show as file chips. */
+  chippedFileIds: ReadonlySet<string>;
 }
 
 // The markdown overrides live at module level so React keeps their elements
@@ -991,8 +994,33 @@ const MarkdownMessageContext = React.createContext<MarkdownMessageContextValue>(
     resolveEratoFileLink: () => null,
     imageAdvisory: null,
     generatedImageFileIds: new Set(),
+    filesById: {},
+    chippedFileIds: new Set(),
   },
 );
+
+/**
+ * Whether a Markdown element holds an image that shows as a file chip, as an
+ * answer's image of a file the call's view already shows does.
+ */
+const holdsChippedImage = (
+  node: unknown,
+  chippedFileIds: ReadonlySet<string>,
+): boolean =>
+  chippedFileIds.size > 0 &&
+  ((node as { children?: unknown[] } | undefined)?.children ?? []).some(
+    (child) => {
+      const { tagName, properties } = child as {
+        tagName?: string;
+        properties?: { src?: unknown };
+      };
+      const fileId =
+        typeof properties?.src === "string"
+          ? getEratoFileIdFromUrl(properties.src)
+          : null;
+      return tagName === "img" && !!fileId && chippedFileIds.has(fileId);
+    },
+  );
 
 type MarkdownElementProps<Tag extends React.ElementType> =
   React.ComponentPropsWithoutRef<Tag> & { node?: unknown };
@@ -1080,7 +1108,21 @@ function MarkdownImage({
     onImageClick,
     imageAdvisory,
     generatedImageFileIds,
+    filesById,
+    chippedFileIds,
   } = React.useContext(MarkdownMessageContext);
+  const fileId = src ? getEratoFileIdFromUrl(src) : null;
+  if (fileId && chippedFileIds.has(fileId)) {
+    // The call's view already shows what the image holds: the same chip as
+    // under the view instead of a second full image.
+    return (
+      <McpAppViewFiles
+        fileIds={[fileId]}
+        filesById={filesById}
+        onFilePreview={onFileLinkPreview}
+      />
+    );
+  }
   const resolvedEratoFile = src ? resolveEratoFileLink(src) : null;
   const isEratoFileImageUrl =
     // eslint-disable-next-line lingui/no-unlocalized-strings
@@ -1228,10 +1270,20 @@ function MarkdownListItem({
 
 function MarkdownParagraph({
   children,
-  node: _node,
+  node,
   ...props
 }: MarkdownElementProps<"p">) {
-  const { isStreaming } = React.useContext(MarkdownMessageContext);
+  const { isStreaming, chippedFileIds } = React.useContext(
+    MarkdownMessageContext,
+  );
+  // A file chip is a block, which a paragraph cannot hold.
+  if (holdsChippedImage(node, chippedFileIds)) {
+    return (
+      <div className="mb-4 text-theme-fg-primary last:mb-0" {...props}>
+        {children}
+      </div>
+    );
+  }
   // A streamed paragraph holding only an unfinished emphasis or code marker.
   if (
     isStreaming &&
@@ -1803,6 +1855,8 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     }),
     [
       messageId,
@@ -1813,6 +1867,8 @@ export const MessageContent = memo(function MessageContent({
       onImageClick,
       imageAdvisory,
       generatedImageFileIds,
+      filesById,
+      chippedFileIds,
     ],
   );
 
