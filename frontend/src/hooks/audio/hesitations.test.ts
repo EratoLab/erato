@@ -51,7 +51,9 @@ describe("hesitation sounds", () => {
     expect(custom("Euh…")).toBe(true);
     expect(custom("Äh")).toBe(false);
     // A malformed entry is skipped, the rest still counts.
-    expect(hesitationMatcher(["euh", 3 as unknown as string])("euh")).toBe(true);
+    expect(hesitationMatcher(["euh", 3 as unknown as string])("euh")).toBe(
+      true,
+    );
     // An entry of more than one sound, or not of letters, disables nothing.
     const odd = hesitationMatcher(["äh ja", "42", "äh"]);
     expect(odd("Ja.")).toBe(false);

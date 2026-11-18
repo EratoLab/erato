@@ -644,9 +644,9 @@ describe("useAudioDictationRecorder", () => {
       });
     });
     await waitFor(() =>
-      expect(MockWebSocket.instances[0].sentBinaryFrames.length).toBeGreaterThan(
-        0,
-      ),
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
     );
 
     act(() => {
@@ -708,9 +708,9 @@ describe("useAudioDictationRecorder", () => {
       });
     });
     await waitFor(() =>
-      expect(MockWebSocket.instances[0].sentBinaryFrames.length).toBeGreaterThan(
-        0,
-      ),
+      expect(
+        MockWebSocket.instances[0].sentBinaryFrames.length,
+      ).toBeGreaterThan(0),
     );
 
     await act(async () => {
@@ -1316,9 +1316,9 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
         type: "finish",
       }),
     );
-    expect(sentPcm().filter((value) => Math.abs(value - word) < 2)).toHaveLength(
-      4096,
-    );
+    expect(
+      sentPcm().filter((value) => Math.abs(value - word) < 2),
+    ).toHaveLength(4096);
   });
 
   it("cuts a speaker who never pauses at the server's piece length, and goes on from there", async () => {
@@ -1466,9 +1466,9 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       }),
     );
     const said = Math.round(0.25 * 32768);
-    expect(sentPcm().filter((value) => Math.abs(value - said) < 2)).toHaveLength(
-      2 * RATE,
-    );
+    expect(
+      sentPcm().filter((value) => Math.abs(value - said) < 2),
+    ).toHaveLength(2 * RATE);
   });
 
   it("B2: a turn the detector heard end while it caught up still ends once it runs", async () => {
@@ -1751,7 +1751,9 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
         transcribed(0, answer);
         await waitFor(() => expect(onVadAutoStop).toHaveBeenCalledTimes(1));
         act(() => MockWebSocket.instances[0].emitJson({ type: "completed" }));
-        await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+        await waitFor(() =>
+          expect(hook.result.current.isDictating).toBe(false),
+        );
         expect(onTranscriptChunk).toHaveBeenCalledWith({
           chunkIndex: 0,
           transcript: answer,
