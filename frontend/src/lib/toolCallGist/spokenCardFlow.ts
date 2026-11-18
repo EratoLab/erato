@@ -72,6 +72,8 @@ export type SpokenCardEvent =
   | { type: "rest" }
   /** The piece being said, or the one named, again. */
   | { type: "repeat"; index?: number }
+  /** How much this short reading holds back, again. */
+  | { type: "held" }
   /** Read out the long text the piece named, or the card's first one, names. */
   | { type: "read"; index?: number }
   /** Quiet; the card keeps waiting. */
@@ -405,7 +407,20 @@ const step = (
           : { type: "count", count: content.length },
       );
     }
+    case "held": {
+      const held = heldBack(pieces, flow);
+      const first = held.indices.at(0);
+      if (flow.released || first === undefined) return flow;
+      return begin(pieces, interrupt(flow, null), {
+        type: "held",
+        count: held.count,
+        kind: pieces[first].held ?? "field",
+      });
+    }
     case "repeat": {
+      // Again, while it says how much it holds back, is that sentence.
+      if (event.index === undefined && flow.playing?.type === "held")
+        return step(pieces, flow, { type: "held" });
       const target =
         event.index ?? pieceOf(flow.playing) ?? flow.lastRead ?? flow.last;
       if (target === null || !(target in pieces)) return flow;

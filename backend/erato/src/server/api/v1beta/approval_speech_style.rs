@@ -39,49 +39,56 @@ pub struct ApprovalSpeechStyleResponse {
     pub user_choice: bool,
 }
 
-/// The first active audience in the approval-speech order that matches the
-/// caller and sets a value. Only audiences the admin listed under this
-/// setting take part.
-pub fn winning_audience<'a>(
+/// The active audiences in the approval-speech order that match the caller
+/// and set a value, first one first. Only audiences the admin listed under
+/// this setting take part.
+pub fn matching_audiences<'a>(
     policy: &'a ExperiencePolicyDocument,
     identity: AudienceIdentity<'_>,
     now: DateTime<Utc>,
-) -> Option<(&'a str, &'a AudienceApprovalSpeech)> {
-    resolution_order_for(policy, APPROVAL_SPEECH_SETTING).find_map(|(name, audience)| {
-        let speech = audience.approval_speech.as_ref()?;
-        (audience.is_active_at(now)
-            && audience
-                .subjects
-                .iter()
-                .any(|subject| subject_matches(subject, identity)))
-        .then_some((name, speech))
-    })
+) -> Vec<(&'a str, &'a AudienceApprovalSpeech)> {
+    resolution_order_for(policy, APPROVAL_SPEECH_SETTING)
+        .filter_map(|(name, audience)| {
+            let speech = audience.approval_speech.as_ref()?;
+            (audience.is_active_at(now)
+                && audience
+                    .subjects
+                    .iter()
+                    .any(|subject| subject_matches(subject, identity)))
+            .then_some((name, speech))
+        })
+        .collect()
 }
 
-/// The style in resolution order: deployment, audience, the user's own.
+/// The style in resolution order: deployment, audiences, the user's own.
+/// Each setting is resolved on its own: the first audience in the order
+/// that sets it wins, so an audience that sets only the wording leaves the
+/// amount to the next audience that sets one, or to the deployment.
 pub fn resolve(
     config: &ApprovalSpeechConfig,
-    audience: Option<(&str, &AudienceApprovalSpeech)>,
+    audiences: &[(&str, &AudienceApprovalSpeech)],
     own_amount: Option<ApprovalSpeechAmount>,
     own_wording: Option<ApprovalSpeechWording>,
 ) -> ApprovalSpeechStyleResponse {
+    fn first<T: Copy>(
+        audiences: &[(&str, &AudienceApprovalSpeech)],
+        part: impl Fn(&AudienceApprovalSpeech) -> Option<T>,
+    ) -> Option<T> {
+        audiences.iter().find_map(|(_, set)| part(set))
+    }
     let mut style = ApprovalSpeechStyleResponse {
-        amount: config.amount,
-        short_details: config.short_details.min(crate::config::MAX_SHORT_DETAILS),
-        wording: config.wording,
+        amount: first(audiences, |set| set.amount).unwrap_or(config.amount),
+        short_details: first(audiences, |set| set.short_details)
+            .unwrap_or(config.short_details)
+            .min(crate::config::MAX_SHORT_DETAILS),
+        wording: first(audiences, |set| set.wording).unwrap_or(config.wording),
         source: ApprovalSpeechStyleSource::Deployment,
         audience: None,
-        user_choice: config.user_choice,
+        user_choice: first(audiences, |set| set.user_choice).unwrap_or(config.user_choice),
     };
-    if let Some((name, set)) = audience {
-        style.amount = set.amount.unwrap_or(style.amount);
-        style.short_details = set.short_details.map_or(style.short_details, |value| {
-            value.min(crate::config::MAX_SHORT_DETAILS)
-        });
-        style.wording = set.wording.unwrap_or(style.wording);
-        style.user_choice = set.user_choice.unwrap_or(style.user_choice);
+    if let Some((name, _)) = audiences.first() {
         style.source = ApprovalSpeechStyleSource::Audience;
-        style.audience = Some(name.to_string());
+        style.audience = Some((*name).to_string());
     }
     if style.user_choice && (own_amount.is_some() || own_wording.is_some()) {
         style.amount = own_amount.unwrap_or(style.amount);
@@ -107,12 +114,13 @@ pub async fn approval_speech_style(
 ) -> Result<Json<ApprovalSpeechStyleResponse>, StatusCode> {
     let experience_policy = { app_state.reloadable.read().await.experience_policy.clone() };
     let identity = AudienceIdentity::from_profile(&me_user);
-    let audience = experience_policy
+    let audiences = experience_policy
         .as_ref()
-        .and_then(|policy| winning_audience(policy, identity, Utc::now()));
+        .map(|policy| matching_audiences(policy, identity, Utc::now()))
+        .unwrap_or_default();
     Ok(Json(resolve(
         &app_state.config.approval_speech,
-        audience,
+        &audiences,
         me_user.preference_approval_speech_amount,
         me_user.preference_approval_speech_wording,
     )))
@@ -132,15 +140,35 @@ mod tests {
     }
 
     #[test]
+    fn each_setting_comes_from_the_first_audience_that_sets_it() {
+        let config = ApprovalSpeechConfig::default();
+        let wording_only = AudienceApprovalSpeech {
+            wording: Some(ApprovalSpeechWording::Natural),
+            ..AudienceApprovalSpeech::default()
+        };
+        let amount_only = audience(None);
+        let style = resolve(
+            &config,
+            &[("Pilot", &wording_only), ("Vertrieb", &amount_only)],
+            None,
+            None,
+        );
+        assert_eq!(style.wording, ApprovalSpeechWording::Natural);
+        assert_eq!(style.amount, ApprovalSpeechAmount::Short);
+        assert_eq!(style.short_details, 2);
+        assert_eq!(style.audience.as_deref(), Some("Pilot"));
+    }
+
+    #[test]
     fn the_deployment_then_the_audience_then_the_user_where_allowed() {
         let config = ApprovalSpeechConfig::default();
-        let plain = resolve(&config, None, None, None);
+        let plain = resolve(&config, &[], None, None);
         assert_eq!(plain.amount, ApprovalSpeechAmount::Full);
         assert_eq!(plain.wording, ApprovalSpeechWording::Precise);
         assert_eq!(plain.source, ApprovalSpeechStyleSource::Deployment);
 
         let set = audience(None);
-        let by_audience = resolve(&config, Some(("Vertrieb", &set)), None, None);
+        let by_audience = resolve(&config, &[("Vertrieb", &set)], None, None);
         assert_eq!(by_audience.amount, ApprovalSpeechAmount::Short);
         assert_eq!(by_audience.short_details, 2);
         assert_eq!(by_audience.wording, ApprovalSpeechWording::Precise);
@@ -148,7 +176,7 @@ mod tests {
 
         let own = resolve(
             &config,
-            Some(("Vertrieb", &set)),
+            &[("Vertrieb", &set)],
             None,
             Some(ApprovalSpeechWording::Natural),
         );
@@ -160,7 +188,7 @@ mod tests {
         let locked = audience(Some(false));
         let kept = resolve(
             &config,
-            Some(("Vertrieb", &locked)),
+            &[("Vertrieb", &locked)],
             Some(ApprovalSpeechAmount::Full),
             Some(ApprovalSpeechWording::Natural),
         );
@@ -174,14 +202,14 @@ mod tests {
             ..ApprovalSpeechConfig::default()
         };
         assert_eq!(
-            resolve(&closed, None, None, Some(ApprovalSpeechWording::Natural)).wording,
+            resolve(&closed, &[], None, Some(ApprovalSpeechWording::Natural)).wording,
             ApprovalSpeechWording::Precise
         );
         let opened = audience(Some(true));
         assert_eq!(
             resolve(
                 &closed,
-                Some(("Pilot", &opened)),
+                &[("Pilot", &opened)],
                 None,
                 Some(ApprovalSpeechWording::Natural)
             )

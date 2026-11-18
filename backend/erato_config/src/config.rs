@@ -482,6 +482,9 @@ impl McpRuntimeConfig {
         validate_mcp_server_ids(&config.mcp_servers)?;
         warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
+        for line in crate::spoken::sentences_in_use(&config.spoken_vocabularies, None) {
+            tracing::info!("Spoken sentence variant in use: {line}.");
+        }
         config.mcp_server_permissions.validate()?;
         config.mcp_servers_global.validate()?;
         Ok(config)
@@ -998,7 +1001,10 @@ pub struct AppConfig {
 
     /// How much a waiting approval card says aloud and how it is worded, in
     /// conversational audio mode. No model is involved.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_approval_speech"
+    )]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     #[facet(erato_config::stability(level = "alpha"))]
     pub approval_speech: ApprovalSpeechConfig,
@@ -1548,6 +1554,7 @@ impl AppConfig {
         warn_unknown_turn_instruction_keys(&schema);
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
+        warn_misshaped_approval_speech(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1567,6 +1574,7 @@ impl AppConfig {
         warn_unknown_turn_instruction_keys(&schema);
         warn_unknown_spoken_keys(&schema);
         warn_misshaped_spoken_entries(&schema);
+        warn_misshaped_approval_speech(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -1746,6 +1754,12 @@ impl AppConfig {
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
         for dropped in config.approval_speech.drop_unusable() {
             tracing::warn!("Approval speech setting dropped: {dropped}.");
+        }
+        for line in crate::spoken::sentences_in_use(
+            &config.spoken_vocabularies,
+            Some(&config.approval_speech),
+        ) {
+            tracing::info!("Spoken sentence variant in use: {line}.");
         }
 
         if let Err(e) = config.validate_approval_change_requests() {
@@ -8727,6 +8741,12 @@ fn warn_unknown_spoken_keys(schema: &Config) {
         tracing::warn!(
             "Config key `{key}` is not known to this Erato version and is ignored. It may come from a newer content package."
         );
+    }
+}
+
+fn warn_misshaped_approval_speech(schema: &Config) {
+    for dropped in crate::spoken::misshaped_approval_speech(schema) {
+        tracing::warn!("Approval speech setting dropped: {dropped}.");
     }
 }
 

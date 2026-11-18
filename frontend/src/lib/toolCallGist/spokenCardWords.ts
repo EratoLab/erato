@@ -129,6 +129,12 @@ interface LanguageCode {
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
   time?: (hour: number, minute: number) => string;
+  /**
+   * An old or new value with its direction, for a sentence variant, where
+   * the language's value in that role carries none ("from 1 December"). A
+   * German value carries it already ("vom 1. Dezember").
+   */
+  directed?: (role: "from" | "to", value: string) => string;
 }
 
 /* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
@@ -170,6 +176,7 @@ const GERMAN: LanguageCode = {
 
 const ENGLISH: LanguageCode = {
   locale: "en-GB",
+  directed: (role, value) => `${role} ${value}`,
   numbers: [
     "zero",
     "one",
@@ -1268,6 +1275,8 @@ const words = (
     natural
       ? naturalVariant(language, key, options.sentences, oneField)
       : undefined;
+  const directed = (role: "from" | "to", said: string): string =>
+    code.directed?.(role, said) ?? said;
   const today = wallClockParts(options.now, options.timeZone);
   const count = (value: number): string =>
     code.numbers[value] ?? new Intl.NumberFormat(code.locale).format(value);
@@ -1416,10 +1425,14 @@ const words = (
       case "set": {
         const type = facts.action === "update" ? "updated" : "set";
         const own = variant(type, entry.sentences?.[type]);
+        // A value an update sets carries its direction, as `to` does.
         if (own !== undefined)
           return fillVariant(own, {
             field: entry.field,
-            value: value(entry.value),
+            value:
+              type === "updated"
+                ? directed("to", value(entry.value, "to"))
+                : value(entry.value),
           });
         return facts.action === "update"
           ? detailSetTo(
@@ -1449,7 +1462,11 @@ const words = (
         const own = variant("changed", entry.sentences?.changed);
         return own === undefined
           ? endSentence(detailChanged(entry.field, from, to))
-          : fillVariant(own, { field: entry.field, from, to });
+          : fillVariant(own, {
+              field: entry.field,
+              from: directed("from", from),
+              to: directed("to", to),
+            });
       }
       case "emptied":
         return detailEmptied(entry.field);
@@ -1663,16 +1680,8 @@ const words = (
         source,
         clause,
       };
-      // What a delete removes is said as the card says it, in every style.
-      const own =
-        facts.action === "delete"
-          ? undefined
-          : // eslint-disable-next-line lingui/no-unlocalized-strings -- a sentence type key, not copy
-            variant(`what.${action}`);
-      const sentence =
-        own === undefined
-          ? whatSentence(action, parts)
-          : withParts(parts, (slots) => fillVariant(own, slots));
+      // The opening's verb is the card's action: it has no variant.
+      const sentence = whatSentence(action, parts);
       return `${prefix}${sentence}${item(facts).length > 0 ? ":" : "."}`;
     },
     item(facts, position) {

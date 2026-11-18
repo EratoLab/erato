@@ -1160,9 +1160,12 @@ const composedPieces = (
   const hold = holder(options);
   for (const detail of facts.details) {
     // A loss is always said; so is the name typed beside an ID, the
-    // listener's only hint which item is meant.
+    // listener's only hint which item is meant, and a value the card cannot
+    // name: the record is not what the listener may expect.
     const held =
-      detail.loss || detail.type === "named" ? undefined : hold.next();
+      detail.loss || detail.type === "named" || surprises(detail)
+        ? undefined
+        : hold.next();
     pieces.push({
       role: "detail",
       text: words.detail(detail, facts),
@@ -1181,7 +1184,11 @@ const composedPieces = (
     });
   }
   for (const spokenText of facts.texts) {
-    const held = hold.next();
+    // A dictation the call does not take word for word is always said.
+    const held =
+      spokenText.dictated === undefined || spokenText.dictated === "unchanged"
+        ? hold.next()
+        : undefined;
     pieces.push({
       ...(held ? { held } : {}),
       role: "text",
@@ -1207,6 +1214,28 @@ const composedPieces = (
   pieces.push(loss ? { ...request, pauseBeforeMs: DELETE_PAUSE_MS } : request);
   return hold.withMore(pieces);
 };
+
+/** The values a detail says. */
+const earsOf = (detail: SpokenDetail): EarValue[] => {
+  switch (detail.type) {
+    case "set":
+    case "named":
+      return [detail.value];
+    case "changed":
+      return [detail.from, detail.to];
+    case "emptied":
+      return [];
+    default:
+      return "values" in detail ? detail.values : [];
+  }
+};
+
+/**
+ * A detail that says a record was never read in this chat, or is known only
+ * by an ID on screen: the listener must hear it before deciding.
+ */
+const surprises = (detail: SpokenDetail): boolean =>
+  earsOf(detail).some((ear) => ear.kind === "unread" || ear.kind === "id");
 
 /** Approval kinds whose own call the voice describes; the rest it points to. */
 const DESCRIBED_KINDS: readonly string[] = [

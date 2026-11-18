@@ -1,0 +1,161 @@
+{
+  "_about": "Sentence variant cases both slot checks must agree on: the web app's variantProblem (spokenSentences.ts) and the backend's variant_problem (erato_config/src/spoken.rs). for_one_field: a variant for one field of one table, which may leave out {field}.",
+  "cases": [
+    {
+      "key": "changed",
+      "template": "{field} ändert sich {from} {to}.",
+      "for_one_field": false,
+      "usable": true
+    },
+    {
+      "key": "changed",
+      "template": "{field} changes {from} {to}.",
+      "for_one_field": false,
+      "usable": true
+    },
+    {
+      "key": "changed",
+      "template": "Der Abschluss verschiebt sich {from} {to}.",
+      "for_one_field": true,
+      "usable": true
+    },
+    {
+      "key": "changed",
+      "template": "Der Abschluss verschiebt sich {from} {to}.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field}: {to} statt {from}.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from} {from} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from}.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{Field} {from} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from_x} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} { from } {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from} {to} {",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from} } {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field} {from}{} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field}​ {from} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "{field}\n{from} {to}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "changed",
+      "template": "   ",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "set",
+      "template": "{field}: {value}.",
+      "for_one_field": false,
+      "usable": true
+    },
+    {
+      "key": "set",
+      "template": "Fällig am {value}.",
+      "for_one_field": true,
+      "usable": true
+    },
+    {
+      "key": "set",
+      "template": "{field} ist gesetzt.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "set",
+      "template": "{value} ist {field}.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "set",
+      "template": "{field} ist {value} für {recipient}.",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "updated",
+      "template": "{field} wird {value} gesetzt.",
+      "for_one_field": false,
+      "usable": true
+    },
+    {
+      "key": "updated",
+      "template": "{field} {value} {value}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "what.create",
+      "template": "Als Nächstes {source} {thing} {destination} anlegen{clause}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "what.update",
+      "template": "Next up: deleting {thing} {destination} {source}{clause}",
+      "for_one_field": false,
+      "usable": false
+    },
+    {
+      "key": "delete",
+      "template": "{field}",
+      "for_one_field": false,
+      "usable": false
+    }
+  ]
+}

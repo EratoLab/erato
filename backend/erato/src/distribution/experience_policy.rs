@@ -222,9 +222,11 @@ pub struct ExperienceAudience {
     #[serde(default)]
     pub provenance: Option<AudienceProvenance>,
     /// How waiting approval cards are read aloud for this audience, where an
-    /// admin set it: each part left out keeps the deployment's value. Read
-    /// only through the [`APPROVAL_SPEECH_SETTING`] order.
-    #[serde(default)]
+    /// admin set it: each part left out is taken from the next audience in
+    /// the [`APPROVAL_SPEECH_SETTING`] order that sets it, else from the
+    /// deployment. A block that does not parse is ignored with a warning and
+    /// costs nothing else: the audience and its pin stay.
+    #[serde(default, deserialize_with = "lenient_approval_speech")]
     pub approval_speech: Option<AudienceApprovalSpeech>,
 }
 
@@ -238,6 +240,25 @@ pub struct AudienceApprovalSpeech {
     /// Whether the audience's users may choose their own; absent keeps the
     /// deployment's `approval_speech.user_choice`.
     pub user_choice: Option<bool>,
+}
+
+fn lenient_approval_speech<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<AudienceApprovalSpeech>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    match AudienceApprovalSpeech::deserialize(&value) {
+        Ok(speech) => Ok(Some(speech)),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "An audience's approval_speech block is ignored: it does not parse"
+            );
+            Ok(None)
+        }
+    }
 }
 
 impl ExperienceAudience {
@@ -825,6 +846,59 @@ mod tests {
         )
         .unwrap();
         assert_eq!(document.priority_order, vec!["engineering"]);
+    }
+
+    #[test]
+    fn a_bad_approval_speech_block_costs_only_itself() {
+        for block in [
+            r#"{"wording": "Natural"}"#,
+            r#"{"amount": "medium"}"#,
+            r#"{"short_details": 300}"#,
+            r#"{"short_details": "2"}"#,
+            r#""short""#,
+        ] {
+            let document = parse_experience_policy(&format!(
+                r#"{{
+                    "audiences": {{
+                        "engineering": {{
+                            "subjects": [{{"subject_type": "organization"}}],
+                            "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                            "approval_speech": {block}
+                        }}
+                    }},
+                    "priority_order": ["engineering"]
+                }}"#
+            ))
+            .unwrap_or_else(|error| panic!("{block}: {error}"));
+            let audience = &document.audiences["engineering"];
+            assert_eq!(audience.approval_speech, None, "{block}");
+            assert_eq!(
+                audience.pinned_assistant_hub_assistant_id.to_string(),
+                "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01"
+            );
+        }
+        let document = parse_experience_policy(
+            r#"{
+                "audiences": {
+                    "engineering": {
+                        "subjects": [{"subject_type": "organization"}],
+                        "pinned_assistant_hub_assistant_id": "6a3d2c76-2f6e-4e6f-8ad0-1f8f8f4f2a01",
+                        "approval_speech": {"wording": "natural", "short_details": 2}
+                    }
+                },
+                "priority_order": ["engineering"]
+            }"#,
+        )
+        .unwrap();
+        let speech = document.audiences["engineering"]
+            .approval_speech
+            .clone()
+            .unwrap();
+        assert_eq!(
+            speech.wording,
+            Some(crate::config::ApprovalSpeechWording::Natural)
+        );
+        assert_eq!(speech.short_details, Some(2));
     }
 
     #[test]

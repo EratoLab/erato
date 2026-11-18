@@ -3,9 +3,11 @@ import { writeFileSync } from "node:fs";
 import { i18n } from "@lingui/core";
 import { describe, expect, it } from "vitest";
 
+import { againOverVoice, resumeEvent } from "@/hooks/audio/approvalListening";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
+import variantCases from "./fixtures/spokenSentenceVariants.json";
 import {
   sameSpokenKind,
   spokenApprovalFor,
@@ -13,10 +15,16 @@ import {
   spokenUtteranceSentences,
 } from "./spokenCard";
 import { spokenCardFlow, spokenCardStep } from "./spokenCardFlow";
-import { fillVariant, naturalVariant, usableVariant } from "./spokenSentences";
+import {
+  fillVariant,
+  naturalVariant,
+  usableVariant,
+  variantProblem,
+} from "./spokenSentences";
 
 import type { SpokenApproval, SpokenOptions, SpokenPiece } from "./spokenCard";
 import type { SpokenCardFlow } from "./spokenCardFlow";
+import type { SentenceSet } from "./spokenSentences";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -64,13 +72,60 @@ const approvalOf = (call: SetCall, kind = "mcp_tool"): SpokenApproval =>
     },
   });
 
-type Style = Pick<SpokenOptions, "amount" | "shortDetails" | "wording">;
+type Style = Pick<SpokenOptions, "amount" | "shortDetails" | "wording"> & {
+  /** A deployment's own sentence variants, per language. */
+  deployment?: Record<string, SentenceSet>;
+};
+
+/** Sentences a deployment might write, with every slot as the check wants. */
+const DEPLOYMENT: Record<string, SentenceSet> = {
+  de: {
+    changed: "{field} geht {from} {to}.",
+    set: "{field} lautet {value}.",
+    updated: "{field} wird {value} gesetzt.",
+  },
+  en: {
+    changed: "{field} goes {from} {to}.",
+    set: "{field} reads {value}.",
+    updated: "{field} will be set {value}.",
+  },
+};
+
+/** The four combinations the listening set is written for. */
+const LISTENED = [
+  "precise, full",
+  "precise, short",
+  "natural, full",
+  "natural, short",
+];
 const STYLES: Record<string, Style> = {
   "precise, full": { amount: "full", wording: "precise" },
   "precise, short": { amount: "short", shortDetails: 1, wording: "precise" },
   "natural, full": { amount: "full", wording: "natural" },
   "natural, short": { amount: "short", shortDetails: 1, wording: "natural" },
+  "precise, short 0": { amount: "short", shortDetails: 0, wording: "precise" },
+  "natural, short 2": { amount: "short", shortDetails: 2, wording: "natural" },
+  "precise, short 3": { amount: "short", shortDetails: 3, wording: "precise" },
+  "natural, short 99": {
+    amount: "short",
+    shortDetails: 99,
+    wording: "natural",
+  },
+  "deployment, full": {
+    amount: "full",
+    wording: "natural",
+    deployment: DEPLOYMENT,
+  },
+  "deployment, short": {
+    amount: "short",
+    shortDetails: 1,
+    wording: "natural",
+    deployment: DEPLOYMENT,
+  },
 };
+const SHORT = Object.keys(STYLES).filter(
+  (name) => STYLES[name].amount === "short",
+);
 
 const cardsOf = (scenario: Scenario, language: string, style: Style) => {
   const approvals =
@@ -94,7 +149,10 @@ const cardsOf = (scenario: Scenario, language: string, style: Style) => {
         language,
         now: NOW,
         timeZone: ZONE,
-        ...style,
+        amount: style.amount,
+        shortDetails: style.shortDetails,
+        wording: style.wording,
+        sentences: style.deployment?.[language],
         position:
           together && approvals.length > 1
             ? {
@@ -188,7 +246,7 @@ describe("every combination of the two settings, over the whole card set", () =>
 
   it("holds nothing back in a full reading, and the precise one is today's card", () => {
     for (const { where, cards } of all) {
-      for (const name of ["precise, full", "natural, full"])
+      for (const name of ["precise, full", "natural, full", "deployment, full"])
         expect(
           cards[name].filter((piece) => piece.held !== undefined),
           `${where} ${name}`,
@@ -199,7 +257,7 @@ describe("every combination of the two settings, over the whole card set", () =>
   it("in a short reading says how much it holds back, and the rest says it", () => {
     let shortened = 0;
     for (const { where, language, cards } of all) {
-      for (const name of ["precise, short", "natural, short"]) {
+      for (const name of SHORT) {
         const pieces = cards[name];
         const held = pieces.filter((piece) => piece.held !== undefined);
         const said = reading(pieces, language);
@@ -231,23 +289,105 @@ describe("every combination of the two settings, over the whole card set", () =>
           );
       }
     }
-    expect(shortened).toBeGreaterThan(20);
+    expect(shortened).toBeGreaterThan(100);
   });
 
-  it("words natural pieces only from variants, with the same values", () => {
+  it("words only details naturally, with the same values; the opening stays precise", () => {
     let natural = 0;
     for (const { where, cards } of all) {
-      cards["natural, full"].forEach((piece, index) => {
-        const precise = cards["precise, full"][index];
-        if (piece.text === precise.text) return;
-        natural += 1;
-        expect(["what", "detail"], `${where} ${piece.id}`).toContain(
-          piece.role,
-        );
-        expect(piece.mustSay, where).toBe(false);
-      });
+      for (const name of ["natural, full", "deployment, full"])
+        cards[name].forEach((piece, index) => {
+          const precise = cards["precise, full"][index];
+          if (piece.text === precise.text) return;
+          natural += 1;
+          expect(piece.role, `${where} ${name} ${piece.id}`).toBe("detail");
+          expect(piece.mustSay, where).toBe(false);
+        });
     }
     expect(natural).toBeGreaterThan(50);
+  });
+
+  it("never glues words, doubles a space or doubles punctuation, in any wording", () => {
+    let checked = 0;
+    for (const { where, cards } of all) {
+      for (const [name, pieces] of Object.entries(cards))
+        for (const piece of pieces) {
+          const at = `${where} ${name} ${piece.id}: ${piece.text}`;
+          expect(piece.text, at).not.toMatch(/\s{2}|^\s|\s$/);
+          expect(piece.text, at).not.toMatch(/\s[.,:;!?]/);
+          expect(piece.text, at).not.toMatch(
+            /[,:;!?][.,:;!?]|\.[,:;!?]|\.\.(?!\.)/,
+          );
+          // Every word the piece says stands on its own: nothing glued to it.
+          for (const source of piece.values ?? []) {
+            if (source.value.kind !== "text" || source.value.text.length === 0)
+              continue;
+            const word = source.value.text.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&",
+            );
+            if (!piece.text.includes(source.value.text)) continue;
+            checked += 1;
+            expect(piece.text, `${at} [${source.slot}]`).toMatch(
+              new RegExp(`(^|[\\s"'„“(«‹])${word}($|[\\s.,:;!?"'“)»›])`, "u"),
+            );
+          }
+        }
+    }
+    expect(checked).toBeGreaterThan(1000);
+  });
+
+  it("says every value of a natural detail with its direction, whatever the deployment wrote", () => {
+    // Sentences that pass the slot check but read the change backwards or
+    // deny it: the value still says which is old and which is new.
+    const attacks: Record<string, SentenceSet> = {
+      de: {
+        changed: "{field}: jetzt {from}, bisher {to}.",
+        updated: "{field} ist nicht mehr {value}.",
+      },
+      en: {
+        changed: "{field}: now {from}, previously {to}.",
+        updated: "{field} is no longer {value}.",
+      },
+    };
+    const said = (id: string, language: string, sentences?: SentenceSet) =>
+      cardsOf(
+        scenarios.find((scenario) => scenario.id === id) as Scenario,
+        language,
+        {
+          amount: "full",
+          wording: "natural",
+          deployment: sentences && { [language]: sentences },
+        },
+      )
+        .flat()
+        .map((piece) => piece.text)
+        .join(" ");
+    expect(said("update-02-coded-value", "en", attacks.en)).toContain(
+      "Risk level: now from Low, previously to High.",
+    );
+    expect(said("update-02-coded-value", "de", attacks.de)).toContain(
+      "Risk level: jetzt von Low, bisher auf High.",
+    );
+    expect(said("update-05-record-nobody-read", "en", attacks.en)).toMatch(
+      /is no longer to /,
+    );
+    // An opening variant is not taken: the verb is the card's action.
+    const opening = (sentences: SentenceSet) =>
+      cardsOf(
+        scenarios.find(
+          (scenario) => scenario.id === "update-02-coded-value",
+        ) as Scenario,
+        "en",
+        { amount: "full", wording: "natural", deployment: { en: sentences } },
+      )[0][0].text;
+    expect(
+      opening({
+        "what.update":
+          "Next up: deleting {thing} {destination} {source}{clause}",
+      }),
+    ).toBe(opening({}));
+    expect(opening({})).toMatch(/^I'd like to change/);
   });
 
   it("writes the listening set when asked", () => {
@@ -255,16 +395,15 @@ describe("every combination of the two settings, over the whole card set", () =>
     if (!out) return;
     const lines = [
       "| Scenario | " +
-        Object.keys(STYLES)
-          .flatMap((name) => [`${name}, German`, `${name}, English`])
-          .join(" | ") +
+        LISTENED.flatMap((name) => [
+          `${name}, German`,
+          `${name}, English`,
+        ]).join(" | ") +
         " |",
-      `|---|${Object.keys(STYLES)
-        .flatMap(() => ["---", "---"])
-        .join("|")}|`,
+      `|---|${LISTENED.flatMap(() => ["---", "---"]).join("|")}|`,
     ];
     for (const scenario of scenarios) {
-      const cells = Object.keys(STYLES).flatMap((name) =>
+      const cells = LISTENED.flatMap((name) =>
         LANGUAGES.map((language) =>
           all
             .filter(
@@ -286,19 +425,21 @@ describe("every combination of the two settings, over the whole card set", () =>
 });
 
 describe("sentence variants", () => {
-  it("are used only with exactly their slots, in the precise order", () => {
-    expect(usableVariant("changed", "{field} ändert sich {from} {to}.")).toBe(
-      true,
-    );
-    expect(usableVariant("changed", "{field}: {to} statt {from}.")).toBe(false);
-    expect(usableVariant("changed", "{field} {from}.")).toBe(false);
-    expect(usableVariant("set", "{field} ist {value} für {name}.")).toBe(false);
-    expect(usableVariant("changed", "Der Abschluss rückt {from} {to}.")).toBe(
-      false,
-    );
-    expect(
-      usableVariant("changed", "Der Abschluss rückt {from} {to}.", true),
-    ).toBe(true);
+  it("follow the cases the backend checks too", () => {
+    const { cases } = variantCases as {
+      cases: {
+        key: string;
+        template: string;
+        for_one_field: boolean;
+        usable: boolean;
+      }[];
+    };
+    expect(cases.length).toBeGreaterThan(20);
+    for (const { key, template, for_one_field, usable } of cases)
+      expect(
+        usableVariant(key, template, for_one_field),
+        `${key} ${JSON.stringify(template)}: ${variantProblem(key, template, for_one_field)}`,
+      ).toBe(usable);
   });
 
   it("fall back from one field's own, to the deployment's, to the built-in one", () => {
@@ -317,16 +458,81 @@ describe("sentence variants", () => {
         "de",
         "changed",
         undefined,
-        "Der Abschluss rückt {from} {to}.",
+        "Der Abschluss verschiebt sich {from} {to}.",
       ),
-    ).toBe("Der Abschluss rückt {from} {to}.");
+    ).toBe("Der Abschluss verschiebt sich {from} {to}.");
+    // Where the precise sentence is natural already, there is no built-in.
+    expect(naturalVariant("de", "set", undefined)).toBeUndefined();
+    expect(naturalVariant("en", "updated", undefined)).toBeUndefined();
     expect(naturalVariant("fr", "changed", undefined)).toBeUndefined();
     expect(
-      fillVariant("Als Nächstes {source} {thing} anlegen{clause}", {
-        source: "",
-        thing: "eine Aufgabe",
-        clause: "",
+      fillVariant("{field} ändert sich {from} {to}.", {
+        field: "Priorität",
+        from: "",
+        to: "auf Hoch",
       }),
-    ).toBe("Als Nächstes eine Aufgabe anlegen");
+    ).toBe("Priorität ändert sich auf Hoch.");
+  });
+});
+
+describe("the sentence that says how much a short reading holds back", () => {
+  const shortCard = () =>
+    cardsOf(
+      scenarios.find(
+        (scenario) => scenario.id === "update-06-many-fields",
+      ) as Scenario,
+      "de",
+      STYLES["precise, short"],
+    )[0];
+  const atHeld = (pieces: SpokenPiece[]) => {
+    let flow: SpokenCardFlow = spokenCardStep(pieces, spokenCardFlow(pieces), {
+      type: "start",
+    });
+    for (let guard = 0; flow.playing?.type !== "held" && guard < 20; guard += 1)
+      flow = spokenCardStep(pieces, flow, { type: "finished" });
+    expect(flow.playing?.type).toBe("held");
+    return flow;
+  };
+
+  it("is said again on 'again' while it plays, not the detail before it", () => {
+    const pieces = shortCard();
+    const flow = atHeld(pieces);
+    const again = spokenCardStep(pieces, flow, { type: "repeat" });
+    expect(again.playing).toEqual(flow.playing);
+    expect(again.released).toBe(false);
+  });
+
+  it("is said again after a cough over it, and the rest stays held back", () => {
+    const pieces = shortCard();
+    const flow = atHeld(pieces);
+    const cut = flow.playing!;
+    const stopped = spokenCardStep(pieces, flow, { type: "stop" });
+    const resumed = spokenCardStep(pieces, stopped, resumeEvent(cut));
+    expect(resumed.playing).toEqual(cut);
+    expect(resumed.released).toBe(false);
+    // "Again" said over it is the same sentence too.
+    expect(againOverVoice(cut, { type: "repeat" })).toEqual({ type: "held" });
+    expect(againOverVoice(cut, { type: "repeat", index: 0 })).toEqual({
+      type: "repeat",
+      index: 0,
+    });
+  });
+
+  it("never holds back a value the card cannot name", () => {
+    for (const shortDetails of [0, 1, 2, 3]) {
+      const pieces = cardsOf(
+        scenarios.find(
+          (scenario) => scenario.id === "create-06-task-unread-regarding",
+        ) as Scenario,
+        "de",
+        { amount: "short", shortDetails, wording: "precise" },
+      )[0];
+      const unread = pieces.filter((piece) =>
+        piece.values?.some((source) => source.value.kind === "unread"),
+      );
+      expect(unread.length, `${shortDetails}`).toBeGreaterThan(0);
+      for (const piece of unread)
+        expect(piece.held, `${shortDetails} ${piece.id}`).toBeUndefined();
+    }
   });
 });

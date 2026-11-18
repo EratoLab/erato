@@ -1097,7 +1097,7 @@
               },
               "sentences": {
                 "set": {
-                  "prioritycode": "With priority {value}.",
+                  "prioritycode": "{value} priority.",
                   "scheduledend": "Due on {value}."
                 }
               }
@@ -2047,7 +2047,7 @@
               },
               "sentences": {
                 "set": {
-                  "prioritycode": "With priority {value}.",
+                  "prioritycode": "{value} priority.",
                   "scheduledend": "Due on {value}."
                 }
               }
@@ -2589,7 +2589,7 @@
               },
               "sentences": {
                 "changed": {
-                  "estimatedvalue": "The estimated revenue goes from {from} to {to}."
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
                 }
               }
             }
@@ -4781,7 +4781,7 @@
               },
               "sentences": {
                 "changed": {
-                  "estimatedvalue": "The estimated revenue goes from {from} to {to}."
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
                 }
               }
             }
@@ -5493,7 +5493,7 @@
               },
               "sentences": {
                 "set": {
-                  "prioritycode": "With priority {value}."
+                  "prioritycode": "{value} priority."
                 }
               }
             }

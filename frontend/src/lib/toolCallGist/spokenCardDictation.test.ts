@@ -466,3 +466,38 @@ describe("a corrected card whose text is dictated", () => {
     expect(texts).not.toContain("exactly as dictated");
   });
 });
+
+describe("a short reading", () => {
+  const shortPieces = (
+    relation: keyof typeof RELATIONS,
+    shortDetails: number,
+  ) => {
+    const base = baseOf(CARDS.create);
+    const call = withText(callOf(CARDS.create), RELATIONS[relation].card(base));
+    return inLanguage("de", () =>
+      spokenApprovalPieces(approvalOf(call), {
+        language: "de",
+        ...OPTIONS,
+        amount: "short",
+        shortDetails,
+        userTurns: [said(base)],
+      }),
+    );
+  };
+
+  it("never holds back a dictation the card does not take word for word", () => {
+    for (const relation of [
+      "one_word_changed",
+      "shortened",
+      "extended",
+    ] as const) {
+      for (const shortDetails of [0, 1, 2, 3])
+        expect(
+          textPiece(shortPieces(relation, shortDetails)).held,
+          `${relation} ${shortDetails}`,
+        ).toBeUndefined();
+    }
+    // Word for word it may wait, like any other text.
+    expect(textPiece(shortPieces("identical", 0)).held).toBe("field");
+  });
+});
