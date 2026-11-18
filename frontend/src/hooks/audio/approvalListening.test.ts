@@ -699,6 +699,36 @@ describe("listening against the endpoint", () => {
     expect(useApprovalSpeech.getState().closed).toBe(false);
   });
 
+  it("shows that words were heard, then the words, then what they were understood as", async () => {
+    const { heardApprovalWords, noteApprovalWordsEnded, useApprovalListening } =
+      await heardCard();
+    let answer!: (value: unknown) => void;
+    fetchCommand.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    noteApprovalWordsEnded(KEY);
+    expect(useApprovalListening.getState().heard).toEqual({
+      key: KEY,
+      words: null,
+      meaning: null,
+    });
+    const understood = heardApprovalWords(KEY, "weiter");
+    expect(useApprovalListening.getState().heard).toEqual({
+      key: KEY,
+      words: "weiter",
+      meaning: null,
+    });
+    answer({ meaning: "skip", piece_id: null, source: "rules" });
+    await understood;
+    expect(useApprovalListening.getState().heard).toEqual({
+      key: KEY,
+      words: "weiter",
+      meaning: "skip",
+    });
+  });
+
   it("noise is ignored and the card keeps listening", async () => {
     const { heardApprovalWords, useApprovalListening } = await heardCard();
     fetchCommand.mockResolvedValue({
@@ -708,7 +738,7 @@ describe("listening against the endpoint", () => {
     });
     await heardApprovalWords(KEY, "mhm");
     expect(connections).toHaveLength(1);
-    expect(useApprovalListening.getState()).toEqual({
+    expect(useApprovalListening.getState()).toMatchObject({
       pending: null,
       quiet: null,
     });
@@ -845,7 +875,7 @@ describe("listening against the endpoint", () => {
     await vi.advanceTimersByTimeAsync(VOICE_COMMAND_TIMEOUT_MS);
     await heard;
     expect(connections).toHaveLength(2);
-    expect(useApprovalListening.getState()).toEqual({
+    expect(useApprovalListening.getState()).toMatchObject({
       pending: null,
       quiet: null,
     });

@@ -85,6 +85,18 @@ interface AudioConversationalFeatureConfig {
   maxRecordingDurationSeconds: number;
   /** Silence in milliseconds that ends a spoken turn; 1800 when omitted. */
   endOfTurnSilenceMs?: number;
+  /** The same while an approval card listens for a command; 1000 when omitted. */
+  cardEndOfTurnSilenceMs?: number;
+  /** Speech the voice detector counts before a turn can end; 250 when omitted. */
+  minSpeechMs?: number;
+  /** The same while an approval card listens; 64 when omitted. */
+  cardMinSpeechMs?: number;
+  /** Audio a voice starting from silence waits for; 400 when omitted. */
+  voiceStartBufferMs?: number;
+  /** The longest it waits for it; 350 when omitted. */
+  voiceStartMaxWaitMs?: number;
+  /** Words that end no conversational turn on their own; a base when omitted. */
+  hesitationWords?: string[];
   /** The user can speak over the voice, and the voice yields. */
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
@@ -485,6 +497,13 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
       endOfTurnSilenceMs: environment.audioConversationalEndOfTurnSilenceMs,
+      cardEndOfTurnSilenceMs:
+        environment.audioConversationalCardEndOfTurnSilenceMs,
+      minSpeechMs: environment.audioConversationalMinSpeechMs,
+      cardMinSpeechMs: environment.audioConversationalCardMinSpeechMs,
+      voiceStartBufferMs: environment.audioConversationalVoiceStartBufferMs,
+      voiceStartMaxWaitMs: environment.audioConversationalVoiceStartMaxWaitMs,
+      hesitationWords: environment.audioConversationalHesitationWords,
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,

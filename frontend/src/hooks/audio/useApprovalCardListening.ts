@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  clearApprovalWordsHeard,
   heardApprovalWords,
   listensIn,
   quietApprovalListening,
@@ -77,6 +78,7 @@ export function useApprovalCardListening({
     if (!want || listeningFor !== null || !recorderIdle) return;
     opened.current = false;
     setListeningFor(key);
+    clearApprovalWordsHeard(key);
     open(key);
   }, [key, listeningFor, open, recorderIdle, want]);
 

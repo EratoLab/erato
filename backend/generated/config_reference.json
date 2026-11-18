@@ -419,6 +419,18 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_conversational.card_end_of_turn_silence_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_conversational.card_min_speech_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_conversational.chat_provider_id": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
@@ -446,6 +458,18 @@
   "audio_conversational.fixed_output_token_budget": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_conversational.hesitation_words.[]": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_conversational.hesitation_words_replace_base": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
     "security_relevance": "unknown",
     "stability": "unstable"
   },
@@ -491,6 +515,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_conversational.min_speech_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_conversational.min_unique_word_ratio": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
@@ -530,6 +560,18 @@
   "audio_conversational.tokens_per_word": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_conversational.voice_start_buffer_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "audio_conversational.voice_start_max_wait_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
     "security_relevance": "unknown",
     "stability": "unstable"
   },

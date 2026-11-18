@@ -38,6 +38,44 @@ export function lowerVoice(lowered: boolean) {
   );
 }
 
+/**
+ * A voice that starts from silence waits until this much audio is there.
+ * The speech stream sends about 200 ms first, then nothing for 0.3 to 0.7 s:
+ * played at once, the first syllable stands alone before a gap.
+ */
+export const DEFAULT_START_BUFFER_MS = 400;
+/**
+ * It waits at most this long, so the first sound is never much later than
+ * before; whatever has come by then plays. A pause up to this long leaves no
+ * gap, a longer one a gap shorter by this much.
+ */
+export const DEFAULT_START_WAIT_MS = 350;
+
+const voiceStart = {
+  bufferMs: DEFAULT_START_BUFFER_MS,
+  maxWaitMs: DEFAULT_START_WAIT_MS,
+};
+
+/**
+ * Sets the start buffer for every voice from here on: the deployment's
+ * `voice_start_buffer_ms` and `voice_start_max_wait_ms`. A value outside 0 to
+ * 2000 keeps the default.
+ */
+export function configureVoiceStart(settings: {
+  bufferMs?: number;
+  maxWaitMs?: number;
+}) {
+  const inRange = (value: number | undefined, fallback: number) =>
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 2000
+      ? value
+      : fallback;
+  voiceStart.bufferMs = inRange(settings.bufferMs, DEFAULT_START_BUFFER_MS);
+  voiceStart.maxWaitMs = inRange(settings.maxWaitMs, DEFAULT_START_WAIT_MS);
+}
+
 export interface PcmQueue {
   /**
    * Schedules one chunk of base64 signed 16-bit little-endian mono PCM right
@@ -45,6 +83,8 @@ export interface PcmQueue {
    * valid PCM, without scheduling it.
    */
   enqueue(context: AudioContext, audio: string, sampleRate: number): boolean;
+  /** Plays what waits for the start buffer now: nothing more is coming. */
+  flush(): void;
   /** Silences and forgets everything queued; `onDrained` is not called. */
   stop(): void;
   /**
@@ -52,7 +92,7 @@ export interface PcmQueue {
    * not played to their end, the one playing first, to be queued again.
    */
   pause(context: AudioContext): PcmChunk[];
-  /** Whether a chunk is playing or still scheduled. */
+  /** Whether a chunk is playing, scheduled, or waits for the start buffer. */
   readonly active: boolean;
 }
 
@@ -67,7 +107,56 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
     AudioBufferSourceNode,
     PcmChunk & { endsAt: number }
   >();
+  /** Audio held back until the start buffer is full, and its context. */
+  let waiting: {
+    context: AudioContext;
+    chunks: (PcmChunk & { buffer: AudioBuffer })[];
+  } | null = null;
+  let waitTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Nothing has played since the queue was created or stopped: the next
+   * audio starts a voice. A voice that only ran dry in the middle goes on at
+   * once, as it would without the buffer.
+   */
+  let fresh = true;
+
+  const schedule = (
+    context: AudioContext,
+    chunk: PcmChunk & { buffer: AudioBuffer },
+  ) => {
+    const source = context.createBufferSource();
+    source.buffer = chunk.buffer;
+    source.connect(voiceOutput(context));
+    const start = Math.max(context.currentTime + 0.03, nextTime);
+    nextTime = start + chunk.buffer.duration;
+    sources.set(source, {
+      audio: chunk.audio,
+      sampleRate: chunk.sampleRate,
+      endsAt: nextTime,
+    });
+    source.onended = () => {
+      sources.delete(source);
+      source.disconnect();
+      if (!sources.size && !waiting) onDrained();
+    };
+    source.start(start);
+  };
+
+  const release = () => {
+    clearTimeout(waitTimer);
+    waitTimer = undefined;
+    const held = waiting;
+    waiting = null;
+    if (!held) return;
+    fresh = false;
+    for (const chunk of held.chunks) schedule(held.context, chunk);
+  };
+
   const stop = () => {
+    clearTimeout(waitTimer);
+    waitTimer = undefined;
+    waiting = null;
+    fresh = true;
     for (const source of sources.keys()) {
       // A stopped source still fires `ended`; it must not report the queue
       // as drained to whatever started playing in the meantime.
@@ -80,7 +169,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
   };
   return {
     get active() {
-      return sources.size > 0;
+      return sources.size > 0 || waiting !== null;
     },
     enqueue(context, audio, sampleRate) {
       const raw = globalThis.atob(audio);
@@ -97,28 +186,38 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
       const samples = buffer.getChannelData(0);
       for (let i = 0; i < samples.length; i++)
         samples[i] = view.getInt16(i * 2, true) / 32768;
-      const source = context.createBufferSource();
-      source.buffer = buffer;
-      source.connect(voiceOutput(context));
-      const start = Math.max(context.currentTime + 0.03, nextTime);
-      nextTime = start + buffer.duration;
-      sources.set(source, { audio, sampleRate, endsAt: nextTime });
-      source.onended = () => {
-        sources.delete(source);
-        source.disconnect();
-        if (!sources.size) onDrained();
-      };
-      source.start(start);
+      const chunk = { audio, sampleRate, buffer };
+      // Playing on, or running dry in the middle: the chunk plays at once.
+      if (!waiting && (sources.size > 0 || !fresh)) {
+        schedule(context, chunk);
+        return true;
+      }
+      // From silence: wait for enough audio, or until it has had time to come.
+      if (!waiting) {
+        waiting = { context, chunks: [] };
+        waitTimer = setTimeout(release, voiceStart.maxWaitMs);
+      }
+      waiting.chunks.push(chunk);
+      const buffered = waiting.chunks.reduce(
+        (sum, held) => sum + held.buffer.duration,
+        0,
+      );
+      if (buffered * 1000 >= voiceStart.bufferMs) release();
       return true;
     },
+    flush: release,
     stop,
     pause(context) {
       const unplayed = [...sources.values()]
         .filter((chunk) => chunk.endsAt > context.currentTime)
         .sort((a, b) => a.endsAt - b.endsAt)
         .map(({ audio, sampleRate }) => ({ audio, sampleRate }));
+      const held = (waiting?.chunks ?? []).map(({ audio, sampleRate }) => ({
+        audio,
+        sampleRate,
+      }));
       stop();
-      return unplayed;
+      return [...unplayed, ...held];
     },
   };
 }

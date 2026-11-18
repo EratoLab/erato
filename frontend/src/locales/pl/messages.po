@@ -1865,6 +1865,71 @@ msgid "chat.audio.cancelNamed"
 msgstr "Anuluj transkrypcję: {filename}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_heard"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.approve"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.change"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.new_request"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.read_text"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.reject"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.repeat"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.rest"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.skip"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.stop"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.unclear"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.hesitation_held"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Więcej"
