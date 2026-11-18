@@ -1163,7 +1163,11 @@ const composedPieces = (
     // listener's only hint which item is meant, and a value the card cannot
     // name: the record is not what the listener may expect.
     const held =
-      detail.loss || detail.type === "named" || surprises(detail)
+      detail.loss ||
+      detail.type === "named" ||
+      // An addition taken on the tool's word: the card cannot vouch for it.
+      detail.type === "list_added" ||
+      surprises(detail)
         ? undefined
         : hold.next();
     pieces.push({
@@ -1214,6 +1218,19 @@ const composedPieces = (
   pieces.push(loss ? { ...request, pauseBeforeMs: DELETE_PAUSE_MS } : request);
   return hold.withMore(pieces);
 };
+
+/**
+ * Whether a read's reading says a condition of its own: one that is not held
+ * back. Otherwise the held-back sentence names the conditions without
+ * "further" ("Mit zwei Bedingungen, sie stehen auf dem Bildschirm.").
+ */
+const saysCondition = (pieces: readonly SpokenPiece[]): boolean =>
+  pieces.some(
+    (piece) =>
+      piece.role === "detail" &&
+      piece.held === undefined &&
+      (piece.values?.some((source) => source.slot === "field") ?? false),
+  );
 
 /** The values a detail says. */
 const earsOf = (detail: SpokenDetail): EarValue[] => {
@@ -1381,7 +1398,7 @@ export const spokenUtteranceSentences = (
     case "held":
       return [
         utterance.kind === "condition"
-          ? words.read.moreConditions(utterance.count, true)
+          ? words.read.moreConditions(utterance.count, saysCondition(pieces))
           : words.more(utterance.count),
       ];
     case "text":

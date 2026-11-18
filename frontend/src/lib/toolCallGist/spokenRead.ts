@@ -351,12 +351,22 @@ export const spokenReadPieces = (
 ): ReadPiece[] => {
   const hold = holder(amount, "condition");
   const said = facts.conditions.slice(0, MAX_SPOKEN_CONDITIONS);
+  // A condition on a record never read here, or known only by its ID, is
+  // always said: the listener must hear it before deciding.
+  const holds = said.map((condition) =>
+    condition.values.some(
+      (value) => value.kind === "unread" || value.kind === "id",
+    )
+      ? undefined
+      : hold.next(),
+  );
+  const saysCondition = holds.some((held) => held === undefined);
   const unsaid =
     facts.conditionsOmitted === "unknown"
       ? "unknown"
       : facts.conditionsOmitted + facts.conditions.length - said.length;
   const pieces: ReadPiece[] = [
-    piece("what", readWords.what(facts, said.length > 0, position), [
+    piece("what", readWords.what(facts, saysCondition, position), [
       ...(facts.server ? [text("server", facts.server)] : []),
       ...(facts.search && "text" in facts.search
         ? [text("text", facts.search.text)]
@@ -378,8 +388,8 @@ export const spokenReadPieces = (
       ),
     );
   }
-  for (const condition of said) {
-    const held = hold.next();
+  said.forEach((condition, index) => {
+    const held = holds[index];
     pieces.push({
       ...(held ? { held } : {}),
       ...piece("detail", readWords.condition(condition), [
@@ -389,7 +399,7 @@ export const spokenReadPieces = (
       ]),
       ...(condition.cardColumn ? { idField: condition.cardColumn } : {}),
     });
-  }
+  });
   if (unsaid === "unknown" || unsaid > 0) {
     pieces.push(
       piece(

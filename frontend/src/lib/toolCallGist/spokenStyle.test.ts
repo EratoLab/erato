@@ -292,6 +292,51 @@ describe("every combination of the two settings, over the whole card set", () =>
     expect(shortened).toBeGreaterThan(100);
   });
 
+  it("never holds back what tells the listener the card is not what they may expect", () => {
+    let kept = 0;
+    for (const { where, cards } of all) {
+      const precise = cards["precise, full"];
+      for (const name of SHORT)
+        cards[name].forEach((piece, index) => {
+          const unnamed = piece.values?.some(
+            (source) =>
+              source.value.kind === "unread" || source.value.kind === "id",
+          );
+          // An addition taken on the tool's word.
+          const toolsWord = /laut Tool|the tool says/.test(precise[index].text);
+          if (!unnamed && !toolsWord) return;
+          kept += 1;
+          expect(piece.held, `${where} ${name} ${piece.id}`).toBeUndefined();
+        });
+    }
+    expect(kept).toBeGreaterThan(20);
+  });
+
+  it("names held-back conditions without 'further' when it says none of them", () => {
+    let checked = 0;
+    for (const { where, language, cards } of all) {
+      for (const name of SHORT) {
+        const pieces = cards[name];
+        const conditions = pieces.filter((piece) => piece.held === "condition");
+        if (conditions.length === 0) continue;
+        const saysOne = pieces.some(
+          (piece) =>
+            piece.role === "detail" &&
+            piece.held === undefined &&
+            piece.values?.some((source) => source.slot === "field"),
+        );
+        if (saysOne) continue;
+        checked += 1;
+        const said = reading(pieces, language);
+        expect(said[0], `${where} ${name}`).not.toMatch(/:$/);
+        expect(said.join(" "), `${where} ${name}`).not.toMatch(
+          /weitere Bedingung|more condition/,
+        );
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+  });
+
   it("words only details naturally, with the same values; the opening stays precise", () => {
     let natural = 0;
     for (const { where, cards } of all) {
@@ -516,6 +561,34 @@ describe("the sentence that says how much a short reading holds back", () => {
       type: "repeat",
       index: 0,
     });
+  });
+
+  it("never holds back a read's condition on a record nobody read", () => {
+    const call = JSON.parse(
+      JSON.stringify(
+        calls.find((entry) => entry.id === "read-11-sql-related-record"),
+      ),
+    ) as SetCall;
+    const label = call.display.label as {
+      read: { query: { conditions: { values: { resolved?: string }[] }[] } };
+    };
+    delete label.read.query.conditions[0].values[0].resolved;
+    for (const language of LANGUAGES)
+      for (const shortDetails of [0, 1, 2, 3]) {
+        const pieces = inLanguage(language, () =>
+          spokenApprovalPieces(approvalOf(call), {
+            language,
+            now: NOW,
+            amount: "short",
+            shortDetails,
+          }),
+        );
+        const unread = pieces.filter((piece) =>
+          piece.values?.some((source) => source.value.kind === "unread"),
+        );
+        expect(unread, `${language} ${shortDetails}`).toHaveLength(1);
+        expect(unread[0].held, `${language} ${shortDetails}`).toBeUndefined();
+      }
   });
 
   it("never holds back a value the card cannot name", () => {
