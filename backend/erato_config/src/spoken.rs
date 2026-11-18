@@ -1,15 +1,13 @@
-//! How approval cards are spoken in conversational audio mode: the words a
-//! person says for a server's machine names, per language, and the reading
-//! style. Both are display only: they never change what a call does or
-//! whether it asks.
+//! The words a person says for a server's machine names, per language, for
+//! approval cards spoken in conversational audio mode. Display only: they
+//! never change what a call does or whether it asks.
 
 use std::collections::HashMap;
 
 use config::Config;
 use erato_memory::HeapSize;
-use eyre::{Report, eyre};
 use facet::Facet;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
@@ -20,11 +18,6 @@ const MAX_VOCABULARY_ENTRIES: usize = 5_000;
 const MAX_ENTRY_BYTES: usize = 128;
 /// A spoken name longer than this is a sentence, not a name.
 pub const MAX_SPOKEN_NAME_CHARS: usize = 64;
-/// Words the natural style may add, per language.
-const MAX_ALLOWED_WORDS: usize = 5_000;
-const MAX_ALLOWED_WORD_CHARS: usize = 40;
-/// The natural style's own instruction is short; a package's may be longer.
-const MAX_PROMPT_CHARS: usize = 20_000;
 
 /// What people call one server family's fields, choice values and tables in
 /// one language. Keys are the machine names exactly as the tool writes them.
@@ -182,187 +175,10 @@ pub fn missing_vocabularies<'a>(
     missing
 }
 
-/// How the voice reads an approval card.
-#[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Facet,
-    HeapSize,
-    utoipa::ToSchema,
-)]
-#[serde(rename_all = "snake_case")]
-#[repr(u8)]
-pub enum ApprovalSpeechStyle {
-    /// Built by rule from the card's data, piece by piece.
-    #[default]
-    Precise,
-    /// The precise pieces reworded by a small model, each checked by rule
-    /// against the card's facts; a piece that fails is said precisely.
-    Natural,
-}
-
-impl ApprovalSpeechStyle {
-    pub fn from_wire(name: &str) -> Option<Self> {
-        match name {
-            "precise" => Some(Self::Precise),
-            "natural" => Some(Self::Natural),
-            _ => None,
-        }
-    }
-
-    pub fn wire_name(self) -> &'static str {
-        match self {
-            Self::Precise => "precise",
-            Self::Natural => "natural",
-        }
-    }
-}
-
-/// `[approval_speech]`: how a waiting approval card is read aloud in
-/// conversational audio mode. Precise by default. The natural style needs a
-/// provider; without one every card is read precisely.
-#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
-#[serde(default)]
-pub struct ApprovalSpeechConfig {
-    /// The organisation's style: `precise` or `natural`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub style: ApprovalSpeechStyle,
-    /// Whether a user may choose the other style in their preferences.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub user_choice: bool,
-    /// Provider for the natural style. It receives the card's spoken pieces,
-    /// which hold the call's values.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    #[facet(erato_config::security_relevance(level = "medium"))]
-    pub chat_provider_id: Option<String>,
-    /// How long the card waits for the natural wording before it is read
-    /// precisely, in milliseconds. Defaults to `1500`; allowed from `200` to
-    /// `10000`.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub model_timeout_ms: u32,
-    /// Replaces the natural style's built-in instruction. Unset or blank
-    /// keeps it.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub prompt: Option<String>,
-    /// Per language tag, words a natural wording may use that the precise
-    /// piece does not have, such as verbs and articles. Any other new word
-    /// makes the piece be read precisely.
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    pub words: HashMap<String, Vec<String>>,
-}
-
-pub const APPROVAL_SPEECH_TIMEOUT_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=10_000;
-
-impl Default for ApprovalSpeechConfig {
-    fn default() -> Self {
-        Self {
-            style: ApprovalSpeechStyle::Precise,
-            user_choice: true,
-            chat_provider_id: None,
-            model_timeout_ms: 1500,
-            prompt: None,
-            words: HashMap::new(),
-        }
-    }
-}
-
-impl ApprovalSpeechConfig {
-    /// The provider id when one is set and not blank.
-    pub fn provider_id(&self) -> Option<&str> {
-        self.chat_provider_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|id| !id.is_empty())
-    }
-
-    /// The style a user hears: their own choice where the organisation lets
-    /// them choose, else the organisation's. Natural without a provider is
-    /// precise.
-    pub fn style_for(&self, user_choice: Option<ApprovalSpeechStyle>) -> ApprovalSpeechStyle {
-        let style = match user_choice {
-            Some(choice) if self.user_choice => choice,
-            _ => self.style,
-        };
-        if self.provider_id().is_none() {
-            ApprovalSpeechStyle::Precise
-        } else {
-            style
-        }
-    }
-
-    pub fn validate(&self) -> Result<(), Report> {
-        if !APPROVAL_SPEECH_TIMEOUT_MS_RANGE.contains(&self.model_timeout_ms) {
-            return Err(eyre!(
-                "approval_speech.model_timeout_ms must be from {} to {} milliseconds",
-                APPROVAL_SPEECH_TIMEOUT_MS_RANGE.start(),
-                APPROVAL_SPEECH_TIMEOUT_MS_RANGE.end()
-            ));
-        }
-        if self
-            .prompt
-            .as_deref()
-            .is_some_and(|prompt| prompt.chars().count() > MAX_PROMPT_CHARS)
-        {
-            return Err(eyre!(
-                "approval_speech.prompt must be at most {MAX_PROMPT_CHARS} characters"
-            ));
-        }
-        for (language, words) in &self.words {
-            if !is_language_tag(language) {
-                return Err(eyre!(
-                    "approval_speech.words: '{}' is not a lowercase language tag such as `de` or `en`",
-                    shown(language)
-                ));
-            }
-            if words.len() > MAX_ALLOWED_WORDS {
-                return Err(eyre!(
-                    "approval_speech.words.{language} holds {} words, more than the {MAX_ALLOWED_WORDS} allowed",
-                    words.len()
-                ));
-            }
-            if let Some(word) = words.iter().find(|word| {
-                !usable(word, MAX_ENTRY_BYTES)
-                    || word.chars().count() > MAX_ALLOWED_WORD_CHARS
-                    || word.chars().any(char::is_whitespace)
-            }) {
-                return Err(eyre!(
-                    "approval_speech.words.{language}: '{}' must be one word of at most {MAX_ALLOWED_WORD_CHARS} characters without hidden characters",
-                    shown(word)
-                ));
-            }
-        }
-        Ok(())
-    }
-}
-
-const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
-    "style",
-    "user_choice",
-    "chat_provider_id",
-    "model_timeout_ms",
-    "prompt",
-    "words",
-];
-
-/// Keys under `[approval_speech]` and `[spoken_vocabularies]` this backend
-/// does not know, sorted. A content package may be newer than the backend.
+/// Keys under `[spoken_vocabularies]` this backend does not know, sorted. A
+/// content package may be newer than the backend.
 pub fn unknown_spoken_keys(schema: &Config) -> Vec<String> {
     let mut unknown = Vec::new();
-    if let Ok(settings) = schema.get_table("approval_speech") {
-        unknown.extend(
-            settings
-                .into_keys()
-                .filter(|key| !APPROVAL_SPEECH_SETTINGS.contains(&key.as_str()))
-                .map(|key| format!("approval_speech.{key}")),
-        );
-    }
     if let Ok(vocabularies) = schema.get_table("spoken_vocabularies") {
         for (name, languages) in vocabularies {
             let Ok(languages) = languages.into_table() else {
@@ -452,9 +268,6 @@ mod tests {
     #[test]
     fn unknown_keys_are_listed_not_rejected() {
         let toml = r#"
-            [approval_speech]
-            style = "natural"
-            tone = "warm"
             [spoken_vocabularies.dataverse.de]
             verbs = { a = "b" }
             [spoken_vocabularies.dataverse.de.field_names]
@@ -462,10 +275,7 @@ mod tests {
         "#;
         assert_eq!(
             unknown_spoken_keys(&schema(toml)),
-            vec![
-                "approval_speech.tone".to_string(),
-                "spoken_vocabularies.dataverse.de.verbs".to_string()
-            ]
+            vec!["spoken_vocabularies.dataverse.de.verbs".to_string()]
         );
         assert!(
             vocabularies(toml)["dataverse"]["de"]
@@ -482,49 +292,5 @@ mod tests {
             missing_vocabularies([("dynamics", used.as_slice())], &loaded),
             vec!["mcp_servers.dynamics.glossary.vocabularies: 'sap'".to_string()]
         );
-    }
-
-    #[test]
-    fn the_style_a_user_hears() {
-        let mut config = ApprovalSpeechConfig {
-            chat_provider_id: Some("small".into()),
-            ..ApprovalSpeechConfig::default()
-        };
-        assert_eq!(config.style_for(None), ApprovalSpeechStyle::Precise);
-        assert_eq!(
-            config.style_for(Some(ApprovalSpeechStyle::Natural)),
-            ApprovalSpeechStyle::Natural
-        );
-        config.user_choice = false;
-        assert_eq!(
-            config.style_for(Some(ApprovalSpeechStyle::Natural)),
-            ApprovalSpeechStyle::Precise
-        );
-        config.style = ApprovalSpeechStyle::Natural;
-        assert_eq!(config.style_for(None), ApprovalSpeechStyle::Natural);
-        config.chat_provider_id = Some("  ".into());
-        assert_eq!(config.style_for(None), ApprovalSpeechStyle::Precise);
-    }
-
-    #[test]
-    fn approval_speech_settings_are_checked() {
-        let base = ApprovalSpeechConfig::default();
-        base.validate().unwrap();
-        for bad in [
-            ApprovalSpeechConfig {
-                model_timeout_ms: 50,
-                ..base.clone()
-            },
-            ApprovalSpeechConfig {
-                words: HashMap::from([("de".into(), vec!["zwei Wörter".into()])]),
-                ..base.clone()
-            },
-            ApprovalSpeechConfig {
-                words: HashMap::from([("Deutsch".into(), vec!["ich".into()])]),
-                ..base.clone()
-            },
-        ] {
-            assert!(bad.validate().is_err());
-        }
     }
 }

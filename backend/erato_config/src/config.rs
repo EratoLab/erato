@@ -15,9 +15,7 @@ use std::ops::Deref;
 use utoipa::ToSchema;
 
 use crate::config_facet_attrs as erato_config;
-pub use crate::spoken::{
-    ApprovalSpeechConfig, ApprovalSpeechStyle, SpokenNamesConfig, SpokenVocabulariesConfig,
-};
+pub use crate::spoken::{SpokenNamesConfig, SpokenVocabulariesConfig};
 use crate::startup_log;
 
 /// Name reserved for the synthetic client-action tool exposed by the backend.
@@ -990,15 +988,6 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub turn_instructions: TurnInstructionsConfig,
 
-    /// How a waiting approval card is read aloud in conversational audio
-    /// mode: precisely by rule, or in natural words checked against the card.
-    #[serde(default)]
-    #[facet(erato_config::introduced_in(version = "unreleased"))]
-    #[facet(erato_config::stability(level = "alpha"))]
-    #[facet(erato_config::security_relevance(level = "medium"))]
-    #[facet(erato_config::default_value_security(level = "more_secure"))]
-    pub approval_speech: ApprovalSpeechConfig,
-
     /// Words people say for a kind of server's machine names, by vocabulary
     /// name and language tag, for approval cards read aloud. A server uses a
     /// vocabulary through `glossary.vocabularies`.
@@ -1731,10 +1720,6 @@ impl AppConfig {
 
         if let Err(e) = config.validate_approval_voice_commands() {
             panic!("Invalid approval voice commands configuration: {}", e);
-        }
-
-        if let Err(e) = config.validate_approval_speech() {
-            panic!("Invalid approval speech configuration: {}", e);
         }
 
         warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
@@ -2820,14 +2805,6 @@ impl AppConfig {
                 .as_deref()
                 .filter(|id| !id.trim().is_empty())
                 .ok_or_else(|| eyre!("tool_labels.chat_provider_id is required when enabled"))?;
-            self.resolve_chat_provider_id(id)?;
-        }
-        Ok(())
-    }
-
-    pub fn validate_approval_speech(&self) -> Result<(), eyre::Report> {
-        self.approval_speech.validate()?;
-        if let Some(id) = self.approval_speech.provider_id() {
             self.resolve_chat_provider_id(id)?;
         }
         Ok(())

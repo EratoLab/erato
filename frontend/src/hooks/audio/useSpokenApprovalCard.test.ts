@@ -10,10 +10,7 @@ import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type {
-  SpokenApproval,
-  SpokenPiece,
-} from "@/lib/toolCallGist/spokenCard";
+import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
 
 const speakApprovalCard = vi.fn();
 const offerApprovalCard = vi.fn();
@@ -33,39 +30,7 @@ vi.mock("./approvalSpeech", () => ({
   forgetApprovalCards: (keys: readonly string[]) => forgetApprovalCards(keys),
 }));
 
-const natural = { on: false };
-type Answer = { id: string; text: string; natural: boolean }[] | undefined;
-const naturalApprovalPieces =
-  vi.fn<
-    (key: string, messageId: string, pieces: SpokenPiece[]) => Promise<Answer>
-  >();
-vi.mock("./approvalRewording", () => ({
-  NATURAL_WAIT_AT_START_MS: 600,
-  useNaturalApprovalSpeech: () => natural.on,
-  naturalWordings: (key: string, messageId: string, pieces: SpokenPiece[]) =>
-    naturalApprovalPieces(key, messageId, pieces),
-  forgetNaturalApprovals: () => {},
-}));
-
 const POINTER: SpokenApproval = { type: "pointer" };
-const CREATE: SpokenApproval = (() => {
-  const { calls } = data as unknown as {
-    calls: {
-      id: string;
-      tool_name: string;
-      input: unknown;
-      display: { title: string; server_name?: string; label?: unknown };
-    }[];
-  };
-  const call = calls.find(
-    (entry) => entry.id === "create-01-task-long-description",
-  );
-  if (!call) throw new Error("create-01-task-long-description");
-  return spokenApprovalFor("mcp_tool", {
-    ...call,
-    display: { ...call.display, label: call.display.label as ToolCallLabel },
-  });
-})();
 
 const props = (
   overrides: Partial<Parameters<typeof useSpokenApprovalCard>[0]> = {},
@@ -84,8 +49,6 @@ const spokenKeys = () =>
   speakApprovalCard.mock.calls.map(([card]) => (card as { key: string }).key);
 
 beforeEach(() => {
-  natural.on = false;
-  naturalApprovalPieces.mockReset();
   speakApprovalCard.mockClear();
   offerApprovalCard.mockClear();
   forgetApprovalCards.mockClear();
@@ -279,162 +242,6 @@ describe("useSpokenApprovalCard", () => {
       renderHook(() => useSpokenApprovalCard(queue));
       expect(change).toHaveBeenCalledWith("b");
       expect(cardOf(0).change?.approvalId).toBe("b");
-    });
-  });
-
-  describe("in the natural style", () => {
-    const reworded = (pieces: SpokenPiece[]): Answer =>
-      pieces.map((piece) => ({
-        id: piece.id,
-        text: `Natürlich: ${piece.text}`,
-        natural: true,
-      }));
-
-    beforeEach(() => {
-      natural.on = true;
-    });
-
-    it("asks for the wording while the model still speaks, and speaks it once", async () => {
-      let answer: (pieces: SpokenPiece[]) => void = () => {};
-      naturalApprovalPieces.mockImplementation(
-        (_key, _message, pieces) =>
-          new Promise((resolve) => {
-            answer = () => resolve(reworded(pieces));
-          }),
-      );
-      useSpeechPlayback.setState({ playing: true });
-      const first = props({ approvals: [CREATE] });
-      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
-        initialProps: first,
-      });
-      expect(naturalApprovalPieces).toHaveBeenCalled();
-      act(() => useSpeechPlayback.setState({ playing: false }));
-      rerender({ ...first });
-      expect(speakApprovalCard).not.toHaveBeenCalled();
-      await act(async () => answer([]));
-      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
-      const card = speakApprovalCard.mock.calls[0][0] as {
-        pieces: SpokenPiece[];
-      };
-      const detail = card.pieces.find((piece) => piece.role === "detail");
-      expect(detail?.text).toMatch(/^Natürlich: /);
-      // The request is never reworded.
-      expect(card.pieces.at(-1)?.text).toBe("Please confirm on screen.");
-    });
-
-    it("holds the card while the user talks over the reply during the wait, and says it once after", async () => {
-      let resolveAnswer: (answer: Answer) => void = () => {};
-      const pending = new Promise<Answer>((resolve) => {
-        resolveAnswer = resolve;
-      });
-      let asked: SpokenPiece[] = [];
-      naturalApprovalPieces.mockImplementation((_key, _message, pieces) => {
-        asked = pieces;
-        return pending;
-      });
-      const first = props({ approvals: [CREATE] });
-      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
-        initialProps: first,
-      });
-      // Talking over the reply pauses it (#1597) while the wording is asked.
-      act(() => useSpeechPlayback.setState({ paused: true }));
-      await act(async () => resolveAnswer(reworded(asked)));
-      expect(speakApprovalCard).not.toHaveBeenCalled();
-      expect(offerApprovalCard).not.toHaveBeenCalled();
-      // The talk-over ends (a turn or only a sound): the card is said once,
-      // in its wording, as the precise style says it after the pause.
-      act(() => useSpeechPlayback.setState({ paused: false }));
-      rerender({ ...first });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
-      const card = speakApprovalCard.mock.calls[0][0] as {
-        pieces: SpokenPiece[];
-      };
-      expect(
-        card.pieces.find((piece) => piece.role === "detail")?.text,
-      ).toMatch(/^Natürlich: /);
-    });
-
-    it("only offers the card when a stop came while the wording was on its way", async () => {
-      // One request per card, as the real module caches it.
-      let resolveAnswer: (answer: Answer) => void = () => {};
-      const pending = new Promise<Answer>((resolve) => {
-        resolveAnswer = resolve;
-      });
-      let asked: SpokenPiece[] = [];
-      naturalApprovalPieces.mockImplementation((_key, _message, pieces) => {
-        asked = pieces;
-        return pending;
-      });
-      const answer = () => resolveAnswer(reworded(asked));
-      renderHook(() => useSpokenApprovalCard(props({ approvals: [CREATE] })));
-      act(() => quietSpokenTurn());
-      await act(async () => answer());
-      expect(speakApprovalCard).not.toHaveBeenCalled();
-      expect(offerApprovalCard).toHaveBeenCalledTimes(1);
-    });
-
-    it("says the card precisely when the wording is late", async () => {
-      vi.useFakeTimers();
-      try {
-        naturalApprovalPieces.mockImplementation(() => new Promise(() => {}));
-        renderHook(() => useSpokenApprovalCard(props()));
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(599);
-        });
-        expect(speakApprovalCard).not.toHaveBeenCalled();
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(1);
-        });
-        expect(speakApprovalCard).toHaveBeenCalledTimes(1);
-        const card = speakApprovalCard.mock.calls[0][0] as {
-          pieces: SpokenPiece[];
-        };
-        expect(card.pieces[0].text).toBe("A decision is waiting on screen.");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("says nothing when the card was decided before the wording came back", async () => {
-      let answer: () => void = () => {};
-      naturalApprovalPieces.mockImplementation(
-        (_key, _message, pieces) =>
-          new Promise((resolve) => {
-            answer = () => resolve(undefined);
-          }),
-      );
-      const first = props();
-      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
-        initialProps: first,
-      });
-      rerender({ ...first, active: false });
-      await act(async () => answer());
-      expect(speakApprovalCard).not.toHaveBeenCalled();
-      expect(offerApprovalCard).not.toHaveBeenCalled();
-    });
-
-    it("keeps the difference reading after a change request precise", () => {
-      noteChangeSending({
-        messageId: "message-2",
-        approvalId: "call-1",
-        approval: POINTER,
-        heard: ["pointer"],
-        words: "nimm 75",
-      });
-      renderHook(() =>
-        useSpokenApprovalCard(
-          props({
-            messageId: "message-2",
-            keys: ["t2:call-2"],
-            items: [{ approvalId: "call-2", replaces: "call-1" }],
-          }),
-        ),
-      );
-      expect(naturalApprovalPieces).not.toHaveBeenCalled();
-      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
     });
   });
 });

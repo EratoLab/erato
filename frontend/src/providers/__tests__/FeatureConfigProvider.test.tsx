@@ -197,8 +197,6 @@ describe("FeatureConfigProvider", () => {
         audioConversational: {
           speechEnabled: false,
           voiceCommandsEnabled: false,
-          approvalSpeechStyle: "precise",
-          approvalSpeechUserChoice: false,
           enabled: false,
           maxRecordingDurationSeconds: 1200,
           talkOverVoice: false,
@@ -868,8 +866,6 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         speechEnabled: false,
         voiceCommandsEnabled: false,
-        approvalSpeechStyle: "precise",
-        approvalSpeechUserChoice: false,
         enabled: false,
         maxRecordingDurationSeconds: 1200,
         talkOverVoice: false,
@@ -892,8 +888,6 @@ describe("FeatureConfigProvider", () => {
       expect(result.current).toEqual({
         speechEnabled: false,
         voiceCommandsEnabled: true,
-        approvalSpeechStyle: "precise",
-        approvalSpeechUserChoice: false,
         enabled: true,
         maxRecordingDurationSeconds: 600,
         talkOverVoice: true,

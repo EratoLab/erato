@@ -836,8 +836,6 @@ CREATE TABLE public.user_preferences (
     teams_nudges_opted_out_at timestamp with time zone,
     time_zone text,
     language text,
-    approval_speech_style text,
-    CONSTRAINT user_preferences_approval_speech_style_check CHECK ((approval_speech_style = ANY (ARRAY['precise'::text, 'natural'::text]))),
     CONSTRAINT user_preferences_client_tool_decisions_check CHECK ((jsonb_typeof(client_tool_decisions) = 'object'::text)),
     CONSTRAINT user_preferences_client_tool_file_approval_check CHECK ((client_tool_file_approval = ANY (ARRAY['never_allow'::text, 'ask'::text, 'always_allow'::text]))),
     CONSTRAINT user_preferences_starting_assistant_single_pick_check CHECK (((starting_hub_assistant_id IS NULL) OR (starting_assistant_id IS NULL))),

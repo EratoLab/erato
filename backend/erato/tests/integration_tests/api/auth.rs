@@ -294,53 +294,6 @@ async fn test_profile_preferences_store_the_client_time_zone_and_language(pool: 
     assert_eq!(profile["preference_language"], "de-DE");
 }
 
-/// The reading style of spoken approval cards is a profile preference: set,
-/// returned, refused when unknown, and cleared with an explicit `null`.
-///
-/// # Test Categories
-/// - `uses-db`
-/// - `auth-required`
-#[sqlx::test(migrator = "crate::MIGRATOR")]
-async fn test_profile_preferences_store_the_approval_speech_style(pool: Pool<Postgres>) {
-    let app_state = test_app_state(hermetic_app_config(None, None), pool).await;
-    let app: Router = router(app_state.clone())
-        .split_for_parts()
-        .0
-        .with_state(app_state);
-    let server = TestServer::new(app.into_make_service()).expect("Failed to create test server");
-    let put = |body: Value| {
-        server
-            .put("/api/v1beta/me/profile/preferences")
-            .with_bearer_token(TEST_JWT_TOKEN)
-            .json(&body)
-    };
-
-    let updated = put(serde_json::json!({"preference_approval_speech_style": "natural"})).await;
-    updated.assert_status_ok();
-    assert_eq!(
-        updated.json::<Value>()["preference_approval_speech_style"],
-        "natural"
-    );
-    put(serde_json::json!({"preference_approval_speech_style": "chatty"}))
-        .await
-        .assert_status(StatusCode::UNPROCESSABLE_ENTITY);
-    let profile: Value = server
-        .get("/api/v1beta/me/profile")
-        .with_bearer_token(TEST_JWT_TOKEN)
-        .await
-        .json();
-    assert_eq!(profile["preference_approval_speech_style"], "natural");
-
-    let cleared = put(serde_json::json!({"preference_approval_speech_style": null})).await;
-    cleared.assert_status_ok();
-    assert_eq!(
-        cleared
-            .json::<Value>()
-            .get("preference_approval_speech_style"),
-        None
-    );
-}
-
 #[sqlx::test(migrator = "crate::MIGRATOR")]
 async fn test_client_tool_decisions_replace_the_map_and_reject_invalid_names(pool: Pool<Postgres>) {
     let app_state = test_app_state(hermetic_app_config(None, None), pool).await;

@@ -161,42 +161,6 @@
     "security_relevance": "unknown",
     "stability": "alpha"
   },
-  "approval_speech.chat_provider_id": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_speech.model_timeout_ms": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_speech.prompt": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_speech.style": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_speech.user_choice": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
-  "approval_speech.words.<key>.[]": {
-    "default_value_security": "more_secure",
-    "introduced_in": "unreleased",
-    "security_relevance": "medium",
-    "stability": "alpha"
-  },
   "approval_voice_commands.chat_provider_id": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",

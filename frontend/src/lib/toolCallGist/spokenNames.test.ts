@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { messages as deMessages } from "@/locales/de/messages.json";
 
 import data from "./fixtures/spokenCards/calls.json";
-import rewordingSet from "./fixtures/spokenCards/rewording.json";
+import withoutVocabulary from "./fixtures/spokenCards/expected-without-vocabulary.json";
 import { toolCallCardOf } from "./gist";
 import { gistPlainLine } from "./gistLabels";
 import {
@@ -15,12 +15,6 @@ import {
   spokenApprovalPieces,
 } from "./spokenCard";
 import {
-  factTokens,
-  rewordable,
-  rewordingRequest,
-  withRewording,
-} from "./spokenCardRewording";
-import {
   spokenChoice,
   spokenFieldName,
   spokenNamesFor,
@@ -28,7 +22,6 @@ import {
 } from "./spokenNames";
 
 import type { SpokenApproval, SpokenPiece } from "./spokenCard";
-import type { RewordedPiece, RewordingPiece } from "./spokenCardRewording";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -69,23 +62,34 @@ const inLanguage = <T>(language: string, compose: () => T): T => {
 const callOf = (id: string): SetCall =>
   calls.find((call) => call.id === id) as SetCall;
 
-const approvalOf = (call: SetCall, kind = "mcp_tool"): SpokenApproval =>
-  spokenApprovalFor(kind, {
+const approvalOf = (
+  call: SetCall,
+  kind = "mcp_tool",
+  vocabulary = true,
+): SpokenApproval => {
+  const label = call.display.label as ToolCallLabel | undefined;
+  const { spoken_names: _, ...plain } = label ?? ({} as ToolCallLabel);
+  return spokenApprovalFor(kind, {
     tool_name: call.tool_name,
     input: call.input,
     display: {
       title: call.display.title,
       server_name: call.display.server_name,
-      label: call.display.label as ToolCallLabel | undefined,
+      label: label && !vocabulary ? (plain) : label,
     },
   });
+};
 
 /** Every card of a scenario, as `spokenCard.test.ts` composes them. */
-const scenarioCards = (scenario: Scenario, language: string) => {
+const scenarioCards = (
+  scenario: Scenario,
+  language: string,
+  vocabulary = true,
+) => {
   const approvals =
     scenario.calls.length > 0
       ? scenario.calls.map((id) =>
-          approvalOf(callOf(id), scenario.approval_kind),
+          approvalOf(callOf(id), scenario.approval_kind, vocabulary),
         )
       : [
           spokenApprovalFor(scenario.approval_kind ?? "mcp_tool", {
@@ -109,21 +113,10 @@ const scenarioCards = (scenario: Scenario, language: string) => {
               }
             : undefined,
       });
-      return { pieces, request: rewordingRequest(pieces, options).pieces };
+      return { pieces };
     }),
   );
 };
-
-const all = scenarios.flatMap((scenario) =>
-  LANGUAGES.flatMap((language) =>
-    scenarioCards(scenario, language).map((card, index) => ({
-      where: `${scenario.id} ${language} #${index}`,
-      scenario: scenario.id,
-      language,
-      ...card,
-    })),
-  ),
-);
 
 describe("spoken names", () => {
   const label = {
@@ -211,88 +204,29 @@ describe("spoken names", () => {
   });
 });
 
-describe("the natural reading", () => {
-  it("asks about every piece, with its id and role, and facts the piece says", () => {
-    for (const card of all) {
-      expect(
-        card.request.map((piece) => [piece.id, piece.role, piece.text]),
-        card.where,
-      ).toEqual(card.pieces.map((piece) => [piece.id, piece.role, piece.text]));
-      for (const piece of card.request) {
-        const said = factTokens(piece.text).join(" ");
-        for (const fact of piece.facts)
-          expect(
-            ` ${said} `.includes(` ${factTokens(fact).join(" ")} `),
-            `${card.where} ${piece.id}: ${fact}`,
-          ).toBe(true);
-      }
-    }
-  });
-
-  /** Answers a model might give, faithful or not, for every piece. */
-  const answers: ((piece: SpokenPiece) => RewordedPiece | undefined)[] = [
-    (piece) => ({ id: piece.id, text: "Etwas ganz anderes.", natural: true }),
-    (piece) => ({
-      id: piece.id,
-      text: piece.text.toUpperCase(),
-      natural: true,
-    }),
-    (piece) => ({ id: piece.id, text: "   ", natural: true }),
-    (piece) => ({ id: piece.id, text: "Nicht benutzt.", natural: false }),
-    (piece) => ({ id: `${piece.id}-other`, text: "Fremd.", natural: true }),
-    () => undefined,
-  ];
-
-  it("keeps ids, roles, count and the precise consequence and request whatever comes back", () => {
-    for (const card of all) {
-      for (const answer of answers) {
-        const merged = withRewording(
-          card.pieces,
-          card.pieces.flatMap((piece) => answer(piece) ?? []),
-        );
-        expect(merged.length, card.where).toBe(card.pieces.length);
-        merged.forEach((piece, index) => {
-          const precise = card.pieces[index];
-          expect(piece.id).toBe(precise.id);
-          expect(piece.role).toBe(precise.role);
-          expect(piece.mustSay).toBe(precise.mustSay);
-          expect(piece.values).toEqual(precise.values);
-          expect(piece.readOut).toEqual(precise.readOut);
-          if (!rewordable(precise))
-            expect(piece.text, `${card.where} ${piece.id}`).toBe(precise.text);
-        });
-      }
-    }
-  });
-
-  it("uses a checked wording only for its own piece", () => {
-    const card = all.find(
-      (entry) => entry.pieces.length > 3,
-    ) as (typeof all)[0];
-    const target = card.pieces.find((piece) =>
-      rewordable(piece),
-    ) as SpokenPiece;
-    const merged = withRewording(card.pieces, [
-      { id: target.id, text: "Neu gesagt.", natural: true },
-    ]);
-    expect(
-      merged.filter((piece, index) => piece !== card.pieces[index]),
-    ).toEqual([{ ...target, text: "Neu gesagt." }]);
-  });
-
-  it("writes the requests the backend checks, and they match", () => {
-    const requests: Record<string, Record<string, RewordingPiece[][]>> = {};
-    for (const card of all) {
-      const languages = (requests[card.scenario] ??= {});
-      (languages[card.language] ??= []).push(card.request);
+/**
+ * Without a vocabulary the voice says exactly what it said before spoken
+ * names existed: this fixture was checked equal to `main`'s `expected.json`
+ * for every scenario both have when spoken names were added (ERMAIN-1224).
+ */
+describe("without a vocabulary", () => {
+  it("says every scenario as before spoken names", () => {
+    const pieces: Record<string, Record<string, SpokenPiece[][]>> = {};
+    for (const scenario of scenarios) {
+      pieces[scenario.id] = Object.fromEntries(
+        LANGUAGES.map((language) => [
+          language,
+          scenarioCards(scenario, language, false).map((card) => card.pieces),
+        ]),
+      );
     }
     if (process.env.SPOKEN_CARD_EXPECT_WRITE) {
       writeFileSync(
-        "src/lib/toolCallGist/fixtures/spokenCards/rewording.json",
-        `${JSON.stringify(requests, null, 2)}\n`,
+        "src/lib/toolCallGist/fixtures/spokenCards/expected-without-vocabulary.json",
+        `${JSON.stringify(pieces, null, 2)}\n`,
       );
       return;
     }
-    expect(rewordingSet).toEqual(requests);
+    expect(withoutVocabulary).toEqual(pieces);
   });
 });
