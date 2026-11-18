@@ -8839,6 +8839,23 @@ describe("ChatInput", () => {
       await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
     });
 
+    it("says that a hesitation was heard and the microphone still listens", async () => {
+      const toggleDictation = vi.fn();
+      conversational(toggleDictation, true);
+      mockUseAudioDictationRecorder.mockReturnValue({
+        ...(mockUseAudioDictationRecorder.getMockImplementation()?.() ??
+          mockUseAudioDictationRecorder()),
+        isDictating: true,
+        heldHesitation: "Äh.",
+        toggleDictation,
+      });
+      const ui = await composer();
+      render(ui(true));
+      expect(
+        screen.getByTestId("chat-input-audio-hesitation"),
+      ).toHaveTextContent("“Äh.” · Still listening");
+    });
+
     it("closes a listening microphone when a card appears", async () => {
       const toggleDictation = vi.fn();
       conversational(toggleDictation, true);

@@ -690,9 +690,9 @@ fn build_frontend_environment(
         Value::Array(
             config
                 .audio_conversational
-                .hesitation_words
-                .iter()
-                .map(|word| Value::String(word.clone()))
+                .effective_hesitation_words()
+                .into_iter()
+                .map(Value::String)
                 .collect(),
         ),
     );
@@ -1510,6 +1510,7 @@ mod tests {
         config.audio_conversational.voice_start_buffer_ms = 0;
         config.audio_conversational.voice_start_max_wait_ms = 500;
         config.audio_conversational.hesitation_words = vec!["euh".into()];
+        config.audio_conversational.hesitation_words_replace_base = true;
         for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
             let environment = build_frontend_environment(&config, kind);
             assert_eq!(

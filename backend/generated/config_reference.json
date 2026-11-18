@@ -467,6 +467,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_conversational.hesitation_words_replace_base": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_conversational.initial_backoff_ms": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

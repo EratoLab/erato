@@ -5,6 +5,7 @@ import { useAudioInputDeviceStore } from "@/state/audioInputDeviceStore";
 
 import { getAudioLevelBarsFromTimeDomainData } from "../audio-pcm-codec";
 import { installAudioCaptureAccessPolicy } from "../audioCaptureAccess";
+import { hesitationMatcher } from "../hesitations";
 import {
   resolveEndOfTurnSilenceMs,
   useAudioDictationRecorder,
@@ -1513,6 +1514,47 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
     expect(sentPcm().filter((value) => value > 8000)).toHaveLength(RATE);
   });
 
+  it("N3: a sound rejected while the detector catches up does not cut the speech after it", async () => {
+    let loaded!: () => void;
+    vadMock.loading.done = new Promise((resolve) => {
+      loaded = resolve;
+    });
+    const hook = render();
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    // A cough, its silence, then two seconds of a question, all in the load.
+    act(() => {
+      emitAudioSamples(new Float32Array(RATE / 4).fill(0.6));
+      emitAudioSamples(new Float32Array(RATE * 2).fill(0));
+      emitAudioSamples(new Float32Array(RATE * 2).fill(0.25));
+    });
+    await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the mock's own type says void
+    vadMock.engines[0].acceptFrame.mockImplementationOnce(() => {
+      vadMock.engines[0].emit({ type: "speech_start", timestampMs: 0 });
+      vadMock.engines[0].emit({ type: "vad_misfire", timestampMs: 0 });
+      hearSpeech();
+      return Promise.resolve();
+    });
+    await act(async () => {
+      loaded();
+      await vadMock.loading.done;
+    });
+    vadMock.loading.done = null;
+    await openSession();
+    endOfSpeech();
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0].sentJsonFrames).toContainEqual({
+        type: "finish",
+      }),
+    );
+    const question = Math.round(0.25 * 32768);
+    expect(
+      sentPcm().filter((value) => Math.abs(value - question) < 2),
+    ).toHaveLength(2 * RATE);
+  });
+
   it("F2: after a rejected sound with a short silence, none of the sound is kept", async () => {
     const hook = render();
     await listen(hook, { endOfTurnSilenceMs: 500 });
@@ -1571,14 +1613,14 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
         mode: "conversational",
         vadAutoStopEnabled: true,
         onVadAutoStop,
-        isHesitationOnly: (words) =>
-          words
-            .toLowerCase()
-            .replace(/[^\p{L}\s]/gu, "")
-            .split(/\s+/)
-            .filter(Boolean)
-            .every((word) => ["äh", "um", "uh"].includes(word)),
+        isHesitationOnly: hesitationMatcher(undefined),
       });
+
+    /** Audio said, and the detector's verdicts on it. */
+    const said = (samples: Float32Array) => {
+      emitAudioSamples(samples);
+      frames(0.9, (samples.length / RATE) * 1000);
+    };
 
     const transcribed = (index: number, transcript: string) =>
       act(() =>
@@ -1594,8 +1636,10 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       const onVadAutoStop = vi.fn();
       const hook = hesitant(onTranscriptChunk, onVadAutoStop);
       await listen(hook);
+      // The detector's verdicts on the silence primer.
+      frames(0.05, 320);
       act(() => {
-        emitAudioSamples(new Float32Array(RATE / 4).fill(0.1));
+        said(new Float32Array(RATE / 4).fill(0.1));
         hearSpeech();
       });
       await openSession();
@@ -1607,9 +1651,9 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       expect(onVadAutoStop).not.toHaveBeenCalled();
       // The question starts before the words of "Äh" are back.
       act(() => {
-        emitAudioSamples(new Float32Array(RATE / 10).fill(0.4));
+        said(new Float32Array(RATE / 10).fill(0.4));
         hearSpeech();
-        emitAudioSamples(new Float32Array(RATE).fill(0.4));
+        said(new Float32Array(RATE).fill(0.4));
       });
       transcribed(0, "Äh.");
       expect(hook.result.current.isDictating).toBe(true);
@@ -1643,8 +1687,10 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       const onVadAutoStop = vi.fn();
       const hook = hesitant(onTranscriptChunk, onVadAutoStop);
       await listen(hook);
+      // The detector's verdicts on the silence primer.
+      frames(0.05, 320);
       act(() => {
-        emitAudioSamples(new Float32Array(RATE / 4).fill(0.3));
+        said(new Float32Array(RATE / 4).fill(0.3));
         hearSpeech();
       });
       await openSession();
@@ -1666,6 +1712,8 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       const onVadAutoStop = vi.fn();
       const hook = hesitant(vi.fn(), onVadAutoStop);
       await listen(hook);
+      // The detector's verdicts on the silence primer.
+      frames(0.05, 320);
       act(() => hearSpeech());
       await openSession();
       endOfSpeech();
@@ -1681,6 +1729,148 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
       expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(1);
       expect(hook.result.current.isDictating).toBe(true);
       expect(onVadAutoStop).not.toHaveBeenCalled();
+    });
+
+    it.each(["Äh, 42.", "Ähm, 3.", "Um, 10.", "Ähm, 15:30."])(
+      "N1: a number after a hesitation is an answer: %s",
+      async (answer) => {
+        const onTranscriptChunk = vi.fn();
+        const onVadAutoStop = vi.fn();
+        const hook = hesitant(onTranscriptChunk, onVadAutoStop);
+        await listen(hook);
+        frames(0.05, 320);
+        act(() => {
+          said(new Float32Array(RATE / 4).fill(0.3));
+          hearSpeech();
+        });
+        await openSession();
+        endOfSpeech();
+        await waitFor(() =>
+          expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(1),
+        );
+        transcribed(0, answer);
+        await waitFor(() => expect(onVadAutoStop).toHaveBeenCalledTimes(1));
+        act(() => MockWebSocket.instances[0].emitJson({ type: "completed" }));
+        await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+        expect(onTranscriptChunk).toHaveBeenCalledWith({
+          chunkIndex: 0,
+          transcript: answer,
+        });
+      },
+    );
+
+    it("N1: a number said after an earlier held 'Äh' is sent, the 'Äh' alone blanked", async () => {
+      const onTranscriptChunk = vi.fn();
+      const onVadAutoStop = vi.fn();
+      const hook = hesitant(onTranscriptChunk, onVadAutoStop);
+      await listen(hook);
+      frames(0.05, 320);
+      act(() => {
+        said(new Float32Array(RATE / 4).fill(0.1));
+        hearSpeech();
+      });
+      await openSession();
+      endOfSpeech();
+      await waitFor(() =>
+        expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(1),
+      );
+      transcribed(0, "Äh.");
+      await waitFor(() =>
+        expect(hook.result.current.heldHesitation).toBe("Äh."),
+      );
+      act(() => {
+        said(new Float32Array(RATE / 2).fill(0.4));
+        hearSpeech();
+      });
+      expect(hook.result.current.heldHesitation).toBeNull();
+      endOfSpeech();
+      await waitFor(() =>
+        expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(2),
+      );
+      transcribed(1, "42.");
+      await waitFor(() => expect(onVadAutoStop).toHaveBeenCalledTimes(1));
+      act(() => MockWebSocket.instances[0].emitJson({ type: "completed" }));
+      await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+      expect(onTranscriptChunk.mock.calls.map(([chunk]) => chunk)).toEqual([
+        { chunkIndex: 0, transcript: "" },
+        { chunkIndex: 1, transcript: "42." },
+      ]);
+    });
+
+    it("N4: the newest audio, not yet judged, is not taken into the checked piece", async () => {
+      const hook = hesitant();
+      await listen(hook);
+      // Verdicts on exactly what they cover: 9 and 8 frames of 512 samples.
+      frames(0.05, 288);
+      act(() => {
+        emitAudioSamples(new Float32Array(4096).fill(0.1));
+        frames(0.9, 256);
+        hearSpeech();
+      });
+      await openSession();
+      // Speech resumes right at the end of the pause: not judged yet.
+      act(() => emitAudioSamples(new Float32Array(2048).fill(0.5)));
+      endOfSpeech();
+      await waitFor(() =>
+        expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(1),
+      );
+      const resumed = Math.round(0.5 * 32768);
+      expect(sentPcm().some((value) => Math.abs(value - resumed) < 2)).toBe(
+        false,
+      );
+      transcribed(0, "Äh.");
+      act(() => {
+        hearSpeech();
+        said(new Float32Array(RATE / 2).fill(0.4));
+      });
+      endOfSpeech();
+      await waitFor(() =>
+        expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(2),
+      );
+      expect(
+        sentPcm().filter((value) => Math.abs(value - resumed) < 2),
+      ).toHaveLength(2048);
+    });
+
+    it("N2: a lone 'Äh' said while the detector loads is checked like any other", async () => {
+      let loaded!: () => void;
+      vadMock.loading.done = new Promise((resolve) => {
+        loaded = resolve;
+      });
+      const onVadAutoStop = vi.fn();
+      const hook = hesitant(vi.fn(), onVadAutoStop);
+      await act(async () => {
+        hook.result.current.toggleDictation();
+      });
+      act(() => emitAudioSamples(new Float32Array(RATE / 4).fill(0.1)));
+      await waitFor(() => expect(vadMock.engines).toHaveLength(1));
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the mock's own type says void
+      vadMock.engines[0].acceptFrame.mockImplementationOnce(() => {
+        frames(0.9, 600);
+        hearSpeech();
+        vadMock.engines[0].emit({
+          type: "speech_end",
+          timestampMs: 0,
+          audio: new Float32Array(1),
+        });
+        return Promise.resolve();
+      });
+      await act(async () => {
+        loaded();
+        await vadMock.loading.done;
+      });
+      vadMock.loading.done = null;
+      await openSession();
+      await waitFor(() =>
+        expect(MockWebSocket.instances[0].sentBinaryFrames).toHaveLength(1),
+      );
+      transcribed(0, "Äh.");
+      await act(async () => {});
+      expect(onVadAutoStop).not.toHaveBeenCalled();
+      expect(MockWebSocket.instances[0].sentJsonFrames).not.toContainEqual({
+        type: "finish",
+      });
+      expect(hook.result.current.isDictating).toBe(true);
     });
 
     it("a card's turn ends on 'äh' at once: its own rules answer it", async () => {

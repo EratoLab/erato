@@ -875,6 +875,7 @@ export const ChatInput = ({
     setDictationError,
     dictationBars,
     isListeningOverVoice,
+    heldHesitation,
     toggleDictation,
     cancelDictation,
   } = useAudioDictationRecorder({
@@ -3905,6 +3906,21 @@ export const ChatInput = ({
                   {/* After the buttons, so they do not move as it grows. */}
                   {decisionWaiting && <ApprovalHeardStatus />}
                 </>
+              )}
+              {isAudioMode && isDictating && heldHesitation && (
+                // Only a hesitation was heard: nothing was sent, and the
+                // microphone still listens for what follows.
+                <span
+                  role="status"
+                  className="max-w-64 truncate text-sm text-theme-fg-secondary"
+                  data-testid="chat-input-audio-hesitation"
+                  title={heldHesitation}
+                >
+                  {t({
+                    id: "chat.audio.hesitation_held",
+                    message: `“${heldHesitation}” · Still listening`,
+                  })}
+                </span>
               )}
               {isAudioMode && (
                 <Button

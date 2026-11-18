@@ -136,6 +136,8 @@ type SpeechGate = {
   checking: boolean;
   /** The turn seemed over again while it was checked. */
   recheck?: boolean;
+  /** A sound was rejected in the audio caught up on: trim once it runs. */
+  trimAfterCatchUp?: boolean;
   waiter?: () => void;
 };
 
@@ -311,6 +313,11 @@ export function useAudioDictationRecorder({
   const [isVadSpeechActive, setIsVadSpeechActive] = useState(false);
   /** The microphone is open over the voice and waits for speech. */
   const [isListeningOverVoice, setIsListeningOverVoice] = useState(false);
+  /**
+   * The words of a turn held back as hesitation only: the recording listens
+   * on, and the person can be shown why nothing happened.
+   */
+  const [heldHesitation, setHeldHesitation] = useState<string | null>(null);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
@@ -1082,6 +1089,11 @@ export function useAudioDictationRecorder({
       }
 
       startInFlightRef.current = true;
+      setHeldHesitation(null);
+      /** The hesitation check of this recording, once its detector runs. */
+      let checkTurnLater: (() => void) | undefined;
+      /** A turn heard to end while the detector caught up: checked once open. */
+      let checkWhenOpen = false;
       gateRef.current = null;
       preDroppedRef.current = 0;
       checkHesitationsRef.current =
@@ -1382,6 +1394,7 @@ export function useAudioDictationRecorder({
                   1000,
               ),
             );
+            checkTurnLater = () => void checkTurn();
             const endTurn = () => {
               vadAutoStopTriggeredRef.current = true;
               onVadAutoStopRef.current?.();
@@ -1402,7 +1415,20 @@ export function useAudioDictationRecorder({
               gate.recheck = false;
               // What follows waits for speech again: the pause is not sent.
               gate.heard = false;
+              // Only what the detector has judged belongs to these words; the
+              // newest audio waits with what follows, should speech go on.
+              const pending = session.pendingSourceSamples;
+              const unjudged = Math.max(
+                0,
+                Math.min(pending.length, gate.fed - gate.judged),
+              );
+              const tail = pending.splice(pending.length - unjudged);
               flushLiveAudioSamples(true);
+              preSessionSamplesRef.current = [
+                ...tail,
+                ...preSessionSamplesRef.current,
+              ];
+              preDroppedRef.current = 0;
               await session.sendQueue;
               const last = session.nextChunkIndex - 1;
               const words = await waitForWords(
@@ -1412,17 +1438,23 @@ export function useAudioDictationRecorder({
               );
               gate.checking = false;
               if (liveSessionRef.current !== session) return;
-              const nothingSaid =
-                words !== null &&
-                (words.trim() === "" ||
-                  isHesitationOnlyRef.current?.(words) === true);
-              if (nothingSaid)
-                for (
-                  let index = session.firstChunkIndex;
-                  index <= last;
-                  index++
-                )
+              const onlyHesitation = (text: string) =>
+                text.trim() === "" ||
+                isHesitationOnlyRef.current?.(text) === true;
+              const nothingSaid = words !== null && onlyHesitation(words);
+              // Each piece by its own words: "Äh." goes out empty, a "42."
+              // after it as it was said.
+              for (
+                let index = session.firstChunkIndex;
+                index <= last;
+                index++
+              ) {
+                const own = session.transcripts.get(index);
+                if (typeof own === "string" && onlyHesitation(own))
                   session.blanked.add(index);
+              }
+              if (nothingSaid && words.trim() !== "" && isMounted())
+                setHeldHesitation(words.trim());
               // Read anew: the detector may have changed it during the wait.
               const now = currentGate(gate);
               if (now.recheck) {
@@ -1431,6 +1463,11 @@ export function useAudioDictationRecorder({
               }
               // The person went on, or only hesitated: the turn goes on.
               if (nothingSaid || now.heard) return;
+              // The turn ends: what was set aside at the check goes with it.
+              for (const sample of preSessionSamplesRef.current)
+                session.pendingSourceSamples.push(sample);
+              preSessionSamplesRef.current = [];
+              preDroppedRef.current = 0;
               endTurn();
             };
             const unsubscribeVad = vadEngine.subscribe((event) => {
@@ -1484,6 +1521,7 @@ export function useAudioDictationRecorder({
               ) {
                 if (event.type === "speech_real_start") {
                   openSpeechGate(gate);
+                  if (isMounted()) setHeldHesitation(null);
                   // Speech again within a recording: from shortly before it.
                   const session = liveSessionRef.current;
                   if (session) {
@@ -1501,7 +1539,11 @@ export function useAudioDictationRecorder({
               if (event.type === "vad_misfire") {
                 // Too short to be a turn: it is dropped, not carried into the
                 // next one. Only the moments before speech stay.
-                if (!gate.heard) {
+                // In the audio caught up on, the buffer runs on ahead of the
+                // detector: it is trimmed once the detector has caught up.
+                if (!gate.heard && gate.catchingUp)
+                  gate.trimAfterCatchUp = true;
+                if (!gate.heard && !gate.catchingUp) {
                   const preBuffer = preSessionSamplesRef.current;
                   if (preBuffer.length > keptAfterMisfire) {
                     const dropped = preBuffer.length - keptAfterMisfire;
@@ -1567,6 +1609,16 @@ export function useAudioDictationRecorder({
                   });
                 }
                 gate.catchingUp = false;
+                if (gate.trimAfterCatchUp && !gate.heard && !gate.speaking) {
+                  const preBuffer = preSessionSamplesRef.current;
+                  if (preBuffer.length > keptAfterMisfire) {
+                    const dropped = preBuffer.length - keptAfterMisfire;
+                    preBuffer.splice(0, dropped);
+                    preDroppedRef.current += dropped;
+                    gate.trimmed = true;
+                  }
+                }
+                gate.trimAfterCatchUp = false;
                 vadEngineRef.current = vadEngine;
                 if (isMounted()) {
                   setIsVadListening(true);
@@ -1664,9 +1716,15 @@ export function useAudioDictationRecorder({
           dispatchSession({ type: "session_ready" });
           setDictationError(null);
           if (gate.endedWhileCatchingUp && !vadAutoStopTriggeredRef.current) {
-            vadAutoStopTriggeredRef.current = true;
-            onVadAutoStopRef.current?.();
-            stopDictation();
+            // Its words are checked like any other turn's, once the
+            // connection is open.
+            if (checkHesitationsRef.current && checkTurnLater) {
+              checkWhenOpen = true;
+            } else {
+              vadAutoStopTriggeredRef.current = true;
+              onVadAutoStopRef.current?.();
+              stopDictation();
+            }
           }
           await waitForSpeech(gate, sessionAbort.signal);
         }
@@ -1707,6 +1765,7 @@ export function useAudioDictationRecorder({
           return;
         }
         flushLiveAudioSamples(false);
+        if (checkWhenOpen) checkTurnLater?.();
 
         if (!gate) {
           armRecordingLimit();
@@ -1837,6 +1896,7 @@ export function useAudioDictationRecorder({
     isVadListening,
     isVadSpeechActive,
     isListeningOverVoice,
+    heldHesitation,
     toggleDictation,
     cancelDictation,
   };

@@ -12,10 +12,9 @@ describe("hesitation sounds", () => {
       "ähhhm",
       "Äh, äh",
       "Hmm.",
-      "Mhm.",
+      "Mh.",
       "Um.",
       "Uhm,",
-      "Er…",
       "Erm",
       "uh",
     ])
@@ -32,6 +31,15 @@ describe("hesitation sounds", () => {
       "Äh, wie spät ist es?",
       "Um, what time is it?",
       "Uh-huh",
+      "Mhm.",
+      "Er.",
+      "Äh, 42.",
+      "Ähm, 3.",
+      "Um, 10.",
+      "Ähm, 15:30.",
+      "Uh, 2026?",
+      "Äh, 50 %",
+      "42.",
       "",
       "…",
     ])
@@ -44,5 +52,12 @@ describe("hesitation sounds", () => {
     expect(custom("Äh")).toBe(false);
     // A malformed entry is skipped, the rest still counts.
     expect(hesitationMatcher(["euh", 3 as unknown as string])("euh")).toBe(true);
+    // An entry of more than one sound, or not of letters, disables nothing.
+    const odd = hesitationMatcher(["äh ja", "42", "äh"]);
+    expect(odd("Ja.")).toBe(false);
+    expect(odd("42.")).toBe(false);
+    expect(odd("Äh.")).toBe(true);
+    // An empty list holds nothing back.
+    expect(hesitationMatcher([])("Äh.")).toBe(false);
   });
 });

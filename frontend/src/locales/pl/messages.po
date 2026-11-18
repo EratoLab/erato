@@ -1925,6 +1925,11 @@ msgid "chat.audio.card_understood.unclear"
 msgstr ""
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.audio.hesitation_held"
+msgstr ""
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Więcej"

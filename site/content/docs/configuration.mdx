@@ -3043,7 +3043,7 @@ The same silence while a spoken approval card waits and listens for what the use
 
 {/* erato_toml_config_key: audio_conversational.min_speech_ms */}
 
-How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: on synthetic voices "Ja" counted 290 to 380 ms, "Äh" and "um" 260 to 350 ms, "Stopp" 100 to 300 ms, while generated coughs and clicks counted nothing (real coughs were not measured). Because "Ja" and "Äh" overlap, no minimum separates them: a turn of hesitation sounds only is held back by `hesitation_words` instead. A lower value hears shorter answers; a higher one drops more short sounds.
+How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: on synthetic voices "Ja" counted 290 to 380 ms, "Äh" and "um" 260 to 350 ms, "Stopp" 100 to 300 ms, while generated coughs and clicks counted nothing (real coughs were not measured). Because "Ja" and "Äh" overlap, no minimum separates them: a turn of hesitation sounds only is held back by its words instead (`hesitation_words`). A lower value hears shorter answers; a higher one drops more short sounds.
 
 **Type:** `integer`, from `32` to `2000`; other values are replaced by the default, with a warning at startup.
 
@@ -3084,13 +3084,23 @@ The longest, in milliseconds, such a voice waits for that audio; what has come b
 {/* erato_toml_config_key: audio_conversational.hesitation_words */}
 {/* erato_toml_config_key: audio_conversational.hesitation_words.[] */}
 
-Words that are only hesitation sounds. When the words of a conversational turn are all of these ("Äh.", "Ähm …", "um"), the turn does not end: nothing is sent, and the microphone keeps listening, so the question the speaker goes on to ask arrives whole and without the hesitation. Case, punctuation and drawn-out letters are ignored ("Ähhm…" counts as "ähm"). A turn with any other word ("Äh, wie spät ist es?", "Ja.") is sent as usual. It does not apply to what is said to a waiting approval card, whose own rules treat hesitations as listening.
+Hesitation sounds to add to the built-in base. When the words of a conversational turn are all hesitation sounds ("Äh.", "Ähm …", "um"), the turn does not end: nothing is sent, the composer says that a hesitation was heard and the microphone keeps listening, so the question the speaker goes on to ask arrives whole and without the hesitation. Case, punctuation and drawn-out letters are ignored ("Ähhm…" counts as "ähm"). A turn with any other word, a number included ("Äh, 42.", "Ja.", "Mhm."), is sent as usual. It does not apply to what is said to a waiting approval card, whose own rules treat hesitations as listening.
 
-The default is a small German and English base. To extend it, list the base and your own words; a configuration package can supply the list for a language it tunes.
+The built-in base is German and English: `äh`, `ähm`, `aeh`, `aehm`, `öh`, `öhm`, `eh`, `ehm`, `hm`, `mh`, `uh`, `uhm`, `um`, `erm`. "Mhm" is a yes and "er" a German word, so neither is in it. The list here is added to the base, so a later change of the base still reaches a deployment that adds its own words; a configuration package for another language (French "euh", for example) adds them here. Each entry must be one word of letters; an entry like "äh ja" or "42" is dropped with a warning at startup, since it would hold back real answers.
 
 **Type:** list of strings
 
-**Default:** `["äh", "ähm", "aeh", "aehm", "öh", "öhm", "eh", "ehm", "hm", "mhm", "mh", "uh", "uhm", "um", "er", "erm"]`
+**Default:** `[]` (the base alone)
+
+#### `audio_conversational.hesitation_words_replace_base`
+
+{/* erato_toml_config_key: audio_conversational.hesitation_words_replace_base */}
+
+Whether `hesitation_words` replaces the built-in base instead of adding to it. Use it only to remove a word of the base. With `true` and an empty list, no turn is held back as a hesitation: every turn with words is sent, as before the setting existed.
+
+**Type:** `boolean`
+
+**Default:** `false`
 
 #### `audio_conversational.talk_over_voice`
 
@@ -3137,7 +3147,8 @@ min_speech_ms = 250
 card_min_speech_ms = 64
 voice_start_buffer_ms = 400
 voice_start_max_wait_ms = 350
-hesitation_words = ["äh", "ähm", "aeh", "aehm", "öh", "öhm", "eh", "ehm", "hm", "mhm", "mh", "uh", "uhm", "um", "er", "erm"]
+hesitation_words = []
+hesitation_words_replace_base = false
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```
