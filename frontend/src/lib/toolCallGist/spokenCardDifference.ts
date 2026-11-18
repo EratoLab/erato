@@ -961,7 +961,10 @@ export const spokenDifference = (
   // A change request is spoken: a text the user said in it is dictated too.
   const options: SpokenOptions = {
     ...given,
-    dictated: [{ passages: [previous.words] }, ...(given.dictated ?? [])],
+    userTurns: [
+      { text: previous.words, passages: [previous.words], whole: true },
+      ...(given.userTurns ?? []),
+    ],
   };
   const words = spokenWordsFor(options.language, options);
   const whole = spokenApprovalPieces(next, options);
@@ -1002,7 +1005,7 @@ export const spokenDifference = (
     before.input,
     withDictation(
       spokenFactsOf(oldCard.gist, before.server, timeZone, true),
-      given.dictated,
+      given.userTurns,
     ),
     words,
     timeZone,
@@ -1012,7 +1015,7 @@ export const spokenDifference = (
     next.input,
     withDictation(
       spokenFactsOf(newCard.gist, next.server, timeZone, true),
-      options.dictated,
+      options.userTurns,
     ),
     words,
     timeZone,

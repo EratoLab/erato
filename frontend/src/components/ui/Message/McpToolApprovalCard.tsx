@@ -12,7 +12,7 @@ import {
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
-import { dictatedTurnsBefore } from "@/hooks/audio/dictatedTurns";
+import { userTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
@@ -20,6 +20,7 @@ import {
   getClientToolHeaders,
 } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatArchived } from "@/hooks/chat/useChatArchived";
@@ -687,12 +688,15 @@ export const McpToolApprovalCard = ({
 
   const chatMessages = chatContext?.messages;
   const chatOrder = chatContext?.messageOrder;
-  const dictated = useMemo(
+  const composeSessionId = useComposeSessionStore((state) =>
+    chatId === null ? undefined : state.sessionIdByChatKey[chatId],
+  );
+  const userTurns = useMemo(
     () =>
-      chatMessages && chatOrder
-        ? dictatedTurnsBefore(chatMessages, chatOrder, messageId)
+      composeSessionId !== undefined && chatMessages && chatOrder
+        ? userTurnsBefore(composeSessionId, chatMessages, chatOrder, messageId)
         : [],
-    [chatMessages, chatOrder, messageId],
+    [composeSessionId, chatMessages, chatOrder, messageId],
   );
 
   const isClientTool = kind === "client_tool";
@@ -745,7 +749,7 @@ export const McpToolApprovalCard = ({
       !isBusy &&
       !isCoveredByParent,
     responding: chatContext?.isPendingResponse ?? false,
-    dictated,
+    userTurns,
   });
 
   // Resolved decisions are represented beside the matching tool call in the

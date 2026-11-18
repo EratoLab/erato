@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  dictatedTurnOf,
-  dictatedTurnsBefore,
+  dictatedTurnFor,
+  userTurnsBefore,
   forgetDictation,
   noteDictatedTranscript,
   settleDictation,
@@ -19,49 +19,85 @@ const assistant = (text: string) => ({ ...user(text), role: "assistant" });
 afterEach(forgetDictation);
 
 describe("the words a user dictated, per sent message", () => {
-  it("a message sent from transcripts is dictated", () => {
+  it("a chat with nothing dictated hands over nothing", () => {
+    expect(
+      userTurnsBefore("s1", { u1: user("Getippt.") }, ["u1"], "card"),
+    ).toEqual([]);
+  });
+
+  it("a message sent from transcripts is dictated whole", () => {
     noteDictatedTranscript("s1", "Schreib dem Kunden:");
     noteDictatedTranscript("s1", "Das Angebot kommt bis Freitag.");
     settleDictation("s1", "Schreib dem Kunden: Das Angebot kommt bis Freitag.");
     expect(
-      dictatedTurnOf("Schreib dem Kunden: Das Angebot kommt bis Freitag."),
+      dictatedTurnFor(
+        "s1",
+        "Schreib dem Kunden: Das Angebot kommt bis Freitag.",
+      ),
     ).toEqual({
+      text: "Schreib dem Kunden: Das Angebot kommt bis Freitag.",
       passages: ["Schreib dem Kunden: Das Angebot kommt bis Freitag."],
+      whole: true,
     });
   });
 
   it("a typed message is not", () => {
     settleDictation("s1", "Das Angebot kommt bis Freitag.");
-    expect(dictatedTurnOf("Das Angebot kommt bis Freitag.")).toBeUndefined();
+    expect(
+      dictatedTurnFor("s1", "Das Angebot kommt bis Freitag."),
+    ).toBeUndefined();
   });
 
-  it("typing into a dictation keeps only what is still as heard", () => {
+  it("typing into a dictation keeps only what is still as heard, and marks the message as not whole", () => {
     noteDictatedTranscript("s1", "Das Angebot kommt bis Freitag.");
     settleDictation("s1", "Bitte notieren: Das Angebot kommt bis Freitag.");
     expect(
-      dictatedTurnOf("Bitte notieren: Das Angebot kommt bis Freitag."),
-    ).toEqual({ passages: ["Das Angebot kommt bis Freitag."] });
+      dictatedTurnFor("s1", "Bitte notieren: Das Angebot kommt bis Freitag."),
+    ).toEqual({
+      text: "Bitte notieren: Das Angebot kommt bis Freitag.",
+      passages: ["Das Angebot kommt bis Freitag."],
+      whole: false,
+    });
   });
 
   it("transcripts belong to their composer, and to one message only", () => {
     noteDictatedTranscript("other", "Das Angebot kommt bis Freitag.");
     settleDictation("s1", "Das Angebot kommt bis Freitag.");
-    expect(dictatedTurnOf("Das Angebot kommt bis Freitag.")).toBeUndefined();
+    expect(
+      dictatedTurnFor("s1", "Das Angebot kommt bis Freitag."),
+    ).toBeUndefined();
 
     noteDictatedTranscript("s1", "Termin am Montag.");
     settleDictation("s1", "Termin am Montag.");
     // The next message of the same composer is typed.
     settleDictation("s1", "Termin am Dienstag.");
-    expect(dictatedTurnOf("Termin am Dienstag.")).toBeUndefined();
+    expect(dictatedTurnFor("s1", "Termin am Dienstag.")).toBeUndefined();
   });
 
-  it("finds the dictated turns before a card, the latest first", () => {
-    noteDictatedTranscript("s1", "Erster diktierter Text.");
-    settleDictation("s1", "Erster diktierter Text.");
-    noteDictatedTranscript("s1", "Zweiter diktierter Text.");
-    settleDictation("s1", "Zweiter diktierter Text.");
-    noteDictatedTranscript("s1", "Nach der Karte.");
-    settleDictation("s1", "Nach der Karte.");
+  it("the same words typed in another chat are not dictated there", () => {
+    noteDictatedTranscript("chat-a", "Das Angebot kommt bis Freitag.");
+    settleDictation("chat-a", "Das Angebot kommt bis Freitag.");
+    settleDictation("chat-b", "Das Angebot kommt bis Freitag.");
+    const messages = { u1: user("Das Angebot kommt bis Freitag.") };
+    expect(userTurnsBefore("chat-b", messages, ["u1"], "card")).toEqual([]);
+    expect(userTurnsBefore("chat-a", messages, ["u1"], "card")).toEqual([
+      {
+        text: "Das Angebot kommt bis Freitag.",
+        passages: ["Das Angebot kommt bis Freitag."],
+        whole: true,
+      },
+    ]);
+  });
+
+  it("hands over the user's messages before a card, the latest first, typed ones too", () => {
+    for (const text of [
+      "Erster diktierter Text.",
+      "Zweiter diktierter Text.",
+      "Nach der Karte.",
+    ]) {
+      noteDictatedTranscript("s1", text);
+      settleDictation("s1", text);
+    }
     const messages = {
       u1: user("Erster diktierter Text."),
       a1: assistant("Erster diktierter Text."),
@@ -71,14 +107,24 @@ describe("the words a user dictated, per sent message", () => {
       u4: user("Nach der Karte."),
     };
     expect(
-      dictatedTurnsBefore(
+      userTurnsBefore(
+        "s1",
         messages,
         ["u1", "a1", "u2", "u3", "card", "u4"],
         "card",
       ),
     ).toEqual([
-      { passages: ["Zweiter diktierter Text."] },
-      { passages: ["Erster diktierter Text."] },
+      {
+        text: "Zweiter diktierter Text.",
+        passages: ["Zweiter diktierter Text."],
+        whole: true,
+      },
+      { text: "Getippt.", passages: [], whole: false },
+      {
+        text: "Erster diktierter Text.",
+        passages: ["Erster diktierter Text."],
+        whole: true,
+      },
     ]);
   });
 });

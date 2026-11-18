@@ -8917,7 +8917,7 @@ msgstr "{shape, select, field {{field}: a text of about {words} words, shown on 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text.dictated"
-msgstr "{relation, select, unchanged {{field}: the dictated text, taken over unchanged.} part {{field}: part of the dictated text, word for word.} extended {{field}: the dictated text word for word, with additions.} other {{field}: the dictated text, changed in places.}}"
+msgstr "{relation, select, unchanged {{field}: the text exactly as dictated.} part {{field}: part of the dictated text, word for word.} extended {{field}: the dictated text word for word, with additions.} other {{field}: the dictated text, changed in places.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
@@ -8927,7 +8927,7 @@ msgstr "{relation, select, part {The card holds only part of what was dictated. 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text.dictatedUnnamed"
-msgstr "{relation, select, unchanged {Plus the dictated text, taken over unchanged.} part {Plus part of the dictated text, word for word.} extended {Plus the dictated text word for word, with additions.} other {Plus the dictated text, changed in places.}}"
+msgstr "{relation, select, unchanged {Plus the text exactly as dictated.} part {Plus part of the dictated text, word for word.} extended {Plus the dictated text word for word, with additions.} other {Plus the dictated text, changed in places.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

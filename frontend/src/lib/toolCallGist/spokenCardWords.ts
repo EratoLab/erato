@@ -755,7 +755,7 @@ const dictatedTextSentence = (
     return t({
       id: "spokenCard.text.dictated",
       message: select(relation, {
-        unchanged: `${field}: the dictated text, taken over unchanged.`,
+        unchanged: `${field}: the text exactly as dictated.`,
         part: `${field}: part of the dictated text, word for word.`,
         extended: `${field}: the dictated text word for word, with additions.`,
         other: `${field}: the dictated text, changed in places.`,
@@ -765,7 +765,7 @@ const dictatedTextSentence = (
   return t({
     id: "spokenCard.text.dictatedUnnamed",
     message: select(relation, {
-      unchanged: "Plus the dictated text, taken over unchanged.",
+      unchanged: "Plus the text exactly as dictated.",
       part: "Plus part of the dictated text, word for word.",
       extended: "Plus the dictated text word for word, with additions.",
       other: "Plus the dictated text, changed in places.",

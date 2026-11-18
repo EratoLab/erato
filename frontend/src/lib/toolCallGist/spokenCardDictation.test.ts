@@ -12,7 +12,7 @@ import {
 import { spokenDifference } from "./spokenCardDifference";
 
 import type { SpokenApproval, SpokenPiece } from "./spokenCard";
-import type { DictatedTurn } from "./spokenDictation";
+import type { UserTurn } from "./spokenDictation";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
 import type { Messages } from "@lingui/core";
 
@@ -91,10 +91,14 @@ const approvalOf = (call: SetCall): SpokenApproval =>
 const piecesOf = (
   call: SetCall,
   language: string,
-  dictated?: readonly DictatedTurn[],
+  dictated?: readonly UserTurn[],
 ) =>
   inLanguage(language, () =>
-    spokenApprovalPieces(approvalOf(call), { language, ...OPTIONS, dictated }),
+    spokenApprovalPieces(approvalOf(call), {
+      language,
+      ...OPTIONS,
+      userTurns: dictated,
+    }),
   );
 
 const textPiece = (pieces: readonly SpokenPiece[]) => {
@@ -102,6 +106,13 @@ const textPiece = (pieces: readonly SpokenPiece[]) => {
   if (!piece) throw new Error("no text piece");
   return piece;
 };
+
+/** A message the user dictated whole. */
+const said = (text: string): UserTurn => ({
+  text,
+  passages: [text],
+  whole: true,
+});
 
 /** The cards that write a long text: one of each kind. */
 const CARDS = {
@@ -173,7 +184,7 @@ const SAID: Record<"de" | "en", Record<Says, RegExp>> = {
     size: /^[\w ]+: ein Text von etwa \d+ Wörtern, er steht auf dem Bildschirm\.$/,
   },
   en: {
-    unchanged: /^[\w ]+: the dictated text, taken over unchanged\.$/,
+    unchanged: /^[\w ]+: the text exactly as dictated\.$/,
     part: /^[\w ]+: part of the dictated text, word for word\.$/,
     extended: /^[\w ]+: the dictated text word for word, with additions\.$/,
     changed: /^[\w ]+: the dictated text, changed in places\.$/,
@@ -184,24 +195,24 @@ const SAID: Record<"de" | "en", Record<Says, RegExp>> = {
 /** Where the words came from, as the chat holds them before the card. */
 const ORIGINS: Record<
   string,
-  { turns: (base: string) => DictatedTurn[]; dictated: boolean }
+  { turns: (base: string) => UserTurn[]; dictated: boolean }
 > = {
   dictated_in_the_last_turn: {
-    turns: (base) => [{ passages: [`Schreib dazu folgenden Text: ${base}`] }],
+    turns: (base) => [said(`Schreib dazu folgenden Text: ${base}`)],
     dictated: true,
   },
   dictated_in_an_earlier_turn: {
-    turns: (base) => [
-      { passages: ["Ja, mach das so, und häng es an den Datensatz."] },
-      { passages: [base] },
-    ],
+    turns: (base) => [said("Ja, genau so."), said(base)],
     dictated: true,
   },
   // A typed message never lands in the record of dictated words.
-  typed: { turns: () => [], dictated: false },
+  typed: {
+    turns: (base) => [{ text: base, passages: [], whole: false }],
+    dictated: false,
+  },
   not_from_the_user: {
     turns: () => [
-      { passages: ["Fass das Gespräch von gestern für den Kunden zusammen."] },
+      said("Fass das Gespräch von gestern für den Kunden zusammen."),
     ],
     dictated: false,
   },
@@ -230,7 +241,7 @@ describe("a dictated text is named by where it came from", () => {
       const base = baseOf(id);
       const call = withText(callOf(id), base);
       const plain = piecesOf(call, "de");
-      const named = piecesOf(call, "de", [{ passages: [base] }]);
+      const named = piecesOf(call, "de", [said(base)]);
       expect(named.map((piece) => piece.id)).toEqual(
         plain.map((piece) => piece.id),
       );
@@ -243,9 +254,7 @@ describe("a dictated text is named by where it came from", () => {
   it("keeps where the text came from beside the piece, instead of its size", () => {
     const base = baseOf(CARDS.create);
     const piece = textPiece(
-      piecesOf(withText(callOf(CARDS.create), base), "de", [
-        { passages: [base] },
-      ]),
+      piecesOf(withText(callOf(CARDS.create), base), "de", [said(base)]),
     );
     expect(piece.values).toEqual([
       { slot: "field", value: { kind: "text", text: "Description" } },
@@ -259,7 +268,59 @@ describe("a dictated text is named by where it came from", () => {
     // Neither the label nor the input holds the whole text.
     text.truncated = true;
     delete (call.input.item as Record<string, unknown>).notetext;
-    const piece = textPiece(piecesOf(call, "de", [{ passages: [text.text] }]));
+    const piece = textPiece(piecesOf(call, "de", [said(text.text)]));
+    expect(piece.text).toMatch(SAID.de.size);
+  });
+});
+
+describe("what the user said last decides", () => {
+  const BASE = baseOf(CARDS.create);
+  const CORRECTED = BASE.replace("12. Dezember", "16. Dezember");
+
+  it("a card holding a dictation the user corrected since is not unchanged", () => {
+    for (const language of ["de", "en"] as const) {
+      const piece = textPiece(
+        piecesOf(withText(callOf(CARDS.create), BASE), language, [
+          said(`Schreib: ${CORRECTED}`),
+          said(`Schreib: ${BASE}`),
+        ]),
+      );
+      expect(piece.text).toMatch(SAID[language].changed);
+    }
+  });
+
+  it("nor after a spoken change request that corrected it", () => {
+    const before = withText(
+      callOf(CARDS.create),
+      BASE.replace(" bis ", " ab "),
+    );
+    const after = withText(callOf(CARDS.create), BASE);
+    const dictated = [said(`Schreib: ${BASE}`)];
+    const heard = piecesOf(before, "de", dictated).map((piece) => piece.id);
+    const result = inLanguage("de", () =>
+      spokenDifference(
+        {
+          approval: approvalOf(before),
+          heard,
+          words: `Nein, schreib: ${CORRECTED}`,
+        },
+        approvalOf(after),
+        { language: "de", ...OPTIONS, userTurns: dictated },
+      ),
+    );
+    const spoken = result.pieces.map((piece) => piece.text).join(" ");
+    expect(spoken).toContain("der diktierte Text, an einigen Stellen geändert");
+    expect(spoken).not.toContain("unverändert");
+  });
+
+  it("a long text that only quotes the dictation is named by its size", () => {
+    const quoted = "Wir verschieben das Treffen auf nächsten Dienstag um zehn.";
+    const mail = `Sehr geehrter Herr Maier, ich hoffe, es geht Ihnen gut. Ich melde mich wegen unseres geplanten Treffens zur nächsten Projektphase. ${quoted} Einige Unterlagen aus der Konstruktion liegen noch nicht vollständig vor, und wir möchten Ihnen eine vollständige Übersicht vorlegen. Bitte geben Sie mir Bescheid, ob der Termin passt. Mit freundlichen Grüßen`;
+    const piece = textPiece(
+      piecesOf(withText(callOf(CARDS.send), mail), "de", [
+        said(`Schreib Herrn Maier und sag ihm: ${quoted}`),
+      ]),
+    );
     expect(piece.text).toMatch(SAID.de.size);
   });
 });
@@ -273,7 +334,7 @@ describe("reading a dictated text on request", () => {
     const pieces = piecesOf(
       withText(callOf(CARDS.create), RELATIONS[relation].card(base)),
       language,
-      [{ passages: [base] }],
+      [said(base)],
     );
     const index = pieces.findIndex((piece) => piece.role === "text");
     return inLanguage(language, () =>
@@ -318,7 +379,7 @@ describe("a corrected card whose text is dictated", () => {
     before: SetCall,
     after: SetCall,
     words: string,
-    dictated: readonly DictatedTurn[],
+    dictated: readonly UserTurn[],
     language = "de",
   ) => {
     const heard = piecesOf(before, language, dictated).map((piece) => piece.id);
@@ -326,13 +387,13 @@ describe("a corrected card whose text is dictated", () => {
       spokenDifference(
         { approval: approvalOf(before), heard, words },
         approvalOf(after),
-        { language, ...OPTIONS, dictated },
+        { language, ...OPTIONS, userTurns: dictated },
       ),
     );
   };
 
   it("says the text changed, and that it is now the dictation word for word", () => {
-    const dictated = [{ passages: [OLD] }];
+    const dictated = [said(OLD)];
     const before = withText(callOf(CARDS.create), OLD.replace(" bis ", " ab "));
     const after = withText(callOf(CARDS.create), OLD);
     const result = difference(
@@ -363,7 +424,7 @@ describe("a corrected card whose text is dictated", () => {
   });
 
   it("an unchanged text stays unsaid, whatever its origin", () => {
-    const dictated = [{ passages: [OLD] }];
+    const dictated = [said(OLD)];
     const before = withText(callOf(CARDS.create), OLD);
     const after = withText(callOf(CARDS.create), OLD);
     const result = difference(before, after, "passt so", dictated);
@@ -374,13 +435,15 @@ describe("a corrected card whose text is dictated", () => {
   });
 
   it("a text changed away from the dictation is never called unchanged", () => {
-    const dictated = [{ passages: [OLD] }];
+    const dictated = [said(OLD)];
     const before = withText(callOf(CARDS.create), OLD);
     const after = withText(callOf(CARDS.create), OLD.replace("12.", "14."));
     const texts = difference(before, after, "nimm den 14.", dictated, "en")
       .pieces.map((piece) => piece.text)
       .join(" ");
-    expect(texts).toContain("the dictated text, changed in places");
+    // The request names a number: it may be about the text, so the text is
+    // named by its size, never as dictated.
+    expect(texts).toMatch(/Changed: Description: a text of about \d+ words/);
     expect(texts).not.toContain("unchanged");
   });
 });

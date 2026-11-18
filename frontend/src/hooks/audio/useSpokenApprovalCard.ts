@@ -18,7 +18,7 @@ import { useSpeechPlayback } from "./speechPlayback";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
-import type { DictatedTurn } from "@/lib/toolCallGist/spokenDictation";
+import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
 
 /**
  * Speaks the approval a card shows when conversational mode reads back and
@@ -38,7 +38,7 @@ export function useSpokenApprovalCard({
   index,
   active,
   responding,
-  dictated,
+  userTurns,
 }: {
   chatId: string | null;
   messageId: string;
@@ -60,8 +60,8 @@ export function useSpokenApprovalCard({
   active: boolean;
   /** The chat is still receiving the turn. */
   responding: boolean;
-  /** What the user dictated in the chat before this card, the latest first. */
-  dictated?: readonly DictatedTurn[];
+  /** The user's messages before this card, the latest first, with what of them was dictated. */
+  userTurns?: readonly UserTurn[];
 }) {
   const spokenTurn = useSpeechPlayback(
     (state) =>
@@ -94,7 +94,7 @@ export function useSpokenApprovalCard({
                 index > 0 && sameSpokenKind(approvals[index - 1], approval),
             }
           : undefined,
-      dictated,
+      userTurns,
     };
     const item = items.at(index);
     const withdrawn =
@@ -121,7 +121,6 @@ export function useSpokenApprovalCard({
     approval,
     approvals,
     change,
-    dictated,
     index,
     items,
     key,
@@ -130,6 +129,7 @@ export function useSpokenApprovalCard({
     quiet,
     responding,
     spokenTurn,
+    userTurns,
   ]);
 
   // A decision, or the card going away, ends the voice of its own approvals

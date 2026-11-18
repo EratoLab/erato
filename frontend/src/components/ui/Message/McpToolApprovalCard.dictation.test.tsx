@@ -7,13 +7,14 @@ import {
   noteDictatedTranscript,
   settleDictation,
 } from "@/hooks/audio/dictatedTurns";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import data from "@/lib/toolCallGist/fixtures/spokenCards/calls.json";
 import { ChatContext } from "@/providers/ChatProvider";
 
 import { McpToolApprovalCard } from "./McpToolApprovalCard";
 
 import type { McpToolApprovalRequestPart } from "./McpToolApprovalCard";
-import type { DictatedTurn } from "@/lib/toolCallGist/spokenDictation";
+import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
 import type { ChatContextValue } from "@/providers/ChatProvider";
 
 vi.mock("@/auth/tokenStore", () => ({ getIdToken: () => null }));
@@ -23,10 +24,10 @@ vi.mock("@/hooks/chat/useChatArchived", () => ({
 }));
 
 /** What the card handed the voice on its last render. */
-const spoken: { dictated?: readonly DictatedTurn[] } = {};
+const spoken: { userTurns?: readonly UserTurn[] } = {};
 vi.mock("@/hooks/audio/useSpokenApprovalCard", () => ({
   useSpokenApprovalCard: (props: typeof spoken) => {
-    spoken.dictated = props.dictated;
+    spoken.userTurns = props.userTurns;
   },
 }));
 
@@ -100,21 +101,26 @@ const markupOf = (container: HTMLElement): string => {
 
 afterEach(() => {
   forgetDictation();
-  spoken.dictated = undefined;
+  spoken.userTurns = undefined;
 });
 
 describe("a dictated text on the card", () => {
   it("the card on screen is the same whether the text was dictated or typed", () => {
     const typed = renderCard();
     const typedHtml = markupOf(typed.container);
-    expect(spoken.dictated).toEqual([]);
+    expect(spoken.userTurns).toEqual([]);
     typed.unmount();
 
-    noteDictatedTranscript("session", SAID);
-    settleDictation("session", SAID);
+    const session = useComposeSessionStore
+      .getState()
+      .resolveSessionId("chat-1");
+    noteDictatedTranscript(session, SAID);
+    settleDictation(session, SAID);
     const dictated = renderCard();
     // Only the voice hears of the dictation.
-    expect(spoken.dictated).toEqual([{ passages: [SAID] }]);
+    expect(spoken.userTurns).toEqual([
+      { text: SAID, passages: [SAID], whole: true },
+    ]);
     expect(markupOf(dictated.container)).toBe(typedHtml);
     expect(typedHtml).toContain("Technisches Layout abstimmen");
   });

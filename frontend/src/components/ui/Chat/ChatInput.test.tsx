@@ -25,7 +25,7 @@ import {
 } from "@/hooks/audio/approvalChanges";
 import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
-import { dictatedTurnOf } from "@/hooks/audio/dictatedTurns";
+import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
@@ -2192,8 +2192,14 @@ describe("ChatInput", () => {
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
 
     expect(onSendMessage).toHaveBeenCalled();
-    expect(dictatedTurnOf("Typed first: the dictated words")).toEqual({
+    const sessionId =
+      useComposeSessionStore.getState().sessionIdByChatKey["__new-chat__"];
+    expect(
+      dictatedTurnFor(sessionId ?? "", "Typed first: the dictated words"),
+    ).toEqual({
+      text: "Typed first: the dictated words",
       passages: ["the dictated words"],
+      whole: false,
     });
   });
 

@@ -15,7 +15,7 @@ import type {
 } from "./change";
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
 import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
-import type { DictatedTurn, DictationRelation } from "./spokenDictation";
+import type { DictationRelation, UserTurn } from "./spokenDictation";
 import type { EarValue } from "./spokenValues";
 import type {
   ToolCallLabel,
@@ -273,10 +273,11 @@ export interface SpokenOptions {
   timeZone?: string;
   position?: SpokenQueuePosition;
   /**
-   * What the user dictated in this chat before the card, the latest turn
-   * first. A long text that is their dictation is named as such.
+   * The user's messages in this chat before the card, the latest first,
+   * with what of them was dictated. A long text that is their dictation is
+   * named as such.
    */
-  dictated?: readonly DictatedTurn[];
+  userTurns?: readonly UserTurn[];
 }
 
 export interface SpokenWords {
@@ -719,7 +720,7 @@ export const spokenFactsOf = (
  */
 export const withDictation = (
   facts: SpokenFacts,
-  turns: readonly DictatedTurn[] | undefined,
+  turns: readonly UserTurn[] | undefined,
 ): SpokenFacts => {
   if (!turns || turns.length === 0) return facts;
   return {
@@ -1032,7 +1033,7 @@ const composedPieces = (
   }
   const facts = withDictation(
     spokenFactsOf(card.gist, approval.server, options.timeZone),
-    options.dictated,
+    options.userTurns,
   );
   const loss = facts.action === "delete";
   const item = words.item(facts, position);
