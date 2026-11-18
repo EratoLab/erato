@@ -1463,9 +1463,9 @@ export function useAudioDictationRecorder({
               }
               // The person went on, or only hesitated: the turn goes on.
               if (nothingSaid || now.heard) return;
-              // The turn ends: what was set aside at the check goes with it.
-              for (const sample of preSessionSamplesRef.current)
-                session.pendingSourceSamples.push(sample);
+              // The turn ends with the words checked. What came after them
+              // is not sent: speech there would have reopened the gate, and
+              // a piece of room sound alone can come back as a word.
               preSessionSamplesRef.current = [];
               preDroppedRef.current = 0;
               endTurn();
