@@ -1,10 +1,18 @@
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import { dictatedTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
@@ -677,6 +685,16 @@ export const McpToolApprovalCard = ({
     [approvalIds.join("\n"), kind],
   );
 
+  const chatMessages = chatContext?.messages;
+  const chatOrder = chatContext?.messageOrder;
+  const dictated = useMemo(
+    () =>
+      chatMessages && chatOrder
+        ? dictatedTurnsBefore(chatMessages, chatOrder, messageId)
+        : [],
+    [chatMessages, chatOrder, messageId],
+  );
+
   const isClientTool = kind === "client_tool";
   const isBuiltinTool = kind === "builtin_tool";
   // The turn's own gated call, and its tool-call limit, carry its parked tasks
@@ -727,6 +745,7 @@ export const McpToolApprovalCard = ({
       !isBusy &&
       !isCoveredByParent,
     responding: chatContext?.isPendingResponse ?? false,
+    dictated,
   });
 
   // Resolved decisions are represented beside the matching tool call in the

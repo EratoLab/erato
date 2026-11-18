@@ -8916,6 +8916,21 @@ msgstr "{shape, select, field {{field}: ein Text von etwa {words} Wörtern, er s
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictated"
+msgstr "{relation, select, unchanged {{field}: der diktierte Text, unverändert übernommen.} part {{field}: ein Teil des diktierten Textes, wörtlich.} extended {{field}: der diktierte Text, wörtlich, mit Ergänzungen.} other {{field}: der diktierte Text, an einigen Stellen geändert.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedReadLead"
+msgstr "{relation, select, part {Auf der Karte steht nur ein Teil des Diktats. Er lautet:} extended {Auf der Karte steht mehr als das Diktat. Der Text lautet:} other {Der Text auf der Karte weicht vom Diktat ab. Er lautet:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedUnnamed"
+msgstr "{relation, select, unchanged {Dazu der diktierte Text, unverändert übernommen.} part {Dazu ein Teil des diktierten Textes, wörtlich.} extended {Dazu der diktierte Text, wörtlich, mit Ergänzungen.} other {Dazu der diktierte Text, an einigen Stellen geändert.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.textCut"
 msgstr "Der Rest des Textes steht auf dem Bildschirm."
 

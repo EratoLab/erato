@@ -18,6 +18,7 @@ import { useSpeechPlayback } from "./speechPlayback";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
+import type { DictatedTurn } from "@/lib/toolCallGist/spokenDictation";
 
 /**
  * Speaks the approval a card shows when conversational mode reads back and
@@ -25,7 +26,7 @@ import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
  * of that turn have played. Several approvals are spoken one at a time, as
  * the screen shows them. After a stop the card waits to be asked for. A card
  * that corrects one the user asked to change by voice is said as the
- * difference to that one.
+ * difference to that one. A long text the user dictated is named as theirs.
  */
 export function useSpokenApprovalCard({
   chatId,
@@ -37,6 +38,7 @@ export function useSpokenApprovalCard({
   index,
   active,
   responding,
+  dictated,
 }: {
   chatId: string | null;
   messageId: string;
@@ -58,6 +60,8 @@ export function useSpokenApprovalCard({
   active: boolean;
   /** The chat is still receiving the turn. */
   responding: boolean;
+  /** What the user dictated in the chat before this card, the latest first. */
+  dictated?: readonly DictatedTurn[];
 }) {
   const spokenTurn = useSpeechPlayback(
     (state) =>
@@ -90,6 +94,7 @@ export function useSpokenApprovalCard({
                 index > 0 && sameSpokenKind(approvals[index - 1], approval),
             }
           : undefined,
+      dictated,
     };
     const item = items.at(index);
     const withdrawn =
@@ -116,6 +121,7 @@ export function useSpokenApprovalCard({
     approval,
     approvals,
     change,
+    dictated,
     index,
     items,
     key,
