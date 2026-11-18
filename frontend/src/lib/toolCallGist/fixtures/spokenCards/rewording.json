@@ -1,0 +1,5134 @@
+{
+  "create-01-task-long-description": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "facts": [
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 15. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "15. Januar 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priorität: Hoch.",
+          "facts": [
+            "Priorität",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Beschreibung: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Beschreibung",
+            "70"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "facts": [
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 15 January 2030.",
+          "facts": [
+            "Due date",
+            "15 January 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority: High.",
+          "facts": [
+            "Priority",
+            "High"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Description: a text of about 70 words, shown on screen.",
+          "facts": [
+            "Description",
+            "70"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-02-appointment": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Termin anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Begehung Linie 4.",
+          "facts": [
+            "Begehung Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Location",
+          "role": "detail",
+          "text": "Ort: Werk Augsburg.",
+          "facts": [
+            "Ort",
+            "Werk Augsburg"
+          ]
+        },
+        {
+          "id": "detail:Scheduled start",
+          "role": "detail",
+          "text": "Beginn: 20. Januar 2030 um 10:30 Uhr.",
+          "facts": [
+            "Beginn",
+            "20. Januar 2030 um 10:30 Uhr"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
+          "facts": [
+            "ein"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create an event in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Begehung Linie 4.",
+          "facts": [
+            "Begehung Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Location",
+          "role": "detail",
+          "text": "Location: Werk Augsburg.",
+          "facts": [
+            "Location",
+            "Werk Augsburg"
+          ]
+        },
+        {
+          "id": "detail:Scheduled start",
+          "role": "detail",
+          "text": "Start: 20 January 2030 at 10:30 am.",
+          "facts": [
+            "Start",
+            "20 January 2030 at 10:30 am"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And one more field, shown on screen.",
+          "facts": [
+            "one"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-03-contact": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Weber.",
+          "facts": [
+            "Weber"
+          ]
+        },
+        {
+          "id": "detail:Parent customer",
+          "role": "detail",
+          "text": "Firma: Beispiel Industrie GmbH.",
+          "facts": [
+            "Firma",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "detail:First name",
+          "role": "detail",
+          "text": "Vorname: Clara.",
+          "facts": [
+            "Vorname",
+            "Clara"
+          ]
+        },
+        {
+          "id": "detail:Job title",
+          "role": "detail",
+          "text": "Position: Projektleiterin.",
+          "facts": [
+            "Position",
+            "Projektleiterin"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
+          "facts": [
+            "ein"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Weber.",
+          "facts": [
+            "Weber"
+          ]
+        },
+        {
+          "id": "detail:Parent customer",
+          "role": "detail",
+          "text": "Company: Beispiel Industrie GmbH.",
+          "facts": [
+            "Company",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "detail:First name",
+          "role": "detail",
+          "text": "First name: Clara.",
+          "facts": [
+            "First name",
+            "Clara"
+          ]
+        },
+        {
+          "id": "detail:Job title",
+          "role": "detail",
+          "text": "Job title: Projektleiterin.",
+          "facts": [
+            "Job title",
+            "Projektleiterin"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And one more field, shown on screen.",
+          "facts": [
+            "one"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-04-email-two-contacts": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine E-Mail an zwei Empfänger anlegen:",
+          "facts": [
+            "Dynamics 365",
+            "zwei"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Betreff: Termin für die Begehung.",
+          "facts": [
+            "Termin für die Begehung"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Beschreibung: ein Text von etwa 30 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Beschreibung",
+            "30"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create an email to two recipients in Dynamics 365:",
+          "facts": [
+            "Dynamics 365",
+            "two"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Subject: Termin für die Begehung.",
+          "facts": [
+            "Termin für die Begehung"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Description: a text of about 30 words, shown on screen.",
+          "facts": [
+            "Description",
+            "30"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-05-task-many-fields": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Ersatzteil-Rahmenvertrag.",
+          "facts": [
+            "Bezug",
+            "Ersatzteil-Rahmenvertrag"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 22. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "22. Januar 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priorität: Hoch.",
+          "facts": [
+            "Priorität",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommen fünf weitere Felder, sie stehen auf dem Bildschirm.",
+          "facts": [
+            "fünf"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Ersatzteil-Rahmenvertrag.",
+          "facts": [
+            "Regarding",
+            "Ersatzteil-Rahmenvertrag"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 22 January 2030.",
+          "facts": [
+            "Due date",
+            "22 January 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority: High.",
+          "facts": [
+            "Priority",
+            "High"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And five more fields, shown on screen.",
+          "facts": [
+            "five"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-06-task-unread-regarding": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Rückruf vereinbaren.",
+          "facts": [
+            "Rückruf vereinbaren"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 16. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "16. Januar 2030"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: ein Datensatz, den ich in diesem Chat nicht gelesen habe.",
+          "facts": [
+            "Bezug",
+            "ein Datensatz, den ich in diesem Chat nicht gelesen habe"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Rückruf vereinbaren.",
+          "facts": [
+            "Rückruf vereinbaren"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 16 January 2030.",
+          "facts": [
+            "Due date",
+            "16 January 2030"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: a record I haven't read in this chat.",
+          "facts": [
+            "Regarding",
+            "a record I haven't read in this chat"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-07-phonecall": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Termin anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Rückfrage zur Stillstandszeit.",
+          "facts": [
+            "Rückfrage zur Stillstandszeit"
+          ]
+        },
+        {
+          "id": "detail:Phone number",
+          "role": "detail",
+          "text": "Telefonnummer: +49 89 1234 500.",
+          "facts": [
+            "Telefonnummer",
+            "+49 89 1234 500"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Ende: 14. Januar 2030 um 15 Uhr.",
+          "facts": [
+            "Ende",
+            "14. Januar 2030 um 15 Uhr"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Beschreibung: Kurz klären, ob zwei Tage Stillstand reichen.",
+          "facts": [
+            "Beschreibung",
+            "Kurz klären, ob zwei Tage Stillstand reichen."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create an event in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Rückfrage zur Stillstandszeit.",
+          "facts": [
+            "Rückfrage zur Stillstandszeit"
+          ]
+        },
+        {
+          "id": "detail:Phone number",
+          "role": "detail",
+          "text": "Phone number: +49 89 1234 500.",
+          "facts": [
+            "Phone number",
+            "+49 89 1234 500"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "End: 14 January 2030 at 3 pm.",
+          "facts": [
+            "End",
+            "14 January 2030 at 3 pm"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Description: Kurz klären, ob zwei Tage Stillstand reichen.",
+          "facts": [
+            "Description",
+            "Kurz klären, ob zwei Tage Stillstand reichen."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-08-opportunity-amounts": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 5 Modernisierung.",
+          "facts": [
+            "Linie 5 Modernisierung"
+          ]
+        },
+        {
+          "id": "detail:Customer",
+          "role": "detail",
+          "text": "Kunde: Beispiel Industrie GmbH.",
+          "facts": [
+            "Kunde",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "detail:Estimated value",
+          "role": "detail",
+          "text": "Geschätzter Umsatz: 185.000.",
+          "facts": [
+            "Geschätzter Umsatz",
+            "185.000"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Voraussichtliches Abschlussdatum: 30. Juni 2030.",
+          "facts": [
+            "Voraussichtliches Abschlussdatum",
+            "30. Juni 2030"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommt ein weiteres Feld, es steht auf dem Bildschirm.",
+          "facts": [
+            "ein"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 5 Modernisierung.",
+          "facts": [
+            "Linie 5 Modernisierung"
+          ]
+        },
+        {
+          "id": "detail:Customer",
+          "role": "detail",
+          "text": "Customer: Beispiel Industrie GmbH.",
+          "facts": [
+            "Customer",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "detail:Estimated value",
+          "role": "detail",
+          "text": "Estimated revenue: 185,000.",
+          "facts": [
+            "Estimated revenue",
+            "185,000"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date: 30 June 2030.",
+          "facts": [
+            "Estimated close date",
+            "30 June 2030"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And one more field, shown on screen.",
+          "facts": [
+            "one"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-09-note-very-long": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Notiz anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Gesprächsnotiz Werksbesuch.",
+          "facts": [
+            "Gesprächsnotiz Werksbesuch"
+          ]
+        },
+        {
+          "id": "detail:Object",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Note text",
+          "role": "text",
+          "text": "Notiz: ein Text von etwa 170 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Notiz",
+            "170"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a note in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Gesprächsnotiz Werksbesuch.",
+          "facts": [
+            "Gesprächsnotiz Werksbesuch"
+          ]
+        },
+        {
+          "id": "detail:Object",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Note text",
+          "role": "text",
+          "text": "Note: a text of about 170 words, shown on screen.",
+          "facts": [
+            "Note",
+            "170"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-10-account": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Muster Maschinenbau AG.",
+          "facts": [
+            "Muster Maschinenbau AG"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "Telefon: +49 821 555 0100.",
+          "facts": [
+            "Telefon",
+            "+49 821 555 0100"
+          ]
+        },
+        {
+          "id": "detail:Website URL",
+          "role": "detail",
+          "text": "Website: https://www.muster-maschinenbau.example.",
+          "facts": [
+            "Website",
+            "https://www.muster-maschinenbau.example"
+          ]
+        },
+        {
+          "id": "detail:Address 1 city",
+          "role": "detail",
+          "text": "Ort: Augsburg.",
+          "facts": [
+            "Ort",
+            "Augsburg"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Muster Maschinenbau AG.",
+          "facts": [
+            "Muster Maschinenbau AG"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "Phone: +49 821 555 0100.",
+          "facts": [
+            "Phone",
+            "+49 821 555 0100"
+          ]
+        },
+        {
+          "id": "detail:Website URL",
+          "role": "detail",
+          "text": "Website: https://www.muster-maschinenbau.example.",
+          "facts": [
+            "Website",
+            "https://www.muster-maschinenbau.example"
+          ]
+        },
+        {
+          "id": "detail:Address 1 city",
+          "role": "detail",
+          "text": "City: Augsburg.",
+          "facts": [
+            "City",
+            "Augsburg"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-11-batch-rows": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion fünf Seiten, darunter Zeichnungen prüfen, Stillstand abschätzen und Schulung planen, in Projekte 2026 anlegen.",
+          "facts": [
+            "Notion",
+            "fünf",
+            "Zeichnungen prüfen",
+            "Stillstand abschätzen",
+            "Schulung planen",
+            "Projekte 2026"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create five pages, including Zeichnungen prüfen, Stillstand abschätzen and Schulung planen, in Projekte 2026 in Notion.",
+          "facts": [
+            "Notion",
+            "five",
+            "Zeichnungen prüfen",
+            "Stillstand abschätzen",
+            "Schulung planen",
+            "Projekte 2026"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-12-hidden-characters": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot freigeben.",
+          "facts": [
+            "Angebot freigeben"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 12. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "12. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot freigeben.",
+          "facts": [
+            "Angebot freigeben"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 12 January 2030.",
+          "facts": [
+            "Due date",
+            "12 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-13-long-title": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … gekürzt.",
+          "facts": [
+            "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner…"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 12. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "12. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner … shortened.",
+          "facts": [
+            "Abstimmung des technischen Layouts der Linie 4 mit der Instandhaltung, dem Elektroplaner…"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 12 January 2030.",
+          "facts": [
+            "Due date",
+            "12 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "create-14-list-entries": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz anlegen:",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "facts": [
+            "Linie 5 Service"
+          ]
+        },
+        {
+          "id": "detail:Tags",
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service und ein weiterer Eintrag.",
+          "facts": [
+            "Tags",
+            "Retrofit",
+            "Linie 4",
+            "Service"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in CRM:",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 5 Service.",
+          "facts": [
+            "Linie 5 Service"
+          ]
+        },
+        {
+          "id": "detail:Tags",
+          "role": "detail",
+          "text": "Tags: Retrofit, Linie 4, Service and one more.",
+          "facts": [
+            "Tags",
+            "Retrofit",
+            "Linie 4",
+            "Service"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-01-date-and-probability": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 15. Januar 2030.",
+          "facts": [
+            "Voraussichtliches Abschlussdatum",
+            "1. Dezember",
+            "15. Januar 2030"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Wahrscheinlichkeit: von 10 auf 60 Prozent.",
+          "facts": [
+            "Wahrscheinlichkeit",
+            "10",
+            "60 Prozent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date: from 1 December to 15 January 2030.",
+          "facts": [
+            "Estimated close date",
+            "1 December",
+            "15 January 2030"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: from 10 to 60 percent.",
+          "facts": [
+            "Probability",
+            "10",
+            "60 percent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-02-coded-value": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risikostufe: von Niedrig auf Hoch.",
+          "facts": [
+            "Risikostufe",
+            "Niedrig",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level: from Low to High.",
+          "facts": [
+            "Risk level",
+            "Low",
+            "High"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-03-lookup": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Parent contact",
+          "role": "detail",
+          "text": "Kontakt: von Anna Müller auf Ben Schmidt.",
+          "facts": [
+            "Kontakt",
+            "Anna Müller",
+            "Ben Schmidt"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Parent contact",
+          "role": "detail",
+          "text": "Contact: from Anna Müller to Ben Schmidt.",
+          "facts": [
+            "Contact",
+            "Anna Müller",
+            "Ben Schmidt"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-04-emptied-fields": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "Das Feld Telefon wird geleert.",
+          "facts": [
+            "Telefon"
+          ]
+        },
+        {
+          "id": "detail:Description",
+          "role": "detail",
+          "text": "Das Feld Beschreibung wird geleert.",
+          "facts": [
+            "Beschreibung"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Wahrscheinlichkeit: von 10 auf 50 Prozent.",
+          "facts": [
+            "Wahrscheinlichkeit",
+            "10",
+            "50 Prozent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "The field Phone will be emptied.",
+          "facts": [
+            "Phone"
+          ]
+        },
+        {
+          "id": "detail:Description",
+          "role": "detail",
+          "text": "The field Description will be emptied.",
+          "facts": [
+            "Description"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: from 10 to 50 percent.",
+          "facts": [
+            "Probability",
+            "10",
+            "50 percent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-05-record-nobody-read": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz ändern, den ich in diesem Chat nicht gelesen habe.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risikostufe wird auf Mittel gesetzt.",
+          "facts": [
+            "Risikostufe",
+            "Mittel"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a record in Dynamics 365 that I haven't read in this chat.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level will be set to Medium.",
+          "facts": [
+            "Risk level",
+            "Medium"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-06-many-fields": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risikostufe: von Niedrig auf Mittel.",
+          "facts": [
+            "Risikostufe",
+            "Niedrig",
+            "Mittel"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 31. März 2030.",
+          "facts": [
+            "Voraussichtliches Abschlussdatum",
+            "1. Dezember",
+            "31. März 2030"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Wahrscheinlichkeit: von 10 auf 75 Prozent.",
+          "facts": [
+            "Wahrscheinlichkeit",
+            "10",
+            "75 Prozent"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommen vier weitere Felder, sie stehen auf dem Bildschirm.",
+          "facts": [
+            "vier"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level: from Low to Medium.",
+          "facts": [
+            "Risk level",
+            "Low",
+            "Medium"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date: from 1 December to 31 March 2030.",
+          "facts": [
+            "Estimated close date",
+            "1 December",
+            "31 March 2030"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: from 10 to 75 percent.",
+          "facts": [
+            "Probability",
+            "10",
+            "75 percent"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And four more fields, shown on screen.",
+          "facts": [
+            "four"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-07-reschedule-appointment": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Termin Werksbesuch Linie 4 verschieben.",
+          "facts": [
+            "Dynamics 365",
+            "Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Scheduled start",
+          "role": "detail",
+          "text": "Beginn: vom 24. November um 9 Uhr auf den 26. November um 14 Uhr.",
+          "facts": [
+            "Beginn",
+            "24. November um 9 Uhr",
+            "26. November um 14 Uhr"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Ende: vom 24. November um 11 Uhr auf den 26. November um 16 Uhr.",
+          "facts": [
+            "Ende",
+            "24. November um 11 Uhr",
+            "26. November um 16 Uhr"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to reschedule the event Werksbesuch Linie 4 in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Scheduled start",
+          "role": "detail",
+          "text": "Start: from 24 November at 9 am to 26 November at 2 pm.",
+          "facts": [
+            "Start",
+            "24 November at 9 am",
+            "26 November at 2 pm"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "End: from 24 November at 11 am to 26 November at 4 pm.",
+          "facts": [
+            "End",
+            "24 November at 11 am",
+            "26 November at 4 pm"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-08-long-text": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Beschreibung: ein Text von etwa 90 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Beschreibung",
+            "90"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Description: a text of about 90 words, shown on screen.",
+          "facts": [
+            "Description",
+            "90"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-09-task-status-codes": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 die Aufgabe Technisches Layout abstimmen ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "Status wird auf Abgeschlossen gesetzt.",
+          "facts": [
+            "Status",
+            "Abgeschlossen"
+          ]
+        },
+        {
+          "id": "detail:Status code",
+          "role": "detail",
+          "text": "Statusgrund wird auf 5 gesetzt.",
+          "facts": [
+            "Statusgrund",
+            "5"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the task Technisches Layout abstimmen in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "Status will be set to Completed.",
+          "facts": [
+            "Status",
+            "Completed"
+          ]
+        },
+        {
+          "id": "detail:Status code",
+          "role": "detail",
+          "text": "Status reason will be set to 5.",
+          "facts": [
+            "Status reason",
+            "5"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-10-contact-two-fields": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Anna Müller ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Anna Müller"
+          ]
+        },
+        {
+          "id": "detail:Job title",
+          "role": "detail",
+          "text": "Position: von Werksleiterin auf Technische Leiterin.",
+          "facts": [
+            "Position",
+            "Werksleiterin",
+            "Technische Leiterin"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "Telefon wird auf +49 89 1234 510 gesetzt.",
+          "facts": [
+            "Telefon",
+            "+49 89 1234 510"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Anna Müller in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Anna Müller"
+          ]
+        },
+        {
+          "id": "detail:Job title",
+          "role": "detail",
+          "text": "Job title: from Werksleiterin to Technische Leiterin.",
+          "facts": [
+            "Job title",
+            "Werksleiterin",
+            "Technische Leiterin"
+          ]
+        },
+        {
+          "id": "detail:Telephone 1",
+          "role": "detail",
+          "text": "Phone will be set to +49 89 1234 510.",
+          "facts": [
+            "Phone",
+            "+49 89 1234 510"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-11-fifteen-emptied": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit ändern.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Dabei werden 15 Felder geleert.",
+          "facts": [
+            "15"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Wahrscheinlichkeit: von 10 auf 20 Prozent.",
+          "facts": [
+            "Wahrscheinlichkeit",
+            "10",
+            "20 Prozent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "15 fields will be emptied.",
+          "facts": [
+            "15"
+          ]
+        },
+        {
+          "id": "detail:Probability",
+          "role": "detail",
+          "text": "Probability: from 10 to 20 percent.",
+          "facts": [
+            "Probability",
+            "10",
+            "20 percent"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-12-list-replace-unknown": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "detail:Tags",
+          "role": "detail",
+          "text": "Die Liste Tags bekommt Retrofit und Linie 4. Ob das die Liste ersetzt oder ergänzt, ist nicht bekannt.",
+          "facts": [
+            "Tags",
+            "Retrofit",
+            "Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Stage",
+          "role": "detail",
+          "text": "Stage wird auf Angebot gesetzt.",
+          "facts": [
+            "Stage",
+            "Angebot"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a record in CRM whose ID is shown on screen.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "detail:Tags",
+          "role": "detail",
+          "text": "The list Tags gets Retrofit and Linie 4. Whether that replaces the list or adds to it is not known.",
+          "facts": [
+            "Tags",
+            "Retrofit",
+            "Linie 4"
+          ]
+        },
+        {
+          "id": "detail:Stage",
+          "role": "detail",
+          "text": "Stage will be set to Angebot.",
+          "facts": [
+            "Stage",
+            "Angebot"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "update-13-list-only-adds": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM einen Datensatz ändern, dessen Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "detail:Labels",
+          "role": "detail",
+          "text": "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+          "facts": [
+            "Labels",
+            "Retrofit",
+            "Service"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a record in CRM whose ID is shown on screen.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "detail:Labels",
+          "role": "detail",
+          "text": "Retrofit and Service will be added to Labels, the tool says.",
+          "facts": [
+            "Labels",
+            "Retrofit",
+            "Service"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-01-task-created-earlier": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 die Aufgabe Technisches Layout abstimmen löschen.",
+          "facts": [
+            "Dynamics 365",
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete the task Technisches Layout abstimmen in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-02-appointment": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Termin Werksbesuch Linie 4 löschen.",
+          "facts": [
+            "Dynamics 365",
+            "Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete the event Werksbesuch Linie 4 in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-03-record-nobody-read": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz löschen, den ich in diesem Chat nicht gelesen habe.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete a record in Dynamics 365 that I haven't read in this chat.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-04-contact": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Ben Schmidt löschen.",
+          "facts": [
+            "Dynamics 365",
+            "Ben Schmidt"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete the record Ben Schmidt in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Ben Schmidt"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-05-account": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Beispiel Industrie GmbH löschen.",
+          "facts": [
+            "Dynamics 365",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob er sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete the record Beispiel Industrie GmbH in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-06-batch-pages": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion zwölf Seiten, darunter Kickoff Line 4, Wochenbericht KW 44 und Wochenbericht KW 45, löschen.",
+          "facts": [
+            "Notion",
+            "zwölf",
+            "Kickoff Line 4",
+            "Wochenbericht KW 44",
+            "Wochenbericht KW 45"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Sie lassen sich wiederherstellen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete twelve pages, including Kickoff Line 4, Wochenbericht KW 44 and Wochenbericht KW 45, in Notion.",
+          "facts": [
+            "Notion",
+            "twelve",
+            "Kickoff Line 4",
+            "Wochenbericht KW 44",
+            "Wochenbericht KW 45"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "They can be restored.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-07-file-permanent": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name laut Aufruf: Angebot Linie 4 v3.docx.",
+          "facts": [
+            "File name",
+            "Angebot Linie 4 v3.docx"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Das lässt sich nicht rückgängig machen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name as given in the call: Angebot Linie 4 v3.docx.",
+          "facts": [
+            "File name",
+            "Angebot Linie 4 v3.docx"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "This cannot be undone.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-08-file-trash": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name laut Aufruf: Entwurf Zeitplan.xlsx.",
+          "facts": [
+            "File name",
+            "Entwurf Zeitplan.xlsx"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Sie lässt sich wiederherstellen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name as given in the call: Entwurf Zeitplan.xlsx.",
+          "facts": [
+            "File name",
+            "Entwurf Zeitplan.xlsx"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "It can be restored.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-09-single-page": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion die Seite Kickoff Line 4 löschen.",
+          "facts": [
+            "Notion",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Sie lässt sich wiederherstellen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete the page Kickoff Line 4 in Notion.",
+          "facts": [
+            "Notion",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "It can be restored.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "delete-10-file-by-id-only": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Google Drive eine Datei löschen, deren Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to delete a file in Google Drive whose ID is shown on screen.",
+          "facts": [
+            "Google Drive"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "send-01-mail-several-recipients": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Outlook eine E-Mail an Anna Mueller und drei weitere senden:",
+          "facts": [
+            "Outlook",
+            "Anna Mueller"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Betreff: Zusammenfassung Werksbesuch Linie 4.",
+          "facts": [
+            "Zusammenfassung Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "outside",
+          "role": "outside",
+          "text": "Zwei der Empfänger sind außerhalb der Firma.",
+          "facts": [
+            "zwei"
+          ]
+        },
+        {
+          "id": "text:Body",
+          "role": "text",
+          "text": "Body: ein Text von etwa 50 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Body",
+            "50"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to send an email to Anna Mueller and three others from Outlook:",
+          "facts": [
+            "Outlook",
+            "Anna Mueller"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Subject: Zusammenfassung Werksbesuch Linie 4.",
+          "facts": [
+            "Zusammenfassung Werksbesuch Linie 4"
+          ]
+        },
+        {
+          "id": "outside",
+          "role": "outside",
+          "text": "Two of the recipients are outside the organisation.",
+          "facts": [
+            "two"
+          ]
+        },
+        {
+          "id": "text:Body",
+          "role": "text",
+          "text": "Body: a text of about 50 words, shown on screen.",
+          "facts": [
+            "Body",
+            "50"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "send-02-slack-message": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Slack eine Nachricht in vertrieb-sued senden.",
+          "facts": [
+            "Slack",
+            "vertrieb-sued"
+          ]
+        },
+        {
+          "id": "text:Text",
+          "role": "text",
+          "text": "Text: Begehung Linie 4 ist am 20. Januar bestätigt.",
+          "facts": [
+            "Text",
+            "Begehung Linie 4 ist am 20. Januar bestätigt."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to send a message to vertrieb-sued from Slack.",
+          "facts": [
+            "Slack",
+            "vertrieb-sued"
+          ]
+        },
+        {
+          "id": "text:Text",
+          "role": "text",
+          "text": "Text: Begehung Linie 4 ist am 20. Januar bestätigt.",
+          "facts": [
+            "Text",
+            "Begehung Linie 4 ist am 20. Januar bestätigt."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "move-01-pages": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion die Seiten Wochenbericht KW 44 und Wochenbericht KW 45 nach Archiv verschieben.",
+          "facts": [
+            "Notion",
+            "Wochenbericht KW 44",
+            "Wochenbericht KW 45",
+            "Archiv"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to move the pages Wochenbericht KW 44 and Wochenbericht KW 45 to Archiv in Notion.",
+          "facts": [
+            "Notion",
+            "Wochenbericht KW 44",
+            "Wochenbericht KW 45",
+            "Archiv"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "archive-01-note": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion eine Notiz archivieren, deren Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "Notion"
+          ]
+        },
+        {
+          "id": "detail:Title",
+          "role": "detail",
+          "text": "Title laut Aufruf: Kickoff Line 4.",
+          "facts": [
+            "Title",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Ob sie sich wiederherstellen lässt, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to archive a note in Notion whose ID is shown on screen.",
+          "facts": [
+            "Notion"
+          ]
+        },
+        {
+          "id": "detail:Title",
+          "role": "detail",
+          "text": "Title as given in the call: Kickoff Line 4.",
+          "facts": [
+            "Title",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Whether it can be restored is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "share-01-file-outside": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Google Drive eine Datei für Planer freigeben, deren Kennung auf dem Bildschirm steht.",
+          "facts": [
+            "Google Drive",
+            "Planer",
+            "eine"
+          ]
+        },
+        {
+          "id": "outside",
+          "role": "outside",
+          "text": "Der Empfänger ist außerhalb der Firma.",
+          "facts": []
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name laut Aufruf: Zeitplan Linie 4.xlsx.",
+          "facts": [
+            "File name",
+            "Zeitplan Linie 4.xlsx"
+          ]
+        },
+        {
+          "id": "detail:Role",
+          "role": "detail",
+          "text": "Role: writer.",
+          "facts": [
+            "Role",
+            "writer"
+          ]
+        },
+        {
+          "id": "detail:Send notification email",
+          "role": "detail",
+          "text": "Send notification email: ja.",
+          "facts": [
+            "Send notification email",
+            "ja"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to share a file with Planer in Google Drive whose ID is shown on screen.",
+          "facts": [
+            "Google Drive",
+            "Planer",
+            "a"
+          ]
+        },
+        {
+          "id": "outside",
+          "role": "outside",
+          "text": "The recipient is outside the organisation.",
+          "facts": []
+        },
+        {
+          "id": "detail:File name",
+          "role": "detail",
+          "text": "File name as given in the call: Zeitplan Linie 4.xlsx.",
+          "facts": [
+            "File name",
+            "Zeitplan Linie 4.xlsx"
+          ]
+        },
+        {
+          "id": "detail:Role",
+          "role": "detail",
+          "text": "Role: writer.",
+          "facts": [
+            "Role",
+            "writer"
+          ]
+        },
+        {
+          "id": "detail:Send notification email",
+          "role": "detail",
+          "text": "Send notification email: yes.",
+          "facts": [
+            "Send notification email",
+            "yes"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "upsert-01-company": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM den Datensatz Muster Maschinenbau AG anlegen oder aktualisieren.",
+          "facts": [
+            "CRM",
+            "Muster Maschinenbau AG"
+          ]
+        },
+        {
+          "id": "detail:Company",
+          "role": "detail",
+          "text": "Company: Der Wert steht auf dem Bildschirm.",
+          "facts": [
+            "Company"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create or update the record Muster Maschinenbau AG in CRM.",
+          "facts": [
+            "CRM",
+            "Muster Maschinenbau AG"
+          ]
+        },
+        {
+          "id": "detail:Company",
+          "role": "detail",
+          "text": "Company: the value is shown on screen.",
+          "facts": [
+            "Company"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "comment-01-page": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion die Seite Kickoff Line 4 kommentieren.",
+          "facts": [
+            "Notion",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "text:Markdown",
+          "role": "text",
+          "text": "Markdown: Bitte bis Freitag die Zeichnungen ergänzen.",
+          "facts": [
+            "Markdown",
+            "Bitte bis Freitag die Zeichnungen ergänzen."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to comment on the page Kickoff Line 4 in Notion.",
+          "facts": [
+            "Notion",
+            "Kickoff Line 4"
+          ]
+        },
+        {
+          "id": "text:Markdown",
+          "role": "text",
+          "text": "Markdown: Bitte bis Freitag die Zeichnungen ergänzen.",
+          "facts": [
+            "Markdown",
+            "Bitte bis Freitag die Zeichnungen ergänzen."
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "upload-01-file": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion eine Datei anlegen:",
+          "facts": [
+            "Notion"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen-Foerdertechnik.pdf.",
+          "facts": [
+            "Zeichnungen-Foerdertechnik.pdf"
+          ]
+        },
+        {
+          "id": "detail:Content type",
+          "role": "detail",
+          "text": "Content type: application/pdf.",
+          "facts": [
+            "Content type",
+            "application/pdf"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a file in Notion:",
+          "facts": [
+            "Notion"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen-Foerdertechnik.pdf.",
+          "facts": [
+            "Zeichnungen-Foerdertechnik.pdf"
+          ]
+        },
+        {
+          "id": "detail:Content type",
+          "role": "detail",
+          "text": "Content type: application/pdf.",
+          "facts": [
+            "Content type",
+            "application/pdf"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "run-01-sql": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Data warehouse eine SQL-Abfrage ausführen. Sie steht auf dem Bildschirm.",
+          "facts": [
+            "Data warehouse",
+            "sql"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "Wie viele Datensätze das betrifft, ist nicht bekannt.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to run an SQL query in Data warehouse. It's shown on screen.",
+          "facts": [
+            "Data warehouse",
+            "sql"
+          ]
+        },
+        {
+          "id": "consequence",
+          "role": "consequence",
+          "text": "How many records this affects is not known.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-01-search": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 nach Müller GmbH suchen.",
+          "facts": [
+            "Dynamics 365",
+            "Müller GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to search in Dynamics 365 for Müller GmbH.",
+          "facts": [
+            "Dynamics 365",
+            "Müller GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-02-query": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Verkaufschancen auflisten, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "Verkaufschancen"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status ist Offen.",
+          "facts": [
+            "Status",
+            "Offen"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list opportunities in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "opportunities"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status is Open.",
+          "facts": [
+            "Status",
+            "Open"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-03-sql-several-filters": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "Aufgaben"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status ist Offen.",
+          "facts": [
+            "Status",
+            "Offen"
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "Priorität ist Hoch.",
+          "facts": [
+            "Priorität",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "detail:scheduledend",
+          "role": "detail",
+          "text": "Fälligkeitsdatum liegt vor dem 31. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "31. Januar 2030"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Dazu kommt eine weitere Bedingung, sie steht auf dem Bildschirm.",
+          "facts": [
+            "eine"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "tasks"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status is Open.",
+          "facts": [
+            "Status",
+            "Open"
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "Priority is High.",
+          "facts": [
+            "Priority",
+            "High"
+          ]
+        },
+        {
+          "id": "detail:scheduledend",
+          "role": "detail",
+          "text": "Due date is before 31 January 2030.",
+          "facts": [
+            "Due date",
+            "31 January 2030"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "And one more condition, shown on screen.",
+          "facts": [
+            "one"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-04-sql-record-by-id": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit lesen.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-05-sql-no-filter": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Firmen auflisten.",
+          "facts": [
+            "Dynamics 365",
+            "Firmen"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Höchstens 50 Datensätze.",
+          "facts": [
+            "50"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list accounts in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "accounts"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "At most 50 records.",
+          "facts": [
+            "50"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-06-sql-long-values": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "Aufgaben"
+          ]
+        },
+        {
+          "id": "detail:description",
+          "role": "detail",
+          "text": "Beschreibung wird mit einem Text von etwa 20 Wörtern verglichen, er steht auf dem Bildschirm.",
+          "facts": [
+            "Beschreibung"
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "Priorität ist Niedrig, Normal, Hoch oder drei weitere Werte.",
+          "facts": [
+            "Priorität",
+            "Niedrig",
+            "Normal",
+            "Hoch",
+            "drei"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "tasks"
+          ]
+        },
+        {
+          "id": "detail:description",
+          "role": "detail",
+          "text": "Description is compared with a text of about 20 words, shown on screen.",
+          "facts": [
+            "Description"
+          ]
+        },
+        {
+          "id": "detail:prioritycode",
+          "role": "detail",
+          "text": "Priority is Low, Normal, High or three more values.",
+          "facts": [
+            "Priority",
+            "Low",
+            "Normal",
+            "High",
+            "three"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-07-retrieve-record": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 den Datensatz Line 4 Retrofit lesen.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Wo: opportunity.",
+          "facts": [
+            "opportunity"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read the record Line 4 Retrofit in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail",
+          "role": "detail",
+          "text": "Where: opportunity.",
+          "facts": [
+            "opportunity"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-08-sql-join": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus den Tabellen opportunity und account Datensätze lesen, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "opportunity",
+            "account"
+          ]
+        },
+        {
+          "id": "detail:name",
+          "role": "detail",
+          "text": "Name von account ist Beispiel Industrie GmbH.",
+          "facts": [
+            "Name",
+            "account",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the tables opportunity and account in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "opportunity",
+            "account"
+          ]
+        },
+        {
+          "id": "detail:name",
+          "role": "detail",
+          "text": "Name of account is Beispiel Industrie GmbH.",
+          "facts": [
+            "Name",
+            "account",
+            "Beispiel Industrie GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-09-sql-record-nobody-read": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz lesen, den ich in diesem Chat nicht gelesen habe.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read a record in Dynamics 365 that I haven't read in this chat.",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-10-list-filtered": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in CRM Aufgaben auflisten.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "Mit Bedingungen, die auf dem Bildschirm stehen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in CRM.",
+          "facts": [
+            "CRM"
+          ]
+        },
+        {
+          "id": "more",
+          "role": "more",
+          "text": "With conditions shown on screen.",
+          "facts": []
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-11-sql-related-record": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Aufgaben auflisten, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "Aufgaben"
+          ]
+        },
+        {
+          "id": "detail:regardingobjectid",
+          "role": "detail",
+          "text": "Bezug ist Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status ist Offen.",
+          "facts": [
+            "Status",
+            "Offen"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list tasks in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "tasks"
+          ]
+        },
+        {
+          "id": "detail:regardingobjectid",
+          "role": "detail",
+          "text": "Regarding is Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status is Open.",
+          "facts": [
+            "Status",
+            "Open"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-12-sql-select-into": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 das Tool read query verwenden.",
+          "facts": [
+            "Dynamics 365",
+            "read_query"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to use the tool read query in Dynamics 365.",
+          "facts": [
+            "Dynamics 365",
+            "read_query"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-13-search-long-text": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion nach einem Text von etwa 20 Wörtern suchen, er steht auf dem Bildschirm.",
+          "facts": [
+            "Notion",
+            "20"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to search in Notion for a text of about 20 words, shown on screen.",
+          "facts": [
+            "Notion",
+            "20"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "read-14-sql-glossary": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 Verkaufschancen auflisten, mit diesen Bedingungen:",
+          "facts": [
+            "Dynamics 365",
+            "Verkaufschancen"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risikostufe ist Hoch.",
+          "facts": [
+            "Risikostufe",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Voraussichtliches Abschlussdatum liegt spätestens am 31. Dezember.",
+          "facts": [
+            "Voraussichtliches Abschlussdatum",
+            "31. Dezember"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to list opportunities in Dynamics 365, with these conditions:",
+          "facts": [
+            "Dynamics 365",
+            "opportunities"
+          ]
+        },
+        {
+          "id": "detail:Risk level",
+          "role": "detail",
+          "text": "Risk level is High.",
+          "facts": [
+            "Risk level",
+            "High"
+          ]
+        },
+        {
+          "id": "detail:Estimated close date",
+          "role": "detail",
+          "text": "Estimated close date is on or before 31 December.",
+          "facts": [
+            "Estimated close date",
+            "31 December"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "generic-01-word-comment-delete": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Word das Tool word submit comment changes verwenden.",
+          "facts": [
+            "Word",
+            "word_submit_comment_changes"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to use the tool word submit comment changes in Word.",
+          "facts": [
+            "Word",
+            "word_submit_comment_changes"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "generic-02-sync-remote-page": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Notion das Tool sync page verwenden.",
+          "facts": [
+            "Notion",
+            "sync_page"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to use the tool sync page in Notion.",
+          "facts": [
+            "Notion",
+            "sync_page"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "stops-01-three-tasks-one-at-a-time": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "facts": [
+            "Zeichnungen anfordern"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 10. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "10. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 20. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "20. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Schulung planen.",
+          "facts": [
+            "Schulung planen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 3. Februar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "3. Februar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "facts": [
+            "Zeichnungen anfordern"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 10 January 2030.",
+          "facts": [
+            "Due date",
+            "10 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 20 January 2030.",
+          "facts": [
+            "Due date",
+            "20 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Schulung planen.",
+          "facts": [
+            "Schulung planen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 3 February 2030.",
+          "facts": [
+            "Due date",
+            "3 February 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "stops-02-search-then-create": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 nach Müller GmbH suchen.",
+          "facts": [
+            "Dynamics 365",
+            "Müller GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "facts": [
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 15. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "15. Januar 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priorität: Hoch.",
+          "facts": [
+            "Priorität",
+            "Hoch"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Beschreibung: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
+          "facts": [
+            "Beschreibung",
+            "70"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to search in Dynamics 365 for Müller GmbH.",
+          "facts": [
+            "Dynamics 365",
+            "Müller GmbH"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Technisches Layout abstimmen.",
+          "facts": [
+            "Technisches Layout abstimmen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 15 January 2030.",
+          "facts": [
+            "Due date",
+            "15 January 2030"
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority: High.",
+          "facts": [
+            "Priority",
+            "High"
+          ]
+        },
+        {
+          "id": "text:Description",
+          "role": "text",
+          "text": "Description: a text of about 70 words, shown on screen.",
+          "facts": [
+            "Description",
+            "70"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "queue-01-three-task-children": {
+    "de": [
+      [
+        {
+          "id": "count",
+          "role": "count",
+          "text": "Dafür brauche ich drei Freigaben.",
+          "facts": [
+            "drei"
+          ]
+        },
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Die erste: Ich möchte in Dynamics 365 eine Aufgabe anlegen:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "facts": [
+            "Zeichnungen anfordern"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 10. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "10. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Die zweite: eine Aufgabe, Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 20. Januar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "20. Januar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Die dritte: eine Aufgabe, Schulung planen.",
+          "facts": [
+            "Schulung planen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Bezug: Line 4 Retrofit.",
+          "facts": [
+            "Bezug",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Fälligkeitsdatum: 3. Februar 2030.",
+          "facts": [
+            "Fälligkeitsdatum",
+            "3. Februar 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "count",
+          "role": "count",
+          "text": "I need three approvals for this.",
+          "facts": [
+            "three"
+          ]
+        },
+        {
+          "id": "what",
+          "role": "what",
+          "text": "The first one: I'd like to create a task in Dynamics 365:",
+          "facts": [
+            "Dynamics 365"
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Zeichnungen anfordern.",
+          "facts": [
+            "Zeichnungen anfordern"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 10 January 2030.",
+          "facts": [
+            "Due date",
+            "10 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "The second one: a task, Angebot nachfassen.",
+          "facts": [
+            "Angebot nachfassen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 20 January 2030.",
+          "facts": [
+            "Due date",
+            "20 January 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ],
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "The third one: a task, Schulung planen.",
+          "facts": [
+            "Schulung planen"
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid",
+          "role": "detail",
+          "text": "Regarding: Line 4 Retrofit.",
+          "facts": [
+            "Regarding",
+            "Line 4 Retrofit"
+          ]
+        },
+        {
+          "id": "detail:Scheduled end",
+          "role": "detail",
+          "text": "Due date: 3 February 2030.",
+          "facts": [
+            "Due date",
+            "3 February 2030"
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "builtin-01-cancel-reminder": {
+    "de": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "Auf dem Bildschirm wartet eine Entscheidung.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "A decision is waiting on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "task-plan-01": {
+    "de": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "Auf dem Bildschirm wartet eine Entscheidung.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "A decision is waiting on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  },
+  "tool-call-limit-01": {
+    "de": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "Auf dem Bildschirm wartet eine Entscheidung.",
+          "facts": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "pointer",
+          "role": "pointer",
+          "text": "A decision is waiting on screen.",
+          "facts": []
+        }
+      ]
+    ]
+  }
+}

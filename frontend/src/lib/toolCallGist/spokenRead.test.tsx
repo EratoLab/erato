@@ -35,10 +35,15 @@ const { calls } = data as unknown as { calls: SetCall[] };
 const NOW = new Date("2026-11-17T09:00:00Z");
 i18n.load({ de: deMessages as unknown as Messages });
 
+// The set's labels carry the spoken vocabulary; these tests are about
+// composing, with the card's own names. `spokenCardRewording.test.ts`
+// covers the vocabulary.
 const callOf = (id: string): SetCall => {
   const call = calls.find((entry) => entry.id === id);
   if (!call) throw new Error(`no call ${id}`);
-  return call;
+  if (!call.display.label) return call;
+  const { spoken_names: _, ...label } = call.display.label;
+  return { ...call, display: { ...call.display, label } };
 };
 
 const sayLabel = (

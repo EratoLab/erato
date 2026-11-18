@@ -88,14 +88,28 @@ const callOf = (id: string): SetCall => {
   return call;
 };
 
-const approvalOf = (call: SetCall, approvalKind = "mcp_tool"): SpokenApproval =>
-  spokenApprovalFor(approvalKind, {
+// The set's labels carry the spoken vocabulary; most tests here are
+// about composing, with the card's own names. the scenario set keeps it, and
+// `spokenCardRewording.test.ts` covers it.
+const approvalOf = (
+  call: SetCall,
+  approvalKind = "mcp_tool",
+  vocabulary = false,
+): SpokenApproval => {
+  const { spoken_names: _, ...label } = (call.display.label ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return spokenApprovalFor(approvalKind, {
     ...call,
     display: {
       ...call.display,
-      label: call.display.label as ToolCallLabel | undefined,
+      label: (vocabulary ? call.display.label : call.display.label && label) as
+        | ToolCallLabel
+        | undefined,
     },
   });
+};
 
 /** A piece without its source values, for comparing the words alone. */
 const said = ({ role, text, mustSay }: SpokenPiece) => ({
@@ -133,7 +147,7 @@ const scenarioPieces = (
   const approvals =
     scenario.calls.length > 0
       ? scenario.calls.map((id) =>
-          approvalOf(callOf(id), scenario.approval_kind),
+          approvalOf(callOf(id), scenario.approval_kind, true),
         )
       : [
           spokenApprovalFor(scenario.approval_kind ?? "mcp_tool", {
@@ -398,8 +412,8 @@ describe("spoken approval card", () => {
     ]);
     expect(second.map((piece) => piece.text)).toEqual([
       "Die zweite: eine Aufgabe, Angebot nachfassen.",
-      "Regardingobjectid: Line 4 Retrofit.",
-      "Scheduled end: 20. Januar 2030.",
+      "Bezug: Line 4 Retrofit.",
+      "Fälligkeitsdatum: 20. Januar 2030.",
       "Bitte auf dem Bildschirm bestätigen.",
     ]);
     expect(third[0].text).toBe("Die dritte: eine Aufgabe, Schulung planen.");
@@ -977,7 +991,10 @@ describe("every scenario of the set", () => {
       { slot: "name", value: { kind: "text", text: "Line 4 Retrofit" } },
     ]);
     expect(card[1].values).toEqual([
-      { slot: "field", value: { kind: "text", text: "Estimated close date" } },
+      {
+        slot: "field",
+        value: { kind: "text", text: "Voraussichtliches Abschlussdatum" },
+      },
       { slot: "from", value: { kind: "date", year: 2026, month: 12, day: 1 } },
       { slot: "to", value: { kind: "date", year: 2030, month: 1, day: 15 } },
     ]);

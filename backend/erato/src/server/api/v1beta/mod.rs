@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 pub(crate) mod approval_access;
+pub mod approval_rewording;
 pub mod approval_voice_commands;
 pub mod assistant_hub;
 pub mod assistant_usage;
@@ -263,6 +264,10 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         .route(
             "/messages/{message_id}/approval-voice-command",
             post(approval_voice_commands::interpret_approval_voice_command),
+        )
+        .route(
+            "/messages/{message_id}/approval-rewording",
+            post(approval_rewording::reword_approval),
         )
         .route("/files", post(upload_file))
         .route("/files/link", post(link_file))
@@ -558,6 +563,7 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         read_aloud::read_message_aloud,
         read_aloud::speak_approval,
         approval_voice_commands::interpret_approval_voice_command,
+        approval_rewording::reword_approval,
         message_text_actions::explain_message_text,
         chat_history_compaction::compact_chat,
         available_models,
@@ -626,6 +632,11 @@ pub fn router(app_state: AppState) -> OpenApiRouter<AppState> {
         crate::services::approval_voice_commands::CardPiece,
         crate::services::approval_voice_commands::CardPieceRole,
         crate::services::approval_voice_commands::CardPieceState,
+        approval_rewording::ApprovalRewordingRequest,
+        crate::services::approval_rewording::RewordPiece,
+        crate::services::approval_rewording::RewordedPiece,
+        crate::services::approval_rewording::Reworded,
+        crate::config::ApprovalSpeechStyle,
         Chat,
         RecentChat,
         FacetInfo,
@@ -1075,6 +1086,13 @@ pub struct UpdateProfilePreferencesRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "Europe/Berlin")]
     pub preference_time_zone: Option<String>,
+    /// How approval cards are read aloud in conversational audio mode:
+    /// `precise` or `natural`. Explicit `null` follows the organisation
+    /// again. Stored even while the organisation does not let users choose,
+    /// and then not used.
+    #[serde(default, deserialize_with = "deserialize_patch_optional_string")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preference_approval_speech_style: Option<Option<String>>,
     /// The client's UI language as a BCP 47 tag, reported like the time zone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false, example = "de")]
@@ -1162,6 +1180,14 @@ pub async fn update_profile_preferences(
                 .ok_or(StatusCode::UNPROCESSABLE_ENTITY)
         })
         .transpose()?;
+    let approval_speech_style = match request.preference_approval_speech_style {
+        None => None,
+        Some(None) => Some(None),
+        Some(Some(style)) => Some(Some(
+            crate::config::ApprovalSpeechStyle::from_wire(style.trim())
+                .ok_or(StatusCode::UNPROCESSABLE_ENTITY)?,
+        )),
+    };
 
     let updated_prefs = models::user_preference::upsert_user_preferences(
         &app_state.db,
@@ -1179,6 +1205,7 @@ pub async fn update_profile_preferences(
             starting_assistant_cleared: request.preference_starting_assistant_cleared,
             time_zone,
             language,
+            approval_speech_style,
         },
     )
     .await
@@ -1220,6 +1247,10 @@ pub async fn update_profile_preferences(
     profile.preference_starting_assistant_cleared = updated_prefs.starting_assistant_cleared;
     profile.preference_time_zone = updated_prefs.time_zone;
     profile.preference_language = updated_prefs.language;
+    profile.preference_approval_speech_style = updated_prefs
+        .approval_speech_style
+        .as_deref()
+        .and_then(crate::config::ApprovalSpeechStyle::from_wire);
     profile.client_tool_decisions = models::user_preference::client_tool_decisions_from_json(
         &updated_prefs.client_tool_decisions,
     );

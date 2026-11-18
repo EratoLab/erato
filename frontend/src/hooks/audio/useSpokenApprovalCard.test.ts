@@ -10,7 +10,10 @@ import { useSpokenApprovalCard } from "./useSpokenApprovalCard";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { ToolCallLabel } from "@/lib/generated/v1betaApi/v1betaApiSchemas";
-import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
+import type {
+  SpokenApproval,
+  SpokenPiece,
+} from "@/lib/toolCallGist/spokenCard";
 
 const speakApprovalCard = vi.fn();
 const offerApprovalCard = vi.fn();
@@ -28,6 +31,26 @@ vi.mock("./approvalSpeech", () => ({
     offerApprovalCard(card);
   },
   forgetApprovalCards: (keys: readonly string[]) => forgetApprovalCards(keys),
+}));
+
+const natural = { on: false };
+const naturalApprovalPieces =
+  vi.fn<
+    (
+      key: string,
+      messageId: string,
+      pieces: SpokenPiece[],
+    ) => Promise<SpokenPiece[]>
+  >();
+vi.mock("./approvalRewording", () => ({
+  NATURAL_WAIT_AT_START_MS: 600,
+  useNaturalApprovalSpeech: () => natural.on,
+  naturalApprovalPieces: (
+    key: string,
+    messageId: string,
+    pieces: SpokenPiece[],
+  ) => naturalApprovalPieces(key, messageId, pieces),
+  forgetNaturalApprovals: () => {},
 }));
 
 const POINTER: SpokenApproval = { type: "pointer" };
@@ -49,6 +72,8 @@ const spokenKeys = () =>
   speakApprovalCard.mock.calls.map(([card]) => (card as { key: string }).key);
 
 beforeEach(() => {
+  natural.on = false;
+  naturalApprovalPieces.mockReset();
   speakApprovalCard.mockClear();
   offerApprovalCard.mockClear();
   forgetApprovalCards.mockClear();
@@ -242,6 +267,104 @@ describe("useSpokenApprovalCard", () => {
       renderHook(() => useSpokenApprovalCard(queue));
       expect(change).toHaveBeenCalledWith("b");
       expect(cardOf(0).change?.approvalId).toBe("b");
+    });
+  });
+
+  describe("in the natural style", () => {
+    const reworded = (pieces: SpokenPiece[]) =>
+      pieces.map((piece) => ({ ...piece, text: `Natürlich: ${piece.text}` }));
+
+    beforeEach(() => {
+      natural.on = true;
+    });
+
+    it("asks for the wording while the model still speaks, and speaks it once", async () => {
+      let answer: (pieces: SpokenPiece[]) => void = () => {};
+      naturalApprovalPieces.mockImplementation(
+        (_key, _message, pieces) =>
+          new Promise((resolve) => {
+            answer = () => resolve(reworded(pieces));
+          }),
+      );
+      useSpeechPlayback.setState({ playing: true });
+      const first = props();
+      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
+        initialProps: first,
+      });
+      expect(naturalApprovalPieces).toHaveBeenCalled();
+      act(() => useSpeechPlayback.setState({ playing: false }));
+      rerender({ ...first });
+      expect(speakApprovalCard).not.toHaveBeenCalled();
+      await act(async () => answer([]));
+      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
+      const card = speakApprovalCard.mock.calls[0][0] as {
+        pieces: SpokenPiece[];
+      };
+      expect(card.pieces[0].text).toBe(
+        "Natürlich: A decision is waiting on screen.",
+      );
+      expect(card.pieces[0].id).toBe("pointer");
+    });
+
+    it("says the card precisely when the wording is late", async () => {
+      vi.useFakeTimers();
+      try {
+        naturalApprovalPieces.mockImplementation(() => new Promise(() => {}));
+        renderHook(() => useSpokenApprovalCard(props()));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(599);
+        });
+        expect(speakApprovalCard).not.toHaveBeenCalled();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1);
+        });
+        expect(speakApprovalCard).toHaveBeenCalledTimes(1);
+        const card = speakApprovalCard.mock.calls[0][0] as {
+          pieces: SpokenPiece[];
+        };
+        expect(card.pieces[0].text).toBe("A decision is waiting on screen.");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("says nothing when the card was decided before the wording came back", async () => {
+      let answer: () => void = () => {};
+      naturalApprovalPieces.mockImplementation(
+        (_key, _message, pieces) =>
+          new Promise((resolve) => {
+            answer = () => resolve(pieces);
+          }),
+      );
+      const first = props();
+      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
+        initialProps: first,
+      });
+      rerender({ ...first, active: false });
+      await act(async () => answer());
+      expect(speakApprovalCard).not.toHaveBeenCalled();
+      expect(offerApprovalCard).not.toHaveBeenCalled();
+    });
+
+    it("keeps the difference reading after a change request precise", () => {
+      noteChangeSending({
+        messageId: "message-2",
+        approvalId: "call-1",
+        approval: POINTER,
+        heard: ["pointer"],
+        words: "nimm 75",
+      });
+      renderHook(() =>
+        useSpokenApprovalCard(
+          props({
+            messageId: "message-2",
+            keys: ["t2:call-2"],
+            items: [{ approvalId: "call-2", replaces: "call-1" }],
+          }),
+        ),
+      );
+      expect(naturalApprovalPieces).not.toHaveBeenCalled();
+      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -12,6 +12,7 @@ import {
   whatValues,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
+import { spokenFieldName, spokenNamesFor } from "./spokenNames";
 import { spokenReadFactsOf } from "./spokenRead";
 import { earValue } from "./spokenValues";
 
@@ -28,6 +29,7 @@ import type {
   SpokenSource,
 } from "./spokenCard";
 import type { DifferenceIntro, LanguageWords } from "./spokenCardWords";
+import type { SpokenNames } from "./spokenNames";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -240,6 +242,7 @@ const entriesOf = (
   facts: SpokenFacts,
   words: LanguageWords,
   timeZone: string | undefined,
+  names?: SpokenNames,
 ): Entry[] => {
   const entries: Entry[] = [];
   const seen = new Map<string, number>();
@@ -252,17 +255,25 @@ const entriesOf = (
         : { ...entry, key: `${entry.key}#${occurrence}` },
     );
   };
+  // Details and texts carry the spoken name; ids and keys the card's.
   const detailFor = (field: string) =>
-    facts.details.find((detail) => "field" in detail && detail.field === field);
+    facts.details.find(
+      (detail) =>
+        "field" in detail && (detail.cardField ?? detail.field) === field,
+    );
   const textFor = (field: string) =>
-    facts.texts.find((text) => text.field === field);
+    facts.texts.find((text) => (text.cardField ?? text.field) === field);
   /**
    * A field as the voice says it: its detail, else its long text, else
    * only that it differs. `found` is false when the card says neither.
    */
-  const fieldEntry = (field: string) => {
+  const fieldEntry = (field: string, rawName: string) => {
     const detail = detailFor(field);
     const text = detail ? undefined : textFor(field);
+    const heard =
+      detail && "field" in detail
+        ? detail.field
+        : (text?.field ?? spokenFieldName(names, rawName) ?? field);
     const spoken: Pick<
       Entry,
       | "heardAs"
@@ -277,7 +288,7 @@ const entriesOf = (
           heardAs: pieceId("detail", field),
           role: "detail",
           sentence: words.detail(detail, facts),
-          field,
+          field: heard,
           mustSay: detail.loss,
           values: detailValues(detail),
         }
@@ -286,10 +297,10 @@ const entriesOf = (
             heardAs: pieceId("text", field),
             role: "text",
             sentence: words.text(text),
-            field,
+            field: heard,
             mustSay: false,
             values: [
-              sourceOf("field", field),
+              sourceOf("field", heard),
               text.read === undefined
                 ? {
                     slot: "words",
@@ -308,10 +319,10 @@ const entriesOf = (
         : {
             heardAs: pieceId("detail", field),
             role: "detail",
-            sentence: words.difference.field(field),
-            field,
+            sentence: words.difference.field(heard),
+            field: heard,
             mustSay: false,
-            values: [sourceOf("field", field)],
+            values: [sourceOf("field", heard)],
           };
     return { found: detail !== undefined || text !== undefined, spoken };
   };
@@ -325,7 +336,7 @@ const entriesOf = (
   const naming: string[] = [];
 
   for (const effect of change?.effects ?? []) {
-    const { found, spoken } = fieldEntry(effectField(effect));
+    const { found, spoken } = fieldEntry(effectField(effect), effect.rawName);
     if (!found && name !== undefined && effect.effect !== "unchanged") {
       naming.push(effect.path);
       continue;
@@ -344,7 +355,7 @@ const entriesOf = (
   }
 
   for (const text of change?.texts ?? []) {
-    const { spoken } = fieldEntry(fieldName(text));
+    const { spoken } = fieldEntry(fieldName(text), text.rawName);
     add({
       key: `text:${text.path}`,
       ...spoken,
@@ -360,7 +371,7 @@ const entriesOf = (
   // A label without a change description: its fields as the card lists them.
   if (!change) {
     for (const field of lead.fields) {
-      const { spoken } = fieldEntry(field.name);
+      const { spoken } = fieldEntry(field.name, field.name);
       add({
         key: `field:${field.pointer}`,
         ...spoken,
@@ -1002,19 +1013,23 @@ export const spokenDifference = (
   }
 
   const { timeZone } = options;
+  const oldNames = spokenNamesFor(before.label, options.language);
+  const newNames = spokenNamesFor(next.label, options.language);
   const oldEntries = entriesOf(
     oldCard.gist,
     before.input,
-    spokenFactsOf(oldCard.gist, before.server, timeZone, true),
+    spokenFactsOf(oldCard.gist, before.server, timeZone, true, oldNames),
     words,
     timeZone,
+    oldNames,
   );
   const newEntries = entriesOf(
     newCard.gist,
     next.input,
-    spokenFactsOf(newCard.gist, next.server, timeZone, true),
+    spokenFactsOf(newCard.gist, next.server, timeZone, true, newNames),
     words,
     timeZone,
+    newNames,
   );
   const said = tokensOf(previous.words);
   const oldByKey = new Map(oldEntries.map((entry) => [entry.key, entry]));
@@ -1092,7 +1107,13 @@ export const spokenDifference = (
   // What the user asked for first, then what nobody asked for.
   differences.sort((a, b) => Number(b.asked) - Number(a.asked));
 
-  const spoken = spokenFactsOf(newCard.gist, next.server, timeZone);
+  const spoken = spokenFactsOf(
+    newCard.gist,
+    next.server,
+    timeZone,
+    false,
+    newNames,
+  );
   // A new title is said as a difference; the first sentence then ends there.
   const facts = nameChanged ? { ...spoken, names: [] } : spoken;
   const item = words.item(facts);

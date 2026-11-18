@@ -17,7 +17,7 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, to_value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use utoipa::ToSchema;
 
@@ -657,6 +657,29 @@ pub struct ToolCallLabel {
     )]
     #[schema(nullable = false)]
     pub read: Option<ToolCallRead>,
+    /// What people call this call's fields, coded values and tables, by
+    /// language tag, from the server's spoken vocabularies, for words spoken
+    /// aloud. Keyed by the names as this label carries them: an effect's
+    /// `raw_name` and its values' `text`, a read condition's `column` and its
+    /// values' `text`, a read's table. No card reads it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub spoken_names: BTreeMap<String, ToolCallSpokenNames>,
+}
+
+/// One language's words for the names a call uses. A name without an entry
+/// is not here and is spoken as the card shows it.
+#[derive(
+    Debug, Clone, Default, Serialize, Deserialize, PartialEq, ToSchema, erato_memory::HeapSize,
+)]
+pub struct ToolCallSpokenNames {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, String>,
+    /// By field, then by value.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub choices: BTreeMap<String, BTreeMap<String, String>>,
+    /// What the records of a table are called, in the plural.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tables: BTreeMap<String, String>,
 }
 
 /// A call that only reads, by the rules alone and only where every check a

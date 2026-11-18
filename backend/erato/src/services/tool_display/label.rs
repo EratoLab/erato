@@ -14,6 +14,7 @@ pub mod own;
 pub mod pointer;
 mod recipients;
 pub mod rules;
+pub mod spoken;
 mod sql;
 mod words;
 
@@ -104,6 +105,7 @@ pub fn generic_label(arguments: &Value) -> ToolCallLabel {
         source: ToolCallLabelSource::Generic,
         change: None,
         read: None,
+        spoken_names: Default::default(),
     }
 }
 
@@ -446,6 +448,7 @@ pub fn sql_read(
     approval_argument: Option<&str>,
     shown: &ToolCallLabel,
     glossary: Option<&erato_config::config::McpGlossaryConfig>,
+    mut spoken: Option<&mut spoken::SpokenNamesCollector<'_, '_>>,
 ) -> Option<ToolCallRead> {
     use crate::models::message::{ToolCallOpaqueKind, ToolCallReadCondition, ToolCallReadQuery};
     let (pointer, text) = rules::the_sql_statement(arguments)?;
@@ -493,6 +496,14 @@ pub fn sql_read(
         cleaned.text
     };
     let tables: Vec<String> = plain.tables.iter().map(|table| name(table)).collect();
+    if let Some(spoken) = spoken.as_deref_mut() {
+        for (shown, raw) in tables.iter().zip(&plain.tables) {
+            spoken.table(shown, raw);
+        }
+        if let [table] = plain.tables.as_slice() {
+            spoken.in_table(Some(table));
+        }
+    }
     // The operator's names for fields and coded values, as on a write card.
     let columns: Vec<String> = plain
         .conditions
@@ -544,6 +555,17 @@ pub fn sql_read(
             .collect();
         match values {
             Some(values) if !column.is_empty() => {
+                if let Some(spoken) = spoken.as_deref_mut() {
+                    if condition.table.is_some() {
+                        spoken.in_table(condition.table.as_deref());
+                    }
+                    spoken.field(&column, &condition.column);
+                    for (shown, raw) in values.iter().zip(&condition.values) {
+                        if !shown.machine_id {
+                            spoken.choice(&column, &condition.column, &shown.text, raw);
+                        }
+                    }
+                }
                 conditions.push(ToolCallReadCondition {
                     column,
                     table: condition

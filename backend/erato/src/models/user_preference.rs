@@ -68,6 +68,9 @@ pub struct UpdateUserPreferencesInput {
     /// and so has no stable hub id to point at. `Some(None)` removes the pick.
     pub starting_assistant_id: Option<Option<Uuid>>,
     pub starting_assistant_cleared: Option<bool>,
+    /// How approval cards are read aloud; `Some(None)` follows the
+    /// organisation again.
+    pub approval_speech_style: Option<Option<crate::config::ApprovalSpeechStyle>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
@@ -350,6 +353,10 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.language {
             model.language = ActiveValue::Set(Some(value));
         }
+        if let Some(value) = input.approval_speech_style {
+            model.approval_speech_style =
+                ActiveValue::Set(value.map(|style| style.wire_name().to_string()));
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -387,6 +394,12 @@ async fn upsert_user_preferences_row(
             )?),
             time_zone: ActiveValue::Set(input.time_zone),
             language: ActiveValue::Set(input.language),
+            approval_speech_style: ActiveValue::Set(
+                input
+                    .approval_speech_style
+                    .flatten()
+                    .map(|style| style.wire_name().to_string()),
+            ),
             ..Default::default()
         };
 

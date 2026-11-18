@@ -113,6 +113,7 @@ fn a_call_with_no_verb_has_no_change_description() {
         source: ToolCallLabelSource::Rules,
         change: None,
         read: None,
+        spoken_names: Default::default(),
     };
     let arguments = json!({});
     let context = ToolResultContext::default();

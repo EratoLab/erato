@@ -196,6 +196,58 @@ export type ApprovalItem = {
 };
 
 /**
+ * A piece as it is spoken: the precise text, or a wording that passed the
+ * check.
+ */
+export type ApprovalRewordedPiece = {
+  id: string;
+  /**
+   * `text` is a checked wording, not the precise sentence.
+   */
+  natural: boolean;
+  text: string;
+};
+
+export type ApprovalRewording = {
+  /**
+   * Every piece of the request, in its order, with its id.
+   */
+  pieces: ApprovalRewordedPiece[];
+};
+
+/**
+ * One piece as the card composed it, with the words it says for each of
+ * its values.
+ */
+export type ApprovalRewordingPiece = {
+  /**
+   * The words `text` says for each value it is built from, in the card's
+   * order: names, dates, numbers, field names, the item. A wording must
+   * keep every one.
+   */
+  facts?: string[];
+  id: string;
+  role: ApprovalCardPieceRole;
+  /**
+   * The precise sentence.
+   */
+  text: string;
+};
+
+export type ApprovalRewordingRequest = {
+  /**
+   * The language the pieces are in, as a tag such as `de`.
+   */
+  language: string;
+  /**
+   * The spoken card's pieces in the order they are said, at most 16, each
+   * at most 400 and all together at most 2000 characters, each with at
+   * most 24 facts of at most 200 characters.
+   */
+  pieces: ApprovalRewordingPiece[];
+};
+
+/**
  * What one decision on this item may cover besides the call itself.
  */
 export type ApprovalScope = {
@@ -246,6 +298,11 @@ export type ApprovalSpeechRequest = {
    */
   pieces: string[];
 };
+
+/**
+ * How the voice reads an approval card.
+ */
+export type ApprovalSpeechStyle = "precise" | "natural";
 
 export type ApprovalVoiceCommand = {
   meaning: ApprovalVoiceMeaning;
@@ -5239,6 +5296,16 @@ export type ToolCallLabel = {
   object_kind: ToolCallObjectKind;
   read?: ToolCallRead;
   source: ToolCallLabelSource;
+  /**
+   * What people call this call's fields, coded values and tables, by
+   * language tag, from the server's spoken vocabularies, for words spoken
+   * aloud. Keyed by the names as this label carries them: an effect's
+   * `raw_name` and its values' `text`, a read condition's `column` and its
+   * values' `text`, a read's table. No card reads it.
+   */
+  spoken_names?: {
+    [key: string]: ToolCallSpokenNames;
+  };
   warnings?: ToolCallLabelWarning[];
 };
 
@@ -5522,6 +5589,30 @@ export type ToolCallRecipients = {
    * @minimum 0
    */
   unchecked?: number;
+};
+
+/**
+ * One language's words for the names a call uses. A name without an entry
+ * is not here and is spoken as the card shows it.
+ */
+export type ToolCallSpokenNames = {
+  /**
+   * By field, then by value.
+   */
+  choices?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  fields?: {
+    [key: string]: string;
+  };
+  /**
+   * What the records of a table are called, in the plural.
+   */
+  tables?: {
+    [key: string]: string;
+  };
 };
 
 export type ToolCallStatus = "preparing" | "in_progress" | "success" | "error";
@@ -5869,6 +5960,13 @@ export type UpdateProfilePreferencesRequest = {
   };
   client_tool_file_approval?: null | ClientToolFileApproval;
   /**
+   * How approval cards are read aloud in conversational audio mode:
+   * `precise` or `natural`. Explicit `null` follows the organisation
+   * again. Stored even while the organisation does not let users choose,
+   * and then not used.
+   */
+  preference_approval_speech_style?: null | undefined;
+  /**
    * Additional contextual information about the user for the assistant.
    */
   preference_assistant_additional_information?: string | null | undefined;
@@ -5980,6 +6078,7 @@ export type UserProfile = {
    * The user's profile picture URL.
    */
   picture?: string;
+  preference_approval_speech_style?: ApprovalSpeechStyle;
   /**
    * Additional contextual information about the user for the assistant.
    */

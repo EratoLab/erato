@@ -3572,6 +3572,67 @@
         ]
       }
     },
+    "/api/v1beta/me/messages/{message_id}/approval-rewording": {
+      "post": {
+        "tags": [
+          "approval_rewording"
+        ],
+        "summary": "Reword a waiting approval card the way a native speaker would say it.",
+        "description": "Answers every piece, in the request's order and with its id: a checked\nwording, or the precise text when the piece may not be reworded (the\nconsequence, the request to decide), the wording fails the check, or the\nmodel is too slow or fails. Only for users whose reading style is\nnatural.",
+        "operationId": "reword_approval",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "description": "The assistant message whose approval waits",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalRewordingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRewording"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No pieces, a piece id twice or empty, or a language that is not a tag"
+          },
+          "404": {
+            "description": "The user's reading style is precise, or the message does not exist or is not in a chat of the user"
+          },
+          "409": {
+            "description": "The message has no approval waiting for a decision"
+          },
+          "413": {
+            "description": "More than 16 pieces, a piece over 400 characters, more than 2000 characters in all, or too many or too long facts"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/messages/{message_id}/approval-speech": {
       "post": {
         "tags": [
@@ -5847,6 +5908,90 @@
           }
         }
       },
+      "ApprovalRewordedPiece": {
+        "type": "object",
+        "description": "A piece as it is spoken: the precise text, or a wording that passed the\ncheck.",
+        "required": [
+          "id",
+          "text",
+          "natural"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "natural": {
+            "type": "boolean",
+            "description": "`text` is a checked wording, not the precise sentence."
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "ApprovalRewording": {
+        "type": "object",
+        "required": [
+          "pieces"
+        ],
+        "properties": {
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRewordedPiece"
+            },
+            "description": "Every piece of the request, in its order, with its id."
+          }
+        }
+      },
+      "ApprovalRewordingPiece": {
+        "type": "object",
+        "description": "One piece as the card composed it, with the words it says for each of\nits values.",
+        "required": [
+          "id",
+          "role",
+          "text"
+        ],
+        "properties": {
+          "facts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The words `text` says for each value it is built from, in the card's\norder: names, dates, numbers, field names, the item. A wording must\nkeep every one."
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ApprovalCardPieceRole"
+          },
+          "text": {
+            "type": "string",
+            "description": "The precise sentence."
+          }
+        }
+      },
+      "ApprovalRewordingRequest": {
+        "type": "object",
+        "required": [
+          "language",
+          "pieces"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "description": "The language the pieces are in, as a tag such as `de`."
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRewordingPiece"
+            },
+            "description": "The spoken card's pieces in the order they are said, at most 16, each\nat most 400 and all together at most 2000 characters, each with at\nmost 24 facts of at most 200 characters."
+          }
+        }
+      },
       "ApprovalScope": {
         "type": "object",
         "description": "What one decision on this item may cover besides the call itself.",
@@ -5918,6 +6063,14 @@
             "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
+      },
+      "ApprovalSpeechStyle": {
+        "type": "string",
+        "description": "How the voice reads an approval card.",
+        "enum": [
+          "precise",
+          "natural"
+        ]
       },
       "ApprovalVoiceCommand": {
         "type": "object",
@@ -14939,6 +15092,16 @@
           "source": {
             "$ref": "#/components/schemas/ToolCallLabelSource"
           },
+          "spoken_names": {
+            "type": "object",
+            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text`, a read's table. No card reads it.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolCallSpokenNames"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "warnings": {
             "type": "array",
             "items": {
@@ -15335,6 +15498,47 @@
             "format": "int32",
             "description": "Recipients with no address to check, such as a number or an ID.",
             "minimum": 0
+          }
+        }
+      },
+      "ToolCallSpokenNames": {
+        "type": "object",
+        "description": "One language's words for the names a call uses. A name without an entry\nis not here and is spoken as the card shows it.",
+        "properties": {
+          "choices": {
+            "type": "object",
+            "description": "By field, then by value.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tables": {
+            "type": "object",
+            "description": "What the records of a table are called, in the plural.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           }
         }
       },
@@ -15906,6 +16110,13 @@
               }
             ]
           },
+          "preference_approval_speech_style": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How approval cards are read aloud in conversational audio mode:\n`precise` or `natural`. Explicit `null` follows the organisation\nagain. Stored even while the organisation does not let users choose,\nand then not used."
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -16048,6 +16259,10 @@
           "picture": {
             "type": "string",
             "description": "The user's profile picture URL."
+          },
+          "preference_approval_speech_style": {
+            "$ref": "#/components/schemas/ApprovalSpeechStyle",
+            "description": "How the user chose to hear approval cards read aloud; absent follows\nthe organisation."
           },
           "preference_assistant_additional_information": {
             "type": "string",

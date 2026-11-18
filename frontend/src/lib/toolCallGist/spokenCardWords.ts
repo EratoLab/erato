@@ -110,6 +110,11 @@ export interface DifferenceWords {
 export type LanguageWords = SpokenWords & {
   /** Whether the language says the whole card, not only the pointer. */
   full: boolean;
+  /**
+   * The ways a piece can say a value it is built from, most likely first: a
+   * number as digits or as a word, a date with its month's name.
+   */
+  factWords(value: EarValue): string[];
   read: SpokenReadWords;
   difference: DifferenceWords;
 };
@@ -119,6 +124,8 @@ interface LanguageCode {
   /** The locale `Intl` formats dates, numbers and lists in. */
   locale: string;
   numbers: readonly string[];
+  /** How a sentence says "one" of something: "ein weiteres Feld". */
+  one: readonly string[];
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
   time?: (hour: number, minute: number) => string;
@@ -127,6 +134,7 @@ interface LanguageCode {
 /* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
 const GERMAN: LanguageCode = {
   locale: "de-DE",
+  one: ["ein", "eine", "einen", "einem", "einer", "eines"],
   numbers: [
     "null",
     "eins",
@@ -163,6 +171,7 @@ const GERMAN: LanguageCode = {
 
 const ENGLISH: LanguageCode = {
   locale: "en-GB",
+  one: ["one", "a", "an"],
   numbers: [
     "zero",
     "one",
@@ -1437,7 +1446,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const readThing = (facts: SpokenReadFacts): string => {
     const { kind, names } = facts;
-    if (facts.shape !== "items") return readThings(kind);
+    if (facts.shape !== "items") return facts.things ?? readThings(kind);
     if (facts.count > 1) {
       if (names.length === facts.count) return namedThings(kind, list(names));
       return names.length > 0
@@ -1602,6 +1611,19 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     },
     item(facts, position) {
       return isShort(position) || facts.statement ? "" : item(facts);
+    },
+    factWords(ear) {
+      const plain = value(ear);
+      if (ear.kind !== "number") return [plain];
+      const word = count(ear.value);
+      // A text's length is said rounded ("etwa 70 Wörter").
+      return [
+        plain,
+        word,
+        capitalised(word),
+        String(roundWords(ear.value)),
+        ...(ear.value === 1 ? code.one : []),
+      ];
     },
     detail,
     outside(entry) {

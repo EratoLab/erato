@@ -11337,6 +11337,7 @@ async fn me_profile(
             preference_starting_assistant_cleared: false,
             preference_time_zone: None,
             preference_language: None,
+            preference_approval_speech_style: None,
         },
         oidc_token: TEST_JWT_TOKEN.to_string(),
         id_token_claims: json!({}),

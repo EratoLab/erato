@@ -2,15 +2,17 @@
 import { GIST_KINDS } from "./gist";
 import { isMachineId } from "./machineId";
 import { cleanServerText, isRecord } from "./serverText";
+import { spokenChoice, spokenFieldName, spokenTableName } from "./spokenNames";
 import { earValue } from "./spokenValues";
 
 import type { GistKind } from "./gist";
 import type {
-  SpokenPiece,
+  ComposedPiece,
   SpokenPieceRole,
   SpokenQueuePosition,
   SpokenSource,
 } from "./spokenCard";
+import type { SpokenNames } from "./spokenNames";
 import type { EarValue } from "./spokenValues";
 import type {
   ToolCallLabel,
@@ -28,6 +30,8 @@ export type SpokenReadShape = "search" | "items" | "list";
 
 export interface SpokenCondition {
   column: string;
+  /** The column as the label names it, where the voice says another name. */
+  cardColumn?: string;
   /** The column's table, when the statement reads several. */
   table?: string;
   operator: Exclude<ToolCallReadOperator, "other">;
@@ -53,6 +57,12 @@ export interface SpokenReadFacts {
   where: string[];
   /** The tables a statement reads, when they say more than the kind. */
   tables: string[];
+  /**
+   * What the records of the one table it reads are called, in the plural,
+   * where a spoken vocabulary says so: said instead of the kind and the
+   * table.
+   */
+  things?: string;
   tablesOmitted: number;
   conditions: SpokenCondition[];
   /**
@@ -148,9 +158,14 @@ const sayableText = (text: string): string | undefined => {
 };
 
 /** A value as the voice may say it: never a machine ID, only its name. */
-const earOf = (value: ReadValue, timeZone?: string): EarValue => {
+const earOf = (
+  value: ReadValue,
+  timeZone?: string,
+  spoken?: string,
+): EarValue => {
   if (value.resolved) return { kind: "text", text: value.resolved };
   if (value.machineId) return { kind: "unread" };
+  if (spoken !== undefined) return { kind: "text", text: spoken };
   const text = sayableText(value.text);
   return text === undefined ? { kind: "id" } : earValue(text, { timeZone });
 };
@@ -164,6 +179,7 @@ const words = (text: string): number =>
 const conditionsOf = (
   raw: unknown,
   timeZone?: string,
+  names?: SpokenNames,
 ): { said: SpokenCondition[]; unsaid: number } => {
   if (!Array.isArray(raw)) return { said: [], unsaid: 0 };
   let unsaid = 0;
@@ -193,12 +209,22 @@ const conditionsOf = (
     const table = isRecord(entry)
       ? cleanServerText(entry.table, MAX_NAME_CHARS).text
       : "";
+    const heard = spokenFieldName(names, column);
     return [
       {
-        column,
+        column: heard ?? column,
+        ...(heard === undefined ? {} : { cardColumn: column }),
         ...(table.length > 0 ? { table } : {}),
         operator: known,
-        values: values.map((value) => earOf(value, timeZone)),
+        values: values.map((value) =>
+          earOf(
+            value,
+            timeZone,
+            value.machineId || value.resolved
+              ? undefined
+              : spokenChoice(names, column, value.text),
+          ),
+        ),
         valuesOmitted: omitted + extra,
         ...(longest > MAX_SAID_WORDS ? { longWords: longest } : {}),
       },
@@ -219,6 +245,7 @@ export const spokenReadFactsOf = (
   label: ToolCallLabel | null | undefined,
   server?: string,
   timeZone?: string,
+  spokenNames?: SpokenNames,
 ): SpokenReadFacts | undefined => {
   if (!label || (label.action !== "other" && label.action !== "run")) {
     return undefined;
@@ -237,7 +264,19 @@ export const spokenReadFactsOf = (
           .map((table) => cleanServerText(table, MAX_NAME_CHARS).text)
           .filter((table) => table.length > 0)
       : [];
-  const { said, unsaid } = conditionsOf(query?.conditions, timeZone);
+  const { said, unsaid } = conditionsOf(
+    query?.conditions,
+    timeZone,
+    spokenNames,
+  );
+  const tablesOmitted =
+    query && typeof query.tables_omitted === "number"
+      ? query.tables_omitted
+      : 0;
+  const things =
+    tables.length === 1 && tablesOmitted === 0
+      ? spokenTableName(spokenNames, tables[0])
+      : undefined;
   const queryOmitted =
     query && typeof query.conditions_omitted === "number"
       ? query.conditions_omitted
@@ -266,11 +305,12 @@ export const spokenReadFactsOf = (
     where: target.values.flatMap((value) => nameOf(value) ?? []),
     // A table named like the kind ("task") says nothing the kind does not.
     tables:
-      tables.length === 1 && kind !== "row" && kind !== "other" ? [] : tables,
-    tablesOmitted:
-      query && typeof query.tables_omitted === "number"
-        ? query.tables_omitted
-        : 0,
+      things !== undefined ||
+      (tables.length === 1 && kind !== "row" && kind !== "other")
+        ? []
+        : tables,
+    tablesOmitted,
+    ...(things === undefined ? {} : { things }),
     conditions: said,
     conditionsOmitted: query === undefined && filtered ? "unknown" : omitted,
     limit:
@@ -289,7 +329,7 @@ const number = (slot: SpokenSource["slot"], value: number): SpokenSource => ({
   value: { kind: "number", value, percent: false },
 });
 
-type ReadPiece = Omit<SpokenPiece, "id">;
+type ReadPiece = ComposedPiece;
 
 const piece = (
   role: SpokenPieceRole,
@@ -319,6 +359,7 @@ export const spokenReadPieces = (
       ...(facts.count > 1 ? [number("count", facts.count)] : []),
       ...facts.names.map((name) => text("name", name)),
       ...facts.tables.map((table) => text("place", table)),
+      ...(facts.things ? [text("place", facts.things)] : []),
     ]),
   ];
   if (facts.where.length > 0) {
@@ -331,13 +372,14 @@ export const spokenReadPieces = (
     );
   }
   for (const condition of said) {
-    pieces.push(
-      piece("detail", readWords.condition(condition), [
+    pieces.push({
+      ...piece("detail", readWords.condition(condition), [
         text("field", condition.column),
         ...(condition.table ? [text("place", condition.table)] : []),
         ...condition.values.map((value) => ({ slot: "value" as const, value })),
       ]),
-    );
+      ...(condition.cardColumn ? { idField: condition.cardColumn } : {}),
+    });
   }
   if (unsaid === "unknown" || unsaid > 0) {
     pieces.push(

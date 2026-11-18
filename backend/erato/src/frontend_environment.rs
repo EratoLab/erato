@@ -659,6 +659,24 @@ fn build_frontend_environment(
         "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
         Value::Bool(config.approval_voice_commands.enabled),
     );
+    // The organisation's reading style; a user's own choice comes with the
+    // profile. Natural without a provider is precise.
+    env.additional_environment.insert(
+        "APPROVAL_SPEECH_STYLE".to_string(),
+        Value::String(
+            config
+                .approval_speech
+                .style_for(None)
+                .wire_name()
+                .to_string(),
+        ),
+    );
+    env.additional_environment.insert(
+        "APPROVAL_SPEECH_USER_CHOICE".to_string(),
+        Value::Bool(
+            config.approval_speech.user_choice && config.approval_speech.provider_id().is_some(),
+        ),
+    );
     env.additional_environment.insert(
         "READ_ALOUD_ENABLED".to_string(),
         Value::Bool(config.read_aloud_speech_provider().is_some()),
@@ -1439,6 +1457,40 @@ mod tests {
                 Some(&Value::Bool(enabled))
             );
         }
+    }
+
+    #[test]
+    fn approval_speech_style_reaches_the_frontend_only_with_a_provider() {
+        let mut config = AppConfig::default();
+        config.approval_speech.style = crate::config::ApprovalSpeechStyle::Natural;
+        let get = |config: &AppConfig, key: &str| {
+            build_frontend_environment(config, FrontendKind::Web)
+                .additional_environment
+                .get(key)
+                .cloned()
+        };
+        assert_eq!(
+            get(&config, "APPROVAL_SPEECH_STYLE"),
+            Some(Value::String("precise".into()))
+        );
+        assert_eq!(
+            get(&config, "APPROVAL_SPEECH_USER_CHOICE"),
+            Some(Value::Bool(false))
+        );
+        config.approval_speech.chat_provider_id = Some("small".into());
+        assert_eq!(
+            get(&config, "APPROVAL_SPEECH_STYLE"),
+            Some(Value::String("natural".into()))
+        );
+        assert_eq!(
+            get(&config, "APPROVAL_SPEECH_USER_CHOICE"),
+            Some(Value::Bool(true))
+        );
+        config.approval_speech.user_choice = false;
+        assert_eq!(
+            get(&config, "APPROVAL_SPEECH_USER_CHOICE"),
+            Some(Value::Bool(false))
+        );
     }
 
     #[test]

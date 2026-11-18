@@ -79,6 +79,10 @@ interface AudioConversationalFeatureConfig {
   speechEnabled?: boolean;
   /** Whether a waiting approval card listens for what the user says about it. */
   voiceCommandsEnabled?: boolean;
+  /** How the organisation has approval cards read aloud. */
+  approvalSpeechStyle?: "precise" | "natural";
+  /** Whether a user's own reading style counts. */
+  approvalSpeechUserChoice?: boolean;
   /** Whether conversational audio mode is enabled */
   enabled: boolean;
   /** Maximum recording duration in seconds for conversational audio captures */
@@ -477,6 +481,8 @@ function createFeatureConfig(
     audioConversational: {
       speechEnabled: environment.speechEnabled ?? false,
       voiceCommandsEnabled: environment.approvalVoiceCommandsEnabled ?? false,
+      approvalSpeechStyle: environment.approvalSpeechStyle ?? "precise",
+      approvalSpeechUserChoice: environment.approvalSpeechUserChoice ?? false,
       enabled: Boolean(environment.audioConversationalEnabled),
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
@@ -804,6 +810,13 @@ export function useAudioDictationFeature(): AudioDictationFeatureConfig {
 export function useAudioConversationalFeature(): AudioConversationalFeatureConfig {
   const config = useFeatureConfig();
   return config.audioConversational;
+}
+
+/** Conversational audio settings, or none outside a FeatureConfigProvider. */
+export function useOptionalAudioConversationalFeature():
+  | AudioConversationalFeatureConfig
+  | undefined {
+  return useContext(FeatureConfigContext)?.audioConversational;
 }
 
 /**

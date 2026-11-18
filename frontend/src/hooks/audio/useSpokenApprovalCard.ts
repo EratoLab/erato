@@ -1,5 +1,5 @@
 import { i18n } from "@lingui/core";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   sameSpokenKind,
@@ -8,6 +8,12 @@ import {
 import { spokenDifference } from "@/lib/toolCallGist/spokenCardDifference";
 
 import { takeWithdrawnCard } from "./approvalChanges";
+import {
+  NATURAL_WAIT_AT_START_MS,
+  forgetNaturalApprovals,
+  naturalApprovalPieces,
+  useNaturalApprovalSpeech,
+} from "./approvalRewording";
 import {
   approvalSpoken,
   forgetApprovalCards,
@@ -25,7 +31,9 @@ import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
  * of that turn have played. Several approvals are spoken one at a time, as
  * the screen shows them. After a stop the card waits to be asked for. A card
  * that corrects one the user asked to change by voice is said as the
- * difference to that one.
+ * difference to that one. In the natural style the card's wording is asked
+ * for as soon as it waits and used when it is checked and back in time; the
+ * difference reading stays precise.
  */
 export function useSpokenApprovalCard({
   chatId,
@@ -70,8 +78,27 @@ export function useSpokenApprovalCard({
     (state) => chatId !== null && state.quietTurn === chatId,
   );
   const modelSpeaking = useSpeechPlayback((state) => state.playing);
+  const natural = useNaturalApprovalSpeech();
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
+  const replaced = items.at(index)?.replaces != null;
+  // Whether the card under a key still waits, for a wording that comes back
+  // after it was decided.
+  const waiting = useRef<string | null>(null);
+  waiting.current = active ? key : null;
+
+  // Ask for the natural wording while the model's own words still play.
+  useEffect(() => {
+    if (!natural || !active || !spokenTurn || !approval || replaced) return;
+    if (approvalSpoken(key)) return;
+    const options = { language: i18n.locale, now: new Date() };
+    void naturalApprovalPieces(
+      key,
+      messageId,
+      spokenApprovalPieces(approval, options),
+      options,
+    );
+  }, [natural, active, spokenTurn, approval, replaced, key, messageId]);
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
@@ -109,8 +136,29 @@ export function useSpokenApprovalCard({
     };
     // A stop during the turn's own words means quiet: the card waits to be
     // asked for.
-    if (quiet) offerApprovalCard(card);
-    else speakApprovalCard(card);
+    const say = (pieces: typeof card.pieces) => {
+      if (waiting.current !== key || approvalSpoken(key)) return;
+      if (quiet) offerApprovalCard({ ...card, pieces });
+      else speakApprovalCard({ ...card, pieces });
+    };
+    if (natural && !withdrawn) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<typeof card.pieces>((resolve) => {
+        timer = setTimeout(
+          () => resolve(card.pieces),
+          NATURAL_WAIT_AT_START_MS,
+        );
+      });
+      void Promise.race([
+        naturalApprovalPieces(key, messageId, card.pieces, options),
+        late,
+      ]).then((pieces) => {
+        clearTimeout(timer);
+        say(pieces);
+      });
+    } else {
+      say(card.pieces);
+    }
   }, [
     active,
     approval,
@@ -121,6 +169,7 @@ export function useSpokenApprovalCard({
     key,
     messageId,
     modelSpeaking,
+    natural,
     quiet,
     responding,
     spokenTurn,
@@ -132,7 +181,16 @@ export function useSpokenApprovalCard({
     .map((entry) => `${messageId}:${entry}`)
     .join("\n");
   useEffect(() => {
-    if (!active) forgetApprovalCards(cardKeys.split("\n"));
+    if (!active) {
+      forgetApprovalCards(cardKeys.split("\n"));
+      forgetNaturalApprovals(cardKeys.split("\n"));
+    }
   }, [active, cardKeys]);
-  useEffect(() => () => forgetApprovalCards(cardKeys.split("\n")), [cardKeys]);
+  useEffect(
+    () => () => {
+      forgetApprovalCards(cardKeys.split("\n"));
+      forgetNaturalApprovals(cardKeys.split("\n"));
+    },
+    [cardKeys],
+  );
 }

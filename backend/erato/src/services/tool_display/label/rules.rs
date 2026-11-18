@@ -334,6 +334,20 @@ pub(super) const TABLE_MEMBERS: [&str; 10] = [
     "objectname",
     "object_name",
 ];
+/// The table a call names at its top level, as written: what a spoken
+/// vocabulary's entries scoped as `table.name` are for. Display only.
+pub fn table_of(arguments: &Value) -> Option<String> {
+    let Value::Object(top) = arguments else {
+        return None;
+    };
+    top.iter()
+        .filter(|(member, _)| is_one_of(member, &TABLE_MEMBERS))
+        .find_map(|(_, value)| value.as_str())
+        .map(str::trim)
+        .filter(|table| !table.is_empty() && table.len() <= MAX_NAME_BYTES)
+        .map(str::to_string)
+}
+
 /// Words naming a kind, in tool names and table names. A record of any other
 /// table is a row.
 const KIND_WORDS: [(ToolCallObjectKind, &[&str]); 12] = [

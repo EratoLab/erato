@@ -26,6 +26,8 @@ struct Set {
     tags: Tags,
     scenarios: Vec<Scenario>,
     servers: BTreeMap<String, Value>,
+    #[serde(default)]
+    spoken_vocabularies: Value,
     history: BTreeMap<String, Vec<Step>>,
     calls: Vec<Call>,
 }
@@ -68,8 +70,11 @@ struct Call {
     arguments: Value,
 }
 
-fn runtime_config(servers: &BTreeMap<String, Value>) -> McpRuntimeConfig {
-    let mut config = McpRuntimeConfig::default();
+fn runtime_config(servers: &BTreeMap<String, Value>, vocabularies: &Value) -> McpRuntimeConfig {
+    let mut config = McpRuntimeConfig {
+        spoken_vocabularies: serde_json::from_value(vocabularies.clone()).unwrap_or_default(),
+        ..McpRuntimeConfig::default()
+    };
     for (id, server) in servers {
         let mut server = server.clone();
         server["transport_type"] = json!("streamable_http");
@@ -112,7 +117,7 @@ fn context(config: &McpRuntimeConfig, server: &str, steps: &[Step]) -> label::To
 
 fn generated() -> Value {
     let set: Set = serde_json::from_str(INPUT).unwrap();
-    let config = runtime_config(&set.servers);
+    let config = runtime_config(&set.servers, &set.spoken_vocabularies);
     let calls: Vec<Value> = set
         .calls
         .iter()

@@ -91,6 +91,10 @@ export type Env = {
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
   approvalVoiceCommandsEnabled?: boolean;
+  /** How the organisation has approval cards read aloud; natural needs a provider. */
+  approvalSpeechStyle?: "precise" | "natural";
+  /** Whether a user may choose the other reading style. */
+  approvalSpeechUserChoice?: boolean;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   maxUploadSizeBytes: number;
@@ -187,6 +191,8 @@ declare global {
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
     APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
+    APPROVAL_SPEECH_STYLE?: string;
+    APPROVAL_SPEECH_USER_CHOICE?: boolean;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
@@ -664,6 +670,15 @@ export const env = (): Env => {
       import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
         ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
         : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
+    approvalSpeechStyle:
+      (import.meta.env.VITE_APPROVAL_SPEECH_STYLE ??
+        window.APPROVAL_SPEECH_STYLE) === "natural"
+        ? "natural"
+        : "precise",
+    approvalSpeechUserChoice:
+      import.meta.env.VITE_APPROVAL_SPEECH_USER_CHOICE !== undefined
+        ? import.meta.env.VITE_APPROVAL_SPEECH_USER_CHOICE === "true"
+        : (window.APPROVAL_SPEECH_USER_CHOICE ?? false),
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     maxUploadSizeBytes,

@@ -1002,6 +1002,34 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "prioritycode": "Priorität",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "prioritycode": "Priority",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                }
+              }
+            }
           }
         }
       }
@@ -1193,6 +1221,24 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "location": "Ort",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Ende",
+                "scheduledstart": "Beginn"
+              }
+            },
+            "en": {
+              "fields": {
+                "location": "Location",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "End",
+                "scheduledstart": "Start"
+              }
+            }
           }
         }
       }
@@ -1385,6 +1431,24 @@
             },
             "table": "contact",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "emailaddress1": "E-Mail",
+                "firstname": "Vorname",
+                "jobtitle": "Position",
+                "parentcustomerid": "Firma"
+              }
+            },
+            "en": {
+              "fields": {
+                "emailaddress1": "Email",
+                "firstname": "First name",
+                "jobtitle": "Job title",
+                "parentcustomerid": "Company"
+              }
+            }
           }
         }
       }
@@ -1594,6 +1658,20 @@
               "unchecked": 2
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "regardingobjectid": "Bezug"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "regardingobjectid": "Regarding"
+              }
+            }
           }
         }
       }
@@ -1848,6 +1926,48 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "actualdurationminutes": "Dauer in Minuten",
+                "category": "Kategorie",
+                "percentcomplete": "Prozent erledigt",
+                "prioritycode": "Priorität",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum",
+                "statecode": "Status",
+                "subcategory": "Unterkategorie"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                },
+                "statecode": {
+                  "0": "Offen"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "actualdurationminutes": "Duration in minutes",
+                "category": "Category",
+                "percentcomplete": "Percent complete",
+                "prioritycode": "Priority",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date",
+                "statecode": "Status",
+                "subcategory": "Subcategory"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                },
+                "statecode": {
+                  "0": "Open"
+                }
+              }
+            }
           }
         }
       }
@@ -1986,6 +2106,20 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -2133,6 +2267,22 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "phonenumber": "Telefonnummer",
+                "scheduledend": "Ende"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "phonenumber": "Phone number",
+                "scheduledend": "End"
+              }
+            }
           }
         }
       }
@@ -2325,6 +2475,24 @@
             },
             "table": "opportunity",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "closeprobability": "Wahrscheinlichkeit",
+                "customerid": "Kunde",
+                "estimatedclosedate": "Voraussichtliches Abschlussdatum",
+                "estimatedvalue": "Geschätzter Umsatz"
+              }
+            },
+            "en": {
+              "fields": {
+                "closeprobability": "Probability",
+                "customerid": "Customer",
+                "estimatedclosedate": "Estimated close date",
+                "estimatedvalue": "Estimated revenue"
+              }
+            }
           }
         }
       }
@@ -2453,6 +2621,20 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "notetext": "Notiz",
+                "objectid": "Bezug"
+              }
+            },
+            "en": {
+              "fields": {
+                "notetext": "Note",
+                "objectid": "Regarding"
+              }
+            }
           }
         }
       }
@@ -2603,6 +2785,22 @@
             },
             "table": "account",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "address1_city": "Ort",
+                "telephone1": "Telefon",
+                "websiteurl": "Website"
+              }
+            },
+            "en": {
+              "fields": {
+                "address1_city": "City",
+                "telephone1": "Phone",
+                "websiteurl": "Website"
+              }
+            }
           }
         }
       }
@@ -3066,6 +3264,18 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -3164,6 +3374,18 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -3414,6 +3636,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "closeprobability": "Wahrscheinlichkeit",
+                "estimatedclosedate": "Voraussichtliches Abschlussdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "closeprobability": "Probability",
+                "estimatedclosedate": "Estimated close date"
+              }
+            }
           }
         }
       }
@@ -3529,6 +3765,30 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "risklevel": "Risikostufe"
+              },
+              "choices": {
+                "risklevel": {
+                  "1": "Niedrig",
+                  "3": "Hoch"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "risklevel": "Risk level"
+              },
+              "choices": {
+                "risklevel": {
+                  "1": "Low",
+                  "3": "High"
+                }
+              }
+            }
           }
         }
       }
@@ -3658,6 +3918,18 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "parentcontactid": "Kontakt"
+              }
+            },
+            "en": {
+              "fields": {
+                "parentcontactid": "Contact"
+              }
+            }
           }
         }
       }
@@ -3794,6 +4066,22 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "closeprobability": "Wahrscheinlichkeit",
+                "description": "Beschreibung",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "closeprobability": "Probability",
+                "description": "Description",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -3898,6 +4186,28 @@
             "table": "opportunity",
             "record_unread": true,
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "risklevel": "Risikostufe"
+              },
+              "choices": {
+                "risklevel": {
+                  "2": "Mittel"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "risklevel": "Risk level"
+              },
+              "choices": {
+                "risklevel": {
+                  "2": "Medium"
+                }
+              }
+            }
           }
         }
       }
@@ -4147,6 +4457,48 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "budgetstatus": "Budgetstatus",
+                "closeprobability": "Wahrscheinlichkeit",
+                "estimatedclosedate": "Voraussichtliches Abschlussdatum",
+                "estimatedvalue": "Geschätzter Umsatz",
+                "purchasetimeframe": "Kaufzeitrahmen",
+                "risklevel": "Risikostufe",
+                "stepname": "Phase"
+              },
+              "choices": {
+                "purchasetimeframe": {
+                  "1": "Dieses Quartal"
+                },
+                "risklevel": {
+                  "1": "Niedrig",
+                  "2": "Mittel"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "budgetstatus": "Budget status",
+                "closeprobability": "Probability",
+                "estimatedclosedate": "Estimated close date",
+                "estimatedvalue": "Estimated revenue",
+                "purchasetimeframe": "Purchase timeframe",
+                "risklevel": "Risk level",
+                "stepname": "Pipeline phase"
+              },
+              "choices": {
+                "purchasetimeframe": {
+                  "1": "This quarter"
+                },
+                "risklevel": {
+                  "1": "Low",
+                  "2": "Medium"
+                }
+              }
+            }
           }
         }
       }
@@ -4283,6 +4635,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Ende",
+                "scheduledstart": "Beginn"
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "End",
+                "scheduledstart": "Start"
+              }
+            }
           }
         }
       }
@@ -4368,6 +4734,18 @@
             ],
             "table": "opportunity",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description"
+              }
+            }
           }
         }
       }
@@ -4493,6 +4871,30 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "statecode": "Status",
+                "statuscode": "Statusgrund"
+              },
+              "choices": {
+                "statecode": {
+                  "1": "Abgeschlossen"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "statecode": "Status",
+                "statuscode": "Status reason"
+              },
+              "choices": {
+                "statecode": {
+                  "1": "Completed"
+                }
+              }
+            }
           }
         }
       }
@@ -4626,6 +5028,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "jobtitle": "Position",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "jobtitle": "Job title",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -4901,6 +5317,38 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "budgetamount": "Budget",
+                "closeprobability": "Wahrscheinlichkeit",
+                "currentsituation": "Aktuelle Situation",
+                "customerneed": "Kundenbedarf",
+                "description": "Beschreibung",
+                "proposedsolution": "Vorgeschlagene Lösung",
+                "purchaseprocess": "Kaufprozess",
+                "qualificationcomments": "Qualifizierungskommentare",
+                "quotecomments": "Angebotskommentare",
+                "stepname": "Phase",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "budgetamount": "Budget",
+                "closeprobability": "Probability",
+                "currentsituation": "Current situation",
+                "customerneed": "Customer need",
+                "description": "Description",
+                "proposedsolution": "Proposed solution",
+                "purchaseprocess": "Purchase process",
+                "qualificationcomments": "Qualification comments",
+                "quotecomments": "Quote comments",
+                "stepname": "Pipeline phase",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -6947,6 +7395,34 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7027,6 +7503,46 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität",
+                "scheduledend": "Fälligkeitsdatum",
+                "statecode": "Status",
+                "subject": "Betreff"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                },
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority",
+                "scheduledend": "Due date",
+                "statecode": "Status",
+                "subject": "Subject"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                },
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
+            }
           }
         },
         "read_only": true
@@ -7077,6 +7593,18 @@
                 "opportunity"
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "tables": {
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7114,6 +7642,18 @@
                 "account"
               ],
               "limit": 50
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "account": "Firmen"
+              }
+            },
+            "en": {
+              "tables": {
+                "account": "accounts"
+              }
             }
           }
         },
@@ -7214,6 +7754,40 @@
                   "values_omitted": 1
                 }
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "0": "Niedrig",
+                  "1": "Normal",
+                  "2": "Hoch"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "0": "Low",
+                  "1": "Normal",
+                  "2": "High"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
             }
           }
         },
@@ -7341,6 +7915,26 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "name": "Name"
+              },
+              "tables": {
+                "account": "Firmen",
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "name": "Name"
+              },
+              "tables": {
+                "account": "accounts",
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7389,6 +7983,18 @@
               "tables": [
                 "opportunity"
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "tables": {
+                "opportunity": "opportunities"
+              }
             }
           }
         },
@@ -7538,6 +8144,36 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
+            }
           }
         },
         "read_only": true
@@ -7669,6 +8305,36 @@
                   ]
                 }
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "Estimated close date": "Voraussichtliches Abschlussdatum",
+                "Risk level": "Risikostufe"
+              },
+              "choices": {
+                "Risk level": {
+                  "High": "Hoch"
+                }
+              },
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "Estimated close date": "Estimated close date",
+                "Risk level": "Risk level"
+              },
+              "choices": {
+                "Risk level": {
+                  "High": "High"
+                }
+              },
+              "tables": {
+                "opportunity": "opportunities"
+              }
             }
           }
         },
@@ -7907,6 +8573,20 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -8046,6 +8726,20 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -8185,6 +8879,20 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
