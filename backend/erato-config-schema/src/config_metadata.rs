@@ -9,6 +9,7 @@ use crate::config_facet_attrs::Attr;
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Stability {
+    Unreviewed,
     Stable,
     Alpha,
     Beta,
@@ -19,6 +20,7 @@ pub(crate) enum Stability {
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SecurityRelevance {
+    Unreviewed,
     High,
     Medium,
     Low,
@@ -30,6 +32,7 @@ pub(crate) enum SecurityRelevance {
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DefaultValueSecurity {
+    Unreviewed,
     LessSecure,
     MoreSecure,
     #[default]

@@ -16,8 +16,9 @@ It supplies Erato's descriptive map placeholders and the custom serialized promp
 paths to the shared generator. `config_facet_attrs` re-exports the shared
 attributes so existing declarations and release tooling remain compatible.
 
-Every emitted key, including hidden keys, has `stability` and `introduced_in`.
-Stability is one of `stable`, `alpha`, `beta`, `unstable`, or `deprecated`.
+Every emitted key, including hidden keys, has `stability`, `introduced_in`,
+`security_relevance`, and `default_value_security`. Stability is one of
+`unreviewed`, `stable`, `alpha`, `beta`, `unstable`, or `deprecated`.
 Introduction is a semantic Erato release version or `unreleased`.
 
 ## Declaring metadata
@@ -32,11 +33,14 @@ config field or parent section:
 pub new_feature: NewFeatureConfig,
 ```
 
-`AppConfig` has a root `stability(level = "unstable")` attribute. Reviewers can
-classify individual fields or sections by adding stability attributes in
-`src/config.rs`. Both properties inherit independently; an explicit child
-attribute overrides its inherited value. Existing deprecation metadata always
-yields `deprecated` for the affected key.
+`AppConfig` sets `stability`, `security_relevance`, and
+`default_value_security` to `unreviewed` for attributes awaiting an initial
+review. Each metadata property inherits independently and can be overridden on
+a section or field in `src/config.rs`. For the security attributes, use
+`unknown` when an initial review finds that more work is needed to reach a
+classification. Deprecation metadata yields `deprecated` for the affected key.
+Security relevance of `none` yields `unknown_none` for the emitted default
+classification.
 
 For shared Rust types whose public config paths have different histories, restrict
 an attribute with `under`. For example, the canonical and deprecated names of a
@@ -52,9 +56,9 @@ pub facets: FacetsConfig,
 Within a field, the most specific matching `under` wins over an unscoped attribute,
 regardless of attribute order. Scopes match complete public path segments, including
 literal collection placeholders (`[]`, `<provider-id>`, etc.). The same optional
-scope is available for stability. Conflicting declarations of equal specificity
-are errors. Aliases are traversed independently so child attributes resolve using
-the alias's own path and inherited date.
+scope is available for stability and both security attributes. Conflicting
+declarations of equal specificity are errors. Aliases are traversed independently
+so child attributes resolve using the alias's own path and inherited date.
 
 A newly added child of an old section needs an explicit `unreleased` introduction
 rather than inheriting the section's historical date. Check every public path when
