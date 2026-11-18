@@ -195,15 +195,19 @@ const SAID: Record<"de" | "en", Record<Says, RegExp>> = {
 /** Where the words came from, as the chat holds them before the card. */
 const ORIGINS: Record<
   string,
-  { turns: (base: string) => UserTurn[]; dictated: boolean }
+  {
+    turns: (base: string) => UserTurn[];
+    /** `latest`: dictated in the user's last message; `earlier`: something came after. */
+    dictated: "latest" | "earlier" | false;
+  }
 > = {
   dictated_in_the_last_turn: {
     turns: (base) => [said(`Schreib dazu folgenden Text: ${base}`)],
-    dictated: true,
+    dictated: "latest",
   },
   dictated_in_an_earlier_turn: {
     turns: (base) => [said("Ja, genau so."), said(base)],
-    dictated: true,
+    dictated: "earlier",
   },
   // A typed message never lands in the record of dictated words.
   typed: {
@@ -218,6 +222,13 @@ const ORIGINS: Record<
   },
 };
 
+/**
+ * What the voice says: after anything said since the dictation, only a
+ * change is told; a word-for-word claim falls back to the size.
+ */
+const expectedSaid = (dictated: "latest" | "earlier" | false, says: Says) =>
+  !dictated || (dictated === "earlier" && says !== "changed") ? "size" : says;
+
 describe("a dictated text is named by where it came from", () => {
   for (const [kind, id] of Object.entries(CARDS)) {
     const base = baseOf(id);
@@ -228,7 +239,7 @@ describe("a dictated text is named by where it came from", () => {
             const call = withText(callOf(id), card(base));
             const piece = textPiece(piecesOf(call, language, turns(base)));
             expect(piece.text).toMatch(
-              SAID[language][dictated ? says : "size"],
+              SAID[language][expectedSaid(dictated, says)],
             );
           });
         }
@@ -392,7 +403,7 @@ describe("a corrected card whose text is dictated", () => {
     );
   };
 
-  it("says the text changed, and that it is now the dictation word for word", () => {
+  it("after a change request, an earlier dictation is not claimed word for word", () => {
     const dictated = [said(OLD)];
     const before = withText(callOf(CARDS.create), OLD.replace(" bis ", " ab "));
     const after = withText(callOf(CARDS.create), OLD);
@@ -404,9 +415,12 @@ describe("a corrected card whose text is dictated", () => {
     );
     expect(result.intro).toBe("changed");
     const texts = result.pieces.map((piece) => piece.text);
-    expect(texts).toContain(
-      "Außerdem ungefragt geändert: Description: der diktierte Text, unverändert übernommen.",
+    // The request is the user's latest turn: the text is still told as
+    // changed, named by its size.
+    expect(texts.join(" ")).toMatch(
+      /geändert: Description: ein Text von etwa \d+ Wörtern/,
     );
+    expect(texts.join(" ")).not.toContain("unverändert");
   });
 
   it("a text the user dictates in the change request counts as dictated", () => {
@@ -415,7 +429,7 @@ describe("a corrected card whose text is dictated", () => {
     const result = difference(
       withText(callOf(CARDS.create), OLD),
       withText(callOf(CARDS.create), spokenText),
-      `Nimm als Beschreibung: ${spokenText}`,
+      `Nein, schreib: ${spokenText}`,
       [],
     );
     expect(result.pieces.map((piece) => piece.text)).toContain(
@@ -441,9 +455,8 @@ describe("a corrected card whose text is dictated", () => {
     const texts = difference(before, after, "nimm den 14.", dictated, "en")
       .pieces.map((piece) => piece.text)
       .join(" ");
-    // The request names a number: it may be about the text, so the text is
-    // named by its size, never as dictated.
-    expect(texts).toMatch(/Changed: Description: a text of about \d+ words/);
-    expect(texts).not.toContain("unchanged");
+    // Changed from the earlier dictation: saying so claims no sameness.
+    expect(texts).toContain("the dictated text, changed in places");
+    expect(texts).not.toContain("exactly as dictated");
   });
 });

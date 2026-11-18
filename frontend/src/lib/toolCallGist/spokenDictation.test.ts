@@ -145,8 +145,8 @@ const RELATIONS: Record<
 
 const BASES = { de: GERMAN, en: ENGLISH } as const;
 const LEAD_INS = {
-  de: "Schreib Frau Müller:",
-  en: "Write to Ms Miller:",
+  de: "Schreib dem Kunden:",
+  en: "Write to the customer:",
 } as const;
 
 describe("a card's text against what the user dictated", () => {
@@ -163,9 +163,36 @@ describe("a card's text against what the user dictated", () => {
     }
   }
 
-  it("finds the dictation in an earlier turn, not only the last one", () => {
-    const turns = [turn("Ja, genau so. Und setz Anna in Kopie."), turn(GERMAN)];
-    expect(dictationOf(GERMAN, turns)).toBe("unchanged");
+  it("claims word for word only against the user's latest message", () => {
+    // Whatever was said or typed since, the user may want something else now.
+    for (const later of [
+      typed("Ja, genau so."),
+      turn("Und setz Anna in Kopie."),
+      typed("Nein, Dienstag."),
+      turn("Nimm lieber Dienstag."),
+      turn("Doch lieber Mittwoch."),
+      typed("Lieber Hamburg statt dessen."),
+      turn("Make it Tuesday."),
+      typed("No, Tuesday."),
+      turn("Actually Hamburg."),
+      turn(
+        "Danach noch eine Aufgabe: Reifen wechseln lassen, Werkstatt anrufen, Termin eintragen.",
+      ),
+    ]) {
+      expect(dictationOf(GERMAN, [later, turn(GERMAN)]), later.text).toBe(
+        undefined,
+      );
+      // Part of it, or with additions, claims word for word too.
+      expect(
+        dictationOf(GERMAN.replace(" Viele Grüße", ""), [later, turn(GERMAN)]),
+        later.text,
+      ).toBe(undefined);
+      // Changed from an earlier dictation claims no sameness.
+      expect(
+        dictationOf(GERMAN.replace("heute", "gestern"), [later, turn(GERMAN)]),
+        later.text,
+      ).toBe("changed");
+    }
   });
 
   it("compares with the latest dictation, not one the user corrected since", () => {
@@ -180,16 +207,6 @@ describe("a card's text against what the user dictated", () => {
         turn(`Schreib: ${GERMAN}`),
       ]),
     ).toBe("changed");
-    // A later message about something else leaves the earlier one.
-    expect(
-      dictationOf(GERMAN, [
-        turn(
-          "Danach noch eine Aufgabe: Reifen wechseln lassen, Werkstatt anrufen, Termin eintragen.",
-        ),
-        typed("Ja, genau so."),
-        turn(GERMAN),
-      ]),
-    ).toBe("unchanged");
   });
 
   it("a later message that may correct the text, dictated or typed, leaves it unnamed", () => {
@@ -232,8 +249,17 @@ describe("a card's text against what the user dictated", () => {
     expect(dictationOf(GERMAN, [turn(`Bitte notiere: ${GERMAN}`)])).toBe(
       "unchanged",
     );
+    expect(
+      dictationOf(GERMAN, [
+        turn(`Okay, schreib dem Kunden eine Mail: ${GERMAN}`),
+      ]),
+    ).toBe("unchanged");
+    expect(
+      dictationOf(GERMAN, [turn(`Write a message to the customer: ${GERMAN}`)]),
+    ).toBe("unchanged");
+    // A name is not an instruction word: the clause may be part of the text.
     expect(dictationOf(GERMAN, [turn(`Okay, schreib Anna: ${GERMAN}`)])).toBe(
-      "unchanged",
+      "part",
     );
     // Without the colon, the words may be part of the text.
     expect(dictationOf(GERMAN, [turn(`Notiere ${GERMAN}`)])).toBe("part");
@@ -258,6 +284,14 @@ describe("a card's text against what the user dictated", () => {
       "Das gilt ausdrücklich nicht, bitte ignorieren:",
       "Anna:",
       "Note:",
+      "Reply:",
+      // Imperatives that may be meant for the recipient.
+      "Please make sure nobody books room 4 on Friday:",
+      "Take the old price, not the new one:",
+      "Make sure you never sign the contract without legal review:",
+      "Sag Bescheid, wenn du nicht kommen kannst:",
+      "Bitte nimm keine Termine am Donnerstag an:",
+      "Schreib ihm nicht:",
     ]) {
       expect(dictationOf(text, [turn(`${clause} ${text}`)]), clause).toBe(
         "part",
@@ -314,6 +348,9 @@ describe("a card's text against what the user dictated", () => {
       ["Fläche 10\u00b2 Meter", "Fläche 102 Meter"],
       ["\u00bd Liter", "1/2 Liter"],
       ["\uff11\uff15 Stück", "15 Stück"],
+      ["Temperatur \u2013 5 Grad", "Temperatur 5 Grad"],
+      ["Temperatur \u2014 5 Grad", "Temperatur 5 Grad"],
+      ["Gr\u00f6\u00dfe /5", "Gr\u00f6\u00dfe 5"],
     ]) {
       expect(dictationKey(a), a).not.toBe(dictationKey(b));
     }
@@ -446,6 +483,25 @@ const INSTRUCTIONS = [
   ["Write", "to", "them:"],
 ];
 const CONTENT_OPENERS = ["Hinweis", "Anna,", "Liebe", "Nicht", "Achtung,"];
+/** Clauses that open like an instruction but hold words meant for the recipient. */
+const RECIPIENT_CLAUSES = [
+  ["Sag", "Bescheid,", "wenn", "nicht:"],
+  ["Take", "the", "old", "price,", "not", "the", "new:"],
+  ["Schreib", "Anna:"],
+  ["Bitte", "nimm", "keine", "Termine", "an:"],
+  ["Please", "make", "sure", "nobody", "books:"],
+  ["Schreib", "ihm", "nicht:"],
+];
+/** Short messages after a dictation that may or may not change what the user wants. */
+const LATER_MESSAGES = [
+  ["Ja,", "genau", "so."],
+  ["Nein,", "Dienstag."],
+  ["Make", "it", "Tuesday."],
+  ["Doch", "lieber", "Mittwoch."],
+  ["Nein,", "16."],
+  ["Nein,", "4"],
+  ["Und", "setz", "Anna", "in", "Kopie."],
+];
 /** Words no generated text shares with the others. */
 const UNRELATED = [
   "Reifen",
@@ -464,18 +520,20 @@ interface Dictation {
   instruction: boolean;
   content: Words;
   related: boolean;
-  /** A short correction the user typed: what it asks for is not known here. */
+  /** Typed, not dictated. */
   typed?: boolean;
 }
 
 const leadOf = (
   random: ReturnType<typeof generator>,
 ): Pick<Dictation, "lead" | "instruction"> => {
-  switch (random.int(3)) {
+  switch (random.int(4)) {
     case 0:
       return { lead: [], instruction: false };
     case 1:
       return { lead: random.pick(INSTRUCTIONS), instruction: true };
+    case 2:
+      return { lead: random.pick(RECIPIENT_CLAUSES), instruction: false };
     default: {
       const words = [
         random.pick(CONTENT_OPENERS),
@@ -529,26 +587,16 @@ describe("'unchanged' is never said over a difference (generated)", () => {
           related: false,
         });
       }
-      if (random.int(3) === 0) {
+      if (random.int(2) === 0) {
         dictations.push({
           lead: [],
           instruction: false,
-          content: ["Ja,", "genau", "so."],
+          content: random.pick(LATER_MESSAGES),
           related: false,
+          typed: random.int(2) === 0,
         });
       }
-      if (random.int(4) === 0) {
-        dictations.push({
-          lead: [],
-          instruction: false,
-          content: ["Nein,", random.pick(["16.", "4", "1000", "20 %"])],
-          related: true,
-          typed: true,
-        });
-      }
-      const source = random.pick(
-        dictations.filter((entry) => entry.related && entry.typed !== true),
-      );
+      const source = random.pick(dictations.filter((entry) => entry.related));
       const changes = random.int(3);
       const card = noise(changed(source.content, changes, random), random).join(
         random.pick([" ", "  ", "\n"]),
@@ -563,20 +611,20 @@ describe("'unchanged' is never said over a difference (generated)", () => {
       const relation = dictationOf(card, turns);
       counts[relation ?? "none"] = (counts[relation ?? "none"] ?? 0) + 1;
 
-      // What the user last asked for: their latest dictation of this text,
-      // without an instruction before it.
-      const latest = dictations
-        .filter((entry) => entry.related)
-        .at(-1) as Dictation;
+      // A word-for-word claim may only be about the user's latest message,
+      // dictated, without an instruction before it.
+      const latest = dictations.at(-1) as Dictation;
       const asked = latest.instruction
         ? latest.content
         : [...latest.lead, ...latest.content];
       const same =
+        latest.related &&
         latest.typed !== true &&
         dictationKey(card) === dictationKey(asked.join(" "));
       const story = `${turns.map((entry) => entry.text).join("\n")}\n→ ${card}`;
       if (relation === "unchanged") expect(same, story).toBe(true);
-      if (same && changes === 0 && source === latest) {
+      const long = dictationKey(card).split(" ").length >= 8;
+      if (same && long && changes === 0 && source === latest) {
         expect(relation, story).toBe("unchanged");
       }
     }

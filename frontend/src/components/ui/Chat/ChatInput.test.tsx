@@ -26,7 +26,6 @@ import {
 import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
-import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
   beginSpeechResponse,

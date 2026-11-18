@@ -7,9 +7,10 @@ import { isInvisibleFormatChar } from "./serverText";
  * count as dictated; typed words never do. The comparison is on words: case,
  * punctuation at a word's edges and spacing are ignored, everything else
  * (a word, a number, a sign, a name, their order) makes the text different.
- * The text is compared with the user's latest dictation it relates to, never
- * with one they corrected since. When the relation is unclear, the text is
- * not called dictated at all.
+ * A word-for-word claim is made only against the user's latest message: if
+ * anything was said or typed after the dictation, the user may want
+ * something else now. When the relation is unclear, the text is not called
+ * dictated at all.
  */
 
 /** A message the user sent, and what of it they dictated. */
@@ -23,8 +24,8 @@ export interface UserTurn {
 
 /**
  * How a card's text relates to the dictation.
- * - `unchanged`: word for word the whole message the user dictated, at most
- *   without an instruction such as "schreib dem Kunden:".
+ * - `unchanged`: word for word the whole message the user dictated last, at
+ *   most without an instruction such as "schreib dem Kunden:".
  * - `part`: word for word a part of it; something dictated is not in it.
  * - `extended`: holds the dictated text word for word, and more, but mostly
  *   the dictation.
@@ -43,8 +44,6 @@ const MAX_LEAD_IN_WORDS = 12;
  */
 const MIN_CARD_SHARE = 0.6;
 const MIN_DICTATION_SHARE = 0.5;
-/** Shorter words a later message shares with the card do not make it a possible correction. */
-const MIN_TELLING_CHARS = 3;
 /** The word-by-word comparison is quadratic: longer texts are not compared. */
 const MAX_COMPARED_WORDS = 3_000;
 
@@ -53,10 +52,10 @@ const QUOTES =
 /**
  * Punctuation a transcript or a model sets differently, at a word's edges
  * only. Signs that change a value (plus, hyphen, minus sign, percent, euro,
- * a dash before a digit) are kept.
+ * a dash or slash before a digit) are kept.
  */
 const LEADING = new RegExp(
-  `^(?:[.,;:!?\u2026${QUOTES}()[\\]{}/*_]|[\u2013\u2014](?!\\d))+`,
+  `^(?:[.,;:!?\u2026${QUOTES}()[\\]{}*_]|[\u2013\u2014/](?!\\d))+`,
   "u",
 );
 const TRAILING = new RegExp(
@@ -80,12 +79,18 @@ interface Words {
 const wordsOf = (text: string): Words => {
   const keys: string[] = [];
   const raw: string[] = [];
-  for (const word of visible(text.normalize("NFC")).split(/\s+/)) {
-    const key = word.replace(LEADING, "").replace(TRAILING, "").toLowerCase();
-    if (key.length === 0) continue;
+  const words = visible(text.normalize("NFC")).split(/\s+/);
+  words.forEach((word, index) => {
+    // A dash standing alone before a number is its sign: "– 5 Grad".
+    const sign =
+      /^[\u2013\u2014]+$/.test(word) && /^\d/.test(words[index + 1] ?? "");
+    const key = sign
+      ? word
+      : word.replace(LEADING, "").replace(TRAILING, "").toLowerCase();
+    if (key.length === 0) return;
     keys.push(key);
     raw.push(word);
-  }
+  });
   return { keys, raw };
 };
 
@@ -93,83 +98,124 @@ const wordsOf = (text: string): Words => {
 export const dictationKey = (text: string): string =>
   wordsOf(text).keys.join(" ");
 
-/** Words that open a request to the assistant before the verb ("Nein, schreib: …"). */
-const OPENERS = new Set([
-  "nein",
-  "ja",
-  "okay",
-  "ok",
-  "also",
-  "bitte",
-  "und",
-  "dann",
-  "jetzt",
-  "no",
-  "yes",
-  "please",
-  "and",
-  "then",
-  "now",
-  "so",
-]);
-
 /**
- * Verbs that tell the assistant what to do with the text that follows. Words
- * that are also nouns ("Note:", "Antwort:") are left out: as a label they
- * may be part of the dictation.
+ * The words an instruction to the assistant before the dictated text may be
+ * made of, per language: verbs that say what to do with the text, and the
+ * few words around them ("Nein, schreib dem Kunden eine Mail:"). A clause
+ * with any other word (a name, a negation, a verb that may be meant for the
+ * recipient) is part of the dictation.
  */
-const INSTRUCTION_VERBS = new Set([
-  "schreib",
-  "schreibe",
-  "schreiben",
-  "notier",
-  "notiere",
-  "notieren",
-  "sag",
-  "sage",
-  "sagen",
-  "antworte",
-  "antworten",
-  "schick",
-  "schicke",
-  "schicken",
-  "send",
-  "sende",
-  "senden",
-  "nimm",
-  "nehmt",
-  "formulier",
-  "formuliere",
-  "setz",
-  "setze",
-  "trag",
-  "trage",
-  "leg",
-  "lege",
-  "erstell",
-  "erstelle",
-  "verfass",
-  "verfasse",
-  "ergänz",
-  "ergänze",
-  "füg",
-  "füge",
-  "write",
-  "tell",
-  "say",
-  "put",
-  "add",
-  "create",
-  "use",
-  "make",
-  "take",
-]);
+const INSTRUCTION_WORDS: Readonly<
+  Record<"de" | "en", { verbs: readonly string[]; others: readonly string[] }>
+> = {
+  de: {
+    verbs: [
+      "schreib",
+      "schreibe",
+      "notier",
+      "notiere",
+      "antworte",
+      "schick",
+      "schicke",
+      "sende",
+      "formulier",
+      "formuliere",
+      "verfass",
+      "verfasse",
+      "erstell",
+      "erstelle",
+    ],
+    others: [
+      "nein",
+      "ja",
+      "okay",
+      "ok",
+      "also",
+      "bitte",
+      "dann",
+      "jetzt",
+      "und",
+      "mal",
+      "kurz",
+      "noch",
+      "dazu",
+      "zurück",
+      "an",
+      "dem",
+      "den",
+      "der",
+      "die",
+      "das",
+      "ein",
+      "eine",
+      "einen",
+      "ihm",
+      "ihr",
+      "ihnen",
+      "kunden",
+      "kundin",
+      "team",
+      "mail",
+      "e-mail",
+      "nachricht",
+      "antwort",
+      "notiz",
+      "text",
+      "folgendes",
+      "folgende",
+      "folgenden",
+    ],
+  },
+  en: {
+    // Not "reply", "answer", "draft" or "note": alone before a colon they
+    // are labels that may be part of the dictation.
+    verbs: ["write", "send", "compose"],
+    others: [
+      "no",
+      "yes",
+      "okay",
+      "ok",
+      "so",
+      "and",
+      "then",
+      "now",
+      "please",
+      "back",
+      "to",
+      "the",
+      "a",
+      "an",
+      "them",
+      "him",
+      "her",
+      "customer",
+      "client",
+      "team",
+      "email",
+      "e-mail",
+      "mail",
+      "message",
+      "note",
+      "reply",
+      "text",
+      "following",
+      "this",
+    ],
+  },
+};
+
+const INSTRUCTION_SETS = Object.values(INSTRUCTION_WORDS).map(
+  ({ verbs, others }) => ({
+    verbs: new Set(verbs),
+    all: new Set([...verbs, ...others]),
+  }),
+);
 
 /**
  * How many words open the dictation as an instruction to the assistant: a
- * short clause ending in a colon, with no sentence before it, whose first
- * word (after "nein", "bitte" and the like) is a verb such as "schreib". A
- * clause that is not recognisably an instruction is part of the dictation.
+ * clause ending in a colon, with no sentence before it, every word of which
+ * is an instruction word of one language, one of them a verb. Anything else
+ * before a colon is part of the dictation.
  */
 const instructionWords = (dictated: Words): number => {
   const end = dictated.raw
@@ -184,12 +230,11 @@ const instructionWords = (dictated: Words): number => {
   ) {
     return 0;
   }
-  const first = dictated.keys
-    .slice(0, end + 1)
-    .findIndex((key) => !OPENERS.has(key));
-  return first !== -1 &&
-    first <= end &&
-    INSTRUCTION_VERBS.has(dictated.keys[first])
+  const keys = dictated.keys.slice(0, end + 1);
+  return INSTRUCTION_SETS.some(
+    ({ verbs, all }) =>
+      keys.every((key) => all.has(key)) && keys.some((key) => verbs.has(key)),
+  )
     ? end + 1
     : 0;
 };
@@ -263,23 +308,13 @@ const comparePassage = (
 };
 
 /**
- * Whether a message may be about the card's text: it shares a word with it,
- * or holds a number. "Nein, 16. Mai" may correct a text with "15. Mai";
- * "Ja, genau so" does not.
- */
-const touches = (card: ReadonlySet<string>, text: string): boolean =>
-  wordsOf(text).keys.some(
-    (key) =>
-      /\d/.test(key) || (key.length >= MIN_TELLING_CHARS && card.has(key)),
-  );
-
-/**
  * How `text` relates to what the user dictated in `turns`, all their
  * messages before the card, the latest first. `undefined` when it is not
  * their dictated text, or that is not clear. The latest message the text
- * relates to decides; a later message that may be about the text, dictated
- * or typed, ends the search, so a dictation the user may have corrected
- * since is never called the card's text.
+ * relates to decides. A word-for-word relation counts only when that is the
+ * user's latest message: after anything said or typed since, they may want
+ * something else, so the text is named by its size instead. A text changed
+ * from an earlier dictation is still "changed": that claims no sameness.
  */
 export const dictationOf = (
   text: string,
@@ -287,15 +322,13 @@ export const dictationOf = (
 ): DictationRelation | undefined => {
   const card = wordsOf(text).keys;
   if (card.length < MIN_DICTATED_WORDS) return undefined;
-  const cardWords = new Set(card);
-  for (const turn of turns) {
+  for (const [index, turn] of turns.entries()) {
     let best: DictationRelation | undefined;
     for (const passage of turn.passages) {
       const relation = comparePassage(card, passage, turn.whole);
       if (relation && (!best || RANK[relation] > RANK[best])) best = relation;
     }
-    if (best) return best;
-    if (touches(cardWords, turn.text)) return undefined;
+    if (best) return index === 0 || best === "changed" ? best : undefined;
   }
   return undefined;
 };
