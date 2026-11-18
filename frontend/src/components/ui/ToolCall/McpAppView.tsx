@@ -195,11 +195,11 @@ const McpAppFrame = ({ part, serverId, uri, onShown }: McpAppFrameProps) => {
       referrerPolicy="origin"
       aria-hidden={height === undefined}
       // On the message's own background like its text: no frame, padding or
-      // card around the view. No color scheme either, as the sandbox page
-      // has none: with the app's dark one the browser paints an opaque
-      // backdrop behind the page.
+      // card around the view. The theme's color scheme, which the sandbox
+      // page takes from the host context too: where they differ, the
+      // browser paints an opaque backdrop behind the page.
       className={clsx("block w-full", height !== undefined && "my-2")}
-      style={{ height: height ?? 0, colorScheme: "normal" }}
+      style={{ height: height ?? 0, colorScheme: theme }}
     />
   );
 };

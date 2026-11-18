@@ -1189,7 +1189,8 @@ impl ServerHandler for UntrustedTextServer {
 /// MIME type of an MCP Apps view.
 pub const VIEW_MIME_TYPE: &str = "text/html;profile=mcp-app";
 /// The counter view, a minimal MCP Apps view: it shows the `start` the tool
-/// was called with and counts up on a click.
+/// was called with and counts up on a click. Like a view built with the MCP
+/// Apps SDK, it takes the host context's theme as its color scheme.
 pub const COUNTER_VIEW_URI: &str = "ui://mock/counter";
 /// A view served as plain `text/html`, which a host refuses.
 pub const WRONG_TYPE_VIEW_URI: &str = "ui://mock/wrong-type";
@@ -1215,7 +1216,10 @@ pub const COUNTER_VIEW_HTML: &str = r#"<!doctype html>
 const count = document.getElementById("count");
 document.getElementById("add").onclick = () => { count.value = Number(count.value) + 1; };
 window.addEventListener("message", ({ data }) => {
-  if (data?.id === 1 && data.result) parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+  if (data?.id === 1 && data.result) {
+    document.documentElement.style.colorScheme = data.result.hostContext?.theme ?? "";
+    parent.postMessage({ jsonrpc: "2.0", method: "ui/notifications/initialized" }, "*");
+  }
   if (data?.method === "ui/notifications/tool-input") count.value = Number(data.params?.arguments?.start ?? 0);
 });
 parent.postMessage({ jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {

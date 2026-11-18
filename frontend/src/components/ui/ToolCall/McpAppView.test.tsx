@@ -344,7 +344,10 @@ describe("McpAppView", () => {
   it("tells the view the message column's width, the theme's colours and font, and every width it changes to", async () => {
     const resize = stubResizeObserver();
     renderView(call(), { withTheme: true });
-    const { sent, fromFrame } = await loadedFrame();
+    const { frame, sent, fromFrame } = await loadedFrame();
+    // The theme's color scheme, which the sandbox page takes from the host
+    // context: where they differ, the browser paints a backdrop.
+    expect(frame.style.colorScheme).toBe("light");
     const contextChanges = () =>
       sent().filter(
         (message) => message.method === "ui/notifications/host-context-changed",

@@ -17,9 +17,12 @@
 <meta charset="utf-8" />
 <title>MCP Apps sandbox</title>
 <!--
-  No color scheme at any frame level: where a frame's scheme and its page's
-  differ, the browser paints an opaque backdrop behind the page. A view takes
-  light or dark from the host context's theme.
+  The color scheme of the host context's theme at every frame level: where a
+  frame's scheme and its page's differ, the browser paints an opaque backdrop
+  behind the page. The app's frame states the theme's scheme, this page
+  takes it from the host context it relays, and the view's frame inherits
+  it, so a view that states its theme's scheme, as the MCP Apps SDK's
+  applyDocumentTheme does, shows no backdrop.
 -->
 <style>
   html,
@@ -38,7 +41,7 @@
     border: 0;
     padding: 0;
     background-color: transparent;
-    color-scheme: normal;
+    color-scheme: inherit;
   }
 </style>
 <script>
@@ -80,6 +83,7 @@
   const SANDBOX_PREFIX = "ui/notifications/sandbox-";
   const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
   const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+  const HOST_CONTEXT_CHANGED = "ui/notifications/host-context-changed";
 
   // Whether a declared domain covers `name`, whatever its scheme or port: the
   // host itself, a wildcard over it, or a network scheme on its own.
@@ -163,12 +167,25 @@
   const isSandboxMessage = (data) =>
     typeof data?.method === "string" && data.method.startsWith(SANDBOX_PREFIX);
 
+  // The theme of the host context the app sends the view, in the answer to
+  // its ui/initialize and in what changes later, as this page's scheme.
+  const followTheme = (data) => {
+    const theme =
+      data?.method === HOST_CONTEXT_CHANGED
+        ? data.params?.theme
+        : data?.result?.hostContext?.theme;
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.style.colorScheme = theme;
+    }
+  };
+
   window.addEventListener("message", (event) => {
     if (event.source === window.parent) {
       if (event.origin !== HOST_ORIGIN) return;
       if (event.data?.method === RESOURCE_READY) {
         load(event.data.params ?? {});
       } else if (!isSandboxMessage(event.data)) {
+        followTheme(event.data);
         inner?.contentWindow?.postMessage(event.data, OWN_ORIGIN);
       }
     } else if (inner && event.source === inner.contentWindow) {
