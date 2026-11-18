@@ -55,5 +55,7 @@ export interface VoiceVadEngine {
   stop(): void;
   destroy(): void;
   acceptFrame(frame: VoiceVadFrame): Promise<void>;
+  /** Forgets any speech in progress, as if listening had just started. */
+  reset?(): void;
   subscribe(listener: VoiceVadEventListener): () => void;
 }

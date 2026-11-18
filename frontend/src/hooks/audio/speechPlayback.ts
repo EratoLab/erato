@@ -6,6 +6,8 @@ import {
   resumePlaybackContext,
 } from "./pcmPlayback";
 
+import type { PcmChunk } from "./pcmPlayback";
+
 const SPEECH_ENABLED_STORAGE_KEY = "erato.audioConversational.audioBackEnabled";
 
 function readSpeechEnabledPreference(): boolean {
@@ -20,6 +22,11 @@ interface SpeechState {
   conversational: boolean;
   enabled: boolean;
   playing: boolean;
+  /**
+   * The user talked over the voice: it is silent, and keeps what it has not
+   * said yet until it is known whether that was a turn or only a sound.
+   */
+  paused: boolean;
   blocked: boolean;
   failed: boolean;
   /**
@@ -37,6 +44,7 @@ export const useSpeechPlayback = create<SpeechState>(() => ({
   conversational: false,
   enabled: readSpeechEnabledPreference(),
   playing: false,
+  paused: false,
   blocked: false,
   failed: false,
 }));
@@ -47,6 +55,8 @@ const sequences = new Map<string, number>();
 let activeMessage: string | undefined;
 let accepting = false;
 let acceptingStream: string | undefined;
+/** What a paused voice has not said yet, and what arrives meanwhile. */
+let held: PcmChunk[] | null = null;
 
 export async function enableSpeechPlayback(enabled: boolean) {
   try {
@@ -69,8 +79,40 @@ export async function enableSpeechPlayback(enabled: boolean) {
 export function stopSpeechPlayback(streamKey?: string) {
   if (streamKey !== undefined && acceptingStream !== streamKey) return;
   accepting = false;
+  held = null;
   queue.stop();
-  useSpeechPlayback.setState({ playing: false });
+  useSpeechPlayback.setState({ playing: false, paused: false });
+}
+
+/**
+ * The user talks over the voice: it falls silent at once, but what it has
+ * not said yet is kept, and so is what still arrives for the response.
+ */
+export function pauseSpeechPlayback() {
+  const context = playbackContext();
+  if (!accepting || held !== null || !context) return;
+  held = queue.pause(context);
+  useSpeechPlayback.setState({ playing: false, paused: true });
+}
+
+/**
+ * Talking over the voice was only a sound: it goes on from the start of
+ * what it was cut off in.
+ */
+export function resumeSpeechPlayback() {
+  const chunks = held;
+  if (chunks === null) return;
+  held = null;
+  useSpeechPlayback.setState({ paused: false });
+  const context = playbackContext();
+  if (context?.state !== "running") return;
+  for (const chunk of chunks) {
+    if (!queue.enqueue(context, chunk.audio, chunk.sampleRate)) {
+      speechFailed();
+      return;
+    }
+  }
+  if (chunks.length > 0) useSpeechPlayback.setState({ playing: true });
 }
 export function beginSpeechResponse(streamKey?: string) {
   acceptingStream = streamKey;
@@ -134,6 +176,10 @@ export function playSpeechChunk(
     if (oldest !== undefined) sequences.delete(oldest);
   }
   activeMessage = messageId;
+  if (held !== null) {
+    held.push({ audio, sampleRate });
+    return;
+  }
   const context = playbackContext();
   if (context?.state !== "running") {
     useSpeechPlayback.setState({ blocked: true });

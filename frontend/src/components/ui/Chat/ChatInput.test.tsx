@@ -27,6 +27,13 @@ import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
 import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { useSpeechPlayback } from "@/hooks/audio/speechPlayback";
+import { playbackContext } from "@/hooks/audio/pcmPlayback";
+import {
+  beginSpeechResponse,
+  enableSpeechPlayback,
+  playSpeechChunk,
+  useSpeechPlayback,
+} from "@/hooks/audio/speechPlayback";
 import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useMessageQueueStore } from "@/hooks/chat/store/messageQueueStore";
@@ -138,9 +145,12 @@ vi.mock("@/hooks/audio/useAudioDictationRecorder", () => ({
 }));
 
 const mockHeardApprovalWords = vi.fn();
+const mockTalkOverApprovalCard = vi.fn();
 vi.mock("@/hooks/audio/approvalListening", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/audio/approvalListening")>()),
   heardApprovalWords: (...args: unknown[]) => mockHeardApprovalWords(...args),
+  talkOverApprovalCard: (...args: unknown[]) =>
+    mockTalkOverApprovalCard(...args),
 }));
 
 vi.mock("@/hooks/audio/useAudioTranscriptionRecorder", () => ({
@@ -9034,6 +9044,451 @@ describe("ChatInput", () => {
         });
         expect(toggleDictation).not.toHaveBeenCalled();
       });
+    });
+
+    describe("talking over the voice", () => {
+      const KEY = "message-1:stop-1";
+
+      /** Audio mode with read-back; `talkOverVoice` is the deployment's setting. */
+      const withTalkOver = (
+        toggleDictation: () => void,
+        recorder: {
+          live?: boolean;
+          waiting?: boolean;
+          error?: string | null;
+        } = {},
+        talkOverVoice = true,
+      ) => {
+        conversational(toggleDictation);
+        mockUseAudioConversationalFeature.mockReturnValue({
+          enabled: true,
+          speechEnabled: true,
+          voiceCommandsEnabled: true,
+          talkOverVoice,
+          talkOverVoiceMinSpeechMs: 500,
+          maxRecordingDurationSeconds: 1200,
+        });
+        mockUseAudioDictationRecorder.mockReturnValue({
+          isDictating: recorder.live ?? false,
+          isDictationStarting: recorder.waiting ?? false,
+          isDictationCompleting: false,
+          isCapturingAudio: recorder.live ?? false,
+          isListeningOverVoice: recorder.waiting ?? false,
+          dictationError: recorder.error ?? null,
+          setDictationError: vi.fn(),
+          dictationBars: [2, 2, 2, 2, 2],
+          toggleDictation,
+        });
+      };
+      const recorderOptions = () =>
+        mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0] as {
+          voiceSpeaking: boolean;
+          onSpeechOverVoice: () => void;
+          onTranscriptChunk: (chunk: {
+            chunkIndex: number;
+            transcript: string;
+          }) => void;
+          onVadAutoStop: () => void;
+        };
+      const pending = (isPendingResponse: boolean) =>
+        mockUseChatContext.mockReturnValue({
+          isPendingResponse,
+          isMessagingLoading: false,
+          isUploading: false,
+          cancelMessage: vi.fn(),
+        });
+      const cardSpeaking = (speaking: boolean) =>
+        act(() =>
+          useApprovalSpeech.setState({
+            key: KEY,
+            available: {
+              key: KEY,
+              messageId: "message-1",
+              pieces: [],
+              language: "de",
+            },
+            speaking,
+            failed: false,
+            closed: false,
+          }),
+        );
+
+      beforeEach(() => {
+        mockHeardApprovalWords.mockReset();
+        mockTalkOverApprovalCard.mockReset();
+        useSpeechPlayback.setState({
+          enabled: true,
+          playing: false,
+          spokenTurn: undefined,
+          quietTurn: undefined,
+        });
+        useApprovalListening.setState({ pending: null, quiet: null });
+        useApprovalSpeech.setState({
+          key: null,
+          available: null,
+          speaking: false,
+          failed: false,
+          closed: false,
+        });
+      });
+
+      it("tells the recorder the voice speaks only with the setting on", async () => {
+        const ui = await composer();
+        withTalkOver(vi.fn(), {}, false);
+        const { rerender } = render(ui(true));
+        act(() => useSpeechPlayback.setState({ playing: true }));
+        rerender(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(false);
+
+        withTalkOver(vi.fn());
+        rerender(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(true);
+        act(() => useSpeechPlayback.setState({ playing: false }));
+        rerender(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(false);
+      });
+
+      it("counts a spoken reply that is still coming as the voice speaking, but not over a waiting card", async () => {
+        const ui = await composer();
+        withTalkOver(vi.fn());
+        pending(true);
+        const { rerender } = render(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(true);
+        showCard();
+        rerender(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(false);
+      });
+
+      it.each([true, false])(
+        "after a spoken turn, opens the microphone while the reply is still coming only with the setting on (%s)",
+        async (talkOverVoice) => {
+          const onSendMessage = vi.fn();
+          const toggleDictation = vi.fn();
+          mockUseChatInputHandlers.mockReturnValue({
+            attachedFiles: [],
+            fileError: null,
+            setFileError: vi.fn(),
+            handleFilesUploaded: vi.fn(),
+            handleRemoveFile: vi.fn(),
+            handleRemoveAllFiles: vi.fn(),
+            setAttachedFiles: vi.fn(),
+            createSubmitHandler:
+              (
+                message: string,
+                _files: FileUploadItem[],
+                send: (message: string) => void,
+                _loading: boolean,
+                _disabled: boolean,
+                resetMessage: () => void,
+              ) =>
+              (event: FormEvent) => {
+                event.preventDefault();
+                if (message.trim()) send(message.trim());
+                resetMessage();
+              },
+          });
+          withTalkOver(toggleDictation, {}, talkOverVoice);
+          const ui = await composer(onSendMessage);
+          const { rerender } = render(ui(false));
+          fireEvent.change(screen.getByPlaceholderText("Type a message..."), {
+            target: { value: "wie wird das Wetter?" },
+          });
+          rerender(ui(true));
+          await act(async () => {
+            recorderOptions().onVadAutoStop();
+          });
+          rerender(ui(true));
+          await waitFor(() => expect(onSendMessage).toHaveBeenCalledTimes(1));
+
+          // The reply streams and its voice plays.
+          pending(true);
+          act(() => useSpeechPlayback.setState({ playing: true }));
+          rerender(ui(true));
+          rerender(ui(true));
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          });
+          expect(toggleDictation).toHaveBeenCalledTimes(talkOverVoice ? 1 : 0);
+          if (talkOverVoice) expect(recorderOptions().voiceSpeaking).toBe(true);
+
+          // The reply and its voice end: today the microphone opens only now.
+          pending(false);
+          act(() => useSpeechPlayback.setState({ playing: false }));
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+        },
+      );
+
+      /** A voice that really plays, so it can be paused and go on. */
+      class PlayingAudioContext {
+        state = "running";
+        currentTime = 1;
+        destination = {};
+        resume = vi.fn(async () => {});
+        createBuffer(_channels: number, length: number, rate: number) {
+          return {
+            duration: length / rate,
+            getChannelData: () => new Float32Array(length),
+          };
+        }
+        createGain() {
+          return {
+            context: this,
+            gain: { value: 1, setTargetAtTime: vi.fn() },
+            connect: vi.fn(),
+          };
+        }
+        createBufferSource() {
+          return {
+            connect: vi.fn(),
+            disconnect: vi.fn(),
+            stop: vi.fn(),
+            start: vi.fn(),
+            buffer: null,
+            onended: null,
+          };
+        }
+      }
+
+      /**
+       * Audio mode is on and listening, then a reply streams and its voice
+       * plays; the microphone waits over it, and the user talks over it.
+       */
+      const talkedOverReply = async (
+        toggleDictation: () => void,
+        onSendMessage = vi.fn(),
+      ) => {
+        vi.stubGlobal("AudioContext", PlayingAudioContext);
+        const ui = await composer(onSendMessage);
+        withTalkOver(toggleDictation);
+        const view = render(ui(false));
+        fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+        view.rerender(ui(true));
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+        await act(async () => {
+          await enableSpeechPlayback(true);
+        });
+        // The voice keeps one context for the whole file; make it play.
+        const playable = new PlayingAudioContext();
+        Object.assign(playbackContext() as object, {
+          state: "running",
+          currentTime: 1,
+          destination: {},
+          createBuffer: playable.createBuffer.bind(playable),
+          createGain: playable.createGain.bind(playable),
+          createBufferSource: playable.createBufferSource.bind(playable),
+        });
+        pending(true);
+        act(() => {
+          beginSpeechResponse("stream-1");
+          playSpeechChunk("m1", 0, "AQIDBA==", 24000, "stream-1");
+        });
+        withTalkOver(toggleDictation, { waiting: true });
+        view.rerender(ui(true));
+        expect(recorderOptions().voiceSpeaking).toBe(true);
+        act(() => recorderOptions().onSpeechOverVoice());
+        expect(useSpeechPlayback.getState()).toMatchObject({
+          playing: false,
+          paused: true,
+        });
+        withTalkOver(toggleDictation, { live: true });
+        view.rerender(ui(true));
+        return { ui, ...view };
+      };
+
+      it("review 2: a false alarm over a reply lets the voice go on and keeps listening", async () => {
+        const toggleDictation = vi.fn();
+        const { ui, rerender } = await talkedOverReply(toggleDictation);
+        try {
+          // The turn ends with no words: a cough, a colleague, an echo.
+          await act(async () => {
+            recorderOptions().onVadAutoStop();
+          });
+          withTalkOver(toggleDictation);
+          rerender(ui(true));
+
+          expect(useSpeechPlayback.getState()).toMatchObject({
+            playing: true,
+            paused: false,
+          });
+          expect(useSpeechPlayback.getState().quietTurn).toBeUndefined();
+          // The microphone waits over the voice again.
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+          expect(recorderOptions().voiceSpeaking).toBe(true);
+        } finally {
+          vi.unstubAllGlobals();
+        }
+      });
+
+      it("review 1: words over a reply that then stops on a card are shown, not sent, and listening goes on after the decision", async () => {
+        const onSendMessage = vi.fn();
+        const toggleDictation = vi.fn();
+        useToastStore.setState({ toasts: [] });
+        const { ui, rerender } = await talkedOverReply(
+          toggleDictation,
+          onSendMessage,
+        );
+        try {
+          await act(async () => {
+            recorderOptions().onTranscriptChunk({
+              chunkIndex: 0,
+              transcript: "Moment, lieber morgen",
+            });
+            recorderOptions().onVadAutoStop();
+          });
+          withTalkOver(toggleDictation);
+          rerender(ui(true));
+          // Words are a turn: the rest of the reply is not said.
+          expect(useSpeechPlayback.getState()).toMatchObject({
+            playing: false,
+            paused: false,
+          });
+
+          // The reply ends on a card before the words could be sent.
+          showCard();
+          pending(false);
+          rerender(ui(true));
+          await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          });
+
+          expect(onSendMessage).not.toHaveBeenCalled();
+          expect(useToastStore.getState().toasts).toEqual([
+            expect.objectContaining({
+              title: "Not sent: a confirmation is waiting",
+              description: "“Moment, lieber morgen”",
+            }),
+          ]);
+          // The turn was not quieted: the card is still read aloud.
+          expect(useSpeechPlayback.getState().quietTurn).toBeUndefined();
+          expect(toggleDictation).toHaveBeenCalledTimes(1);
+
+          decideCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+          rerender(ui(false));
+          expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+            "",
+          );
+        } finally {
+          vi.unstubAllGlobals();
+        }
+      });
+
+      it("shows the open microphone while it waits over the voice, not a spinner", async () => {
+        const ui = await composer();
+        withTalkOver(vi.fn(), { waiting: true });
+        pending(true);
+        render(ui(true));
+        expect(
+          screen.getByTestId(
+            "chat-input-audio-mode-pending-recording-waveform",
+          ),
+        ).toBeInTheDocument();
+      });
+
+      it("listens over a card's voice; what is said cuts the card and goes to it, never into a message", async () => {
+        const onSendMessage = vi.fn();
+        const requestSubmitSpy = vi.spyOn(
+          HTMLFormElement.prototype,
+          "requestSubmit",
+        );
+        const toggleDictation = vi.fn();
+        withTalkOver(toggleDictation);
+        cardSpeaking(true);
+        showCard();
+        const ui = await composer(onSendMessage);
+        const { rerender } = render(ui(true));
+        await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+        expect(recorderOptions().voiceSpeaking).toBe(true);
+
+        // Speech over the voice: the card is cut, the recorder transcribes.
+        withTalkOver(toggleDictation, { waiting: true });
+        rerender(ui(true));
+        act(() => recorderOptions().onSpeechOverVoice());
+        expect(mockTalkOverApprovalCard).toHaveBeenCalledWith(KEY);
+        cardSpeaking(false);
+        withTalkOver(toggleDictation, { live: true });
+        rerender(ui(true));
+        await act(async () => {
+          recorderOptions().onTranscriptChunk({
+            chunkIndex: 0,
+            transcript: "ja, mach das",
+          });
+          recorderOptions().onVadAutoStop();
+        });
+        withTalkOver(toggleDictation);
+        rerender(ui(true));
+
+        await waitFor(() =>
+          expect(mockHeardApprovalWords).toHaveBeenCalledWith(
+            KEY,
+            "ja, mach das",
+          ),
+        );
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(requestSubmitSpy).not.toHaveBeenCalled();
+        expect(onSendMessage).not.toHaveBeenCalled();
+        rerender(ui(false));
+        expect(screen.getByPlaceholderText("Type a message...")).toHaveValue(
+          "",
+        );
+        requestSubmitSpy.mockRestore();
+      });
+
+      it("with the setting off, a card's voice keeps the microphone closed (as today)", async () => {
+        const toggleDictation = vi.fn();
+        withTalkOver(toggleDictation, {}, false);
+        cardSpeaking(true);
+        showCard();
+        const ui = await composer();
+        render(ui(true));
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+        expect(toggleDictation).not.toHaveBeenCalled();
+        expect(recorderOptions().voiceSpeaking).toBe(false);
+      });
+
+      it.each([
+        null,
+        "Dictation stopped automatically after the configured maximum duration.",
+      ])(
+        "review 1: a card recording opened over the voice that ends (error: %s) keeps the conversation's restart",
+        async (error) => {
+          const toggleDictation = vi.fn();
+          withTalkOver(toggleDictation);
+          const ui = await composer();
+          const { rerender } = render(ui(false));
+          fireEvent.click(screen.getByTestId("chat-input-audio-mode-start"));
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(1));
+          withTalkOver(toggleDictation, { live: true });
+          rerender(ui(true));
+          // A card appears and closes the conversation's microphone.
+          cardSpeaking(true);
+          showCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(2));
+          withTalkOver(toggleDictation);
+          rerender(ui(true));
+          // The card's listening opens over its voice and ends.
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(3));
+          withTalkOver(toggleDictation, { waiting: true });
+          rerender(ui(true));
+          withTalkOver(toggleDictation, { error });
+          rerender(ui(true));
+
+          act(() =>
+            useApprovalSpeech.setState({ closed: true, speaking: false }),
+          );
+          decideCard();
+          rerender(ui(true));
+          await waitFor(() => expect(toggleDictation).toHaveBeenCalledTimes(4));
+        },
+      );
     });
   });
 });

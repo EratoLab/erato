@@ -188,6 +188,11 @@ export class Ricky0123VadEngine implements VoiceVadEngine {
     this.vad = null;
   }
 
+  reset(): void {
+    if (this.state !== "started") return;
+    this.resetUnderlyingState();
+  }
+
   async acceptFrame(frame: VoiceVadFrame): Promise<void> {
     if (this.state === "destroyed") {
       throw new Error("Cannot process frames with a destroyed VAD engine.");
