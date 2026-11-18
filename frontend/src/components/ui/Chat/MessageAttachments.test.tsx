@@ -114,6 +114,52 @@ describe("MessageAttachments", () => {
 
     expect(screen.getByText("spec.pdf")).toBeInTheDocument();
     expect(screen.getByText("notes.txt")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Download / })).toBeNull();
+  });
+
+  it("downloads an available output directly and keeps preview as a separate action", async () => {
+    const output = file("1", "report.csv", "https://example.invalid/preview/1");
+    const missingUrl = { ...file("2", "missing.csv"), download_url: "" };
+    const restricted = {
+      ...file("3", "restricted.csv"),
+      file_contents_unavailable_missing_permissions: true,
+    };
+    const files = [output, missingUrl, restricted];
+    const onFilePreview = vi.fn();
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+
+    try {
+      await renderWithProviders(
+        <MessageAttachments
+          fileIds={files.map((entry) => entry.id)}
+          filesById={byId(...files)}
+          relatedFiles={files}
+          onFilePreview={onFilePreview}
+          showDownload
+        />,
+      );
+
+      const download = screen.getByRole("button", {
+        name: "Download report.csv",
+      });
+      expect(screen.getAllByRole("button", { name: /^Download / })).toEqual([
+        download,
+      ]);
+      fireEvent.click(download);
+      expect(open).toHaveBeenCalledExactlyOnceWith(
+        output.download_url,
+        "_blank",
+        "noopener",
+      );
+      expect(onFilePreview).not.toHaveBeenCalled();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Preview attachment report\.csv/ }),
+      );
+      expect(onFilePreview).toHaveBeenCalledExactlyOnceWith(output, files);
+    } finally {
+      open.mockRestore();
+    }
   });
 
   it("does not request files the conversation already knows about", async () => {

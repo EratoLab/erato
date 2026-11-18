@@ -2042,6 +2042,11 @@ msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Odznacz {facetDisplayName}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/MessageAttachments.tsx
+msgid "chat.file.download_output"
+msgstr "Pobierz {filename}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #~ msgid "chat.file.error"
 #~ msgstr "Błąd wczytywania pliku"
