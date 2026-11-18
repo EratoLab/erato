@@ -25,6 +25,10 @@ import {
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
+import {
+  noteDictatedTranscript,
+  settleDictation,
+} from "@/hooks/audio/dictatedTurns";
 import { lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
@@ -799,6 +803,7 @@ export const ChatInput = ({
           );
           continue;
         }
+        noteDictatedTranscript(target.sessionId, nextTranscript);
 
         if (target.sessionId === getActiveSessionId()) {
           if (nextTranscript.trim()) {
@@ -1075,6 +1080,7 @@ export const ChatInput = ({
         setQueueReplacePending({ runMode: decidedDelegation?.runMode });
         return true;
       }
+      settleDictation(composeSessionId, trimmedMessage);
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
         attachedFiles,
@@ -1116,6 +1122,7 @@ export const ChatInput = ({
       const runMode = queueReplacePending
         ? queueReplacePending.runMode
         : undefined;
+      settleDictation(composeSessionId, trimmedMessage);
       setQueuedBySessionId(composeSessionId, {
         message: trimmedMessage,
         attachedFiles,
@@ -1762,6 +1769,7 @@ export const ChatInput = ({
         return;
       }
 
+      settleDictation(composeSessionId, messageContent);
       const resolvedMentions = resolveMentionedAssistants(
         messageContent,
         mentionedAssistants,

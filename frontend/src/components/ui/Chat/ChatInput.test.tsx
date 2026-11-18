@@ -25,6 +25,7 @@ import {
 } from "@/hooks/audio/approvalChanges";
 import { useApprovalListening } from "@/hooks/audio/approvalListening";
 import { useApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import { dictatedTurnFor } from "@/hooks/audio/dictatedTurns";
 import { playbackContext } from "@/hooks/audio/pcmPlayback";
 import {
   beginSpeechResponse,
@@ -2153,6 +2154,62 @@ describe("ChatInput", () => {
     });
 
     expect(textarea).toHaveValue("Existing dictated text");
+  });
+
+  it("remembers which words of a sent message were dictated, not typed", async () => {
+    mockUseAudioDictationFeature.mockReturnValue({ enabled: true });
+    mockUseChatInputHandlers.mockReturnValue({
+      attachedFiles: [],
+      fileError: null,
+      setFileError: vi.fn(),
+      handleFilesUploaded: vi.fn(),
+      handleRemoveFile: vi.fn(),
+      handleRemoveAllFiles: vi.fn(),
+      setAttachedFiles: vi.fn(),
+      createSubmitHandler:
+        (
+          message: string,
+          _attachedFiles: FileUploadItem[],
+          innerOnSend: (message: string) => void,
+        ) =>
+        (event: FormEvent) => {
+          event.preventDefault();
+          innerOnSend(message.trim());
+        },
+    });
+    const onSendMessage = vi.fn();
+    const { i18n } = await import("@lingui/core");
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <I18nProvider i18n={i18n}>
+          <ChatInput onSendMessage={onSendMessage} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+
+    const textarea = screen.getByPlaceholderText("Type a message...");
+    fireEvent.change(textarea, { target: { value: "Typed first:" } });
+    fireEvent.click(screen.getByTestId("chat-input-record-audio"));
+    const dictationOptions =
+      mockUseAudioDictationRecorder.mock.calls.at(-1)?.[0];
+    await act(async () => {
+      dictationOptions.onTranscriptChunk({
+        chunkIndex: 0,
+        transcript: "the dictated words",
+      });
+    });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: false });
+
+    expect(onSendMessage).toHaveBeenCalled();
+    const sessionId =
+      useComposeSessionStore.getState().sessionIdByChatKey["__new-chat__"];
+    expect(
+      dictatedTurnFor(sessionId ?? "", "Typed first: the dictated words"),
+    ).toEqual({
+      text: "Typed first: the dictated words",
+      passages: ["the dictated words"],
+      whole: false,
+    });
   });
 
   describe("textarea scroll during dictation", () => {

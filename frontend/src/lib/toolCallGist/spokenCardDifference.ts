@@ -9,7 +9,9 @@ import {
   spokenApprovalPieces,
   spokenFactsOf,
   spokenPiecesOf,
+  textValues,
   whatValues,
+  withDictation,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { spokenReadFactsOf } from "./spokenRead";
@@ -288,19 +290,7 @@ const entriesOf = (
             sentence: words.text(text),
             field,
             mustSay: false,
-            values: [
-              sourceOf("field", field),
-              text.read === undefined
-                ? {
-                    slot: "words",
-                    value: {
-                      kind: "number",
-                      value: text.words,
-                      percent: false,
-                    },
-                  }
-                : sourceOf("text", text.read),
-            ],
+            values: textValues(text),
             ...(text.read === undefined && text.full
               ? { readOut: text.full }
               : {}),
@@ -966,8 +956,16 @@ interface Difference {
 export const spokenDifference = (
   previous: WithdrawnCard,
   next: SpokenApproval,
-  options: SpokenOptions,
+  given: SpokenOptions,
 ): SpokenDifference => {
+  // A change request is spoken: a text the user said in it is dictated too.
+  const options: SpokenOptions = {
+    ...given,
+    userTurns: [
+      { text: previous.words, passages: [previous.words], whole: true },
+      ...(given.userTurns ?? []),
+    ],
+  };
   const words = spokenWordsFor(options.language, options);
   const whole = spokenApprovalPieces(next, options);
   if (!words.full) return { intro: "reread", pieces: whole };
@@ -1005,14 +1003,20 @@ export const spokenDifference = (
   const oldEntries = entriesOf(
     oldCard.gist,
     before.input,
-    spokenFactsOf(oldCard.gist, before.server, timeZone, true),
+    withDictation(
+      spokenFactsOf(oldCard.gist, before.server, timeZone, true),
+      given.userTurns,
+    ),
     words,
     timeZone,
   );
   const newEntries = entriesOf(
     newCard.gist,
     next.input,
-    spokenFactsOf(newCard.gist, next.server, timeZone, true),
+    withDictation(
+      spokenFactsOf(newCard.gist, next.server, timeZone, true),
+      options.userTurns,
+    ),
     words,
     timeZone,
   );
