@@ -12,6 +12,13 @@ class MockAudioContext {
       getChannelData: () => new Float32Array(length),
     };
   }
+  createGain() {
+    return {
+      context: this,
+      gain: { value: 1, setTargetAtTime: vi.fn() },
+      connect: vi.fn(),
+    };
+  }
   createBufferSource() {
     return {
       connect: vi.fn(),
@@ -131,4 +138,84 @@ it("1.10: reads the answer after a decision back when the stopped turn was spoke
   expect(p.readsBackContinuation("chat-1")).toBe(true);
   p.beginSpeechResponse("chat-1");
   expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
+});
+
+it("lowers every voice while the user may be talking over it, and restores it", async () => {
+  const p = await import("./speechPlayback");
+  const playback = await import("./pcmPlayback");
+  p.useSpeechPlayback.setState({ conversational: true });
+  await p.enableSpeechPlayback(true);
+  const context = playback.playbackContext() as unknown as MockAudioContext;
+  const createGain = vi.spyOn(context, "createGain");
+  p.beginSpeechResponse("chat-1");
+  p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+  p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+  // One output for every chunk, so lowering it lowers the whole voice.
+  expect(createGain).toHaveBeenCalledTimes(1);
+  const output = createGain.mock.results[0].value as ReturnType<
+    MockAudioContext["createGain"]
+  >;
+  playback.lowerVoice(true);
+  expect(output.gain.setTargetAtTime).toHaveBeenLastCalledWith(0.3, 1, 0.03);
+  playback.lowerVoice(false);
+  expect(output.gain.setTargetAtTime).toHaveBeenLastCalledWith(1, 1, 0.03);
+});
+
+describe("talking over a reply", () => {
+  const speaking = async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse("chat-1");
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+    p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+    return p;
+  };
+
+  it("pauses at once and keeps what was not said, and what arrives meanwhile", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    expect(stops).toHaveBeenCalledTimes(2);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: false,
+      paused: true,
+    });
+    p.playSpeechChunk("m1", 2, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+
+    p.resumeSpeechPlayback();
+    // Both cut chunks from their start, then the one that arrived.
+    expect(starts).toHaveLength(5);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: true,
+      paused: false,
+    });
+    p.playSpeechChunk("m1", 3, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(6);
+  });
+
+  it("a turn with words drops what the paused voice kept", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    p.stopSpeechPlayback();
+    p.resumeSpeechPlayback();
+    p.playSpeechChunk("m1", 2, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: false,
+      paused: false,
+    });
+    // The turn stays spoken, so a card it stops on is still said.
+    expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
+  });
+
+  it("a new response ends a pause", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    p.beginSpeechResponse("chat-1");
+    expect(p.useSpeechPlayback.getState().paused).toBe(false);
+    p.resumeSpeechPlayback();
+    expect(starts).toHaveLength(2);
+  });
 });

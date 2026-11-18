@@ -4,6 +4,7 @@ import {
   heardApprovalWords,
   listensIn,
   quietApprovalListening,
+  resumeTalkedOverCard,
   useApprovalListening,
 } from "./approvalListening";
 import { useApprovalSpeech } from "./approvalSpeech";
@@ -14,13 +15,20 @@ import { useApprovalSpeech } from "./approvalSpeech";
  * speaks, the card is decided or replaced, or listening is switched off.
  * What is heard goes to the card, never into the composer.
  *
+ * With `overVoice`, the microphone also opens while the voice speaks: the
+ * recorder then waits for speech over the voice before it transcribes. A
+ * recording that already transcribes is still closed when the voice starts,
+ * and opens again to wait over it.
+ *
  * The recorder is the composer's own; the caller routes what it hears for
  * the card: `open` starts it for a card, and `readTurn` says whether the
  * end-of-turn silence ended the turn and what was heard so far.
  */
 export function useApprovalCardListening({
   enabled,
+  overVoice = false,
   recorderOpen,
+  recorderLive = false,
   recorderIdle,
   open,
   close,
@@ -28,6 +36,10 @@ export function useApprovalCardListening({
 }: {
   /** Audio mode reads back, voice commands are on and a card waits. */
   enabled: boolean;
+  /** The user may talk over the voice. */
+  overVoice?: boolean;
+  /** The microphone transcribes what it hears. */
+  recorderLive?: boolean;
   /** The microphone records or is starting to. */
   recorderOpen: boolean;
   /** The microphone neither records nor finishes a recording. */
@@ -43,8 +55,9 @@ export function useApprovalCardListening({
       ? state.available.language
       : undefined,
   );
-  const quietVoice = useApprovalSpeech(
-    (state) => !state.speaking && !state.failed && !state.closed,
+  const speaking = useApprovalSpeech((state) => state.speaking);
+  const voiceAllows = useApprovalSpeech(
+    (state) => (overVoice || !state.speaking) && !state.failed && !state.closed,
   );
   const pending = useApprovalListening((state) => state.pending);
   const quiet = useApprovalListening((state) => state.quiet);
@@ -52,7 +65,7 @@ export function useApprovalCardListening({
   const want =
     enabled &&
     key !== null &&
-    quietVoice &&
+    voiceAllows &&
     listensIn(language) &&
     pending !== key &&
     quiet !== key;
@@ -72,11 +85,18 @@ export function useApprovalCardListening({
   }, [recorderOpen]);
 
   // The voice speaks, the card goes, or listening ends: the microphone closes.
+  // Over the voice it stays open, unless it already transcribes: the voice
+  // would be heard as the user's words.
+  const voiceOverLive = speaking && recorderLive;
   useEffect(() => {
-    if (listeningFor === null || (want && key === listeningFor)) return;
+    if (
+      listeningFor === null ||
+      (want && key === listeningFor && !voiceOverLive)
+    )
+      return;
     if (recorderOpen) close();
     setListeningFor(null);
-  }, [close, key, listeningFor, recorderOpen, want]);
+  }, [close, key, listeningFor, recorderOpen, voiceOverLive, want]);
 
   // The turn is over: its words go to the card. The recorder is idle only
   // after the last transcript arrived, so the words are complete; none at all
@@ -93,6 +113,7 @@ export function useApprovalCardListening({
     const { words } = readTurn();
     setListeningFor(null);
     if (words.trim().length > 0) void heardApprovalWords(card, words);
+    else resumeTalkedOverCard(card);
   }, [listeningFor, readTurn, recorderIdle]);
 
   return { listeningFor };

@@ -32,6 +32,13 @@ class MockAudioContext {
       getChannelData: () => new Float32Array(length),
     };
   }
+  createGain() {
+    return {
+      context: this,
+      gain: { value: 1, setTargetAtTime: vi.fn() },
+      connect: vi.fn(),
+    };
+  }
   createBufferSource() {
     const source = {
       connect: vi.fn(),

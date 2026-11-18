@@ -2513,6 +2513,11 @@ msgid "chat.history.unpinFailed"
 msgstr "No se pudo desfijar el chat"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.audio.notSentCardWaiting"
+msgstr "No enviado: hay una confirmación pendiente"
+
+#. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "chat.input.audioRecording.diagnostics.autoGainControl"
 #~ msgstr ""

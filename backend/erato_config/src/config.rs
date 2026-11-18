@@ -2499,6 +2499,9 @@ impl AppConfig {
         if let Err(message) = config.audio_conversational.validate_end_of_turn_silence() {
             panic!("{message}");
         }
+        if let Err(message) = config.audio_conversational.validate_talk_over_voice() {
+            panic!("{message}");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -3404,6 +3407,34 @@ mod audio_config_tests {
             AudioConversationalConfig::default().end_of_turn_silence_ms,
             1800
         );
+        assert!(!conversational.talk_over_voice);
+        assert_eq!(conversational.talk_over_voice_min_speech_ms, 500);
+    }
+
+    #[test]
+    fn conversational_talk_over_voice_is_read_and_range_checked() {
+        let load = |toml: &str| {
+            config::Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AudioConversationalConfig>()
+                .unwrap()
+        };
+        let settings = load("talk_over_voice = true\ntalk_over_voice_min_speech_ms = 700");
+        assert!(settings.talk_over_voice);
+        assert_eq!(settings.talk_over_voice_min_speech_ms, 700);
+        assert!(settings.validate_talk_over_voice().is_ok());
+
+        for allowed in [200, 2000] {
+            let settings = load(&format!("talk_over_voice_min_speech_ms = {allowed}"));
+            assert!(settings.validate_talk_over_voice().is_ok());
+        }
+        for rejected in [0, 199, 2001, 10000] {
+            let settings = load(&format!("talk_over_voice_min_speech_ms = {rejected}"));
+            let error = settings.validate_talk_over_voice().unwrap_err();
+            assert!(error.contains("200 to 2000 milliseconds"), "{error}");
+        }
     }
 
     #[test]
@@ -8557,6 +8588,16 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_end_of_turn_silence_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub end_of_turn_silence_ms: u32,
+    /// Whether the user can start speaking while the voice still talks, and
+    /// the voice yields. Defaults to `false`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub talk_over_voice: bool,
+    /// How long, in milliseconds, speech over the voice must last before the
+    /// voice stops. Defaults to `500`; allowed from `200` to `2000`.
+    #[serde(default = "default_talk_over_voice_min_speech_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub talk_over_voice_min_speech_ms: u32,
 }
 
 pub const END_OF_TURN_SILENCE_MS_RANGE: std::ops::RangeInclusive<u32> = 500..=5000;
@@ -8565,12 +8606,20 @@ fn default_end_of_turn_silence_ms() -> u32 {
     1800
 }
 
+pub const TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=2000;
+
+fn default_talk_over_voice_min_speech_ms() -> u32 {
+    500
+}
+
 impl Default for AudioConversationalConfig {
     fn default() -> Self {
         Self {
             transcription: AudioTranscriptionConfig::default(),
             speech_provider: None,
             end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
+            talk_over_voice: false,
+            talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
         }
     }
 }
@@ -8585,6 +8634,18 @@ impl AudioConversationalConfig {
             "Invalid `audio_conversational.end_of_turn_silence_ms`: {value} is outside {} to {} milliseconds.",
             END_OF_TURN_SILENCE_MS_RANGE.start(),
             END_OF_TURN_SILENCE_MS_RANGE.end()
+        ))
+    }
+
+    pub fn validate_talk_over_voice(&self) -> Result<(), String> {
+        let value = self.talk_over_voice_min_speech_ms;
+        if TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.contains(&value) {
+            return Ok(());
+        }
+        Err(format!(
+            "Invalid `audio_conversational.talk_over_voice_min_speech_ms`: {value} is outside {} to {} milliseconds.",
+            TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.start(),
+            TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE.end()
         ))
     }
 }

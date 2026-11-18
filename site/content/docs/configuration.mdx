@@ -3029,6 +3029,28 @@ The silence, in milliseconds, after which conversational audio mode takes the sp
 
 A shorter wait makes replies start sooner on every turn, but cuts off more people who pause to think. On 400 public German turns (LiveKit's end-of-turn benchmark), the share of turns sent while the speaker was only pausing was 1.2 % at 1800, 2.2 % at 1500, 3.0 % at 1200 and 6.0 % at 1000. Those turns are phone bookings; work requests with more thinking pauses will do somewhat worse.
 
+#### `audio_conversational.talk_over_voice`
+
+{/* erato_toml_config_key: audio_conversational.talk_over_voice */}
+
+Whether the user can start speaking while the voice still reads a reply or an approval card. The voice is lowered as soon as speech is heard and stops once the speech has lasted `talk_over_voice_min_speech_ms`; the words become the next turn, or, on an approval card, go to its voice commands. Shorter sounds only lower the voice for a moment. The reply's text stays on screen in full; the rest of it is not spoken later.
+
+A recording that starts while the voice plays asks the browser for echo cancellation, so the voice does not hear itself, and keeps it until that turn ends (switching it off in the middle of the user's words would change the sound mid-sentence). Turns that start while the voice is quiet use the microphone as before. On speakers echo cancellation depends on the browser and the device and cannot be guaranteed; with headphones there is no echo. Check it on the devices your users have before switching it on.
+
+**Type:** `boolean`
+
+**Default:** `false`
+
+#### `audio_conversational.talk_over_voice_min_speech_ms`
+
+{/* erato_toml_config_key: audio_conversational.talk_over_voice_min_speech_ms */}
+
+How long, in milliseconds, speech over the voice must last before the voice stops. A shorter value reacts sooner, but stops the voice for more coughs, short "mhm"s and the voice's own echo; a longer one may miss a short "stop".
+
+**Type:** `integer`, from `200` to `2000`; other values stop the server at startup.
+
+**Default:** `500`
+
 ```toml
 [audio_conversational]
 enabled = true
@@ -3047,6 +3069,8 @@ fixed_output_token_budget = 500
 min_output_tokens = 32
 max_output_tokens = 2048
 end_of_turn_silence_ms = 1800
+talk_over_voice = false
+talk_over_voice_min_speech_ms = 500
 ```
 
 ### `model_permissions`
