@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
@@ -45,6 +45,118 @@ pub struct SpokenNamesConfig {
 pub type SpokenVocabulariesConfig = HashMap<String, HashMap<String, SpokenNamesConfig>>;
 
 const SPOKEN_NAMES_SETTINGS: &[&str] = &["field_names", "choice_labels", "table_names"];
+
+/// The vocabularies as written, whatever their shape, so that a text where a
+/// table belongs (or the other way round) is dropped with a warning instead
+/// of stopping the configuration.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Written {
+    Text(String),
+    Table(HashMap<String, Written>),
+    Other(serde::de::IgnoredAny),
+}
+
+fn written_table(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> HashMap<String, Written> {
+    match written {
+        Written::Table(entries) => entries,
+        _ => {
+            dropped.push(format!("{place} is not a table and is ignored"));
+            HashMap::new()
+        }
+    }
+}
+
+fn written_texts(
+    place: &str,
+    written: Written,
+    dropped: &mut Vec<String>,
+) -> HashMap<String, String> {
+    let mut texts = HashMap::new();
+    for (key, value) in written_table(place, written, dropped) {
+        match value {
+            Written::Text(text) => {
+                texts.insert(key, text);
+            }
+            _ => dropped.push(format!(
+                "{place}: '{}' is not a text and is ignored",
+                shown(&key)
+            )),
+        }
+    }
+    texts
+}
+
+/// The vocabularies whose shape is right, and each part that is not.
+fn shaped_vocabularies(written: Written) -> (SpokenVocabulariesConfig, Vec<String>) {
+    let mut dropped = Vec::new();
+    let mut vocabularies = SpokenVocabulariesConfig::new();
+    for (name, languages) in written_table("spoken_vocabularies", written, &mut dropped) {
+        let place = format!("spoken_vocabularies.{name}");
+        let mut shaped = HashMap::new();
+        for (language, settings) in written_table(&place, languages, &mut dropped) {
+            let place = format!("{place}.{language}");
+            if !matches!(settings, Written::Table(_)) {
+                dropped.push(format!("{place} is not a table and is ignored"));
+                continue;
+            }
+            let mut settings = written_table(&place, settings, &mut dropped);
+            let mut texts = |setting: &str, dropped: &mut Vec<String>| {
+                settings
+                    .remove(setting)
+                    .map(|written| written_texts(&format!("{place}.{setting}"), written, dropped))
+                    .unwrap_or_default()
+            };
+            let field_names = texts("field_names", &mut dropped);
+            let table_names = texts("table_names", &mut dropped);
+            let mut choice_labels = HashMap::new();
+            if let Some(fields) = settings.remove("choice_labels") {
+                let place = format!("{place}.choice_labels");
+                for (field, labels) in written_table(&place, fields, &mut dropped) {
+                    let place = format!("{place}.{field}");
+                    if matches!(labels, Written::Table(_)) {
+                        choice_labels.insert(field, written_texts(&place, labels, &mut dropped));
+                    } else {
+                        dropped.push(format!("{place} is not a table and is ignored"));
+                    }
+                }
+            }
+            shaped.insert(
+                language,
+                SpokenNamesConfig {
+                    field_names,
+                    choice_labels,
+                    table_names,
+                },
+            );
+        }
+        vocabularies.insert(name, shaped);
+    }
+    dropped.sort();
+    (vocabularies, dropped)
+}
+
+/// Reads `[spoken_vocabularies]` leaving out every wrongly shaped part;
+/// [`misshaped_spoken_entries`] names them.
+pub fn deserialize_spoken_vocabularies<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<SpokenVocabulariesConfig, D::Error> {
+    Ok(shaped_vocabularies(Written::deserialize(deserializer)?).0)
+}
+
+/// The parts of `[spoken_vocabularies]` the loader leaves out for their
+/// shape, sorted: a text where a table belongs, or anything but a text where
+/// a name belongs.
+pub fn misshaped_spoken_entries(schema: &Config) -> Vec<String> {
+    schema
+        .get::<Written>("spoken_vocabularies")
+        .map(|written| shaped_vocabularies(written).1)
+        .unwrap_or_default()
+}
 
 /// A language tag as the voice uses it: `de`, `en`, `pt-br`.
 pub fn is_language_tag(tag: &str) -> bool {
@@ -216,7 +328,7 @@ mod tests {
     fn vocabularies(toml: &str) -> SpokenVocabulariesConfig {
         #[derive(Deserialize)]
         struct Holder {
-            #[serde(default)]
+            #[serde(default, deserialize_with = "deserialize_spoken_vocabularies")]
             spoken_vocabularies: SpokenVocabulariesConfig,
         }
         schema(toml)
@@ -282,6 +394,45 @@ mod tests {
                 .field_names
                 .contains_key("a")
         );
+    }
+
+    #[test]
+    fn a_wrongly_shaped_entry_is_dropped_and_named() {
+        let toml = r#"
+            [spoken_vocabularies.broken]
+            de = "x"
+            [spoken_vocabularies.dataverse.de]
+            table_names = "Tabellen"
+            [spoken_vocabularies.dataverse.de.field_names]
+            ok = "Gut"
+            nested = { a = "b" }
+            number = 5
+            [spoken_vocabularies.dataverse.de.choice_labels]
+            statecode = "Status"
+            [spoken_vocabularies.dataverse.de.choice_labels.prioritycode]
+            "1" = "Hoch"
+            "2" = { a = "b" }
+        "#;
+        let loaded = vocabularies(toml);
+        let de = &loaded["dataverse"]["de"];
+        assert_eq!(de.field_names.len(), 1);
+        assert_eq!(de.field_names["ok"], "Gut");
+        assert!(de.table_names.is_empty());
+        assert!(!de.choice_labels.contains_key("statecode"));
+        assert_eq!(de.choice_labels["prioritycode"].len(), 1);
+        assert!(loaded["broken"].is_empty());
+        assert_eq!(
+            misshaped_spoken_entries(&schema(toml)),
+            vec![
+                "spoken_vocabularies.broken.de is not a table and is ignored",
+                "spoken_vocabularies.dataverse.de.choice_labels.prioritycode: '2' is not a text and is ignored",
+                "spoken_vocabularies.dataverse.de.choice_labels.statecode is not a table and is ignored",
+                "spoken_vocabularies.dataverse.de.field_names: 'nested' is not a text and is ignored",
+                "spoken_vocabularies.dataverse.de.field_names: 'number' is not a text and is ignored",
+                "spoken_vocabularies.dataverse.de.table_names is not a table and is ignored",
+            ]
+        );
+        assert!(misshaped_spoken_entries(&schema("[other]\na = 1")).is_empty());
     }
 
     #[test]

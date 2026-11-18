@@ -89,8 +89,8 @@ const callOf = (id: string): SetCall => {
 };
 
 // The set's labels carry the spoken vocabulary; most tests here are
-// about composing, with the card's own names. the scenario set keeps it, and
-// `spokenCardRewording.test.ts` covers it.
+// about composing, with the card's own names. `spokenNames.test.ts` covers
+// the vocabulary.
 const approvalOf = (
   call: SetCall,
   approvalKind = "mcp_tool",
@@ -993,7 +993,8 @@ describe("every scenario of the set", () => {
     expect(card[1].values).toEqual([
       {
         slot: "field",
-        value: { kind: "text", text: "Voraussichtliches Abschlussdatum" },
+        // The operator's glossary names it; the voice says its word.
+        value: { kind: "text", text: "Estimated close date" },
       },
       { slot: "from", value: { kind: "date", year: 2026, month: 12, day: 1 } },
       { slot: "to", value: { kind: "date", year: 2030, month: 1, day: 15 } },

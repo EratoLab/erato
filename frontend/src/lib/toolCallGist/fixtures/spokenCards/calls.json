@@ -173,6 +173,18 @@
       ]
     },
     {
+      "id": "create-15-nested-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-15-nested-account"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -291,6 +303,18 @@
       ],
       "calls": [
         "update-14-case-priority"
+      ]
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-15-task-nested-case"
       ]
     },
     {
@@ -2503,17 +2527,13 @@
           "spoken_names": {
             "de": {
               "fields": {
-                "closeprobability": "Wahrscheinlichkeit",
                 "customerid": "Kunde",
-                "estimatedclosedate": "Voraussichtliches Abschlussdatum",
                 "estimatedvalue": "Geschätzter Umsatz"
               }
             },
             "en": {
               "fields": {
-                "closeprobability": "Probability",
                 "customerid": "Customer",
-                "estimatedclosedate": "Estimated close date",
                 "estimatedvalue": "Estimated revenue"
               }
             }
@@ -3528,6 +3548,118 @@
       }
     },
     {
+      "id": "create-15-nested-account",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 6",
+          "parentaccountid": {
+            "name": "Neue Firma",
+            "statecode": 1
+          }
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "row",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/name",
+                "values": [
+                  {
+                    "path": "/item/name",
+                    "text": "Linie 6"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/name",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/parentaccountid",
+                    "kind": "group",
+                    "children": [
+                      {
+                        "path": "/item/parentaccountid/name",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/item/parentaccountid/statecode",
+                        "kind": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/parentaccountid/name",
+                "name": "Parent account ID · Name",
+                "raw_name": "name",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Neue Firma"
+                  }
+                ],
+                "nested": true
+              },
+              {
+                "path": "/item/parentaccountid/statecode",
+                "name": "Parent account ID · State code",
+                "raw_name": "statecode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 2,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "opportunity",
+            "complete": true
+          }
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "tool_name": "update_record",
       "server_id": "dynamics",
@@ -3660,20 +3792,6 @@
               "old_values_from_earlier"
             ],
             "complete": true
-          },
-          "spoken_names": {
-            "de": {
-              "fields": {
-                "closeprobability": "Wahrscheinlichkeit",
-                "estimatedclosedate": "Voraussichtliches Abschlussdatum"
-              }
-            },
-            "en": {
-              "fields": {
-                "closeprobability": "Probability",
-                "estimatedclosedate": "Estimated close date"
-              }
-            }
           }
         }
       }
@@ -3789,30 +3907,6 @@
               "old_values_from_earlier"
             ],
             "complete": true
-          },
-          "spoken_names": {
-            "de": {
-              "fields": {
-                "risklevel": "Risikostufe"
-              },
-              "choices": {
-                "risklevel": {
-                  "1": "Niedrig",
-                  "3": "Hoch"
-                }
-              }
-            },
-            "en": {
-              "fields": {
-                "risklevel": "Risk level"
-              },
-              "choices": {
-                "risklevel": {
-                  "1": "Low",
-                  "3": "High"
-                }
-              }
-            }
           }
         }
       }
@@ -4094,14 +4188,12 @@
           "spoken_names": {
             "de": {
               "fields": {
-                "closeprobability": "Wahrscheinlichkeit",
                 "description": "Beschreibung",
                 "telephone1": "Telefon"
               }
             },
             "en": {
               "fields": {
-                "closeprobability": "Probability",
                 "description": "Description",
                 "telephone1": "Phone"
               }
@@ -4210,28 +4302,6 @@
             "table": "opportunity",
             "record_unread": true,
             "complete": true
-          },
-          "spoken_names": {
-            "de": {
-              "fields": {
-                "risklevel": "Risikostufe"
-              },
-              "choices": {
-                "risklevel": {
-                  "2": "Mittel"
-                }
-              }
-            },
-            "en": {
-              "fields": {
-                "risklevel": "Risk level"
-              },
-              "choices": {
-                "risklevel": {
-                  "2": "Medium"
-                }
-              }
-            }
           }
         }
       }
@@ -4486,40 +4556,26 @@
             "de": {
               "fields": {
                 "budgetstatus": "Budgetstatus",
-                "closeprobability": "Wahrscheinlichkeit",
-                "estimatedclosedate": "Voraussichtliches Abschlussdatum",
                 "estimatedvalue": "Geschätzter Umsatz",
                 "purchasetimeframe": "Kaufzeitrahmen",
-                "risklevel": "Risikostufe",
                 "stepname": "Phase"
               },
               "choices": {
                 "purchasetimeframe": {
                   "1": "Dieses Quartal"
-                },
-                "risklevel": {
-                  "1": "Niedrig",
-                  "2": "Mittel"
                 }
               }
             },
             "en": {
               "fields": {
                 "budgetstatus": "Budget status",
-                "closeprobability": "Probability",
-                "estimatedclosedate": "Estimated close date",
                 "estimatedvalue": "Estimated revenue",
                 "purchasetimeframe": "Purchase timeframe",
-                "risklevel": "Risk level",
                 "stepname": "Pipeline phase"
               },
               "choices": {
                 "purchasetimeframe": {
                   "1": "This quarter"
-                },
-                "risklevel": {
-                  "1": "Low",
-                  "2": "Medium"
                 }
               }
             }
@@ -5046,6 +5102,190 @@
       }
     },
     {
+      "id": "update-15-task-nested-case",
+      "tool_name": "update_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a015",
+        "item": {
+          "prioritycode": 1,
+          "regardingobjectid_incident_task": {
+            "title": "Linie 6 steht",
+            "prioritycode": 1
+          }
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "update",
+          "object_kind": "task",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a015",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                },
+                {
+                  "pointer": "/item/regardingobjectid_incident_task/title",
+                  "name": "title",
+                  "values": [
+                    {
+                      "path": "/item/regardingobjectid_incident_task/title",
+                      "text": "Linie 6 steht"
+                    }
+                  ]
+                },
+                {
+                  "pointer": "/item/regardingobjectid_incident_task/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/regardingobjectid_incident_task/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/prioritycode",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/regardingobjectid_incident_task",
+                    "kind": "group",
+                    "children": [
+                      {
+                        "path": "/item/regardingobjectid_incident_task/title",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/item/regardingobjectid_incident_task/prioritycode",
+                        "kind": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/prioritycode",
+                "name": "Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ]
+              },
+              {
+                "path": "/item/regardingobjectid_incident_task/title",
+                "name": "Regardingobjectid incident task · Title",
+                "raw_name": "title",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Linie 6 steht"
+                  }
+                ],
+                "new_name": true,
+                "nested": true
+              },
+              {
+                "path": "/item/regardingobjectid_incident_task/prioritycode",
+                "name": "Regardingobjectid incident task · Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 3,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "record_unread": true,
+            "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Normal"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Normal"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "id": "update-10-contact-two-fields",
       "tool_name": "update_record",
       "server_id": "dynamics",
@@ -5468,7 +5708,6 @@
             "de": {
               "fields": {
                 "budgetamount": "Budget",
-                "closeprobability": "Wahrscheinlichkeit",
                 "currentsituation": "Aktuelle Situation",
                 "customerneed": "Kundenbedarf",
                 "description": "Beschreibung",
@@ -5483,7 +5722,6 @@
             "en": {
               "fields": {
                 "budgetamount": "Budget",
-                "closeprobability": "Probability",
                 "currentsituation": "Current situation",
                 "customerneed": "Customer need",
                 "description": "Description",
@@ -7202,7 +7440,8 @@
                   {
                     "text": "Legal name: Muster Maschinenbau AG, Website: muster-maschinenbau.example, Segment: Mittelstand"
                   }
-                ]
+                ],
+                "nested": true
               }
             ],
             "counts": {
@@ -8556,29 +8795,11 @@
           },
           "spoken_names": {
             "de": {
-              "fields": {
-                "Estimated close date": "Voraussichtliches Abschlussdatum",
-                "Risk level": "Risikostufe"
-              },
-              "choices": {
-                "Risk level": {
-                  "High": "Hoch"
-                }
-              },
               "tables": {
                 "opportunity": "Verkaufschancen"
               }
             },
             "en": {
-              "fields": {
-                "Estimated close date": "Estimated close date",
-                "Risk level": "Risk level"
-              },
-              "choices": {
-                "Risk level": {
-                  "High": "High"
-                }
-              },
               "tables": {
                 "opportunity": "opportunities"
               }

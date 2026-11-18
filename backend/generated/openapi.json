@@ -14699,6 +14699,10 @@
             "type": "string",
             "description": "A readable name, display-cleaned."
           },
+          "nested": {
+            "type": "boolean",
+            "description": "The value sits in an object inside the record, such as a record\ncreated with it: its name and codes belong to that object, so spoken\nnames never apply to it."
+          },
           "new_name": {
             "type": "boolean",
             "description": "A name the call gives a record nobody read in this chat (see\n`record_unread`): a card reads it as a new value, never as the name of\nthe record being changed."
@@ -15426,6 +15430,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "nested": {
+            "type": "boolean",
+            "description": "See [`ToolCallEffect::nested`]."
           },
           "path": {
             "type": "string"

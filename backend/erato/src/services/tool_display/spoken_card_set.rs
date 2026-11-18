@@ -217,3 +217,46 @@ fn spoken_choices_follow_the_table_of_the_value() {
     assert_eq!(join["de"]["choices"]["account.statecode"]["1"], "Inaktiv");
     assert!(join["de"]["choices"].get("statecode").is_none());
 }
+
+/// A value inside a nested object of the record, such as an account created
+/// with an opportunity or a case written through a task, has that object's
+/// fields and codes: it is marked nested and gives the call's table no entry.
+#[test]
+fn a_nested_effect_is_never_named_from_the_outer_table() {
+    let generated = generated();
+    let label = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]
+            .clone()
+    };
+    let nested = |label: &Value, path: &str| {
+        label["change"]["effects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|effect| effect["path"] == path)
+            .unwrap_or_else(|| panic!("{path}"))["nested"]
+            == true
+    };
+    let create = label("create-15-nested-account");
+    assert!(nested(&create, "/item/parentaccountid/name"));
+    assert!(nested(&create, "/item/parentaccountid/statecode"));
+    // The opportunity's name is its title; the account's name and state 1
+    // (Inactive, never the opportunity's Won) get no entry.
+    assert!(create.get("spoken_names").is_none());
+    let update = label("update-15-task-nested-case");
+    assert!(!nested(&update, "/item/prioritycode"));
+    assert!(nested(
+        &update,
+        "/item/regardingobjectid_incident_task/prioritycode"
+    ));
+    // The task's priority 1 is Normal; the case's 1 (High) gets no entry.
+    assert_eq!(
+        update["spoken_names"]["de"]["choices"]["prioritycode"],
+        json!({ "1": "Normal" })
+    );
+}

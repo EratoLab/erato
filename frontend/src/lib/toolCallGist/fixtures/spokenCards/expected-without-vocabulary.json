@@ -2841,6 +2841,180 @@
       ]
     ]
   },
+  "create-15-nested-account": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 6.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · Name",
+          "role": "detail",
+          "text": "Parent account ID · Name: Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · State code",
+          "role": "detail",
+          "text": "Parent account ID · State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 6.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · Name",
+          "role": "detail",
+          "text": "Parent account ID · Name: Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · State code",
+          "role": "detail",
+          "text": "Parent account ID · State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
@@ -4439,6 +4613,196 @@
               "value": {
                 "kind": "text",
                 "text": "Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "update-15-task-nested-case": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe ändern, die ich in diesem Chat nicht gelesen habe.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority code wird auf 1 gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Title",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Title wird auf Linie 6 steht gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Title"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6 steht"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Priority code",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Priority code wird auf 1 gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a task in Dynamics 365 that I haven't read in this chat.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority code will be set to 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Title",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Title will be set to Linie 6 steht.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Title"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6 steht"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Priority code",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Priority code will be set to 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Priority code"
               }
             },
             {

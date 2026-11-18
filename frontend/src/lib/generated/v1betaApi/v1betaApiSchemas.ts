@@ -5067,6 +5067,12 @@ export type ToolCallEffect = {
    */
   name: string;
   /**
+   * The value sits in an object inside the record, such as a record
+   * created with it: its name and codes belong to that object, so spoken
+   * names never apply to it.
+   */
+  nested?: boolean;
+  /**
    * A name the call gives a record nobody read in this chat (see
    * `record_unread`): a card reads it as a new value, never as the name of
    * the record being changed.
@@ -5578,6 +5584,10 @@ export type ToolCallTextChange = {
    */
   lines: number;
   name: string;
+  /**
+   * See [`ToolCallEffect::nested`].
+   */
+  nested?: boolean;
   path: string;
   raw_name: string;
   /**

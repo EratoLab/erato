@@ -269,13 +269,17 @@ const entriesOf = (
    * A field as the voice says it: its detail, else its long text, else
    * only that it differs. `found` is false when the card says neither.
    */
-  const fieldEntry = (field: string, rawName: string) => {
+  const fieldEntry = (field: string, rawName: string | undefined) => {
     const detail = detailFor(field);
     const text = detail ? undefined : textFor(field);
     const heard =
       detail && "field" in detail
         ? detail.field
-        : (text?.field ?? spokenFieldName(names, rawName) ?? field);
+        : (text?.field ??
+          (rawName === undefined
+            ? undefined
+            : spokenFieldName(names, rawName)) ??
+          field);
     const spoken: Pick<
       Entry,
       | "heardAs"
@@ -326,7 +330,11 @@ const entriesOf = (
   const naming: string[] = [];
 
   for (const effect of change?.effects ?? []) {
-    const { found, spoken } = fieldEntry(effectField(effect), effect.rawName);
+    // A nested value keeps the card's name, as when the card is said whole.
+    const { found, spoken } = fieldEntry(
+      effectField(effect),
+      effect.nested ? undefined : effect.rawName,
+    );
     if (!found && name !== undefined && effect.effect !== "unchanged") {
       naming.push(effect.path);
       continue;
@@ -345,7 +353,10 @@ const entriesOf = (
   }
 
   for (const text of change?.texts ?? []) {
-    const { spoken } = fieldEntry(fieldName(text), text.rawName);
+    const { spoken } = fieldEntry(
+      fieldName(text),
+      text.nested ? undefined : text.rawName,
+    );
     add({
       key: `text:${text.path}`,
       ...spoken,

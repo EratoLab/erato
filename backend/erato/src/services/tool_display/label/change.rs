@@ -278,6 +278,8 @@ struct Walk<'a> {
     lists: ListClaims,
     /// A value was compared with what an earlier result showed.
     used_earlier: bool,
+    /// How many objects inside the record the walk is in.
+    nesting: usize,
 }
 
 struct EarlierRecord<'a> {
@@ -358,6 +360,7 @@ impl<'a> Walk<'a> {
             complete: true,
             says: ToolText::read(facts.tool.description.as_deref()),
             before_stored: false,
+            nesting: 0,
             lists: ListClaims::default(),
             used_earlier: false,
         }
@@ -505,7 +508,9 @@ impl<'a> Walk<'a> {
         match unwrap(value, false) {
             Unwrapped::Other if depth + 1 < MAX_DEPTH && !inner.is_empty() => {
                 let prefix = format!("{name} · ");
+                self.nesting += 1;
                 self.members(inner, path, depth + 1, false, &prefix);
+                self.nesting -= 1;
             }
             _ => self.value(member, value, path, name.to_string()),
         }
@@ -775,6 +780,7 @@ impl<'a> Walk<'a> {
             list: false,
             link: false,
             new_name: false,
+            nested: self.nesting > 0,
         };
         match unwrap(value, is_plural(member)) {
             Unwrapped::Empty => {
@@ -1560,6 +1566,7 @@ impl<'a> Walk<'a> {
             lines: line_count(raw),
             chars: u32::try_from(raw.chars().count()).unwrap_or(u32::MAX),
             before,
+            nested: self.nesting > 0,
         });
     }
 

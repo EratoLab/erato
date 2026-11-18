@@ -216,6 +216,18 @@
       ]
     },
     {
+      "id": "create-15-nested-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-15-nested-account"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -334,6 +346,18 @@
       ],
       "calls": [
         "update-14-case-priority"
+      ]
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-15-task-nested-case"
       ]
     },
     {
@@ -1385,6 +1409,25 @@
       }
     },
     {
+      "id": "create-15-nested-account",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 6",
+          "parentaccountid": {
+            "name": "Neue Firma",
+            "statecode": 1
+          }
+        }
+      }
+    },
+    {
       "id": "update-01-date-and-probability",
       "server": "dynamics",
       "tool": "update_record",
@@ -1556,6 +1599,26 @@
         "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
         "item": {
           "prioritycode": 1
+        }
+      }
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a015",
+        "item": {
+          "prioritycode": 1,
+          "regardingobjectid_incident_task": {
+            "title": "Linie 6 steht",
+            "prioritycode": 1
+          }
         }
       }
     },
