@@ -232,6 +232,7 @@ const resumeEvent = (cut: SpokenUtterance): SpokenCardEvent => {
       return { type: "read", index: cut.index };
     case "count":
     case "nothing_left":
+    case "held":
       return { type: "rest" };
     case "notice":
       return { type: "notice", notice: cut.notice };

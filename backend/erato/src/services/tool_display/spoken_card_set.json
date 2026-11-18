@@ -2415,6 +2415,18 @@
           "invoice": "Rechnungen",
           "product": "Produkte",
           "systemuser": "Benutzer"
+        },
+        "sentences": {
+          "changed": {
+            "estimatedclosedate": "Der Abschluss rückt {from} {to}.",
+            "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+            "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+          },
+          "set": {
+            "task.scheduledend": "Fällig am {value}.",
+            "task.prioritycode": "Mit Priorität {value}.",
+            "estimatedclosedate": "Abschluss voraussichtlich am {value}."
+          }
         }
       },
       "en": {
@@ -2588,6 +2600,18 @@
           "invoice": "invoices",
           "product": "products",
           "systemuser": "users"
+        },
+        "sentences": {
+          "changed": {
+            "estimatedclosedate": "The close moves from {from} to {to}.",
+            "closeprobability": "The probability goes from {from} to {to}.",
+            "estimatedvalue": "The estimated revenue goes from {from} to {to}."
+          },
+          "set": {
+            "task.scheduledend": "Due on {value}.",
+            "task.prioritycode": "With priority {value}.",
+            "estimatedclosedate": "Expected to close on {value}."
+          }
         }
       }
     }

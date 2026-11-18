@@ -18,6 +18,11 @@ pub const EXPERIENCE_POLICY_SLUG: &str = "policy";
 /// in [`resolution_order_for`].
 pub const STARTING_ASSISTANT_SETTING: &str = "starting_assistant";
 
+/// The `setting_orders` key of how waiting approval cards are read aloud.
+/// It has no legacy fallback: an audience takes part only once the admin
+/// lists it under this key.
+pub const APPROVAL_SPEECH_SETTING: &str = "approval_speech";
+
 /// The shared resolution-contract fixture: the cases every resolver of this
 /// document must agree on. Downstream consumers keep a copy (the admin panel
 /// does) and assert it against this one byte for byte; the
@@ -216,6 +221,23 @@ pub struct ExperienceAudience {
     /// never rewritten with the key (the S14f stance).
     #[serde(default)]
     pub provenance: Option<AudienceProvenance>,
+    /// How waiting approval cards are read aloud for this audience, where an
+    /// admin set it: each part left out keeps the deployment's value. Read
+    /// only through the [`APPROVAL_SPEECH_SETTING`] order.
+    #[serde(default)]
+    pub approval_speech: Option<AudienceApprovalSpeech>,
+}
+
+/// A supervisor's choice for how an audience hears approval cards.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct AudienceApprovalSpeech {
+    pub amount: Option<crate::config::ApprovalSpeechAmount>,
+    pub short_details: Option<u8>,
+    pub wording: Option<crate::config::ApprovalSpeechWording>,
+    /// Whether the audience's users may choose their own; absent keeps the
+    /// deployment's `approval_speech.user_choice`.
+    pub user_choice: Option<bool>,
 }
 
 impl ExperienceAudience {
@@ -641,6 +663,7 @@ mod tests {
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: Some(expires_at),
             provenance: None,
+            approval_speech: None,
         };
         assert!(audience.is_active_at(expires_at - chrono::Duration::seconds(1)));
         assert!(!audience.is_active_at(expires_at));
@@ -842,6 +865,7 @@ mod tests {
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: None,
             provenance: None,
+            approval_speech: None,
         }
     }
 

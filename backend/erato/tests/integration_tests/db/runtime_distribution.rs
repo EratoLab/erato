@@ -75,6 +75,7 @@ fn expected_policy_document() -> ExperiencePolicyDocument {
                     .unwrap(),
                 expires_at: None,
                 provenance: None,
+                approval_speech: None,
             },
         )]),
         priority_order: vec!["engineering".to_string()],

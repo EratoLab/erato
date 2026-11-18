@@ -3,6 +3,7 @@ import { plural, select, t } from "@lingui/core/macro";
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
+import { fillVariant, naturalVariant } from "./spokenSentences";
 import { bothPercent } from "./spokenValues";
 
 import type { GistKind } from "./gist";
@@ -22,6 +23,7 @@ import type {
   SpokenReadFacts,
   SpokenReadWords,
 } from "./spokenRead";
+import type { SentenceSet } from "./spokenSentences";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -37,6 +39,10 @@ interface WordOptions {
   now: Date;
   /** The zone "today" is in; the device's when not given. */
   timeZone?: string;
+  /** `natural` says details and the opening in the sentence variants. */
+  wording?: "precise" | "natural";
+  /** The deployment's sentence variants for this language. */
+  sentences?: SentenceSet;
 }
 
 interface CalendarDay {
@@ -1251,7 +1257,17 @@ const isNew = (facts: SpokenFacts) => ACTIONS_ON_NEW.includes(facts.action);
 const isShort = (position: SpokenQueuePosition | undefined) =>
   position !== undefined && position.index > 0 && position.sameAsPrevious;
 
-const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
+const words = (
+  code: LanguageCode,
+  options: WordOptions,
+  language: string,
+): LanguageWords => {
+  const natural = options.wording === "natural";
+  /** The natural variant for `key`, or `undefined` for the precise sentence. */
+  const variant = (key: string, oneField?: string): string | undefined =>
+    natural
+      ? naturalVariant(language, key, options.sentences, oneField)
+      : undefined;
   const today = wallClockParts(options.now, options.timeZone);
   const count = (value: number): string =>
     code.numbers[value] ?? new Intl.NumberFormat(code.locale).format(value);
@@ -1397,7 +1413,14 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const detail = (entry: SpokenDetail, facts: SpokenFacts): string => {
     switch (entry.type) {
-      case "set":
+      case "set": {
+        const type = facts.action === "update" ? "updated" : "set";
+        const own = variant(type, entry.sentences?.[type]);
+        if (own !== undefined)
+          return fillVariant(own, {
+            field: entry.field,
+            value: value(entry.value),
+          });
         return facts.action === "update"
           ? detailSetTo(
               kindOf(entry.value),
@@ -1405,6 +1428,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
               value(entry.value, "to"),
             )
           : endSentence(fieldValue(entry.field, value(entry.value)));
+      }
       case "list_set": {
         const entries = listValues(entry.values, entry.omitted);
         return facts.action === "update"
@@ -1415,14 +1439,18 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
             )
           : endSentence(fieldValue(entry.field, entries));
       }
-      case "changed":
-        return endSentence(
-          detailChanged(
-            entry.field,
-            value(entry.from, "from", !bothPercent(entry.from, entry.to)),
-            value(entry.to, "to"),
-          ),
+      case "changed": {
+        const from = value(
+          entry.from,
+          "from",
+          !bothPercent(entry.from, entry.to),
         );
+        const to = value(entry.to, "to");
+        const own = variant("changed", entry.sentences?.changed);
+        return own === undefined
+          ? endSentence(detailChanged(entry.field, from, to))
+          : fillVariant(own, { field: entry.field, from, to });
+      }
       case "emptied":
         return detailEmptied(entry.field);
       case "list_replaced":
@@ -1628,15 +1656,23 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         isNew(facts) || facts.count !== 1 || facts.names.length > 0
           ? ""
           : unnamedClause(facts.kind, facts.unread);
-      const sentence = whatSentence(
-        facts.reschedule ? "reschedule" : facts.action,
-        {
-          thing: thing(facts),
-          destination: destination(facts),
-          source,
-          clause,
-        },
-      );
+      const action = facts.reschedule ? "reschedule" : facts.action;
+      const parts = {
+        thing: thing(facts),
+        destination: destination(facts),
+        source,
+        clause,
+      };
+      // What a delete removes is said as the card says it, in every style.
+      const own =
+        facts.action === "delete"
+          ? undefined
+          : // eslint-disable-next-line lingui/no-unlocalized-strings -- a sentence type key, not copy
+            variant(`what.${action}`);
+      const sentence =
+        own === undefined
+          ? whatSentence(action, parts)
+          : withParts(parts, (slots) => fillVariant(own, slots));
       return `${prefix}${sentence}${item(facts).length > 0 ? ":" : "."}`;
     },
     item(facts, position) {
@@ -1734,6 +1770,6 @@ export const spokenWordsFor = (
   options: WordOptions,
 ): LanguageWords => {
   const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const said = words(code === "de" ? GERMAN : ENGLISH, options);
+  const said = words(code === "de" ? GERMAN : ENGLISH, options, code);
   return POINTER_ONLY.includes(code) ? { ...said, full: false } : said;
 };

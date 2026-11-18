@@ -1039,6 +1039,12 @@
                 "prioritycode": {
                   "2": "Hoch"
                 }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
@@ -1051,6 +1057,12 @@
               "choices": {
                 "prioritycode": {
                   "2": "High"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "With priority {value}.",
+                  "scheduledend": "Due on {value}."
                 }
               }
             }
@@ -1970,6 +1982,12 @@
                 "statecode": {
                   "0": "Offen"
                 }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
@@ -1989,6 +2007,12 @@
                 },
                 "statecode": {
                   "0": "Open"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "With priority {value}.",
+                  "scheduledend": "Due on {value}."
                 }
               }
             }
@@ -2136,12 +2160,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -2507,6 +2541,16 @@
                 "customerid": "Kunde",
                 "estimatedclosedate": "Voraussichtliches Abschlussdatum",
                 "estimatedvalue": "Geschätzter Umsatz"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+                  "estimatedclosedate": "Der Abschluss rückt {from} {to}.",
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Abschluss voraussichtlich am {value}."
+                }
               }
             },
             "en": {
@@ -2515,6 +2559,16 @@
                 "customerid": "Customer",
                 "estimatedclosedate": "Estimated close date",
                 "estimatedvalue": "Estimated revenue"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "The probability goes from {from} to {to}.",
+                  "estimatedclosedate": "The close moves from {from} to {to}.",
+                  "estimatedvalue": "The estimated revenue goes from {from} to {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Expected to close on {value}."
+                }
               }
             }
           }
@@ -3293,11 +3347,21 @@
             "de": {
               "fields": {
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -3403,11 +3467,21 @@
             "de": {
               "fields": {
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -3666,12 +3740,30 @@
               "fields": {
                 "closeprobability": "Wahrscheinlichkeit",
                 "estimatedclosedate": "Voraussichtliches Abschlussdatum"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+                  "estimatedclosedate": "Der Abschluss rückt {from} {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Abschluss voraussichtlich am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "closeprobability": "Probability",
                 "estimatedclosedate": "Estimated close date"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "The probability goes from {from} to {to}.",
+                  "estimatedclosedate": "The close moves from {from} to {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Expected to close on {value}."
+                }
               }
             }
           }
@@ -4097,6 +4189,11 @@
                 "closeprobability": "Wahrscheinlichkeit",
                 "description": "Beschreibung",
                 "telephone1": "Telefon"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}."
+                }
               }
             },
             "en": {
@@ -4104,6 +4201,11 @@
                 "closeprobability": "Probability",
                 "description": "Description",
                 "telephone1": "Phone"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "The probability goes from {from} to {to}."
+                }
               }
             }
           }
@@ -4501,6 +4603,16 @@
                   "1": "Niedrig",
                   "2": "Mittel"
                 }
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+                  "estimatedclosedate": "Der Abschluss rückt {from} {to}.",
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Abschluss voraussichtlich am {value}."
+                }
               }
             },
             "en": {
@@ -4520,6 +4632,16 @@
                 "risklevel": {
                   "1": "Low",
                   "2": "Medium"
+                }
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "The probability goes from {from} to {to}.",
+                  "estimatedclosedate": "The close moves from {from} to {to}.",
+                  "estimatedvalue": "The estimated revenue goes from {from} to {to}."
+                },
+                "set": {
+                  "estimatedclosedate": "Expected to close on {value}."
                 }
               }
             }
@@ -5478,6 +5600,11 @@
                 "quotecomments": "Angebotskommentare",
                 "stepname": "Phase",
                 "telephone1": "Telefon"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "Die Wahrscheinlichkeit geht {from} {to}."
+                }
               }
             },
             "en": {
@@ -5493,6 +5620,11 @@
                 "quotecomments": "Quote comments",
                 "stepname": "Pipeline phase",
                 "telephone1": "Phone"
+              },
+              "sentences": {
+                "changed": {
+                  "closeprobability": "The probability goes from {from} to {to}."
+                }
               }
             }
           }
@@ -8826,12 +8958,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -8979,12 +9121,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -9132,12 +9284,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }

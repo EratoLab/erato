@@ -68,6 +68,12 @@ pub struct UpdateUserPreferencesInput {
     /// and so has no stable hub id to point at. `Some(None)` removes the pick.
     pub starting_assistant_id: Option<Option<Uuid>>,
     pub starting_assistant_cleared: Option<bool>,
+    /// How much approval cards say aloud; `Some(None)` follows the
+    /// organisation again.
+    pub approval_speech_amount: Option<Option<crate::config::ApprovalSpeechAmount>>,
+    /// How approval cards are worded aloud; `Some(None)` follows the
+    /// organisation again.
+    pub approval_speech_wording: Option<Option<crate::config::ApprovalSpeechWording>>,
     /// Already normalized with [`normalize_time_zone`]; `None` keeps the stored value.
     pub time_zone: Option<String>,
     /// Already normalized with [`normalize_language`]; `None` keeps the stored value.
@@ -350,6 +356,12 @@ async fn upsert_user_preferences_row(
         if let Some(value) = input.language {
             model.language = ActiveValue::Set(Some(value));
         }
+        if let Some(value) = input.approval_speech_amount {
+            model.approval_speech_amount = ActiveValue::Set(value.map(amount_name));
+        }
+        if let Some(value) = input.approval_speech_wording {
+            model.approval_speech_wording = ActiveValue::Set(value.map(wording_name));
+        }
 
         Ok(model.update(conn).await?)
     } else {
@@ -387,6 +399,12 @@ async fn upsert_user_preferences_row(
             )?),
             time_zone: ActiveValue::Set(input.time_zone),
             language: ActiveValue::Set(input.language),
+            approval_speech_amount: ActiveValue::Set(
+                input.approval_speech_amount.flatten().map(amount_name),
+            ),
+            approval_speech_wording: ActiveValue::Set(
+                input.approval_speech_wording.flatten().map(wording_name),
+            ),
             ..Default::default()
         };
 
@@ -394,6 +412,27 @@ async fn upsert_user_preferences_row(
             .exec_with_returning(conn)
             .await?)
     }
+}
+
+/// The stored name of an amount, as the API and the config spell it.
+pub fn amount_name(amount: crate::config::ApprovalSpeechAmount) -> String {
+    serde_json::to_value(amount)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The stored name of a wording, as the API and the config spell it.
+pub fn wording_name(wording: crate::config::ApprovalSpeechWording) -> String {
+    serde_json::to_value(wording)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// A stored or sent name read back; anything else is no choice.
+pub fn parse_style_name<T: serde::de::DeserializeOwned>(name: &str) -> Option<T> {
+    serde_json::from_value(serde_json::Value::String(name.trim().to_string())).ok()
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {

@@ -2,12 +2,14 @@
 import { GIST_KINDS } from "./gist";
 import { isMachineId } from "./machineId";
 import { cleanServerText, isRecord } from "./serverText";
+import { holder } from "./spokenHold";
 import { spokenChoice, spokenFieldName, spokenTableName } from "./spokenNames";
 import { earValue } from "./spokenValues";
 
 import type { GistKind } from "./gist";
 import type {
   ComposedPiece,
+  SpokenOptions,
   SpokenPieceRole,
   SpokenQueuePosition,
   SpokenSource,
@@ -345,7 +347,9 @@ export const spokenReadPieces = (
   facts: SpokenReadFacts,
   readWords: SpokenReadWords,
   position?: SpokenQueuePosition,
+  amount: Pick<SpokenOptions, "amount" | "shortDetails"> = {},
 ): ReadPiece[] => {
+  const hold = holder(amount, "condition");
   const said = facts.conditions.slice(0, MAX_SPOKEN_CONDITIONS);
   const unsaid =
     facts.conditionsOmitted === "unknown"
@@ -375,7 +379,9 @@ export const spokenReadPieces = (
     );
   }
   for (const condition of said) {
+    const held = hold.next();
     pieces.push({
+      ...(held ? { held } : {}),
       ...piece("detail", readWords.condition(condition), [
         text("field", condition.column),
         ...(condition.table ? [text("place", condition.table)] : []),
@@ -393,6 +399,8 @@ export const spokenReadPieces = (
       ),
     );
   }
+  const counted = hold.withMore(pieces);
+  pieces.splice(0, pieces.length, ...counted);
   if (facts.limit !== undefined) {
     pieces.push(
       piece("detail", readWords.limit(facts.limit, facts.kind), [

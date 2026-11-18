@@ -75,7 +75,7 @@ const approvalOf = (
     display: {
       title: call.display.title,
       server_name: call.display.server_name,
-      label: label && !vocabulary ? (plain) : label,
+      label: label && !vocabulary ? plain : label,
     },
   });
 };

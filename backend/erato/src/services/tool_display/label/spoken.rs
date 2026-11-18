@@ -148,12 +148,38 @@ impl SpokenNamesCollector<'_, '_> {
         );
     }
 
+    /// A field's own natural sentence variants.
+    pub fn field_sentences(&mut self, shown: &str, raw: &str) {
+        if shown.is_empty() {
+            return;
+        }
+        for kind in ["changed", "set", "updated"] {
+            let table = self.table.clone();
+            self.add(
+                |layers| {
+                    first(layers, table.as_deref(), raw, |names, key| {
+                        names.sentences.get(kind)?.get(key)
+                    })
+                    .map(str::to_string)
+                },
+                |entry, spoken| {
+                    entry
+                        .sentences
+                        .entry(kind.to_string())
+                        .or_default()
+                        .insert(shown.to_string(), spoken);
+                },
+            );
+        }
+    }
+
     /// The fields and coded values a change writes: an effect's raw name is
     /// both the key and the lookup, and a value's text is the code as written.
     pub fn change(&mut self, change: &ToolCallChange) {
         for effect in &change.effects {
             let raw = effect.raw_name.as_str();
             self.field(raw, raw);
+            self.field_sentences(raw, raw);
             let values = effect
                 .values
                 .iter()
@@ -218,6 +244,7 @@ fn entries(names: &ToolCallSpokenNames) -> usize {
     names.fields.len()
         + names.tables.len()
         + names.choices.values().map(BTreeMap::len).sum::<usize>()
+        + names.sentences.values().map(BTreeMap::len).sum::<usize>()
 }
 
 #[cfg(test)]

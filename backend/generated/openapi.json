@@ -1754,6 +1754,35 @@
         ]
       }
     },
+    "/api/v1beta/me/approval-speech-style": {
+      "get": {
+        "tags": [
+          "approval_speech_style"
+        ],
+        "summary": "How waiting approval cards are read aloud for the caller.",
+        "operationId": "approval_speech_style",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalSpeechStyleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/budget": {
       "get": {
         "tags": [
@@ -5903,6 +5932,14 @@
           }
         }
       },
+      "ApprovalSpeechAmount": {
+        "type": "string",
+        "description": "How much a spoken card says.",
+        "enum": [
+          "full",
+          "short"
+        ]
+      },
       "ApprovalSpeechRequest": {
         "type": "object",
         "description": "What a client says about the approval it shows.",
@@ -5918,6 +5955,59 @@
             "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
+      },
+      "ApprovalSpeechStyleResponse": {
+        "type": "object",
+        "required": [
+          "amount",
+          "short_details",
+          "wording",
+          "source",
+          "user_choice"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "short_details": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Details a short reading says before it holds back the rest.",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/ApprovalSpeechStyleSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own amount and wording."
+          },
+          "wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording"
+          }
+        }
+      },
+      "ApprovalSpeechStyleSource": {
+        "type": "string",
+        "description": "Where the caller's reading style comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "ApprovalSpeechWording": {
+        "type": "string",
+        "description": "How a spoken card is worded.",
+        "enum": [
+          "precise",
+          "natural"
+        ]
       },
       "ApprovalVoiceCommand": {
         "type": "object",
@@ -15377,6 +15467,22 @@
               "type": "string"
             }
           },
+          "sentences": {
+            "type": "object",
+            "description": "A field's own natural sentence variants, by sentence type (`changed`,\n`set`, `updated`) and then by field, keyed like `fields`.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
           "tables": {
             "type": "object",
             "description": "What the records of a table are called, in the plural.",
@@ -15957,6 +16063,20 @@
               }
             ]
           },
+          "preference_approval_speech_amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How much approval cards say aloud: `full` or `short`. Explicit\n`null` follows the organisation again. Kept even where the user may\nnot choose, and then not used."
+          },
+          "preference_approval_speech_wording": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How approval cards are worded aloud: `precise` or `natural`, like the\namount."
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -16099,6 +16219,14 @@
           "picture": {
             "type": "string",
             "description": "The user's profile picture URL."
+          },
+          "preference_approval_speech_amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount",
+            "description": "How much approval cards say aloud, as the user chose; absent follows\nthe organisation."
+          },
+          "preference_approval_speech_wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording",
+            "description": "How approval cards are worded aloud, as the user chose; absent\nfollows the organisation."
           },
           "preference_assistant_additional_information": {
             "type": "string",

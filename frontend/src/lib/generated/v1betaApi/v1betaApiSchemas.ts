@@ -236,6 +236,11 @@ export type ApprovalScopeLineage = {
 };
 
 /**
+ * How much a spoken card says.
+ */
+export type ApprovalSpeechAmount = "full" | "short";
+
+/**
  * What a client says about the approval it shows.
  */
 export type ApprovalSpeechRequest = {
@@ -246,6 +251,37 @@ export type ApprovalSpeechRequest = {
    */
   pieces: string[];
 };
+
+export type ApprovalSpeechStyleResponse = {
+  amount: ApprovalSpeechAmount;
+  /**
+   * The audience whose value applies, by its display name.
+   */
+  audience?: string;
+  /**
+   * Details a short reading says before it holds back the rest.
+   *
+   * @format int32
+   * @minimum 0
+   */
+  short_details: number;
+  source: ApprovalSpeechStyleSource;
+  /**
+   * Whether the caller may choose their own amount and wording.
+   */
+  user_choice: boolean;
+  wording: ApprovalSpeechWording;
+};
+
+/**
+ * Where the caller's reading style comes from.
+ */
+export type ApprovalSpeechStyleSource = "deployment" | "audience" | "user";
+
+/**
+ * How a spoken card is worded.
+ */
+export type ApprovalSpeechWording = "precise" | "natural";
 
 export type ApprovalVoiceCommand = {
   meaning: ApprovalVoiceMeaning;
@@ -5553,6 +5589,15 @@ export type ToolCallSpokenNames = {
     [key: string]: string;
   };
   /**
+   * A field's own natural sentence variants, by sentence type (`changed`,
+   * `set`, `updated`) and then by field, keyed like `fields`.
+   */
+  sentences?: {
+    [key: string]: {
+      [key: string]: string;
+    };
+  };
+  /**
    * What the records of a table are called, in the plural.
    */
   tables?: {
@@ -5905,6 +5950,17 @@ export type UpdateProfilePreferencesRequest = {
   };
   client_tool_file_approval?: null | ClientToolFileApproval;
   /**
+   * How much approval cards say aloud: `full` or `short`. Explicit
+   * `null` follows the organisation again. Kept even where the user may
+   * not choose, and then not used.
+   */
+  preference_approval_speech_amount?: null | undefined;
+  /**
+   * How approval cards are worded aloud: `precise` or `natural`, like the
+   * amount.
+   */
+  preference_approval_speech_wording?: null | undefined;
+  /**
    * Additional contextual information about the user for the assistant.
    */
   preference_assistant_additional_information?: string | null | undefined;
@@ -6016,6 +6072,8 @@ export type UserProfile = {
    * The user's profile picture URL.
    */
   picture?: string;
+  preference_approval_speech_amount?: ApprovalSpeechAmount;
+  preference_approval_speech_wording?: ApprovalSpeechWording;
   /**
    * Additional contextual information about the user for the assistant.
    */

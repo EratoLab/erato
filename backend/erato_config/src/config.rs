@@ -15,7 +15,10 @@ use std::ops::Deref;
 use utoipa::ToSchema;
 
 use crate::config_facet_attrs as erato_config;
-pub use crate::spoken::{SpokenNamesConfig, SpokenVocabulariesConfig};
+pub use crate::spoken::{
+    ApprovalSpeechAmount, ApprovalSpeechConfig, ApprovalSpeechWording, MAX_SHORT_DETAILS,
+    SpokenNamesConfig, SpokenVocabulariesConfig,
+};
 use crate::startup_log;
 
 /// Name reserved for the synthetic client-action tool exposed by the backend.
@@ -988,6 +991,13 @@ pub struct AppConfig {
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub turn_instructions: TurnInstructionsConfig,
 
+    /// How much a waiting approval card says aloud and how it is worded, in
+    /// conversational audio mode. No model is involved.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    #[facet(erato_config::stability(level = "alpha"))]
+    pub approval_speech: ApprovalSpeechConfig,
+
     /// Words people say for a kind of server's machine names, by vocabulary
     /// name and language tag, for approval cards read aloud. A server uses a
     /// vocabulary through `glossary.vocabularies`.
@@ -1724,6 +1734,9 @@ impl AppConfig {
 
         warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
+        for dropped in config.approval_speech.drop_unusable() {
+            tracing::warn!("Approval speech setting dropped: {dropped}.");
+        }
 
         if let Err(e) = config.validate_approval_change_requests() {
             panic!("Invalid approval change requests configuration: {}", e);

@@ -682,6 +682,10 @@ pub struct ToolCallSpokenNames {
     /// What the records of a table are called, in the plural.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub tables: BTreeMap<String, String>,
+    /// A field's own natural sentence variants, by sentence type (`changed`,
+    /// `set`, `updated`) and then by field, keyed like `fields`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sentences: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 /// A call that only reads, by the rules alone and only where every check a

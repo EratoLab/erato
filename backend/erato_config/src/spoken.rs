@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
@@ -37,6 +38,13 @@ pub struct SpokenNamesConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub table_names: HashMap<String, String>,
+    /// One field's own natural sentence variants, by sentence type
+    /// (`changed`, `set`, `updated`) and then by the field's exact name (or
+    /// `table.field`), such as `"Der Abschluss rückt {from} {to}."`. Used
+    /// when the card is read in the natural wording.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sentences: HashMap<String, HashMap<String, String>>,
 }
 
 /// `[spoken_vocabularies.<name>.<language>]`: named so that a content package
@@ -44,7 +52,71 @@ pub struct SpokenNamesConfig {
 /// server ids. A server uses them through `glossary.vocabularies`.
 pub type SpokenVocabulariesConfig = HashMap<String, HashMap<String, SpokenNamesConfig>>;
 
-const SPOKEN_NAMES_SETTINGS: &[&str] = &["field_names", "choice_labels", "table_names"];
+const SPOKEN_NAMES_SETTINGS: &[&str] =
+    &["field_names", "choice_labels", "table_names", "sentences"];
+
+/// Sentence types with a natural variant: the slots each must hold, and
+/// whether their order carries meaning (old before new).
+const SENTENCE_TYPES: &[(&str, &[&str], bool)] = &[
+    ("changed", &["field", "from", "to"], true),
+    ("set", &["field", "value"], true),
+    ("updated", &["field", "value"], true),
+    ("what", &["source", "thing", "destination", "clause"], false),
+];
+/// Field-specific variants exist for these types only.
+const FIELD_SENTENCE_TYPES: &[&str] = &["changed", "set", "updated"];
+const MAX_VARIANT_CHARS: usize = 300;
+
+/// Whether `template` may stand for the sentence `key` (`changed`, `set`,
+/// `updated`, `what.<action>`): every required slot exactly once, no other
+/// slot, and the precise order where order carries meaning. A variant for
+/// one field may leave out `{field}`. The web app checks the same again.
+pub fn usable_variant(key: &str, template: &str, for_one_field: bool) -> bool {
+    let kind = key.split('.').next().unwrap_or(key);
+    let Some((_, slots, ordered)) = SENTENCE_TYPES.iter().find(|(name, _, _)| *name == kind) else {
+        return false;
+    };
+    if template.trim().is_empty()
+        || template.chars().count() > MAX_VARIANT_CHARS
+        || template.chars().any(char::is_control)
+        || has_hidden_chars(template)
+    {
+        return false;
+    }
+    let mut found = Vec::new();
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let after = &rest[open + 1..];
+        let Some(close) = after.find('}') else {
+            return false;
+        };
+        found.push(&after[..close]);
+        rest = &after[close + 1..];
+    }
+    if found.iter().any(|slot| !slots.contains(slot)) {
+        return false;
+    }
+    let mut unique = found.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    if unique.len() != found.len() {
+        return false;
+    }
+    let required = slots
+        .iter()
+        .filter(|slot| !(for_one_field && **slot == "field"));
+    if required.clone().any(|slot| !found.contains(slot)) {
+        return false;
+    }
+    if !ordered {
+        return true;
+    }
+    let order: Vec<usize> = found
+        .iter()
+        .map(|slot| slots.iter().position(|known| known == slot).unwrap_or(0))
+        .collect();
+    order.windows(2).all(|pair| pair[0] < pair[1])
+}
 
 /// A language tag as the voice uses it: `de`, `en`, `pt-br`.
 pub fn is_language_tag(tag: &str) -> bool {
@@ -73,6 +145,7 @@ impl SpokenNamesConfig {
         self.field_names.len()
             + self.table_names.len()
             + self.choice_labels.values().map(HashMap::len).sum::<usize>()
+            + self.sentences.values().map(HashMap::len).sum::<usize>()
     }
 
     /// Removes the entries the voice cannot say and names each one: blank,
@@ -102,6 +175,23 @@ impl SpokenNamesConfig {
                 keep
             });
         }
+        self.sentences.retain(|kind, variants| {
+            if !FIELD_SENTENCE_TYPES.contains(&kind.as_str()) {
+                dropped.push(format!("{place}.sentences: '{}' is ignored", shown(kind)));
+                return false;
+            }
+            variants.retain(|key, template| {
+                let keep = usable(key, MAX_ENTRY_BYTES) && usable_variant(kind, template, true);
+                if !keep {
+                    dropped.push(format!(
+                        "{place}.sentences.{kind}: '{}' is ignored",
+                        shown(key)
+                    ));
+                }
+                keep
+            });
+            true
+        });
         self.choice_labels.retain(|field, labels| {
             if !usable(field, MAX_ENTRY_BYTES) {
                 dropped.push(format!(
@@ -156,6 +246,123 @@ pub fn drop_unusable_spoken_entries(vocabularies: &mut SpokenVocabulariesConfig)
     dropped
 }
 
+/// How much a spoken card says.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet, HeapSize, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ApprovalSpeechAmount {
+    /// What the card says today: losses, up to three details, the rest
+    /// counted.
+    #[default]
+    Full,
+    /// Only the first `short_details` details in the card's own order; the
+    /// rest is held back, counted, and said when the user asks for it.
+    Short,
+}
+
+/// How a spoken card is worded.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet, HeapSize, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ApprovalSpeechWording {
+    /// Every spoken field named, old and new value both said.
+    #[default]
+    Precise,
+    /// Hand-written sentence variants with the values in fixed slots.
+    Natural,
+}
+
+/// `[approval_speech]`: how a waiting approval card is read aloud in
+/// conversational audio mode. No model is involved: both settings choose
+/// among sentences built by rule. Must-say pieces (losses, the outside
+/// warning, a delete's subject, the consequence) and the request are said
+/// in every combination, in their precise words.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ApprovalSpeechConfig {
+    /// The deployment's amount: `full` or `short`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub amount: ApprovalSpeechAmount,
+    /// Details a short reading says before it holds back the rest, 0 to 3.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub short_details: u8,
+    /// The deployment's wording: `precise` or `natural`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub wording: ApprovalSpeechWording,
+    /// Whether a user may choose their own amount and wording, unless a
+    /// supervisor's audience setting says otherwise.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub user_choice: bool,
+    /// Per language tag, natural sentence variants by sentence type
+    /// (`changed`, `set`, `updated`, `what.<action>`), replacing the built-in
+    /// ones. A variant without exactly its slots is ignored with a warning.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sentences: HashMap<String, HashMap<String, String>>,
+}
+
+pub const MAX_SHORT_DETAILS: u8 = 3;
+
+impl Default for ApprovalSpeechConfig {
+    fn default() -> Self {
+        Self {
+            amount: ApprovalSpeechAmount::Full,
+            short_details: 1,
+            wording: ApprovalSpeechWording::Precise,
+            user_choice: true,
+            sentences: HashMap::new(),
+        }
+    }
+}
+
+impl ApprovalSpeechConfig {
+    /// Clamps what is out of range and removes the variants that cannot be
+    /// used, naming each for a warning.
+    pub fn drop_unusable(&mut self) -> Vec<String> {
+        let mut dropped = Vec::new();
+        if self.short_details > MAX_SHORT_DETAILS {
+            dropped.push(format!(
+                "approval_speech.short_details {} is more than {MAX_SHORT_DETAILS}; {MAX_SHORT_DETAILS} is used",
+                self.short_details
+            ));
+            self.short_details = MAX_SHORT_DETAILS;
+        }
+        self.sentences.retain(|language, variants| {
+            if !is_language_tag(language) {
+                dropped.push(format!(
+                    "approval_speech.sentences: '{}' is not a lowercase language tag and is ignored",
+                    shown(language)
+                ));
+                return false;
+            }
+            variants.retain(|key, template| {
+                let keep = usable_variant(key, template, false);
+                if !keep {
+                    dropped.push(format!(
+                        "approval_speech.sentences.{language}: '{}' is ignored",
+                        shown(key)
+                    ));
+                }
+                keep
+            });
+            true
+        });
+        dropped.sort();
+        dropped
+    }
+}
+
+const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
+    "amount",
+    "short_details",
+    "wording",
+    "user_choice",
+    "sentences",
+];
+
 /// The vocabularies a server names that no source defines. Warned about, not
 /// rejected: the content package that defines them may not be applied.
 pub fn missing_vocabularies<'a>(
@@ -179,6 +386,14 @@ pub fn missing_vocabularies<'a>(
 /// content package may be newer than the backend.
 pub fn unknown_spoken_keys(schema: &Config) -> Vec<String> {
     let mut unknown = Vec::new();
+    if let Ok(settings) = schema.get_table("approval_speech") {
+        unknown.extend(
+            settings
+                .into_keys()
+                .filter(|key| !APPROVAL_SPEECH_SETTINGS.contains(&key.as_str()))
+                .map(|key| format!("approval_speech.{key}")),
+        );
+    }
     if let Ok(vocabularies) = schema.get_table("spoken_vocabularies") {
         for (name, languages) in vocabularies {
             let Ok(languages) = languages.into_table() else {
@@ -282,6 +497,77 @@ mod tests {
                 .field_names
                 .contains_key("a")
         );
+    }
+
+    #[test]
+    fn a_variant_holds_exactly_its_slots_in_the_precise_order() {
+        assert!(usable_variant(
+            "changed",
+            "{field} ändert sich {from} {to}.",
+            false
+        ));
+        assert!(usable_variant(
+            "changed",
+            "Der Abschluss rückt {from} {to}.",
+            true
+        ));
+        assert!(!usable_variant(
+            "changed",
+            "Der Abschluss rückt {from} {to}.",
+            false
+        ));
+        // Old and new swapped, a slot twice or missing, an unknown slot.
+        assert!(!usable_variant(
+            "changed",
+            "{field}: {to} statt {from}.",
+            false
+        ));
+        assert!(!usable_variant(
+            "changed",
+            "{field} {from} {from} {to}",
+            false
+        ));
+        assert!(!usable_variant("set", "{field} ist gesetzt.", false));
+        assert!(!usable_variant(
+            "set",
+            "{field} ist {value} für {recipient}.",
+            false
+        ));
+        assert!(!usable_variant("delete", "{field}", false));
+        // The opening's parts are of different kinds and may move.
+        assert!(usable_variant(
+            "what.create",
+            "Als Nächstes {source} {thing} {destination} anlegen{clause}",
+            false
+        ));
+        assert!(!usable_variant(
+            "what.create",
+            "Als Nächstes {thing} anlegen",
+            false
+        ));
+    }
+
+    #[test]
+    fn unusable_variants_are_dropped_with_a_warning() {
+        let mut config = ApprovalSpeechConfig {
+            short_details: 9,
+            sentences: HashMap::from([(
+                "de".to_string(),
+                HashMap::from([
+                    (
+                        "changed".to_string(),
+                        "{field} geht {from} {to}.".to_string(),
+                    ),
+                    ("set".to_string(), "{value} ist {field}.".to_string()),
+                ]),
+            )]),
+            ..ApprovalSpeechConfig::default()
+        };
+        let dropped = config.drop_unusable();
+        assert_eq!(dropped.len(), 2, "{dropped:?}");
+        assert_eq!(config.short_details, MAX_SHORT_DETAILS);
+        assert!(config.sentences["de"].contains_key("changed"));
+        assert!(!config.sentences["de"].contains_key("set"));
     }
 
     #[test]

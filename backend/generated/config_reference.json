@@ -161,6 +161,36 @@
     "security_relevance": "unknown",
     "stability": "alpha"
   },
+  "approval_speech.amount": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_speech.sentences.<key>.<key>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_speech.short_details": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_speech.user_choice": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
+  "approval_speech.wording": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "alpha"
+  },
   "approval_voice_commands.chat_provider_id": {
     "default_value_security": "more_secure",
     "introduced_in": "unreleased",
@@ -4864,6 +4894,12 @@
     "stability": "unstable"
   },
   "spoken_vocabularies.<key>.<key>.field_names.<key>": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
+  "spoken_vocabularies.<key>.<key>.sentences.<key>.<key>": {
     "default_value_security": "unknown",
     "introduced_in": "unreleased",
     "security_relevance": "unknown",
