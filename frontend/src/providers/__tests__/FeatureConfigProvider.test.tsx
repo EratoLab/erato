@@ -199,6 +199,7 @@ describe("FeatureConfigProvider", () => {
           voiceCommandsEnabled: false,
           enabled: false,
           maxRecordingDurationSeconds: 1200,
+          talkOverVoice: false,
         },
         chatSharing: {
           enabled: false,
@@ -867,6 +868,7 @@ describe("FeatureConfigProvider", () => {
         voiceCommandsEnabled: false,
         enabled: false,
         maxRecordingDurationSeconds: 1200,
+        talkOverVoice: false,
       });
     });
 
@@ -875,6 +877,8 @@ describe("FeatureConfigProvider", () => {
         audioConversationalEnabled: true,
         audioConversationalMaxRecordingDurationSeconds: 600,
         approvalVoiceCommandsEnabled: true,
+        audioConversationalTalkOverVoice: true,
+        audioConversationalTalkOverVoiceMinSpeechMs: 700,
       });
 
       const { result } = renderHook(() => useAudioConversationalFeature(), {
@@ -886,6 +890,8 @@ describe("FeatureConfigProvider", () => {
         voiceCommandsEnabled: true,
         enabled: true,
         maxRecordingDurationSeconds: 600,
+        talkOverVoice: true,
+        talkOverVoiceMinSpeechMs: 700,
       });
     });
   });

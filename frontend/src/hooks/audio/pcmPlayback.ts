@@ -15,6 +15,29 @@ export function playbackContext(): AudioContext | undefined {
   return context;
 }
 
+/** About 10 dB down: still audible, clearly giving way. */
+const LOWERED_VOICE_GAIN = 0.3;
+let output: GainNode | undefined;
+
+/** Where every voice plays, so that talking over it can lower it. */
+function voiceOutput(context: AudioContext): GainNode {
+  if (output?.context !== context) {
+    output = context.createGain();
+    output.connect(context.destination);
+  }
+  return output;
+}
+
+/** Lowers the voice while the user may be starting to talk over it. */
+export function lowerVoice(lowered: boolean) {
+  if (!output) return;
+  output.gain.setTargetAtTime(
+    lowered ? LOWERED_VOICE_GAIN : 1,
+    output.context.currentTime,
+    0.03,
+  );
+}
+
 export interface PcmQueue {
   /**
    * Schedules one chunk of base64 signed 16-bit little-endian mono PCM right
@@ -52,7 +75,7 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
         samples[i] = view.getInt16(i * 2, true) / 32768;
       const source = context.createBufferSource();
       source.buffer = buffer;
-      source.connect(context.destination);
+      source.connect(voiceOutput(context));
       const start = Math.max(context.currentTime + 0.03, nextTime);
       nextTime = start + buffer.duration;
       sources.add(source);

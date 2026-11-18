@@ -18,12 +18,14 @@ import {
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
+import { talkOverApprovalCard } from "@/hooks/audio/approvalListening";
 import {
   replayApprovalCard,
   skipApprovalPiece,
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
+import { lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
@@ -561,6 +563,8 @@ export const ChatInput = ({
     voiceCommandsEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
     endOfTurnSilenceMs,
+    talkOverVoice,
+    talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
   useEffect(() => {
@@ -732,6 +736,37 @@ export const ChatInput = ({
     setAttachedFiles,
   });
 
+  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
+  const onlyWaitingConfirmations = useOnlyWaitingConfirmations(chatId);
+  // A card asks the user something. Conversational mode then keeps the
+  // microphone closed: words spoken now would be sent as a new message and
+  // take the turn away from the card.
+  const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
+  const cardSpeaking = useApprovalSpeech((state) => state.speaking);
+  // Talking over the voice: the microphone may open while the voice speaks
+  // (or a spoken reply is still coming) and waits there for confirmed speech.
+  // Over a waiting card only the voice itself counts, so the card's own
+  // listening transcribes again as soon as the voice is quiet.
+  const overVoiceAllowed =
+    isAudioMode &&
+    Boolean(talkOverVoice) &&
+    Boolean(speechEnabled) &&
+    speech.enabled;
+  const overVoiceSpeaking =
+    overVoiceAllowed &&
+    (speech.playing || cardSpeaking || (isPendingResponse && !decisionWaiting));
+  const handleSpeechOverVoice = useCallback(() => {
+    if (dictationTargetRef.current?.card) {
+      stopSpeechPlayback();
+      const { key } = useApprovalSpeech.getState();
+      if (key !== null) talkOverApprovalCard(key);
+      return;
+    }
+    // As the stop control: quiet for the rest of the turn, its text stays.
+    quietSpokenTurn();
+    stopApprovalSpeech();
+  }, []);
+
   const appendDictationTranscript = useCallback(
     ({ chunkIndex, transcript }: AudioDictationTranscriptChunk) => {
       const target = dictationTargetRef.current;
@@ -794,6 +829,7 @@ export const ChatInput = ({
     dictationError,
     setDictationError,
     dictationBars,
+    isListeningOverVoice,
     toggleDictation,
   } = useAudioDictationRecorder({
     enabled: audioDictationEnabled || audioConversationalEnabled,
@@ -805,10 +841,16 @@ export const ChatInput = ({
     vadAutoStopEnabled: audioConversationalEnabled && isAudioMode,
     onVadAutoStop: handleConversationVadAutoStop,
     endOfTurnSilenceMs,
+    voiceSpeaking: overVoiceSpeaking,
+    overVoiceMinSpeechMs: talkOverVoiceMinSpeechMs,
+    onSpeechOverVoice: handleSpeechOverVoice,
+    onVoiceLowered: lowerVoice,
   });
 
   const ownsAudio =
     isAudioMode || isDictating || isDictationStarting || isRecording;
+  const showsListening =
+    (isCapturingAudio && isDictating) || isListeningOverVoice;
   useEffect(() => {
     if (!ownsAudio) return;
     setReadAloudAudioModeActive(true);
@@ -935,13 +977,6 @@ export const ChatInput = ({
   const [queueReplacePending, setQueueReplacePending] = useState<
     false | { runMode?: DelegationRunMode }
   >(false);
-  const hasPendingConfirmation = useHasPendingConfirmation(chatId);
-  const onlyWaitingConfirmations = useOnlyWaitingConfirmations(chatId);
-  // A card asks the user something. Conversational mode then keeps the
-  // microphone closed: words spoken now would be sent as a new message and
-  // take the turn away from the card.
-  const decisionWaiting = hasPendingConfirmation && !onlyWaitingConfirmations;
-  const cardSpeaking = useApprovalSpeech((state) => state.speaking);
   const cardAvailable = useApprovalSpeech((state) => state.available !== null);
 
   const openCardListening = useCallback(() => {
@@ -964,6 +999,8 @@ export const ChatInput = ({
     [],
   );
   useApprovalCardListening({
+    overVoice: overVoiceAllowed,
+    recorderLive: isDictating,
     enabled:
       isAudioMode &&
       decisionWaiting &&
@@ -3003,10 +3040,10 @@ export const ChatInput = ({
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
+    // Over the voice the microphone opens right away and waits there.
     if (
       !isAudioMode ||
-      isPendingResponse ||
-      speech.playing ||
+      (!overVoiceAllowed && (isPendingResponse || speech.playing)) ||
       cardSpeaking ||
       changeAwaited ||
       decisionWaiting
@@ -3039,6 +3076,7 @@ export const ChatInput = ({
     attachedFiles.length,
     cardSpeaking,
     changeAwaited,
+    overVoiceAllowed,
     decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,
@@ -3775,7 +3813,7 @@ export const ChatInput = ({
               {isAudioMode &&
                 isPendingResponse &&
                 isConversationalAudioActive &&
-                (isCapturingAudio && isDictating ? (
+                (showsListening ? (
                   <WaveformButton
                     onClick={handleAudioModeButtonToggle}
                     bars={dictationBars}
@@ -3972,7 +4010,7 @@ export const ChatInput = ({
                     isRecording
                     recordingBars={dictationBars}
                     // Spinner until capture is live; waveform once real audio flows.
-                    isStarting={!isCapturingAudio || !isDictating}
+                    isStarting={!showsListening}
                     onToggle={handleAudioModeButtonToggle}
                     disabled={isAudioModeButtonDisabled}
                   />

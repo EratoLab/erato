@@ -83,6 +83,39 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
   });
 });
 
+describe("env audioConversationalTalkOverVoice", () => {
+  afterEach(() => {
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE;
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
+    vi.unstubAllEnvs();
+  });
+
+  it("is off by default, with no minimum of its own", () => {
+    expect(env().audioConversationalTalkOverVoice).toBe(false);
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBeUndefined();
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE = value;
+      expect(env().audioConversationalTalkOverVoice).toBe(value);
+      vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE", String(!value));
+      expect(env().audioConversationalTalkOverVoice).toBe(!value);
+    },
+  );
+
+  it("reads the minimum speech and prefers the Vite override", () => {
+    window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS = 700;
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(700);
+    vi.stubEnv(
+      "VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS",
+      "300",
+    );
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(300);
+  });
+});
+
 describe("env faviconPath", () => {
   afterEach(() => {
     delete window.FAVICON_PATH;

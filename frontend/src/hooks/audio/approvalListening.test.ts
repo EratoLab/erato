@@ -499,6 +499,13 @@ class MockAudioContext {
       getChannelData: () => new Float32Array(length),
     };
   }
+  createGain() {
+    return {
+      context: this,
+      gain: { value: 1, setTargetAtTime: vi.fn() },
+      connect: vi.fn(),
+    };
+  }
   createBufferSource() {
     const source = {
       connect: vi.fn(),
@@ -1100,5 +1107,217 @@ describe("listening against the endpoint", () => {
     const { heardApprovalWords } = await heardCard();
     await heardApprovalWords("message-1:stop-0", "nochmal");
     expect(fetchCommand).not.toHaveBeenCalled();
+  });
+
+  describe("talking over the voice", () => {
+    const DELETE = expected["delete-01-task-created-earlier"].de[0];
+    const CONSEQUENCE = DELETE.findIndex(
+      (piece) => piece.role === "consequence",
+    );
+    const TEXT = CARD.findIndex(namesLongText);
+
+    /**
+     * The voice is in the middle of piece `at`: the pieces before it were
+     * heard, and the card's audio has arrived only up to that piece.
+     */
+    async function talkedOverAt(pieces: SpokenPiece[], at: number) {
+      const speech = await import("./approvalSpeech");
+      const listening = await import("./approvalListening");
+      const { useSpeechPlayback } = await import("./speechPlayback");
+      useSpeechPlayback.setState({ conversational: true, enabled: true });
+      speech.speakApprovalCard({
+        key: KEY,
+        messageId: "message-1",
+        pieces,
+        language: "de",
+        approval: { type: "pointer" },
+      });
+      await vi.waitFor(() => expect(connections).toHaveLength(1));
+      for (let index = 0; index <= at; index += 1) {
+        audio(connections[0], index);
+        if (index < at) playOut();
+      }
+      expect(speech.useApprovalSpeech.getState().current).toBe(at);
+      listening.talkOverApprovalCard(KEY);
+      return { ...speech, ...listening, useSpeechPlayback };
+    }
+
+    const answer = (meaning: string, piece_id: string | null = null) =>
+      fetchCommand.mockResolvedValue({ meaning, piece_id, source: "model" });
+
+    it("cuts the piece being said short and stops the voice; the card keeps waiting", async () => {
+      const { useApprovalSpeech, spokenApprovalCardNow } = await talkedOverAt(
+        CARD,
+        TEXT,
+      );
+      const state = useApprovalSpeech.getState();
+      expect(state.speaking).toBe(false);
+      expect(state.closed).toBe(false);
+      expect(state.pieces.map((piece) => piece.state)).toEqual([
+        "heard",
+        "cut",
+        "pending",
+      ]);
+      expect(spokenApprovalCardNow()?.flow.heard[TEXT]).toBe(false);
+    });
+
+    it("sends the cut piece as cut short with the words, and says only what is left", async () => {
+      const { heardApprovalWords } = await talkedOverAt(CARD, TEXT);
+      answer("rest");
+      await heardApprovalWords(KEY, "hab ich, was noch?");
+      const [variables] = fetchCommand.mock.calls[0] as [
+        { body: { pieces: { state: string }[]; current_piece_id: string } },
+      ];
+      expect(variables.body.pieces.map((piece) => piece.state)).toEqual([
+        "heard",
+        "cut_short",
+        "not_said",
+      ]);
+      expect(variables.body.current_piece_id).toBe(CARD[TEXT].id);
+      expect(sentences(connections.at(-1) as Connection)).toEqual([
+        "Das war alles.",
+      ]);
+    });
+
+    it("a must-say piece cut over the voice stays owed: skipping says it before the request", async () => {
+      const { heardApprovalWords, spokenApprovalCardNow, useApprovalSpeech } =
+        await talkedOverAt(DELETE, CONSEQUENCE);
+      expect(spokenApprovalCardNow()?.flow.owed).toEqual([CONSEQUENCE]);
+      answer("skip");
+      await heardApprovalWords(KEY, "weiter");
+      expect(useApprovalSpeech.getState().current).toBe(CONSEQUENCE);
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+    });
+
+    it("reads the long text when asked over the voice", async () => {
+      const { heardApprovalWords } = await talkedOverAt(CARD, 0);
+      answer("read_text");
+      await heardApprovalWords(KEY, "lies den Text vor");
+      expect(sentences(connections.at(-1) as Connection).join(" ")).toContain(
+        CARD[TEXT].readOut?.text.slice(0, 40) ?? "",
+      );
+    });
+
+    it("'stopp' over the voice: the voice stays quiet and the card stops listening", async () => {
+      const { heardApprovalWords, useApprovalListening, useApprovalSpeech } =
+        await talkedOverAt(CARD, TEXT);
+      answer("stop");
+      await heardApprovalWords(KEY, "stopp");
+      expect(useApprovalSpeech.getState().speaking).toBe(false);
+      expect(useApprovalListening.getState().quiet).toBe(KEY);
+      expect(connections).toHaveLength(1);
+    });
+
+    it.each(["approve", "reject"] as const)(
+      "%s over the voice only says that deciding is on screen",
+      async (meaning) => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+        const { heardApprovalWords, useApprovalSpeech } = await talkedOverAt(
+          DELETE,
+          CONSEQUENCE,
+        );
+        answer(meaning);
+        await heardApprovalWords(KEY, meaning === "approve" ? "ja" : "nein");
+        expect(sentences(connections.at(-1) as Connection)[0]).toMatch(
+          /nur auf dem Bildschirm/,
+        );
+        expect(useApprovalSpeech.getState().closed).toBe(false);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        fetchSpy.mockRestore();
+      },
+    );
+
+    it("a sound with no meaning ('mhm') goes on with the cut piece from its start", async () => {
+      const { heardApprovalWords, useApprovalSpeech } = await talkedOverAt(
+        CARD,
+        TEXT,
+      );
+      answer("noise");
+      await heardApprovalWords(KEY, "mhm");
+      expect(useApprovalSpeech.getState().current).toBe(TEXT);
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+    });
+
+    it("no words at all (a cough) go on with the cut piece from its start", async () => {
+      const { resumeTalkedOverCard, useApprovalSpeech } = await talkedOverAt(
+        DELETE,
+        CONSEQUENCE,
+      );
+      resumeTalkedOverCard(KEY);
+      expect(fetchCommand).not.toHaveBeenCalled();
+      expect(useApprovalSpeech.getState().current).toBe(CONSEQUENCE);
+      expect(useApprovalSpeech.getState().speaking).toBe(true);
+    });
+
+    it("noise without talking over the voice still changes nothing", async () => {
+      const { heardApprovalWords, resumeTalkedOverCard, useApprovalSpeech } =
+        await heardCard();
+      answer("noise");
+      await heardApprovalWords(KEY, "mhm");
+      resumeTalkedOverCard(KEY);
+      expect(useApprovalSpeech.getState().speaking).toBe(false);
+      expect(connections).toHaveLength(1);
+    });
+
+    it("review 2: the card's stream breaking after the cut says nothing", async () => {
+      const { useApprovalSpeech, useSpeechPlayback } = await talkedOverAt(
+        CARD,
+        0,
+      );
+      connections[0].options.onError?.(new Error("network"));
+      connections[0].options.onClose?.();
+      expect(useApprovalSpeech.getState()).toMatchObject({
+        speaking: false,
+        failed: false,
+      });
+      expect(useSpeechPlayback.getState().failed).toBe(false);
+      expect(connections).toHaveLength(1);
+    });
+
+    it("review 3: a late answer does not steer a reading restarted by tap", async () => {
+      const { heardApprovalWords, replayApprovalCard, useApprovalSpeech } =
+        await talkedOverAt(CARD, TEXT);
+      let reply: (value: unknown) => void = () => {};
+      fetchCommand.mockReturnValue(
+        new Promise((resolve) => {
+          reply = resolve;
+        }),
+      );
+      const heard = heardApprovalWords(KEY, "mhm");
+      replayApprovalCard();
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      reply({ meaning: "noise", piece_id: null, source: "model" });
+      await heard;
+      expect(useApprovalSpeech.getState().current).toBe(0);
+      expect(connections).toHaveLength(2);
+    });
+
+    it("a reading restarted by tap is not resumed at the old cut", async () => {
+      const { replayApprovalCard, resumeTalkedOverCard, useApprovalSpeech } =
+        await talkedOverAt(CARD, TEXT);
+      replayApprovalCard();
+      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      resumeTalkedOverCard(KEY);
+      expect(useApprovalSpeech.getState().current).toBe(0);
+    });
+
+    it("talking over a card that has since closed does nothing", async () => {
+      const speech = await import("./approvalSpeech");
+      const { talkOverApprovalCard } = await import("./approvalListening");
+      const { useSpeechPlayback } = await import("./speechPlayback");
+      useSpeechPlayback.setState({ conversational: true, enabled: true });
+      speech.speakApprovalCard({
+        key: KEY,
+        messageId: "message-1",
+        pieces: CARD,
+        language: "de",
+      });
+      await vi.waitFor(() => expect(connections).toHaveLength(1));
+      speech.forgetApprovalCards([KEY]);
+      talkOverApprovalCard(KEY);
+      expect(speech.useApprovalSpeech.getState().closed).toBe(true);
+      talkOverApprovalCard("message-1:other");
+      expect(speech.useApprovalSpeech.getState().speaking).toBe(false);
+    });
   });
 });

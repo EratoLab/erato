@@ -44,6 +44,11 @@ import {
   createSpeechOnsetController,
   type SpeechOnsetController,
 } from "./onsetFlipController";
+import {
+  overVoiceGate,
+  overVoiceStep,
+  type OverVoiceGate,
+} from "./talkOverVoice";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
 import { useMediaStreamTrackWatchdog } from "./useMediaStreamTrackWatchdog";
 
@@ -61,6 +66,19 @@ export const DEFAULT_END_OF_TURN_SILENCE_MS = 1800;
 // Same range the backend accepts; anything else falls back to the default.
 const MIN_END_OF_TURN_SILENCE_MS = 500;
 const MAX_END_OF_TURN_SILENCE_MS = 5000;
+
+/**
+ * Audio kept while the microphone listens over the voice: enough for the
+ * start of the words that stop it, including the detector's own lead-in.
+ */
+const HELD_AUDIO_MS = 1500;
+
+type OverVoiceHold = {
+  released: "speech" | "voice_ended" | null;
+  gate: OverVoiceGate;
+  lowered: boolean;
+  waiter?: (reason: "speech" | "voice_ended") => void;
+};
 
 export function resolveEndOfTurnSilenceMs(value: number | undefined): number {
   return typeof value === "number" &&
@@ -97,6 +115,18 @@ type UseAudioDictationRecorderOptions = {
   onVadAutoStop?: () => void;
   /** Silence in milliseconds after which the VAD ends the turn. */
   endOfTurnSilenceMs?: number;
+  /**
+   * The voice speaks. A conversational recording started now listens over
+   * it: nothing is sent for transcription and no turn ends until speech
+   * over the voice is confirmed, or the voice ends on its own.
+   */
+  voiceSpeaking?: boolean;
+  /** How long speech over the voice must last, in milliseconds. */
+  overVoiceMinSpeechMs?: number;
+  /** The user talks over the voice; the caller makes it yield. */
+  onSpeechOverVoice?: () => void;
+  /** Speech may be starting over the voice: lower it, or restore it. */
+  onVoiceLowered?: (lowered: boolean) => void;
 };
 
 /**
@@ -154,6 +184,10 @@ export function useAudioDictationRecorder({
   vadAutoStopEnabled = false,
   onVadAutoStop,
   endOfTurnSilenceMs,
+  voiceSpeaking = false,
+  overVoiceMinSpeechMs,
+  onSpeechOverVoice,
+  onVoiceLowered,
 }: UseAudioDictationRecorderOptions) {
   const [sessionStatus, dispatchSession] = useReducer(
     dictationSessionReducer,
@@ -188,6 +222,8 @@ export function useAudioDictationRecorder({
     useState<AudioDictationDiagnostics | null>(null);
   const [isVadListening, setIsVadListening] = useState(false);
   const [isVadSpeechActive, setIsVadSpeechActive] = useState(false);
+  /** The microphone is open over the voice and waits for speech. */
+  const [isListeningOverVoice, setIsListeningOverVoice] = useState(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const liveSessionRef = useRef<LiveAudioDictationSession | null>(null);
@@ -278,6 +314,12 @@ export function useAudioDictationRecorder({
   const vadEngineStartQueueRef = useRef<Promise<void>>(Promise.resolve());
   const vadAutoStopTriggeredRef = useRef(false);
   const onVadAutoStopRef = useRef(onVadAutoStop);
+  const voiceSpeakingRef = useRef(voiceSpeaking);
+  const overVoiceMinSpeechMsRef = useRef(overVoiceMinSpeechMs);
+  const onSpeechOverVoiceRef = useRef(onSpeechOverVoice);
+  const onVoiceLoweredRef = useRef(onVoiceLowered);
+  /** The current recording's wait over the voice, from its start. */
+  const holdRef = useRef<OverVoiceHold | null>(null);
   /**
    * `react-use`'s `useMountedState` returns a getter that's `true` while
    * the component is mounted and flips to `false` exactly once during
@@ -316,6 +358,28 @@ export function useAudioDictationRecorder({
   useEffect(() => {
     onVadAutoStopRef.current = onVadAutoStop;
   }, [onVadAutoStop]);
+
+  useEffect(() => {
+    overVoiceMinSpeechMsRef.current = overVoiceMinSpeechMs;
+    onSpeechOverVoiceRef.current = onSpeechOverVoice;
+    onVoiceLoweredRef.current = onVoiceLowered;
+  }, [onSpeechOverVoice, onVoiceLowered, overVoiceMinSpeechMs]);
+
+  const releaseHold = useCallback((reason: "speech" | "voice_ended") => {
+    const hold = holdRef.current;
+    if (!hold || hold.released) return;
+    hold.released = reason;
+    if (hold.lowered) {
+      hold.lowered = false;
+      onVoiceLoweredRef.current?.(false);
+    }
+    hold.waiter?.(reason);
+  }, []);
+
+  useEffect(() => {
+    voiceSpeakingRef.current = voiceSpeaking;
+    if (!voiceSpeaking) releaseHold("voice_ended");
+  }, [releaseHold, voiceSpeaking]);
 
   const clearRecordingDurationTimer = useCallback(() => {
     if (recordingDurationTimerRef.current !== null) {
@@ -778,6 +842,11 @@ export function useAudioDictationRecorder({
     dispatchSession({ type: "start" });
     const sessionAbort = new AbortController();
     sessionAbortRef.current = sessionAbort;
+    const hold: OverVoiceHold | null =
+      vadAutoStopEnabled && voiceSpeakingRef.current
+        ? { released: null, gate: overVoiceGate(), lowered: false }
+        : null;
+    holdRef.current = hold;
 
     const mediaDevices =
       typeof navigator === "undefined"
@@ -793,7 +862,9 @@ export function useAudioDictationRecorder({
     }
 
     const baseAudioConstraints: MediaTrackConstraints = {
-      echoCancellation: false,
+      // Over the voice, the browser's echo cancellation keeps the voice
+      // from hearing itself; otherwise the raw signal as before.
+      echoCancellation: hold !== null,
       noiseSuppression: false,
       autoGainControl: false,
       channelCount: { ideal: 1 },
@@ -854,6 +925,7 @@ export function useAudioDictationRecorder({
       // source of startup latency between getUserMedia and the first
       // sample reaching the worklet.
       let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
+      let primerSamples: number[] = [];
       const audioContext = await ensureAudioContextReady(
         trackSettings.sampleRate,
       );
@@ -889,7 +961,11 @@ export function useAudioDictationRecorder({
         const primer: number[] = [];
         primer.length = primerSampleCount;
         primer.fill(0);
-        preSessionSamplesRef.current = primer;
+        primerSamples = primer;
+        preSessionSamplesRef.current = [...primer];
+        const heldSampleCount = Math.floor(
+          (audioContext.sampleRate * HELD_AUDIO_MS) / 1000,
+        );
         // The worklet posts every render quantum, including zero-filled
         // OS warm-up frames — we want those in the stream sent to the
         // server too (it stays dumb; server-side prefix padding handles
@@ -935,6 +1011,13 @@ export function useAudioDictationRecorder({
             const preBuffer = preSessionSamplesRef.current;
             for (let index = 0; index < input.length; index += 1) {
               preBuffer.push(input[index]);
+            }
+            // Trimmed in batches: only the last moments over the voice count.
+            if (
+              holdRef.current?.released === null &&
+              preBuffer.length > 2 * heldSampleCount
+            ) {
+              preBuffer.splice(0, preBuffer.length - heldSampleCount);
             }
           }
           if (vadFrame && vadEngineRef.current) {
@@ -996,6 +1079,31 @@ export function useAudioDictationRecorder({
               stopVadEngine();
               return;
             }
+            const waiting = holdRef.current?.released === null;
+            if (event.type === "frame") {
+              const current = holdRef.current;
+              if (current?.released !== null) return;
+              const step = overVoiceStep(
+                current.gate,
+                event.probabilities.isSpeech,
+                (event.frame.samples.length / event.frame.sampleRate) * 1000,
+                overVoiceMinSpeechMsRef.current,
+              );
+              current.gate = step.gate;
+              if (step.confirmed) {
+                onSpeechOverVoiceRef.current?.();
+                releaseHold("speech");
+                return;
+              }
+              if (step.lowered !== current.lowered) {
+                current.lowered = step.lowered;
+                onVoiceLoweredRef.current?.(step.lowered);
+              }
+              return;
+            }
+            // Over the voice, only the gate above ends the wait: the voice's
+            // own sound or a short noise starts and ends no turn.
+            if (waiting) return;
             if (
               event.type === "speech_start" ||
               event.type === "speech_real_start"
@@ -1009,9 +1117,6 @@ export function useAudioDictationRecorder({
               if (isMounted()) {
                 setIsVadSpeechActive(false);
               }
-              return;
-            }
-            if (event.type !== "speech_end") {
               return;
             }
 
@@ -1069,6 +1174,23 @@ export function useAudioDictationRecorder({
             ? [2, 2, 6, 2, 2]
             : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
         );
+      }
+
+      if (hold) {
+        if (isMounted()) setIsListeningOverVoice(true);
+        const reason = await waitForHold(hold, sessionAbort.signal);
+        if (isMounted()) setIsListeningOverVoice(false);
+        if (reason === "voice_ended") {
+          // Only what the user says from now on is theirs; what was heard
+          // over the voice, and any speech the detector saw in it, is not.
+          preSessionSamplesRef.current = [...primerSamples];
+          vadEngineRef.current?.reset?.();
+        } else {
+          const preBuffer = preSessionSamplesRef.current;
+          const keep = Math.floor((sourceSampleRate * HELD_AUDIO_MS) / 1000);
+          if (preBuffer.length > keep)
+            preBuffer.splice(0, preBuffer.length - keep);
+        }
       }
 
       const liveSession = await startLiveDictationSession(
@@ -1129,6 +1251,14 @@ export function useAudioDictationRecorder({
       if (sessionAbortRef.current === sessionAbort) {
         sessionAbortRef.current = null;
       }
+      if (hold) {
+        if (hold.lowered) {
+          hold.lowered = false;
+          onVoiceLoweredRef.current?.(false);
+        }
+        if (holdRef.current === hold) holdRef.current = null;
+        if (isMounted()) setIsListeningOverVoice(false);
+      }
     }
   }, [
     clearRecordingDurationTimer,
@@ -1141,6 +1271,7 @@ export function useAudioDictationRecorder({
     isDictationStarting,
     isMounted,
     maxRecordingDurationSeconds,
+    releaseHold,
     selectedAudioInputDeviceId,
     setDictationBarsThrottled,
     startLiveDictationSession,
@@ -1208,6 +1339,31 @@ export function useAudioDictationRecorder({
     dictationDiagnostics,
     isVadListening,
     isVadSpeechActive,
+    isListeningOverVoice,
     toggleDictation,
   };
+}
+
+/** Resolves when the wait over the voice ends; rejects when the recording is cancelled. */
+function waitForHold(
+  hold: OverVoiceHold,
+  signal: AbortSignal,
+): Promise<"speech" | "voice_ended"> {
+  if (hold.released) return Promise.resolve(hold.released);
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      hold.waiter = undefined;
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    hold.waiter = (reason) => {
+      signal.removeEventListener("abort", abort);
+      hold.waiter = undefined;
+      resolve(reason);
+    };
+  });
 }
