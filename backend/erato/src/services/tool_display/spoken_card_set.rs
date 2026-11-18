@@ -248,6 +248,14 @@ fn a_nested_effect_is_never_named_from_the_outer_table() {
     // The opportunity's name is its title; the account's name and state 1
     // (Inactive, never the opportunity's Won) get no entry.
     assert!(create.get("spoken_names").is_none());
+    // Microsoft's deep insert through a collection: one opportunity created
+    // with the account, its state 1 (Won) never the account's Inactive.
+    let account = label("create-16-account-with-opportunity");
+    assert!(nested(
+        &account,
+        "/item/opportunity_customer_accounts/0/statecode"
+    ));
+    assert!(account.get("spoken_names").is_none());
     let update = label("update-15-task-nested-case");
     assert!(!nested(&update, "/item/prioritycode"));
     assert!(nested(

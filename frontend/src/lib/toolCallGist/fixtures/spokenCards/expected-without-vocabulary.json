@@ -3015,6 +3015,180 @@
       ]
     ]
   },
+  "create-16-account-with-opportunity": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Name",
+          "role": "detail",
+          "text": "Name: Linie 7.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 7"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Name",
+          "role": "detail",
+          "text": "Name: Linie 7.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 7"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:State code",
+          "role": "detail",
+          "text": "State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
