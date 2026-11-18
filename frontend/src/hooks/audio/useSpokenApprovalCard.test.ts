@@ -322,6 +322,41 @@ describe("useSpokenApprovalCard", () => {
       expect(card.pieces.at(-1)?.text).toBe("Please confirm on screen.");
     });
 
+    it("holds the card while the user talks over the reply during the wait, and says it once after", async () => {
+      let resolveAnswer: (answer: Answer) => void = () => {};
+      const pending = new Promise<Answer>((resolve) => {
+        resolveAnswer = resolve;
+      });
+      let asked: SpokenPiece[] = [];
+      naturalApprovalPieces.mockImplementation((_key, _message, pieces) => {
+        asked = pieces;
+        return pending;
+      });
+      const first = props({ approvals: [CREATE] });
+      const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
+        initialProps: first,
+      });
+      // Talking over the reply pauses it (#1597) while the wording is asked.
+      act(() => useSpeechPlayback.setState({ paused: true }));
+      await act(async () => resolveAnswer(reworded(asked)));
+      expect(speakApprovalCard).not.toHaveBeenCalled();
+      expect(offerApprovalCard).not.toHaveBeenCalled();
+      // The talk-over ends (a turn or only a sound): the card is said once,
+      // in its wording, as the precise style says it after the pause.
+      act(() => useSpeechPlayback.setState({ paused: false }));
+      rerender({ ...first });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(speakApprovalCard).toHaveBeenCalledTimes(1);
+      const card = speakApprovalCard.mock.calls[0][0] as {
+        pieces: SpokenPiece[];
+      };
+      expect(
+        card.pieces.find((piece) => piece.role === "detail")?.text,
+      ).toMatch(/^Natürlich: /);
+    });
+
     it("only offers the card when a stop came while the wording was on its way", async () => {
       // One request per card, as the real module caches it.
       let resolveAnswer: (answer: Answer) => void = () => {};
