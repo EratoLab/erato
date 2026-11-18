@@ -190,7 +190,7 @@
   {"id": "de-reject-03", "language": "de", "meaning": "reject", "way": "plain", "text": "abbrechen", "piece_id": null, "tags": ["card:de-asked"]},
   {"id": "de-reject-04", "language": "de", "meaning": "reject", "way": "plain", "text": "nicht machen", "piece_id": null, "tags": ["card:de-asked"]},
   {"id": "de-reject-05", "language": "de", "meaning": "reject", "way": "free", "text": "nein, das lassen wir lieber", "piece_id": null, "tags": ["card:de-asked"]},
-  {"id": "de-reject-06", "language": "de", "meaning": "reject", "way": "free", "text": "nein, das will ich so nicht", "piece_id": null, "tags": ["card:de-asked"]},
+  {"id": "de-reject-06", "language": "de", "meaning": "change", "way": "free", "text": "nein, das will ich so nicht", "piece_id": null, "tags": ["relabelled:reject", "card:de-asked"]},
   {"id": "de-reject-07", "language": "de", "meaning": "reject", "way": "free", "text": "das machen wir nicht", "piece_id": null, "tags": ["card:de-asked"]},
   {"id": "de-reject-08", "language": "de", "meaning": "reject", "way": "free", "text": "vergiss es, das brauchen wir nicht mehr", "piece_id": null, "tags": ["card:de-asked"]},
   {"id": "de-reject-09", "language": "de", "meaning": "reject", "way": "filler", "text": "äh, nein", "piece_id": null, "tags": ["card:de-asked"]},

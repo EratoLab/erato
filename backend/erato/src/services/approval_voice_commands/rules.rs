@@ -1248,6 +1248,19 @@ impl Words {
     }
 
     fn change_marker(&self, plain: bool) -> bool {
+        // "nicht so", "so nicht", "not like that": the call, but different.
+        if self.segments.iter().any(|segment| {
+            segment.windows(2).any(|pair| {
+                matches!(
+                    (pair[0].as_str(), pair[1].as_str()),
+                    ("nicht", "so") | ("so", "nicht")
+                )
+            }) || segment
+                .windows(3)
+                .any(|words| words[0] == "not" && words[1] == "like" && words[2] == "that")
+        }) {
+            return true;
+        }
         for (index, segment) in self.segments.iter().enumerate() {
             let personal = segment
                 .first()
@@ -1364,15 +1377,29 @@ impl Words {
         } else {
             (&lists.refusal, &lists.refusing)
         };
-        // An acknowledgement on its own ("in Ordnung, mach") is not part of
-        // what the decision is checked for.
-        let words = self.decision_words();
+        // Only a yes may end on "so" or "then", or open with an
+        // acknowledgement ("in Ordnung, mach"): a refusal must be a clear
+        // no, and "lass es so" or "nein, in Ordnung, mach" are not.
+        let approve = meaning == VoiceMeaning::Approve;
+        let words = if approve {
+            self.decision_words()
+        } else {
+            self.all().collect()
+        };
+        let open = if approve {
+            self.ends_open()
+        } else {
+            self.all()
+                .last()
+                .is_some_and(|last| CONTINUATIONS.contains(&last))
+        };
         !self.question
             && !self.any_asks()
             && !self.broken_off
             && !self.takes_back
-            && !self.ends_open()
-            && !(meaning == VoiceMeaning::Approve && self.has_any(NEGATIONS))
+            && !open
+            && !(approve && self.has_any(NEGATIONS))
+            && !(!approve && self.agrees_without_its_no())
             && words.iter().all(|word| allowed.contains(*word))
             && words.iter().any(|word| carrying.contains(*word))
             && self.count() > 0
@@ -1405,29 +1432,40 @@ impl Words {
         })
     }
 
-    /// The words a decision is checked for: without segments that are only
-    /// an acknowledgement ("in Ordnung, mach").
+    /// The words a yes is checked for: without a first segment that is only
+    /// an acknowledgement ("in Ordnung, mach", "I see, go ahead").
     fn decision_words(&self) -> Vec<&str> {
         let lists = &*LISTS;
+        let skip = self.segments.first().is_some_and(|segment| {
+            segment.len() > 1 && lists.noise_phrases.contains(&segment.join(" "))
+        });
         self.segments
             .iter()
-            .filter(|segment| {
-                segment.len() < 2 || !lists.noise_phrases.contains(&segment.join(" "))
-            })
+            .skip(usize::from(skip))
             .flatten()
             .map(String::as_str)
             .collect()
     }
 
-    /// Whether the words may ask for something about the call rather than
-    /// decide it: another value, a part, a condition. A plain no does not.
-    pub(super) fn may_ask_for_change(&self, pieces: &[CardPiece]) -> bool {
-        self.has_change_marker()
-            || self.has_number()
-            || self.has_any(CONDITIONS)
-            || self.has_any(DATE_WORDS)
-            || self.has_any(CORRECTIONS)
-            || self.names_a_field(pieces)
+    /// A word that agrees ("mach", "do") with no negation of its own: "nein,
+    /// mach" is no clear no. Its negation follows it in the segment ("mach
+    /// das nicht") or stands right before it ("nicht machen", "don't do").
+    fn agrees_without_its_no(&self) -> bool {
+        let lists = &*LISTS;
+        self.segments.iter().any(|segment| {
+            segment.iter().enumerate().any(|(at, word)| {
+                lists.agreeing.contains(word.as_str())
+                    && !segment[at + 1..]
+                        .iter()
+                        .any(|later| NEGATIONS.contains(&later.as_str()))
+                    && !at.checked_sub(1).is_some_and(|before| {
+                        matches!(
+                            segment[before].as_str(),
+                            "nicht" | "not" | "dont" | "never" | "nie"
+                        )
+                    })
+            })
+        })
     }
 
     /// Whether the words could be about this card's call rather than

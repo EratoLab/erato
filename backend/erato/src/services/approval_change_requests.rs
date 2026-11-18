@@ -39,20 +39,6 @@ pub(crate) fn rounds(content: &[ContentPart]) -> usize {
         .count()
 }
 
-/// Whether the message's latest decision was a change request and it was
-/// answered without a new card: the voice still owes the user a sentence
-/// about what came of it.
-pub(crate) fn answered_without_card(content: &[ContentPart]) -> bool {
-    content
-        .iter()
-        .rposition(is_change_request)
-        .is_some_and(|at| {
-            !content[at + 1..]
-                .iter()
-                .any(|part| matches!(part, ContentPart::ToolApprovalRequest(_)))
-        })
-}
-
 fn is_change_request(part: &ContentPart) -> bool {
     matches!(part, ContentPart::ToolRejection(rejection)
         if rejection.reason.as_deref() == Some(REJECTION_REASON))
@@ -257,28 +243,6 @@ mod tests {
     ) -> Option<String> {
         mark_replacement(content, &mut new);
         new.approvals[0].replaces_approval_id.clone()
-    }
-
-    #[test]
-    fn a_change_request_answered_without_a_card_may_still_be_spoken_about() {
-        use crate::models::message::ContentPartText;
-        let answer = ContentPart::Text(ContentPartText {
-            text: "Welchen Datensatz meinst du?".into(),
-        });
-        assert!(answered_without_card(&asked_to_change(vec![
-            answer.clone()
-        ])));
-        // A corrected card came: it speaks for itself.
-        assert!(!answered_without_card(&asked_to_change(vec![
-            ContentPart::ToolApprovalRequest(stop("new", "update_record", "records")),
-        ])));
-        // A plain denial, or no decision at all, is not a change request.
-        assert!(!answered_without_card(&[
-            ContentPart::ToolApprovalRequest(stop("old", "update_record", "records")),
-            rejection("old", None),
-            answer,
-        ]));
-        assert!(!answered_without_card(&[]));
     }
 
     #[test]

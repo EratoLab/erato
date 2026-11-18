@@ -895,11 +895,16 @@ describe("listening against the endpoint", () => {
       });
     /** Plays the confirmation out, so the change goes out. */
     const confirm = async () => {
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
-      expect(sentences(connections[1])).toEqual([
+      await vi.waitFor(() => expect(connections).toHaveLength(3));
+      // What is said if no new card comes is asked for first, while the
+      // card still waits.
+      expect(sentences(connections[1]).join(" ")).toMatch(
+        /keine neue Karte/,
+      );
+      expect(sentences(connections[2])).toEqual([
         "In Ordnung, ich ändere das.",
       ]);
-      audio(connections[1], 0);
+      audio(connections[2], 0);
       playOut();
     };
 
@@ -983,10 +988,12 @@ describe("listening against the endpoint", () => {
       await confirm();
       await heard;
       expect(send).toHaveBeenCalledTimes(1);
-      expect(connections).toHaveLength(3);
-      expect(sentences(connections[2])).toEqual([
+      expect(connections).toHaveLength(4);
+      expect(sentences(connections[3])).toEqual([
         "Die Änderung ließ sich nicht senden. Die Karte wartet auf dem Bildschirm.",
       ]);
+      // What was prepared for "no new card" is not said and stops loading.
+      expect(connections[1].close).toHaveBeenCalled();
       expect(useApprovalSpeech.getState().closed).toBe(false);
       expect(useApprovalListening.getState().quiet).toBe(KEY);
       expect(useApprovalChanges.getState().records).toEqual({});
@@ -1000,7 +1007,7 @@ describe("listening against the endpoint", () => {
       const heard = heardApprovalWords(KEY, "nimm den 22.");
       await confirm();
       await heard;
-      expect(sentences(connections[2])[0]).toMatch(/^Die Änderung ließ sich/);
+      expect(sentences(connections[3])[0]).toMatch(/^Die Änderung ließ sich/);
     });
 
     it("a card changed elsewhere meanwhile (409) says so, though the card is gone", async () => {
@@ -1015,7 +1022,7 @@ describe("listening against the endpoint", () => {
       const heard = heardApprovalWords(KEY, "nimm den 22.");
       await confirm();
       await heard;
-      expect(sentences(connections[2])).toEqual([
+      expect(sentences(connections[3])).toEqual([
         "Die Karte hat sich inzwischen geändert. Bitte auf dem Bildschirm nachsehen.",
       ]);
     });
@@ -1026,11 +1033,12 @@ describe("listening against the endpoint", () => {
         await heardCard(change);
       answer("change");
       const heard = heardApprovalWords(KEY, "nimm den 22.");
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      await vi.waitFor(() => expect(connections).toHaveLength(3));
       forgetApprovalCards([KEY]);
       await heard;
       expect(send).not.toHaveBeenCalled();
       expect(useApprovalChanges.getState().records).toEqual({});
+      expect(connections[1].close).toHaveBeenCalled();
     });
 
     it("sends nothing once audio mode was left during the confirmation", async () => {
@@ -1038,7 +1046,7 @@ describe("listening against the endpoint", () => {
       const { heardApprovalWords, useSpeechPlayback } = await heardCard(change);
       answer("change");
       const heard = heardApprovalWords(KEY, "nimm den 22.");
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      await vi.waitFor(() => expect(connections).toHaveLength(3));
       useSpeechPlayback.setState({ conversational: false });
       await heard;
       expect(send).not.toHaveBeenCalled();
@@ -1051,7 +1059,7 @@ describe("listening against the endpoint", () => {
         await heardCard(change);
       answer("change");
       const heard = heardApprovalWords(KEY, "nimm den 22.");
-      await vi.waitFor(() => expect(connections).toHaveLength(2));
+      await vi.waitFor(() => expect(connections).toHaveLength(3));
       await vi.advanceTimersByTimeAsync(CONFIRMATION_WAIT_MS);
       await heard;
       expect(send).toHaveBeenCalledTimes(1);

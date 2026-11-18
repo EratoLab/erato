@@ -12,11 +12,14 @@ import { spokenWordsFor } from "@/lib/toolCallGist/spokenCardWords";
 
 import {
   dropChange,
+  nextChangeRound,
   noteChangeSending,
   noteChangeSent,
+  SEVERAL_CHANGE_ROUNDS,
 } from "./approvalChanges";
 import {
   announceApprovalNotice,
+  prepareApprovalNotice,
   approvalSpeechAllowed,
   spokenApprovalCardNow,
   steerApprovalCard,
@@ -379,13 +382,30 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
   const heard = pieces.flatMap((piece, index) =>
     flow.heard[index] ? [piece.id] : [],
   );
+  // What is said if no corrected card comes is asked for now, while the
+  // card still waits: afterwards the voice speaks nothing for this message.
+  const prepared = prepareApprovalNotice(
+    card.messageId,
+    {
+      kind: "change_no_card",
+      several: nextChangeRound(change.approvalId) >= SEVERAL_CHANGE_ROUNDS,
+    },
+    card.language ?? "en",
+  );
   notice({ kind: "changing" });
   useApprovalListening.setState({ quiet: key });
   await untilSilent(key, CONFIRMATION_WAIT_MS);
   const still = spokenApprovalCardNow();
-  if (still?.card.key !== key || still.flow.closed || !approvalSpeechAllowed())
+  if (
+    still?.card.key !== key ||
+    still.flow.closed ||
+    !approvalSpeechAllowed()
+  ) {
+    prepared?.close();
     return;
+  }
   noteChangeSending({
+    ...(prepared ? { prepared } : {}),
     messageId: card.messageId,
     approvalId: change.approvalId,
     language: card.language,
@@ -418,11 +438,6 @@ async function changeByVoice(key: string, transcript: string): Promise<void> {
 export const quietApprovalListening = (key: string) =>
   useApprovalListening.setState({ quiet: key });
 
-/** The card under `key` listens again, if it had stopped. */
-export const listenAgainForApprovalCard = (key: string) => {
-  if (useApprovalListening.getState().quiet === key)
-    useApprovalListening.setState({ quiet: null });
-};
 
 // Saying a card again, by the control or by a new card, listens again.
 useApprovalSpeech.subscribe((state, previous) => {

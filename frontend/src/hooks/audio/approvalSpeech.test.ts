@@ -389,6 +389,57 @@ describe("speaking an approval card", () => {
     expect(useSpeechPlayback.getState().failed).toBe(false);
   });
 
+  it("ERMAIN-1233: a notice prepared while the card waits is said later from what was loaded", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({ conversational: true, enabled: true });
+    const prepared = module.prepareApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: false },
+      "en",
+    );
+    expect(prepared).not.toBeNull();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    expect(
+      (JSON.parse(connections[0].options.body as string) as { pieces: string[] })
+        .pieces,
+    ).toEqual(["No new card came, and nothing was run. Just say how to go on."]);
+    // Loaded while the card still waited.
+    audio(connections[0], 0);
+    expect(sources).toHaveLength(0);
+
+    module.sayPreparedNotice(prepared!);
+    await vi.waitFor(() =>
+      expect(module.useApprovalSpeech.getState().speaking).toBe(true),
+    );
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    // Nothing is asked for once the card is gone.
+    expect(connections).toHaveLength(1);
+    playOut();
+    expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+  });
+
+  it("a prepared notice that could not be loaded is left out, without an error", async () => {
+    const module = await import("./approvalSpeech");
+    const { useSpeechPlayback } = await import("./speechPlayback");
+    useSpeechPlayback.setState({
+      conversational: true,
+      enabled: true,
+      failed: false,
+    });
+    const prepared = module.prepareApprovalNotice(
+      "message-1",
+      { kind: "change_no_card", several: true },
+      "de",
+    );
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    connections[0].options.onError?.(new Error("409"));
+    module.sayPreparedNotice(prepared!);
+    expect(module.useApprovalSpeech.getState().speaking).toBe(false);
+    expect(useSpeechPlayback.getState().failed).toBe(false);
+    expect(connections).toHaveLength(1);
+  });
+
   it("says nothing of a change once audio mode was left", async () => {
     const module = await import("./approvalSpeech");
     const { useSpeechPlayback } = await import("./speechPlayback");

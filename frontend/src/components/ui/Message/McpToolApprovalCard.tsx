@@ -11,10 +11,7 @@ import {
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
-import {
-  listenAgainForApprovalCard,
-  quietApprovalListening,
-} from "@/hooks/audio/approvalListening";
+import { quietApprovalListening } from "@/hooks/audio/approvalListening";
 import {
   stopApprovalSpeech,
   useApprovalSpeech,
@@ -471,8 +468,6 @@ export const McpToolApprovalCard = ({
       }
       return "sent";
     } catch (cause) {
-      // The card still waits: it listens again.
-      if (spokenKey !== null) listenAgainForApprovalCard(spokenKey);
       // A task that waited stopped on a question meanwhile, and the answers
       // given so far did not cover it. They are kept, and the refetched row
       // asks only the new question.

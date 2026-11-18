@@ -306,17 +306,4 @@ describe("ERMAIN-1230: a decision tapped while the voice speaks", () => {
     rerender({ on: false });
     expect(mic.open).not.toHaveBeenCalled();
   });
-
-  it("listens again when the decision could not be sent and the card still waits", async () => {
-    const { listenAgainForApprovalCard, quietApprovalListening } =
-      await import("./approvalListening");
-    const mic = recorder();
-    cardSaid(false);
-    act(() => quietApprovalListening(KEY));
-    const { rerender } = render(mic);
-    expect(mic.open).not.toHaveBeenCalled();
-    act(() => listenAgainForApprovalCard(KEY));
-    rerender({ on: true });
-    expect(mic.open).toHaveBeenCalledWith(KEY);
-  });
 });
