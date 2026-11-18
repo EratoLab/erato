@@ -34,26 +34,38 @@ vi.mock("./approvalSpeech", () => ({
 }));
 
 const natural = { on: false };
+type Answer = { id: string; text: string; natural: boolean }[] | undefined;
 const naturalApprovalPieces =
   vi.fn<
-    (
-      key: string,
-      messageId: string,
-      pieces: SpokenPiece[],
-    ) => Promise<SpokenPiece[]>
+    (key: string, messageId: string, pieces: SpokenPiece[]) => Promise<Answer>
   >();
 vi.mock("./approvalRewording", () => ({
   NATURAL_WAIT_AT_START_MS: 600,
   useNaturalApprovalSpeech: () => natural.on,
-  naturalApprovalPieces: (
-    key: string,
-    messageId: string,
-    pieces: SpokenPiece[],
-  ) => naturalApprovalPieces(key, messageId, pieces),
+  naturalWordings: (key: string, messageId: string, pieces: SpokenPiece[]) =>
+    naturalApprovalPieces(key, messageId, pieces),
   forgetNaturalApprovals: () => {},
 }));
 
 const POINTER: SpokenApproval = { type: "pointer" };
+const CREATE: SpokenApproval = (() => {
+  const { calls } = data as unknown as {
+    calls: {
+      id: string;
+      tool_name: string;
+      input: unknown;
+      display: { title: string; server_name?: string; label?: unknown };
+    }[];
+  };
+  const call = calls.find(
+    (entry) => entry.id === "create-01-task-long-description",
+  );
+  if (!call) throw new Error("create-01-task-long-description");
+  return spokenApprovalFor("mcp_tool", {
+    ...call,
+    display: { ...call.display, label: call.display.label as ToolCallLabel },
+  });
+})();
 
 const props = (
   overrides: Partial<Parameters<typeof useSpokenApprovalCard>[0]> = {},
@@ -271,8 +283,12 @@ describe("useSpokenApprovalCard", () => {
   });
 
   describe("in the natural style", () => {
-    const reworded = (pieces: SpokenPiece[]) =>
-      pieces.map((piece) => ({ ...piece, text: `Natürlich: ${piece.text}` }));
+    const reworded = (pieces: SpokenPiece[]): Answer =>
+      pieces.map((piece) => ({
+        id: piece.id,
+        text: `Natürlich: ${piece.text}`,
+        natural: true,
+      }));
 
     beforeEach(() => {
       natural.on = true;
@@ -287,7 +303,7 @@ describe("useSpokenApprovalCard", () => {
           }),
       );
       useSpeechPlayback.setState({ playing: true });
-      const first = props();
+      const first = props({ approvals: [CREATE] });
       const { rerender } = renderHook((p) => useSpokenApprovalCard(p), {
         initialProps: first,
       });
@@ -300,10 +316,29 @@ describe("useSpokenApprovalCard", () => {
       const card = speakApprovalCard.mock.calls[0][0] as {
         pieces: SpokenPiece[];
       };
-      expect(card.pieces[0].text).toBe(
-        "Natürlich: A decision is waiting on screen.",
-      );
-      expect(card.pieces[0].id).toBe("pointer");
+      const detail = card.pieces.find((piece) => piece.role === "detail");
+      expect(detail?.text).toMatch(/^Natürlich: /);
+      // The request is never reworded.
+      expect(card.pieces.at(-1)?.text).toBe("Please confirm on screen.");
+    });
+
+    it("only offers the card when a stop came while the wording was on its way", async () => {
+      // One request per card, as the real module caches it.
+      let resolveAnswer: (answer: Answer) => void = () => {};
+      const pending = new Promise<Answer>((resolve) => {
+        resolveAnswer = resolve;
+      });
+      let asked: SpokenPiece[] = [];
+      naturalApprovalPieces.mockImplementation((_key, _message, pieces) => {
+        asked = pieces;
+        return pending;
+      });
+      const answer = () => resolveAnswer(reworded(asked));
+      renderHook(() => useSpokenApprovalCard(props({ approvals: [CREATE] })));
+      act(() => quietSpokenTurn());
+      await act(async () => answer());
+      expect(speakApprovalCard).not.toHaveBeenCalled();
+      expect(offerApprovalCard).toHaveBeenCalledTimes(1);
     });
 
     it("says the card precisely when the wording is late", async () => {
@@ -333,7 +368,7 @@ describe("useSpokenApprovalCard", () => {
       naturalApprovalPieces.mockImplementation(
         (_key, _message, pieces) =>
           new Promise((resolve) => {
-            answer = () => resolve(pieces);
+            answer = () => resolve(undefined);
           }),
       );
       const first = props();

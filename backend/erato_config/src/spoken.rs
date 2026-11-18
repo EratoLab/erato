@@ -82,66 +82,85 @@ impl SpokenNamesConfig {
             + self.choice_labels.values().map(HashMap::len).sum::<usize>()
     }
 
-    fn validate(&self, place: &str) -> Result<(), Report> {
-        let entry_error = |what: &str, text: &str| {
-            eyre!(
-                "{place}: {what} '{}' must not be blank, must be at most {MAX_ENTRY_BYTES} bytes, at most {MAX_SPOKEN_NAME_CHARS} characters as a spoken name, and must not contain control, bidi or invisible formatting characters",
-                shown(text)
-            )
-        };
+    /// Removes the entries the voice cannot say and names each one: blank,
+    /// too long, or with hidden characters. A language with more entries
+    /// than allowed is removed whole.
+    fn drop_unusable(&mut self, place: &str) -> Vec<String> {
+        if self.entries() > MAX_VOCABULARY_ENTRIES {
+            let count = self.entries();
+            *self = Self::default();
+            return vec![format!(
+                "{place} holds {count} entries, more than the {MAX_VOCABULARY_ENTRIES} allowed; it is ignored"
+            )];
+        }
         let name_ok = |name: &str| {
             usable(name, MAX_ENTRY_BYTES) && name.chars().count() <= MAX_SPOKEN_NAME_CHARS
         };
-        if self.entries() > MAX_VOCABULARY_ENTRIES {
-            return Err(eyre!(
-                "{place}: holds {} entries, more than the {MAX_VOCABULARY_ENTRIES} allowed",
-                self.entries()
-            ));
+        let mut dropped = Vec::new();
+        for (what, entries) in [
+            ("field_names", &mut self.field_names),
+            ("table_names", &mut self.table_names),
+        ] {
+            entries.retain(|key, name| {
+                let keep = usable(key, MAX_ENTRY_BYTES) && name_ok(name);
+                if !keep {
+                    dropped.push(format!("{place}.{what}: '{}' is ignored", shown(key)));
+                }
+                keep
+            });
         }
-        for (key, name) in self.field_names.iter().chain(&self.table_names) {
-            if !usable(key, MAX_ENTRY_BYTES) {
-                return Err(entry_error("machine name", key));
-            }
-            if !name_ok(name) {
-                return Err(entry_error("spoken name", name));
-            }
-        }
-        for (field, labels) in &self.choice_labels {
+        self.choice_labels.retain(|field, labels| {
             if !usable(field, MAX_ENTRY_BYTES) {
-                return Err(entry_error("machine name", field));
+                dropped.push(format!(
+                    "{place}.choice_labels: '{}' is ignored",
+                    shown(field)
+                ));
+                return false;
             }
-            for (value, label) in labels {
-                if !usable(value, MAX_ENTRY_BYTES) {
-                    return Err(entry_error("choice value", value));
+            labels.retain(|value, label| {
+                let keep = usable(value, MAX_ENTRY_BYTES) && name_ok(label);
+                if !keep {
+                    dropped.push(format!(
+                        "{place}.choice_labels.{}: '{}' is ignored",
+                        shown(field),
+                        shown(value)
+                    ));
                 }
-                if !name_ok(label) {
-                    return Err(entry_error("spoken name", label));
-                }
-            }
-        }
-        Ok(())
+                keep
+            });
+            true
+        });
+        dropped
     }
 }
 
-pub fn validate_spoken_vocabularies(vocabularies: &SpokenVocabulariesConfig) -> Result<(), Report> {
-    for (name, languages) in vocabularies {
+/// Removes what the voice cannot say from the vocabularies, so that one bad
+/// entry of a content package never stops a deployment, and names each
+/// removal for a warning: a blank or hidden-character name, a language that
+/// is not a lowercase tag, an entry that is blank, too long or holds hidden
+/// characters.
+pub fn drop_unusable_spoken_entries(vocabularies: &mut SpokenVocabulariesConfig) -> Vec<String> {
+    let mut dropped = Vec::new();
+    vocabularies.retain(|name, languages| {
         if !usable(name, MAX_ENTRY_BYTES) {
-            return Err(eyre!(
-                "spoken_vocabularies: the name '{}' must not be blank or hold hidden characters",
-                shown(name)
-            ));
+            dropped.push(format!("spoken_vocabularies: '{}' is ignored", shown(name)));
+            return false;
         }
-        for (language, names) in languages {
+        languages.retain(|language, names| {
             if !is_language_tag(language) {
-                return Err(eyre!(
-                    "spoken_vocabularies.{name}: '{}' is not a lowercase language tag such as `de` or `en`",
+                dropped.push(format!(
+                    "spoken_vocabularies.{name}: '{}' is not a lowercase language tag such as `de` and is ignored",
                     shown(language)
                 ));
+                return false;
             }
-            names.validate(&format!("spoken_vocabularies.{name}.{language}"))?;
-        }
-    }
-    Ok(())
+            dropped.extend(names.drop_unusable(&format!("spoken_vocabularies.{name}.{language}")));
+            true
+        });
+        true
+    });
+    dropped.sort();
+    dropped
 }
 
 /// The vocabularies a server names that no source defines. Warned about, not
@@ -409,11 +428,11 @@ mod tests {
             loaded["dataverse"]["en"].table_names["opportunity"],
             "opportunities"
         );
-        validate_spoken_vocabularies(&loaded).unwrap();
+        assert!(drop_unusable_spoken_entries(&mut loaded.clone()).is_empty());
     }
 
     #[test]
-    fn unusable_entries_and_language_tags_are_rejected() {
+    fn unusable_entries_and_language_tags_are_dropped_with_a_warning() {
         for toml in [
             "[spoken_vocabularies.v.German.field_names]\na = \"b\"",
             "[spoken_vocabularies.v.de.field_names]\na = \" \"",
@@ -421,10 +440,12 @@ mod tests {
             "[spoken_vocabularies.v.de.table_names]\na = \"eine sehr lange Bezeichnung, die eher ein Satz ist als ein Name für eine Tabelle\"",
             "[spoken_vocabularies.v.de.choice_labels.f]\n\"\" = \"b\"",
         ] {
-            assert!(
-                validate_spoken_vocabularies(&vocabularies(toml)).is_err(),
-                "{toml}"
-            );
+            let mut loaded = vocabularies(&format!(
+                "{toml}\n[spoken_vocabularies.v.en.field_names]\nok = \"Good\""
+            ));
+            let dropped = drop_unusable_spoken_entries(&mut loaded);
+            assert_eq!(dropped.len(), 1, "{toml}: {dropped:?}");
+            assert_eq!(loaded["v"]["en"].field_names["ok"], "Good", "{toml}");
         }
     }
 

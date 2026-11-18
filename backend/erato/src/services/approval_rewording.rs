@@ -43,6 +43,10 @@ pub struct RewordPiece {
     /// keep every one.
     #[serde(default)]
     pub facts: Vec<String>,
+    /// A loss, a warning or a delete's subject: said even when the listener
+    /// skips ahead, and never reworded.
+    #[serde(default)]
+    pub must_say: bool,
 }
 
 /// A piece as it is spoken: the precise text, or a wording that passed the
@@ -74,18 +78,20 @@ pub enum InputProblem {
     Invalid,
 }
 
-/// Pieces a wording may replace. A consequence and the request to decide
-/// are always the precise sentences; a count and a pointer say only that.
-pub fn rewordable(role: CardPieceRole) -> bool {
-    matches!(
-        role,
-        CardPieceRole::What
-            | CardPieceRole::Item
-            | CardPieceRole::Detail
-            | CardPieceRole::Outside
-            | CardPieceRole::More
-            | CardPieceRole::Text
-    )
+/// Pieces a wording may replace. A consequence, the request to decide and
+/// every piece that must be said (a loss, the outside warning, a delete's
+/// subject) are always the precise sentences; a count and a pointer say only
+/// that.
+pub fn rewordable(piece: &RewordPiece) -> bool {
+    !piece.must_say
+        && matches!(
+            piece.role,
+            CardPieceRole::What
+                | CardPieceRole::Item
+                | CardPieceRole::Detail
+                | CardPieceRole::More
+                | CardPieceRole::Text
+        )
 }
 
 pub fn check_input(input: &RewordInput<'_>) -> Result<(), InputProblem> {
@@ -137,6 +143,8 @@ pub struct Outcome {
     pub rejected: Vec<(String, Rejection)>,
     /// The model's wordings, checked or not, for the offline check.
     pub wordings: BTreeMap<String, String>,
+    /// Input and output tokens of the model call, where the provider says.
+    pub tokens: Option<(u64, u64)>,
 }
 
 /// Every piece as the card composed it.
@@ -156,6 +164,7 @@ pub fn precise(input: &RewordInput<'_>, outcome: &'static str) -> Outcome {
         outcome,
         rejected: Vec::new(),
         wordings: BTreeMap::new(),
+        tokens: None,
     }
 }
 
@@ -175,7 +184,7 @@ pub fn apply(
         .map(|piece| {
             let wording = wordings
                 .get(&piece.id)
-                .filter(|_| rewordable(piece.role))
+                .filter(|_| rewordable(piece))
                 .map(|wording| wording.trim());
             let passed = wording.and_then(|wording| {
                 let precise = check::Precise {
@@ -201,7 +210,7 @@ pub fn apply(
     let asked = input
         .pieces
         .iter()
-        .filter(|piece| rewordable(piece.role))
+        .filter(|piece| rewordable(piece))
         .count();
     Outcome {
         reworded: Reworded { pieces },
@@ -214,16 +223,20 @@ pub fn apply(
         },
         rejected,
         wordings,
+        tokens: None,
     }
 }
 
 /// One model call for the whole card, then the check per piece.
 pub async fn reword(input: &RewordInput<'_>, model: &RewordModel<'_>) -> Outcome {
-    if !input.pieces.iter().any(|piece| rewordable(piece.role)) {
+    if !input.pieces.iter().any(rewordable) {
         return precise(input, "nothing_to_reword");
     }
     match model::ask(model, input).await {
-        Ok(wordings) => apply(input, wordings, model.allowed),
+        Ok((wordings, tokens)) => Outcome {
+            tokens,
+            ..apply(input, wordings, model.allowed)
+        },
         Err(outcome) => precise(input, outcome),
     }
 }

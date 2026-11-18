@@ -76,7 +76,7 @@ fn assert_shape(card: &Card, outcome: &Outcome) {
         "{where_}"
     );
     for (piece, said) in card.pieces.iter().zip(&outcome.reworded.pieces) {
-        if !rewordable(piece.role) {
+        if !rewordable(piece) || piece.must_say {
             assert_eq!(said.text, piece.text, "{where_} {}", piece.id);
             assert!(!said.natural, "{where_} {}", piece.id);
         }
@@ -140,10 +140,18 @@ fn any_answer_keeps_ids_and_the_precise_consequence_and_request() {
     }
 }
 
-/// Generated from the set: a wording that drops, alters or adds a fact, or
-/// drops or adds a negation, is rejected for every piece that has one.
+/// Generated from the set, for every piece that may be reworded: two facts
+/// swapped, each word dropped in turn, each word replaced by glue that
+/// changes the meaning, a tense or a modal added, a number written with
+/// another separator, a name, a number or a negation added. Each is
+/// rejected; a must-say piece is never reworded at all.
 #[test]
 fn generated_unfaithful_wordings_are_rejected() {
+    const GLUE: &[&str] = &[
+        "statt", "anstelle", "neu", "bisher", "aus", "nach", "und", "oder", "instead", "new",
+        "current", "from", "and", "or", "in",
+    ];
+    const MODES: &[&str] = &["wurde", "können", "würde", "has been", "could", "would"];
     let mut tried = 0;
     for card in card_set() {
         let allowed = allowed(&card.language);
@@ -152,51 +160,68 @@ fn generated_unfaithful_wordings_are_rejected() {
         } else {
             "not"
         };
-        for piece in card.pieces.iter().filter(|piece| rewordable(piece.role)) {
-            let mut wrong: Vec<(&str, String)> = Vec::new();
-            for fact in &piece.facts {
-                let fact_words = check::tokens(fact);
-                if fact_words.is_empty() {
-                    continue;
-                }
-                // Dropped: unless the piece says the same words twice.
-                if piece.text.matches(fact.as_str()).count() == 1 {
-                    wrong.push(("dropped", piece.text.replacen(fact.as_str(), "", 1)));
-                }
-                // Altered: every digit moved by one.
-                if piece.text.contains(fact.as_str()) && fact.chars().any(|c| c.is_ascii_digit()) {
-                    let altered: String = fact
-                        .chars()
-                        .map(|c| {
-                            c.to_digit(10)
-                                .map_or(c, |d| char::from_digit((d + 1) % 10, 10).unwrap())
-                        })
-                        .collect();
-                    if !check::tokens(&piece.text)
-                        .join(" ")
-                        .contains(&check::tokens(&altered).join(" "))
-                    {
-                        wrong.push(("altered", piece.text.replacen(fact.as_str(), &altered, 1)));
+        for piece in card.pieces.iter().filter(|piece| rewordable(piece)) {
+            let mut wrong: Vec<(String, String)> = Vec::new();
+            let facts: Vec<&String> = piece
+                .facts
+                .iter()
+                .filter(|fact| piece.text.matches(fact.as_str()).count() == 1)
+                .collect();
+            // Swapped: the first two different facts trade places.
+            if let [first, second, ..] = facts.as_slice()
+                && check::tokens(first) != check::tokens(second)
+                && !first.contains(second.as_str())
+                && !second.contains(first.as_str())
+            {
+                let swapped = piece
+                    .text
+                    .replacen(first.as_str(), "\u{E000}", 1)
+                    .replacen(second.as_str(), first, 1)
+                    .replacen("\u{E000}", second, 1);
+                wrong.push(("swapped".into(), swapped));
+            }
+            let words: Vec<&str> = piece.text.split(' ').collect();
+            for index in 0..words.len() {
+                // Dropped: every word, relation words included.
+                let mut dropped = words.clone();
+                dropped.remove(index);
+                wrong.push((format!("dropped {}", words[index]), dropped.join(" ")));
+                // Replaced by glue that changes the meaning.
+                for glue in GLUE {
+                    if !words[index].eq_ignore_ascii_case(glue) {
+                        let mut replaced = words.clone();
+                        replaced[index] = glue;
+                        wrong.push((format!("{} as {glue}", words[index]), replaced.join(" ")));
                     }
                 }
             }
-            // Added: a name, a number and a negation the piece does not have.
-            let said = check::tokens(&piece.text);
-            if !said.iter().any(|word| word == "zacharias") {
-                wrong.push(("added name", format!("{} Zacharias", piece.text)));
+            for mode in MODES {
+                wrong.push((format!("added {mode}"), format!("{mode} {}", piece.text)));
             }
-            if !said.iter().any(|word| word == "17") {
-                wrong.push(("added number", format!("{} 17", piece.text)));
+            // A number with another separator ("185.000" as "185,000").
+            for fact in &facts {
+                for (from, to) in [('.', ','), (',', '.'), (':', '.')] {
+                    let altered = fact.replace(from, &to.to_string());
+                    if altered != **fact && fact.chars().any(|c| c.is_ascii_digit()) {
+                        wrong.push((
+                            format!("{fact} as {altered}"),
+                            piece.text.replacen(fact.as_str(), &altered, 1),
+                        ));
+                    }
+                }
             }
-            if !said.iter().any(|word| word == negation) {
-                wrong.push(("added negation", format!("{} {negation}", piece.text)));
-            } else {
-                wrong.push((
-                    "dropped negation",
-                    piece.text.replacen(&format!(" {negation}"), "", 1),
-                ));
-            }
+            wrong.push(("added name".into(), format!("{} Zacharias", piece.text)));
+            wrong.push(("added number".into(), format!("{} 17", piece.text)));
+            wrong.push((
+                "added negation".into(),
+                format!("{} {negation}", piece.text),
+            ));
             for (how, wording) in wrong {
+                if check::tokens(&wording) == check::tokens(&piece.text) {
+                    // Only punctuation or case differs: the same words, and a
+                    // number keeps its separators inside its word.
+                    continue;
+                }
                 tried += 1;
                 let precise = check::Precise {
                     text: &piece.text,
@@ -212,7 +237,27 @@ fn generated_unfaithful_wordings_are_rejected() {
             }
         }
     }
-    assert!(tried > 500, "{tried}");
+    assert!(tried > 5_000, "{tried}");
+}
+
+#[test]
+fn a_must_say_piece_is_never_reworded() {
+    let mut losses = 0;
+    for card in card_set() {
+        let outcome = apply(
+            &input(&card),
+            wordings(&card, |piece| Some(format!("Die {}", piece.text))),
+            &allowed(&card.language),
+        );
+        for (piece, said) in card.pieces.iter().zip(&outcome.reworded.pieces) {
+            if piece.must_say {
+                losses += 1;
+                assert_eq!(said.text, piece.text, "{} {}", card.scenario, piece.id);
+                assert!(!said.natural);
+            }
+        }
+    }
+    assert!(losses > 20, "{losses}");
 }
 
 #[test]
@@ -222,6 +267,7 @@ fn input_bounds() {
         role: CardPieceRole::Detail,
         text: text.into(),
         facts: vec![],
+        must_say: false,
     };
     let check = |language: &str, pieces: Vec<RewordPiece>| {
         check_input(&RewordInput {
@@ -347,6 +393,13 @@ fn provider() -> ChatProviderConfig {
 fn update_card() -> Card {
     card_set()
         .into_iter()
+        .find(|card| card.scenario == "update-01-date-and-probability" && card.language == "de")
+        .expect("the set has update-01-date-and-probability")
+}
+
+fn delete_card() -> Card {
+    card_set()
+        .into_iter()
         .find(|card| card.scenario == "delete-01-task-created-earlier" && card.language == "de")
         .expect("the set has delete-01-task-created-earlier")
 }
@@ -396,40 +449,64 @@ async fn a_slow_failing_or_unreadable_model_leaves_the_card_precise() {
 
 #[tokio::test]
 async fn a_checked_wording_replaces_only_its_piece() {
-    let card = update_card();
-    let what = card
+    // A delete: its what and item must be said, so only a detail is asked.
+    let card = delete_card();
+    let shown_pieces: Vec<&RewordPiece> = card
         .pieces
         .iter()
-        .find(|piece| piece.role == CardPieceRole::What)
-        .unwrap();
+        .filter(|piece| rewordable(piece))
+        .collect();
+    let must = card
+        .pieces
+        .iter()
+        .find(|piece| piece.must_say && piece.role == CardPieceRole::What)
+        .expect("a delete says what it deletes");
     let consequence = card
         .pieces
         .iter()
         .find(|piece| piece.role == CardPieceRole::Consequence)
         .expect("a delete says its consequence");
+    let create = card_set()
+        .into_iter()
+        .find(|card| card.scenario == "create-01-task-long-description" && card.language == "de")
+        .unwrap();
+    let priority = create
+        .pieces
+        .iter()
+        .find(|piece| piece.text == "Priorität: Hoch.")
+        .unwrap();
     let reply = serde_json::json!({"pieces": [
-        {"id": what.id, "text": what.text.replace("Ich möchte", "Ich würde gern")},
+        {"id": priority.id, "text": "Die Priorität ist Hoch."},
+        {"id": must.id, "text": format!("Die {}", must.text)},
         {"id": consequence.id, "text": "Das ist kein Problem."},
     ]});
     let client = ScriptedModel::new(Script::Reply(reply.to_string()));
+    let got = run(&create, &client, Duration::from_secs(1)).await;
+    assert_shape(&create, &got);
+    let said = got
+        .reworded
+        .pieces
+        .iter()
+        .find(|piece| piece.id == priority.id)
+        .unwrap();
+    assert!(said.natural, "{:?}", got.rejected);
+    assert_eq!(said.text, "Die Priorität ist Hoch.");
+
+    // On the delete, the model sees no must-say piece and no consequence,
+    // and answers for them are ignored.
+    let client = ScriptedModel::new(Script::Reply(reply.to_string()));
     let got = run(&card, &client, Duration::from_secs(1)).await;
     assert_shape(&card, &got);
-    let said = |id: &str| {
-        got.reworded
-            .pieces
-            .iter()
-            .find(|piece| piece.id == id)
-            .unwrap()
-    };
-    assert!(said(&what.id).natural, "{:?}", got.rejected);
-    assert!(said(&what.id).text.starts_with("Ich würde gern"));
-    assert_eq!(said(&consequence.id).text, consequence.text);
-
-    // The model saw only the pieces it may reword.
-    let request = client.request.lock().unwrap().take().unwrap();
-    let shown = format!("{:?}", request.messages);
-    assert!(!shown.contains(&consequence.text));
-    assert!(shown.contains(&what.text));
+    let request = client.request.lock().unwrap().take();
+    if let Some(request) = request {
+        let shown = format!("{:?}", request.messages);
+        assert!(!shown.contains(&consequence.text));
+        assert!(!shown.contains(&must.text));
+    }
+    assert_eq!(
+        shown_pieces.is_empty(),
+        client.calls.load(Ordering::SeqCst) == 0
+    );
 }
 
 #[tokio::test]
@@ -442,6 +519,7 @@ async fn a_card_with_nothing_to_reword_asks_no_model() {
             role: CardPieceRole::Pointer,
             text: "Auf dem Bildschirm wartet eine Entscheidung.".into(),
             facts: vec![],
+            must_say: false,
         }],
     };
     let client = ScriptedModel::new(Script::Fail);

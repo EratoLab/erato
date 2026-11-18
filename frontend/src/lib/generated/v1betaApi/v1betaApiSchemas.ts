@@ -227,6 +227,11 @@ export type ApprovalRewordingPiece = {
    */
   facts?: string[];
   id: string;
+  /**
+   * A loss, a warning or a delete's subject: said even when the listener
+   * skips ahead, and never reworded.
+   */
+  must_say?: boolean;
   role: ApprovalCardPieceRole;
   /**
    * The precise sentence.
@@ -5301,7 +5306,9 @@ export type ToolCallLabel = {
    * language tag, from the server's spoken vocabularies, for words spoken
    * aloud. Keyed by the names as this label carries them: an effect's
    * `raw_name` and its values' `text`, a read condition's `column` and its
-   * values' `text`, a read's table. No card reads it.
+   * values' `text` (as `table.column` when the condition names one of
+   * several tables; a coded value of an unnamed table has none), a read's
+   * table. No card reads it.
    */
   spoken_names?: {
     [key: string]: ToolCallSpokenNames;

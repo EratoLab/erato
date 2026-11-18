@@ -190,3 +190,30 @@ fn the_spoken_card_set_matches_its_labels() {
         "{OUTPUT_PATH} is out of date; regenerate it with SPOKEN_CARD_SET_WRITE=1"
     );
 }
+
+/// A coded value is named by its own table's word: a case's priority 1 is
+/// High (not an activity's Normal), and a join that filters two tables on
+/// the same code names each by its table.
+#[test]
+fn spoken_choices_follow_the_table_of_the_value() {
+    let generated = generated();
+    let names = |id: &str| {
+        generated["calls"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|call| call["id"] == id)
+            .unwrap()["display"]["label"]["spoken_names"]
+            .clone()
+    };
+    let case = names("update-14-case-priority");
+    assert_eq!(case["de"]["choices"]["prioritycode"]["1"], "Hoch");
+    assert_eq!(case["en"]["choices"]["prioritycode"]["1"], "High");
+    let join = names("read-15-sql-join-two-states");
+    assert_eq!(
+        join["de"]["choices"]["opportunity.statecode"]["1"],
+        "Gewonnen"
+    );
+    assert_eq!(join["de"]["choices"]["account.statecode"]["1"], "Inaktiv");
+    assert!(join["de"]["choices"].get("statecode").is_none());
+}

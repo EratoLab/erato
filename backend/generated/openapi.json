@@ -5963,6 +5963,10 @@
           "id": {
             "type": "string"
           },
+          "must_say": {
+            "type": "boolean",
+            "description": "A loss, a warning or a delete's subject: said even when the listener\nskips ahead, and never reworded."
+          },
           "role": {
             "$ref": "#/components/schemas/ApprovalCardPieceRole"
           },
@@ -15094,7 +15098,7 @@
           },
           "spoken_names": {
             "type": "object",
-            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text`, a read's table. No card reads it.",
+            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text` (as `table.column` when the condition names one of\nseveral tables; a coded value of an unnamed table has none), a read's\ntable. No card reads it.",
             "additionalProperties": {
               "$ref": "#/components/schemas/ToolCallSpokenNames"
             },

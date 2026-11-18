@@ -325,6 +325,18 @@
       ]
     },
     {
+      "id": "update-14-case-priority",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-14-case-priority"
+      ]
+    },
+    {
       "id": "update-10-contact-two-fields",
       "kind": [
         "update"
@@ -681,6 +693,18 @@
       ],
       "calls": [
         "read-08-sql-join"
+      ]
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-15-sql-join-two-states"
       ]
     },
     {
@@ -1520,6 +1544,22 @@
       }
     },
     {
+      "id": "update-14-case-priority",
+      "server": "dynamics",
+      "tool": "update_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "incident",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
+        "item": {
+          "prioritycode": 1
+        }
+      }
+    },
+    {
       "id": "update-10-contact-two-fields",
       "server": "dynamics",
       "tool": "update_record",
@@ -1999,6 +2039,18 @@
       }
     },
     {
+      "id": "read-15-sql-join-two-states",
+      "server": "dynamics",
+      "tool": "read_query",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "querytext": "SELECT o.name FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE o.statecode = 1 AND a.statecode = 1"
+      }
+    },
+    {
       "id": "read-09-sql-record-nobody-read",
       "server": "dynamics",
       "tool": "read_query",
@@ -2221,11 +2273,15 @@
           "statecode": "Status",
           "statuscode": "Statusgrund",
           "prioritycode": "Priorität",
-          "percentcomplete": "Prozent erledigt",
+          "percentcomplete": "Prozent abgeschlossen",
           "scheduledstart": "Beginn",
           "scheduledend": "Ende",
           "task.scheduledend": "Fälligkeitsdatum",
           "task.scheduledstart": "Startdatum",
+          "phonecall.scheduledend": "Fälligkeitsdatum",
+          "email.scheduledend": "Fälligkeitsdatum",
+          "letter.scheduledend": "Fälligkeitsdatum",
+          "fax.scheduledend": "Fälligkeitsdatum",
           "actualdurationminutes": "Dauer in Minuten",
           "scheduleddurationminutes": "Geplante Dauer in Minuten",
           "location": "Ort",
@@ -2292,12 +2348,49 @@
             "2": "Abgebrochen",
             "3": "Geplant"
           },
-          "prioritycode": {
+          "task.prioritycode": {
             "0": "Niedrig",
             "1": "Normal",
             "2": "Hoch"
           },
-          "purchasetimeframe": {
+          "email.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "appointment.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "phonecall.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "letter.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "fax.prioritycode": {
+            "0": "Niedrig",
+            "1": "Normal",
+            "2": "Hoch"
+          },
+          "incident.prioritycode": {
+            "1": "Hoch",
+            "2": "Normal",
+            "3": "Niedrig"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Sofort",
+            "1": "Dieses Quartal",
+            "2": "Nächstes Quartal",
+            "3": "Dieses Jahr",
+            "4": "Unbekannt"
+          },
+          "lead.purchasetimeframe": {
             "0": "Sofort",
             "1": "Dieses Quartal",
             "2": "Nächstes Quartal",
@@ -2358,6 +2451,10 @@
           "scheduledend": "End",
           "task.scheduledend": "Due date",
           "task.scheduledstart": "Start date",
+          "phonecall.scheduledend": "Due date",
+          "email.scheduledend": "Due date",
+          "letter.scheduledend": "Due date",
+          "fax.scheduledend": "Due date",
           "actualdurationminutes": "Duration in minutes",
           "scheduleddurationminutes": "Planned duration in minutes",
           "location": "Location",
@@ -2424,12 +2521,49 @@
             "2": "Canceled",
             "3": "Scheduled"
           },
-          "prioritycode": {
+          "task.prioritycode": {
             "0": "Low",
             "1": "Normal",
             "2": "High"
           },
-          "purchasetimeframe": {
+          "email.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "appointment.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "phonecall.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "letter.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "fax.prioritycode": {
+            "0": "Low",
+            "1": "Normal",
+            "2": "High"
+          },
+          "incident.prioritycode": {
+            "1": "High",
+            "2": "Normal",
+            "3": "Low"
+          },
+          "opportunity.purchasetimeframe": {
+            "0": "Immediate",
+            "1": "This quarter",
+            "2": "Next quarter",
+            "3": "This year",
+            "4": "Unknown"
+          },
+          "lead.purchasetimeframe": {
             "0": "Immediate",
             "1": "This quarter",
             "2": "Next quarter",

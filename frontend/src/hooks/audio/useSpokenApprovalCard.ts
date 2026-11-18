@@ -6,12 +6,13 @@ import {
   spokenApprovalPieces,
 } from "@/lib/toolCallGist/spokenCard";
 import { spokenDifference } from "@/lib/toolCallGist/spokenCardDifference";
+import { withRewording } from "@/lib/toolCallGist/spokenCardRewording";
 
 import { takeWithdrawnCard } from "./approvalChanges";
 import {
   NATURAL_WAIT_AT_START_MS,
   forgetNaturalApprovals,
-  naturalApprovalPieces,
+  naturalWordings,
   useNaturalApprovalSpeech,
 } from "./approvalRewording";
 import {
@@ -24,6 +25,28 @@ import { useSpeechPlayback } from "./speechPlayback";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
+
+/** How a card is composed, the same when it is asked for and when due. */
+const optionsFor = (
+  approvals: readonly SpokenApproval[],
+  index: number,
+  shown: SpokenApproval,
+) => {
+  const total = approvals.length;
+  return {
+    language: i18n.locale,
+    now: new Date(),
+    position:
+      total > 1
+        ? {
+            index,
+            total,
+            sameAsPrevious:
+              index > 0 && sameSpokenKind(approvals[index - 1], shown),
+          }
+        : undefined,
+  };
+};
 
 /**
  * Speaks the approval a card shows when conversational mode reads back and
@@ -86,38 +109,37 @@ export function useSpokenApprovalCard({
   // after it was decided.
   const waiting = useRef<string | null>(null);
   waiting.current = active ? key : null;
+  const stillResponding = useRef(responding);
+  stillResponding.current = responding;
 
   // Ask for the natural wording while the model's own words still play.
   useEffect(() => {
     if (!natural || !active || !spokenTurn || !approval || replaced) return;
     if (approvalSpoken(key)) return;
-    const options = { language: i18n.locale, now: new Date() };
-    void naturalApprovalPieces(
+    const options = optionsFor(approvals, index, approval);
+    void naturalWordings(
       key,
       messageId,
       spokenApprovalPieces(approval, options),
       options,
     );
-  }, [natural, active, spokenTurn, approval, replaced, key, messageId]);
+  }, [
+    natural,
+    active,
+    spokenTurn,
+    approval,
+    approvals,
+    index,
+    replaced,
+    key,
+    messageId,
+  ]);
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
       return;
     if (approvalSpoken(key)) return;
-    const total = approvals.length;
-    const options = {
-      language: i18n.locale,
-      now: new Date(),
-      position:
-        total > 1
-          ? {
-              index,
-              total,
-              sameAsPrevious:
-                index > 0 && sameSpokenKind(approvals[index - 1], approval),
-            }
-          : undefined,
-    };
+    const options = optionsFor(approvals, index, approval);
     const item = items.at(index);
     const withdrawn =
       item?.replaces != null
@@ -135,26 +157,33 @@ export function useSpokenApprovalCard({
       change: item ? change?.(item.approvalId) : undefined,
     };
     // A stop during the turn's own words means quiet: the card waits to be
-    // asked for.
+    // asked for. Read again when the natural wording comes back: a stop or a
+    // new answer may have come during the wait.
     const say = (pieces: typeof card.pieces) => {
       if (waiting.current !== key || approvalSpoken(key)) return;
-      if (quiet) offerApprovalCard({ ...card, pieces });
+      const now = useSpeechPlayback.getState();
+      if (
+        !now.conversational ||
+        !now.enabled ||
+        now.spokenTurn !== chatId ||
+        now.playing ||
+        stillResponding.current
+      )
+        return;
+      if (now.quietTurn === chatId) offerApprovalCard({ ...card, pieces });
       else speakApprovalCard({ ...card, pieces });
     };
     if (natural && !withdrawn) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = new Promise<typeof card.pieces>((resolve) => {
-        timer = setTimeout(
-          () => resolve(card.pieces),
-          NATURAL_WAIT_AT_START_MS,
-        );
+      const late = new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), NATURAL_WAIT_AT_START_MS);
       });
       void Promise.race([
-        naturalApprovalPieces(key, messageId, card.pieces, options),
+        naturalWordings(key, messageId, card.pieces, options),
         late,
-      ]).then((pieces) => {
+      ]).then((answer) => {
         clearTimeout(timer);
-        say(pieces);
+        say(withRewording(card.pieces, answer));
       });
     } else {
       say(card.pieces);
@@ -164,6 +193,7 @@ export function useSpokenApprovalCard({
     approval,
     approvals,
     change,
+    chatId,
     index,
     items,
     key,

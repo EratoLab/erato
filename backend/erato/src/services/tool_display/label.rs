@@ -556,13 +556,30 @@ pub fn sql_read(
         match values {
             Some(values) if !column.is_empty() => {
                 if let Some(spoken) = spoken.as_deref_mut() {
-                    if condition.table.is_some() {
-                        spoken.in_table(condition.table.as_deref());
-                    }
-                    spoken.field(&column, &condition.column);
-                    for (shown, raw) in values.iter().zip(&condition.values) {
-                        if !shown.machine_id {
-                            spoken.choice(&column, &condition.column, &shown.text, raw);
+                    // Over several tables a word holds only for the table
+                    // the condition names, and the label keys it by that
+                    // table; a coded value of an unnamed table stays a code.
+                    let several = plain.tables.len() > 1;
+                    let key = match (several, condition.table.as_deref()) {
+                        (true, Some(table)) => {
+                            spoken.in_table(Some(table));
+                            Some(format!(
+                                "{}.{column}",
+                                sanitize_display_text(table, MAX_DISPLAY_NAME_CHARS).text
+                            ))
+                        }
+                        (true, None) => {
+                            spoken.in_table(None);
+                            None
+                        }
+                        (false, _) => Some(column.clone()),
+                    };
+                    spoken.field(key.as_deref().unwrap_or(&column), &condition.column);
+                    if let Some(key) = key {
+                        for (shown, raw) in values.iter().zip(&condition.values) {
+                            if !shown.machine_id {
+                                spoken.choice(&key, &condition.column, &shown.text, raw);
+                            }
                         }
                     }
                 }

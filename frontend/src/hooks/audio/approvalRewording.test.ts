@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  forgetNaturalApprovals,
-  naturalApprovalPieces,
-} from "./approvalRewording";
+import { withRewording } from "@/lib/toolCallGist/spokenCardRewording";
+
+import { forgetNaturalApprovals, naturalWordings } from "./approvalRewording";
+
 
 import type { SpokenPiece } from "@/lib/toolCallGist/spokenCard";
 
@@ -35,7 +35,7 @@ beforeEach(() => {
   forgetNaturalApprovals(["a", "b", "c"]);
 });
 
-describe("naturalApprovalPieces", () => {
+describe("naturalWordings", () => {
   it("sends the pieces with their facts and takes only checked wordings", async () => {
     fetchRewordApproval.mockResolvedValue({
       pieces: [
@@ -47,7 +47,8 @@ describe("naturalApprovalPieces", () => {
         { id: "request", text: "Passt schon.", natural: true },
       ],
     });
-    const pieces = await naturalApprovalPieces("a", "m", PIECES, OPTIONS);
+    const answer = await naturalWordings("a", "m", PIECES, OPTIONS);
+    const pieces = withRewording(PIECES, answer);
     expect(fetchRewordApproval.mock.calls[0][0].body).toEqual({
       language: "de",
       pieces: [
@@ -56,8 +57,15 @@ describe("naturalApprovalPieces", () => {
           role: "what",
           text: PIECES[0].text,
           facts: ["Dynamics 365"],
+          must_say: false,
         },
-        { id: "request", role: "request", text: PIECES[1].text, facts: [] },
+        {
+          id: "request",
+          role: "request",
+          text: PIECES[1].text,
+          facts: [],
+          must_say: false,
+        },
       ],
     });
     expect(pieces.map((piece) => piece.text)).toEqual([
@@ -66,12 +74,15 @@ describe("naturalApprovalPieces", () => {
     ]);
   });
 
-  it("asks once per card and falls back to the precise pieces on failure", async () => {
+  it("asks once per composition and gives nothing on failure", async () => {
     fetchRewordApproval.mockRejectedValue(new Error("404"));
-    const first = naturalApprovalPieces("b", "m", PIECES, OPTIONS);
-    const again = naturalApprovalPieces("b", "m", PIECES, OPTIONS);
-    expect(await first).toBe(PIECES);
-    expect(await again).toBe(PIECES);
+    const first = naturalWordings("b", "m", PIECES, OPTIONS);
+    const again = naturalWordings("b", "m", PIECES, OPTIONS);
+    expect(await first).toBeUndefined();
+    expect(await again).toBeUndefined();
     expect(fetchRewordApproval).toHaveBeenCalledTimes(1);
+    // Another composition of the same card is another request.
+    await naturalWordings("b", "m", PIECES.slice(1), OPTIONS);
+    expect(fetchRewordApproval).toHaveBeenCalledTimes(2);
   });
 });

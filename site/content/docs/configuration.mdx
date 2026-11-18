@@ -5439,14 +5439,15 @@ Replaces the model's built-in instruction, for example from subscription content
 
 How a waiting approval card is read aloud in conversational audio mode. The card is always composed piece by piece from its own data: what and where, the item, up to three details, long texts, the consequence and the request to decide. In the `precise` style the voice says those pieces as built by rule. In the `natural` style a small model rewords each piece the way a native speaker would say it, through `POST /api/v1beta/me/messages/{message_id}/approval-rewording`, and every wording is checked by rule before it is spoken:
 
-- every value, name, date, number and field name the precise piece says must still be in it, in the same order and exactly as often;
-- every number, negation, word for a quantity, a day or a time, verb of what is done, word for the kind of thing, hedge ("laut Aufruf", "whether") and pointer to the screen must be there exactly as often as in the precise piece;
-- every other word must be a word of the precise piece or one of the allowed `words` for the language;
+- every word of the precise piece must still be in it, in the same order: a wording may only add words, never drop, replace or move one;
+- every word it adds must be on the language's list of [`words`](#approval_speechwords), such as an article, "ist", "geht" or "lautet";
+- every value, name, date and number the piece says must be there in exactly its characters ("185.000" stays "185.000") and as often;
+- an added "ist" or "is" may not come right before "von" or "from", where a change would sound like a range;
 - it may be at most 80 characters longer than the precise piece, and may hold no markup or invisible characters.
 
-A piece that fails, or that the model does not answer within `model_timeout_ms`, is spoken precisely. The consequence and the request to decide are never reworded. Piece ids, order and count never change, so skipping, "the rest", repeating and the difference reading after a change request work the same in both styles; the difference reading itself is always precise. The card on screen does not change.
+A piece that fails, or that the model does not answer within `model_timeout_ms`, is spoken precisely. The consequence, the request to decide and every piece that must be said (a loss such as an emptied field, the warning about recipients outside the organisation, what a delete removes) are never reworded and never sent to the model. Only the texts of pieces change: which pieces are said, their ids and their order are those of the precise card, so skipping, "the rest", repeating and the difference reading after a change request work the same in both styles; the difference reading itself is always precise. The card on screen does not change.
 
-The web app asks for the wording as soon as the card waits, while the model's own spoken words still play, and waits for it at most until the backend answers.
+The web app asks for the wording as soon as the card waits, while the model's own spoken words still play. Once the card is due it waits at most 600 milliseconds more, then says the whole card precisely; a stop said during that wait is kept.
 
 **What leaves Erato.** In the natural style the model receives the card's spoken pieces that may be reworded, with the words each must keep: these hold the call's values, such as names and dates, but not the call itself or the chat. The model is not used for a user whose [`model_permissions`](#model_permissions) do not include its provider; the card is then read precisely. Requests are not traced in Langfuse and their tokens are not counted against user budgets. The log names how many pieces were reworded and why others were not, never their words.
 
@@ -5492,7 +5493,7 @@ Replaces the model's built-in instruction, for example from subscription content
 
 {/* erato_toml_config_key: approval_speech.words.<key>.[] */}
 
-Per language tag, the words a natural wording may use that the precise piece does not have, such as articles, prepositions and verbs. A list replaces the built-in one for that language (German and English have one); a language without either may only reorder the piece's own words. Words of the kinds the check keeps exactly (numbers, negations, days and times, action verbs, kinds of things, hedges) are ignored here: they may only come from the precise piece.
+Per language tag, the words a natural wording may add to the precise piece, such as articles, a copula, "geht" and "lautet". A list replaces the built-in one for that language (German and English have one); in a language without either, a wording may only change punctuation. Words for numbers, negations, days and times, action verbs, kinds of things and hedges are ignored here even when listed.
 
 **Type:** table of lists of `string`
 
@@ -5509,7 +5510,7 @@ What people call a kind of server's machine names, by vocabulary name and langua
 - `choice_labels`: what each value of a choice field is called, keyed by the field and then by the value as the tool writes it.
 - `table_names`: what the records of a table are called, in the plural, keyed by the table's exact name. A read of one table says them instead of the kind ("Verkaufschancen auflisten").
 
-A key `table.field` holds only for calls on that table and wins over the plain `field`; use it for codes that mean different things per table, such as a status. The table is the one the call names in an argument such as `tablename`. A vocabulary entry wins over the operator's [glossary](#mcp_serversserver-idglossary) on the voice; the card keeps the glossary's name. Entries are checked like the glossary's: not blank, at most 128 bytes as a key, at most 64 characters as a name, no hidden characters, at most 5000 per language. A key the backend does not know is ignored with a warning, since a content package may be newer than the backend.
+A key `table.field` holds only for calls on that table and wins over the plain `field`; use it for codes that mean different things per table, such as a status. The table is the one the call names in an argument such as `tablename`. A vocabulary entry wins over the operator's [glossary](#mcp_serversserver-idglossary) on the voice; the card keeps the glossary's name. In a read of several tables, a condition's word is taken only from an entry for its own table; a coded value whose table the statement does not name is said as the code. Entries are checked at startup: an entry that is blank, longer than 128 bytes as a key or 64 characters as a name, or holds hidden characters, a language that is not a lowercase tag, and a language with more than 5000 entries are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too, since a content package may be newer than the backend.
 
 ```toml
 [spoken_vocabularies.dataverse.de.field_names]

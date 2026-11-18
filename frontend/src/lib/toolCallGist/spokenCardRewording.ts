@@ -11,24 +11,28 @@ import type { SpokenOptions, SpokenPiece, SpokenPieceRole } from "./spokenCard";
  * and the difference reading work as in the precise reading.
  */
 
-/** Pieces a wording may replace; the consequence and the request never. */
+/**
+ * Pieces a wording may replace. Never the consequence, the request, or a
+ * piece that must be said: a loss, the outside warning, a delete's subject.
+ */
 export const REWORDABLE_ROLES: readonly SpokenPieceRole[] = [
   "what",
   "item",
   "detail",
-  "outside",
   "more",
   "text",
 ];
 
-export const rewordable = (piece: Pick<SpokenPiece, "role">): boolean =>
-  REWORDABLE_ROLES.includes(piece.role);
+export const rewordable = (
+  piece: Pick<SpokenPiece, "role" | "mustSay">,
+): boolean => !piece.mustSay && REWORDABLE_ROLES.includes(piece.role);
 
 export interface RewordingPiece {
   id: string;
   role: SpokenPieceRole;
   text: string;
   facts: string[];
+  must_say: boolean;
 }
 
 export interface RewordedPiece {
@@ -87,6 +91,7 @@ export const rewordingRequest = (
     role: piece.role,
     text: piece.text,
     facts: pieceFacts(piece, options),
+    must_say: piece.mustSay,
   })),
 });
 

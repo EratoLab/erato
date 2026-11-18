@@ -472,9 +472,9 @@ impl McpRuntimeConfig {
     }
 
     pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
-        let config: Self = runtime_sources(sources)?.try_deserialize()?;
+        let mut config: Self = runtime_sources(sources)?.try_deserialize()?;
         validate_mcp_server_ids(&config.mcp_servers)?;
-        crate::spoken::validate_spoken_vocabularies(&config.spoken_vocabularies)?;
+        warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
         config.mcp_server_permissions.validate()?;
         config.mcp_servers_global.validate()?;
@@ -492,6 +492,12 @@ impl McpRuntimeConfig {
         config
             .spoken_vocabularies
             .clone_from(&self.spoken_vocabularies);
+    }
+}
+
+fn warn_dropped_spoken_entries(vocabularies: &mut SpokenVocabulariesConfig) {
+    for dropped in crate::spoken::drop_unusable_spoken_entries(vocabularies) {
+        tracing::warn!("Spoken vocabulary entry dropped: {dropped}.");
     }
 }
 
@@ -1731,9 +1737,7 @@ impl AppConfig {
             panic!("Invalid approval speech configuration: {}", e);
         }
 
-        if let Err(e) = crate::spoken::validate_spoken_vocabularies(&config.spoken_vocabularies) {
-            panic!("Invalid spoken vocabularies: {}", e);
-        }
+        warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
 
         if let Err(e) = config.validate_approval_change_requests() {

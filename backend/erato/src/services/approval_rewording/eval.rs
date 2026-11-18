@@ -132,7 +132,7 @@ fn report(
                     .card
                     .pieces
                     .iter()
-                    .filter(|piece| rewordable(piece.role))
+                    .filter(|piece| rewordable(piece))
                     .count()
             })
             .sum();
@@ -198,6 +198,19 @@ fn report(
             100.0 * rejected as f64 / changed.max(1) as f64,
             100.0 * rejected as f64 / answered.max(1) as f64
         );
+        let tokens: Vec<(u64, u64)> = cards
+            .iter()
+            .filter_map(|scored| scored.outcome.tokens)
+            .collect();
+        if !tokens.is_empty() {
+            let count = tokens.len() as f64;
+            println!(
+                "    tokens per card: {:.0} in, {:.0} out (mean of {})",
+                tokens.iter().map(|(input, _)| *input as f64).sum::<f64>() / count,
+                tokens.iter().map(|(_, output)| *output as f64).sum::<f64>() / count,
+                tokens.len()
+            );
+        }
         println!("    rejected by kind: {kinds:?}");
         println!("    cards without an answer: {failures:?}");
         let mut top: Vec<(String, usize)> = new_words.into_iter().collect();

@@ -1459,14 +1459,14 @@
         {
           "id": "detail:Scheduled end",
           "role": "detail",
-          "text": "Ende: 14. Januar 2030 um 15 Uhr.",
+          "text": "Fälligkeitsdatum: 14. Januar 2030 um 15 Uhr.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Ende"
+                "text": "Fälligkeitsdatum"
               }
             },
             {
@@ -1570,14 +1570,14 @@
         {
           "id": "detail:Scheduled end",
           "role": "detail",
-          "text": "End: 14 January 2030 at 3 pm.",
+          "text": "Due date: 14 January 2030 at 3 pm.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "End"
+                "text": "Due date"
               }
             },
             {
@@ -4341,6 +4341,104 @@
                 "kind": "number",
                 "value": 5,
                 "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "update-14-case-priority": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz ändern, den ich in diesem Chat nicht gelesen habe.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priorität wird auf Hoch gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priorität"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Hoch"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a record in Dynamics 365 that I haven't read in this chat.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority will be set to High.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "High"
               }
             }
           ]
@@ -8381,6 +8479,204 @@
               "value": {
                 "kind": "text",
                 "text": "Beispiel Industrie GmbH"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
+  "read-15-sql-join-two-states": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 aus den Tabellen opportunity und account Datensätze lesen, mit diesen Bedingungen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status von opportunity ist Gewonnen.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Gewonnen"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode#2",
+          "role": "detail",
+          "text": "Status von account ist Inaktiv.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Inaktiv"
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to read records from the tables opportunity and account in Dynamics 365, with these conditions:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode",
+          "role": "detail",
+          "text": "Status of opportunity is Won.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "opportunity"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Won"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:statecode#2",
+          "role": "detail",
+          "text": "Status of account is Inactive.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Status"
+              }
+            },
+            {
+              "slot": "place",
+              "value": {
+                "kind": "text",
+                "text": "account"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Inactive"
               }
             }
           ]

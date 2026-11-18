@@ -1,11 +1,12 @@
 //! The rule check a natural wording passes before it is spoken. What is heard
-//! is what gets approved, so a wording passes only when the check can show it
-//! says every fact of the precise piece, in the same order, and nothing else:
-//! every word it uses is a word of the precise piece or one the language
-//! allows, and every number, negation and word for a quantity, a day or a
-//! time is said exactly as often as in the precise piece.
+//! is what gets approved, so a wording may only add words to the precise
+//! piece, never drop, replace or reorder one: the precise piece's words must
+//! all be in it, in their order, and every word it adds must be on the short
+//! per-language list of insertions (articles, "ist", "geht", "lautet", …).
+//! Each fact is also said in exactly the precise piece's characters, so
+//! "185.000" cannot become "185,000". Anything else keeps the precise piece.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::config::is_invisible_format_char;
 
@@ -17,17 +18,15 @@ pub enum Rejection {
     /// A character outside the allowed set: markup, a control or an
     /// invisible character.
     Character(char),
-    /// A fact of the precise piece is not in the wording.
-    FactMissing(String),
-    /// Two facts are said in another order than in the precise piece.
-    FactOrder,
-    /// A word that is neither in the precise piece nor allowed.
+    /// A word of the precise piece is missing or out of its order.
+    Dropped(String),
+    /// A word that is not on the list of insertions.
     NewWord(String),
-    /// More or fewer negations than the precise piece.
-    Negation,
-    /// A number, a quantity or a time word of the precise piece said more
-    /// or fewer times.
-    Guarded(String),
+    /// A fact not said in exactly its precise characters, or not as often.
+    FactText(String),
+    /// An added "ist" or "is" before "von" or "from", which sounds like a
+    /// range ("is from Low to Medium") instead of a change.
+    RangeLike,
 }
 
 impl Rejection {
@@ -36,11 +35,10 @@ impl Rejection {
             Self::Empty => "empty",
             Self::TooLong => "too_long",
             Self::Character(_) => "character",
-            Self::FactMissing(_) => "fact_missing",
-            Self::FactOrder => "fact_order",
+            Self::Dropped(_) => "dropped",
             Self::NewWord(_) => "new_word",
-            Self::Negation => "negation",
-            Self::Guarded(_) => "guarded_word",
+            Self::FactText(_) => "fact_text",
+            Self::RangeLike => "range_like",
         }
     }
 }
@@ -50,14 +48,24 @@ const PUNCTUATION: &str = ".,:;!?'\"’‘“”„«»–—-()/%€$&+…@";
 /// A wording may be this much longer than the precise piece, in characters.
 const MAX_GROWTH_CHARS: usize = 80;
 
-/// Words in lowercase, apostrophes inside a word kept ("can't"), anything
-/// else a separator: "E-Mail" is "e" and "mail" in both texts alike.
+/// Words in lowercase, apostrophes inside a word kept ("can't"); a number
+/// keeps the separators between its digits ("185.000", "15.01.2030",
+/// "10:30"), so another separator is another word. Anything else separates.
 pub fn tokens(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text
+        .chars()
+        .map(|c| if c == '’' || c == '‘' { '\'' } else { c })
+        .collect();
     let mut words = Vec::new();
     let mut word = String::new();
-    for c in text.chars() {
-        let c = if c == '’' || c == '‘' { '\'' } else { c };
-        if c.is_alphanumeric() || (c == '\'' && !word.is_empty()) {
+    for (index, &c) in chars.iter().enumerate() {
+        let inside_number = matches!(c, '.' | ',' | ':' | '/')
+            && word
+                .chars()
+                .last()
+                .is_some_and(|last| last.is_ascii_digit())
+            && chars.get(index + 1).is_some_and(char::is_ascii_digit);
+        if c.is_alphanumeric() || inside_number || (c == '\'' && !word.is_empty()) {
             word.extend(c.to_lowercase());
         } else if !word.is_empty() {
             words.push(std::mem::take(&mut word).trim_end_matches('\'').to_string());
@@ -70,30 +78,28 @@ pub fn tokens(text: &str) -> Vec<String> {
     words
 }
 
-fn occurrences(haystack: &[String], needle: &[String]) -> usize {
-    if needle.is_empty() || needle.len() > haystack.len() {
+/// Places of `fact` in `text`, compared without case but character for
+/// character otherwise, and only where it is not part of a longer word.
+fn fact_places(text: &str, fact: &str) -> usize {
+    let text: Vec<char> = text.to_lowercase().chars().collect();
+    let fact: Vec<char> = fact.trim().to_lowercase().chars().collect();
+    if fact.is_empty() || fact.len() > text.len() {
         return 0;
     }
-    haystack
-        .windows(needle.len())
-        .filter(|window| *window == needle)
+    let edge = |c: Option<&char>| c.is_none_or(|c| !c.is_alphanumeric());
+    (0..=text.len() - fact.len())
+        .filter(|&start| {
+            text[start..start + fact.len()] == fact[..]
+                && (start == 0 || edge(text.get(start - 1)))
+                && edge(text.get(start + fact.len()))
+        })
         .count()
 }
 
-fn find(haystack: &[String], needle: &[String]) -> Option<usize> {
-    if needle.is_empty() || needle.len() > haystack.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-/// Words a language never lets a wording add or drop: numbers, quantities,
-/// words for days, months and times, the words that say whose claim a value
-/// is or that something is not known ("laut Aufruf", "ob"), what is done
-/// (the action verbs), to what kind of thing, and what is only on screen or
-/// cut. They may only come from the precise piece, exactly as often.
+/// Words a language never lets a wording add: negations, numbers,
+/// quantities, words for days and times, hedges, action verbs, kinds of
+/// things and pointers to the screen. A configured list of insertions that
+/// holds one is cut by it.
 fn guarded(language: &str) -> &'static [&'static str] {
     match primary(language) {
         "de" => GUARD_DE,
@@ -140,6 +146,15 @@ pub fn allowed_words(language: &str, configured: &[String]) -> BTreeSet<String> 
         .collect()
 }
 
+/// Copulas that may not be added right before the word that starts a change.
+fn range_like(language: &str) -> (&'static [&'static str], &'static [&'static str]) {
+    match primary(language) {
+        "de" => (&["ist", "sind"], &["von", "vom"]),
+        "en" => (&["is", "are"], &["from"]),
+        _ => (&[], &[]),
+    }
+}
+
 /// One precise piece and what it must keep.
 pub struct Precise<'a> {
     pub text: &'a str,
@@ -173,77 +188,35 @@ pub fn check(
         return Err(Rejection::Character(c));
     }
 
+    // The precise words, in order, with only allowed words between them.
     let said = tokens(precise.text);
     let new = tokens(wording);
-
-    // Every fact, where the precise piece says it and where the wording does.
-    let mut places = Vec::new();
-    for fact in precise.facts {
-        let words = tokens(fact);
-        if words.is_empty() {
-            continue;
-        }
-        let Some(in_precise) = find(&said, &words) else {
-            // The caller only sends facts the piece says.
-            return Err(Rejection::FactMissing(fact.clone()));
-        };
-        // A fact inside another one ("Word" in "word comment") counts only
-        // when it is there as often as in the precise piece, and a fact said
-        // twice is not the piece's.
-        let Some(in_wording) =
-            find(&new, &words).filter(|_| occurrences(&new, &words) == occurrences(&said, &words))
-        else {
-            return Err(Rejection::FactMissing(fact.clone()));
-        };
-        places.push((in_precise, in_wording));
-    }
-    for (index, (precise_a, wording_a)) in places.iter().enumerate() {
-        for (precise_b, wording_b) in &places[index + 1..] {
-            if precise_a != precise_b && (precise_a < precise_b) != (wording_a < wording_b) {
-                return Err(Rejection::FactOrder);
+    let (copulas, change_starts) = range_like(language);
+    let mut next = 0;
+    let mut added_before: Option<&str> = None;
+    for word in &new {
+        if said.get(next) == Some(word) {
+            if added_before.is_some_and(|added| copulas.contains(&added))
+                && change_starts.contains(&word.as_str())
+            {
+                return Err(Rejection::RangeLike);
             }
+            added_before = None;
+            next += 1;
+        } else if allowed.contains(word.as_str()) {
+            added_before = Some(word.as_str());
+        } else {
+            return Err(Rejection::NewWord(word.clone()));
         }
     }
-
-    let precise_words: BTreeSet<&str> = said.iter().map(String::as_str).collect();
-    if let Some(word) = new
-        .iter()
-        .find(|word| !precise_words.contains(word.as_str()) && !allowed.contains(word.as_str()))
-    {
-        return Err(Rejection::NewWord(word.clone()));
+    if let Some(missing) = said.get(next) {
+        return Err(Rejection::Dropped(missing.clone()));
     }
 
-    let negation = negations(language);
-    let negations_in = |words: &[String]| {
-        words
-            .iter()
-            .filter(|word| negation.contains(&word.as_str()))
-            .count()
-    };
-    if negations_in(&said) != negations_in(&new) {
-        return Err(Rejection::Negation);
-    }
-    // Facts a piece says without a value behind them, such as "und ein
-    // weiterer Eintrag", are kept by keeping these words.
-    let guard = guarded(language);
-    let guarded_in = |words: &[String]| -> BTreeMap<String, usize> {
-        let mut counts = BTreeMap::new();
-        for word in words
-            .iter()
-            .filter(|word| guard.contains(&word.as_str()) || word.chars().any(char::is_numeric))
-        {
-            *counts.entry(word.clone()).or_default() += 1;
+    for fact in precise.facts {
+        if fact_places(wording, fact) != fact_places(precise.text, fact) {
+            return Err(Rejection::FactText(fact.clone()));
         }
-        counts
-    };
-    let (before, after) = (guarded_in(&said), guarded_in(&new));
-    if let Some(word) = before
-        .iter()
-        .chain(&after)
-        .map(|(word, _)| word)
-        .find(|word| before.get(*word) != after.get(*word))
-    {
-        return Err(Rejection::Guarded(word.clone()));
     }
     Ok(())
 }
@@ -810,12 +783,8 @@ const GUARD_EN: &[&str] = &[
 mod tests {
     use super::*;
 
-    fn facts(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_string()).collect()
-    }
-
-    fn run(precise: &str, values: &[&str], wording: &str, language: &str) -> Result<(), Rejection> {
-        let facts = facts(values);
+    fn run(precise: &str, facts: &[&str], wording: &str, language: &str) -> Result<(), Rejection> {
+        let facts: Vec<String> = facts.iter().map(|fact| (*fact).to_string()).collect();
         check(
             &Precise {
                 text: precise,
@@ -828,10 +797,14 @@ mod tests {
     }
 
     #[test]
-    fn tokens_ignore_case_and_punctuation() {
+    fn tokens_ignore_case_and_keep_a_number_whole() {
         assert_eq!(
-            tokens("Fälligkeitsdatum: 15. Januar 2030."),
-            vec!["fälligkeitsdatum", "15", "januar", "2030"]
+            tokens("Fälligkeitsdatum: 15. Januar 2030, 10:30 Uhr."),
+            vec!["fälligkeitsdatum", "15", "januar", "2030", "10:30", "uhr"]
+        );
+        assert_eq!(
+            tokens("185.000 und 185,000"),
+            vec!["185.000", "und", "185,000"]
         );
         assert_eq!(
             tokens("I can’t, it's E-Mail"),
@@ -839,227 +812,273 @@ mod tests {
         );
     }
 
-    /// Each row: precise piece, its facts, a wording, and whether it passes.
+    /// Faithful rewordings: only articles, a copula, "geht", "lautet" or
+    /// "Wert" added, as the model does in the measured run.
     #[test]
-    fn rule_check_table() {
-        use Rejection as R;
-        let de_change =
-            "Das Feld Fälligkeitsdatum wird vom 1. Dezember auf den 15. Januar 2030 geändert.";
-        let de_change_facts = ["Fälligkeitsdatum", "1. Dezember", "15. Januar 2030"];
-        let too_long = "Status: aktiv, und so weiter. ".repeat(6);
-        type Row<'a> = (
-            &'a str,
-            &'a [&'a str],
-            &'a str,
-            &'a str,
-            Result<(), fn(&Rejection) -> bool>,
-        );
-        let rows: Vec<Row<'_>> = vec![
-            // Faithful rewordings.
+    fn faithful_wordings_pass() {
+        let rows: &[(&str, &[&str], &str, &str)] = &[
             (
-                de_change,
-                &de_change_facts,
-                "Das Fälligkeitsdatum wird vom 1. Dezember auf den 15. Januar 2030 geändert.",
+                "Priorität: Hoch.",
+                &["Priorität", "Hoch"],
+                "Die Priorität ist Hoch.",
                 "de",
-                Ok(()),
-            ),
-            // A verb of its own is another action, even a fitting one.
-            (
-                de_change,
-                &de_change_facts,
-                "Ich verschiebe das Fälligkeitsdatum vom 1. Dezember auf den 15. Januar 2030.",
-                "de",
-                Err(|r| matches!(r, R::Guarded(_) | R::NewWord(_))),
             ),
             (
-                de_change,
-                &de_change_facts,
-                "Fälligkeitsdatum: vom 1. Dezember auf den 15. Januar 2030.",
+                "Bezug: Line 4 Retrofit.",
+                &["Bezug", "Line 4 Retrofit"],
+                "Der Bezug ist Line 4 Retrofit.",
                 "de",
-                Err(|r| matches!(r, R::Guarded(_))),
             ),
             (
-                "Status: aktiv.",
-                &["Status", "aktiv"],
-                "Der Status wird aktiv.",
+                "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 15. Januar 2030.",
+                &[
+                    "Voraussichtliches Abschlussdatum",
+                    "1. Dezember",
+                    "15. Januar 2030",
+                ],
+                "Das Voraussichtliches Abschlussdatum geht vom 1. Dezember auf den 15. Januar 2030.",
                 "de",
-                Ok(()),
+            ),
+            (
+                "Betreff: Termin für die Begehung.",
+                &["Betreff", "Termin für die Begehung"],
+                "Der Betreff lautet Termin für die Begehung.",
+                "de",
+            ),
+            (
+                "Geschätzter Umsatz: 185.000.",
+                &["Geschätzter Umsatz", "185.000"],
+                "Der Geschätzter Umsatz ist 185.000.",
+                "de",
             ),
             (
                 "Priority: High.",
                 &["Priority", "High"],
                 "The priority is High.",
                 "en",
-                Ok(()),
             ),
             (
-                "I'd like to create a task in Dynamics 365:",
-                &["Dynamics 365"],
-                "I'll create a task in Dynamics 365:",
+                "Probability: from 10 to 60 percent.",
+                &["Probability", "10", "60 percent"],
+                "The probability goes from 10 to 60 percent.",
                 "en",
-                Ok(()),
-            ),
-            // A fact dropped.
-            (
-                de_change,
-                &de_change_facts,
-                "Ich verschiebe das Fälligkeitsdatum auf den 15. Januar 2030.",
-                "de",
-                Err(|r| matches!(r, R::FactMissing(_))),
             ),
             (
-                "Empfänger: Anna Müller.",
-                &["Empfänger", "Anna Müller"],
-                "Empfänger: Anna.",
-                "de",
-                Err(|r| matches!(r, R::FactMissing(_))),
-            ),
-            // A fact altered.
-            (
-                de_change,
-                &de_change_facts,
-                "Ich verschiebe das Fälligkeitsdatum vom 1. Dezember auf den 16. Januar 2030.",
-                "de",
-                Err(|r| matches!(r, R::FactMissing(_))),
-            ),
-            (
-                "Probability: 70 percent.",
-                &["Probability", "70 percent"],
-                "Probability: 80 percent.",
+                "Phone: +49 821 555 0100.",
+                &["Phone", "+49 821 555 0100"],
+                "The Phone value is +49 821 555 0100.",
                 "en",
-                Err(|r| matches!(r, R::FactMissing(_))),
             ),
+        ];
+        for (precise, facts, wording, language) in rows {
+            assert_eq!(run(precise, facts, wording, language), Ok(()), "{wording}");
+        }
+    }
+
+    /// Wordings that keep every fact word but change what is said, from the
+    /// review of 2026-11-18, and the earlier cases: each is rejected.
+    #[test]
+    fn unfaithful_wordings_are_rejected() {
+        let change_de =
+            "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 15. Januar 2030.";
+        let change_de_facts: &[&str] = &[
+            "Voraussichtliches Abschlussdatum",
+            "1. Dezember",
+            "15. Januar 2030",
+        ];
+        let rows: &[(&str, &[&str], &str, &str)] = &[
             // Old and new swapped.
             (
-                de_change,
-                &de_change_facts,
-                "Fälligkeitsdatum: vom 15. Januar 2030 auf den 1. Dezember.",
+                change_de,
+                change_de_facts,
+                "Voraussichtliches Abschlussdatum: neu 1. Dezember, bisher 15. Januar 2030.",
                 "de",
-                Err(|r| matches!(r, R::FactOrder)),
-            ),
-            // A negation dropped or added.
-            (
-                "Der Datensatz wird nicht gelöscht.",
-                &["Datensatz"],
-                "Der Datensatz wird gelöscht.",
-                "de",
-                Err(|r| matches!(r, R::Negation)),
             ),
             (
-                "Status: aktiv.",
-                &["Status", "aktiv"],
-                "Status: nicht aktiv.",
+                "Wahrscheinlichkeit: von 10 auf 60 Prozent.",
+                &["Wahrscheinlichkeit", "10", "60 Prozent"],
+                "Die Wahrscheinlichkeit ist neu 10 statt 60 Prozent.",
                 "de",
-                Err(|r| matches!(r, R::NewWord(_))),
             ),
             (
-                "The task is created.",
-                &[],
-                "The task is not created.",
+                "Contact: from Anna Müller to Ben Schmidt.",
+                &["Contact", "Anna Müller", "Ben Schmidt"],
+                "The contact is Anna Müller instead of Ben Schmidt.",
                 "en",
-                Err(|r| matches!(r, R::NewWord(_))),
-            ),
-            // Whose claim a value is, or that something is not known, dropped.
-            (
-                "Title laut Aufruf: Kickoff Line 4.",
-                &["Title", "Kickoff Line 4"],
-                "Title lautet Kickoff Line 4.",
-                "de",
-                Err(|r| matches!(r, R::Guarded(_))),
             ),
             (
-                "Labels: the tool says it adds Retrofit.",
-                &["Labels", "Retrofit"],
-                "Labels: it adds Retrofit.",
+                "Estimated close date: from 1 December to 15 January 2030.",
+                &["Estimated close date", "1 December", "15 January 2030"],
+                "The estimated close date goes to 1 December from 15 January 2030.",
                 "en",
-                Err(|r| matches!(r, R::Guarded(_))),
             ),
-            // Another action, a dropped kind, a past stance, a dropped pointer.
+            (
+                change_de,
+                change_de_facts,
+                "Voraussichtliches Abschlussdatum: vom 15. Januar 2030 auf den 1. Dezember.",
+                "de",
+            ),
+            // A warning, a condition or a direction reversed.
+            (
+                "Zwei der Empfänger sind außerhalb der Firma.",
+                &["Zwei"],
+                "Zwei der Empfänger sind in der Firma.",
+                "de",
+            ),
+            (
+                "Two of the recipients are outside the organisation.",
+                &["Two"],
+                "Two of the recipients are in the organisation.",
+                "en",
+            ),
+            (
+                "Fälligkeitsdatum liegt vor dem 31. Januar 2030.",
+                &["Fälligkeitsdatum", "31. Januar 2030"],
+                "Fälligkeitsdatum liegt nach dem 31. Januar 2030.",
+                "de",
+            ),
+            (
+                "Ich möchte in Notion die Seiten Wochenbericht KW 44 und Wochenbericht KW 45 nach Archiv verschieben.",
+                &[
+                    "Notion",
+                    "Wochenbericht KW 44",
+                    "Wochenbericht KW 45",
+                    "Archiv",
+                ],
+                "Ich möchte in Notion die Seiten Wochenbericht KW 44 und Wochenbericht KW 45 aus Archiv verschieben.",
+                "de",
+            ),
+            (
+                "Ich möchte in Outlook eine E-Mail an Anna Mueller und drei weitere senden:",
+                &["Outlook", "Anna Mueller", "drei"],
+                "Ich möchte in Outlook eine E-Mail von Anna Mueller an drei weitere senden:",
+                "de",
+            ),
+            // Tense and modality.
+            (
+                "Das Feld Telefon wird geleert.",
+                &["Telefon"],
+                "Das Feld Telefon wurde geleert.",
+                "de",
+            ),
+            (
+                "The field Phone will be emptied.",
+                &["Phone"],
+                "The field Phone has been emptied.",
+                "en",
+            ),
+            (
+                "Dabei werden 15 Felder geleert.",
+                &["15"],
+                "Dabei können 15 Felder geleert werden.",
+                "de",
+            ),
+            (
+                "Risk level will be set to Medium.",
+                &["Risk level", "Medium"],
+                "Risk level could be set to Medium.",
+                "en",
+            ),
+            // A number in another format, "oder" for "und", a moved negation,
+            // a dropped approximation, "kommen dazu" said as "sind".
+            (
+                "Geschätzter Umsatz: 185.000.",
+                &["Geschätzter Umsatz", "185.000"],
+                "Der Geschätzter Umsatz ist 185,000.",
+                "de",
+            ),
+            (
+                "Priorität ist Niedrig, Normal, Hoch oder drei weitere Werte.",
+                &["Priorität", "Niedrig", "Normal", "Hoch", "drei"],
+                "Priorität ist Niedrig, Normal, Hoch und drei weitere Werte.",
+                "de",
+            ),
+            (
+                "Ich möchte in Dynamics 365 einen Datensatz ändern, den ich in diesem Chat nicht gelesen habe.",
+                &["Dynamics 365"],
+                "Ich möchte in Dynamics 365 nicht einen Datensatz ändern, den ich in diesem Chat gelesen habe.",
+                "de",
+            ),
+            (
+                "Beschreibung: ein Text von etwa 70 Wörtern, er steht auf dem Bildschirm.",
+                &["Beschreibung", "70"],
+                "Die Beschreibung ist ein Text von 70 Wörtern, er steht auf dem Bildschirm.",
+                "de",
+            ),
+            (
+                "Zu Labels kommen laut Tool Retrofit und Service dazu.",
+                &["Labels", "Retrofit", "Service"],
+                "Labels sind laut Tool Retrofit und Service.",
+                "de",
+            ),
+            // A range where a change is meant.
+            (
+                "Risk level: from Low to Medium.",
+                &["Risk level", "Low", "Medium"],
+                "Risk level is from Low to Medium.",
+                "en",
+            ),
+            (
+                "Risikostufe: von Niedrig auf Mittel.",
+                &["Risikostufe", "Niedrig", "Mittel"],
+                "Die Risikostufe ist von Niedrig auf Mittel.",
+                "de",
+            ),
+            // Earlier cases: another action, a dropped kind, a past stance,
+            // a dropped hedge or pointer, a repeated fact, added words.
             (
                 "Angebot freigeben.",
                 &["Angebot freigeben"],
                 "Ich möchte Angebot freigeben auflisten.",
                 "de",
-                Err(|r| matches!(r, R::Guarded(_) | R::NewWord(_))),
             ),
             (
                 "The second one: a task, Angebot nachfassen.",
                 &["Angebot nachfassen"],
                 "The second one is Angebot nachfassen.",
                 "en",
-                Err(|r| matches!(r, R::Guarded(_) | R::NewWord(_))),
             ),
             (
-                "Kontakt: von Anna Müller auf Ben Schmidt.",
-                &["Kontakt", "Anna Müller", "Ben Schmidt"],
-                "Der Kontakt ist von Anna Müller auf Ben Schmidt geändert.",
+                "Title laut Aufruf: Kickoff Line 4.",
+                &["Title", "Kickoff Line 4"],
+                "Title lautet Kickoff Line 4.",
                 "de",
-                Err(|r| matches!(r, R::Guarded(_) | R::NewWord(_))),
             ),
             (
                 "I'd like to share a file with Planer in Google Drive whose ID is shown on screen.",
                 &["Planer", "Google Drive"],
                 "I'd like to share a file with Planer in Google Drive.",
                 "en",
-                Err(|r| matches!(r, R::Guarded(_))),
             ),
             (
                 "Ich möchte in CRM einen Datensatz anlegen:",
                 &["CRM"],
                 "Ich möchte in CRM einen Datensatz anlegen: CRM",
                 "de",
-                Err(|r| matches!(r, R::FactMissing(_))),
-            ),
-            // A counted rest dropped, a number said twice.
-            (
-                "Tags: Retrofit, Service und ein weiterer Eintrag.",
-                &["Tags", "Retrofit", "Service"],
-                "Tags: Retrofit, Service.",
-                "de",
-                Err(|r| matches!(r, R::Guarded(_))),
-            ),
-            (
-                "Dazu kommen vier weitere Felder.",
-                &["vier"],
-                "Dazu kommen vier Felder.",
-                "de",
-                Err(|r| matches!(r, R::Guarded(_))),
-            ),
-            (
-                "Probability: 70 percent.",
-                &["Probability", "70 percent"],
-                "Probability: 70 percent, 70.",
-                "en",
-                Err(|r| matches!(r, R::Guarded(_))),
-            ),
-            // A new fact: a name, a number, a date word, an amount.
-            (
-                "Ich möchte eine Aufgabe anlegen:",
-                &[],
-                "Ich möchte für Anna eine Aufgabe anlegen:",
-                "de",
-                Err(|r| matches!(r, R::NewWord(_))),
             ),
             (
                 "Status: aktiv.",
                 &["Status", "aktiv"],
                 "Status: aktiv, ab morgen.",
                 "de",
-                Err(|r| matches!(r, R::NewWord(_))),
             ),
             (
                 "Priority: High.",
                 &["Priority", "High"],
-                "Priority: High, for 2 tasks.",
+                "Priority: High for all 2 tasks.",
                 "en",
-                Err(|r| matches!(r, R::NewWord(_))),
             ),
             (
-                "Priority: High.",
-                &["Priority", "High"],
-                "Priority: High for all tasks.",
+                "The task is created.",
+                &[],
+                "The task is not created.",
                 "en",
-                Err(|r| matches!(r, R::NewWord(_))),
+            ),
+            (
+                "Tags: Retrofit, Service und ein weiterer Eintrag.",
+                &["Tags", "Retrofit", "Service"],
+                "Tags: Retrofit, Service.",
+                "de",
             ),
             // Markup, an invisible character, empty, too long.
             (
@@ -1067,75 +1086,48 @@ mod tests {
                 &["Status", "aktiv"],
                 "**Status**: aktiv.",
                 "de",
-                Err(|r| matches!(r, R::Character('*'))),
             ),
             (
                 "Status: aktiv.",
                 &["Status", "aktiv"],
                 "Status:\u{200B} aktiv.",
                 "de",
-                Err(|r| matches!(r, R::Character(_))),
             ),
-            (
-                "Status: aktiv.",
-                &["Status", "aktiv"],
-                "  ",
-                "de",
-                Err(|r| matches!(r, R::Empty)),
-            ),
-            (
-                "Status: aktiv.",
-                &["Status", "aktiv"],
-                &too_long,
-                "de",
-                Err(|r| matches!(r, R::TooLong)),
-            ),
+            ("Status: aktiv.", &["Status", "aktiv"], "  ", "de"),
         ];
-        for (precise, values, wording, language, expected) in rows {
-            let got = run(precise, values, wording, language);
-            match expected {
-                Ok(()) => assert_eq!(got, Ok(()), "{wording}"),
-                Err(is) => assert!(got.as_ref().is_err_and(is), "{wording}: {got:?}"),
-            }
+        for (precise, facts, wording, language) in rows {
+            assert!(run(precise, facts, wording, language).is_err(), "{wording}");
         }
+        let too_long = "Status: aktiv, der der der der der der der der der der der der der der der der der der der der der der der der der der der der der.";
+        assert_eq!(
+            run("Status: aktiv.", &["Status", "aktiv"], too_long, "de"),
+            Err(Rejection::TooLong)
+        );
     }
 
     #[test]
     fn guarded_words_cannot_be_allowed_by_configuration() {
-        let allowed = allowed_words(
-            "de",
-            &facts(&["nicht", "morgen", "zwei", "2", "ändern", "Aufgabe", "gerne"]),
+        let configured: Vec<String> =
+            ["nicht", "morgen", "zwei", "2", "ändern", "Aufgabe", "gerne"]
+                .iter()
+                .map(|word| (*word).to_string())
+                .collect();
+        assert_eq!(
+            allowed_words("de", &configured),
+            BTreeSet::from(["gerne".to_string()])
         );
-        assert_eq!(allowed, BTreeSet::from(["gerne".to_string()]));
     }
 
     #[test]
-    fn a_language_without_words_only_reorders() {
+    fn a_language_without_insertions_only_keeps_the_piece() {
         let allowed = allowed_words("fr", &[]);
         assert!(allowed.is_empty());
-        assert_eq!(
-            check(
-                &Precise {
-                    text: "Statut : actif.",
-                    facts: &facts(&["Statut", "actif"])
-                },
-                "Statut actif.",
-                "fr",
-                &allowed
-            ),
-            Ok(())
-        );
-        assert!(
-            check(
-                &Precise {
-                    text: "Statut : actif.",
-                    facts: &facts(&["Statut", "actif"])
-                },
-                "Le statut : actif.",
-                "fr",
-                &allowed
-            )
-            .is_err()
-        );
+        let facts = ["Statut".to_string(), "actif".to_string()];
+        let precise = Precise {
+            text: "Statut : actif.",
+            facts: &facts,
+        };
+        assert_eq!(check(&precise, "Statut actif.", "fr", &allowed), Ok(()));
+        assert!(check(&precise, "Le statut : actif.", "fr", &allowed).is_err());
     }
 }

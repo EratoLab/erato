@@ -209,7 +209,10 @@ const conditionsOf = (
     const table = isRecord(entry)
       ? cleanServerText(entry.table, MAX_NAME_CHARS).text
       : "";
-    const heard = spokenFieldName(names, column);
+    // A condition on one of several tables finds its words under
+    // `table.column` only, so one table's label never names another's code.
+    const key = table.length > 0 ? `${table}.${column}` : column;
+    const heard = spokenFieldName(names, key);
     return [
       {
         column: heard ?? column,
@@ -222,7 +225,7 @@ const conditionsOf = (
             timeZone,
             value.machineId || value.resolved
               ? undefined
-              : spokenChoice(names, column, value.text),
+              : spokenChoice(names, key, value.text),
           ),
         ),
         valuesOmitted: omitted + extra,

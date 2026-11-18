@@ -282,6 +282,18 @@
       ]
     },
     {
+      "id": "update-14-case-priority",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-14-case-priority"
+      ]
+    },
+    {
       "id": "update-10-contact-two-fields",
       "kind": [
         "update"
@@ -638,6 +650,18 @@
       ],
       "calls": [
         "read-08-sql-join"
+      ]
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-15-sql-join-two-states"
       ]
     },
     {
@@ -1932,7 +1956,7 @@
               "fields": {
                 "actualdurationminutes": "Dauer in Minuten",
                 "category": "Kategorie",
-                "percentcomplete": "Prozent erledigt",
+                "percentcomplete": "Prozent abgeschlossen",
                 "prioritycode": "Priorität",
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum",
@@ -2273,14 +2297,14 @@
               "fields": {
                 "description": "Beschreibung",
                 "phonenumber": "Telefonnummer",
-                "scheduledend": "Ende"
+                "scheduledend": "Fälligkeitsdatum"
               }
             },
             "en": {
               "fields": {
                 "description": "Description",
                 "phonenumber": "Phone number",
-                "scheduledend": "End"
+                "scheduledend": "Due date"
               }
             }
           }
@@ -4892,6 +4916,128 @@
               "choices": {
                 "statecode": {
                   "1": "Completed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "update-14-case-priority",
+      "tool_name": "update_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "incident",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
+        "item": {
+          "prioritycode": 1
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000e001",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/prioritycode",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/prioritycode",
+                "name": "Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "incident",
+            "record_unread": true,
+            "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Hoch"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "High"
                 }
               }
             }
@@ -7919,7 +8065,7 @@
           "spoken_names": {
             "de": {
               "fields": {
-                "name": "Name"
+                "account.name": "Name"
               },
               "tables": {
                 "account": "Firmen",
@@ -7928,7 +8074,108 @@
             },
             "en": {
               "fields": {
-                "name": "Name"
+                "account.name": "Name"
+              },
+              "tables": {
+                "account": "accounts",
+                "opportunity": "opportunities"
+              }
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT o.name FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE o.statecode = 1 AND a.statecode = 1"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "opportunity",
+                "account"
+              ],
+              "conditions": [
+                {
+                  "column": "statecode",
+                  "table": "opportunity",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "1"
+                    }
+                  ]
+                },
+                {
+                  "column": "statecode",
+                  "table": "account",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "account.statecode": "Status",
+                "opportunity.statecode": "Status"
+              },
+              "choices": {
+                "account.statecode": {
+                  "1": "Inaktiv"
+                },
+                "opportunity.statecode": {
+                  "1": "Gewonnen"
+                }
+              },
+              "tables": {
+                "account": "Firmen",
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "account.statecode": "Status",
+                "opportunity.statecode": "Status"
+              },
+              "choices": {
+                "account.statecode": {
+                  "1": "Inactive"
+                },
+                "opportunity.statecode": {
+                  "1": "Won"
+                }
               },
               "tables": {
                 "account": "accounts",
