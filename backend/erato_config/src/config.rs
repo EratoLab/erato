@@ -2524,6 +2524,12 @@ impl AppConfig {
         if let Err(message) = config.audio_conversational.validate_talk_over_voice() {
             panic!("{message}");
         }
+        if let Err(message) = config
+            .audio_conversational
+            .validate_listening_and_voice_start()
+        {
+            panic!("{message}");
+        }
 
         // Validate that Langfuse is configured if any chat provider uses it
         if config.any_prompt_source_uses_langfuse() && !config.integrations.langfuse.enabled {
@@ -3473,6 +3479,42 @@ mod audio_config_tests {
             let settings = load(&format!("end_of_turn_silence_ms = {rejected}"));
             let error = settings.validate_end_of_turn_silence().unwrap_err();
             assert!(error.contains("500 to 5000 milliseconds"), "{error}");
+        }
+    }
+
+    #[test]
+    fn minimum_speech_and_voice_start_have_defaults_and_ranges() {
+        let load = |toml: &str| {
+            config::Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AudioConversationalConfig>()
+                .unwrap()
+        };
+        let settings = load("enabled = true");
+        assert_eq!(
+            (
+                settings.min_speech_ms,
+                settings.card_min_speech_ms,
+                settings.voice_start_buffer_ms,
+                settings.voice_start_max_wait_ms
+            ),
+            (250, 64, 400, 350)
+        );
+        assert!(settings.validate_listening_and_voice_start().is_ok());
+        let settings = load("card_min_speech_ms = 96\nvoice_start_buffer_ms = 0");
+        assert_eq!(settings.card_min_speech_ms, 96);
+        assert!(settings.validate_listening_and_voice_start().is_ok());
+        for (key, rejected) in [
+            ("min_speech_ms", 31),
+            ("card_min_speech_ms", 2001),
+            ("voice_start_buffer_ms", 2001),
+            ("voice_start_max_wait_ms", 5000),
+        ] {
+            let settings = load(&format!("{key} = {rejected}"));
+            let error = settings.validate_listening_and_voice_start().unwrap_err();
+            assert!(error.contains(key), "{error}");
         }
     }
 
@@ -8632,6 +8674,31 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_card_end_of_turn_silence_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub card_end_of_turn_silence_ms: u32,
+    /// Speech, in milliseconds, the voice detector must count before a
+    /// conversational turn can end. It counts only what it is fairly sure is
+    /// speech, often just the vowels: a short word is far shorter than it
+    /// sounds. Defaults to `250`; allowed from `32` to `2000`.
+    #[serde(default = "default_min_speech_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub min_speech_ms: u32,
+    /// The same while a waiting approval card listens, whose commands are the
+    /// shortest words there are ("Stopp", "Ja"). Defaults to `64`; allowed
+    /// from `32` to `2000`.
+    #[serde(default = "default_card_min_speech_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub card_min_speech_ms: u32,
+    /// Audio, in milliseconds, a voice starting from silence waits for before
+    /// it plays, so its first syllable does not stand alone before the speech
+    /// provider's first pause. `0` plays at once. Defaults to `400`; allowed
+    /// from `0` to `2000`. Also used when a message is read aloud.
+    #[serde(default = "default_voice_start_buffer_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub voice_start_buffer_ms: u32,
+    /// The longest such a voice waits, in milliseconds; what has come by
+    /// then plays. Defaults to `350`; allowed from `0` to `2000`.
+    #[serde(default = "default_voice_start_max_wait_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub voice_start_max_wait_ms: u32,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -8654,6 +8721,26 @@ fn default_card_end_of_turn_silence_ms() -> u32 {
     1000
 }
 
+pub const MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 32..=2000;
+
+fn default_min_speech_ms() -> u32 {
+    250
+}
+
+fn default_card_min_speech_ms() -> u32 {
+    64
+}
+
+pub const VOICE_START_MS_RANGE: std::ops::RangeInclusive<u32> = 0..=2000;
+
+fn default_voice_start_buffer_ms() -> u32 {
+    400
+}
+
+fn default_voice_start_max_wait_ms() -> u32 {
+    350
+}
+
 pub const TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=2000;
 
 fn default_talk_over_voice_min_speech_ms() -> u32 {
@@ -8667,6 +8754,10 @@ impl Default for AudioConversationalConfig {
             speech_provider: None,
             end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
             card_end_of_turn_silence_ms: default_card_end_of_turn_silence_ms(),
+            min_speech_ms: default_min_speech_ms(),
+            card_min_speech_ms: default_card_min_speech_ms(),
+            voice_start_buffer_ms: default_voice_start_buffer_ms(),
+            voice_start_max_wait_ms: default_voice_start_max_wait_ms(),
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
         }
@@ -8677,13 +8768,47 @@ impl AudioConversationalConfig {
     pub fn validate_end_of_turn_silence(&self) -> Result<(), String> {
         for (key, value) in [
             ("end_of_turn_silence_ms", self.end_of_turn_silence_ms),
-            ("card_end_of_turn_silence_ms", self.card_end_of_turn_silence_ms),
+            (
+                "card_end_of_turn_silence_ms",
+                self.card_end_of_turn_silence_ms,
+            ),
         ] {
             if !END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
                 return Err(format!(
                     "Invalid `audio_conversational.{key}`: {value} is outside {} to {} milliseconds.",
                     END_OF_TURN_SILENCE_MS_RANGE.start(),
                     END_OF_TURN_SILENCE_MS_RANGE.end()
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Minimum speech and the voice's start buffer are in range.
+    pub fn validate_listening_and_voice_start(&self) -> Result<(), String> {
+        for (key, value, range) in [
+            ("min_speech_ms", self.min_speech_ms, &MIN_SPEECH_MS_RANGE),
+            (
+                "card_min_speech_ms",
+                self.card_min_speech_ms,
+                &MIN_SPEECH_MS_RANGE,
+            ),
+            (
+                "voice_start_buffer_ms",
+                self.voice_start_buffer_ms,
+                &VOICE_START_MS_RANGE,
+            ),
+            (
+                "voice_start_max_wait_ms",
+                self.voice_start_max_wait_ms,
+                &VOICE_START_MS_RANGE,
+            ),
+        ] {
+            if !range.contains(&value) {
+                return Err(format!(
+                    "Invalid `audio_conversational.{key}`: {value} is outside {} to {} milliseconds.",
+                    range.start(),
+                    range.end()
                 ));
             }
         }

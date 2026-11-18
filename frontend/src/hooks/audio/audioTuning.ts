@@ -151,14 +151,29 @@ export type OnsetTuning = typeof ONSET_TUNING;
  * score nothing; "mhm" and "äh" score 350 to 450 ms, so the minimum never
  * kept those out, only short words. A bare "Ja" (about 350 ms) is heard.
  */
-export const CONVERSATION_MIN_SPEECH_MS = 250;
+export const DEFAULT_MIN_SPEECH_MS = 250;
 
 /**
  * The same while an approval card listens: its commands are the shortest
  * words there are, and the card's rules answer "mhm" and "okay" as noise.
  * Two detector frames.
  */
-export const CARD_MIN_SPEECH_MS = 64;
+export const DEFAULT_CARD_MIN_SPEECH_MS = 64;
+
+/** Same range the backend accepts for both; anything else falls back. */
+const MIN_SPEECH_RANGE_MS = [32, 2000] as const;
+
+export function resolveMinSpeechMs(
+  value: number | undefined,
+  fallback: number,
+): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= MIN_SPEECH_RANGE_MS[0] &&
+    value <= MIN_SPEECH_RANGE_MS[1]
+    ? value
+    : fallback;
+}
 
 /**
  * Audio kept from before the detector is sure someone speaks; nothing older

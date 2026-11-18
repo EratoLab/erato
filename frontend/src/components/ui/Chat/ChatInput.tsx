@@ -28,12 +28,15 @@ import {
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
-import { CARD_MIN_SPEECH_MS } from "@/hooks/audio/audioTuning";
+import {
+  DEFAULT_CARD_MIN_SPEECH_MS,
+  resolveMinSpeechMs,
+} from "@/hooks/audio/audioTuning";
 import {
   noteDictatedTranscript,
   settleDictation,
 } from "@/hooks/audio/dictatedTurns";
-import { lowerVoice } from "@/hooks/audio/pcmPlayback";
+import { configureVoiceStart, lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
@@ -580,10 +583,20 @@ export const ChatInput = ({
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
     endOfTurnSilenceMs,
     cardEndOfTurnSilenceMs,
+    minSpeechMs,
+    cardMinSpeechMs,
+    voiceStartBufferMs,
+    voiceStartMaxWaitMs,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
   const speech = useSpeechPlayback();
+  useEffect(() => {
+    configureVoiceStart({
+      bufferMs: voiceStartBufferMs,
+      maxWaitMs: voiceStartMaxWaitMs,
+    });
+  }, [voiceStartBufferMs, voiceStartMaxWaitMs]);
   useEffect(() => {
     useSpeechPlayback.setState({
       conversational: isAudioMode && Boolean(speechEnabled),
@@ -868,6 +881,7 @@ export const ChatInput = ({
     vadAutoStopEnabled: audioConversationalEnabled && isAudioMode,
     onVadAutoStop: handleConversationVadAutoStop,
     endOfTurnSilenceMs,
+    minSpeechMs,
     voiceSpeaking: overVoiceSpeaking,
     overVoiceMinSpeechMs: talkOverVoiceMinSpeechMs,
     onSpeechOverVoice: handleSpeechOverVoice,
@@ -1020,10 +1034,18 @@ export const ChatInput = ({
           cardEndOfTurnSilenceMs,
           DEFAULT_CARD_END_OF_TURN_SILENCE_MS,
         ),
-        minSpeechMs: CARD_MIN_SPEECH_MS,
+        minSpeechMs: resolveMinSpeechMs(
+          cardMinSpeechMs,
+          DEFAULT_CARD_MIN_SPEECH_MS,
+        ),
       });
     },
-    [cardEndOfTurnSilenceMs, getActiveSessionId, toggleDictation],
+    [
+      cardEndOfTurnSilenceMs,
+      cardMinSpeechMs,
+      getActiveSessionId,
+      toggleDictation,
+    ],
   );
   // The card's target stays after a close: a late error is still known to be
   // the card's. Its words are not wanted any more and are not transcribed.

@@ -1352,6 +1352,41 @@ describe("useAudioDictationRecorder: a conversational turn transcribes only spee
     });
   });
 
+  it("takes the deployment's minimum speech for a conversation, and a malformed one falls back", async () => {
+    const hook = renderHook(
+      ({ minSpeechMs }: { minSpeechMs: number }) =>
+        useAudioDictationRecorder({
+          enabled: true,
+          mode: "conversational",
+          maxRecordingDurationSeconds: 1200,
+          onTranscriptChunk: vi.fn(),
+          vadAutoStopEnabled: true,
+          minSpeechMs,
+        }),
+      { initialProps: { minSpeechMs: 320 } },
+    );
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+    expect(vadMock.engines[0].configure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ minSpeechMs: 320 }),
+    );
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(false));
+
+    hook.rerender({ minSpeechMs: 5 });
+    await act(async () => {
+      hook.result.current.toggleDictation();
+    });
+    await waitFor(() => expect(hook.result.current.isDictating).toBe(true));
+    expect(vadMock.engines[0].configure).toHaveBeenLastCalledWith(
+      expect.objectContaining({ minSpeechMs: 250 }),
+    );
+  });
+
   it("tries the connection once more after a failure, the words kept, without an error", async () => {
     const hook = render();
     await listen(hook);

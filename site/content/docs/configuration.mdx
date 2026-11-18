@@ -3039,6 +3039,46 @@ The same silence while a spoken approval card waits and listens for what the use
 
 **Default:** `1000`
 
+#### `audio_conversational.min_speech_ms`
+
+{/* erato_toml_config_key: audio_conversational.min_speech_ms */}
+
+How much speech, in milliseconds, the voice detector must count before a conversational turn can end. A sound with less is dropped and is not carried into the next turn. The detector counts only what it is fairly sure is speech, often just the vowels: "Ja" counts about 350 ms, "Stopp" 100 to 300 ms, while coughs and clicks count nothing. A lower value hears shorter answers; a higher one ignores more short sounds such as "mhm".
+
+**Type:** `integer`, from `32` to `2000`; other values stop the server at startup.
+
+**Default:** `250`
+
+#### `audio_conversational.card_min_speech_ms`
+
+{/* erato_toml_config_key: audio_conversational.card_min_speech_ms */}
+
+The same while a waiting approval card listens. Its commands are the shortest words there are ("Stopp", "Ja", "weiter", "stop", "yes", "next"), and its rules answer a lone "mhm" or "okay" as listening noise, so the default is two detector frames.
+
+**Type:** `integer`, from `32` to `2000`; other values stop the server at startup.
+
+**Default:** `64`
+
+#### `audio_conversational.voice_start_buffer_ms`
+
+{/* erato_toml_config_key: audio_conversational.voice_start_buffer_ms */}
+
+How much audio, in milliseconds, a voice that starts from silence waits for before it plays: a reply, an approval card, or a message read aloud. Speech providers often send the first syllable, then pause; played at once, that syllable stands alone before a gap. `0` plays at once. A complete short sentence always plays at once.
+
+**Type:** `integer`, from `0` to `2000`; other values stop the server at startup.
+
+**Default:** `400`
+
+#### `audio_conversational.voice_start_max_wait_ms`
+
+{/* erato_toml_config_key: audio_conversational.voice_start_max_wait_ms */}
+
+The longest, in milliseconds, such a voice waits for that audio; what has come by then plays. It bounds how much later the first sound can come.
+
+**Type:** `integer`, from `0` to `2000`; other values stop the server at startup.
+
+**Default:** `350`
+
 #### `audio_conversational.talk_over_voice`
 
 {/* erato_toml_config_key: audio_conversational.talk_over_voice */}
@@ -3080,6 +3120,10 @@ min_output_tokens = 32
 max_output_tokens = 2048
 end_of_turn_silence_ms = 1800
 card_end_of_turn_silence_ms = 1000
+min_speech_ms = 250
+card_min_speech_ms = 64
+voice_start_buffer_ms = 400
+voice_start_max_wait_ms = 350
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```

@@ -43,13 +43,38 @@ export function lowerVoice(lowered: boolean) {
  * The speech stream sends about 200 ms first, then nothing for 0.3 to 0.7 s:
  * played at once, the first syllable stands alone before a gap.
  */
-export const START_BUFFER_MS = 400;
+export const DEFAULT_START_BUFFER_MS = 400;
 /**
  * It waits at most this long, so the first sound is never much later than
  * before; whatever has come by then plays. A pause up to this long leaves no
  * gap, a longer one a gap shorter by this much.
  */
-export const START_WAIT_MS = 350;
+export const DEFAULT_START_WAIT_MS = 350;
+
+const voiceStart = {
+  bufferMs: DEFAULT_START_BUFFER_MS,
+  maxWaitMs: DEFAULT_START_WAIT_MS,
+};
+
+/**
+ * Sets the start buffer for every voice from here on: the deployment's
+ * `voice_start_buffer_ms` and `voice_start_max_wait_ms`. A value outside 0 to
+ * 2000 keeps the default.
+ */
+export function configureVoiceStart(settings: {
+  bufferMs?: number;
+  maxWaitMs?: number;
+}) {
+  const inRange = (value: number | undefined, fallback: number) =>
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 2000
+      ? value
+      : fallback;
+  voiceStart.bufferMs = inRange(settings.bufferMs, DEFAULT_START_BUFFER_MS);
+  voiceStart.maxWaitMs = inRange(settings.maxWaitMs, DEFAULT_START_WAIT_MS);
+}
 
 export interface PcmQueue {
   /**
@@ -162,14 +187,14 @@ export function createPcmQueue(onDrained: () => void): PcmQueue {
       // From silence: wait for enough audio, or until it has had time to come.
       if (!waiting) {
         waiting = { context, chunks: [] };
-        waitTimer = setTimeout(release, START_WAIT_MS);
+        waitTimer = setTimeout(release, voiceStart.maxWaitMs);
       }
       waiting.chunks.push(chunk);
       const buffered = waiting.chunks.reduce(
         (sum, held) => sum + held.buffer.duration,
         0,
       );
-      if (buffered * 1000 >= START_BUFFER_MS) release();
+      if (buffered * 1000 >= voiceStart.bufferMs) release();
       return true;
     },
     flush: release,

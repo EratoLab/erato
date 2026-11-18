@@ -96,6 +96,14 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS: &str =
     "AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS: &str =
     "AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS: &str =
+    "AUDIO_CONVERSATIONAL_MIN_SPEECH_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS: &str =
+    "AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS: &str =
+    "AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS: &str =
+    "AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
@@ -658,6 +666,22 @@ fn build_frontend_environment(
                 .card_end_of_turn_silence_ms
                 .into(),
         ),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS.to_string(),
+        Value::Number(config.audio_conversational.min_speech_ms.into()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS.to_string(),
+        Value::Number(config.audio_conversational.card_min_speech_ms.into()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS.to_string(),
+        Value::Number(config.audio_conversational.voice_start_buffer_ms.into()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS.to_string(),
+        Value::Number(config.audio_conversational.voice_start_max_wait_ms.into()),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE.to_string(),
@@ -1462,6 +1486,36 @@ mod tests {
                     .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS),
                 Some(&Value::Number((silence_ms - 500).into()))
             );
+        }
+    }
+
+    #[test]
+    fn minimum_speech_and_voice_start_reach_web_and_office_addin() {
+        let mut config = AppConfig::default();
+        config.audio_conversational.min_speech_ms = 300;
+        config.audio_conversational.card_min_speech_ms = 96;
+        config.audio_conversational.voice_start_buffer_ms = 0;
+        config.audio_conversational.voice_start_max_wait_ms = 500;
+        for kind in [FrontendKind::Web, FrontendKind::OfficeAddin] {
+            let environment = build_frontend_environment(&config, kind);
+            for (key, value) in [
+                (FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MIN_SPEECH_MS, 300),
+                (FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS, 96),
+                (
+                    FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS,
+                    0,
+                ),
+                (
+                    FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS,
+                    500,
+                ),
+            ] {
+                assert_eq!(
+                    environment.additional_environment.get(key),
+                    Some(&Value::Number(value.into())),
+                    "{key}"
+                );
+            }
         }
     }
 

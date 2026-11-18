@@ -41,10 +41,11 @@ import { getAudioEnvironment } from "./audioEnvironment";
 import { describeAudioTranscriptionFailure } from "./audioTranscriptionErrors";
 import {
   BEFORE_SPEECH_KEPT_MS,
-  CONVERSATION_MIN_SPEECH_MS,
+  DEFAULT_MIN_SPEECH_MS,
   CUT_AT_PAUSE_AFTER_MS,
   PAUSE_FRAMES,
   PRE_SPEECH_SILENCE_PRIMER_MS,
+  resolveMinSpeechMs,
   SESSION_RETRY_DELAY_MS,
   SILENT_FRAME_PROBABILITY,
 } from "./audioTuning";
@@ -161,6 +162,8 @@ type UseAudioDictationRecorderOptions = {
   onVadAutoStop?: () => void;
   /** Silence in milliseconds after which the VAD ends the turn. */
   endOfTurnSilenceMs?: number;
+  /** Speech the VAD must count before a turn can end, in milliseconds. */
+  minSpeechMs?: number;
   /**
    * The voice speaks. A conversational recording started now listens over
    * it: nothing is sent for transcription and no turn ends until speech
@@ -230,6 +233,7 @@ export function useAudioDictationRecorder({
   vadAutoStopEnabled = false,
   onVadAutoStop,
   endOfTurnSilenceMs,
+  minSpeechMs,
   voiceSpeaking = false,
   overVoiceMinSpeechMs,
   onSpeechOverVoice,
@@ -819,7 +823,8 @@ export function useAudioDictationRecorder({
         };
       } finally {
         signal.removeEventListener("abort", handleAbortDuringStartup);
-        if (pendingSocketRef.current === socket) pendingSocketRef.current = null;
+        if (pendingSocketRef.current === socket)
+          pendingSocketRef.current = null;
         if (!opened) closeQuietly(socket);
       }
     },
@@ -953,570 +958,580 @@ export function useAudioDictationRecorder({
     tearDownCaptureGraph();
   }, [clearRecordingDurationTimer, closeQuietly, tearDownCaptureGraph]);
 
-  const startDictation = useCallback(async (turn?: DictationTurn) => {
-    if (
-      startInFlightRef.current ||
-      isDictating ||
-      isDictationStarting ||
-      isDictationCompleting
-    ) {
-      return;
-    }
+  const startDictation = useCallback(
+    async (turn?: DictationTurn) => {
+      if (
+        startInFlightRef.current ||
+        isDictating ||
+        isDictationStarting ||
+        isDictationCompleting
+      ) {
+        return;
+      }
 
-    if (!enabled) {
-      setDictationError(
-        t`Audio dictation is not available in this environment.`,
-      );
-      return;
-    }
+      if (!enabled) {
+        setDictationError(
+          t`Audio dictation is not available in this environment.`,
+        );
+        return;
+      }
 
-    startInFlightRef.current = true;
-    gateRef.current = null;
-    dispatchSession({ type: "start" });
-    const sessionAbort = new AbortController();
-    sessionAbortRef.current = sessionAbort;
-    const hold: OverVoiceHold | null =
-      vadAutoStopEnabled && voiceSpeakingRef.current
-        ? { released: null, gate: overVoiceGate(), lowered: false }
-        : null;
-    holdRef.current = hold;
+      startInFlightRef.current = true;
+      gateRef.current = null;
+      dispatchSession({ type: "start" });
+      const sessionAbort = new AbortController();
+      sessionAbortRef.current = sessionAbort;
+      const hold: OverVoiceHold | null =
+        vadAutoStopEnabled && voiceSpeakingRef.current
+          ? { released: null, gate: overVoiceGate(), lowered: false }
+          : null;
+      holdRef.current = hold;
 
-    const mediaDevices =
-      typeof navigator === "undefined"
-        ? undefined
-        : (navigator as Navigator & { mediaDevices?: MediaDevices })
-            .mediaDevices;
+      const mediaDevices =
+        typeof navigator === "undefined"
+          ? undefined
+          : (navigator as Navigator & { mediaDevices?: MediaDevices })
+              .mediaDevices;
 
-    if (typeof mediaDevices?.getUserMedia !== "function") {
-      setDictationError(t`Audio recording is not supported in this browser.`);
-      dispatchSession({ type: "abort" });
-      startInFlightRef.current = false;
-      return;
-    }
+      if (typeof mediaDevices?.getUserMedia !== "function") {
+        setDictationError(t`Audio recording is not supported in this browser.`);
+        dispatchSession({ type: "abort" });
+        startInFlightRef.current = false;
+        return;
+      }
 
-    const baseAudioConstraints: MediaTrackConstraints = {
-      // Over the voice, the browser's echo cancellation keeps the voice
-      // from hearing itself; otherwise the raw signal as before. It stays
-      // on for the rest of the turn: switched off when the voice ends, the
-      // sound would change in the middle of the user's words.
-      echoCancellation: hold !== null,
-      noiseSuppression: false,
-      autoGainControl: false,
-      channelCount: { ideal: 1 },
-      sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
-    };
+      const baseAudioConstraints: MediaTrackConstraints = {
+        // Over the voice, the browser's echo cancellation keeps the voice
+        // from hearing itself; otherwise the raw signal as before. It stays
+        // on for the rest of the turn: switched off when the voice ends, the
+        // sound would change in the middle of the user's words.
+        echoCancellation: hold !== null,
+        noiseSuppression: false,
+        autoGainControl: false,
+        channelCount: { ideal: 1 },
+        sampleRate: { ideal: CANONICAL_AUDIO_SAMPLE_RATE_HZ },
+      };
 
-    try {
-      let stream: MediaStream;
       try {
-        stream = await requestAudioStream(mediaDevices, {
-          audio: selectedAudioInputDeviceId
-            ? {
-                deviceId: { exact: selectedAudioInputDeviceId },
-                ...baseAudioConstraints,
-              }
-            : baseAudioConstraints,
-        });
-      } catch (firstError) {
-        // The stored device can be gone at capture time (Bluetooth drop or
-        // profile switch): use the system default for this session only.
-        if (
-          selectedAudioInputDeviceId &&
-          firstError instanceof DOMException &&
-          (firstError.name === "OverconstrainedError" ||
-            firstError.name === "NotFoundError")
-        ) {
+        let stream: MediaStream;
+        try {
           stream = await requestAudioStream(mediaDevices, {
-            audio: baseAudioConstraints,
+            audio: selectedAudioInputDeviceId
+              ? {
+                  deviceId: { exact: selectedAudioInputDeviceId },
+                  ...baseAudioConstraints,
+                }
+              : baseAudioConstraints,
           });
-        } else {
-          throw firstError;
-        }
-      }
-      if (!isMounted()) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-
-      mediaStreamRef.current = stream;
-      const audioTrack = stream.getAudioTracks()[0];
-      // Start watching for mid-session device-loss (AirPods route change,
-      // incoming call, unplug) as soon as the track exists (ERMAIN-390).
-      watchCaptureTrack(audioTrack);
-      const trackSettings = audioTrack.getSettings();
-      setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
-
-      // Build the audio pipeline BEFORE awaiting the socket handshake. Once
-      // the worklet node is connected, samples land in
-      // `preSessionSamplesRef` until the live session is constructed, so
-      // the user's first words aren't dropped during the (~250 ms–1 s)
-      // socket + session_state handshake. Sample extraction runs on the
-      // audio rendering thread via `AudioWorkletNode`, isolated from
-      // main-thread contention.
-      //
-      // Passing the track's sampleRate to the AudioContext constructor
-      // (when known and supported) prevents createMediaStreamSource from
-      // inserting an internal Web Audio resampler — one fewer documented
-      // source of startup latency between getUserMedia and the first
-      // sample reaching the worklet.
-      let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
-      let primerSamples: number[] = [];
-      const audioContext = await ensureAudioContextReady(
-        trackSettings.sampleRate,
-      );
-      if (!isMounted()) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      if (audioContext) {
-        const source = audioContext.createMediaStreamSource(stream);
-        const analyser = audioContext.createAnalyser();
-        const processor = new AudioWorkletNode(
-          audioContext,
-          AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
-        );
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.65;
-        sourceSampleRate = audioContext.sampleRate;
-        // Synthetic silence primer: seeds the pre-session buffer with a
-        // fixed amount of zero samples so the audio sent to the server
-        // always starts with the same calibration window for its VAD,
-        // regardless of how warm the OS audio device is. Cold first
-        // dictation: hundreds of ms of natural OS warm-up zeros arrive
-        // first anyway. Warm second dictation: the OS device stays hot
-        // between sessions and real audio arrives nearly instantly — the
-        // primer is what prevents the server from clipping the first
-        // word in that case.
-        const primerSampleCount = Math.max(
-          0,
-          Math.floor(
-            (audioContext.sampleRate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000,
-          ),
-        );
-        const primer: number[] = [];
-        primer.length = primerSampleCount;
-        primer.fill(0);
-        primerSamples = primer;
-        preSessionSamplesRef.current = [...primer];
-        const heldSampleCount = Math.floor(
-          (audioContext.sampleRate * HELD_AUDIO_MS) / 1000,
-        );
-        const beforeSpeechSampleCount = Math.floor(
-          (audioContext.sampleRate * BEFORE_SPEECH_KEPT_MS) / 1000,
-        );
-        // The worklet posts every render quantum, including zero-filled
-        // OS warm-up frames — we want those in the stream sent to the
-        // server too (it stays dumb; server-side prefix padding handles
-        // onset). The "speak now" UI cue is a separate, UI-only concern:
-        // an RMS onset detector flips `isCapturingAudio` on real
-        // speech-level energy. It replaced an exact-zero predicate
-        // (`sample !== 0`) that mistimed on WebKit, whose raw-capture
-        // warm-up emits a noise floor instead of bit-exact zeros. The
-        // detector gates ONLY the cue; it never sees or alters streamed
-        // bytes.
-        const flipCapturingAudio = () => {
-          // Guard against late firings: if the pipeline was torn down
-          // between scheduling and execution, the processor ref will be
-          // null or point at a different node — don't flip stale state.
-          if (!isMounted() || audioProcessorRef.current !== processor) {
-            return;
-          }
-          setIsCapturingAudio(true);
-        };
-        const onsetController = createSpeechOnsetController({
-          sampleRate: audioContext.sampleRate,
-          onFlip: flipCapturingAudio,
-          log: (diagnostics) => logger.log("[AUDIO_DICT] frame", diagnostics),
-        });
-        onsetControllerRef.current = onsetController;
-        logger.log("[AUDIO_DICT] onset detector armed", {
-          sampleRate: audioContext.sampleRate,
-          engine: getAudioEnvironment().engine,
-        });
-        processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
-          const input = event.data;
-          const vadFrame = vadEngineRef.current
-            ? new Float32Array(input)
-            : null;
-          onsetController.acceptFrame(input);
-          const session = liveSessionRef.current;
-          if (session) {
-            for (let index = 0; index < input.length; index += 1) {
-              session.pendingSourceSamples.push(input[index]);
-            }
-            flushLiveAudioSamples(false);
-          } else {
-            const preBuffer = preSessionSamplesRef.current;
-            for (let index = 0; index < input.length; index += 1) {
-              preBuffer.push(input[index]);
-            }
-            // Trimmed in batches: only the last moments over the voice count.
-            if (
-              holdRef.current?.released === null &&
-              preBuffer.length > 2 * heldSampleCount
-            ) {
-              preBuffer.splice(0, preBuffer.length - heldSampleCount);
-            }
-            // Before anyone speaks, only the moments before speech are kept.
-            const gate = gateRef.current;
-            if (
-              gate &&
-              holdRef.current?.released !== null &&
-              !gate.heard &&
-              !gate.speaking &&
-              preBuffer.length > 2 * beforeSpeechSampleCount
-            ) {
-              preBuffer.splice(0, preBuffer.length - beforeSpeechSampleCount);
-              gate.trimmed = true;
-            }
-          }
-          if (vadFrame && vadEngineRef.current) {
-            void vadEngineRef.current
-              .acceptFrame({
-                samples: vadFrame,
-                sampleRate: audioContext.sampleRate,
-                timestampMs: Date.now(),
-              })
-              .catch(() => stopVadEngine());
-          }
-        };
-
-        const levelData = new Uint8Array(analyser.fftSize);
-
-        const analyzeLevel = () => {
-          if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
-            return;
-          }
-
-          audioAnalyserRef.current.getByteTimeDomainData(
-            audioLevelDataRef.current,
-          );
-
-          setDictationBarsThrottled(
-            getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
-          );
-          audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-        };
-
-        audioContextRef.current = audioContext;
-        audioAnalyserRef.current = analyser;
-        audioSourceNodeRef.current = source;
-        audioProcessorRef.current = processor;
-        audioLevelDataRef.current = levelData;
-        source.connect(analyser);
-        source.connect(processor);
-        audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
-
-        if (vadAutoStopEnabled) {
-          // Start (or re-start) the VAD engine only AFTER the capture
-          // graph is connected: samples buffer into preSessionSamplesRef
-          // while the model loads, so the first-time onnxruntime WASM +
-          // Silero ONNX fetch no longer eats the start of the first
-          // utterance (ERMAIN-334). The await therefore delays only the
-          // session handshake below, never audio capture. The engine is
-          // created once and reused warm across turns.
-          const tuning = {
-            redemptionMs: resolveEndOfTurnSilenceMs(
-              turn?.endOfTurnSilenceMs ?? endOfTurnSilenceMs,
-            ),
-            minSpeechMs: turn?.minSpeechMs ?? CONVERSATION_MIN_SPEECH_MS,
-          };
-          const vadEngine =
-            persistentVadEngineRef.current ??
-            createRicky0123VadEngine({
-              model: "silero-v5",
-              preSpeechPadMs: 500,
-              ...tuning,
+        } catch (firstError) {
+          // The stored device can be gone at capture time (Bluetooth drop or
+          // profile switch): use the system default for this session only.
+          if (
+            selectedAudioInputDeviceId &&
+            firstError instanceof DOMException &&
+            (firstError.name === "OverconstrainedError" ||
+              firstError.name === "NotFoundError")
+          ) {
+            stream = await requestAudioStream(mediaDevices, {
+              audio: baseAudioConstraints,
             });
-          persistentVadEngineRef.current = vadEngine;
-          vadEngine.configure?.(tuning);
-          const gate: SpeechGate = {
-            heard: false,
-            speaking: false,
-            realStarted: false,
-            trimmed: false,
-            quietFrames: 0,
-          };
-          gateRef.current = gate;
-          const unsubscribeVad = vadEngine.subscribe((event) => {
-            if (event.type === "error") {
-              stopVadEngine();
+          } else {
+            throw firstError;
+          }
+        }
+        if (!isMounted()) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        mediaStreamRef.current = stream;
+        const audioTrack = stream.getAudioTracks()[0];
+        // Start watching for mid-session device-loss (AirPods route change,
+        // incoming call, unplug) as soon as the track exists (ERMAIN-390).
+        watchCaptureTrack(audioTrack);
+        const trackSettings = audioTrack.getSettings();
+        setDictationDiagnostics(mediaTrackSettingsToDiagnostics(trackSettings));
+
+        // Build the audio pipeline BEFORE awaiting the socket handshake. Once
+        // the worklet node is connected, samples land in
+        // `preSessionSamplesRef` until the live session is constructed, so
+        // the user's first words aren't dropped during the (~250 ms–1 s)
+        // socket + session_state handshake. Sample extraction runs on the
+        // audio rendering thread via `AudioWorkletNode`, isolated from
+        // main-thread contention.
+        //
+        // Passing the track's sampleRate to the AudioContext constructor
+        // (when known and supported) prevents createMediaStreamSource from
+        // inserting an internal Web Audio resampler — one fewer documented
+        // source of startup latency between getUserMedia and the first
+        // sample reaching the worklet.
+        let sourceSampleRate = CANONICAL_AUDIO_SAMPLE_RATE_HZ;
+        let primerSamples: number[] = [];
+        const audioContext = await ensureAudioContextReady(
+          trackSettings.sampleRate,
+        );
+        if (!isMounted()) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        if (audioContext) {
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          const processor = new AudioWorkletNode(
+            audioContext,
+            AUDIO_DICTATION_WORKLET_PROCESSOR_NAME,
+          );
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.65;
+          sourceSampleRate = audioContext.sampleRate;
+          // Synthetic silence primer: seeds the pre-session buffer with a
+          // fixed amount of zero samples so the audio sent to the server
+          // always starts with the same calibration window for its VAD,
+          // regardless of how warm the OS audio device is. Cold first
+          // dictation: hundreds of ms of natural OS warm-up zeros arrive
+          // first anyway. Warm second dictation: the OS device stays hot
+          // between sessions and real audio arrives nearly instantly — the
+          // primer is what prevents the server from clipping the first
+          // word in that case.
+          const primerSampleCount = Math.max(
+            0,
+            Math.floor(
+              (audioContext.sampleRate * PRE_SPEECH_SILENCE_PRIMER_MS) / 1000,
+            ),
+          );
+          const primer: number[] = [];
+          primer.length = primerSampleCount;
+          primer.fill(0);
+          primerSamples = primer;
+          preSessionSamplesRef.current = [...primer];
+          const heldSampleCount = Math.floor(
+            (audioContext.sampleRate * HELD_AUDIO_MS) / 1000,
+          );
+          const beforeSpeechSampleCount = Math.floor(
+            (audioContext.sampleRate * BEFORE_SPEECH_KEPT_MS) / 1000,
+          );
+          // The worklet posts every render quantum, including zero-filled
+          // OS warm-up frames — we want those in the stream sent to the
+          // server too (it stays dumb; server-side prefix padding handles
+          // onset). The "speak now" UI cue is a separate, UI-only concern:
+          // an RMS onset detector flips `isCapturingAudio` on real
+          // speech-level energy. It replaced an exact-zero predicate
+          // (`sample !== 0`) that mistimed on WebKit, whose raw-capture
+          // warm-up emits a noise floor instead of bit-exact zeros. The
+          // detector gates ONLY the cue; it never sees or alters streamed
+          // bytes.
+          const flipCapturingAudio = () => {
+            // Guard against late firings: if the pipeline was torn down
+            // between scheduling and execution, the processor ref will be
+            // null or point at a different node — don't flip stale state.
+            if (!isMounted() || audioProcessorRef.current !== processor) {
               return;
             }
-            const waiting = holdRef.current?.released === null;
-            if (event.type === "frame") {
-              gate.quietFrames =
-                event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
-                  ? gate.quietFrames + 1
-                  : 0;
-              const current = holdRef.current;
-              if (current?.released !== null) return;
-              const step = overVoiceStep(
-                current.gate,
-                event.probabilities.isSpeech,
-                (event.frame.samples.length / event.frame.sampleRate) * 1000,
-                overVoiceMinSpeechMsRef.current,
-              );
-              current.gate = step.gate;
-              if (step.confirmed) {
-                onSpeechOverVoiceRef.current?.();
-                releaseHold("speech");
+            setIsCapturingAudio(true);
+          };
+          const onsetController = createSpeechOnsetController({
+            sampleRate: audioContext.sampleRate,
+            onFlip: flipCapturingAudio,
+            log: (diagnostics) => logger.log("[AUDIO_DICT] frame", diagnostics),
+          });
+          onsetControllerRef.current = onsetController;
+          logger.log("[AUDIO_DICT] onset detector armed", {
+            sampleRate: audioContext.sampleRate,
+            engine: getAudioEnvironment().engine,
+          });
+          processor.port.onmessage = (event: MessageEvent<Float32Array>) => {
+            const input = event.data;
+            const vadFrame = vadEngineRef.current
+              ? new Float32Array(input)
+              : null;
+            onsetController.acceptFrame(input);
+            const session = liveSessionRef.current;
+            if (session) {
+              for (let index = 0; index < input.length; index += 1) {
+                session.pendingSourceSamples.push(input[index]);
+              }
+              flushLiveAudioSamples(false);
+            } else {
+              const preBuffer = preSessionSamplesRef.current;
+              for (let index = 0; index < input.length; index += 1) {
+                preBuffer.push(input[index]);
+              }
+              // Trimmed in batches: only the last moments over the voice count.
+              if (
+                holdRef.current?.released === null &&
+                preBuffer.length > 2 * heldSampleCount
+              ) {
+                preBuffer.splice(0, preBuffer.length - heldSampleCount);
+              }
+              // Before anyone speaks, only the moments before speech are kept.
+              const gate = gateRef.current;
+              if (
+                gate &&
+                holdRef.current?.released !== null &&
+                !gate.heard &&
+                !gate.speaking &&
+                preBuffer.length > 2 * beforeSpeechSampleCount
+              ) {
+                preBuffer.splice(0, preBuffer.length - beforeSpeechSampleCount);
+                gate.trimmed = true;
+              }
+            }
+            if (vadFrame && vadEngineRef.current) {
+              void vadEngineRef.current
+                .acceptFrame({
+                  samples: vadFrame,
+                  sampleRate: audioContext.sampleRate,
+                  timestampMs: Date.now(),
+                })
+                .catch(() => stopVadEngine());
+            }
+          };
+
+          const levelData = new Uint8Array(analyser.fftSize);
+
+          const analyzeLevel = () => {
+            if (!audioAnalyserRef.current || !audioLevelDataRef.current) {
+              return;
+            }
+
+            audioAnalyserRef.current.getByteTimeDomainData(
+              audioLevelDataRef.current,
+            );
+
+            setDictationBarsThrottled(
+              getAudioLevelBarsFromTimeDomainData(audioLevelDataRef.current),
+            );
+            audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+          };
+
+          audioContextRef.current = audioContext;
+          audioAnalyserRef.current = analyser;
+          audioSourceNodeRef.current = source;
+          audioProcessorRef.current = processor;
+          audioLevelDataRef.current = levelData;
+          source.connect(analyser);
+          source.connect(processor);
+          audioFrameRef.current = window.requestAnimationFrame(analyzeLevel);
+
+          if (vadAutoStopEnabled) {
+            // Start (or re-start) the VAD engine only AFTER the capture
+            // graph is connected: samples buffer into preSessionSamplesRef
+            // while the model loads, so the first-time onnxruntime WASM +
+            // Silero ONNX fetch no longer eats the start of the first
+            // utterance (ERMAIN-334). The await therefore delays only the
+            // session handshake below, never audio capture. The engine is
+            // created once and reused warm across turns.
+            const tuning = {
+              redemptionMs: resolveEndOfTurnSilenceMs(
+                turn?.endOfTurnSilenceMs ?? endOfTurnSilenceMs,
+              ),
+              minSpeechMs: resolveMinSpeechMs(
+                turn?.minSpeechMs ?? minSpeechMs,
+                DEFAULT_MIN_SPEECH_MS,
+              ),
+            };
+            const vadEngine =
+              persistentVadEngineRef.current ??
+              createRicky0123VadEngine({
+                model: "silero-v5",
+                preSpeechPadMs: 500,
+                ...tuning,
+              });
+            persistentVadEngineRef.current = vadEngine;
+            vadEngine.configure?.(tuning);
+            const gate: SpeechGate = {
+              heard: false,
+              speaking: false,
+              realStarted: false,
+              trimmed: false,
+              quietFrames: 0,
+            };
+            gateRef.current = gate;
+            const unsubscribeVad = vadEngine.subscribe((event) => {
+              if (event.type === "error") {
+                stopVadEngine();
                 return;
               }
-              if (step.lowered !== current.lowered) {
-                current.lowered = step.lowered;
-                onVoiceLoweredRef.current?.(step.lowered);
-              }
-              return;
-            }
-            if (event.type === "speech_start") gate.speaking = true;
-            if (event.type === "speech_real_start") gate.realStarted = true;
-            if (event.type === "vad_misfire" || event.type === "speech_end") {
-              gate.speaking = false;
-              gate.realStarted = false;
-            }
-            // Over the voice, only the gate above ends the wait: the voice's
-            // own sound or a short noise starts and ends no turn.
-            if (waiting) return;
-            if (
-              event.type === "speech_start" ||
-              event.type === "speech_real_start"
-            ) {
-              if (event.type === "speech_real_start") openSpeechGate(gate);
-              if (isMounted()) {
-                setIsVadSpeechActive(true);
-              }
-              return;
-            }
-            if (event.type === "vad_misfire") {
-              // Too short to be a turn: it is dropped, not carried into the
-              // next one. Only the moments before speech stay.
-              if (!gate.heard) {
-                const preBuffer = preSessionSamplesRef.current;
-                if (preBuffer.length > beforeSpeechSampleCount) {
-                  preBuffer.splice(0, preBuffer.length - beforeSpeechSampleCount);
-                  gate.trimmed = true;
+              const waiting = holdRef.current?.released === null;
+              if (event.type === "frame") {
+                gate.quietFrames =
+                  event.probabilities.isSpeech < SILENT_FRAME_PROBABILITY
+                    ? gate.quietFrames + 1
+                    : 0;
+                const current = holdRef.current;
+                if (current?.released !== null) return;
+                const step = overVoiceStep(
+                  current.gate,
+                  event.probabilities.isSpeech,
+                  (event.frame.samples.length / event.frame.sampleRate) * 1000,
+                  overVoiceMinSpeechMsRef.current,
+                );
+                current.gate = step.gate;
+                if (step.confirmed) {
+                  onSpeechOverVoiceRef.current?.();
+                  releaseHold("speech");
+                  return;
                 }
+                if (step.lowered !== current.lowered) {
+                  current.lowered = step.lowered;
+                  onVoiceLoweredRef.current?.(step.lowered);
+                }
+                return;
               }
+              if (event.type === "speech_start") gate.speaking = true;
+              if (event.type === "speech_real_start") gate.realStarted = true;
+              if (event.type === "vad_misfire" || event.type === "speech_end") {
+                gate.speaking = false;
+                gate.realStarted = false;
+              }
+              // Over the voice, only the gate above ends the wait: the voice's
+              // own sound or a short noise starts and ends no turn.
+              if (waiting) return;
+              if (
+                event.type === "speech_start" ||
+                event.type === "speech_real_start"
+              ) {
+                if (event.type === "speech_real_start") openSpeechGate(gate);
+                if (isMounted()) {
+                  setIsVadSpeechActive(true);
+                }
+                return;
+              }
+              if (event.type === "vad_misfire") {
+                // Too short to be a turn: it is dropped, not carried into the
+                // next one. Only the moments before speech stay.
+                if (!gate.heard) {
+                  const preBuffer = preSessionSamplesRef.current;
+                  if (preBuffer.length > beforeSpeechSampleCount) {
+                    preBuffer.splice(
+                      0,
+                      preBuffer.length - beforeSpeechSampleCount,
+                    );
+                    gate.trimmed = true;
+                  }
+                }
+                if (isMounted()) {
+                  setIsVadSpeechActive(false);
+                }
+                return;
+              }
+
               if (isMounted()) {
                 setIsVadSpeechActive(false);
               }
-              return;
-            }
-
-            if (isMounted()) {
-              setIsVadSpeechActive(false);
-            }
-            if (vadAutoStopTriggeredRef.current) {
-              return;
-            }
-            openSpeechGate(gate);
-            vadAutoStopTriggeredRef.current = true;
-            onVadAutoStopRef.current?.();
-            stopDictation();
-          });
-          vadEngineUnsubscribeRef.current = unsubscribeVad;
-          const vadStartPromise = vadEngineStartQueueRef.current
-            .catch(() => undefined)
-            .then(() => vadEngine.start());
-          vadEngineStartQueueRef.current = vadStartPromise.then(
-            () => undefined,
-            () => undefined,
-          );
-          try {
-            await vadStartPromise;
-            if (audioProcessorRef.current === processor) {
-              vadEngineRef.current = vadEngine;
-              if (isMounted()) {
-                setIsVadListening(true);
+              if (vadAutoStopTriggeredRef.current) {
+                return;
               }
-            } else {
+              openSpeechGate(gate);
+              vadAutoStopTriggeredRef.current = true;
+              onVadAutoStopRef.current?.();
+              stopDictation();
+            });
+            vadEngineUnsubscribeRef.current = unsubscribeVad;
+            const vadStartPromise = vadEngineStartQueueRef.current
+              .catch(() => undefined)
+              .then(() => vadEngine.start());
+            vadEngineStartQueueRef.current = vadStartPromise.then(
+              () => undefined,
+              () => undefined,
+            );
+            try {
+              await vadStartPromise;
+              if (audioProcessorRef.current === processor) {
+                vadEngineRef.current = vadEngine;
+                if (isMounted()) {
+                  setIsVadListening(true);
+                }
+              } else {
+                if (gateRef.current === gate) gateRef.current = null;
+                // The session was torn down while the model loaded; leave
+                // the engine warm but detached. Guard the ref compare so a
+                // newer session's subscription is never ripped out.
+                unsubscribeVad();
+                if (vadEngineUnsubscribeRef.current === unsubscribeVad) {
+                  vadEngineUnsubscribeRef.current = null;
+                }
+                vadEngine.stop();
+              }
+            } catch {
+              // Model load failed — continue without auto-stop and without
+              // waiting for speech; the warm instance is retained so the next
+              // session can retry.
               if (gateRef.current === gate) gateRef.current = null;
-              // The session was torn down while the model loaded; leave
-              // the engine warm but detached. Guard the ref compare so a
-              // newer session's subscription is never ripped out.
               unsubscribeVad();
               if (vadEngineUnsubscribeRef.current === unsubscribeVad) {
                 vadEngineUnsubscribeRef.current = null;
               }
-              vadEngine.stop();
+              if (isMounted()) {
+                setIsVadListening(false);
+                setIsVadSpeechActive(false);
+              }
             }
-          } catch {
-            // Model load failed — continue without auto-stop and without
-            // waiting for speech; the warm instance is retained so the next
-            // session can retry.
-            if (gateRef.current === gate) gateRef.current = null;
-            unsubscribeVad();
-            if (vadEngineUnsubscribeRef.current === unsubscribeVad) {
-              vadEngineUnsubscribeRef.current = null;
-            }
-            if (isMounted()) {
-              setIsVadListening(false);
-              setIsVadSpeechActive(false);
-            }
-          }
-        }
-      } else {
-        setDictationBars((existingBars) =>
-          existingBars.length === AUDIO_BARS_COUNT
-            ? [2, 2, 6, 2, 2]
-            : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
-        );
-      }
-
-      if (hold) {
-        if (isMounted()) setIsListeningOverVoice(true);
-        const reason = await waitForHold(hold, sessionAbort.signal);
-        if (isMounted()) setIsListeningOverVoice(false);
-        // Speech already under way as the voice ends is the start of the
-        // turn: kept from shortly before it began, the detector going on.
-        const keepMs =
-          reason === "speech"
-            ? HELD_AUDIO_MS
-            : hold.gate.speechMs > 0
-              ? Math.min(
-                  HELD_AUDIO_MS,
-                  hold.gate.speechMs + hold.gate.dipMs + SPEECH_LEAD_IN_MS,
-                )
-              : 0;
-        const gate = gateRef.current;
-        if (keepMs === 0) {
-          // Only what the user says from now on is theirs; what was heard
-          // over the voice, and any speech the detector saw in it, is not.
-          preSessionSamplesRef.current = [...primerSamples];
-          vadEngineRef.current?.reset?.();
-          if (gate) {
-            gate.speaking = false;
-            gate.realStarted = false;
-            gate.trimmed = false;
           }
         } else {
-          if (gate && (reason === "speech" || gate.realStarted))
-            openSpeechGate(gate);
-          const preBuffer = preSessionSamplesRef.current;
-          const keep = Math.floor((sourceSampleRate * keepMs) / 1000);
-          if (preBuffer.length > keep)
-            preBuffer.splice(0, preBuffer.length - keep);
+          setDictationBars((existingBars) =>
+            existingBars.length === AUDIO_BARS_COUNT
+              ? [2, 2, 6, 2, 2]
+              : Array.from({ length: AUDIO_BARS_COUNT }, () => 2),
+          );
         }
-      }
 
-      const armRecordingLimit = () => {
-        clearRecordingDurationTimer();
-        const recordingLimitMs = Math.max(
-          1,
-          Math.ceil(maxRecordingDurationSeconds),
+        if (hold) {
+          if (isMounted()) setIsListeningOverVoice(true);
+          const reason = await waitForHold(hold, sessionAbort.signal);
+          if (isMounted()) setIsListeningOverVoice(false);
+          // Speech already under way as the voice ends is the start of the
+          // turn: kept from shortly before it began, the detector going on.
+          const keepMs =
+            reason === "speech"
+              ? HELD_AUDIO_MS
+              : hold.gate.speechMs > 0
+                ? Math.min(
+                    HELD_AUDIO_MS,
+                    hold.gate.speechMs + hold.gate.dipMs + SPEECH_LEAD_IN_MS,
+                  )
+                : 0;
+          const gate = gateRef.current;
+          if (keepMs === 0) {
+            // Only what the user says from now on is theirs; what was heard
+            // over the voice, and any speech the detector saw in it, is not.
+            preSessionSamplesRef.current = [...primerSamples];
+            vadEngineRef.current?.reset?.();
+            if (gate) {
+              gate.speaking = false;
+              gate.realStarted = false;
+              gate.trimmed = false;
+            }
+          } else {
+            if (gate && (reason === "speech" || gate.realStarted))
+              openSpeechGate(gate);
+            const preBuffer = preSessionSamplesRef.current;
+            const keep = Math.floor((sourceSampleRate * keepMs) / 1000);
+            if (preBuffer.length > keep)
+              preBuffer.splice(0, preBuffer.length - keep);
+          }
+        }
+
+        const armRecordingLimit = () => {
+          clearRecordingDurationTimer();
+          const recordingLimitMs = Math.max(
+            1,
+            Math.ceil(maxRecordingDurationSeconds),
+          );
+          recordingDurationTimerRef.current = window.setTimeout(() => {
+            stopDictation();
+            setDictationError(
+              t`Dictation stopped automatically after the configured maximum duration.`,
+            );
+          }, recordingLimitMs * 1000);
+        };
+
+        // A conversational recording listens before it transcribes: no
+        // connection and no upload until speech is heard.
+        const gate = gateRef.current;
+        if (gate) {
+          armRecordingLimit();
+          dispatchSession({ type: "session_ready" });
+          setDictationError(null);
+          await waitForSpeech(gate, sessionAbort.signal);
+        }
+
+        const liveSession = await openLiveDictationSession(
+          sourceSampleRate,
+          sessionAbort.signal,
         );
-        recordingDurationTimerRef.current = window.setTimeout(() => {
-          stopDictation();
-          setDictationError(
-            t`Dictation stopped automatically after the configured maximum duration.`,
-          );
-        }, recordingLimitMs * 1000);
-      };
-
-      // A conversational recording listens before it transcribes: no
-      // connection and no upload until speech is heard.
-      const gate = gateRef.current;
-      if (gate) {
-        armRecordingLimit();
-        dispatchSession({ type: "session_ready" });
-        setDictationError(null);
-        await waitForSpeech(gate, sessionAbort.signal);
-      }
-
-      const liveSession = await openLiveDictationSession(
-        sourceSampleRate,
-        sessionAbort.signal,
-      );
-      // Cancelled in the moment the connection came: it is not used.
-      if (sessionAbort.signal.aborted) {
-        closeQuietly(liveSession.socket);
-        throw new DOMException("Aborted", "AbortError");
-      }
-
-      // Drain pre-buffered samples into the new session in their original
-      // order, THEN publish the session ref. Order matters: until
-      // `liveSessionRef.current` is set, `processor.onaudioprocess` keeps
-      // pushing to `preSessionSamplesRef`. The drain → ref-assign → flush
-      // sequence is one synchronous block, so no audio frame can interleave
-      // and split samples across the two buffers.
-      if (gate?.trimmed) {
-        for (const sample of primerSamples)
-          liveSession.pendingSourceSamples.push(sample);
-      }
-      const preBuffer = preSessionSamplesRef.current;
-      if (preBuffer.length > 0) {
-        for (let index = 0; index < preBuffer.length; index += 1) {
-          liveSession.pendingSourceSamples.push(preBuffer[index]);
+        // Cancelled in the moment the connection came: it is not used.
+        if (sessionAbort.signal.aborted) {
+          closeQuietly(liveSession.socket);
+          throw new DOMException("Aborted", "AbortError");
         }
-        preSessionSamplesRef.current = [];
-      }
-      liveSessionRef.current = liveSession;
-      if (finishWhenOpenRef.current) {
+
+        // Drain pre-buffered samples into the new session in their original
+        // order, THEN publish the session ref. Order matters: until
+        // `liveSessionRef.current` is set, `processor.onaudioprocess` keeps
+        // pushing to `preSessionSamplesRef`. The drain → ref-assign → flush
+        // sequence is one synchronous block, so no audio frame can interleave
+        // and split samples across the two buffers.
+        if (gate?.trimmed) {
+          for (const sample of primerSamples)
+            liveSession.pendingSourceSamples.push(sample);
+        }
+        const preBuffer = preSessionSamplesRef.current;
+        if (preBuffer.length > 0) {
+          for (let index = 0; index < preBuffer.length; index += 1) {
+            liveSession.pendingSourceSamples.push(preBuffer[index]);
+          }
+          preSessionSamplesRef.current = [];
+        }
+        liveSessionRef.current = liveSession;
+        if (finishWhenOpenRef.current) {
+          finishWhenOpenRef.current = false;
+          void completeDictation();
+          return;
+        }
+        flushLiveAudioSamples(false);
+
+        if (!gate) {
+          armRecordingLimit();
+          dispatchSession({ type: "session_ready" });
+          setDictationError(null);
+        }
+      } catch (error) {
         finishWhenOpenRef.current = false;
-        void completeDictation();
-        return;
-      }
-      flushLiveAudioSamples(false);
-
-      if (!gate) {
-        armRecordingLimit();
-        dispatchSession({ type: "session_ready" });
-        setDictationError(null);
-      }
-    } catch (error) {
-      finishWhenOpenRef.current = false;
-      closeQuietly(liveSessionRef.current?.socket);
-      liveSessionRef.current = null;
-      tearDownCaptureGraph();
-      if (isMounted()) {
-        dispatchSession({ type: "abort" });
-        // A cancel while starting or waiting for speech is no failure.
-        if (!isAbort(error) && !sessionAbort.signal.aborted) {
-          setDictationError(
-            error instanceof Error
-              ? error.message
-              : t`Could not start audio dictation.`,
-          );
+        closeQuietly(liveSessionRef.current?.socket);
+        liveSessionRef.current = null;
+        tearDownCaptureGraph();
+        if (isMounted()) {
+          dispatchSession({ type: "abort" });
+          // A cancel while starting or waiting for speech is no failure.
+          if (!isAbort(error) && !sessionAbort.signal.aborted) {
+            setDictationError(
+              error instanceof Error
+                ? error.message
+                : t`Could not start audio dictation.`,
+            );
+          }
+        }
+      } finally {
+        startInFlightRef.current = false;
+        if (sessionAbortRef.current === sessionAbort) {
+          sessionAbortRef.current = null;
+        }
+        if (hold) {
+          if (hold.lowered) {
+            hold.lowered = false;
+            onVoiceLoweredRef.current?.(false);
+          }
+          if (holdRef.current === hold) holdRef.current = null;
+          if (isMounted()) setIsListeningOverVoice(false);
         }
       }
-    } finally {
-      startInFlightRef.current = false;
-      if (sessionAbortRef.current === sessionAbort) {
-        sessionAbortRef.current = null;
-      }
-      if (hold) {
-        if (hold.lowered) {
-          hold.lowered = false;
-          onVoiceLoweredRef.current?.(false);
-        }
-        if (holdRef.current === hold) holdRef.current = null;
-        if (isMounted()) setIsListeningOverVoice(false);
-      }
-    }
-  }, [
-    clearRecordingDurationTimer,
-    closeQuietly,
-    completeDictation,
-    enabled,
-    endOfTurnSilenceMs,
-    ensureAudioContextReady,
-    flushLiveAudioSamples,
-    openLiveDictationSession,
-    isDictating,
-    isDictationCompleting,
-    isDictationStarting,
-    isMounted,
-    maxRecordingDurationSeconds,
-    releaseHold,
-    selectedAudioInputDeviceId,
-    setDictationBarsThrottled,
-    stopDictation,
-    stopVadEngine,
-    tearDownCaptureGraph,
-    vadAutoStopEnabled,
-    watchCaptureTrack,
-  ]);
+    },
+    [
+      clearRecordingDurationTimer,
+      closeQuietly,
+      completeDictation,
+      enabled,
+      endOfTurnSilenceMs,
+      ensureAudioContextReady,
+      minSpeechMs,
+      flushLiveAudioSamples,
+      openLiveDictationSession,
+      isDictating,
+      isDictationCompleting,
+      isDictationStarting,
+      isMounted,
+      maxRecordingDurationSeconds,
+      releaseHold,
+      selectedAudioInputDeviceId,
+      setDictationBarsThrottled,
+      stopDictation,
+      stopVadEngine,
+      tearDownCaptureGraph,
+      vadAutoStopEnabled,
+      watchCaptureTrack,
+    ],
+  );
 
   /** Stops a running recording, or starts one, tuned by `turn` when given. */
   const toggleDictation = useCallback(

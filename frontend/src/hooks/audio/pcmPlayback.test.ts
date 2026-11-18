@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { START_BUFFER_MS, START_WAIT_MS, createPcmQueue } from "./pcmPlayback";
+import {
+  DEFAULT_START_BUFFER_MS as START_BUFFER_MS,
+  DEFAULT_START_WAIT_MS as START_WAIT_MS,
+  configureVoiceStart,
+  createPcmQueue,
+} from "./pcmPlayback";
 
 const RATE = 24000;
 
@@ -44,7 +49,10 @@ const pcm = (ms: number) =>
 const context = () => new MockContext() as unknown as AudioContext;
 
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  configureVoiceStart({});
+  vi.useRealTimers();
+});
 
 describe("starting a voice from silence", () => {
   it("does not play the stream's first 200 ms alone before its pause", () => {
@@ -107,6 +115,28 @@ describe("starting a voice from silence", () => {
     expect((other as unknown as MockContext).started).toHaveLength(0);
     expect(waiting.active).toBe(false);
     expect(drained).not.toHaveBeenCalled();
+  });
+
+  it("takes the deployment's start buffer, and plays at once with none", () => {
+    configureVoiceStart({ bufferMs: 0 });
+    const ctx = context();
+    createPcmQueue(vi.fn()).enqueue(ctx, pcm(100), RATE);
+    expect((ctx as unknown as MockContext).started).toHaveLength(1);
+
+    configureVoiceStart({ bufferMs: 1000, maxWaitMs: 600 });
+    const other = context();
+    const queue = createPcmQueue(vi.fn());
+    queue.enqueue(other, pcm(500), RATE);
+    vi.advanceTimersByTime(START_WAIT_MS);
+    expect((other as unknown as MockContext).started).toHaveLength(0);
+    vi.advanceTimersByTime(600 - START_WAIT_MS);
+    expect((other as unknown as MockContext).started).toHaveLength(1);
+
+    // Out of range: the defaults.
+    configureVoiceStart({ bufferMs: -1, maxWaitMs: 99_999 });
+    const third = context();
+    createPcmQueue(vi.fn()).enqueue(third, pcm(START_BUFFER_MS), RATE);
+    expect((third as unknown as MockContext).started).toHaveLength(1);
   });
 
   it("keeps waiting audio when paused, to be said again", () => {

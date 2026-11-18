@@ -103,6 +103,26 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1200);
   });
 
+  it("reads the minimum speech and the voice's start buffer", () => {
+    expect(env().audioConversationalMinSpeechMs).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_MIN_SPEECH_MS = 300;
+    window.AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS = 96;
+    window.AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS = 0;
+    window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS = 500;
+    expect(env()).toMatchObject({
+      audioConversationalMinSpeechMs: 300,
+      audioConversationalCardMinSpeechMs: 96,
+      audioConversationalVoiceStartBufferMs: 0,
+      audioConversationalVoiceStartMaxWaitMs: 500,
+    });
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS", "128");
+    expect(env().audioConversationalCardMinSpeechMs).toBe(128);
+    delete window.AUDIO_CONVERSATIONAL_MIN_SPEECH_MS;
+    delete window.AUDIO_CONVERSATIONAL_CARD_MIN_SPEECH_MS;
+    delete window.AUDIO_CONVERSATIONAL_VOICE_START_BUFFER_MS;
+    delete window.AUDIO_CONVERSATIONAL_VOICE_START_MAX_WAIT_MS;
+  });
+
   it("reads the card's own silence beside it", () => {
     expect(env().audioConversationalCardEndOfTurnSilenceMs).toBeUndefined();
     window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS = 900;
