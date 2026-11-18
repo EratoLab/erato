@@ -1754,6 +1754,35 @@
         ]
       }
     },
+    "/api/v1beta/me/approval-speech-style": {
+      "get": {
+        "tags": [
+          "approval_speech_style"
+        ],
+        "summary": "How waiting approval cards are read aloud for the caller.",
+        "operationId": "approval_speech_style",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalSpeechStyleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "When no valid JWT token is provided"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/v1beta/me/budget": {
       "get": {
         "tags": [
@@ -5903,6 +5932,14 @@
           }
         }
       },
+      "ApprovalSpeechAmount": {
+        "type": "string",
+        "description": "How much a spoken card says.",
+        "enum": [
+          "full",
+          "short"
+        ]
+      },
       "ApprovalSpeechRequest": {
         "type": "object",
         "description": "What a client says about the approval it shows.",
@@ -5918,6 +5955,59 @@
             "description": "The spoken card's pieces in the order they are said: plain sentences,\nat most 16 of them, each at most 400 and all together at most 2000\ncharacters."
           }
         }
+      },
+      "ApprovalSpeechStyleResponse": {
+        "type": "object",
+        "required": [
+          "amount",
+          "short_details",
+          "wording",
+          "source",
+          "user_choice"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount"
+          },
+          "audience": {
+            "type": "string",
+            "description": "The audience whose value applies, by its display name."
+          },
+          "short_details": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Details a short reading says before it holds back the rest.",
+            "minimum": 0
+          },
+          "source": {
+            "$ref": "#/components/schemas/ApprovalSpeechStyleSource",
+            "description": "Where the last value that applied came from."
+          },
+          "user_choice": {
+            "type": "boolean",
+            "description": "Whether the caller may choose their own amount and wording."
+          },
+          "wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording"
+          }
+        }
+      },
+      "ApprovalSpeechStyleSource": {
+        "type": "string",
+        "description": "Where the caller's reading style comes from.",
+        "enum": [
+          "deployment",
+          "audience",
+          "user"
+        ]
+      },
+      "ApprovalSpeechWording": {
+        "type": "string",
+        "description": "How a spoken card is worded.",
+        "enum": [
+          "precise",
+          "natural"
+        ]
       },
       "ApprovalVoiceCommand": {
         "type": "object",
@@ -14699,6 +14789,10 @@
             "type": "string",
             "description": "A readable name, display-cleaned."
           },
+          "nested": {
+            "type": "boolean",
+            "description": "The value sits in an object inside the record, such as a record\ncreated with it: its name and codes belong to that object, so spoken\nnames never apply to it."
+          },
           "new_name": {
             "type": "boolean",
             "description": "A name the call gives a record nobody read in this chat (see\n`record_unread`): a card reads it as a new value, never as the name of\nthe record being changed."
@@ -14938,6 +15032,16 @@
           },
           "source": {
             "$ref": "#/components/schemas/ToolCallLabelSource"
+          },
+          "spoken_names": {
+            "type": "object",
+            "description": "What people call this call's fields, coded values and tables, by\nlanguage tag, from the server's spoken vocabularies, for words spoken\naloud. Keyed by the names as this label carries them: an effect's\n`raw_name` and its values' `text`, a read condition's `column` and its\nvalues' `text` (as `table.column` when the condition names one of\nseveral tables; a coded value of an unnamed table has none), a read's\ntable. No card reads it.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolCallSpokenNames"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "warnings": {
             "type": "array",
@@ -15338,6 +15442,63 @@
           }
         }
       },
+      "ToolCallSpokenNames": {
+        "type": "object",
+        "description": "One language's words for the names a call uses. A name without an entry\nis not here and is spoken as the card shows it.",
+        "properties": {
+          "choices": {
+            "type": "object",
+            "description": "By field, then by value.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "sentences": {
+            "type": "object",
+            "description": "A field's own natural sentence variants, by sentence type (`changed`,\n`set`, `updated`) and then by field, keyed like `fields`.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tables": {
+            "type": "object",
+            "description": "What the records of a table are called, in the plural.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ToolCallStatus": {
         "type": "string",
         "enum": [
@@ -15375,6 +15536,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "nested": {
+            "type": "boolean",
+            "description": "See [`ToolCallEffect::nested`]."
           },
           "path": {
             "type": "string"
@@ -15910,6 +16075,20 @@
               }
             ]
           },
+          "preference_approval_speech_amount": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How much approval cards say aloud: `full` or `short`. Explicit\n`null` follows the organisation again. Kept even where the user may\nnot choose, and then not used."
+          },
+          "preference_approval_speech_wording": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How approval cards are worded aloud: `precise` or `natural`, like the\namount."
+          },
           "preference_assistant_additional_information": {
             "type": [
               "string",
@@ -16052,6 +16231,14 @@
           "picture": {
             "type": "string",
             "description": "The user's profile picture URL."
+          },
+          "preference_approval_speech_amount": {
+            "$ref": "#/components/schemas/ApprovalSpeechAmount",
+            "description": "How much approval cards say aloud, as the user chose; absent follows\nthe organisation."
+          },
+          "preference_approval_speech_wording": {
+            "$ref": "#/components/schemas/ApprovalSpeechWording",
+            "description": "How approval cards are worded aloud, as the user chose; absent\nfollows the organisation."
           },
           "preference_assistant_additional_information": {
             "type": "string",

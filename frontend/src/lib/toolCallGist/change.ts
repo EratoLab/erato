@@ -46,6 +46,8 @@ export interface ChangeEffect {
   link: boolean;
   /** A name the call gives a record nobody read in this chat: a new value, not its name. */
   newName: boolean;
+  /** The value sits in an object inside the record: spoken names never apply to it. */
+  nested: boolean;
 }
 
 export interface ChangeText {
@@ -57,6 +59,8 @@ export interface ChangeText {
   lines: number;
   chars: number;
   before?: ChangeValue;
+  /** See {@link ChangeEffect.nested}. */
+  nested: boolean;
 }
 
 export interface ChangeRecipientGroup {
@@ -309,6 +313,7 @@ class Reader {
       list: raw.list === true,
       link: raw.link === true,
       newName: raw.new_name === true,
+      nested: raw.nested === true,
     };
   }
 
@@ -334,6 +339,7 @@ class Reader {
           lines: countOf(entry.lines),
           chars: countOf(entry.chars),
           before: this.value(entry.before),
+          nested: entry.nested === true,
         },
       ];
     });

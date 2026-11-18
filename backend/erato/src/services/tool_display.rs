@@ -6,7 +6,7 @@ pub mod label;
 mod spoken_card_set;
 
 use crate::config::McpRuntimeConfig;
-use crate::models::message::{ToolCallLabelWarning, ToolDisplayMetadata};
+use crate::models::message::{ToolCallLabel, ToolCallLabelWarning, ToolDisplayMetadata};
 use crate::services::display_text::{
     MAX_DISPLAY_DESCRIPTION_CHARS, MAX_DISPLAY_NAME_CHARS, sanitize_display_text,
 };
@@ -234,8 +234,19 @@ fn labelled_display(
                 label.warnings.push(ToolCallLabelWarning::HiddenCharacters);
             }
         }
+        let vocabulary = label::spoken::SpokenVocabulary::for_server(config, server_id);
+        let mut spoken = vocabulary.as_ref().map(|vocabulary| {
+            let table = spoken_table(&label).or_else(|| label::rules::table_of(arguments));
+            vocabulary.collector(table.as_deref())
+        });
+        if let (Some(spoken), Some(change)) = (spoken.as_mut(), label.change.as_ref()) {
+            spoken.change(change);
+        }
         let shown = &label;
-        label.read = label::guarded_read(|| {
+        let mut read_names = vocabulary
+            .as_ref()
+            .map(|vocabulary| vocabulary.collector(None));
+        let read = label::guarded_read(|| {
             let (mut read, filtered) = label::read_label(tool, arguments, consent, shown)?;
             if let Some(server) = &scope {
                 context.resolve(&mut read, arguments, server);
@@ -249,13 +260,29 @@ fn labelled_display(
                     .mcp_servers
                     .get(server_id)
                     .map(|server| &server.glossary);
-                let mut read = label::sql_read(tool, arguments, consent, shown, glossary)?;
+                let mut read = label::sql_read(
+                    tool,
+                    arguments,
+                    consent,
+                    shown,
+                    glossary,
+                    read_names.as_mut(),
+                )?;
                 if let Some(server) = &scope {
                     context.resolve_query(&mut read, server);
                 }
                 Some(read)
             })
         });
+        if let (Some(spoken), Some(read_names)) = (spoken.as_mut(), read_names)
+            && read.is_some()
+        {
+            spoken.merge(read_names.finish());
+        }
+        label.read = read;
+        if let Some(spoken) = spoken {
+            label.spoken_names = spoken.finish();
+        }
         label
     })
     .or_else(|| {
@@ -272,6 +299,21 @@ fn labelled_display(
         closed_world: !crate::services::mcp_tool_approval::normalize_tool_annotations(tool)
             .open_world_hint,
         ..tool_display_metadata(tool)
+    }
+}
+
+/// Where the call's one item lives, when its label names a single place:
+/// the table a spoken vocabulary's scoped entries are for.
+fn spoken_table(label: &ToolCallLabel) -> Option<String> {
+    let [item] = label.items.as_slice() else {
+        return None;
+    };
+    let target = item.target.as_ref()?;
+    match (target.values.as_slice(), target.omitted) {
+        ([value], 0) if !value.machine_id && !value.text.trim().is_empty() => {
+            Some(value.text.trim().to_string())
+        }
+        _ => None,
     }
 }
 

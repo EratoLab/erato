@@ -69,7 +69,8 @@
     "deploy/0067_add_teams_nudge_opt_out.sql",
     "deploy/0068_add_user_time_zone_and_language.sql",
     "deploy/0069_add_scheduled_items.sql",
-    "deploy/0070_add_excel_and_powerpoint_created_via.sql"
+    "deploy/0070_add_excel_and_powerpoint_created_via.sql",
+    "deploy/0071_add_approval_speech_preferences.sql"
   ],
-  "latest_change": "a397e56c9dc410f821f6c1186dadabbe059b12c0"
+  "latest_change": "7b5aaa70dc0161d5349687baaf9ad96d9d7616bd"
 }

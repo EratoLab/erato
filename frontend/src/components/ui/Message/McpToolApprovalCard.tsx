@@ -1,10 +1,18 @@
 import { plural, t } from "@lingui/core/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
 import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import { userTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
 import {
@@ -12,6 +20,7 @@ import {
   getClientToolHeaders,
 } from "@/hooks/chat/clientToolExecutors";
 import { readConflictRefusal } from "@/hooks/chat/conflictRefusal";
+import { useComposeSessionStore } from "@/hooks/chat/store/composeSessionStore";
 import { useConfirmationRegistryStore } from "@/hooks/chat/store/confirmationRegistryStore";
 import { useGenerationStatusStore } from "@/hooks/chat/store/generationStatusStore";
 import { useChatArchived } from "@/hooks/chat/useChatArchived";
@@ -677,6 +686,19 @@ export const McpToolApprovalCard = ({
     [approvalIds.join("\n"), kind],
   );
 
+  const chatMessages = chatContext?.messages;
+  const chatOrder = chatContext?.messageOrder;
+  const composeSessionId = useComposeSessionStore((state) =>
+    chatId === null ? undefined : state.sessionIdByChatKey[chatId],
+  );
+  const userTurns = useMemo(
+    () =>
+      composeSessionId !== undefined && chatMessages && chatOrder
+        ? userTurnsBefore(composeSessionId, chatMessages, chatOrder, messageId)
+        : [],
+    [composeSessionId, chatMessages, chatOrder, messageId],
+  );
+
   const isClientTool = kind === "client_tool";
   const isBuiltinTool = kind === "builtin_tool";
   // The turn's own gated call, and its tool-call limit, carry its parked tasks
@@ -727,6 +749,7 @@ export const McpToolApprovalCard = ({
       !isBusy &&
       !isCoveredByParent,
     responding: chatContext?.isPendingResponse ?? false,
+    userTurns,
   });
 
   // Resolved decisions are represented beside the matching tool call in the

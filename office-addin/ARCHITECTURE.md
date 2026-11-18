@@ -48,7 +48,10 @@ implement the seams listed below, and never modify the core itself.
   full tier, else the whole file through `getFileAsync`, fetching only the
   slices that hold the slide's parts (`utils/powerpointFileContent.ts`). Nothing
   is cached; a file that does not match the shapes on screen is not used, and
-  what the whole file supplies is labelled as possibly the last saved version.
+  what the whole file supplies is labelled as possibly the last saved version,
+  except on the one host measured to hand over unsaved edits (Microsoft 365 for
+  Windows at the full tier, `fileIsCurrent`). On that host only, an export
+  without a notes page also counts as "no notes" (`exportKeepsNotes`).
   Like Word's
   chip, the chip and the tools appear only while the server advertises the
   `powerpoint_presentation` action facet, and the tools are listed only for a

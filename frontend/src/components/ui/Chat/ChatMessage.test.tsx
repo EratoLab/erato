@@ -348,6 +348,7 @@ describe("ChatMessage", () => {
       expect.objectContaining({
         fileIds: ["pdf-file", "docx-file"],
         onFilePreview,
+        showDownload: true,
       }),
     );
     expect(

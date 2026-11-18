@@ -20,6 +20,7 @@ import {
   approvalSpeechAllowed,
   spokenApprovalCardNow,
   steerApprovalCard,
+  stopApprovalSpeech,
   useApprovalSpeech,
 } from "./approvalSpeech";
 
@@ -32,6 +33,7 @@ import type {
   SpokenCardEvent,
   SpokenCardFlow,
   SpokenNotice,
+  SpokenUtterance,
 } from "@/lib/toolCallGist/spokenCardFlow";
 
 /**
@@ -201,6 +203,71 @@ const stillWaiting = (key: string, asked: SpokenCardFlow): boolean => {
   );
 };
 
+/** What the voice was saying about a card when the user talked over it. */
+let talkedOver: {
+  key: string;
+  flow: SpokenCardFlow;
+  cut: SpokenUtterance;
+} | null = null;
+
+/**
+ * The user talks over the voice reading the card under `key`: what it was
+ * saying is cut short, and its words go the way words said in silence go.
+ */
+export function talkOverApprovalCard(key: string) {
+  const before = spokenApprovalCardNow();
+  if (before?.card.key !== key || before.flow.closed) return;
+  const cut = before.flow.playing;
+  stopApprovalSpeech();
+  const after = spokenApprovalCardNow();
+  talkedOver = cut && after ? { key, flow: after.flow, cut } : null;
+}
+
+/** Says again, from its start, what the user talked over. */
+export const resumeEvent = (cut: SpokenUtterance): SpokenCardEvent => {
+  switch (cut.type) {
+    case "piece":
+      return { type: "repeat", index: cut.index };
+    case "text":
+      return { type: "read", index: cut.index };
+    case "held":
+      return { type: "held" };
+    case "count":
+    case "nothing_left":
+      return { type: "rest" };
+    case "notice":
+      return { type: "notice", notice: cut.notice };
+  }
+};
+
+/** "Again" over how much the voice holds back is that sentence again. */
+export const againOverVoice = (
+  cut: SpokenUtterance,
+  event: SpokenCardEvent,
+): SpokenCardEvent =>
+  cut.type === "held" && event.type === "repeat" && event.index === undefined
+    ? { type: "held" }
+    : event;
+
+/** The voice was talked over under `key`, and nothing happened since. */
+const takeTalkedOver = (key: string, flow: SpokenCardFlow) => {
+  const record = talkedOver;
+  talkedOver = null;
+  return record?.key === key && record.flow === flow ? record : null;
+};
+
+/**
+ * Talking over the voice brought no words (a cough, a breath): the voice
+ * goes on with what it was cut off in, from its start.
+ */
+export function resumeTalkedOverCard(key: string) {
+  const now = spokenApprovalCardNow();
+  if (!now) return;
+  const record = takeTalkedOver(key, now.flow);
+  if (!record || !stillWaiting(key, now.flow)) return;
+  steerApprovalCard(key, resumeEvent(record.cut));
+}
+
 /**
  * Acts on what the user said while the card under `key` waited. Words for a
  * card that has since been decided, replaced or left are dropped.
@@ -215,6 +282,7 @@ export async function heardApprovalWords(
   const now = spokenApprovalCardNow();
   if (words.length === 0 || now?.card.key !== key || now.flow.closed) return;
   const { card, pieces, flow } = now;
+  const overVoice = takeTalkedOver(key, flow);
   const current = currentPiece(flow);
   useApprovalListening.setState({ pending: key });
   const abort = new AbortController();
@@ -250,6 +318,11 @@ export async function heardApprovalWords(
       useApprovalListening.setState({ pending: null });
   }
   if (!stillWaiting(key, flow)) return;
+  // Only a sound ("mhm") over the voice: it goes on where it was cut.
+  if (overVoice && step.listen && step.event === null && !step.change)
+    step = { ...step, event: resumeEvent(overVoice.cut) };
+  if (overVoice && step.event)
+    step = { ...step, event: againOverVoice(overVoice.cut, step.event) };
   if (step.change) {
     await changeByVoice(key, transcript);
     return;

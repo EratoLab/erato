@@ -470,6 +470,7 @@ mod tests {
             pinned_assistant_hub_assistant_id: Uuid::new_v4(),
             expires_at: None,
             provenance: None,
+            approval_speech: None,
         }
     }
 
@@ -814,6 +815,7 @@ mod tests {
             pinned_assistant_hub_assistant_id: pin,
             expires_at: None,
             provenance: None,
+            approval_speech: None,
         };
         let policy = policy_with(
             vec![

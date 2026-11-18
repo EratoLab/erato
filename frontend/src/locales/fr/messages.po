@@ -2042,6 +2042,11 @@ msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Désélectionner {facetDisplayName}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/MessageAttachments.tsx
+msgid "chat.file.download_output"
+msgstr "Télécharger {filename}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #~ msgid "chat.file.error"
 #~ msgstr "Erreur lors du chargement du fichier"
@@ -2511,6 +2516,11 @@ msgstr "Impossible de désarchiver la discussion"
 #: src/components/ui/Chat/chatActionFeedback.ts
 msgid "chat.history.unpinFailed"
 msgstr "Impossible de désépingler la discussion"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.audio.notSentCardWaiting"
+msgstr "Non envoyé : une confirmation est en attente"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -8912,6 +8922,21 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictated"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedReadLead"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedUnnamed"
 msgstr ""
 
 #. js-lingui-explicit-id

@@ -173,6 +173,30 @@
       ]
     },
     {
+      "id": "create-15-nested-account",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-15-nested-account"
+      ]
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-16-account-with-opportunity"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -279,6 +303,30 @@
       ],
       "calls": [
         "update-09-task-status-codes"
+      ]
+    },
+    {
+      "id": "update-14-case-priority",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-14-case-priority"
+      ]
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "kind": [
+        "update"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "update-15-task-nested-case"
       ]
     },
     {
@@ -638,6 +686,18 @@
       ],
       "calls": [
         "read-08-sql-join"
+      ]
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "kind": [
+        "read"
+      ],
+      "holds": [
+        "several_filters"
+      ],
+      "calls": [
+        "read-15-sql-join-two-states"
       ]
     },
     {
@@ -1002,6 +1062,46 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "prioritycode": "Priorität",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "prioritycode": "Priority",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority.",
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -1193,6 +1293,24 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "location": "Ort",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Ende",
+                "scheduledstart": "Beginn"
+              }
+            },
+            "en": {
+              "fields": {
+                "location": "Location",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "End",
+                "scheduledstart": "Start"
+              }
+            }
           }
         }
       }
@@ -1385,6 +1503,24 @@
             },
             "table": "contact",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "emailaddress1": "E-Mail",
+                "firstname": "Vorname",
+                "jobtitle": "Position",
+                "parentcustomerid": "Firma"
+              }
+            },
+            "en": {
+              "fields": {
+                "emailaddress1": "Email",
+                "firstname": "First name",
+                "jobtitle": "Job title",
+                "parentcustomerid": "Company"
+              }
+            }
           }
         }
       }
@@ -1594,6 +1730,20 @@
               "unchecked": 2
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "regardingobjectid": "Bezug"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "regardingobjectid": "Regarding"
+              }
+            }
           }
         }
       }
@@ -1848,6 +1998,60 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "actualdurationminutes": "Dauer in Minuten",
+                "category": "Kategorie",
+                "percentcomplete": "Prozent abgeschlossen",
+                "prioritycode": "Priorität",
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum",
+                "statecode": "Status",
+                "subcategory": "Unterkategorie"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                },
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "actualdurationminutes": "Duration in minutes",
+                "category": "Category",
+                "percentcomplete": "Percent complete",
+                "prioritycode": "Priority",
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date",
+                "statecode": "Status",
+                "subcategory": "Subcategory"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                },
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority.",
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -1986,6 +2190,30 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -2133,6 +2361,22 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "phonenumber": "Telefonnummer",
+                "scheduledend": "Fälligkeitsdatum"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "phonenumber": "Phone number",
+                "scheduledend": "Due date"
+              }
+            }
           }
         }
       }
@@ -2325,6 +2569,30 @@
             },
             "table": "opportunity",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "customerid": "Kunde",
+                "estimatedvalue": "Geschätzter Umsatz"
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "customerid": "Customer",
+                "estimatedvalue": "Estimated revenue"
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
+                }
+              }
+            }
           }
         }
       }
@@ -2453,6 +2721,20 @@
               }
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "notetext": "Notiz",
+                "objectid": "Bezug"
+              }
+            },
+            "en": {
+              "fields": {
+                "notetext": "Note",
+                "objectid": "Regarding"
+              }
+            }
           }
         }
       }
@@ -2603,6 +2885,22 @@
             },
             "table": "account",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "address1_city": "Ort",
+                "telephone1": "Telefon",
+                "websiteurl": "Website"
+              }
+            },
+            "en": {
+              "fields": {
+                "address1_city": "City",
+                "telephone1": "Phone",
+                "websiteurl": "Website"
+              }
+            }
           }
         }
       }
@@ -3066,6 +3364,28 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -3164,6 +3484,28 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -3276,6 +3618,238 @@
               "unchanged": 0,
               "unreadable": 0
             },
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "create-15-nested-account",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "opportunity",
+        "item": {
+          "name": "Linie 6",
+          "parentaccountid": {
+            "name": "Neue Firma",
+            "statecode": 1
+          }
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "row",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/name",
+                "values": [
+                  {
+                    "path": "/item/name",
+                    "text": "Linie 6"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/name",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/parentaccountid",
+                    "kind": "group",
+                    "children": [
+                      {
+                        "path": "/item/parentaccountid/name",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/item/parentaccountid/statecode",
+                        "kind": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/parentaccountid/name",
+                "name": "Parent account ID · Name",
+                "raw_name": "name",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Neue Firma"
+                  }
+                ],
+                "nested": true
+              },
+              {
+                "path": "/item/parentaccountid/statecode",
+                "name": "Parent account ID · State code",
+                "raw_name": "statecode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 2,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "opportunity",
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "account",
+        "item": {
+          "name": "Neue Firma",
+          "opportunity_customer_accounts": [
+            {
+              "name": "Linie 7",
+              "statecode": 1
+            }
+          ]
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "row",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/name",
+                "values": [
+                  {
+                    "path": "/item/name",
+                    "text": "Neue Firma"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/name",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/opportunity_customer_accounts",
+                    "kind": "list",
+                    "children": [
+                      {
+                        "path": "/item/opportunity_customer_accounts/0",
+                        "kind": "group",
+                        "children": [
+                          {
+                            "path": "/item/opportunity_customer_accounts/0/name",
+                            "kind": "value"
+                          },
+                          {
+                            "path": "/item/opportunity_customer_accounts/0/statecode",
+                            "kind": "value"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/opportunity_customer_accounts/0/name",
+                "name": "Name",
+                "raw_name": "name",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Linie 7"
+                  }
+                ],
+                "nested": true
+              },
+              {
+                "path": "/item/opportunity_customer_accounts/0/statecode",
+                "name": "State code",
+                "raw_name": "statecode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 2,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "account",
             "complete": true
           }
         }
@@ -3658,6 +4232,18 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "parentcontactid": "Kontakt"
+              }
+            },
+            "en": {
+              "fields": {
+                "parentcontactid": "Contact"
+              }
+            }
           }
         }
       }
@@ -3794,6 +4380,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -4147,6 +4747,44 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "budgetstatus": "Budgetstatus",
+                "estimatedvalue": "Geschätzter Umsatz",
+                "purchasetimeframe": "Kaufzeitrahmen",
+                "stepname": "Phase"
+              },
+              "choices": {
+                "purchasetimeframe": {
+                  "1": "Dieses Quartal"
+                }
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "budgetstatus": "Budget status",
+                "estimatedvalue": "Estimated revenue",
+                "purchasetimeframe": "Purchase timeframe",
+                "stepname": "Pipeline phase"
+              },
+              "choices": {
+                "purchasetimeframe": {
+                  "1": "This quarter"
+                }
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
+                }
+              }
+            }
           }
         }
       }
@@ -4283,6 +4921,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "scheduledend": "Ende",
+                "scheduledstart": "Beginn"
+              }
+            },
+            "en": {
+              "fields": {
+                "scheduledend": "End",
+                "scheduledstart": "Start"
+              }
+            }
           }
         }
       }
@@ -4368,6 +5020,18 @@
             ],
             "table": "opportunity",
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description"
+              }
+            }
           }
         }
       }
@@ -4493,6 +5157,346 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "statecode": "Status",
+                "statuscode": "Statusgrund"
+              },
+              "choices": {
+                "statecode": {
+                  "1": "Abgeschlossen"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "statecode": "Status",
+                "statuscode": "Status reason"
+              },
+              "choices": {
+                "statecode": {
+                  "1": "Completed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "update-14-case-priority",
+      "tool_name": "update_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "incident",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000e001",
+        "item": {
+          "prioritycode": 1
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "update",
+          "object_kind": "row",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000e001",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/prioritycode",
+                    "kind": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/prioritycode",
+                "name": "Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ]
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 1,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "incident",
+            "record_unread": true,
+            "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Hoch"
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "High"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "update-15-task-nested-case",
+      "tool_name": "update_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "task",
+        "recordId": "5f0c2a10-0000-4000-8000-00000000a015",
+        "item": {
+          "prioritycode": 1,
+          "regardingobjectid_incident_task": {
+            "title": "Linie 6 steht",
+            "prioritycode": 1
+          }
+        }
+      },
+      "display": {
+        "title": "update_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "update",
+          "object_kind": "task",
+          "items": [
+            {
+              "id": {
+                "pointer": "/recordId",
+                "values": [
+                  {
+                    "path": "/recordId",
+                    "text": "5f0c2a10-0000-4000-8000-00000000a015",
+                    "machine_id": true
+                  }
+                ]
+              },
+              "fields": [
+                {
+                  "pointer": "/item/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                },
+                {
+                  "pointer": "/item/regardingobjectid_incident_task/title",
+                  "name": "title",
+                  "values": [
+                    {
+                      "path": "/item/regardingobjectid_incident_task/title",
+                      "text": "Linie 6 steht"
+                    }
+                  ]
+                },
+                {
+                  "pointer": "/item/regardingobjectid_incident_task/prioritycode",
+                  "name": "prioritycode",
+                  "values": [
+                    {
+                      "path": "/item/regardingobjectid_incident_task/prioritycode",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/recordId",
+                "kind": "machine_id"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/prioritycode",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/regardingobjectid_incident_task",
+                    "kind": "group",
+                    "children": [
+                      {
+                        "path": "/item/regardingobjectid_incident_task/title",
+                        "kind": "value"
+                      },
+                      {
+                        "path": "/item/regardingobjectid_incident_task/prioritycode",
+                        "kind": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/prioritycode",
+                "name": "Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ]
+              },
+              {
+                "path": "/item/regardingobjectid_incident_task/title",
+                "name": "Regardingobjectid incident task · Title",
+                "raw_name": "title",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Linie 6 steht"
+                  }
+                ],
+                "new_name": true,
+                "nested": true
+              },
+              {
+                "path": "/item/regardingobjectid_incident_task/prioritycode",
+                "name": "Regardingobjectid incident task · Priority code",
+                "raw_name": "prioritycode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 3,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "record_unread": true,
+            "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Normal"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "1": "Normal"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority."
+                }
+              }
+            }
           }
         }
       }
@@ -4626,6 +5630,20 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "jobtitle": "Position",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "jobtitle": "Job title",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -4901,6 +5919,36 @@
               "old_values_from_earlier"
             ],
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "budgetamount": "Budget",
+                "currentsituation": "Aktuelle Situation",
+                "customerneed": "Kundenbedarf",
+                "description": "Beschreibung",
+                "proposedsolution": "Vorgeschlagene Lösung",
+                "purchaseprocess": "Kaufprozess",
+                "qualificationcomments": "Qualifizierungskommentare",
+                "quotecomments": "Angebotskommentare",
+                "stepname": "Phase",
+                "telephone1": "Telefon"
+              }
+            },
+            "en": {
+              "fields": {
+                "budgetamount": "Budget",
+                "currentsituation": "Current situation",
+                "customerneed": "Customer need",
+                "description": "Description",
+                "proposedsolution": "Proposed solution",
+                "purchaseprocess": "Purchase process",
+                "qualificationcomments": "Qualification comments",
+                "quotecomments": "Quote comments",
+                "stepname": "Pipeline phase",
+                "telephone1": "Phone"
+              }
+            }
           }
         }
       }
@@ -6608,7 +7656,8 @@
                   {
                     "text": "Legal name: Muster Maschinenbau AG, Website: muster-maschinenbau.example, Segment: Mittelstand"
                   }
-                ]
+                ],
+                "nested": true
               }
             ],
             "counts": {
@@ -6947,6 +7996,34 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7027,6 +8104,46 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "prioritycode": "Priorität",
+                "scheduledend": "Fälligkeitsdatum",
+                "statecode": "Status",
+                "subject": "Betreff"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "Hoch"
+                },
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "prioritycode": "Priority",
+                "scheduledend": "Due date",
+                "statecode": "Status",
+                "subject": "Subject"
+              },
+              "choices": {
+                "prioritycode": {
+                  "2": "High"
+                },
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
+            }
           }
         },
         "read_only": true
@@ -7077,6 +8194,18 @@
                 "opportunity"
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "tables": {
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7114,6 +8243,18 @@
                 "account"
               ],
               "limit": 50
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "account": "Firmen"
+              }
+            },
+            "en": {
+              "tables": {
+                "account": "accounts"
+              }
             }
           }
         },
@@ -7214,6 +8355,40 @@
                   "values_omitted": 1
                 }
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "description": "Beschreibung",
+                "prioritycode": "Priorität"
+              },
+              "choices": {
+                "prioritycode": {
+                  "0": "Niedrig",
+                  "1": "Normal",
+                  "2": "Hoch"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "description": "Description",
+                "prioritycode": "Priority"
+              },
+              "choices": {
+                "prioritycode": {
+                  "0": "Low",
+                  "1": "Normal",
+                  "2": "High"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
             }
           }
         },
@@ -7341,6 +8516,127 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "account.name": "Name"
+              },
+              "tables": {
+                "account": "Firmen",
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "account.name": "Name"
+              },
+              "tables": {
+                "account": "accounts",
+                "opportunity": "opportunities"
+              }
+            }
+          }
+        },
+        "read_only": true
+      }
+    },
+    {
+      "id": "read-15-sql-join-two-states",
+      "tool_name": "read_query",
+      "server_id": "dynamics",
+      "input": {
+        "querytext": "SELECT o.name FROM opportunity o JOIN account a ON o.customerid = a.accountid WHERE o.statecode = 1 AND a.statecode = 1"
+      },
+      "display": {
+        "title": "read_query",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "other",
+          "object_kind": "other",
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/querytext",
+                "kind": "text"
+              }
+            ]
+          },
+          "source": "generic",
+          "read": {
+            "object_kind": "row",
+            "filtered": true,
+            "query": {
+              "tables": [
+                "opportunity",
+                "account"
+              ],
+              "conditions": [
+                {
+                  "column": "statecode",
+                  "table": "opportunity",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "1"
+                    }
+                  ]
+                },
+                {
+                  "column": "statecode",
+                  "table": "account",
+                  "operator": "equals",
+                  "values": [
+                    {
+                      "path": "/querytext",
+                      "text": "1"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "account.statecode": "Status",
+                "opportunity.statecode": "Status"
+              },
+              "choices": {
+                "account.statecode": {
+                  "1": "Inaktiv"
+                },
+                "opportunity.statecode": {
+                  "1": "Gewonnen"
+                }
+              },
+              "tables": {
+                "account": "Firmen",
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "fields": {
+                "account.statecode": "Status",
+                "opportunity.statecode": "Status"
+              },
+              "choices": {
+                "account.statecode": {
+                  "1": "Inactive"
+                },
+                "opportunity.statecode": {
+                  "1": "Won"
+                }
+              },
+              "tables": {
+                "account": "accounts",
+                "opportunity": "opportunities"
+              }
+            }
           }
         },
         "read_only": true
@@ -7389,6 +8685,18 @@
               "tables": [
                 "opportunity"
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "tables": {
+                "opportunity": "opportunities"
+              }
             }
           }
         },
@@ -7538,6 +8846,36 @@
                 }
               ]
             }
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Offen"
+                }
+              },
+              "tables": {
+                "task": "Aufgaben"
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "statecode": "Status"
+              },
+              "choices": {
+                "statecode": {
+                  "0": "Open"
+                }
+              },
+              "tables": {
+                "task": "tasks"
+              }
+            }
           }
         },
         "read_only": true
@@ -7669,6 +9007,18 @@
                   ]
                 }
               ]
+            }
+          },
+          "spoken_names": {
+            "de": {
+              "tables": {
+                "opportunity": "Verkaufschancen"
+              }
+            },
+            "en": {
+              "tables": {
+                "opportunity": "opportunities"
+              }
             }
           }
         },
@@ -7907,6 +9257,30 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -8046,6 +9420,30 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }
@@ -8185,6 +9583,30 @@
               "unreadable": 0
             },
             "complete": true
+          },
+          "spoken_names": {
+            "de": {
+              "fields": {
+                "regardingobjectid": "Bezug",
+                "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
+              }
+            },
+            "en": {
+              "fields": {
+                "regardingobjectid": "Regarding",
+                "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
+              }
+            }
           }
         }
       }

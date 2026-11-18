@@ -31,6 +31,10 @@ pub struct Model {
     pub time_zone: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub language: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub approval_speech_amount: Option<String>,
+    #[sea_orm(column_type = "Text", nullable)]
+    pub approval_speech_wording: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

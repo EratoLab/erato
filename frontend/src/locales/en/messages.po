@@ -2042,6 +2042,11 @@ msgid "chat.facetSelector.deselectFacet.title"
 msgstr "Deselect {facetDisplayName}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/MessageAttachments.tsx
+msgid "chat.file.download_output"
+msgstr "Download {filename}"
+
+#. js-lingui-explicit-id
 #: src/components/ui/Chat/ChatMessage.tsx
 #~ msgid "chat.file.error"
 #~ msgstr "Error loading file"
@@ -2511,6 +2516,11 @@ msgstr "Couldn't unarchive the chat"
 #: src/components/ui/Chat/chatActionFeedback.ts
 msgid "chat.history.unpinFailed"
 msgstr "Couldn't unpin the chat"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.audio.notSentCardWaiting"
+msgstr "Not sent: a confirmation is waiting"
 
 #. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
@@ -8913,6 +8923,21 @@ msgstr "{direction, select, from {from {server}} other {in {server}}}"
 #: src/lib/toolCallGist/spokenCardWords.ts
 msgid "spokenCard.text"
 msgstr "{shape, select, field {{field}: a text of about {words} words, shown on screen.} other {Plus a text of about {words} words, shown on screen.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictated"
+msgstr "{relation, select, unchanged {{field}: the text exactly as dictated.} part {{field}: part of the dictated text, word for word.} extended {{field}: the dictated text word for word, with additions.} other {{field}: the dictated text, changed in places.}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedReadLead"
+msgstr "{relation, select, part {The card holds only part of what was dictated. It reads:} extended {The card holds more than what was dictated. It reads:} other {The text on the card differs from what was dictated. It reads:}}"
+
+#. js-lingui-explicit-id
+#: src/lib/toolCallGist/spokenCardWords.ts
+msgid "spokenCard.text.dictatedUnnamed"
+msgstr "{relation, select, unchanged {Plus the text exactly as dictated.} part {Plus part of the dictated text, word for word.} extended {Plus the dictated text word for word, with additions.} other {Plus the dictated text, changed in places.}}"
 
 #. js-lingui-explicit-id
 #: src/lib/toolCallGist/spokenCardWords.ts

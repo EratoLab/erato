@@ -94,6 +94,10 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS: &str
     "AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS: &str =
     "AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
+    "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
+    "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS";
 const FRONTEND_ENV_KEY_SIDEBAR_COLLAPSED_MODE: &str = "SIDEBAR_COLLAPSED_MODE";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_PATH: &str = "SIDEBAR_LOGO_PATH";
 const FRONTEND_ENV_KEY_SIDEBAR_LOGO_DARK_PATH: &str = "SIDEBAR_LOGO_DARK_PATH";
@@ -645,6 +649,19 @@ fn build_frontend_environment(
         Value::Number(config.audio_conversational.end_of_turn_silence_ms.into()),
     );
     env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE.to_string(),
+        Value::Bool(config.audio_conversational.talk_over_voice),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS.to_string(),
+        Value::Number(
+            config
+                .audio_conversational
+                .talk_over_voice_min_speech_ms
+                .into(),
+        ),
+    );
+    env.additional_environment.insert(
         "SPEECH_ENABLED".to_string(),
         Value::Bool(
             config.audio_conversational.transcription.enabled
@@ -659,6 +676,14 @@ fn build_frontend_environment(
         "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
         Value::Bool(config.approval_voice_commands.enabled),
     );
+    // The deployment's natural sentence variants for approval cards read
+    // aloud; how much is said and how it is worded is asked per user.
+    if !config.approval_speech.sentences.is_empty() {
+        env.additional_environment.insert(
+            "APPROVAL_SPEECH_SENTENCES".to_string(),
+            serde_json::to_value(&config.approval_speech.sentences).unwrap_or(Value::Null),
+        );
+    }
     env.additional_environment.insert(
         "READ_ALOUD_ENABLED".to_string(),
         Value::Bool(config.read_aloud_speech_provider().is_some()),
@@ -1423,6 +1448,32 @@ mod tests {
     }
 
     #[test]
+    fn talk_over_voice_reaches_web_and_office_addin() {
+        let mut config = AppConfig::default();
+        for (enabled, min_speech_ms, kind) in [
+            (false, 500, FrontendKind::Web),
+            (true, 700, FrontendKind::Web),
+            (true, 700, FrontendKind::OfficeAddin),
+        ] {
+            config.audio_conversational.talk_over_voice = enabled;
+            config.audio_conversational.talk_over_voice_min_speech_ms = min_speech_ms;
+            let environment = build_frontend_environment(&config, kind);
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE),
+                Some(&Value::Bool(enabled))
+            );
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS),
+                Some(&Value::Number(min_speech_ms.into()))
+            );
+        }
+    }
+
+    #[test]
     fn approval_voice_commands_switch_reaches_web_and_office_addin() {
         let mut config = AppConfig::default();
         for (enabled, kind) in [
@@ -1439,6 +1490,29 @@ mod tests {
                 Some(&Value::Bool(enabled))
             );
         }
+    }
+
+    #[test]
+    fn approval_speech_sentences_reach_the_frontend_when_set() {
+        let mut config = AppConfig::default();
+        let get = |config: &AppConfig| {
+            build_frontend_environment(config, FrontendKind::Web)
+                .additional_environment
+                .get("APPROVAL_SPEECH_SENTENCES")
+                .cloned()
+        };
+        assert_eq!(get(&config), None);
+        config.approval_speech.sentences = std::collections::HashMap::from([(
+            "de".to_string(),
+            std::collections::HashMap::from([(
+                "changed".to_string(),
+                "{field} geht {from} {to}.".to_string(),
+            )]),
+        )]);
+        assert_eq!(
+            get(&config),
+            Some(serde_json::json!({"de": {"changed": "{field} geht {from} {to}."}}))
+        );
     }
 
     #[test]

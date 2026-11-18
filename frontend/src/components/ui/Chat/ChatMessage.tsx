@@ -322,6 +322,7 @@ export const ChatMessage = memo(function ChatMessage(props: ChatMessageProps) {
         filesById={filesById}
         relatedFiles={relatedFiles}
         onFilePreview={onFilePreview}
+        showDownload={message.role === "assistant"}
       />
     ) : null;
 

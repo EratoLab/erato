@@ -278,6 +278,8 @@ struct Walk<'a> {
     lists: ListClaims,
     /// A value was compared with what an earlier result showed.
     used_earlier: bool,
+    /// How many objects inside the record the walk is in.
+    nesting: usize,
 }
 
 struct EarlierRecord<'a> {
@@ -358,6 +360,7 @@ impl<'a> Walk<'a> {
             complete: true,
             says: ToolText::read(facts.tool.description.as_deref()),
             before_stored: false,
+            nesting: 0,
             lists: ListClaims::default(),
             used_earlier: false,
         }
@@ -464,7 +467,11 @@ impl<'a> Walk<'a> {
                 self.batch(entries, path, &name);
             }
             Value::Array(entries) if entries.len() == 1 && is_record(&entries[0]) => {
-                // One record sent as a list is that record.
+                // One record sent as a list is that record. Inside the record
+                // it is another one, created with it (a deep insert through a
+                // collection), unless the list only wraps the record.
+                let nested = depth > 0 && !is_one_of(member, &WRAPPER_MEMBERS);
+                self.nesting += usize::from(nested);
                 if let Value::Object(row) = &entries[0] {
                     let base = format!("{path}/0");
                     if let Some((before, after)) = text_edit(row) {
@@ -482,6 +489,7 @@ impl<'a> Walk<'a> {
                         self.members(row, &base, depth + 1, true, "");
                     }
                 }
+                self.nesting -= usize::from(nested);
             }
             Value::Object(inner) if !flat && is_one_of(member, &WRAPPER_MEMBERS) => {
                 self.members(inner, path, depth + 1, true, "");
@@ -505,7 +513,9 @@ impl<'a> Walk<'a> {
         match unwrap(value, false) {
             Unwrapped::Other if depth + 1 < MAX_DEPTH && !inner.is_empty() => {
                 let prefix = format!("{name} · ");
+                self.nesting += 1;
                 self.members(inner, path, depth + 1, false, &prefix);
+                self.nesting -= 1;
             }
             _ => self.value(member, value, path, name.to_string()),
         }
@@ -775,6 +785,7 @@ impl<'a> Walk<'a> {
             list: false,
             link: false,
             new_name: false,
+            nested: self.nesting > 0,
         };
         match unwrap(value, is_plural(member)) {
             Unwrapped::Empty => {
@@ -1560,6 +1571,7 @@ impl<'a> Walk<'a> {
             lines: line_count(raw),
             chars: u32::try_from(raw.chars().count()).unwrap_or(u32::MAX),
             before,
+            nested: self.nesting > 0,
         });
     }
 

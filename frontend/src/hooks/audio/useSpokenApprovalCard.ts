@@ -15,9 +15,11 @@ import {
   speakApprovalCard,
 } from "./approvalSpeech";
 import { useSpeechPlayback } from "./speechPlayback";
+import { deploymentSentences, useSpokenStyle } from "./spokenStyle";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
+import type { UserTurn } from "@/lib/toolCallGist/spokenDictation";
 
 /**
  * Speaks the approval a card shows when conversational mode reads back and
@@ -25,7 +27,7 @@ import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
  * of that turn have played. Several approvals are spoken one at a time, as
  * the screen shows them. After a stop the card waits to be asked for. A card
  * that corrects one the user asked to change by voice is said as the
- * difference to that one.
+ * difference to that one. A long text the user dictated is named as theirs.
  */
 export function useSpokenApprovalCard({
   chatId,
@@ -37,6 +39,7 @@ export function useSpokenApprovalCard({
   index,
   active,
   responding,
+  userTurns,
 }: {
   chatId: string | null;
   messageId: string;
@@ -58,6 +61,8 @@ export function useSpokenApprovalCard({
   active: boolean;
   /** The chat is still receiving the turn. */
   responding: boolean;
+  /** The user's messages before this card, the latest first, with what of them was dictated. */
+  userTurns?: readonly UserTurn[];
 }) {
   const spokenTurn = useSpeechPlayback(
     (state) =>
@@ -69,9 +74,13 @@ export function useSpokenApprovalCard({
   const quiet = useSpeechPlayback(
     (state) => chatId !== null && state.quietTurn === chatId,
   );
-  const modelSpeaking = useSpeechPlayback((state) => state.playing);
+  // A reply paused by the user talking over it may still go on.
+  const modelSpeaking = useSpeechPlayback(
+    (state) => state.playing || state.paused,
+  );
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
+  const style = useSpokenStyle(spokenTurn);
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
@@ -90,19 +99,28 @@ export function useSpokenApprovalCard({
                 index > 0 && sameSpokenKind(approvals[index - 1], approval),
             }
           : undefined,
+      userTurns,
     };
     const item = items.at(index);
     const withdrawn =
       item?.replaces != null
         ? takeWithdrawnCard(item.replaces, item.approvalId)
         : undefined;
+    // The style changes which pieces are held back and the words of
+    // details and the opening, never the pieces themselves; the difference
+    // reading after a change request stays as it is.
+    const styled = {
+      ...options,
+      ...style,
+      sentences: deploymentSentences(options.language),
+    };
     const card = {
       key,
       messageId,
       language: options.language,
       pieces: withdrawn
         ? spokenDifference(withdrawn, approval, options).pieces
-        : spokenApprovalPieces(approval, options),
+        : spokenApprovalPieces(approval, styled),
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
       approval,
       change: item ? change?.(item.approvalId) : undefined,
@@ -124,6 +142,8 @@ export function useSpokenApprovalCard({
     quiet,
     responding,
     spokenTurn,
+    style,
+    userTurns,
   ]);
 
   // A decision, or the card going away, ends the voice of its own approvals

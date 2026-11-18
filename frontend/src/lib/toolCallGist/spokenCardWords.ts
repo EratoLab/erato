@@ -3,6 +3,7 @@ import { plural, select, t } from "@lingui/core/macro";
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
+import { fillVariant, naturalVariant } from "./spokenSentences";
 import { bothPercent } from "./spokenValues";
 
 import type { GistKind } from "./gist";
@@ -16,11 +17,13 @@ import type {
   SpokenWords,
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
+import type { DictationRelation } from "./spokenDictation";
 import type {
   SpokenCondition,
   SpokenReadFacts,
   SpokenReadWords,
 } from "./spokenRead";
+import type { SentenceSet } from "./spokenSentences";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -36,6 +39,10 @@ interface WordOptions {
   now: Date;
   /** The zone "today" is in; the device's when not given. */
   timeZone?: string;
+  /** `natural` says details and the opening in the sentence variants. */
+  wording?: "precise" | "natural";
+  /** The deployment's sentence variants for this language. */
+  sentences?: SentenceSet;
 }
 
 interface CalendarDay {
@@ -122,6 +129,12 @@ interface LanguageCode {
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
   time?: (hour: number, minute: number) => string;
+  /**
+   * An old or new value with its direction, for a sentence variant, where
+   * the language's value in that role carries none ("from 1 December"). A
+   * German value carries it already ("vom 1. Dezember").
+   */
+  directed?: (role: "from" | "to", value: string) => string;
 }
 
 /* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
@@ -163,6 +176,7 @@ const GERMAN: LanguageCode = {
 
 const ENGLISH: LanguageCode = {
   locale: "en-GB",
+  directed: (role, value) => `${role} ${value}`,
   numbers: [
     "zero",
     "one",
@@ -744,6 +758,44 @@ const longTextSentence = (
     }),
   });
 
+/** A long text named by where it came from: the user's dictation. */
+const dictatedTextSentence = (
+  shape: "field" | "none",
+  relation: DictationRelation,
+  field: string,
+): string => {
+  if (shape === "field") {
+    return t({
+      id: "spokenCard.text.dictated",
+      message: select(relation, {
+        unchanged: `${field}: the text exactly as dictated.`,
+        part: `${field}: part of the dictated text, word for word.`,
+        extended: `${field}: the dictated text word for word, with additions.`,
+        other: `${field}: the dictated text, changed in places.`,
+      }),
+    });
+  }
+  return t({
+    id: "spokenCard.text.dictatedUnnamed",
+    message: select(relation, {
+      unchanged: "Plus the text exactly as dictated.",
+      part: "Plus part of the dictated text, word for word.",
+      extended: "Plus the dictated text word for word, with additions.",
+      other: "Plus the dictated text, changed in places.",
+    }),
+  });
+};
+
+const dictatedReadLeadSentence = (relation: DictationRelation): string =>
+  t({
+    id: "spokenCard.text.dictatedReadLead",
+    message: select(relation, {
+      part: "The card holds only part of what was dictated. It reads:",
+      extended: "The card holds more than what was dictated. It reads:",
+      other: "The text on the card differs from what was dictated. It reads:",
+    }),
+  });
+
 /** What a consequence is about: the thing's kind, several things, or a statement. */
 type ConsequenceSubject = GistKind | "many" | "statement";
 
@@ -1212,7 +1264,19 @@ const isNew = (facts: SpokenFacts) => ACTIONS_ON_NEW.includes(facts.action);
 const isShort = (position: SpokenQueuePosition | undefined) =>
   position !== undefined && position.index > 0 && position.sameAsPrevious;
 
-const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
+const words = (
+  code: LanguageCode,
+  options: WordOptions,
+  language: string,
+): LanguageWords => {
+  const natural = options.wording === "natural";
+  /** The natural variant for `key`, or `undefined` for the precise sentence. */
+  const variant = (key: string, oneField?: string): string | undefined =>
+    natural
+      ? naturalVariant(language, key, options.sentences, oneField)
+      : undefined;
+  const directed = (role: "from" | "to", said: string): string =>
+    code.directed?.(role, said) ?? said;
   const today = wallClockParts(options.now, options.timeZone);
   const count = (value: number): string =>
     code.numbers[value] ?? new Intl.NumberFormat(code.locale).format(value);
@@ -1358,7 +1422,18 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const detail = (entry: SpokenDetail, facts: SpokenFacts): string => {
     switch (entry.type) {
-      case "set":
+      case "set": {
+        const type = facts.action === "update" ? "updated" : "set";
+        const own = variant(type, entry.sentences?.[type]);
+        // A value an update sets carries its direction, as `to` does.
+        if (own !== undefined)
+          return fillVariant(own, {
+            field: entry.field,
+            value:
+              type === "updated"
+                ? directed("to", value(entry.value, "to"))
+                : value(entry.value),
+          });
         return facts.action === "update"
           ? detailSetTo(
               kindOf(entry.value),
@@ -1366,6 +1441,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
               value(entry.value, "to"),
             )
           : endSentence(fieldValue(entry.field, value(entry.value)));
+      }
       case "list_set": {
         const entries = listValues(entry.values, entry.omitted);
         return facts.action === "update"
@@ -1376,14 +1452,22 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
             )
           : endSentence(fieldValue(entry.field, entries));
       }
-      case "changed":
-        return endSentence(
-          detailChanged(
-            entry.field,
-            value(entry.from, "from", !bothPercent(entry.from, entry.to)),
-            value(entry.to, "to"),
-          ),
+      case "changed": {
+        const from = value(
+          entry.from,
+          "from",
+          !bothPercent(entry.from, entry.to),
         );
+        const to = value(entry.to, "to");
+        const own = variant("changed", entry.sentences?.changed);
+        return own === undefined
+          ? endSentence(detailChanged(entry.field, from, to))
+          : fillVariant(own, {
+              field: entry.field,
+              from: directed("from", from),
+              to: directed("to", to),
+            });
+      }
       case "emptied":
         return detailEmptied(entry.field);
       case "list_replaced":
@@ -1437,7 +1521,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const readThing = (facts: SpokenReadFacts): string => {
     const { kind, names } = facts;
-    if (facts.shape !== "items") return readThings(kind);
+    if (facts.shape !== "items") return facts.things ?? readThings(kind);
     if (facts.count > 1) {
       if (names.length === facts.count) return namedThings(kind, list(names));
       return names.length > 0
@@ -1589,15 +1673,15 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         isNew(facts) || facts.count !== 1 || facts.names.length > 0
           ? ""
           : unnamedClause(facts.kind, facts.unread);
-      const sentence = whatSentence(
-        facts.reschedule ? "reschedule" : facts.action,
-        {
-          thing: thing(facts),
-          destination: destination(facts),
-          source,
-          clause,
-        },
-      );
+      const action = facts.reschedule ? "reschedule" : facts.action;
+      const parts = {
+        thing: thing(facts),
+        destination: destination(facts),
+        source,
+        clause,
+      };
+      // The opening's verb is the card's action: it has no variant.
+      const sentence = whatSentence(action, parts);
       return `${prefix}${sentence}${item(facts).length > 0 ? ":" : "."}`;
     },
     item(facts, position) {
@@ -1618,6 +1702,13 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
       if (text.read !== undefined) {
         return endSentence(
           text.field.length > 0 ? fieldValue(text.field, text.read) : text.read,
+        );
+      }
+      if (text.dictated) {
+        return dictatedTextSentence(
+          text.field.length > 0 ? "field" : "none",
+          text.dictated,
+          text.field,
         );
       }
       return longTextSentence(
@@ -1646,6 +1737,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     nothingLeft: nothingLeftSentence,
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
+    dictatedReadLead: dictatedReadLeadSentence,
     notice: noticeSentence,
     difference: {
       intro: differenceIntro,
@@ -1687,6 +1779,6 @@ export const spokenWordsFor = (
   options: WordOptions,
 ): LanguageWords => {
   const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const said = words(code === "de" ? GERMAN : ENGLISH, options);
+  const said = words(code === "de" ? GERMAN : ENGLISH, options, code);
   return POINTER_ONLY.includes(code) ? { ...said, full: false } : said;
 };

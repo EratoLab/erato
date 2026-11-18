@@ -44,6 +44,27 @@ describe("env readAloudEnabled", () => {
   );
 });
 
+describe("env speechEnabled", () => {
+  afterEach(() => {
+    delete window.SPEECH_ENABLED;
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to off", () => {
+    expect(env().speechEnabled).toBe(false);
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.SPEECH_ENABLED = value;
+      expect(env().speechEnabled).toBe(value);
+      vi.stubEnv("VITE_SPEECH_ENABLED", String(!value));
+      expect(env().speechEnabled).toBe(!value);
+    },
+  );
+});
+
 describe("env approvalVoiceCommandsEnabled", () => {
   afterEach(() => {
     delete window.APPROVAL_VOICE_COMMANDS_ENABLED;
@@ -80,6 +101,39 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1500);
     vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS", "1200");
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1200);
+  });
+});
+
+describe("env audioConversationalTalkOverVoice", () => {
+  afterEach(() => {
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE;
+    delete window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
+    vi.unstubAllEnvs();
+  });
+
+  it("is off by default, with no minimum of its own", () => {
+    expect(env().audioConversationalTalkOverVoice).toBe(false);
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBeUndefined();
+  });
+
+  it.each([true, false])(
+    "reads the backend value and the Vite override (%s)",
+    (value) => {
+      window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE = value;
+      expect(env().audioConversationalTalkOverVoice).toBe(value);
+      vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE", String(!value));
+      expect(env().audioConversationalTalkOverVoice).toBe(!value);
+    },
+  );
+
+  it("reads the minimum speech and prefers the Vite override", () => {
+    window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS = 700;
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(700);
+    vi.stubEnv(
+      "VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS",
+      "300",
+    );
+    expect(env().audioConversationalTalkOverVoiceMinSpeechMs).toBe(300);
   });
 });
 

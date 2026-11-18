@@ -91,8 +91,16 @@ export type Env = {
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
   approvalVoiceCommandsEnabled?: boolean;
+  /** The deployment's natural sentence variants for spoken approval cards, by language. */
+  approvalSpeechSentences?: Partial<
+    Record<string, Partial<Record<string, string>>>
+  >;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
+  /** The user can speak over the voice, and the voice yields. */
+  audioConversationalTalkOverVoice?: boolean;
+  /** Speech over the voice that stops it, in milliseconds. */
+  audioConversationalTalkOverVoiceMinSpeechMs?: number;
   maxUploadSizeBytes: number;
   sidebarCollapsedMode: "hidden" | "slim";
   sidebarLogoPath: string | null;
@@ -187,8 +195,13 @@ declare global {
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
     APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
+    APPROVAL_SPEECH_SENTENCES?: Partial<
+      Record<string, Partial<Record<string, string>>>
+    >;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
+    AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
+    AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
     SIDEBAR_LOGO_DARK_PATH?: string;
     SIDEBAR_CHAT_HISTORY_SHOW_METADATA?: boolean;
@@ -519,6 +532,16 @@ export const env = (): Env => {
     .VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS
     ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS)
     : window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
+  const audioConversationalTalkOverVoice =
+    import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE !== undefined
+      ? import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE === "true"
+      : (window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE ?? false);
+  const audioConversationalTalkOverVoiceMinSpeechMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS
+    ? Number(
+        import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS,
+      )
+    : window.AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS;
 
   const sidebarCollapsedMode =
     import.meta.env.VITE_SIDEBAR_COLLAPSED_MODE ??
@@ -655,7 +678,10 @@ export const env = (): Env => {
     audioDictationEnabled,
     audioDictationMaxRecordingDurationSeconds,
     audioConversationalEnabled,
-    speechEnabled: window.SPEECH_ENABLED ?? false,
+    speechEnabled:
+      import.meta.env.VITE_SPEECH_ENABLED !== undefined
+        ? import.meta.env.VITE_SPEECH_ENABLED === "true"
+        : (window.SPEECH_ENABLED ?? false),
     readAloudEnabled:
       import.meta.env.VITE_READ_ALOUD_ENABLED !== undefined
         ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
@@ -664,8 +690,11 @@ export const env = (): Env => {
       import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
         ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
         : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
+    approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
+    audioConversationalTalkOverVoice,
+    audioConversationalTalkOverVoiceMinSpeechMs,
     maxUploadSizeBytes,
     sidebarCollapsedMode: sidebarCollapsedMode as "hidden" | "slim",
     sidebarLogoPath,

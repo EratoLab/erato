@@ -85,6 +85,10 @@ interface AudioConversationalFeatureConfig {
   maxRecordingDurationSeconds: number;
   /** Silence in milliseconds that ends a spoken turn; 1800 when omitted. */
   endOfTurnSilenceMs?: number;
+  /** The user can speak over the voice, and the voice yields. */
+  talkOverVoice?: boolean;
+  /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
+  talkOverVoiceMinSpeechMs?: number;
 }
 
 /**
@@ -481,6 +485,9 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
       endOfTurnSilenceMs: environment.audioConversationalEndOfTurnSilenceMs,
+      talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
+      talkOverVoiceMinSpeechMs:
+        environment.audioConversationalTalkOverVoiceMinSpeechMs,
     },
     auth: {
       showLogout: !environment.disableLogout,
