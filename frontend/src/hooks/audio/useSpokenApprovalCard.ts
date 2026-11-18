@@ -69,7 +69,10 @@ export function useSpokenApprovalCard({
   const quiet = useSpeechPlayback(
     (state) => chatId !== null && state.quietTurn === chatId,
   );
-  const modelSpeaking = useSpeechPlayback((state) => state.playing);
+  // A reply paused by the user talking over it may still go on.
+  const modelSpeaking = useSpeechPlayback(
+    (state) => state.playing || state.paused,
+  );
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
 
