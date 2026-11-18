@@ -678,7 +678,10 @@ export const env = (): Env => {
     audioDictationEnabled,
     audioDictationMaxRecordingDurationSeconds,
     audioConversationalEnabled,
-    speechEnabled: window.SPEECH_ENABLED ?? false,
+    speechEnabled:
+      import.meta.env.VITE_SPEECH_ENABLED !== undefined
+        ? import.meta.env.VITE_SPEECH_ENABLED === "true"
+        : (window.SPEECH_ENABLED ?? false),
     readAloudEnabled:
       import.meta.env.VITE_READ_ALOUD_ENABLED !== undefined
         ? import.meta.env.VITE_READ_ALOUD_ENABLED === "true"
