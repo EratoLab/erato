@@ -467,7 +467,11 @@ impl<'a> Walk<'a> {
                 self.batch(entries, path, &name);
             }
             Value::Array(entries) if entries.len() == 1 && is_record(&entries[0]) => {
-                // One record sent as a list is that record.
+                // One record sent as a list is that record. Inside the record
+                // it is another one, created with it (a deep insert through a
+                // collection), unless the list only wraps the record.
+                let nested = depth > 0 && !is_one_of(member, &WRAPPER_MEMBERS);
+                self.nesting += usize::from(nested);
                 if let Value::Object(row) = &entries[0] {
                     let base = format!("{path}/0");
                     if let Some((before, after)) = text_edit(row) {
@@ -485,6 +489,7 @@ impl<'a> Walk<'a> {
                         self.members(row, &base, depth + 1, true, "");
                     }
                 }
+                self.nesting -= usize::from(nested);
             }
             Value::Object(inner) if !flat && is_one_of(member, &WRAPPER_MEMBERS) => {
                 self.members(inner, path, depth + 1, true, "");

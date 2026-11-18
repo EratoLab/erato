@@ -194,6 +194,11 @@ describe("spoken names", () => {
       expect(said).not.toMatch(/Gewonnen|Won|Inaktiv|Inactive/);
       expect(said).toMatch(/Parent account ID · State code: 1\./);
     }
+    // An opportunity created with an account, as a one-entry collection.
+    for (const language of LANGUAGES)
+      expect(words("create-16-account-with-opportunity", language)).not.toMatch(
+        /Gewonnen|Won|Inaktiv|Inactive|Status/,
+      );
     // A task's priority 1 is Normal; the case written through it keeps its
     // code, as the card shows it.
     const task = words("update-15-task-nested-case", "de");

@@ -228,6 +228,18 @@
       ]
     },
     {
+      "id": "create-16-account-with-opportunity",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-16-account-with-opportunity"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -1424,6 +1436,27 @@
             "name": "Neue Firma",
             "statecode": 1
           }
+        }
+      }
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "server": "dynamics",
+      "tool": "create_record",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false
+      },
+      "arguments": {
+        "tablename": "account",
+        "item": {
+          "name": "Neue Firma",
+          "opportunity_customer_accounts": [
+            {
+              "name": "Linie 7",
+              "statecode": 1
+            }
+          ]
         }
       }
     },

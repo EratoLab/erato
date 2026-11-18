@@ -185,6 +185,18 @@
       ]
     },
     {
+      "id": "create-16-account-with-opportunity",
+      "kind": [
+        "create"
+      ],
+      "holds": [
+        "short_fields"
+      ],
+      "calls": [
+        "create-16-account-with-opportunity"
+      ]
+    },
+    {
       "id": "update-01-date-and-probability",
       "kind": [
         "update"
@@ -3718,6 +3730,126 @@
               "unreadable": 0
             },
             "table": "opportunity",
+            "complete": true
+          }
+        }
+      }
+    },
+    {
+      "id": "create-16-account-with-opportunity",
+      "tool_name": "create_record",
+      "server_id": "dynamics",
+      "input": {
+        "tablename": "account",
+        "item": {
+          "name": "Neue Firma",
+          "opportunity_customer_accounts": [
+            {
+              "name": "Linie 7",
+              "statecode": 1
+            }
+          ]
+        }
+      },
+      "display": {
+        "title": "create_record",
+        "description_truncated": false,
+        "server_name": "Dynamics 365",
+        "label": {
+          "action": "create",
+          "object_kind": "row",
+          "items": [
+            {
+              "title": {
+                "pointer": "/item/name",
+                "values": [
+                  {
+                    "path": "/item/name",
+                    "text": "Neue Firma"
+                  }
+                ]
+              }
+            }
+          ],
+          "arguments": {
+            "path": "",
+            "kind": "group",
+            "children": [
+              {
+                "path": "/tablename",
+                "kind": "value"
+              },
+              {
+                "path": "/item",
+                "kind": "group",
+                "children": [
+                  {
+                    "path": "/item/name",
+                    "kind": "value"
+                  },
+                  {
+                    "path": "/item/opportunity_customer_accounts",
+                    "kind": "list",
+                    "children": [
+                      {
+                        "path": "/item/opportunity_customer_accounts/0",
+                        "kind": "group",
+                        "children": [
+                          {
+                            "path": "/item/opportunity_customer_accounts/0/name",
+                            "kind": "value"
+                          },
+                          {
+                            "path": "/item/opportunity_customer_accounts/0/statecode",
+                            "kind": "value"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "rules",
+          "change": {
+            "effects": [
+              {
+                "path": "/item/opportunity_customer_accounts/0/name",
+                "name": "Name",
+                "raw_name": "name",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "Linie 7"
+                  }
+                ],
+                "nested": true
+              },
+              {
+                "path": "/item/opportunity_customer_accounts/0/statecode",
+                "name": "State code",
+                "raw_name": "statecode",
+                "effect": "set",
+                "values": [
+                  {
+                    "text": "1"
+                  }
+                ],
+                "nested": true
+              }
+            ],
+            "counts": {
+              "emptied": 0,
+              "list_replaced": 0,
+              "list_removed": 0,
+              "list_added": 0,
+              "changed": 0,
+              "set": 2,
+              "unchanged": 0,
+              "unreadable": 0
+            },
+            "table": "account",
             "complete": true
           }
         }
