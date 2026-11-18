@@ -336,6 +336,19 @@ fn guarded(
     source: VoiceCommandSource,
 ) -> VoiceCommand {
     let words = rules::Words::of(input.transcript);
+    // Before the card asked, a clear yes or no is listening, whichever
+    // stage heard it. Anything else the guards refuse stays unclear, so the
+    // person gets an answer ("das reicht jetzt", "ja, aber dann …").
+    if meaning.is_decision()
+        && !request_heard(input.pieces)
+        && (words.could_be_plain_decision(meaning, input.pieces) || words.is_backchannel_yes())
+    {
+        return VoiceCommand {
+            meaning: VoiceMeaning::Noise,
+            piece_id: None,
+            source,
+        };
+    }
     let refused = (meaning.is_decision() && !words.could_be_plain_decision(meaning, input.pieces))
         || (meaning == VoiceMeaning::Change && words.breaks_off())
         || (meaning == VoiceMeaning::NewRequest && words.could_be_change(input.pieces));

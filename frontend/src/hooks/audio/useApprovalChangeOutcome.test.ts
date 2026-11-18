@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  nextChangeRound,
   noteChangeSending,
   noteChangeSent,
   takeWithdrawnCard,
@@ -13,11 +14,12 @@ import {
   useApprovalChangeOutcome,
 } from "./useApprovalChangeOutcome";
 
-const announceApprovalNotice = vi.fn();
+const sayPreparedNotice = vi.fn();
 vi.mock("./approvalSpeech", () => ({
-  announceApprovalNotice: (...args: unknown[]) =>
-    announceApprovalNotice(...args),
+  sayPreparedNotice: (...args: unknown[]) => sayPreparedNotice(...args),
 }));
+/** "No new card came", as loaded while the card waited. */
+const prepared = { close: vi.fn() };
 
 const props = (
   overrides: Partial<Parameters<typeof useApprovalChangeOutcome>[0]> = {},
@@ -37,13 +39,15 @@ const sent = (approvalId = "call-1") => {
     approval: { type: "pointer" },
     heard: [],
     words: "nimm den 22.",
+    prepared,
   });
   noteChangeSent(approvalId);
 };
 
 beforeEach(() => {
   vi.useFakeTimers();
-  announceApprovalNotice.mockClear();
+  sayPreparedNotice.mockClear();
+  prepared.close.mockClear();
   useApprovalChanges.setState({ records: {} });
   useSpeechPlayback.setState({ conversational: true, enabled: true });
 });
@@ -60,15 +64,11 @@ describe("what came of a change request", () => {
     // The model's words are read first.
     rerender(props({ voicePlaying: true }));
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS * 2));
-    expect(announceApprovalNotice).not.toHaveBeenCalled();
+    expect(sayPreparedNotice).not.toHaveBeenCalled();
     rerender(props());
     expect(result.current.holding).toBe(true);
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS));
-    expect(announceApprovalNotice).toHaveBeenCalledWith(
-      "message-1",
-      { kind: "change_no_card", several: false },
-      "de",
-    );
+    expect(sayPreparedNotice).toHaveBeenCalledWith(prepared);
     expect(result.current.holding).toBe(false);
   });
 
@@ -80,7 +80,7 @@ describe("what came of a change request", () => {
     );
     rerender(props({ decisionWaiting: true }));
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS * 2));
-    expect(announceApprovalNotice).not.toHaveBeenCalled();
+    expect(sayPreparedNotice).not.toHaveBeenCalled();
     expect(result.current.holding).toBe(false);
     // The corrected card can still be compared with the withdrawn one.
     expect(takeWithdrawnCard("call-1", "call-2")).toBeDefined();
@@ -96,7 +96,7 @@ describe("what came of a change request", () => {
     rerender(props({ responding: true }));
     rerender(props({ decisionWaiting: true }));
     expect(result.current.holding).toBe(false);
-    expect(announceApprovalNotice).not.toHaveBeenCalled();
+    expect(sayPreparedNotice).not.toHaveBeenCalled();
   });
 
   it("says nothing when the corrected card took the withdrawn one", () => {
@@ -110,7 +110,7 @@ describe("what came of a change request", () => {
     expect(result.current.holding).toBe(false);
   });
 
-  it("after several rounds, says so", () => {
+  it("counts the rounds, and a corrected card stops loading the unused sentence", () => {
     for (const [from, to] of [
       ["call-1", "call-2"],
       ["call-2", "call-3"],
@@ -118,15 +118,13 @@ describe("what came of a change request", () => {
       act(() => sent(from));
       takeWithdrawnCard(from, to);
     }
+    expect(prepared.close).toHaveBeenCalledTimes(2);
+    expect(nextChangeRound("call-3")).toBe(3);
     act(() => sent("call-3"));
     expect(useApprovalChanges.getState().records["call-3"].round).toBe(3);
     renderHook(() => useApprovalChangeOutcome(props()));
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS));
-    expect(announceApprovalNotice).toHaveBeenCalledWith(
-      "message-1",
-      { kind: "change_no_card", several: true },
-      "de",
-    );
+    expect(sayPreparedNotice).toHaveBeenCalledWith(prepared);
   });
 
   it("a request still on its way says nothing yet", () => {
@@ -141,7 +139,7 @@ describe("what came of a change request", () => {
     );
     const { result } = renderHook(() => useApprovalChangeOutcome(props()));
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS * 2));
-    expect(announceApprovalNotice).not.toHaveBeenCalled();
+    expect(sayPreparedNotice).not.toHaveBeenCalled();
     expect(result.current.holding).toBe(true);
   });
 
@@ -154,7 +152,7 @@ describe("what came of a change request", () => {
     act(() => useSpeechPlayback.setState({ conversational: false }));
     rerender(props({ enabled: false }));
     act(() => vi.advanceTimersByTime(NO_CARD_GRACE_MS * 2));
-    expect(announceApprovalNotice).not.toHaveBeenCalled();
+    expect(sayPreparedNotice).not.toHaveBeenCalled();
     expect(result.current.holding).toBe(false);
     expect(useApprovalChanges.getState().records).toEqual({});
   });

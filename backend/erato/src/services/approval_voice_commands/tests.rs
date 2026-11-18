@@ -571,6 +571,15 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         (VoiceMeaning::Approve, "go ahead"),
         (VoiceMeaning::Reject, "nein, lass es"),
         (VoiceMeaning::Reject, "mach das nicht"),
+        // Voice loop test 2026-11-18: a final "so" or "then" closes these,
+        // and an acknowledgement before a yes is not checked as its words.
+        (VoiceMeaning::Approve, "ja passt, mach das so"),
+        (VoiceMeaning::Approve, "mach das so"),
+        (VoiceMeaning::Approve, "das passt so"),
+        (VoiceMeaning::Approve, "ja, genau so"),
+        (VoiceMeaning::Approve, "go ahead then"),
+        (VoiceMeaning::Approve, "in Ordnung, mach"),
+        (VoiceMeaning::Approve, "I see, go ahead"),
     ] {
         assert!(
             rules::Words::of(words).could_be_plain_decision(meaning, &pieces),
@@ -590,9 +599,282 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         "uh, yes, so",
         "ja, nicht so",
         "Jaguar, mach",
+        "ja, aber dann",
+        "ja, und dann",
+        "ja und so",
+        "ja so",
+        "mach das aus",
+        "von mir aus nicht",
+        "yes, but then",
+        "yes and so",
+        "yes, and then",
     ] {
         assert!(
             !rules::Words::of(words).could_be_plain_decision(VoiceMeaning::Approve, &pieces),
+            "{words}"
+        );
+    }
+}
+
+/// Card-correctness review 2026-11-18, B1: the refusal guard passes only a
+/// clear no, whatever the model says.
+#[tokio::test]
+async fn only_a_clear_no_is_a_refusal() {
+    let set = sentence_set();
+    let (asked, en) = (set.cards["de-asked"].clone(), set.cards["en-asked"].clone());
+    let says_reject = |words: &'static str, card: Card| async move {
+        let model = ScriptedModel::answering(VoiceMeaning::Reject.wire_name(), None);
+        let config = provider();
+        classify(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+            },
+            Some(VoiceModel {
+                client: &model,
+                config: &config,
+                prompt: DEFAULT_PROMPT,
+                timeout: Duration::from_millis(200),
+            }),
+        )
+        .await
+        .command
+        .meaning
+    };
+    for words in [
+        "lass es so",
+        "lass das so",
+        "nein, lass es so",
+        "nein nein, lass es so",
+        "aha ja, lass es so",
+        "nein, mach das so",
+        "nee, mach das so",
+        "nein nein, mach das so",
+        "nein, in Ordnung, mach",
+        "nein, mach",
+        "mach das nicht so",
+        "nicht so",
+        "nein, nicht so",
+        "in Ordnung, mach das nicht so",
+        "so nicht",
+        "mach das so nicht",
+        "genau so nicht",
+        "lass, so",
+    ] {
+        assert_ne!(
+            says_reject(words, asked.clone()).await,
+            VoiceMeaning::Reject,
+            "{words}"
+        );
+    }
+    for words in [
+        "not then",
+        "no, not then",
+        "not like that",
+        "no, do it like that",
+    ] {
+        assert_ne!(
+            says_reject(words, en.clone()).await,
+            VoiceMeaning::Reject,
+            "{words}"
+        );
+    }
+    // Clear refusals stay refusals. An acknowledgement before a no ("in
+    // Ordnung, nein") is not understood rather than taken as a no.
+    for words in [
+        "nein",
+        "dann nicht",
+        "nein, dann nicht",
+        "nein, lass es",
+        "mach das nicht",
+        "nicht machen",
+    ] {
+        assert_eq!(
+            says_reject(words, asked.clone()).await,
+            VoiceMeaning::Reject,
+            "{words}"
+        );
+    }
+    for words in ["no", "don't do it", "no thanks"] {
+        assert_eq!(
+            says_reject(words, en.clone()).await,
+            VoiceMeaning::Reject,
+            "{words}"
+        );
+    }
+}
+
+#[test]
+fn not_like_that_asks_for_a_change() {
+    let set = sentence_set();
+    let card = &set.cards["de-asked"];
+    for words in ["nicht so", "so nicht", "mach das so nicht", "not like that"] {
+        let found = classify_by_rules(&VoiceCommandInput {
+            transcript: words,
+            language: "de",
+            pieces: &card.pieces,
+            current_piece_id: Some(&card.current_piece_id),
+        })
+        .map(|classified| classified.command.meaning);
+        assert!(
+            matches!(found, None | Some(VoiceMeaning::Change)),
+            "{words}: {found:?}"
+        );
+    }
+}
+
+/// Card-correctness re-check N1: on its own "nicht so" asks for a change;
+/// in a question or a remark to the voice the model decides, in both
+/// languages alike.
+#[test]
+fn not_like_that_is_a_change_only_on_its_own() {
+    let set = sentence_set();
+    let rules = |words: &str, card: &str| {
+        let card = &set.cards[card];
+        classify_by_rules(&VoiceCommandInput {
+            transcript: words,
+            language: "de",
+            pieces: &card.pieces,
+            current_piece_id: Some(&card.current_piece_id),
+        })
+        .map(|classified| classified.command.meaning)
+    };
+    for (words, card) in [
+        ("nicht so", "de-asked"),
+        ("nicht so.", "de-asked"),
+        ("so nicht", "de-asked"),
+        ("nein, nicht so", "de-asked"),
+        ("also so nicht", "de-asked"),
+        ("mach das nicht so", "de-asked"),
+        ("nicht so machen", "de-asked"),
+        ("not like that", "en-asked"),
+        ("no, not like that", "en-asked"),
+    ] {
+        assert_eq!(rules(words, card), Some(VoiceMeaning::Change), "{words}");
+    }
+    for (words, card) in [
+        ("nicht so schnell", "de-asked"),
+        ("nicht so laut", "de"),
+        ("ist das nicht so?", "de-asked"),
+        ("warum nicht so", "de-asked"),
+        ("ja, ist nicht so schlimm, mach", "de-asked"),
+        ("passt schon, nicht so wichtig", "de-asked"),
+        ("das ist nicht so wichtig", "de"),
+        ("it's not like that", "en-asked"),
+        ("is it not like that?", "en-asked"),
+        ("not so fast", "en-asked"),
+        ("not so loud", "en"),
+    ] {
+        assert_ne!(rules(words, card), Some(VoiceMeaning::Change), "{words}");
+    }
+}
+
+#[test]
+fn refusals_are_refusals_only_by_their_no() {
+    let (pieces, _) = card();
+    for words in ["ich will das", "ausführen", "will ich"] {
+        assert!(
+            !rules::Words::of(words).could_be_plain_decision(VoiceMeaning::Reject, &pieces),
+            "{words}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_yes_before_the_card_asked_is_noise_whichever_stage_heard_it() {
+    let set = sentence_set();
+    let card = |name: &str| set.cards[name].clone();
+    let (de, asked, en) = (card("de"), card("de-asked"), card("en-asked"));
+    let answer = |words: &'static str, card: Card, meaning: VoiceMeaning| async move {
+        let model = ScriptedModel::answering(meaning.wire_name(), None);
+        let config = provider();
+        classify(
+            &VoiceCommandInput {
+                transcript: words,
+                language: "de",
+                pieces: &card.pieces,
+                current_piece_id: Some(&card.current_piece_id),
+            },
+            Some(VoiceModel {
+                client: &model,
+                config: &config,
+                prompt: DEFAULT_PROMPT,
+                timeout: Duration::from_millis(200),
+            }),
+        )
+        .await
+        .command
+        .meaning
+    };
+
+    // Agreements that end in "so" or "then" are understood.
+    for words in [
+        "Ja passt, mach das so.",
+        "das passt so",
+        "ja, mach das bitte so",
+    ] {
+        assert_eq!(
+            answer(words, asked.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Approve,
+            "{words}"
+        );
+        assert_eq!(
+            answer(words, de.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Noise,
+            "{words}"
+        );
+    }
+    assert_eq!(
+        answer("go ahead then", en.clone(), VoiceMeaning::Approve).await,
+        VoiceMeaning::Approve
+    );
+    assert_eq!(
+        answer("use record 43 instead", en, VoiceMeaning::Change).await,
+        VoiceMeaning::Change
+    );
+    // Before the card asked, only a clear yes or no is listening; anything
+    // else the guards refuse gets an answer.
+    assert_eq!(
+        answer("ja", de.clone(), VoiceMeaning::Approve).await,
+        VoiceMeaning::Noise
+    );
+    for (words, meaning) in [
+        ("na gut, meinetwegen", VoiceMeaning::Approve),
+        ("das reicht jetzt", VoiceMeaning::Approve),
+        ("nein, das Datum", VoiceMeaning::Reject),
+        ("wie spät ist es?", VoiceMeaning::Approve),
+        ("Anna soll nicht dabei sein", VoiceMeaning::Reject),
+    ] {
+        assert_eq!(
+            answer(words, de.clone(), meaning).await,
+            VoiceMeaning::Unclear,
+            "{words}"
+        );
+    }
+    // An unfinished yes is never a yes. After the card asked it is not
+    // understood; before, it is listening, unless it may ask for something.
+    for words in [
+        "ja, aber dann …",
+        "ja, aber dann",
+        "ja, und dann",
+        "yes, but then …",
+    ] {
+        assert_eq!(
+            answer(words, asked.clone(), VoiceMeaning::Approve).await,
+            VoiceMeaning::Unclear,
+            "{words}"
+        );
+    }
+    for (words, before) in [
+        ("ja, aber dann …", VoiceMeaning::Unclear),
+        ("ja, aber dann", VoiceMeaning::Unclear),
+        ("ja, und dann", VoiceMeaning::Unclear),
+    ] {
+        assert_eq!(
+            answer(words, de.clone(), VoiceMeaning::Approve).await,
+            before,
             "{words}"
         );
     }

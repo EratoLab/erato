@@ -2739,8 +2739,17 @@ export const ChatInput = ({
       pendingConversationalStartRef.current = false;
       return;
     }
-    // Held until a card waiting for a decision is decided.
-    if (!isAudioMode || decisionWaiting) {
+    if (!isAudioMode) {
+      return;
+    }
+    // A card waits: the conversation listens once it is decided and what
+    // follows has been said, as after any reply. Kept here, the start would
+    // fire the moment the card goes, also while the answer to a change
+    // request is still on its way and read aloud.
+    if (decisionWaiting) {
+      pendingConversationalStartRef.current = false;
+      shouldRestartAudioModeAfterResponseRef.current = true;
+      audioModeRestartSawPendingResponseRef.current = true;
       return;
     }
     if (

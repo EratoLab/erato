@@ -54,6 +54,8 @@ export interface SpeakableCard {
   approval?: SpokenApproval;
   /** How the card is changed by voice; absent where it cannot be. */
   change?: VoiceChange;
+  /** A notice about a card, not a card: a failure to say it shows nothing. */
+  notice?: true;
 }
 
 interface ApprovalSpeechState {
@@ -110,6 +112,8 @@ let cardRun = 0;
 let playRun = 0;
 let speaking: SpeakableCard | null = null;
 let fellBack = false;
+/** The prepared notice being said, whose own request still loads it. */
+let playingPrepared: Prepared | null = null;
 let closeStream: (() => void) | undefined;
 let buffers: Buffered[] = [];
 let said: SpokenPiece[] = [];
@@ -157,6 +161,7 @@ const silence = () => {
 /** Ends everything of the card: what plays and its stream. */
 const finish = () => {
   cardRun++;
+  playingPrepared = null;
   const close = closeStream;
   closeStream = undefined;
   close?.();
@@ -238,6 +243,30 @@ const openSpeech = (
       },
     },
   );
+};
+
+/**
+ * A piece's audio far too short for its words was cut on the way (seen once:
+ * 0.4 s for a sentence of 73 characters): it is not counted as heard. Speech
+ * takes 60 to 90 ms a character; a third of the lowest is the floor.
+ */
+const MIN_MS_PER_CHARACTER = 20;
+/** Short words ("Okay.") may be said faster than that. */
+const MIN_CHARACTERS_CHECKED = 12;
+
+export const audioTooShort = (
+  text: string,
+  chunks: readonly { audio: string; sampleRate: number }[],
+) => {
+  const characters = Array.from(text.trim()).length;
+  if (characters < MIN_CHARACTERS_CHECKED) return false;
+  const ms = chunks.reduce(
+    (sum, chunk) =>
+      sum +
+      ((globalThis.atob(chunk.audio).length / 2) * 1000) / chunk.sampleRate,
+    0,
+  );
+  return ms < characters * MIN_MS_PER_CHARACTER;
 };
 
 const pushChunk = (buffer: Buffered | undefined, chunk: AudioDelta) => {
@@ -372,6 +401,11 @@ function settle() {
     feed();
     return;
   }
+  const piece = currentPiece();
+  if (piece !== null && audioTooShort(said[piece].text, buffer.chunks)) {
+    fail();
+    return;
+  }
   apply({ type: "finished" });
 }
 
@@ -389,7 +423,9 @@ function fail() {
   if (!card) return;
   started.delete(card.key);
   // Audio mode was left or read-back turned off: nothing is said or shown.
-  if (!approvalSpeechAllowed()) return;
+  // A notice that could not be said is left out: the answer it follows was
+  // read, and the composer shows no error for it.
+  if (!approvalSpeechAllowed() || card.notice) return;
   if (!fellBack && flow.failed === "fallback" && card.fallback) {
     fellBack = true;
     play_(card, card.fallback);
@@ -447,9 +483,10 @@ export function speakApprovalCard(card: SpeakableCard) {
 }
 
 /**
- * Says `notice` about `messageId` when no card waits, such as what came of
- * a change request. It is not a card: it cannot be asked for again, and the
- * microphone does not listen for it.
+ * Says `notice` about `messageId`, such as what came of a change request. It
+ * is not a card: it cannot be asked for again, and the microphone does not
+ * listen for it. The voice answers only while an approval of the message
+ * waits, so a notice for after the card is gone is prepared beforehand.
  */
 export function announceApprovalNotice(
   messageId: string,
@@ -457,17 +494,112 @@ export function announceApprovalNotice(
   language: string,
 ) {
   if (!approvalSpeechAllowed()) return;
-  const text = spokenUtteranceSentences({ type: "notice", notice }, [], {
+  const text = noticeText(notice, language);
+  fellBack = true;
+  const key = noticeKey(messageId, notice);
+  play_(
+    { key, messageId, pieces: [], notice: true },
+    [{ id: key, role: "pointer", text, mustSay: false }],
+    false,
+  );
+}
+
+const noticeText = (notice: SpokenNotice, language: string) =>
+  spokenUtteranceSentences({ type: "notice", notice }, [], {
     language,
     now: new Date(),
   }).join(" ");
-  fellBack = true;
+
+const noticeKey = (messageId: string, notice: SpokenNotice) =>
   // eslint-disable-next-line lingui/no-unlocalized-strings -- a key and a piece id, not copy
-  const key = `${messageId}:notice:${notice.kind}`;
+  `${messageId}:notice:${notice.kind}`;
+
+/** A notice asked for while its card still waits, to be said after it is gone. */
+export interface PreparedNotice {
+  /** Stops loading it; it is not said. */
+  close(): void;
+}
+
+interface Prepared extends PreparedNotice {
+  key: string;
+  messageId: string;
+  text: string;
+  buffer: Buffered;
+  failed: boolean;
+  closed: boolean;
+  stream: () => void;
+}
+
+/**
+ * Asks the voice for `notice` now, while an approval of `messageId` still
+ * waits, and keeps its audio until `sayPreparedNotice`. The voice speaks only
+ * the sentences the client asks for while an approval waits; nothing is
+ * spoken for a message once its approval is gone.
+ */
+export function prepareApprovalNotice(
+  messageId: string,
+  notice: SpokenNotice,
+  language: string,
+): PreparedNotice | null {
+  if (!approvalSpeechAllowed()) return null;
+  const buffer = emptyBuffer();
+  const prepared: Prepared = {
+    key: noticeKey(messageId, notice),
+    messageId,
+    text: noticeText(notice, language),
+    buffer,
+    failed: false,
+    closed: false,
+    stream: () => {},
+    close: () => {
+      prepared.closed = true;
+      prepared.stream();
+    },
+  };
+  prepared.stream = openSpeech(messageId, [prepared.text], {
+    stale: () => prepared.closed,
+    audio: (_, chunk) => {
+      pushChunk(buffer, chunk);
+      if (playingPrepared === prepared) feed();
+    },
+    done: () => {
+      buffer.done = true;
+      if (playingPrepared === prepared) feed();
+    },
+    ended: () => {},
+    failed: () => {
+      prepared.failed = true;
+      if (playingPrepared === prepared) fail();
+    },
+  });
+  return prepared;
+}
+
+/** Says a prepared notice from what was loaded; a failed one says nothing. */
+export function sayPreparedNotice(notice: PreparedNotice) {
+  const prepared = notice as Prepared;
+  if (prepared.closed || prepared.failed || !approvalSpeechAllowed()) {
+    prepared.close();
+    return;
+  }
+  fellBack = true;
   play_(
-    { key, messageId, pieces: [] },
-    [{ id: key, role: "pointer", text, mustSay: false }],
+    {
+      key: prepared.key,
+      messageId: prepared.messageId,
+      pieces: [],
+      notice: true,
+    },
+    [
+      {
+        id: prepared.key,
+        role: "pointer",
+        text: prepared.text,
+        mustSay: false,
+      },
+    ],
     false,
+    prepared,
   );
 }
 
@@ -499,12 +631,22 @@ export function forgetApprovalCards(keys: readonly string[]) {
     useApprovalSpeech.setState({ available: null });
 }
 
-function play_(card: SpeakableCard, pieces: SpokenPiece[], offer = true) {
+function play_(
+  card: SpeakableCard,
+  pieces: SpokenPiece[],
+  offer = true,
+  prepared?: Prepared,
+) {
   const { key } = card;
   finish();
   speaking = card;
   const current = cardRun;
-  buffers = pieces.map(emptyBuffer);
+  buffers = prepared ? [prepared.buffer] : pieces.map(emptyBuffer);
+  if (prepared) {
+    playingPrepared = prepared;
+    // Its own request still loads it; it is not asked for again.
+    closeStream = prepared.buffer.done ? undefined : () => prepared.close();
+  }
   said = pieces;
   flow = spokenCardFlow(pieces);
   publish({
@@ -521,7 +663,7 @@ function play_(card: SpeakableCard, pieces: SpokenPiece[], offer = true) {
         return;
       }
       context = resumed;
-      loadPieces(pieces.map((_, index) => index));
+      if (!prepared) loadPieces(pieces.map((_, index) => index));
       apply({ type: "start" });
     },
     () => {

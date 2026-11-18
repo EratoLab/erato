@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { useSpeechPlayback } from "./speechPlayback";
 
+import type { PreparedNotice } from "./approvalSpeech";
 import type { WithdrawnCard } from "@/lib/toolCallGist/spokenCardDifference";
 
 /**
@@ -39,7 +40,12 @@ export interface ChangeRecord extends WithdrawnCard {
    * answer is awaited. `answered`: a card came, or the answer was told.
    */
   state: "sending" | "sent" | "answered";
+  /** "No new card came", loaded while the card still waited. */
+  prepared?: PreparedNotice;
 }
+
+/** From this many change requests in a row, the sentence says so. */
+export const SEVERAL_CHANGE_ROUNDS = 3;
 
 interface ApprovalChangesState {
   /** By the approval id of the withdrawn card. */
@@ -63,9 +69,16 @@ const update = (
     const next = { ...records };
     const changed = change(record);
     if (changed) next[approvalId] = changed;
-    else delete next[approvalId];
+    else {
+      record.prepared?.close();
+      delete next[approvalId];
+    }
     return { records: next };
   });
+
+/** The round a change request on `approvalId` would be in. */
+export const nextChangeRound = (approvalId: string) =>
+  (rounds.get(approvalId) ?? 0) + 1;
 
 /** The change request for `approvalId` is on its way. */
 export const noteChangeSending = (
@@ -76,7 +89,7 @@ export const noteChangeSending = (
       ...records,
       [record.approvalId]: {
         ...record,
-        round: (rounds.get(record.approvalId) ?? 0) + 1,
+        round: nextChangeRound(record.approvalId),
         state: "sending",
       },
     },
@@ -127,6 +140,8 @@ useSpeechPlayback.subscribe((state, previous) => {
     (previous.enabled && !state.enabled)
   ) {
     rounds.clear();
+    for (const record of Object.values(useApprovalChanges.getState().records))
+      record.prepared?.close();
     useApprovalChanges.setState({ records: {} });
   }
 });
