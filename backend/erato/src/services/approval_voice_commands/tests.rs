@@ -725,6 +725,52 @@ fn not_like_that_asks_for_a_change() {
     }
 }
 
+/// Card-correctness re-check N1: on its own "nicht so" asks for a change;
+/// in a question or a remark to the voice the model decides, in both
+/// languages alike.
+#[test]
+fn not_like_that_is_a_change_only_on_its_own() {
+    let set = sentence_set();
+    let rules = |words: &str, card: &str| {
+        let card = &set.cards[card];
+        classify_by_rules(&VoiceCommandInput {
+            transcript: words,
+            language: "de",
+            pieces: &card.pieces,
+            current_piece_id: Some(&card.current_piece_id),
+        })
+        .map(|classified| classified.command.meaning)
+    };
+    for (words, card) in [
+        ("nicht so", "de-asked"),
+        ("nicht so.", "de-asked"),
+        ("so nicht", "de-asked"),
+        ("nein, nicht so", "de-asked"),
+        ("also so nicht", "de-asked"),
+        ("mach das nicht so", "de-asked"),
+        ("nicht so machen", "de-asked"),
+        ("not like that", "en-asked"),
+        ("no, not like that", "en-asked"),
+    ] {
+        assert_eq!(rules(words, card), Some(VoiceMeaning::Change), "{words}");
+    }
+    for (words, card) in [
+        ("nicht so schnell", "de-asked"),
+        ("nicht so laut", "de"),
+        ("ist das nicht so?", "de-asked"),
+        ("warum nicht so", "de-asked"),
+        ("ja, ist nicht so schlimm, mach", "de-asked"),
+        ("passt schon, nicht so wichtig", "de-asked"),
+        ("das ist nicht so wichtig", "de"),
+        ("it's not like that", "en-asked"),
+        ("is it not like that?", "en-asked"),
+        ("not so fast", "en-asked"),
+        ("not so loud", "en"),
+    ] {
+        assert_ne!(rules(words, card), Some(VoiceMeaning::Change), "{words}");
+    }
+}
+
 #[test]
 fn refusals_are_refusals_only_by_their_no() {
     let (pieces, _) = card();

@@ -607,6 +607,22 @@ const CONDITIONS: &[&str] = &[
     "or",
 ];
 
+/// "Not like that" said on its own: a wish for a different call.
+const NOT_LIKE_THAT_ALONE: &[&str] = &[
+    "nicht so",
+    "so nicht",
+    "nicht so machen",
+    "so nicht machen",
+    "mach das nicht so",
+    "mach das so nicht",
+    "mach es nicht so",
+    "mach es so nicht",
+    "genau so nicht",
+    "not like that",
+    "not like this",
+    "dont do it like that",
+];
+
 /// Words that ask for a different call wherever they stand.
 const CHANGE_ANYWHERE: &[&str] = &[
     "ohne",
@@ -1249,15 +1265,30 @@ impl Words {
 
     fn change_marker(&self, plain: bool) -> bool {
         // "nicht so", "so nicht", "not like that": the call, but different.
-        if self.segments.iter().any(|segment| {
-            segment.windows(2).any(|pair| {
-                matches!(
-                    (pair[0].as_str(), pair[1].as_str()),
-                    ("nicht", "so") | ("so", "nicht")
-                )
-            }) || segment
-                .windows(3)
-                .any(|words| words[0] == "not" && words[1] == "like" && words[2] == "that")
+        // For the guards it counts anywhere. As a change the rules report
+        // without the model, only when the segment says nothing else: "nicht
+        // so schnell" or "ist das nicht so?" is no wish for a change.
+        if self.segments.iter().enumerate().any(|(index, segment)| {
+            if plain {
+                // After leading words ("nein", "also"); "so" leads too.
+                let leading = segment
+                    .iter()
+                    .take_while(|word| LEADING.contains(&word.as_str()))
+                    .count();
+                !self.asks(index)
+                    && (0..=leading).any(|start| {
+                        NOT_LIKE_THAT_ALONE.contains(&segment[start..].join(" ").as_str())
+                    })
+            } else {
+                segment.windows(2).any(|pair| {
+                    matches!(
+                        (pair[0].as_str(), pair[1].as_str()),
+                        ("nicht", "so") | ("so", "nicht")
+                    )
+                }) || segment
+                    .windows(3)
+                    .any(|words| words[0] == "not" && words[1] == "like" && words[2] == "that")
+            }
         }) {
             return true;
         }
