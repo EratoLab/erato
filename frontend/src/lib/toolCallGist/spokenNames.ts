@@ -46,3 +46,19 @@ export const spokenTableName = (
   names: SpokenNames | undefined,
   key: string,
 ): string | undefined => entry(names?.tables?.[key]);
+
+/** One field's own natural sentence variants, keyed like its name. */
+export const spokenFieldSentences = (
+  names: SpokenNames | undefined,
+  key: string,
+): Partial<Record<"changed" | "set" | "updated", string>> | undefined => {
+  const all = names?.sentences;
+  if (!all) return undefined;
+  const own = Object.fromEntries(
+    (["changed", "set", "updated"] as const).flatMap((type) => {
+      const template = type in all ? entry(all[type][key]) : undefined;
+      return template === undefined ? [] : [[type, template]];
+    }),
+  );
+  return Object.keys(own).length > 0 ? own : undefined;
+};

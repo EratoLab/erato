@@ -2,12 +2,14 @@
 import { GIST_KINDS } from "./gist";
 import { isMachineId } from "./machineId";
 import { cleanServerText, isRecord } from "./serverText";
+import { holder } from "./spokenHold";
 import { spokenChoice, spokenFieldName, spokenTableName } from "./spokenNames";
 import { earValue } from "./spokenValues";
 
 import type { GistKind } from "./gist";
 import type {
   ComposedPiece,
+  SpokenOptions,
   SpokenPieceRole,
   SpokenQueuePosition,
   SpokenSource,
@@ -345,14 +347,26 @@ export const spokenReadPieces = (
   facts: SpokenReadFacts,
   readWords: SpokenReadWords,
   position?: SpokenQueuePosition,
+  amount: Pick<SpokenOptions, "amount" | "shortDetails"> = {},
 ): ReadPiece[] => {
+  const hold = holder(amount, "condition");
   const said = facts.conditions.slice(0, MAX_SPOKEN_CONDITIONS);
+  // A condition on a record never read here, or known only by its ID, is
+  // always said: the listener must hear it before deciding.
+  const holds = said.map((condition) =>
+    condition.values.some(
+      (value) => value.kind === "unread" || value.kind === "id",
+    )
+      ? undefined
+      : hold.next(),
+  );
+  const saysCondition = holds.some((held) => held === undefined);
   const unsaid =
     facts.conditionsOmitted === "unknown"
       ? "unknown"
       : facts.conditionsOmitted + facts.conditions.length - said.length;
   const pieces: ReadPiece[] = [
-    piece("what", readWords.what(facts, said.length > 0, position), [
+    piece("what", readWords.what(facts, saysCondition, position), [
       ...(facts.server ? [text("server", facts.server)] : []),
       ...(facts.search && "text" in facts.search
         ? [text("text", facts.search.text)]
@@ -374,8 +388,10 @@ export const spokenReadPieces = (
       ),
     );
   }
-  for (const condition of said) {
+  said.forEach((condition, index) => {
+    const held = holds[index];
     pieces.push({
+      ...(held ? { held } : {}),
       ...piece("detail", readWords.condition(condition), [
         text("field", condition.column),
         ...(condition.table ? [text("place", condition.table)] : []),
@@ -383,7 +399,7 @@ export const spokenReadPieces = (
       ]),
       ...(condition.cardColumn ? { idField: condition.cardColumn } : {}),
     });
-  }
+  });
   if (unsaid === "unknown" || unsaid > 0) {
     pieces.push(
       piece(
@@ -393,6 +409,8 @@ export const spokenReadPieces = (
       ),
     );
   }
+  const counted = hold.withMore(pieces);
+  pieces.splice(0, pieces.length, ...counted);
   if (facts.limit !== undefined) {
     pieces.push(
       piece("detail", readWords.limit(facts.limit, facts.kind), [

@@ -91,6 +91,10 @@ export type Env = {
   speechEnabled?: boolean;
   readAloudEnabled?: boolean;
   approvalVoiceCommandsEnabled?: boolean;
+  /** The deployment's natural sentence variants for spoken approval cards, by language. */
+  approvalSpeechSentences?: Partial<
+    Record<string, Partial<Record<string, string>>>
+  >;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
   /** The user can speak over the voice, and the voice yields. */
@@ -191,6 +195,9 @@ declare global {
     SPEECH_ENABLED?: boolean;
     READ_ALOUD_ENABLED?: boolean;
     APPROVAL_VOICE_COMMANDS_ENABLED?: boolean;
+    APPROVAL_SPEECH_SENTENCES?: Partial<
+      Record<string, Partial<Record<string, string>>>
+    >;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
@@ -680,6 +687,7 @@ export const env = (): Env => {
       import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED !== undefined
         ? import.meta.env.VITE_APPROVAL_VOICE_COMMANDS_ENABLED === "true"
         : (window.APPROVAL_VOICE_COMMANDS_ENABLED ?? false),
+    approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
     audioConversationalTalkOverVoice,

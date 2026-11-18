@@ -224,12 +224,14 @@ export function talkOverApprovalCard(key: string) {
 }
 
 /** Says again, from its start, what the user talked over. */
-const resumeEvent = (cut: SpokenUtterance): SpokenCardEvent => {
+export const resumeEvent = (cut: SpokenUtterance): SpokenCardEvent => {
   switch (cut.type) {
     case "piece":
       return { type: "repeat", index: cut.index };
     case "text":
       return { type: "read", index: cut.index };
+    case "held":
+      return { type: "held" };
     case "count":
     case "nothing_left":
       return { type: "rest" };
@@ -237,6 +239,15 @@ const resumeEvent = (cut: SpokenUtterance): SpokenCardEvent => {
       return { type: "notice", notice: cut.notice };
   }
 };
+
+/** "Again" over how much the voice holds back is that sentence again. */
+export const againOverVoice = (
+  cut: SpokenUtterance,
+  event: SpokenCardEvent,
+): SpokenCardEvent =>
+  cut.type === "held" && event.type === "repeat" && event.index === undefined
+    ? { type: "held" }
+    : event;
 
 /** The voice was talked over under `key`, and nothing happened since. */
 const takeTalkedOver = (key: string, flow: SpokenCardFlow) => {
@@ -310,6 +321,8 @@ export async function heardApprovalWords(
   // Only a sound ("mhm") over the voice: it goes on where it was cut.
   if (overVoice && step.listen && step.event === null && !step.change)
     step = { ...step, event: resumeEvent(overVoice.cut) };
+  if (overVoice && step.event)
+    step = { ...step, event: againOverVoice(overVoice.cut, step.event) };
   if (step.change) {
     await changeByVoice(key, transcript);
     return;

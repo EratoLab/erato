@@ -676,6 +676,14 @@ fn build_frontend_environment(
         "APPROVAL_VOICE_COMMANDS_ENABLED".to_string(),
         Value::Bool(config.approval_voice_commands.enabled),
     );
+    // The deployment's natural sentence variants for approval cards read
+    // aloud; how much is said and how it is worded is asked per user.
+    if !config.approval_speech.sentences.is_empty() {
+        env.additional_environment.insert(
+            "APPROVAL_SPEECH_SENTENCES".to_string(),
+            serde_json::to_value(&config.approval_speech.sentences).unwrap_or(Value::Null),
+        );
+    }
     env.additional_environment.insert(
         "READ_ALOUD_ENABLED".to_string(),
         Value::Bool(config.read_aloud_speech_provider().is_some()),
@@ -1482,6 +1490,29 @@ mod tests {
                 Some(&Value::Bool(enabled))
             );
         }
+    }
+
+    #[test]
+    fn approval_speech_sentences_reach_the_frontend_when_set() {
+        let mut config = AppConfig::default();
+        let get = |config: &AppConfig| {
+            build_frontend_environment(config, FrontendKind::Web)
+                .additional_environment
+                .get("APPROVAL_SPEECH_SENTENCES")
+                .cloned()
+        };
+        assert_eq!(get(&config), None);
+        config.approval_speech.sentences = std::collections::HashMap::from([(
+            "de".to_string(),
+            std::collections::HashMap::from([(
+                "changed".to_string(),
+                "{field} geht {from} {to}.".to_string(),
+            )]),
+        )]);
+        assert_eq!(
+            get(&config),
+            Some(serde_json::json!({"de": {"changed": "{field} geht {from} {to}."}}))
+        );
     }
 
     #[test]

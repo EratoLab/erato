@@ -15,6 +15,7 @@ import {
   speakApprovalCard,
 } from "./approvalSpeech";
 import { useSpeechPlayback } from "./speechPlayback";
+import { deploymentSentences, useSpokenStyle } from "./spokenStyle";
 
 import type { VoiceChange } from "./approvalChanges";
 import type { SpokenApproval } from "@/lib/toolCallGist/spokenCard";
@@ -79,6 +80,7 @@ export function useSpokenApprovalCard({
   );
   const approval = approvals[index] as SpokenApproval | undefined;
   const key = `${messageId}:${keys[index] ?? index}`;
+  const style = useSpokenStyle(spokenTurn);
 
   useEffect(() => {
     if (!active || !spokenTurn || modelSpeaking || responding || !approval)
@@ -104,13 +106,21 @@ export function useSpokenApprovalCard({
       item?.replaces != null
         ? takeWithdrawnCard(item.replaces, item.approvalId)
         : undefined;
+    // The style changes which pieces are held back and the words of
+    // details and the opening, never the pieces themselves; the difference
+    // reading after a change request stays as it is.
+    const styled = {
+      ...options,
+      ...style,
+      sentences: deploymentSentences(options.language),
+    };
     const card = {
       key,
       messageId,
       language: options.language,
       pieces: withdrawn
         ? spokenDifference(withdrawn, approval, options).pieces
-        : spokenApprovalPieces(approval, options),
+        : spokenApprovalPieces(approval, styled),
       fallback: spokenApprovalPieces({ type: "pointer" }, options),
       approval,
       change: item ? change?.(item.approvalId) : undefined,
@@ -132,6 +142,7 @@ export function useSpokenApprovalCard({
     quiet,
     responding,
     spokenTurn,
+    style,
     userTurns,
   ]);
 

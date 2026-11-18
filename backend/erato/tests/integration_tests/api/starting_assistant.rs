@@ -113,6 +113,7 @@ async fn install_policy_with_ids(
                 pinned_assistant_hub_assistant_id,
                 expires_at: None,
                 provenance: None,
+                approval_speech: None,
             },
         );
     }

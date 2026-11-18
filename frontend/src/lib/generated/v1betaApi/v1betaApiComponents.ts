@@ -3336,6 +3336,119 @@ export const useSearchSharepoint = <TData = Schemas.SharepointSearchResponse,>(
   });
 };
 
+export type ApprovalSpeechStyleError = Fetcher.ErrorWrapper<undefined>;
+
+export type ApprovalSpeechStyleVariables = V1betaApiContext["fetcherOptions"];
+
+export const fetchApprovalSpeechStyle = (
+  variables: ApprovalSpeechStyleVariables,
+  signal?: AbortSignal,
+) =>
+  v1betaApiFetch<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    undefined,
+    {},
+    {},
+    {}
+  >({
+    url: "/api/v1beta/me/approval-speech-style",
+    method: "get",
+    ...variables,
+    signal,
+  });
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn: (
+    options: QueryFnOptions,
+  ) => Promise<Schemas.ApprovalSpeechStyleResponse>;
+};
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+): {
+  queryKey: reactQuery.QueryKey;
+  queryFn:
+    | ((
+        options: QueryFnOptions,
+      ) => Promise<Schemas.ApprovalSpeechStyleResponse>)
+    | reactQuery.SkipToken;
+};
+
+export function approvalSpeechStyleQuery(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+) {
+  return {
+    queryKey: queryKeyFn({
+      path: "/api/v1beta/me/approval-speech-style",
+      operationId: "approvalSpeechStyle",
+      variables,
+    }),
+    queryFn:
+      variables === reactQuery.skipToken
+        ? reactQuery.skipToken
+        : ({ signal }: QueryFnOptions) =>
+            fetchApprovalSpeechStyle(variables, signal),
+  };
+}
+
+export const useSuspenseApprovalSpeechStyle = <
+  TData = Schemas.ApprovalSpeechStyleResponse,
+>(
+  variables: ApprovalSpeechStyleVariables,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ApprovalSpeechStyleResponse,
+      ApprovalSpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useSuspenseQuery<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    TData
+  >({
+    ...approvalSpeechStyleQuery(deepMerge(fetcherOptions, variables)),
+    ...options,
+    ...queryOptions,
+  });
+};
+
+export const useApprovalSpeechStyle = <
+  TData = Schemas.ApprovalSpeechStyleResponse,
+>(
+  variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken,
+  options?: Omit<
+    reactQuery.UseQueryOptions<
+      Schemas.ApprovalSpeechStyleResponse,
+      ApprovalSpeechStyleError,
+      TData
+    >,
+    "queryKey" | "queryFn" | "initialData"
+  >,
+) => {
+  const { queryOptions, fetcherOptions } = useV1betaApiContext(options);
+  return reactQuery.useQuery<
+    Schemas.ApprovalSpeechStyleResponse,
+    ApprovalSpeechStyleError,
+    TData
+  >({
+    ...approvalSpeechStyleQuery(
+      variables === reactQuery.skipToken
+        ? variables
+        : deepMerge(fetcherOptions, variables),
+    ),
+    ...options,
+    ...queryOptions,
+  });
+};
+
 export type BudgetStatusError = Fetcher.ErrorWrapper<undefined>;
 
 export type BudgetStatusVariables = V1betaApiContext["fetcherOptions"];
@@ -9836,6 +9949,11 @@ export type QueryOperation =
       path: "/api/v1beta/integrations/sharepoint/search";
       operationId: "searchSharepoint";
       variables: SearchSharepointVariables | reactQuery.SkipToken;
+    }
+  | {
+      path: "/api/v1beta/me/approval-speech-style";
+      operationId: "approvalSpeechStyle";
+      variables: ApprovalSpeechStyleVariables | reactQuery.SkipToken;
     }
   | {
       path: "/api/v1beta/me/budget";

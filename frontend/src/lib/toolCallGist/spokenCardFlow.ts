@@ -14,7 +14,9 @@ import type { SpokenPiece } from "./spokenCard";
  * - the request to decide is never started while a loss or consequence has
  *   not been heard in full: that piece comes first, however often it is
  *   skipped;
- * - no event decides the card: it waits until a decision closes it.
+ * - no event decides the card: it waits until a decision closes it;
+ * - in a short reading, pieces held back are said only when the listener
+ *   asks for the rest, and the voice says how many it held back.
  */
 
 export type SpokenPieceState = "pending" | "playing" | "heard" | "cut";
@@ -26,6 +28,11 @@ export type SpokenUtterance =
   | { type: "count"; count: number }
   /** The rest was asked for and nothing is left ("Das war alles"). */
   | { type: "nothing_left" }
+  /**
+   * In a short reading, in place of the pieces held back: how many fields
+   * or conditions are not said, and that they are on screen.
+   */
+  | { type: "held"; count: number; kind: "field" | "condition" }
   /** A long text the piece at `index` names, read out on request. */
   | { type: "text"; index: number }
   /** A sentence about what the voice cannot do (yet); the card stays as it is. */
@@ -65,6 +72,8 @@ export type SpokenCardEvent =
   | { type: "rest" }
   /** The piece being said, or the one named, again. */
   | { type: "repeat"; index?: number }
+  /** How much this short reading holds back, again. */
+  | { type: "held" }
   /** Read out the long text the piece named, or the card's first one, names. */
   | { type: "read"; index?: number }
   /** Quiet; the card keeps waiting. */
@@ -106,6 +115,10 @@ export interface SpokenCardFlow {
   closed: boolean;
   /** Closed because it was taken back for a change, not decided. */
   withdrawn: boolean;
+  /** The rest was asked for: pieces held back join this reading. */
+  released: boolean;
+  /** This reading has said how many pieces it holds back. */
+  heldSaid: boolean;
 }
 
 const owedOf = (
@@ -132,6 +145,8 @@ export const spokenCardFlow = (
     failed: null,
     closed: false,
     withdrawn: false,
+    released: false,
+    heldSaid: false,
   };
 };
 
@@ -152,10 +167,15 @@ export const piecesAhead = (
   pieces: readonly SpokenPiece[],
   states: readonly SpokenPieceState[],
   heard: readonly boolean[],
+  released = true,
 ): number[] => {
   const request = requestOf(pieces);
-  const pending = pieces.flatMap((_, index) =>
-    states[index] === "pending" && index !== request ? [index] : [],
+  const pending = pieces.flatMap((piece, index) =>
+    states[index] === "pending" &&
+    index !== request &&
+    (released || piece.held === undefined)
+      ? [index]
+      : [],
   );
   const due = pieces.flatMap((piece, index) =>
     piece.mustSay && states[index] === "cut" && !heard[index] ? [index] : [],
@@ -234,12 +254,55 @@ const begin = (
   };
 };
 
-/** Goes on with the first piece still to say in this reading. */
+/**
+ * The pieces a short reading holds back and has not said, and how many
+ * fields or conditions they stand for: a held "more" piece counts its own.
+ */
+const heldBack = (pieces: readonly SpokenPiece[], flow: SpokenCardFlow) => {
+  const indices = pieces.flatMap((piece, index) =>
+    piece.held !== undefined &&
+    flow.states[index] === "pending" &&
+    !flow.heard[index]
+      ? [index]
+      : [],
+  );
+  const count = indices.reduce((sum, index) => {
+    const piece = pieces[index];
+    if (piece.role !== "more") return sum + 1;
+    const counted = piece.values?.find(
+      (source) => source.slot === "count",
+    )?.value;
+    return sum + (counted?.kind === "number" ? counted.value : 1);
+  }, 0);
+  return { indices, count };
+};
+
+/**
+ * Goes on with the first piece still to say in this reading. A short reading
+ * says how much it holds back where the first held piece would have been.
+ */
 const advance = (
   pieces: readonly SpokenPiece[],
   flow: SpokenCardFlow,
 ): SpokenCardFlow => {
-  const next = piecesAhead(pieces, flow.states, flow.heard).at(0);
+  const next = piecesAhead(pieces, flow.states, flow.heard, flow.released).at(
+    0,
+  );
+  if (!flow.released && !flow.heldSaid) {
+    const held = heldBack(pieces, flow);
+    const first = held.indices.at(0);
+    if (first !== undefined && (next === undefined || next > first)) {
+      return begin(
+        pieces,
+        { ...flow, heldSaid: true },
+        {
+          type: "held",
+          count: held.count,
+          kind: pieces[first].held ?? "field",
+        },
+      );
+    }
+  }
   return begin(
     pieces,
     flow,
@@ -278,6 +341,8 @@ const step = (
         states: pieces.map(() => "pending"),
         playing: null,
         failed: null,
+        released: false,
+        heldSaid: false,
       });
     case "finished": {
       const { playing } = flow;
@@ -304,7 +369,8 @@ const step = (
       // Quiet, "go on" says what is left of this reading; with nothing left
       // it is the rest: "that was all", and the request again.
       if (playing === null) {
-        return piecesAhead(pieces, flow.states, flow.heard).length === 0
+        return piecesAhead(pieces, flow.states, flow.heard, flow.released)
+          .length === 0
           ? step(pieces, flow, { type: "rest" })
           : advance(pieces, flow);
       }
@@ -316,7 +382,7 @@ const step = (
       return advance(pieces, next);
     }
     case "rest": {
-      let next = leave(flow, "cut");
+      let next: SpokenCardFlow = { ...leave(flow, "cut"), released: true };
       const request = requestOf(pieces);
       // Only what was never heard in full; it ends with the request, said
       // again if it was heard.
@@ -341,7 +407,20 @@ const step = (
           : { type: "count", count: content.length },
       );
     }
+    case "held": {
+      const held = heldBack(pieces, flow);
+      const first = held.indices.at(0);
+      if (flow.released || first === undefined) return flow;
+      return begin(pieces, interrupt(flow, null), {
+        type: "held",
+        count: held.count,
+        kind: pieces[first].held ?? "field",
+      });
+    }
     case "repeat": {
+      // Again, while it says how much it holds back, is that sentence.
+      if (event.index === undefined && flow.playing?.type === "held")
+        return step(pieces, flow, { type: "held" });
       const target =
         event.index ?? pieceOf(flow.playing) ?? flow.lastRead ?? flow.last;
       if (target === null || !(target in pieces)) return flow;

@@ -3,6 +3,7 @@ import { plural, select, t } from "@lingui/core/macro";
 import { wallClockParts } from "@/components/ui/Scheduled/scheduledTime";
 
 import { changeNoteLabel } from "./changeLabels";
+import { fillVariant, naturalVariant } from "./spokenSentences";
 import { bothPercent } from "./spokenValues";
 
 import type { GistKind } from "./gist";
@@ -22,6 +23,7 @@ import type {
   SpokenReadFacts,
   SpokenReadWords,
 } from "./spokenRead";
+import type { SentenceSet } from "./spokenSentences";
 import type { EarValue } from "./spokenValues";
 
 /**
@@ -37,6 +39,10 @@ interface WordOptions {
   now: Date;
   /** The zone "today" is in; the device's when not given. */
   timeZone?: string;
+  /** `natural` says details and the opening in the sentence variants. */
+  wording?: "precise" | "natural";
+  /** The deployment's sentence variants for this language. */
+  sentences?: SentenceSet;
 }
 
 interface CalendarDay {
@@ -123,6 +129,12 @@ interface LanguageCode {
   ordinals: readonly string[];
   /** A time of day; `undefined` leaves it to `Intl`. */
   time?: (hour: number, minute: number) => string;
+  /**
+   * An old or new value with its direction, for a sentence variant, where
+   * the language's value in that role carries none ("from 1 December"). A
+   * German value carries it already ("vom 1. Dezember").
+   */
+  directed?: (role: "from" | "to", value: string) => string;
 }
 
 /* eslint-disable lingui/no-unlocalized-strings -- number words, ordinals and locales are code, not catalog copy */
@@ -164,6 +176,7 @@ const GERMAN: LanguageCode = {
 
 const ENGLISH: LanguageCode = {
   locale: "en-GB",
+  directed: (role, value) => `${role} ${value}`,
   numbers: [
     "zero",
     "one",
@@ -1251,7 +1264,19 @@ const isNew = (facts: SpokenFacts) => ACTIONS_ON_NEW.includes(facts.action);
 const isShort = (position: SpokenQueuePosition | undefined) =>
   position !== undefined && position.index > 0 && position.sameAsPrevious;
 
-const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
+const words = (
+  code: LanguageCode,
+  options: WordOptions,
+  language: string,
+): LanguageWords => {
+  const natural = options.wording === "natural";
+  /** The natural variant for `key`, or `undefined` for the precise sentence. */
+  const variant = (key: string, oneField?: string): string | undefined =>
+    natural
+      ? naturalVariant(language, key, options.sentences, oneField)
+      : undefined;
+  const directed = (role: "from" | "to", said: string): string =>
+    code.directed?.(role, said) ?? said;
   const today = wallClockParts(options.now, options.timeZone);
   const count = (value: number): string =>
     code.numbers[value] ?? new Intl.NumberFormat(code.locale).format(value);
@@ -1397,7 +1422,18 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
 
   const detail = (entry: SpokenDetail, facts: SpokenFacts): string => {
     switch (entry.type) {
-      case "set":
+      case "set": {
+        const type = facts.action === "update" ? "updated" : "set";
+        const own = variant(type, entry.sentences?.[type]);
+        // A value an update sets carries its direction, as `to` does.
+        if (own !== undefined)
+          return fillVariant(own, {
+            field: entry.field,
+            value:
+              type === "updated"
+                ? directed("to", value(entry.value, "to"))
+                : value(entry.value),
+          });
         return facts.action === "update"
           ? detailSetTo(
               kindOf(entry.value),
@@ -1405,6 +1441,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
               value(entry.value, "to"),
             )
           : endSentence(fieldValue(entry.field, value(entry.value)));
+      }
       case "list_set": {
         const entries = listValues(entry.values, entry.omitted);
         return facts.action === "update"
@@ -1415,14 +1452,22 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
             )
           : endSentence(fieldValue(entry.field, entries));
       }
-      case "changed":
-        return endSentence(
-          detailChanged(
-            entry.field,
-            value(entry.from, "from", !bothPercent(entry.from, entry.to)),
-            value(entry.to, "to"),
-          ),
+      case "changed": {
+        const from = value(
+          entry.from,
+          "from",
+          !bothPercent(entry.from, entry.to),
         );
+        const to = value(entry.to, "to");
+        const own = variant("changed", entry.sentences?.changed);
+        return own === undefined
+          ? endSentence(detailChanged(entry.field, from, to))
+          : fillVariant(own, {
+              field: entry.field,
+              from: directed("from", from),
+              to: directed("to", to),
+            });
+      }
       case "emptied":
         return detailEmptied(entry.field);
       case "list_replaced":
@@ -1628,15 +1673,15 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
         isNew(facts) || facts.count !== 1 || facts.names.length > 0
           ? ""
           : unnamedClause(facts.kind, facts.unread);
-      const sentence = whatSentence(
-        facts.reschedule ? "reschedule" : facts.action,
-        {
-          thing: thing(facts),
-          destination: destination(facts),
-          source,
-          clause,
-        },
-      );
+      const action = facts.reschedule ? "reschedule" : facts.action;
+      const parts = {
+        thing: thing(facts),
+        destination: destination(facts),
+        source,
+        clause,
+      };
+      // The opening's verb is the card's action: it has no variant.
+      const sentence = whatSentence(action, parts);
       return `${prefix}${sentence}${item(facts).length > 0 ? ":" : "."}`;
     },
     item(facts, position) {
@@ -1734,6 +1779,6 @@ export const spokenWordsFor = (
   options: WordOptions,
 ): LanguageWords => {
   const code = language.split(/[-_]/)[0]?.toLowerCase() ?? "en";
-  const said = words(code === "de" ? GERMAN : ENGLISH, options);
+  const said = words(code === "de" ? GERMAN : ENGLISH, options, code);
   return POINTER_ONLY.includes(code) ? { ...said, full: false } : said;
 };

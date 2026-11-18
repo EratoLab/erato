@@ -2511,6 +2511,21 @@
           "invoice": "Rechnungen",
           "product": "Produkte",
           "systemuser": "Benutzer"
+        },
+        "sentences": {
+          "changed": {
+            "opportunity.estimatedclosedate": "Der Abschluss verschiebt sich {from} {to}.",
+            "lead.estimatedclosedate": "Der Abschluss verschiebt sich {from} {to}.",
+            "opportunity.closeprobability": "Die Wahrscheinlichkeit geht {from} {to}.",
+            "opportunity.estimatedvalue": "Der geschätzte Umsatz geht {from} {to}.",
+            "lead.estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+          },
+          "set": {
+            "task.scheduledend": "Fällig am {value}.",
+            "task.prioritycode": "Mit Priorität {value}.",
+            "opportunity.estimatedclosedate": "Abschluss voraussichtlich am {value}.",
+            "lead.estimatedclosedate": "Abschluss voraussichtlich am {value}."
+          }
         }
       },
       "en": {
@@ -2684,6 +2699,21 @@
           "invoice": "invoices",
           "product": "products",
           "systemuser": "users"
+        },
+        "sentences": {
+          "changed": {
+            "opportunity.estimatedclosedate": "The close date moves {from} {to}.",
+            "lead.estimatedclosedate": "The close date moves {from} {to}.",
+            "opportunity.closeprobability": "The probability goes {from} {to}.",
+            "opportunity.estimatedvalue": "The estimated revenue goes {from} {to}.",
+            "lead.estimatedvalue": "The estimated revenue goes {from} {to}."
+          },
+          "set": {
+            "task.scheduledend": "Due on {value}.",
+            "task.prioritycode": "{value} priority.",
+            "opportunity.estimatedclosedate": "Expected to close on {value}.",
+            "lead.estimatedclosedate": "Expected to close on {value}."
+          }
         }
       }
     }

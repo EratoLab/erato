@@ -114,6 +114,16 @@ pub struct UserProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub preference_language: Option<String>,
+    /// How much approval cards say aloud, as the user chose; absent follows
+    /// the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_approval_speech_amount: Option<crate::config::ApprovalSpeechAmount>,
+    /// How approval cards are worded aloud, as the user chose; absent
+    /// follows the organisation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub preference_approval_speech_wording: Option<crate::config::ApprovalSpeechWording>,
 }
 
 impl UserProfile {
@@ -140,6 +150,8 @@ impl UserProfile {
             preference_starting_assistant_cleared: false,
             preference_time_zone: None,
             preference_language: None,
+            preference_approval_speech_amount: None,
+            preference_approval_speech_wording: None,
         }
     }
 
@@ -206,6 +218,14 @@ impl UserProfile {
             self.preference_starting_assistant_cleared = prefs.starting_assistant_cleared;
             self.preference_time_zone = prefs.time_zone;
             self.preference_language = prefs.language;
+            self.preference_approval_speech_amount = prefs
+                .approval_speech_amount
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
+            self.preference_approval_speech_wording = prefs
+                .approval_speech_wording
+                .as_deref()
+                .and_then(crate::models::user_preference::parse_style_name);
             self.client_tool_decisions =
                 crate::models::user_preference::client_tool_decisions_from_json(
                     &prefs.client_tool_decisions,

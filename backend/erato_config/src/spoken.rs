@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use config::Config;
 use erato_memory::HeapSize;
 use facet::Facet;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
+use utoipa::ToSchema;
 
 use crate::config::has_hidden_chars;
 use crate::config_facet_attrs as erato_config;
@@ -37,6 +38,14 @@ pub struct SpokenNamesConfig {
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub table_names: HashMap<String, String>,
+    /// One field's own natural sentence variants, by sentence type
+    /// (`changed`, `set`, `updated`) and then by the field's exact name (or
+    /// `table.field`). Used when the card is read in the natural wording.
+    /// Only a `table.field` variant may leave out `{field}`, such as
+    /// `"opportunity.estimatedclosedate" = "Der Abschluss verschiebt sich {from} {to}."`.
+    #[serde(default)]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sentences: HashMap<String, HashMap<String, String>>,
 }
 
 /// `[spoken_vocabularies.<name>.<language>]`: named so that a content package
@@ -44,7 +53,149 @@ pub struct SpokenNamesConfig {
 /// server ids. A server uses them through `glossary.vocabularies`.
 pub type SpokenVocabulariesConfig = HashMap<String, HashMap<String, SpokenNamesConfig>>;
 
-const SPOKEN_NAMES_SETTINGS: &[&str] = &["field_names", "choice_labels", "table_names"];
+const SPOKEN_NAMES_SETTINGS: &[&str] =
+    &["field_names", "choice_labels", "table_names", "sentences"];
+
+/// Sentence types with a natural variant and the slots each must hold, in
+/// the precise sentence's order. The opening of a card has none: its verb is
+/// the card's action.
+const SENTENCE_TYPES: &[(&str, &[&str])] = &[
+    ("changed", &["field", "from", "to"]),
+    ("set", &["field", "value"]),
+    ("updated", &["field", "value"]),
+];
+const MAX_VARIANT_CHARS: usize = 300;
+
+/// The slots of `template` in order, or `None` when a brace stands alone.
+fn slots_of(template: &str) -> Option<Vec<&str>> {
+    let mut found = Vec::new();
+    let mut rest = template;
+    while let Some(open) = rest.find(['{', '}']) {
+        let after = rest[open..].strip_prefix('{')?;
+        let close = after.find('}')?;
+        let name = &after[..close];
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase()) {
+            return None;
+        }
+        found.push(name);
+        rest = &after[close + 1..];
+    }
+    Some(found)
+}
+
+/// Why `template` may not stand for the sentence `key` (`changed`, `set`,
+/// `updated`), or `None` when it may: every required slot exactly once, no
+/// other slot or brace, and the precise order (old before new). A variant
+/// for one field of one table may leave out `{field}`. This guards the
+/// slots, not the meaning: whoever writes a variant answers for what it
+/// says. The web app checks the same, against the same cases
+/// (`frontend/src/lib/toolCallGist/fixtures/spokenSentenceVariants.json`).
+pub fn variant_problem(key: &str, template: &str, for_one_field: bool) -> Option<&'static str> {
+    let Some((_, slots)) = SENTENCE_TYPES.iter().find(|(name, _)| *name == key) else {
+        return Some("no sentence type has this name");
+    };
+    if template.trim().is_empty() {
+        return Some("it is blank");
+    }
+    if template.chars().count() > MAX_VARIANT_CHARS {
+        return Some("it is longer than 300 characters");
+    }
+    if template.chars().any(char::is_control) || has_hidden_chars(template) {
+        return Some("it holds control or hidden characters");
+    }
+    let Some(found) = slots_of(template) else {
+        return Some("a brace is not part of a slot such as {field}");
+    };
+    if found.iter().any(|slot| !slots.contains(slot)) {
+        return Some("it holds a slot this sentence does not have");
+    }
+    let mut unique = found.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    if unique.len() != found.len() {
+        return Some("a slot is used twice");
+    }
+    if slots
+        .iter()
+        .filter(|slot| !(for_one_field && **slot == "field"))
+        .any(|slot| !found.contains(slot))
+    {
+        return Some("a slot is missing");
+    }
+    let order: Vec<usize> = found
+        .iter()
+        .map(|slot| slots.iter().position(|known| known == slot).unwrap_or(0))
+        .collect();
+    (!order.windows(2).all(|pair| pair[0] < pair[1]))
+        .then_some("its slots are not in the precise sentence's order")
+}
+
+pub fn usable_variant(key: &str, template: &str, for_one_field: bool) -> bool {
+    variant_problem(key, template, for_one_field).is_none()
+}
+
+/// What a variant says with sample values, in its language where the
+/// backend has samples for it, so whoever wrote it sees at startup what the
+/// voice will say. Old and new carry their direction, as on the voice.
+pub fn sample_sentence(language: &str, key: &str, template: &str) -> String {
+    let german = language.split('-').next() == Some("de");
+    let samples: &[(&str, &str)] = match (german, key) {
+        (true, "changed") => &[
+            ("field", "Priorität"),
+            ("from", "von Niedrig"),
+            ("to", "auf Hoch"),
+        ],
+        (true, "updated") => &[("field", "Priorität"), ("value", "auf Hoch")],
+        (true, _) => &[("field", "Priorität"), ("value", "Hoch")],
+        (false, "changed") => &[
+            ("field", "Priority"),
+            ("from", "from Low"),
+            ("to", "to High"),
+        ],
+        (false, "updated") => &[("field", "Priority"), ("value", "to High")],
+        (false, _) => &[("field", "Priority"), ("value", "High")],
+    };
+    let mut said = template.to_string();
+    for (slot, value) in samples {
+        said = said.replace(&format!("{{{slot}}}"), value);
+    }
+    said.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Every natural sentence variant in use, rendered with sample values, for
+/// the startup log.
+pub fn sentences_in_use(
+    vocabularies: &SpokenVocabulariesConfig,
+    approval_speech: Option<&ApprovalSpeechConfig>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (language, variants) in approval_speech
+        .map(|speech| &speech.sentences)
+        .into_iter()
+        .flatten()
+    {
+        for (key, template) in variants {
+            lines.push(format!(
+                "approval_speech.sentences.{language}.{key} says \"{}\"",
+                sample_sentence(language, key, template)
+            ));
+        }
+    }
+    for (name, languages) in vocabularies {
+        for (language, names) in languages {
+            for (kind, variants) in &names.sentences {
+                for (field, template) in variants {
+                    lines.push(format!(
+                        "spoken_vocabularies.{name}.{language}.sentences.{kind}.{field} says \"{}\"",
+                        sample_sentence(language, kind, template)
+                    ));
+                }
+            }
+        }
+    }
+    lines.sort();
+    lines
+}
 
 /// The vocabularies as written, whatever their shape, so that a text where a
 /// table belongs (or the other way round) is dropped with a warning instead
@@ -53,6 +204,8 @@ const SPOKEN_NAMES_SETTINGS: &[&str] = &["field_names", "choice_labels", "table_
 #[serde(untagged)]
 enum Written {
     Text(String),
+    Flag(bool),
+    Number(i64),
     Table(HashMap<String, Written>),
     Other(serde::de::IgnoredAny),
 }
@@ -113,24 +266,30 @@ fn shaped_vocabularies(written: Written) -> (SpokenVocabulariesConfig, Vec<Strin
             };
             let field_names = texts("field_names", &mut dropped);
             let table_names = texts("table_names", &mut dropped);
-            let mut choice_labels = HashMap::new();
-            if let Some(fields) = settings.remove("choice_labels") {
-                let place = format!("{place}.choice_labels");
-                for (field, labels) in written_table(&place, fields, &mut dropped) {
-                    let place = format!("{place}.{field}");
-                    if matches!(labels, Written::Table(_)) {
-                        choice_labels.insert(field, written_texts(&place, labels, &mut dropped));
-                    } else {
-                        dropped.push(format!("{place} is not a table and is ignored"));
+            let mut nested = |setting: &str, dropped: &mut Vec<String>| {
+                let mut tables = HashMap::new();
+                if let Some(written) = settings.remove(setting) {
+                    let place = format!("{place}.{setting}");
+                    for (key, entries) in written_table(&place, written, dropped) {
+                        let place = format!("{place}.{key}");
+                        if matches!(entries, Written::Table(_)) {
+                            tables.insert(key, written_texts(&place, entries, dropped));
+                        } else {
+                            dropped.push(format!("{place} is not a table and is ignored"));
+                        }
                     }
                 }
-            }
+                tables
+            };
+            let choice_labels = nested("choice_labels", &mut dropped);
+            let sentences = nested("sentences", &mut dropped);
             shaped.insert(
                 language,
                 SpokenNamesConfig {
                     field_names,
                     choice_labels,
                     table_names,
+                    sentences,
                 },
             );
         }
@@ -156,6 +315,88 @@ pub fn misshaped_spoken_entries(schema: &Config) -> Vec<String> {
         .get::<Written>("spoken_vocabularies")
         .map(|written| shaped_vocabularies(written).1)
         .unwrap_or_default()
+}
+
+/// The values of `[approval_speech]` the loader replaces by the default for
+/// their kind, sorted.
+pub fn misshaped_approval_speech(schema: &Config) -> Vec<String> {
+    schema
+        .get::<Written>("approval_speech")
+        .map(|written| shaped_approval_speech(written).1)
+        .unwrap_or_default()
+}
+
+fn wrong(dropped: &mut Vec<String>, key: &str, expected: &str) {
+    dropped.push(format!(
+        "approval_speech.{key} is not {expected}; the default is used"
+    ));
+}
+
+/// `[approval_speech]` as written: a value of the wrong kind or shape keeps
+/// the default with a warning instead of stopping the configuration.
+fn shaped_approval_speech(written: Written) -> (ApprovalSpeechConfig, Vec<String>) {
+    let mut dropped = Vec::new();
+    let mut config = ApprovalSpeechConfig::default();
+    let mut settings = written_table("approval_speech", written, &mut dropped);
+    match settings.remove("amount") {
+        None => {}
+        Some(Written::Text(text)) if text == "full" => config.amount = ApprovalSpeechAmount::Full,
+        Some(Written::Text(text)) if text == "short" => {
+            config.amount = ApprovalSpeechAmount::Short;
+        }
+        Some(_) => wrong(&mut dropped, "amount", "`full` or `short`"),
+    }
+    match settings.remove("wording") {
+        None => {}
+        Some(Written::Text(text)) if text == "precise" => {
+            config.wording = ApprovalSpeechWording::Precise;
+        }
+        Some(Written::Text(text)) if text == "natural" => {
+            config.wording = ApprovalSpeechWording::Natural;
+        }
+        Some(_) => wrong(&mut dropped, "wording", "`precise` or `natural`"),
+    }
+    match settings.remove("short_details") {
+        None => {}
+        Some(Written::Number(number)) if number > i64::from(MAX_SHORT_DETAILS) => {
+            dropped.push(format!(
+                "approval_speech.short_details {number} is more than {MAX_SHORT_DETAILS}; {MAX_SHORT_DETAILS} is used"
+            ));
+            config.short_details = MAX_SHORT_DETAILS;
+        }
+        Some(Written::Number(number)) if number >= 0 => {
+            config.short_details = u8::try_from(number).unwrap_or(MAX_SHORT_DETAILS);
+        }
+        Some(_) => wrong(&mut dropped, "short_details", "a number from 0 to 3"),
+    }
+    match settings.remove("user_choice") {
+        None => {}
+        Some(Written::Flag(flag)) => config.user_choice = flag,
+        Some(_) => wrong(&mut dropped, "user_choice", "`true` or `false`"),
+    }
+    if let Some(languages) = settings.remove("sentences") {
+        let place = "approval_speech.sentences";
+        for (language, variants) in written_table(place, languages, &mut dropped) {
+            let place = format!("{place}.{language}");
+            if matches!(variants, Written::Table(_)) {
+                config
+                    .sentences
+                    .insert(language, written_texts(&place, variants, &mut dropped));
+            } else {
+                dropped.push(format!("{place} is not a table and is ignored"));
+            }
+        }
+    }
+    dropped.sort();
+    (config, dropped)
+}
+
+/// Reads `[approval_speech]` keeping the default for every value of the
+/// wrong kind; [`misshaped_approval_speech`] names them.
+pub fn deserialize_approval_speech<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<ApprovalSpeechConfig, D::Error> {
+    Ok(shaped_approval_speech(Written::deserialize(deserializer)?).0)
 }
 
 /// A language tag as the voice uses it: `de`, `en`, `pt-br`.
@@ -185,6 +426,7 @@ impl SpokenNamesConfig {
         self.field_names.len()
             + self.table_names.len()
             + self.choice_labels.values().map(HashMap::len).sum::<usize>()
+            + self.sentences.values().map(HashMap::len).sum::<usize>()
     }
 
     /// Removes the entries the voice cannot say and names each one: blank,
@@ -214,6 +456,29 @@ impl SpokenNamesConfig {
                 keep
             });
         }
+        self.sentences.retain(|kind, variants| {
+            if !SENTENCE_TYPES.iter().any(|(name, _)| name == kind) {
+                dropped.push(format!("{place}.sentences: '{}' is ignored", shown(kind)));
+                return false;
+            }
+            variants.retain(|key, template| {
+                // Only a variant for one field of one table may leave the
+                // field's name out: its words name that field.
+                let problem = if usable(key, MAX_ENTRY_BYTES) {
+                    variant_problem(kind, template, key.contains('.'))
+                } else {
+                    Some("its field name is blank, too long or holds hidden characters")
+                };
+                if let Some(problem) = problem {
+                    dropped.push(format!(
+                        "{place}.sentences.{kind}: '{}' is ignored: {problem}",
+                        shown(key)
+                    ));
+                }
+                problem.is_none()
+            });
+            true
+        });
         self.choice_labels.retain(|field, labels| {
             if !usable(field, MAX_ENTRY_BYTES) {
                 dropped.push(format!(
@@ -268,6 +533,125 @@ pub fn drop_unusable_spoken_entries(vocabularies: &mut SpokenVocabulariesConfig)
     dropped
 }
 
+/// How much a spoken card says.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet, HeapSize, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ApprovalSpeechAmount {
+    /// What the card says today: losses, up to three details, the rest
+    /// counted.
+    #[default]
+    Full,
+    /// Only the first `short_details` details in the card's own order; the
+    /// rest is held back, counted, and said when the user asks for it.
+    Short,
+}
+
+/// How a spoken card is worded.
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Facet, HeapSize, ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ApprovalSpeechWording {
+    /// Every spoken field named, old and new value both said.
+    #[default]
+    Precise,
+    /// Hand-written sentence variants with the values in fixed slots.
+    Natural,
+}
+
+/// `[approval_speech]`: how a waiting approval card is read aloud in
+/// conversational audio mode. No model is involved: both settings choose
+/// among sentences built by rule. Must-say pieces (losses, the outside
+/// warning, a delete's subject, the consequence) and the request are said
+/// in every combination, in their precise words.
+#[derive(Debug, Deserialize, PartialEq, Eq, Clone, Facet, HeapSize)]
+#[serde(default)]
+pub struct ApprovalSpeechConfig {
+    /// The deployment's amount: `full` or `short`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub amount: ApprovalSpeechAmount,
+    /// Details a short reading says before it holds back the rest, 0 to 3.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub short_details: u8,
+    /// The deployment's wording: `precise` or `natural`.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub wording: ApprovalSpeechWording,
+    /// Whether a user may choose their own amount and wording, unless a
+    /// supervisor's audience setting says otherwise.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub user_choice: bool,
+    /// Per language tag, natural sentence variants by sentence type
+    /// (`changed`, `set`, `updated`), replacing the built-in ones. A variant
+    /// without exactly its slots is ignored with a warning; each one in use
+    /// is logged at startup with sample values. The check guards the slots,
+    /// not the meaning: the sentence is its author's responsibility.
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub sentences: HashMap<String, HashMap<String, String>>,
+}
+
+pub const MAX_SHORT_DETAILS: u8 = 3;
+
+impl Default for ApprovalSpeechConfig {
+    fn default() -> Self {
+        Self {
+            amount: ApprovalSpeechAmount::Full,
+            short_details: 1,
+            wording: ApprovalSpeechWording::Precise,
+            user_choice: true,
+            sentences: HashMap::new(),
+        }
+    }
+}
+
+impl ApprovalSpeechConfig {
+    /// Clamps what is out of range and removes the variants that cannot be
+    /// used, naming each for a warning.
+    pub fn drop_unusable(&mut self) -> Vec<String> {
+        let mut dropped = Vec::new();
+        if self.short_details > MAX_SHORT_DETAILS {
+            dropped.push(format!(
+                "approval_speech.short_details {} is more than {MAX_SHORT_DETAILS}; {MAX_SHORT_DETAILS} is used",
+                self.short_details
+            ));
+            self.short_details = MAX_SHORT_DETAILS;
+        }
+        self.sentences.retain(|language, variants| {
+            if !is_language_tag(language) {
+                dropped.push(format!(
+                    "approval_speech.sentences: '{}' is not a lowercase language tag and is ignored",
+                    shown(language)
+                ));
+                return false;
+            }
+            variants.retain(|key, template| {
+                let problem = variant_problem(key, template, false);
+                if let Some(problem) = problem {
+                    dropped.push(format!(
+                        "approval_speech.sentences.{language}: '{}' is ignored: {problem}",
+                        shown(key)
+                    ));
+                }
+                problem.is_none()
+            });
+            true
+        });
+        dropped.sort();
+        dropped
+    }
+}
+
+const APPROVAL_SPEECH_SETTINGS: &[&str] = &[
+    "amount",
+    "short_details",
+    "wording",
+    "user_choice",
+    "sentences",
+];
+
 /// The vocabularies a server names that no source defines. Warned about, not
 /// rejected: the content package that defines them may not be applied.
 pub fn missing_vocabularies<'a>(
@@ -291,6 +675,14 @@ pub fn missing_vocabularies<'a>(
 /// content package may be newer than the backend.
 pub fn unknown_spoken_keys(schema: &Config) -> Vec<String> {
     let mut unknown = Vec::new();
+    if let Ok(settings) = schema.get_table("approval_speech") {
+        unknown.extend(
+            settings
+                .into_keys()
+                .filter(|key| !APPROVAL_SPEECH_SETTINGS.contains(&key.as_str()))
+                .map(|key| format!("approval_speech.{key}")),
+        );
+    }
     if let Ok(vocabularies) = schema.get_table("spoken_vocabularies") {
         for (name, languages) in vocabularies {
             let Ok(languages) = languages.into_table() else {
@@ -397,6 +789,162 @@ mod tests {
     }
 
     #[test]
+    fn variants_follow_the_cases_the_web_app_checks_too() {
+        #[derive(Deserialize)]
+        struct Case {
+            key: String,
+            template: String,
+            for_one_field: bool,
+            usable: bool,
+        }
+        #[derive(Deserialize)]
+        struct Cases {
+            cases: Vec<Case>,
+        }
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../frontend/src/lib/toolCallGist/fixtures/spokenSentenceVariants.json"
+        );
+        let cases: Cases = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(cases.cases.len() > 20);
+        for case in cases.cases {
+            assert_eq!(
+                usable_variant(&case.key, &case.template, case.for_one_field),
+                case.usable,
+                "{} {:?}: {:?}",
+                case.key,
+                case.template,
+                variant_problem(&case.key, &case.template, case.for_one_field)
+            );
+        }
+    }
+
+    #[test]
+    fn only_a_variant_for_one_table_may_leave_out_the_field() {
+        let mut loaded = vocabularies(
+            r#"
+            [spoken_vocabularies.v.de.sentences.changed]
+            estimatedclosedate = "Der Abschluss verschiebt sich {from} {to}."
+            "opportunity.estimatedclosedate" = "Der Abschluss verschiebt sich {from} {to}."
+            closeprobability = "{field} geht {from} {to}."
+            "#,
+        );
+        let dropped = drop_unusable_spoken_entries(&mut loaded);
+        assert_eq!(
+            dropped,
+            vec![
+                "spoken_vocabularies.v.de.sentences.changed: 'estimatedclosedate' is ignored: a slot is missing"
+                    .to_string()
+            ]
+        );
+        let changed = &loaded["v"]["de"].sentences["changed"];
+        assert!(changed.contains_key("opportunity.estimatedclosedate"));
+        assert!(changed.contains_key("closeprobability"));
+    }
+
+    #[test]
+    fn every_variant_in_use_is_shown_with_sample_values() {
+        let loaded = vocabularies(
+            r#"
+            [spoken_vocabularies.v.en.sentences.changed]
+            "opportunity.estimatedclosedate" = "The close date moves {from} {to}."
+            "#,
+        );
+        let speech = ApprovalSpeechConfig {
+            sentences: HashMap::from([(
+                "de".to_string(),
+                HashMap::from([(
+                    "updated".to_string(),
+                    "{field} wird {value} gesetzt.".to_string(),
+                )]),
+            )]),
+            ..ApprovalSpeechConfig::default()
+        };
+        assert_eq!(
+            sentences_in_use(&loaded, Some(&speech)),
+            vec![
+                "approval_speech.sentences.de.updated says \"Priorität wird auf Hoch gesetzt.\"",
+                "spoken_vocabularies.v.en.sentences.changed.opportunity.estimatedclosedate says \"The close date moves from Low to High.\"",
+            ]
+        );
+        // A swapped sentence cannot hide it: the direction is in the value.
+        assert_eq!(
+            sample_sentence("en", "changed", "{field}: now {from}, previously {to}."),
+            "Priority: now from Low, previously to High."
+        );
+    }
+
+    #[test]
+    fn a_wrong_approval_speech_value_keeps_the_default() {
+        #[derive(Deserialize)]
+        struct Holder {
+            #[serde(default, deserialize_with = "deserialize_approval_speech")]
+            approval_speech: ApprovalSpeechConfig,
+        }
+        let toml = r#"
+            [approval_speech]
+            amount = "medium"
+            wording = "natural"
+            short_details = 300
+            user_choice = "no"
+            [approval_speech.sentences]
+            de = "x"
+            [approval_speech.sentences.en]
+            changed = "{field} changes {from} {to}."
+            set = 5
+        "#;
+        let loaded = schema(toml)
+            .try_deserialize::<Holder>()
+            .unwrap()
+            .approval_speech;
+        assert_eq!(loaded.amount, ApprovalSpeechAmount::Full);
+        assert_eq!(loaded.wording, ApprovalSpeechWording::Natural);
+        assert_eq!(loaded.short_details, MAX_SHORT_DETAILS);
+        assert!(loaded.user_choice);
+        assert_eq!(loaded.sentences.len(), 1);
+        assert_eq!(loaded.sentences["en"].len(), 1);
+        assert_eq!(
+            misshaped_approval_speech(&schema(toml)),
+            vec![
+                "approval_speech.amount is not `full` or `short`; the default is used",
+                "approval_speech.sentences.de is not a table and is ignored",
+                "approval_speech.sentences.en: 'set' is not a text and is ignored",
+                "approval_speech.short_details 300 is more than 3; 3 is used",
+                "approval_speech.user_choice is not `true` or `false`; the default is used",
+            ]
+        );
+        let plain = schema("[approval_speech]\namount = \"short\"\nshort_details = 2")
+            .try_deserialize::<Holder>()
+            .unwrap()
+            .approval_speech;
+        assert_eq!(plain.amount, ApprovalSpeechAmount::Short);
+        assert_eq!(plain.short_details, 2);
+    }
+
+    #[test]
+    fn unusable_variants_are_dropped_with_a_warning() {
+        let mut config = ApprovalSpeechConfig {
+            short_details: 9,
+            sentences: HashMap::from([(
+                "de".to_string(),
+                HashMap::from([
+                    (
+                        "changed".to_string(),
+                        "{field} geht {from} {to}.".to_string(),
+                    ),
+                    ("set".to_string(), "{value} ist {field}.".to_string()),
+                ]),
+            )]),
+            ..ApprovalSpeechConfig::default()
+        };
+        let dropped = config.drop_unusable();
+        assert_eq!(dropped.len(), 2, "{dropped:?}");
+        assert_eq!(config.short_details, MAX_SHORT_DETAILS);
+        assert!(config.sentences["de"].contains_key("changed"));
+        assert!(!config.sentences["de"].contains_key("set"));
+    }
+
+    #[test]
     fn a_wrongly_shaped_entry_is_dropped_and_named() {
         let toml = r#"
             [spoken_vocabularies.broken]
@@ -412,6 +960,10 @@ mod tests {
             [spoken_vocabularies.dataverse.de.choice_labels.prioritycode]
             "1" = "Hoch"
             "2" = { a = "b" }
+            [spoken_vocabularies.dataverse.de.sentences]
+            changed = "{field} ändert sich {from} {to}."
+            [spoken_vocabularies.dataverse.de.sentences.set]
+            statecode = "{field} wird {value}."
         "#;
         let loaded = vocabularies(toml);
         let de = &loaded["dataverse"]["de"];
@@ -421,6 +973,8 @@ mod tests {
         assert!(!de.choice_labels.contains_key("statecode"));
         assert_eq!(de.choice_labels["prioritycode"].len(), 1);
         assert!(loaded["broken"].is_empty());
+        assert_eq!(de.sentences.len(), 1);
+        assert_eq!(de.sentences["set"].len(), 1);
         assert_eq!(
             misshaped_spoken_entries(&schema(toml)),
             vec![
@@ -429,6 +983,7 @@ mod tests {
                 "spoken_vocabularies.dataverse.de.choice_labels.statecode is not a table and is ignored",
                 "spoken_vocabularies.dataverse.de.field_names: 'nested' is not a text and is ignored",
                 "spoken_vocabularies.dataverse.de.field_names: 'number' is not a text and is ignored",
+                "spoken_vocabularies.dataverse.de.sentences.changed is not a table and is ignored",
                 "spoken_vocabularies.dataverse.de.table_names is not a table and is ignored",
             ]
         );

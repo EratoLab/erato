@@ -5457,18 +5457,80 @@ Replaces the model's built-in instruction, for example from subscription content
 
 **Type:** `string`
 
+### `approval_speech`
+
+{/* erato_toml_config_key: approval_speech */}
+
+How much a waiting approval card says aloud in conversational audio mode, and how it is worded. No model is involved: both settings choose among sentences built by rule from the card's data.
+
+- **How much is said** (`amount`): `full` says what the card says today (losses, up to three details, the rest counted). `short` says only the first `short_details` details in the card's own order, the one the screen uses, and holds back the rest: the voice says how many it held back ("Dazu kommen fünf weitere Felder, sie stehen auf dem Bildschirm."), and asking for the rest ("was noch?") says them. A cough over that sentence says it again; "nochmal" repeats it.
+- **How it is worded** (`wording`): `precise` names every spoken field with its old and new value. `natural` says a detail in a hand-written sentence variant with the values in fixed places ("Wahrscheinlichkeit ändert sich von 10 auf 60 Prozent."). The opening keeps its precise words: its verb is the card's action. Where the precise sentence already sounds natural, there is no built-in variant (`set`, `updated`), so the natural wording differs mainly where a deployment's `sentences` or a vocabulary's sentence for one field exists.
+
+In every combination the item is said, and the pieces that must be said (a loss such as an emptied field, the warning about recipients outside the organisation, what a delete removes, the consequence) and the request to decide keep their precise words and are never held back. A short reading never holds back what tells the user the card is not what they may expect either: a value or a read's condition that is a record never read in the chat or known only by its ID on screen, an addition to a list taken on the tool's word, and a dictated text the card does not take word for word. The card's pieces stay the same in every combination, so skipping, "the rest", repeating and the difference reading after a change request work alike; the difference reading is always precise. The card on screen does not change.
+
+The value a user hears is resolved in this order: these deployment values; the audiences of the admin panel's experience policy that set `approval_speech` (`amount`, `short_details`, `wording`, `user_choice`) and are listed under the `approval_speech` setting order; the user's own choice (`preference_approval_speech_amount`, `preference_approval_speech_wording`) where the deciding level allows it. Each setting is resolved on its own: the first matching audience in the order that sets it wins, so an audience that sets only `wording` leaves `amount` to the next audience that sets it, or to the deployment. This holds for `user_choice` too: a higher audience's `user_choice` applies to a lower audience's values, so a higher audience that allows the user's choice reopens it for a lower audience that fixed a value. `GET /api/v1beta/me/approval-speech-style` returns the resolved values and where they came from. The web app asks for them again for each card, so a changed style applies from the next card on.
+
+For now the supervisor level is edited by hand in the experience policy document: the audience needs a starting-assistant pin like every audience, and it must be listed under `setting_orders.approval_speech` (there is no fallback to `priority_order`). An audience's `approval_speech` block that does not parse is ignored with a warning; the rest of the policy, including the audience and its pin, stays in force.
+
+```toml
+[approval_speech]
+amount = "short"
+short_details = 1
+wording = "natural"
+```
+
+#### `approval_speech.amount`
+
+{/* erato_toml_config_key: approval_speech.amount */}
+
+`full` or `short`. **Default:** `full`.
+
+#### `approval_speech.short_details`
+
+{/* erato_toml_config_key: approval_speech.short_details */}
+
+Details a short reading says before it holds back the rest, in the card's order. Losses, the name typed beside an ID and the values above that are never held back are always said and not counted. **Default:** `1`. **Range:** `0–3`; a larger value is lowered with a warning. A value of the wrong kind in this section (`amount = "medium"`, `short_details = "2"`) keeps the default with a warning; it does not stop the server.
+
+#### `approval_speech.wording`
+
+{/* erato_toml_config_key: approval_speech.wording */}
+
+`precise` or `natural`. **Default:** `precise`.
+
+#### `approval_speech.user_choice`
+
+{/* erato_toml_config_key: approval_speech.user_choice */}
+
+Whether a user may choose their own amount and wording. An audience's `user_choice` overrides it for its members. **Default:** `true`.
+
+#### `approval_speech.sentences`
+
+{/* erato_toml_config_key: approval_speech.sentences.<key>.<key> */}
+
+Per language tag, natural sentence variants by type, replacing the built-in ones: `changed` (slots `{field}`, `{from}`, `{to}`), `set` for a value a new item gets and `updated` for a value an item gets without a known old one (`{field}`, `{value}`). There is no variant for the opening. A variant must hold each of its slots exactly once, `{field}` before `{from}` before `{to}`, and no other slot or brace; one that does not is ignored with a warning naming the reason, and the precise sentence is said.
+
+Old and new carry their direction in every language: `{from}` is said as "vom 1. Dezember" or "from 1 December", `{to}` as "auf den 15. Januar" or "to 15 January", and the `{value}` of `updated` as "auf Hoch" or "to High". So a variant cannot swap old and new by its own words; the most it can do is sound wrong. At startup every variant in use is logged with sample values, for example `approval_speech.sentences.de.changed says "Priorität geht von Niedrig auf Hoch."`, so whoever wrote it sees what the voice will say. The check guards the slots, not the meaning: a variant that denies or misnames the change is said as written, and its author is responsible for the sentence.
+
+```toml
+[approval_speech.sentences.de]
+changed = "{field} geht {from} {to}."
+updated = "{field} wird {value} gesetzt."
+```
+
 ### `spoken_vocabularies`
 
 {/* erato_toml_config_key: spoken_vocabularies */}
 {/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.field_names.<key> */}
 {/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.choice_labels.<key>.<choice-value> */}
 {/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.table_names.<key> */}
+{/* erato_toml_config_key: spoken_vocabularies.<key>.<key>.sentences.<key>.<key> */}
 
 What people call a kind of server's machine names, by vocabulary name and language tag, for approval cards read aloud. A server uses a vocabulary through [`glossary.vocabularies`](#mcp_serversserver-idglossaryvocabularies). They are named so that a content package can ship the words for a kind of server, such as the standard fields of Dataverse, without knowing a deployment's server ids.
 
 - `field_names`: the spoken name of a field, keyed by its exact name.
 - `choice_labels`: what each value of a choice field is called, keyed by the field and then by the value as the tool writes it.
 - `table_names`: what the records of a table are called, in the plural, keyed by the table's exact name. A read of one table says them instead of the kind ("Verkaufschancen auflisten").
+- `sentences`: one field's own natural sentence variants, by type (`changed`, `set`, `updated`) and then by the field's exact name or `table.field`, used in the natural [wording](#approval_speechwording). The [same slot rules](#approval_speechsentences) apply, and each one in use is logged at startup with sample values. Only a variant for one field of one table (`table.field`) may leave out `{field}`, since its words name that field: `"opportunity.estimatedclosedate" = "Der Abschluss verschiebt sich {from} {to}."`. A field the operator's glossary names, or one inside a nested object, gets no variant of its own.
 
 A key `table.field` holds only for calls on that table and wins over the plain `field`; use it for codes that mean different things per table, such as a status. The table is the one the call names in an argument such as `tablename`. Where the operator's own [glossary](#mcp_serversserver-idglossary) names a field or a value, the voice says the glossary's word, as the card shows it. A value inside a nested object of the record, such as an account created together with an opportunity, has that object's fields and codes: it is said as the card shows it. In a read of several tables, a condition's word is taken only from an entry for its own table; a coded value whose table the statement does not name is said as the code. Entries are checked at startup: an entry that is blank, longer than 128 bytes as a key or 64 characters as a name, or holds hidden characters, an entry of the wrong shape (a text where a table belongs, or anything but a text where a name belongs), a language that is not a lowercase tag, and a language with more than 5000 entries are ignored with a warning, so one bad entry of a content package does not stop the server. A key the backend does not know is ignored with a warning too, since a content package may be newer than the backend.
 

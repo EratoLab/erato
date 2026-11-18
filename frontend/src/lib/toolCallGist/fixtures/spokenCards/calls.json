@@ -1075,6 +1075,12 @@
                 "prioritycode": {
                   "2": "Hoch"
                 }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
@@ -1087,6 +1093,12 @@
               "choices": {
                 "prioritycode": {
                   "2": "High"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority.",
+                  "scheduledend": "Due on {value}."
                 }
               }
             }
@@ -2006,6 +2018,12 @@
                 "statecode": {
                   "0": "Offen"
                 }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}.",
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
@@ -2025,6 +2043,12 @@
                 },
                 "statecode": {
                   "0": "Open"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority.",
+                  "scheduledend": "Due on {value}."
                 }
               }
             }
@@ -2172,12 +2196,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -2541,12 +2575,22 @@
               "fields": {
                 "customerid": "Kunde",
                 "estimatedvalue": "Geschätzter Umsatz"
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                }
               }
             },
             "en": {
               "fields": {
                 "customerid": "Customer",
                 "estimatedvalue": "Estimated revenue"
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
+                }
               }
             }
           }
@@ -3325,11 +3369,21 @@
             "de": {
               "fields": {
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -3435,11 +3489,21 @@
             "de": {
               "fields": {
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -4696,6 +4760,11 @@
                 "purchasetimeframe": {
                   "1": "Dieses Quartal"
                 }
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "Der geschätzte Umsatz geht {from} {to}."
+                }
               }
             },
             "en": {
@@ -4708,6 +4777,11 @@
               "choices": {
                 "purchasetimeframe": {
                   "1": "This quarter"
+                }
+              },
+              "sentences": {
+                "changed": {
+                  "estimatedvalue": "The estimated revenue goes {from} {to}."
                 }
               }
             }
@@ -5401,6 +5475,11 @@
                 "prioritycode": {
                   "1": "Normal"
                 }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "Mit Priorität {value}."
+                }
               }
             },
             "en": {
@@ -5410,6 +5489,11 @@
               "choices": {
                 "prioritycode": {
                   "1": "Normal"
+                }
+              },
+              "sentences": {
+                "set": {
+                  "prioritycode": "{value} priority."
                 }
               }
             }
@@ -9179,12 +9263,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -9332,12 +9426,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
@@ -9485,12 +9589,22 @@
               "fields": {
                 "regardingobjectid": "Bezug",
                 "scheduledend": "Fälligkeitsdatum"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Fällig am {value}."
+                }
               }
             },
             "en": {
               "fields": {
                 "regardingobjectid": "Regarding",
                 "scheduledend": "Due date"
+              },
+              "sentences": {
+                "set": {
+                  "scheduledend": "Due on {value}."
+                }
               }
             }
           }
