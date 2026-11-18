@@ -16,6 +16,7 @@ import type {
   SpokenWords,
 } from "./spokenCard";
 import type { SpokenNotice } from "./spokenCardFlow";
+import type { DictationRelation } from "./spokenDictation";
 import type {
   SpokenCondition,
   SpokenReadFacts,
@@ -741,6 +742,44 @@ const longTextSentence = (
     message: select(shape, {
       field: `${field}: a text of about ${words} words, shown on screen.`,
       other: `Plus a text of about ${words} words, shown on screen.`,
+    }),
+  });
+
+/** A long text named by where it came from: the user's dictation. */
+const dictatedTextSentence = (
+  shape: "field" | "none",
+  relation: DictationRelation,
+  field: string,
+): string => {
+  if (shape === "field") {
+    return t({
+      id: "spokenCard.text.dictated",
+      message: select(relation, {
+        unchanged: `${field}: the text exactly as dictated.`,
+        part: `${field}: part of the dictated text, word for word.`,
+        extended: `${field}: the dictated text word for word, with additions.`,
+        other: `${field}: the dictated text, changed in places.`,
+      }),
+    });
+  }
+  return t({
+    id: "spokenCard.text.dictatedUnnamed",
+    message: select(relation, {
+      unchanged: "Plus the text exactly as dictated.",
+      part: "Plus part of the dictated text, word for word.",
+      extended: "Plus the dictated text word for word, with additions.",
+      other: "Plus the dictated text, changed in places.",
+    }),
+  });
+};
+
+const dictatedReadLeadSentence = (relation: DictationRelation): string =>
+  t({
+    id: "spokenCard.text.dictatedReadLead",
+    message: select(relation, {
+      part: "The card holds only part of what was dictated. It reads:",
+      extended: "The card holds more than what was dictated. It reads:",
+      other: "The text on the card differs from what was dictated. It reads:",
     }),
   });
 
@@ -1620,6 +1659,13 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
           text.field.length > 0 ? fieldValue(text.field, text.read) : text.read,
         );
       }
+      if (text.dictated) {
+        return dictatedTextSentence(
+          text.field.length > 0 ? "field" : "none",
+          text.dictated,
+          text.field,
+        );
+      }
       return longTextSentence(
         text.field.length > 0 ? "field" : "none",
         text.field,
@@ -1646,6 +1692,7 @@ const words = (code: LanguageCode, options: WordOptions): LanguageWords => {
     nothingLeft: nothingLeftSentence,
     readText: (field, passage) => fieldValue(field, passage),
     textCut: textCutSentence,
+    dictatedReadLead: dictatedReadLeadSentence,
     notice: noticeSentence,
     difference: {
       intro: differenceIntro,

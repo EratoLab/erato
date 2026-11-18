@@ -9,7 +9,9 @@ import {
   spokenApprovalPieces,
   spokenFactsOf,
   spokenPiecesOf,
+  textValues,
   whatValues,
+  withDictation,
 } from "./spokenCard";
 import { spokenWordsFor } from "./spokenCardWords";
 import { spokenFieldName, spokenNamesFor } from "./spokenNames";
@@ -299,19 +301,7 @@ const entriesOf = (
             sentence: words.text(text),
             field: heard,
             mustSay: false,
-            values: [
-              sourceOf("field", heard),
-              text.read === undefined
-                ? {
-                    slot: "words",
-                    value: {
-                      kind: "number",
-                      value: text.words,
-                      percent: false,
-                    },
-                  }
-                : sourceOf("text", text.read),
-            ],
+            values: textValues(text),
             ...(text.read === undefined && text.full
               ? { readOut: text.full }
               : {}),
@@ -977,8 +967,16 @@ interface Difference {
 export const spokenDifference = (
   previous: WithdrawnCard,
   next: SpokenApproval,
-  options: SpokenOptions,
+  given: SpokenOptions,
 ): SpokenDifference => {
+  // A change request is spoken: a text the user said in it is dictated too.
+  const options: SpokenOptions = {
+    ...given,
+    userTurns: [
+      { text: previous.words, passages: [previous.words], whole: true },
+      ...(given.userTurns ?? []),
+    ],
+  };
   const words = spokenWordsFor(options.language, options);
   const whole = spokenApprovalPieces(next, options);
   if (!words.full) return { intro: "reread", pieces: whole };
@@ -1018,7 +1016,10 @@ export const spokenDifference = (
   const oldEntries = entriesOf(
     oldCard.gist,
     before.input,
-    spokenFactsOf(oldCard.gist, before.server, timeZone, true, oldNames),
+    withDictation(
+      spokenFactsOf(oldCard.gist, before.server, timeZone, true, oldNames),
+      given.userTurns,
+    ),
     words,
     timeZone,
     oldNames,
@@ -1026,7 +1027,10 @@ export const spokenDifference = (
   const newEntries = entriesOf(
     newCard.gist,
     next.input,
-    spokenFactsOf(newCard.gist, next.server, timeZone, true, newNames),
+    withDictation(
+      spokenFactsOf(newCard.gist, next.server, timeZone, true, newNames),
+      options.userTurns,
+    ),
     words,
     timeZone,
     newNames,

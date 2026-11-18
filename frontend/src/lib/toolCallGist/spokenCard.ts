@@ -3,6 +3,7 @@ import { effectDisplayName } from "./cardLayout";
 import { addsOnToolsWord, changeLayout, listReplaceIsUnknown } from "./change";
 import { toolCallCardOf } from "./gist";
 import { spokenWordsFor } from "./spokenCardWords";
+import { dictationOf } from "./spokenDictation";
 import { spokenChoice, spokenFieldName, spokenNamesFor } from "./spokenNames";
 import { spokenReadFactsOf, spokenReadPieces } from "./spokenRead";
 import { earValue } from "./spokenValues";
@@ -15,6 +16,7 @@ import type {
 } from "./change";
 import type { Gist, GistAction, GistKind, GistValue } from "./gist";
 import type { SpokenNotice, SpokenUtterance } from "./spokenCardFlow";
+import type { DictationRelation, UserTurn } from "./spokenDictation";
 import type { SpokenNames } from "./spokenNames";
 import type { EarValue } from "./spokenValues";
 import type {
@@ -59,6 +61,7 @@ export type SpokenSlot =
   | "to"
   | "words"
   | "text"
+  | "dictated"
   | "consequence";
 
 /**
@@ -92,6 +95,8 @@ export interface SpokenReadOut {
   text: string;
   /** The card holds only the start of the text. */
   cut: boolean;
+  /** How the text relates to what the user dictated, when it is their dictation. */
+  dictated?: DictationRelation;
 }
 
 /** A piece as it is composed, before the card gives it its id. */
@@ -210,6 +215,8 @@ export interface SpokenText extends CardField {
   read?: string;
   /** The whole text as the card holds it, read out only on request. */
   full?: SpokenReadOut;
+  /** How the text relates to what the user dictated, when it is their dictation. */
+  dictated?: DictationRelation;
 }
 
 export type SpokenConsequence =
@@ -280,6 +287,12 @@ export interface SpokenOptions {
   /** The zone times with an offset are said in. */
   timeZone?: string;
   position?: SpokenQueuePosition;
+  /**
+   * The user's messages in this chat before the card, the latest first,
+   * with what of them was dictated. A long text that is their dictation is
+   * named as such.
+   */
+  userTurns?: readonly UserTurn[];
 }
 
 export interface SpokenWords {
@@ -309,6 +322,8 @@ export interface SpokenWords {
   readText(field: string, passage: string): string;
   /** After a long text read only in part. */
   textCut(): string;
+  /** Before a dictated text read out that is not word for word the dictation. */
+  dictatedReadLead(relation: DictationRelation): string;
   notice(notice: SpokenNotice): string;
 }
 
@@ -746,6 +761,39 @@ export const spokenFactsOf = (
   };
 };
 
+/**
+ * `facts` with each long text that is the user's dictation marked so. A text
+ * the card holds only in part is never compared: its rest is unknown.
+ */
+export const withDictation = (
+  facts: SpokenFacts,
+  turns: readonly UserTurn[] | undefined,
+): SpokenFacts => {
+  if (!turns || turns.length === 0) return facts;
+  return {
+    ...facts,
+    texts: facts.texts.map((spoken) => {
+      if (spoken.read !== undefined || !spoken.full || spoken.full.cut) {
+        return spoken;
+      }
+      const dictated = dictationOf(spoken.full.text, turns);
+      return dictated
+        ? { ...spoken, dictated, full: { ...spoken.full, dictated } }
+        : spoken;
+    }),
+  };
+};
+
+/** The values a text piece says: its field, then its words, its size or where it came from. */
+export const textValues = (spoken: SpokenText): SpokenSource[] => [
+  ...(spoken.field ? [text("field", spoken.field)] : []),
+  spoken.read !== undefined
+    ? text("text", spoken.read)
+    : spoken.dictated
+      ? text("dictated", spoken.dictated)
+      : number("words", spoken.words),
+];
+
 /** A batch says its losses; its fields stay on screen. */
 const batchLosses = (change: GistChange): SpokenDetail[] =>
   (change.batch?.fields ?? []).flatMap((field): SpokenDetail[] =>
@@ -1032,12 +1080,9 @@ const composedPieces = (
     pieces.push(request);
     return pieces;
   }
-  const facts = spokenFactsOf(
-    card.gist,
-    approval.server,
-    options.timeZone,
-    false,
-    names,
+  const facts = withDictation(
+    spokenFactsOf(card.gist, approval.server, options.timeZone, false, names),
+    options.userTurns,
   );
   const loss = facts.action === "delete";
   const item = words.item(facts, position);
@@ -1090,12 +1135,7 @@ const composedPieces = (
       role: "text",
       text: words.text(spokenText),
       mustSay: false,
-      values: [
-        ...(spokenText.field ? [text("field", spokenText.field)] : []),
-        spokenText.read === undefined
-          ? number("words", spokenText.words)
-          : text("text", spokenText.read),
-      ],
+      values: textValues(spokenText),
       ...(spokenText.read === undefined && spokenText.full
         ? { readOut: spokenText.full }
         : {}),
@@ -1211,12 +1251,18 @@ const readOutSentences = (piece: SpokenPiece, words: SpokenWords): string[] => {
   const field = spokenPieceField(piece) ?? "";
   const ending = words.textCut();
   const budget = MAX_CARD_CHARS - ending.length;
-  const said: string[] = [];
-  let used = 0;
+  const { dictated } = piece.readOut;
+  // A dictated text that differs from the dictation says so before it is read.
+  const said: string[] =
+    dictated && dictated !== "unchanged"
+      ? [words.dictatedReadLead(dictated)]
+      : [];
+  const leading = said.length;
+  let used = said.join("").length;
   let cut = piece.readOut.cut;
   for (const passage of passagesOf(piece.readOut.text)) {
     const sentence =
-      said.length === 0 && field.length > 0
+      said.length === leading && field.length > 0
         ? words.readText(field, passage)
         : passage;
     if (
