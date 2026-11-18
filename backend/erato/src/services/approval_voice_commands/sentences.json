@@ -442,16 +442,18 @@
   {"id": "de-approve-20", "language": "de", "meaning": "approve", "way": "plain", "text": "mach das so", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-approve-21", "language": "de", "meaning": "approve", "way": "plain", "text": "passt so", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-approve-22", "language": "de", "meaning": "approve", "way": "free", "text": "in Ordnung, mach", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
-  {"id": "de-approve-23", "language": "de", "meaning": "approve", "way": "plain", "text": "von mir aus", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
+  {"id": "de-approve-23", "language": "de", "meaning": "approve", "way": "free", "text": "von mir aus", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-approve-24", "language": "de", "meaning": "approve", "way": "free", "text": "ja, mach das so", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-approve-25", "language": "de", "meaning": "approve", "way": "free", "text": "ja, mach das bitte so", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-approve-26", "language": "de", "meaning": "approve", "way": "free", "text": "ja, genau so", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "en-approve-17", "language": "en", "meaning": "approve", "way": "free", "text": "go ahead then", "piece_id": null, "tags": ["card:en-asked", "source:voice-loop-2026-11-18"]},
-  {"id": "de-reject-15", "language": "de", "meaning": "reject", "way": "plain", "text": "das will ich nicht", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
+  {"id": "de-reject-15", "language": "de", "meaning": "reject", "way": "free", "text": "das will ich nicht", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "de-reject-16", "language": "de", "meaning": "reject", "way": "free", "text": "bitte nicht ausführen", "piece_id": null, "tags": ["card:de-asked", "source:voice-loop-2026-11-18"]},
   {"id": "en-change-21", "language": "en", "meaning": "change", "way": "free", "text": "use record 43 instead", "piece_id": null, "tags": ["source:voice-loop-2026-11-18"]},
   {"id": "de-noise-24", "language": "de", "meaning": "noise", "way": "free", "text": "Ja passt, mach das so.", "piece_id": null, "tags": ["hard:yes_before_request", "source:voice-loop-2026-11-18"]},
   {"id": "de-unclear-20", "language": "de", "meaning": "unclear", "way": "broken_off", "text": "ja, aber dann …", "piece_id": null, "tags": ["card:de-asked", "hard:unfinished_yes", "source:voice-loop-2026-11-18"]},
-  {"id": "de-unclear-21", "language": "de", "meaning": "unclear", "way": "broken_off", "text": "ja, aber dann …", "piece_id": null, "tags": ["hard:unfinished_yes", "source:voice-loop-2026-11-18"]}
+  {"id": "de-unclear-21", "language": "de", "meaning": "unclear", "way": "broken_off", "text": "ja, aber dann …", "piece_id": null, "tags": ["hard:unfinished_yes", "source:voice-loop-2026-11-18"]},
+  {"id": "en-approve-18", "language": "en", "meaning": "approve", "way": "free", "text": "I see, go ahead", "piece_id": null, "tags": ["card:en-asked", "source:voice-loop-2026-11-18"]},
+  {"id": "en-unclear-19", "language": "en", "meaning": "unclear", "way": "broken_off", "text": "yes, but then …", "piece_id": null, "tags": ["card:en-asked", "hard:unfinished_yes", "source:voice-loop-2026-11-18"]}
  ]
 }

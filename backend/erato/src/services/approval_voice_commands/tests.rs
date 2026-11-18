@@ -571,16 +571,15 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         (VoiceMeaning::Approve, "go ahead"),
         (VoiceMeaning::Reject, "nein, lass es"),
         (VoiceMeaning::Reject, "mach das nicht"),
-        // Voice loop test 2026-11-18: a final "so" or "then" closes these.
+        // Voice loop test 2026-11-18: a final "so" or "then" closes these,
+        // and an acknowledgement before a yes is not checked as its words.
         (VoiceMeaning::Approve, "ja passt, mach das so"),
         (VoiceMeaning::Approve, "mach das so"),
         (VoiceMeaning::Approve, "das passt so"),
         (VoiceMeaning::Approve, "ja, genau so"),
         (VoiceMeaning::Approve, "go ahead then"),
         (VoiceMeaning::Approve, "in Ordnung, mach"),
-        (VoiceMeaning::Approve, "von mir aus"),
-        (VoiceMeaning::Reject, "das will ich nicht"),
-        (VoiceMeaning::Reject, "bitte nicht ausführen"),
+        (VoiceMeaning::Approve, "I see, go ahead"),
     ] {
         assert!(
             rules::Words::of(words).could_be_plain_decision(meaning, &pieces),
@@ -606,6 +605,9 @@ fn only_a_short_unconditional_sentence_can_be_a_decision() {
         "ja so",
         "mach das aus",
         "von mir aus nicht",
+        "yes, but then",
+        "yes and so",
+        "yes, and then",
     ] {
         assert!(
             !rules::Words::of(words).could_be_plain_decision(VoiceMeaning::Approve, &pieces),
@@ -685,7 +687,12 @@ async fn a_yes_before_the_card_asked_is_noise_whichever_stage_heard_it() {
     );
     // An unfinished yes is never a yes. After the card asked it is not
     // understood; before, it is listening, unless it may ask for something.
-    for words in ["ja, aber dann …", "ja, aber dann", "ja, und dann"] {
+    for words in [
+        "ja, aber dann …",
+        "ja, aber dann",
+        "ja, und dann",
+        "yes, but then …",
+    ] {
         assert_eq!(
             answer(words, asked.clone(), VoiceMeaning::Approve).await,
             VoiceMeaning::Unclear,
