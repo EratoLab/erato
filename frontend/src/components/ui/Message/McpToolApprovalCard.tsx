@@ -11,7 +11,11 @@ import {
 
 import { getIdToken } from "@/auth/tokenStore";
 import { archivedNoticeText } from "@/components/ui/Chat/chatArchiveActions";
-import { stopApprovalSpeech } from "@/hooks/audio/approvalSpeech";
+import { quietApprovalListening } from "@/hooks/audio/approvalListening";
+import {
+  stopApprovalSpeech,
+  useApprovalSpeech,
+} from "@/hooks/audio/approvalSpeech";
 import { userTurnsBefore } from "@/hooks/audio/dictatedTurns";
 import { useSpokenApprovalCard } from "@/hooks/audio/useSpokenApprovalCard";
 import { standingAnswerTargets } from "@/hooks/chat/approvalSeeding";
@@ -404,6 +408,10 @@ export const McpToolApprovalCard = ({
     decision: ToolApprovalDecision,
     itemDecisions?: DecidedApproval[],
   ): Promise<VoiceChangeOutcome> => {
+    // The decision is on its way: the card stops listening before its voice
+    // stops, or the microphone would open in the moment before it closes.
+    const { key: spokenKey } = useApprovalSpeech.getState();
+    if (spokenKey !== null) quietApprovalListening(spokenKey);
     stopApprovalSpeech();
     const answers: DecidedApproval[] =
       itemDecisions ??

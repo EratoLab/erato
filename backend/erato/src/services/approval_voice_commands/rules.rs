@@ -472,7 +472,7 @@ const CORRECTIONS: &[&str] = &[
 const DANGLING: &[&str] = &[
     "den", "die", "der", "das", "dem", "des", "ein", "eine", "einen", "the", "a", "an", "to", "on",
     "at", "auf", "am", "zum", "zur", "mit", "ohne", "statt", "und", "and", "aber", "but", "for",
-    "fuer", "von", "of", "in", "im", "bis", "ab", "lieber", "rather", "instead", "without",
+    "fuer", "von", "of", "in", "im", "bis", "ab", "lieber", "rather", "without",
 ];
 /// Besides "the rest" and "what else", the only words a request for the
 /// rest may have.
@@ -579,6 +579,8 @@ const ONWARD_WORDS: &[&str] = &[
     "weiter",
 ];
 /// A sentence ending in one of these goes on; it is not a finished decision.
+/// A final "so" or "then" after what it qualifies closes it: see
+/// [`Words::ends_open`].
 const CONTINUATIONS: &[&str] = &[
     "so", "also", "und", "and", "aber", "but", "dann", "then", "well", "weil", "because", "wenn",
     "if", "ich", "i", "naja",
@@ -603,6 +605,22 @@ const CONDITIONS: &[&str] = &[
     "provided",
     "oder",
     "or",
+];
+
+/// "Not like that" said on its own: a wish for a different call.
+const NOT_LIKE_THAT_ALONE: &[&str] = &[
+    "nicht so",
+    "so nicht",
+    "nicht so machen",
+    "so nicht machen",
+    "mach das nicht so",
+    "mach das so nicht",
+    "mach es nicht so",
+    "mach es so nicht",
+    "genau so nicht",
+    "not like that",
+    "not like this",
+    "dont do it like that",
 ];
 
 /// Words that ask for a different call wherever they stand.
@@ -1246,6 +1264,34 @@ impl Words {
     }
 
     fn change_marker(&self, plain: bool) -> bool {
+        // "nicht so", "so nicht", "not like that": the call, but different.
+        // For the guards it counts anywhere. As a change the rules report
+        // without the model, only when the segment says nothing else: "nicht
+        // so schnell" or "ist das nicht so?" is no wish for a change.
+        if self.segments.iter().enumerate().any(|(index, segment)| {
+            if plain {
+                // After leading words ("nein", "also"); "so" leads too.
+                let leading = segment
+                    .iter()
+                    .take_while(|word| LEADING.contains(&word.as_str()))
+                    .count();
+                !self.asks(index)
+                    && (0..=leading).any(|start| {
+                        NOT_LIKE_THAT_ALONE.contains(&segment[start..].join(" ").as_str())
+                    })
+            } else {
+                segment.windows(2).any(|pair| {
+                    matches!(
+                        (pair[0].as_str(), pair[1].as_str()),
+                        ("nicht", "so") | ("so", "nicht")
+                    )
+                }) || segment
+                    .windows(3)
+                    .any(|words| words[0] == "not" && words[1] == "like" && words[2] == "that")
+            }
+        }) {
+            return true;
+        }
         for (index, segment) in self.segments.iter().enumerate() {
             let personal = segment
                 .first()
@@ -1362,23 +1408,95 @@ impl Words {
         } else {
             (&lists.refusal, &lists.refusing)
         };
+        // Only a yes may end on "so" or "then", or open with an
+        // acknowledgement ("in Ordnung, mach"): a refusal must be a clear
+        // no, and "lass es so" or "nein, in Ordnung, mach" are not.
+        let approve = meaning == VoiceMeaning::Approve;
+        let words = if approve {
+            self.decision_words()
+        } else {
+            self.all().collect()
+        };
+        let open = if approve {
+            self.ends_open()
+        } else {
+            self.all()
+                .last()
+                .is_some_and(|last| CONTINUATIONS.contains(&last))
+        };
         !self.question
             && !self.any_asks()
             && !self.broken_off
             && !self.takes_back
-            && !self
-                .all()
-                .last()
-                .is_some_and(|last| CONTINUATIONS.contains(&last))
-            && !(meaning == VoiceMeaning::Approve && self.has_any(NEGATIONS))
-            && self.all().all(|word| allowed.contains(word))
-            && self.all().any(|word| carrying.contains(word))
+            && !open
+            && !(approve && self.has_any(NEGATIONS))
+            && !(!approve && self.agrees_without_its_no())
+            && words.iter().all(|word| allowed.contains(*word))
+            && words.iter().any(|word| carrying.contains(*word))
             && self.count() > 0
             && self.count() <= 6
             && !self.has_any(CONDITIONS)
             && !self.has_number()
             && !self.has_change_marker()
             && !self.names_a_field(pieces)
+    }
+
+    /// Whether the sentence goes on after its last word: "ja, und dann", "yes,
+    /// but". A final "so" or "then" closes it after what it qualifies ("mach
+    /// das so", "passt so", "go ahead then"), not after a yes, a joining word
+    /// or a condition ("uh, yes, so", "ja, und so").
+    pub(super) fn ends_open(&self) -> bool {
+        let words: Vec<&str> = self.all().collect();
+        let Some((last, before)) = words.split_last() else {
+            return false;
+        };
+        if !CONTINUATIONS.contains(last) {
+            return false;
+        }
+        if !matches!(*last, "so" | "then") {
+            return true;
+        }
+        before.last().is_none_or(|previous| {
+            CONTINUATIONS.contains(previous)
+                || CONDITIONS.contains(previous)
+                || YES_PARTICLES.contains(previous)
+        })
+    }
+
+    /// The words a yes is checked for: without a first segment that is only
+    /// an acknowledgement ("in Ordnung, mach", "I see, go ahead").
+    fn decision_words(&self) -> Vec<&str> {
+        let lists = &*LISTS;
+        let skip = self.segments.first().is_some_and(|segment| {
+            segment.len() > 1 && lists.noise_phrases.contains(&segment.join(" "))
+        });
+        self.segments
+            .iter()
+            .skip(usize::from(skip))
+            .flatten()
+            .map(String::as_str)
+            .collect()
+    }
+
+    /// A word that agrees ("mach", "do") with no negation of its own: "nein,
+    /// mach" is no clear no. Its negation follows it in the segment ("mach
+    /// das nicht") or stands right before it ("nicht machen", "don't do").
+    fn agrees_without_its_no(&self) -> bool {
+        let lists = &*LISTS;
+        self.segments.iter().any(|segment| {
+            segment.iter().enumerate().any(|(at, word)| {
+                lists.agreeing.contains(word.as_str())
+                    && !segment[at + 1..]
+                        .iter()
+                        .any(|later| NEGATIONS.contains(&later.as_str()))
+                    && !at.checked_sub(1).is_some_and(|before| {
+                        matches!(
+                            segment[before].as_str(),
+                            "nicht" | "not" | "dont" | "never" | "nie"
+                        )
+                    })
+            })
+        })
     }
 
     /// Whether the words could be about this card's call rather than

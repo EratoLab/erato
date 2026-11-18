@@ -285,3 +285,25 @@ describe("listening over the voice of a spoken card", () => {
     expect(mic.close).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ERMAIN-1230: a decision tapped while the voice speaks", () => {
+  it("does not open the microphone in the moment before the card closes", async () => {
+    const { quietApprovalListening } = await import("./approvalListening");
+    const mic = recorder();
+    cardSaid(true);
+    const { rerender } = render(mic);
+    expect(mic.open).not.toHaveBeenCalled();
+
+    // The tap: listening for the card ends, then its voice stops.
+    act(() => {
+      quietApprovalListening(KEY);
+      useApprovalSpeech.setState({ speaking: false });
+    });
+    rerender({ on: true });
+    expect(mic.open).not.toHaveBeenCalled();
+
+    // A render later the decision is on its way and the card closes.
+    rerender({ on: false });
+    expect(mic.open).not.toHaveBeenCalled();
+  });
+});

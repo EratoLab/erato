@@ -5,12 +5,10 @@ import {
   noteChangeAnswered,
   useApprovalChanges,
 } from "./approvalChanges";
-import { announceApprovalNotice } from "./approvalSpeech";
+import { sayPreparedNotice } from "./approvalSpeech";
 
 /** A card that comes with the answer registers within this. */
 export const NO_CARD_GRACE_MS = 400;
-/** From this many change requests in a row, the sentence says so. */
-const SEVERAL_ROUNDS = 3;
 
 /**
  * What the voice says when a change request was answered without a card:
@@ -52,12 +50,9 @@ export function useApprovalChangeOutcome({
     }
     const timer = setTimeout(() => {
       noteChangeAnswered(awaited.approvalId);
-      announceApprovalNotice(
-        awaited.messageId,
-        // eslint-disable-next-line lingui/no-unlocalized-strings -- notice kind
-        { kind: "change_no_card", several: awaited.round >= SEVERAL_ROUNDS },
-        awaited.language ?? "en",
-      );
+      // Loaded while the card still waited: the voice speaks nothing for a
+      // message whose approval is gone.
+      if (awaited.prepared) sayPreparedNotice(awaited.prepared);
     }, NO_CARD_GRACE_MS);
     return () => clearTimeout(timer);
   }, [awaited, decisionWaiting, enabled, responding, voicePlaying]);
