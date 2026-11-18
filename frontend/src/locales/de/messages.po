@@ -1865,6 +1865,66 @@ msgid "chat.audio.cancelNamed"
 msgstr "Transkription abbrechen: {filename}"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_heard"
+msgstr "Gehört …"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood"
+msgstr "„{words}“ · Verstanden: {meaning}"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.approve"
+msgstr "zustimmen (nur auf dem Bildschirm)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.change"
+msgstr "ändern"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.new_request"
+msgstr "eine neue Bitte"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.read_text"
+msgstr "Text vorlesen"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.reject"
+msgstr "ablehnen (nur auf dem Bildschirm)"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.repeat"
+msgstr "nochmal"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.rest"
+msgstr "was noch"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.skip"
+msgstr "weiter"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.stop"
+msgstr "stopp"
+
+#. js-lingui-explicit-id
+#: src/components/ui/Chat/ApprovalHeardStatus.tsx
+msgid "chat.audio.card_understood.unclear"
+msgstr "nicht verstanden"
+
+#. js-lingui-explicit-id
 #: src/components/ui/FileUpload/audioTranscriptionStatus.ts
 msgid "chat.audio.more"
 msgstr "Mehr"

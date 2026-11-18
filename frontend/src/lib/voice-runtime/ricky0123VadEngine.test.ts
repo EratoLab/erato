@@ -10,6 +10,7 @@ import type { VoiceVadEvent } from "./vadEngine";
 const vadMock = vi.hoisted(() => {
   const fakeVad = {
     processFrame: vi.fn(async (_frame: Float32Array) => {}),
+    setOptions: vi.fn(),
     frameProcessor: {
       resume: vi.fn(),
       reset: vi.fn(),
@@ -50,6 +51,7 @@ beforeEach(() => {
     async (_frame: Float32Array) => {},
   );
   vadMock.fakeVad.frameProcessor.resume.mockClear();
+  vadMock.fakeVad.setOptions.mockClear();
   vadMock.fakeVad.frameProcessor.reset.mockClear();
   vadMock.fakeVad.model.reset_state.mockClear();
   vadMock.fakeVad.model.release.mockClear();
@@ -120,6 +122,25 @@ describe("Ricky0123VadEngine", () => {
     expect(vadMock.state.options).not.toHaveProperty("redemptionMs");
     expect(vadMock.state.options).not.toHaveProperty("preSpeechPadMs");
     expect(vadMock.state.options).not.toHaveProperty("minSpeechMs");
+  });
+
+  it("takes a recording's own silence and minimum speech, before and after loading", async () => {
+    const engine = createRicky0123VadEngine({
+      assetOptions: { baseAssetPath: "/vad/", onnxWASMBasePath: "/ort/" },
+      redemptionMs: 1800,
+      minSpeechMs: 250,
+    });
+
+    engine.configure?.({ redemptionMs: 1000, minSpeechMs: 64 });
+    await engine.start();
+    expect(vadMock.state.options).toEqual(
+      expect.objectContaining({ redemptionMs: 1000, minSpeechMs: 64 }),
+    );
+
+    engine.configure?.({ redemptionMs: 1800, minSpeechMs: undefined });
+    expect(vadMock.fakeVad.setOptions).toHaveBeenLastCalledWith({
+      redemptionMs: 1800,
+    });
   });
 
   it("feeds canonical V5 frames into MicVAD and emits frame probabilities", async () => {

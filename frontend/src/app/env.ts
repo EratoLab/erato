@@ -97,6 +97,7 @@ export type Env = {
   >;
   audioConversationalMaxRecordingDurationSeconds: number;
   audioConversationalEndOfTurnSilenceMs?: number;
+  audioConversationalCardEndOfTurnSilenceMs?: number;
   /** The user can speak over the voice, and the voice yields. */
   audioConversationalTalkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds. */
@@ -200,6 +201,7 @@ declare global {
     >;
     AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS?: number;
     AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS?: number;
+    AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS?: number;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE?: boolean;
     AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS?: number;
     SIDEBAR_LOGO_PATH?: string;
@@ -532,6 +534,12 @@ export const env = (): Env => {
     .VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS
     ? Number(import.meta.env.VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS)
     : window.AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS;
+  const audioConversationalCardEndOfTurnSilenceMs = import.meta.env
+    .VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS
+    ? Number(
+        import.meta.env.VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS,
+      )
+    : window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS;
   const audioConversationalTalkOverVoice =
     import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE !== undefined
       ? import.meta.env.VITE_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE === "true"
@@ -693,6 +701,7 @@ export const env = (): Env => {
     approvalSpeechSentences: window.APPROVAL_SPEECH_SENTENCES,
     audioConversationalMaxRecordingDurationSeconds,
     audioConversationalEndOfTurnSilenceMs,
+    audioConversationalCardEndOfTurnSilenceMs,
     audioConversationalTalkOverVoice,
     audioConversationalTalkOverVoiceMinSpeechMs,
     maxUploadSizeBytes,

@@ -102,6 +102,15 @@ describe("env audioConversationalEndOfTurnSilenceMs", () => {
     vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS", "1200");
     expect(env().audioConversationalEndOfTurnSilenceMs).toBe(1200);
   });
+
+  it("reads the card's own silence beside it", () => {
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBeUndefined();
+    window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS = 900;
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBe(900);
+    vi.stubEnv("VITE_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS", "700");
+    expect(env().audioConversationalCardEndOfTurnSilenceMs).toBe(700);
+    delete window.AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS;
+  });
 });
 
 describe("env audioConversationalTalkOverVoice", () => {

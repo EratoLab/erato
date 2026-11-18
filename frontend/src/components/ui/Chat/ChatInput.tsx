@@ -18,13 +18,17 @@ import {
 } from "@/components/ui/FileUpload/audioTranscriptionStatus";
 import { ConfirmationDialog } from "@/components/ui/Modal/ConfirmationDialog";
 import { componentRegistry } from "@/config/componentRegistry";
-import { talkOverApprovalCard } from "@/hooks/audio/approvalListening";
+import {
+  noteApprovalWordsEnded,
+  talkOverApprovalCard,
+} from "@/hooks/audio/approvalListening";
 import {
   replayApprovalCard,
   skipApprovalPiece,
   stopApprovalSpeech,
   useApprovalSpeech,
 } from "@/hooks/audio/approvalSpeech";
+import { CARD_MIN_SPEECH_MS } from "@/hooks/audio/audioTuning";
 import {
   noteDictatedTranscript,
   settleDictation,
@@ -41,7 +45,11 @@ import {
 } from "@/hooks/audio/speechPlayback";
 import { useApprovalCardListening } from "@/hooks/audio/useApprovalCardListening";
 import { useApprovalChangeOutcome } from "@/hooks/audio/useApprovalChangeOutcome";
-import { useAudioDictationRecorder } from "@/hooks/audio/useAudioDictationRecorder";
+import {
+  DEFAULT_CARD_END_OF_TURN_SILENCE_MS,
+  resolveEndOfTurnSilenceMs,
+  useAudioDictationRecorder,
+} from "@/hooks/audio/useAudioDictationRecorder";
 import { useAudioTranscriptionRecorder } from "@/hooks/audio/useAudioTranscriptionRecorder";
 import { useTokenManagement, useActiveModelSelection } from "@/hooks/chat";
 import {
@@ -115,6 +123,7 @@ import {
   StopIcon,
   VoiceIcon,
 } from "../icons";
+import { ApprovalHeardStatus } from "./ApprovalHeardStatus";
 import { AssistantBrowserModal } from "./AssistantBrowserModal";
 import { AssistantMentionBackdrop } from "./AssistantMentionBackdrop";
 import { AssistantMentionPopover } from "./AssistantMentionPopover";
@@ -350,7 +359,7 @@ interface DictationTarget {
    * Listening for a waiting approval card: what is heard goes to the card,
    * never into the composer, and the end of the turn sends nothing.
    */
-  card?: { words: string; ended: boolean };
+  card?: { key: string; words: string; ended: boolean };
 }
 
 function isScrolledToEnd(element: HTMLElement): boolean {
@@ -538,6 +547,7 @@ export const ChatInput = ({
     const card = dictationTargetRef.current?.card;
     if (card) {
       card.ended = true;
+      noteApprovalWordsEnded(card.key);
       return;
     }
     clearPendingAutoSendTimeout();
@@ -569,6 +579,7 @@ export const ChatInput = ({
     voiceCommandsEnabled,
     maxRecordingDurationSeconds: maxConversationalDurationSeconds,
     endOfTurnSilenceMs,
+    cardEndOfTurnSilenceMs,
     talkOverVoice,
     talkOverVoiceMinSpeechMs,
   } = useAudioConversationalFeature();
@@ -846,6 +857,7 @@ export const ChatInput = ({
     dictationBars,
     isListeningOverVoice,
     toggleDictation,
+    cancelDictation,
   } = useAudioDictationRecorder({
     enabled: audioDictationEnabled || audioConversationalEnabled,
     mode: isAudioMode ? "conversational" : "dictation",
@@ -994,21 +1006,30 @@ export const ChatInput = ({
   >(false);
   const cardAvailable = useApprovalSpeech((state) => state.available !== null);
 
-  const openCardListening = useCallback(() => {
-    dictationTargetRef.current = {
-      sessionId: getActiveSessionId(),
-      nextChunkIndex: 0,
-      chunkTranscripts: new Map(),
-      hasAppendedVisibleText: false,
-      card: { words: "", ended: false },
-    };
-    toggleDictation();
-  }, [getActiveSessionId, toggleDictation]);
-  // The card's target stays after a close: its late words are dropped with
-  // it, and a late error is still known to be the card's.
+  const openCardListening = useCallback(
+    (key: string) => {
+      dictationTargetRef.current = {
+        sessionId: getActiveSessionId(),
+        nextChunkIndex: 0,
+        chunkTranscripts: new Map(),
+        hasAppendedVisibleText: false,
+        card: { key, words: "", ended: false },
+      };
+      toggleDictation({
+        endOfTurnSilenceMs: resolveEndOfTurnSilenceMs(
+          cardEndOfTurnSilenceMs,
+          DEFAULT_CARD_END_OF_TURN_SILENCE_MS,
+        ),
+        minSpeechMs: CARD_MIN_SPEECH_MS,
+      });
+    },
+    [cardEndOfTurnSilenceMs, getActiveSessionId, toggleDictation],
+  );
+  // The card's target stays after a close: a late error is still known to be
+  // the card's. Its words are not wanted any more and are not transcribed.
   const closeCardListening = useCallback(() => {
-    if (isDictating || isDictationStarting) toggleDictation();
-  }, [isDictating, isDictationStarting, toggleDictation]);
+    if (isDictating || isDictationStarting) cancelDictation();
+  }, [cancelDictation, isDictating, isDictationStarting]);
   const readCardTurn = useCallback(
     () => dictationTargetRef.current?.card ?? { words: "", ended: false },
     [],
@@ -3023,17 +3044,17 @@ export const ChatInput = ({
     audioModeRestartSawPendingResponseRef.current = true;
     clearPendingAutoSendTimeout();
     pendingAutoSendRef.current = false;
-    toggleDictation();
+    cancelDictation();
     dictationTargetRef.current = null;
     setMessage("");
   }, [
+    cancelDictation,
     clearPendingAutoSendTimeout,
     decisionWaiting,
     isAudioMode,
     isDictating,
     isDictationStarting,
     setMessage,
-    toggleDictation,
   ]);
 
   useEffect(() => {
@@ -3804,6 +3825,7 @@ export const ChatInput = ({
                       {t({ id: "chat.audio_stop", message: "Stop playback" })}
                     </Button>
                   )}
+                  {decisionWaiting && <ApprovalHeardStatus />}
                   {cardSpeaking && (
                     <Button
                       type="button"

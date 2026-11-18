@@ -419,6 +419,12 @@
     "security_relevance": "unknown",
     "stability": "unstable"
   },
+  "audio_conversational.card_end_of_turn_silence_ms": {
+    "default_value_security": "unknown",
+    "introduced_in": "unreleased",
+    "security_relevance": "unknown",
+    "stability": "unstable"
+  },
   "audio_conversational.chat_provider_id": {
     "default_value_security": "unknown",
     "introduced_in": "0.6.0",

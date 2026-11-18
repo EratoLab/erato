@@ -85,6 +85,8 @@ interface AudioConversationalFeatureConfig {
   maxRecordingDurationSeconds: number;
   /** Silence in milliseconds that ends a spoken turn; 1800 when omitted. */
   endOfTurnSilenceMs?: number;
+  /** The same while an approval card listens for a command; 1000 when omitted. */
+  cardEndOfTurnSilenceMs?: number;
   /** The user can speak over the voice, and the voice yields. */
   talkOverVoice?: boolean;
   /** Speech over the voice that stops it, in milliseconds; 500 when omitted. */
@@ -485,6 +487,8 @@ function createFeatureConfig(
       maxRecordingDurationSeconds:
         environment.audioConversationalMaxRecordingDurationSeconds,
       endOfTurnSilenceMs: environment.audioConversationalEndOfTurnSilenceMs,
+      cardEndOfTurnSilenceMs:
+        environment.audioConversationalCardEndOfTurnSilenceMs,
       talkOverVoice: environment.audioConversationalTalkOverVoice ?? false,
       talkOverVoiceMinSpeechMs:
         environment.audioConversationalTalkOverVoiceMinSpeechMs,

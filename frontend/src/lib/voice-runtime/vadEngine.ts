@@ -50,8 +50,16 @@ export type VoiceVadEngineOptions = {
   minSpeechMs?: number;
 };
 
+/** What may change from one recording to the next on a warm engine. */
+export type VoiceVadTuning = Pick<
+  VoiceVadEngineOptions,
+  "redemptionMs" | "minSpeechMs"
+>;
+
 export interface VoiceVadEngine {
   start(): Promise<void>;
+  /** Applies to the speech detected from now on, and to a later start. */
+  configure?(tuning: VoiceVadTuning): void;
   stop(): void;
   destroy(): void;
   acceptFrame(frame: VoiceVadFrame): Promise<void>;

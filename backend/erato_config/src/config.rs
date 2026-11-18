@@ -3477,6 +3477,29 @@ mod audio_config_tests {
     }
 
     #[test]
+    fn card_end_of_turn_silence_defaults_shorter_and_is_range_checked() {
+        let load = |toml: &str| {
+            config::Config::builder()
+                .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+                .build()
+                .unwrap()
+                .try_deserialize::<AudioConversationalConfig>()
+                .unwrap()
+        };
+        let settings = load("enabled = true");
+        assert_eq!(settings.card_end_of_turn_silence_ms, 1000);
+        assert_eq!(settings.end_of_turn_silence_ms, 1800);
+        let settings = load("card_end_of_turn_silence_ms = 700");
+        assert_eq!(settings.card_end_of_turn_silence_ms, 700);
+        assert!(settings.validate_end_of_turn_silence().is_ok());
+        for rejected in [0, 499, 5001] {
+            let settings = load(&format!("card_end_of_turn_silence_ms = {rejected}"));
+            let error = settings.validate_end_of_turn_silence().unwrap_err();
+            assert!(error.contains("card_end_of_turn_silence_ms"), "{error}");
+        }
+    }
+
+    #[test]
     fn read_aloud_resolves_its_own_speech_provider_only_while_enabled() {
         let voice: SpeechProviderConfig = serde_json::from_value(serde_json::json!({
             "provider_kind": "openai", "model_name": "tts", "voice": "alloy"
@@ -8603,6 +8626,12 @@ pub struct AudioConversationalConfig {
     #[serde(default = "default_end_of_turn_silence_ms")]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub end_of_turn_silence_ms: u32,
+    /// Silence in milliseconds that ends what the user says to a waiting
+    /// approval card. Shorter than a conversation's, because card commands
+    /// are a few words. Defaults to `1000`; allowed from `500` to `5000`.
+    #[serde(default = "default_card_end_of_turn_silence_ms")]
+    #[facet(erato_config::introduced_in(version = "unreleased"))]
+    pub card_end_of_turn_silence_ms: u32,
     /// Whether the user can start speaking while the voice still talks, and
     /// the voice yields. Defaults to `false`.
     #[serde(default)]
@@ -8621,6 +8650,10 @@ fn default_end_of_turn_silence_ms() -> u32 {
     1800
 }
 
+fn default_card_end_of_turn_silence_ms() -> u32 {
+    1000
+}
+
 pub const TALK_OVER_VOICE_MIN_SPEECH_MS_RANGE: std::ops::RangeInclusive<u32> = 200..=2000;
 
 fn default_talk_over_voice_min_speech_ms() -> u32 {
@@ -8633,6 +8666,7 @@ impl Default for AudioConversationalConfig {
             transcription: AudioTranscriptionConfig::default(),
             speech_provider: None,
             end_of_turn_silence_ms: default_end_of_turn_silence_ms(),
+            card_end_of_turn_silence_ms: default_card_end_of_turn_silence_ms(),
             talk_over_voice: false,
             talk_over_voice_min_speech_ms: default_talk_over_voice_min_speech_ms(),
         }
@@ -8641,15 +8675,19 @@ impl Default for AudioConversationalConfig {
 
 impl AudioConversationalConfig {
     pub fn validate_end_of_turn_silence(&self) -> Result<(), String> {
-        let value = self.end_of_turn_silence_ms;
-        if END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
-            return Ok(());
+        for (key, value) in [
+            ("end_of_turn_silence_ms", self.end_of_turn_silence_ms),
+            ("card_end_of_turn_silence_ms", self.card_end_of_turn_silence_ms),
+        ] {
+            if !END_OF_TURN_SILENCE_MS_RANGE.contains(&value) {
+                return Err(format!(
+                    "Invalid `audio_conversational.{key}`: {value} is outside {} to {} milliseconds.",
+                    END_OF_TURN_SILENCE_MS_RANGE.start(),
+                    END_OF_TURN_SILENCE_MS_RANGE.end()
+                ));
+            }
         }
-        Err(format!(
-            "Invalid `audio_conversational.end_of_turn_silence_ms`: {value} is outside {} to {} milliseconds.",
-            END_OF_TURN_SILENCE_MS_RANGE.start(),
-            END_OF_TURN_SILENCE_MS_RANGE.end()
-        ))
+        Ok(())
     }
 
     pub fn validate_talk_over_voice(&self) -> Result<(), String> {

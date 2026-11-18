@@ -175,6 +175,8 @@ const feed = () => {
       return;
     }
   }
+  // The whole sentence is there: it need not wait for more to start.
+  if (buffer.done) queue.flush();
   settle();
 };
 

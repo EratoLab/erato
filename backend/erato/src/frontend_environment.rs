@@ -94,6 +94,8 @@ const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS: &str
     "AUDIO_CONVERSATIONAL_MAX_RECORDING_DURATION_SECONDS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS: &str =
     "AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS";
+const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS: &str =
+    "AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE: &str =
     "AUDIO_CONVERSATIONAL_TALK_OVER_VOICE";
 const FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE_MIN_SPEECH_MS: &str =
@@ -647,6 +649,15 @@ fn build_frontend_environment(
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS.to_string(),
         Value::Number(config.audio_conversational.end_of_turn_silence_ms.into()),
+    );
+    env.additional_environment.insert(
+        FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS.to_string(),
+        Value::Number(
+            config
+                .audio_conversational
+                .card_end_of_turn_silence_ms
+                .into(),
+        ),
     );
     env.additional_environment.insert(
         FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_TALK_OVER_VOICE.to_string(),
@@ -1437,12 +1448,19 @@ mod tests {
             (1200, FrontendKind::OfficeAddin),
         ] {
             config.audio_conversational.end_of_turn_silence_ms = silence_ms;
+            config.audio_conversational.card_end_of_turn_silence_ms = silence_ms - 500;
             let environment = build_frontend_environment(&config, kind);
             assert_eq!(
                 environment
                     .additional_environment
                     .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_END_OF_TURN_SILENCE_MS),
                 Some(&Value::Number(silence_ms.into()))
+            );
+            assert_eq!(
+                environment
+                    .additional_environment
+                    .get(FRONTEND_ENV_KEY_AUDIO_CONVERSATIONAL_CARD_END_OF_TURN_SILENCE_MS),
+                Some(&Value::Number((silence_ms - 500).into()))
             );
         }
     }

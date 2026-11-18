@@ -3029,6 +3029,16 @@ The silence, in milliseconds, after which conversational audio mode takes the sp
 
 A shorter wait makes replies start sooner on every turn, but cuts off more people who pause to think. On 400 public German turns (LiveKit's end-of-turn benchmark), the share of turns sent while the speaker was only pausing was 1.2 % at 1800, 2.2 % at 1500, 3.0 % at 1200 and 6.0 % at 1000. Those turns are phone bookings; work requests with more thinking pauses will do somewhat worse.
 
+#### `audio_conversational.card_end_of_turn_silence_ms`
+
+{/* erato_toml_config_key: audio_conversational.card_end_of_turn_silence_ms */}
+
+The same silence while a spoken approval card waits and listens for what the user says to it ("weiter", "stopp", "nimm den 22."). It is shorter than `end_of_turn_silence_ms` because those are a few words: the user hears the answer sooner. A pause cut short there costs at most an answer that the card did not understand, never a decision.
+
+**Type:** `integer`, from `500` to `5000`; other values stop the server at startup.
+
+**Default:** `1000`
+
 #### `audio_conversational.talk_over_voice`
 
 {/* erato_toml_config_key: audio_conversational.talk_over_voice */}
@@ -3069,6 +3079,7 @@ fixed_output_token_budget = 500
 min_output_tokens = 32
 max_output_tokens = 2048
 end_of_turn_silence_ms = 1800
+card_end_of_turn_silence_ms = 1000
 talk_over_voice = false
 talk_over_voice_min_speech_ms = 500
 ```
