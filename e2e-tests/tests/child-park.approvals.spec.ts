@@ -184,7 +184,8 @@ test("denies a parked child, which finishes in prose, and the origin turn comple
   await expect(approval).toHaveAttribute("data-item-count", "1");
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
-  await expect(item).toContainText(GATED_TOOL);
+  // The card names the call by the tool's title; the item keeps its name.
+  await expect(item).toHaveAttribute("data-tool-name", GATED_TOOL);
   await expect(item).toContainText(GATED_SERVER_NAME);
   // Matched as an id rather than as "not empty", which an attribute that had
   // been dropped altogether would also satisfy.
@@ -250,7 +251,8 @@ test("commits the sibling that finished before it asks, and leaves the parked ch
   await expect(approval).toHaveAttribute("data-item-count", "1");
   const item = approval.getByTestId("delegated-task-approval-item");
   await expect(item).toHaveCount(1);
-  await expect(item).toContainText(GATED_TOOL);
+  // The card names the call by the tool's title; the item keeps its name.
+  await expect(item).toHaveAttribute("data-tool-name", GATED_TOOL);
 
   const steps = assistantMessage.locator(TASK_STEP);
   await expect(steps).toHaveCount(2);
