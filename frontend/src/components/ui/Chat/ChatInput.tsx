@@ -29,7 +29,9 @@ import { lowerVoice } from "@/hooks/audio/pcmPlayback";
 import { setReadAloudAudioModeActive } from "@/hooks/audio/readAloud";
 import {
   enableSpeechPlayback,
+  pauseSpeechPlayback,
   quietSpokenTurn,
+  resumeSpeechPlayback,
   stopSpeechPlayback,
   useSpeechPlayback,
 } from "@/hooks/audio/speechPlayback";
@@ -755,6 +757,9 @@ export const ChatInput = ({
   const overVoiceSpeaking =
     overVoiceAllowed &&
     (speech.playing || cardSpeaking || (isPendingResponse && !decisionWaiting));
+  // A reply the user talked over: whether that was a turn or only a sound
+  // is known once the recording has ended.
+  const interruptedReplyRef = useRef(false);
   const handleSpeechOverVoice = useCallback(() => {
     if (dictationTargetRef.current?.card) {
       stopSpeechPlayback();
@@ -762,9 +767,14 @@ export const ChatInput = ({
       if (key !== null) talkOverApprovalCard(key);
       return;
     }
-    // As the stop control: quiet for the rest of the turn, its text stays.
-    quietSpokenTurn();
+    // The reply's voice pauses; a card the reply stops on is still said.
+    pauseSpeechPlayback();
     stopApprovalSpeech();
+    interruptedReplyRef.current = true;
+    // Whatever the recording turns out to hold, the conversation listens
+    // again afterwards: an empty turn must not leave it silent.
+    shouldRestartAudioModeAfterResponseRef.current = true;
+    audioModeRestartSawPendingResponseRef.current = true;
   }, []);
 
   const appendDictationTranscript = useCallback(
@@ -2889,6 +2899,23 @@ export const ChatInput = ({
     if (decisionWaiting) {
       clearPendingAutoSendTimeout();
       pendingAutoSendRef.current = false;
+      // Said over the reply before its card came: not sent and not the
+      // card's, but shown; the conversation listens again after the decision.
+      const words = message.trim();
+      if (overVoiceAllowed && words) {
+        toast.info({
+          title: t({
+            id: "chat.input.audio.notSentCardWaiting",
+            message: "Not sent: a confirmation is waiting",
+          }),
+          description: `“${words}”`,
+          duration: Number.POSITIVE_INFINITY,
+          dedupeKey: "chat-input-audio-not-sent",
+        });
+        setMessage("");
+        shouldRestartAudioModeAfterResponseRef.current = true;
+        audioModeRestartSawPendingResponseRef.current = true;
+      }
       return;
     }
     if (
@@ -2936,6 +2963,7 @@ export const ChatInput = ({
     attachedFiles.length,
     conversationAutoSendSignal,
     clearPendingAutoSendTimeout,
+    overVoiceAllowed,
   ]);
 
   useEffect(() => {
@@ -2943,6 +2971,30 @@ export const ChatInput = ({
       audioModeRestartSawPendingResponseRef.current = true;
     }
   }, [isPendingResponse]);
+
+  // The recording over a reply has ended. Words are the user's turn: the rest
+  // of the reply is not said. No words (a cough, a colleague, the voice's
+  // own echo): the voice goes on where it was cut, unless a card now waits.
+  useEffect(() => {
+    if (
+      !interruptedReplyRef.current ||
+      isDictating ||
+      isDictationStarting ||
+      isDictationCompleting
+    ) {
+      return;
+    }
+    interruptedReplyRef.current = false;
+    if (message.trim() || decisionWaiting || cardSpeaking) stopSpeechPlayback();
+    else resumeSpeechPlayback();
+  }, [
+    cardSpeaking,
+    decisionWaiting,
+    isDictating,
+    isDictationCompleting,
+    isDictationStarting,
+    message,
+  ]);
 
   // A card that appears while the microphone listens closes it; it opens
   // again once the card is decided and the answer has played. What it heard
@@ -3040,9 +3092,11 @@ export const ChatInput = ({
     if (!audioModeRestartSawPendingResponseRef.current) {
       return;
     }
-    // Over the voice the microphone opens right away and waits there.
+    // Over the voice the microphone opens right away and waits there; a
+    // paused voice may go on, and must be heard as the voice when it does.
     if (
       !isAudioMode ||
+      speech.paused ||
       (!overVoiceAllowed && (isPendingResponse || speech.playing)) ||
       cardSpeaking ||
       changeAwaited ||
@@ -3077,6 +3131,7 @@ export const ChatInput = ({
     cardSpeaking,
     changeAwaited,
     overVoiceAllowed,
+    speech.paused,
     decisionWaiting,
     disabled,
     hasIncompleteAudioTranscription,

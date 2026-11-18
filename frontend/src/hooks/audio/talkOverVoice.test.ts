@@ -4,6 +4,7 @@ import {
   OVER_VOICE_SPEECH_PROBABILITY,
   overVoiceGate,
   overVoiceStep,
+  resolveOverVoiceMinSpeechMs,
   type OverVoiceStep,
 } from "./talkOverVoice";
 
@@ -62,5 +63,17 @@ describe("talking over the voice", () => {
   it("never reacts to what the detector is unsure of, such as the voice's own echo", () => {
     const steps = run(repeat(OVER_VOICE_SPEECH_PROBABILITY - 0.01, 3000));
     expect(steps.some((step) => step.lowered || step.confirmed)).toBe(false);
+  });
+});
+
+describe("the minimum speech over the voice", () => {
+  it("keeps values the backend accepts and falls back to 500 ms otherwise", () => {
+    expect(resolveOverVoiceMinSpeechMs(200)).toBe(200);
+    expect(resolveOverVoiceMinSpeechMs(2000)).toBe(2000);
+    expect(resolveOverVoiceMinSpeechMs(undefined)).toBe(500);
+    // A malformed local override such as "abc" or "500ms" arrives as NaN.
+    expect(resolveOverVoiceMinSpeechMs(Number("500ms"))).toBe(500);
+    expect(resolveOverVoiceMinSpeechMs(199)).toBe(500);
+    expect(resolveOverVoiceMinSpeechMs(5000)).toBe(500);
   });
 });

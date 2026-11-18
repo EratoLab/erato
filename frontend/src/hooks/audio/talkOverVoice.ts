@@ -15,6 +15,18 @@ export const OVER_VOICE_SPEECH_PROBABILITY = 0.75;
 /** A dip this short between syllables keeps the stretch going. */
 export const OVER_VOICE_MAX_DIP_MS = 100;
 export const DEFAULT_OVER_VOICE_MIN_SPEECH_MS = 500;
+// Same range the backend accepts; anything else falls back to the default.
+const MIN_OVER_VOICE_SPEECH_MS = 200;
+const MAX_OVER_VOICE_SPEECH_MS = 2000;
+
+export function resolveOverVoiceMinSpeechMs(value: number | undefined): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= MIN_OVER_VOICE_SPEECH_MS &&
+    value <= MAX_OVER_VOICE_SPEECH_MS
+    ? value
+    : DEFAULT_OVER_VOICE_MIN_SPEECH_MS;
+}
 
 export interface OverVoiceGate {
   /** Confident speech in the current stretch. */

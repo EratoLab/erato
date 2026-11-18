@@ -160,3 +160,62 @@ it("lowers every voice while the user may be talking over it, and restores it", 
   playback.lowerVoice(false);
   expect(output.gain.setTargetAtTime).toHaveBeenLastCalledWith(1, 1, 0.03);
 });
+
+describe("talking over a reply", () => {
+  const speaking = async () => {
+    const p = await import("./speechPlayback");
+    p.useSpeechPlayback.setState({ conversational: true });
+    await p.enableSpeechPlayback(true);
+    p.beginSpeechResponse("chat-1");
+    p.playSpeechChunk("m1", 0, "AQIDBA==", 24000, "chat-1");
+    p.playSpeechChunk("m1", 1, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+    return p;
+  };
+
+  it("pauses at once and keeps what was not said, and what arrives meanwhile", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    expect(stops).toHaveBeenCalledTimes(2);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: false,
+      paused: true,
+    });
+    p.playSpeechChunk("m1", 2, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+
+    p.resumeSpeechPlayback();
+    // Both cut chunks from their start, then the one that arrived.
+    expect(starts).toHaveLength(5);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: true,
+      paused: false,
+    });
+    p.playSpeechChunk("m1", 3, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(6);
+  });
+
+  it("a turn with words drops what the paused voice kept", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    p.stopSpeechPlayback();
+    p.resumeSpeechPlayback();
+    p.playSpeechChunk("m1", 2, "AQIDBA==", 24000, "chat-1");
+    expect(starts).toHaveLength(2);
+    expect(p.useSpeechPlayback.getState()).toMatchObject({
+      playing: false,
+      paused: false,
+    });
+    // The turn stays spoken, so a card it stops on is still said.
+    expect(p.useSpeechPlayback.getState().quietTurn).toBeUndefined();
+  });
+
+  it("a new response ends a pause", async () => {
+    const p = await speaking();
+    p.pauseSpeechPlayback();
+    p.beginSpeechResponse("chat-1");
+    expect(p.useSpeechPlayback.getState().paused).toBe(false);
+    p.resumeSpeechPlayback();
+    expect(starts).toHaveLength(2);
+  });
+});

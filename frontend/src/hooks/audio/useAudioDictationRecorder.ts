@@ -47,6 +47,7 @@ import {
 import {
   overVoiceGate,
   overVoiceStep,
+  resolveOverVoiceMinSpeechMs,
   type OverVoiceGate,
 } from "./talkOverVoice";
 import { useAudioContextInterruptionRecovery } from "./useAudioContextInterruptionRecovery";
@@ -72,6 +73,8 @@ const MAX_END_OF_TURN_SILENCE_MS = 5000;
  * start of the words that stop it, including the detector's own lead-in.
  */
 const HELD_AUDIO_MS = 1500;
+/** Kept before speech the detector was sure of: its first sounds are softer. */
+const SPEECH_LEAD_IN_MS = 500;
 
 type OverVoiceHold = {
   released: "speech" | "voice_ended" | null;
@@ -315,7 +318,9 @@ export function useAudioDictationRecorder({
   const vadAutoStopTriggeredRef = useRef(false);
   const onVadAutoStopRef = useRef(onVadAutoStop);
   const voiceSpeakingRef = useRef(voiceSpeaking);
-  const overVoiceMinSpeechMsRef = useRef(overVoiceMinSpeechMs);
+  const overVoiceMinSpeechMsRef = useRef(
+    resolveOverVoiceMinSpeechMs(overVoiceMinSpeechMs),
+  );
   const onSpeechOverVoiceRef = useRef(onSpeechOverVoice);
   const onVoiceLoweredRef = useRef(onVoiceLowered);
   /** The current recording's wait over the voice, from its start. */
@@ -360,7 +365,8 @@ export function useAudioDictationRecorder({
   }, [onVadAutoStop]);
 
   useEffect(() => {
-    overVoiceMinSpeechMsRef.current = overVoiceMinSpeechMs;
+    overVoiceMinSpeechMsRef.current =
+      resolveOverVoiceMinSpeechMs(overVoiceMinSpeechMs);
     onSpeechOverVoiceRef.current = onSpeechOverVoice;
     onVoiceLoweredRef.current = onVoiceLowered;
   }, [onSpeechOverVoice, onVoiceLowered, overVoiceMinSpeechMs]);
@@ -863,7 +869,9 @@ export function useAudioDictationRecorder({
 
     const baseAudioConstraints: MediaTrackConstraints = {
       // Over the voice, the browser's echo cancellation keeps the voice
-      // from hearing itself; otherwise the raw signal as before.
+      // from hearing itself; otherwise the raw signal as before. It stays
+      // on for the rest of the turn: switched off when the voice ends, the
+      // sound would change in the middle of the user's words.
       echoCancellation: hold !== null,
       noiseSuppression: false,
       autoGainControl: false,
@@ -1180,14 +1188,25 @@ export function useAudioDictationRecorder({
         if (isMounted()) setIsListeningOverVoice(true);
         const reason = await waitForHold(hold, sessionAbort.signal);
         if (isMounted()) setIsListeningOverVoice(false);
-        if (reason === "voice_ended") {
+        // Speech already under way as the voice ends is the start of the
+        // turn: kept from shortly before it began, the detector going on.
+        const keepMs =
+          reason === "speech"
+            ? HELD_AUDIO_MS
+            : hold.gate.speechMs > 0
+              ? Math.min(
+                  HELD_AUDIO_MS,
+                  hold.gate.speechMs + hold.gate.dipMs + SPEECH_LEAD_IN_MS,
+                )
+              : 0;
+        if (keepMs === 0) {
           // Only what the user says from now on is theirs; what was heard
           // over the voice, and any speech the detector saw in it, is not.
           preSessionSamplesRef.current = [...primerSamples];
           vadEngineRef.current?.reset?.();
         } else {
           const preBuffer = preSessionSamplesRef.current;
-          const keep = Math.floor((sourceSampleRate * HELD_AUDIO_MS) / 1000);
+          const keep = Math.floor((sourceSampleRate * keepMs) / 1000);
           if (preBuffer.length > keep)
             preBuffer.splice(0, preBuffer.length - keep);
         }

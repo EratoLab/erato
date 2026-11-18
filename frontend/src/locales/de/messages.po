@@ -2513,6 +2513,11 @@ msgid "chat.history.unpinFailed"
 msgstr "Chat konnte nicht gelöst werden"
 
 #. js-lingui-explicit-id
+#: src/components/ui/Chat/ChatInput.tsx
+msgid "chat.input.audio.notSentCardWaiting"
+msgstr "Nicht gesendet: eine Bestätigung wartet"
+
+#. js-lingui-explicit-id
 #: src/hooks/audio/useAudioTranscriptionRecorder.ts
 #~ msgid "chat.input.audioRecording.diagnostics.autoGainControl"
 #~ msgstr ""
