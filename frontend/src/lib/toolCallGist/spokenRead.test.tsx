@@ -36,7 +36,7 @@ const NOW = new Date("2026-11-17T09:00:00Z");
 i18n.load({ de: deMessages as unknown as Messages });
 
 // The set's labels carry the spoken vocabulary; these tests are about
-// composing, with the card's own names. `spokenCardRewording.test.ts`
+// composing, with the card's own names. `spokenNames.test.ts`
 // covers the vocabulary.
 const callOf = (id: string): SetCall => {
   const call = calls.find((entry) => entry.id === id);

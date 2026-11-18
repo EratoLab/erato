@@ -444,13 +444,19 @@ const detailsOf = (
   whole = false,
   names?: SpokenNames,
 ): Detailed => {
-  const earOf = (value: ChangeValue, field: string, rawName: string) =>
+  // A value in an object inside the record has that object's fields and
+  // codes, not the call's table's: it is said as the card shows it.
+  const namesOf = (part: { nested: boolean }) =>
+    part.nested ? undefined : names;
+  const earOf = (value: ChangeValue, field: string, effect: ChangeEffect) =>
     sayable(
       valueOf(
         value,
         field,
         timeZone,
-        value.machineId ? undefined : spokenChoice(names, rawName, value.text),
+        value.machineId
+          ? undefined
+          : spokenChoice(namesOf(effect), effect.rawName, value.text),
       ),
     );
   const layout = changeLayout(change);
@@ -460,13 +466,14 @@ const detailsOf = (
   let typedName = false;
   const describe = (effect: ChangeEffect): SpokenDetail | undefined => {
     const shown = effectField(effect);
-    const heard = spokenFieldName(names, effect.rawName);
+    const heard = spokenFieldName(namesOf(effect), effect.rawName);
     const field = heard === undefined ? shown : shorten(heard, MAX_FIELD_WORDS);
     const ear = (value: ChangeValue, field: string) =>
-      earOf(value, field, effect.rawName);
+      earOf(value, field, effect);
     const entries = () => effect.values.map((value) => ear(value, field));
     const first = effect.values[0] as ChangeValue | undefined;
     const namesItem =
+      !effect.nested &&
       effect.effect === "set" &&
       first !== undefined &&
       !first.machineId &&
@@ -560,10 +567,10 @@ const detailsOf = (
   const detailOf = (effect: ChangeEffect): SpokenDetail | undefined => {
     const detail = describe(effect);
     if (!detail) return detail;
-    const sentences = spokenFieldSentences(names, effect.rawName);
+    const sentences = spokenFieldSentences(namesOf(effect), effect.rawName);
     return {
       ...detail,
-      ...(spokenFieldName(names, effect.rawName) !== undefined
+      ...(spokenFieldName(namesOf(effect), effect.rawName) !== undefined
         ? { cardField: effectField(effect) }
         : {}),
       ...(sentences ? { sentences } : {}),
@@ -619,7 +626,7 @@ const detailsOf = (
   omitted += layout.beyondCap;
   for (const text of change.texts) {
     const shown = fieldName(text);
-    const heard = spokenFieldName(names, text.rawName);
+    const heard = spokenFieldName(namesOf(text), text.rawName);
     const field = heard === undefined ? shown : shorten(heard, MAX_FIELD_WORDS);
     const cardField = heard === undefined ? {} : { cardField: shown };
     // A truncated text is counted by its length; a whole one by its words.

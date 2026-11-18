@@ -894,6 +894,11 @@ pub struct ToolCallEffect {
     /// the record being changed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub new_name: bool,
+    /// The value sits in an object inside the record, such as a record
+    /// created with it: its name and codes belong to that object, so spoken
+    /// names never apply to it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
 }
 
 /// One value as a card shows it.
@@ -1013,6 +1018,9 @@ pub struct ToolCallTextChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(nullable = false)]
     pub before: Option<ToolCallEffectValue>,
+    /// See [`ToolCallEffect::nested`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub nested: bool,
 }
 
 /// Who a call reaches. Group addresses count as one and are never expanded.

@@ -172,10 +172,33 @@ describe("spoken names", () => {
     expect(words("create-01-task-long-description", "en")).toMatch(
       /Due date: 15 January 2030\. Priority: High\./,
     );
-    // The customer's own vocabulary comes before the shared one.
+    // The operator's glossary names the risk level and its values: the
+    // voice says its words, as the card shows them.
     expect(words("update-06-many-fields", "de")).toMatch(
-      /Risikostufe: von Niedrig auf Mittel\./,
+      /Risk level: von Low auf Medium\./,
     );
+  });
+
+  it("never name a value in a nested object from the call's table", () => {
+    const words = (id: string, language: string) =>
+      scenarioCards(
+        scenarios.find((scenario) => scenario.id === id) as Scenario,
+        language,
+      )
+        .flatMap((card) => card.pieces.map((piece) => piece.text))
+        .join(" ");
+    // An account created with an opportunity: its state 1 is Inactive, never
+    // the opportunity's Won, and its name is the card's, prefix and all.
+    for (const language of LANGUAGES) {
+      const said = words("create-15-nested-account", language);
+      expect(said).not.toMatch(/Gewonnen|Won|Inaktiv|Inactive/);
+      expect(said).toMatch(/Parent account ID · State code: 1\./);
+    }
+    // A task's priority 1 is Normal; the case written through it keeps its
+    // code, as the card shows it.
+    const task = words("update-15-task-nested-case", "de");
+    expect(task.match(/Normal/g)).toHaveLength(1);
+    expect(task).toMatch(/Priority code wird auf 1 gesetzt/);
   });
 
   it("leave the on-screen card exactly as it was", () => {

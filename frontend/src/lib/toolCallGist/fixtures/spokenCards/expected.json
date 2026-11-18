@@ -1706,14 +1706,14 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Voraussichtliches Abschlussdatum: 30. Juni 2030.",
+          "text": "Estimated close date: 30. Juni 2030.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Voraussichtliches Abschlussdatum"
+                "text": "Estimated close date"
               }
             },
             {
@@ -2837,6 +2837,180 @@
       ]
     ]
   },
+  "create-15-nested-account": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 einen Datensatz anlegen:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 6.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · Name",
+          "role": "detail",
+          "text": "Parent account ID · Name: Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · State code",
+          "role": "detail",
+          "text": "Parent account ID · State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to create a record in Dynamics 365:",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "item",
+          "role": "item",
+          "text": "Linie 6.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "name",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · Name",
+          "role": "detail",
+          "text": "Parent account ID · Name: Neue Firma.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · Name"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Neue Firma"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Parent account ID · State code",
+          "role": "detail",
+          "text": "Parent account ID · State code: 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Parent account ID · State code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-01-date-and-probability": {
     "de": [
       [
@@ -2865,14 +3039,14 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 15. Januar 2030.",
+          "text": "Estimated close date: vom 1. Dezember auf den 15. Januar 2030.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Voraussichtliches Abschlussdatum"
+                "text": "Estimated close date"
               }
             },
             {
@@ -2898,14 +3072,14 @@
         {
           "id": "detail:Probability",
           "role": "detail",
-          "text": "Wahrscheinlichkeit: von 10 auf 60 Prozent.",
+          "text": "Probability: von 10 auf 60 Prozent.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Wahrscheinlichkeit"
+                "text": "Probability"
               }
             },
             {
@@ -3061,28 +3235,28 @@
         {
           "id": "detail:Risk level",
           "role": "detail",
-          "text": "Risikostufe: von Niedrig auf Hoch.",
+          "text": "Risk level: von Low auf High.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Risikostufe"
+                "text": "Risk level"
               }
             },
             {
               "slot": "from",
               "value": {
                 "kind": "text",
-                "text": "Niedrig"
+                "text": "Low"
               }
             },
             {
               "slot": "to",
               "value": {
                 "kind": "text",
-                "text": "Hoch"
+                "text": "High"
               }
             }
           ]
@@ -3343,14 +3517,14 @@
         {
           "id": "detail:Probability",
           "role": "detail",
-          "text": "Wahrscheinlichkeit: von 10 auf 50 Prozent.",
+          "text": "Probability: von 10 auf 50 Prozent.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Wahrscheinlichkeit"
+                "text": "Probability"
               }
             },
             {
@@ -3496,21 +3670,21 @@
         {
           "id": "detail:Risk level",
           "role": "detail",
-          "text": "Risikostufe wird auf Mittel gesetzt.",
+          "text": "Risk level wird auf Medium gesetzt.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Risikostufe"
+                "text": "Risk level"
               }
             },
             {
               "slot": "value",
               "value": {
                 "kind": "text",
-                "text": "Mittel"
+                "text": "Medium"
               }
             }
           ]
@@ -3601,28 +3775,28 @@
         {
           "id": "detail:Risk level",
           "role": "detail",
-          "text": "Risikostufe: von Niedrig auf Mittel.",
+          "text": "Risk level: von Low auf Medium.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Risikostufe"
+                "text": "Risk level"
               }
             },
             {
               "slot": "from",
               "value": {
                 "kind": "text",
-                "text": "Niedrig"
+                "text": "Low"
               }
             },
             {
               "slot": "to",
               "value": {
                 "kind": "text",
-                "text": "Mittel"
+                "text": "Medium"
               }
             }
           ]
@@ -3630,14 +3804,14 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Voraussichtliches Abschlussdatum: vom 1. Dezember auf den 31. März 2030.",
+          "text": "Estimated close date: vom 1. Dezember auf den 31. März 2030.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Voraussichtliches Abschlussdatum"
+                "text": "Estimated close date"
               }
             },
             {
@@ -3663,14 +3837,14 @@
         {
           "id": "detail:Probability",
           "role": "detail",
-          "text": "Wahrscheinlichkeit: von 10 auf 75 Prozent.",
+          "text": "Probability: von 10 auf 75 Prozent.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Wahrscheinlichkeit"
+                "text": "Probability"
               }
             },
             {
@@ -4453,6 +4627,194 @@
       ]
     ]
   },
+  "update-15-task-nested-case": {
+    "de": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "Ich möchte in Dynamics 365 eine Aufgabe ändern, die ich in diesem Chat nicht gelesen habe.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priorität wird auf Normal gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priorität"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Normal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Title",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Title wird auf Linie 6 steht gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Title"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6 steht"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Priority code",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Priority code wird auf 1 gesetzt.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Bitte auf dem Bildschirm bestätigen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ],
+    "en": [
+      [
+        {
+          "id": "what",
+          "role": "what",
+          "text": "I'd like to change a task in Dynamics 365 that I haven't read in this chat.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "server",
+              "value": {
+                "kind": "text",
+                "text": "Dynamics 365"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Priority code",
+          "role": "detail",
+          "text": "Priority will be set to Normal.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Priority"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Normal"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Title",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Title will be set to Linie 6 steht.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Title"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "text",
+                "text": "Linie 6 steht"
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail:Regardingobjectid incident task · Priority code",
+          "role": "detail",
+          "text": "Regardingobjectid incident task · Priority code will be set to 1.",
+          "mustSay": false,
+          "values": [
+            {
+              "slot": "field",
+              "value": {
+                "kind": "text",
+                "text": "Regardingobjectid incident task · Priority code"
+              }
+            },
+            {
+              "slot": "value",
+              "value": {
+                "kind": "number",
+                "value": 1,
+                "percent": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "request",
+          "role": "request",
+          "text": "Please confirm on screen.",
+          "mustSay": false,
+          "values": []
+        }
+      ]
+    ]
+  },
   "update-10-contact-two-fields": {
     "de": [
       [
@@ -4675,14 +5037,14 @@
         {
           "id": "detail:Probability",
           "role": "detail",
-          "text": "Wahrscheinlichkeit: von 10 auf 20 Prozent.",
+          "text": "Probability: von 10 auf 20 Prozent.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Wahrscheinlichkeit"
+                "text": "Probability"
               }
             },
             {
@@ -9149,21 +9511,21 @@
         {
           "id": "detail:Risk level",
           "role": "detail",
-          "text": "Risikostufe ist Hoch.",
+          "text": "Risk level ist High.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Risikostufe"
+                "text": "Risk level"
               }
             },
             {
               "slot": "value",
               "value": {
                 "kind": "text",
-                "text": "Hoch"
+                "text": "High"
               }
             }
           ]
@@ -9171,14 +9533,14 @@
         {
           "id": "detail:Estimated close date",
           "role": "detail",
-          "text": "Voraussichtliches Abschlussdatum liegt spätestens am 31. Dezember.",
+          "text": "Estimated close date liegt spätestens am 31. Dezember.",
           "mustSay": false,
           "values": [
             {
               "slot": "field",
               "value": {
                 "kind": "text",
-                "text": "Voraussichtliches Abschlussdatum"
+                "text": "Estimated close date"
               }
             },
             {

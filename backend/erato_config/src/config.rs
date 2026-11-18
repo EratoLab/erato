@@ -444,7 +444,10 @@ pub struct McpRuntimeConfig {
     pub mcp_servers_global: McpServersGlobalConfig,
     #[serde(default)]
     pub mcp_server_permissions: McpServerPermissionsConfig,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_vocabularies"
+    )]
     pub spoken_vocabularies: SpokenVocabulariesConfig,
 }
 
@@ -473,7 +476,9 @@ impl McpRuntimeConfig {
     }
 
     pub fn from_toml_sources(sources: &[ConfigSourceFile]) -> Result<Self, Report> {
-        let mut config: Self = runtime_sources(sources)?.try_deserialize()?;
+        let schema = runtime_sources(sources)?;
+        warn_misshaped_spoken_entries(&schema);
+        let mut config: Self = schema.try_deserialize()?;
         validate_mcp_server_ids(&config.mcp_servers)?;
         warn_dropped_spoken_entries(&mut config.spoken_vocabularies);
         warn_missing_vocabularies(&config.mcp_servers, &config.spoken_vocabularies);
@@ -1001,7 +1006,10 @@ pub struct AppConfig {
     /// Words people say for a kind of server's machine names, by vocabulary
     /// name and language tag, for approval cards read aloud. A server uses a
     /// vocabulary through `glossary.vocabularies`.
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "crate::spoken::deserialize_spoken_vocabularies"
+    )]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub spoken_vocabularies: SpokenVocabulariesConfig,
 
@@ -1539,6 +1547,7 @@ impl AppConfig {
         let schema = Self::config_schema(config_file_paths, true)?;
         warn_unknown_turn_instruction_keys(&schema);
         warn_unknown_spoken_keys(&schema);
+        warn_misshaped_spoken_entries(&schema);
         // You can deserialize (and thus freeze) the entire configuration as
         let mut config: Self = schema.try_deserialize()?;
         config = config.migrate();
@@ -1557,6 +1566,7 @@ impl AppConfig {
             Self::config_schema_builder_for_resolved_paths(&config_files_to_load)?.build()?;
         warn_unknown_turn_instruction_keys(&schema);
         warn_unknown_spoken_keys(&schema);
+        warn_misshaped_spoken_entries(&schema);
         let config: Self = schema.try_deserialize::<Self>()?.migrate();
         config.desktop_sidecar.bootstrap_fields()?;
 
@@ -4639,7 +4649,8 @@ pub struct McpGlossaryConfig {
     /// Names of `[spoken_vocabularies]` whose words the voice uses for this
     /// server's fields, choice values and tables, in the listener's language.
     /// Voice only: the card keeps the names above. The first vocabulary with
-    /// an entry wins; a name without one is spoken as the card shows it.
+    /// an entry wins; a name without one is spoken as the card shows it. A
+    /// field or value the names above cover is spoken with their word.
     #[serde(default)]
     #[facet(erato_config::introduced_in(version = "unreleased"))]
     pub vocabularies: Vec<String>,
@@ -8716,6 +8727,12 @@ fn warn_unknown_spoken_keys(schema: &Config) {
         tracing::warn!(
             "Config key `{key}` is not known to this Erato version and is ignored. It may come from a newer content package."
         );
+    }
+}
+
+fn warn_misshaped_spoken_entries(schema: &Config) {
+    for dropped in crate::spoken::misshaped_spoken_entries(schema) {
+        tracing::warn!("Spoken vocabulary entry dropped: {dropped}.");
     }
 }
 

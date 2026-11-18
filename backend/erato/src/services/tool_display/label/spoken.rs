@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use erato_config::config::{McpRuntimeConfig, SpokenNamesConfig};
+use erato_config::config::{McpGlossaryConfig, McpRuntimeConfig, SpokenNamesConfig};
 
 use crate::models::message::{ToolCallChange, ToolCallSpokenNames};
 
@@ -17,6 +17,9 @@ const MAX_SPOKEN_ENTRIES: usize = 64;
 pub struct SpokenVocabulary<'a> {
     /// Per language, the vocabularies that have it, first one first.
     languages: BTreeMap<&'a str, Vec<&'a SpokenNamesConfig>>,
+    /// The operator's own names: a field or value the card names from them
+    /// is said as the card shows it, so voice and screen agree.
+    glossary: &'a McpGlossaryConfig,
 }
 
 impl<'a> SpokenVocabulary<'a> {
@@ -32,7 +35,10 @@ impl<'a> SpokenVocabulary<'a> {
                 languages.entry(language.as_str()).or_default().push(names);
             }
         }
-        (!languages.is_empty()).then_some(Self { languages })
+        (!languages.is_empty()).then_some(Self {
+            languages,
+            glossary: &server.glossary,
+        })
     }
 
     /// A collector for one call; `table` is the table the call acts on,
@@ -92,7 +98,7 @@ impl SpokenNamesCollector<'_, '_> {
 
     /// A field the label names `shown`, which the tool writes `raw`.
     pub fn field(&mut self, shown: &str, raw: &str) {
-        if shown.is_empty() {
+        if shown.is_empty() || self.vocabulary.glossary.field_names.contains_key(raw) {
             return;
         }
         let table = self.table.clone();
@@ -112,7 +118,13 @@ impl SpokenNamesCollector<'_, '_> {
     /// A coded value of a field, each as the label carries it and as the tool
     /// writes it.
     pub fn choice(&mut self, shown_field: &str, raw_field: &str, shown: &str, raw: &str) {
-        if shown_field.is_empty() || shown.is_empty() {
+        let in_glossary = self
+            .vocabulary
+            .glossary
+            .choice_labels
+            .get(raw_field)
+            .is_some_and(|labels| labels.contains_key(raw));
+        if shown_field.is_empty() || shown.is_empty() || in_glossary {
             return;
         }
         let table = self.table.clone();
@@ -148,9 +160,10 @@ impl SpokenNamesCollector<'_, '_> {
         );
     }
 
-    /// A field's own natural sentence variants.
+    /// A field's own natural sentence variants; none for a field the
+    /// operator's glossary names, which keeps the card's word.
     pub fn field_sentences(&mut self, shown: &str, raw: &str) {
-        if shown.is_empty() {
+        if shown.is_empty() || self.vocabulary.glossary.field_names.contains_key(raw) {
             return;
         }
         for kind in ["changed", "set", "updated"] {
@@ -175,8 +188,11 @@ impl SpokenNamesCollector<'_, '_> {
 
     /// The fields and coded values a change writes: an effect's raw name is
     /// both the key and the lookup, and a value's text is the code as written.
+    /// Only what sits directly in the record: a nested object, such as an
+    /// account created with an opportunity, has other fields and codes than
+    /// the call's table.
     pub fn change(&mut self, change: &ToolCallChange) {
-        for effect in &change.effects {
+        for effect in change.effects.iter().filter(|effect| !effect.nested) {
             let raw = effect.raw_name.as_str();
             self.field(raw, raw);
             self.field_sentences(raw, raw);
@@ -191,7 +207,7 @@ impl SpokenNamesCollector<'_, '_> {
                 self.choice(raw, raw, &value.text, &value.text);
             }
         }
-        for text in &change.texts {
+        for text in change.texts.iter().filter(|text| !text.nested) {
             self.field(&text.raw_name, &text.raw_name);
         }
     }
@@ -310,6 +326,7 @@ mod tests {
             list: false,
             link: false,
             new_name: false,
+            nested: false,
         }
     }
 
@@ -337,6 +354,45 @@ mod tests {
         let en = &names["en"];
         assert_eq!(en.fields["scheduledend"], "due date");
         assert_eq!(en.choices["statecode"].get("1"), None);
+    }
+
+    #[test]
+    fn the_operators_glossary_wins_over_a_vocabulary() {
+        let mut config = config();
+        let glossary = &mut config.mcp_servers.get_mut("dynamics").unwrap().glossary;
+        glossary
+            .field_names
+            .insert("scheduledend".into(), "Deadline".into());
+        glossary.choice_labels.insert(
+            "statecode".into(),
+            [("1".to_string(), "Geschlossen".to_string())].into(),
+        );
+        let vocabulary = SpokenVocabulary::for_server(&config, "dynamics").unwrap();
+        let mut names = vocabulary.collector(None);
+        names.field("Deadline", "scheduledend");
+        names.field("statecode", "statecode");
+        names.choice("statecode", "statecode", "1", "1");
+        names.choice("statecode", "statecode", "0", "0");
+        let de = &names.finish()["de"];
+        assert!(!de.fields.contains_key("Deadline"));
+        assert_eq!(de.fields["statecode"], "Status");
+        assert_eq!(de.choices["statecode"].get("1"), None);
+        assert_eq!(de.choices["statecode"]["0"], "aktiv");
+    }
+
+    #[test]
+    fn a_nested_effect_gets_no_entry() {
+        let config = config();
+        let vocabulary = SpokenVocabulary::for_server(&config, "dynamics").unwrap();
+        let mut names = vocabulary.collector(Some("opportunity"));
+        names.change(&ToolCallChange {
+            effects: vec![ToolCallEffect {
+                nested: true,
+                ..effect("statecode", &["0"])
+            }],
+            ..ToolCallChange::default()
+        });
+        assert!(names.finish().is_empty());
     }
 
     #[test]
