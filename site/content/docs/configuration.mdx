@@ -5439,8 +5439,8 @@ Replaces the model's built-in instruction, for example from subscription content
 
 How a waiting approval card is read aloud in conversational audio mode. The card is always composed piece by piece from its own data: what and where, the item, up to three details, long texts, the consequence and the request to decide. In the `precise` style the voice says those pieces as built by rule. In the `natural` style a small model rewords each piece the way a native speaker would say it, through `POST /api/v1beta/me/messages/{message_id}/approval-rewording`, and every wording is checked by rule before it is spoken:
 
-- every value, name, date, number and field name the precise piece says must still be in it, in the same order and at least as often;
-- every number, negation and word for a quantity, a day or a time must be there exactly as often as in the precise piece;
+- every value, name, date, number and field name the precise piece says must still be in it, in the same order and exactly as often;
+- every number, negation, word for a quantity, a day or a time, verb of what is done, word for the kind of thing, hedge ("laut Aufruf", "whether") and pointer to the screen must be there exactly as often as in the precise piece;
 - every other word must be a word of the precise piece or one of the allowed `words` for the language;
 - it may be at most 80 characters longer than the precise piece, and may hold no markup or invisible characters.
 
@@ -5492,7 +5492,7 @@ Replaces the model's built-in instruction, for example from subscription content
 
 {/* erato_toml_config_key: approval_speech.words.<key>.[] */}
 
-Per language tag, the words a natural wording may use that the precise piece does not have, such as articles, prepositions and verbs. A list replaces the built-in one for that language (German and English have one); a language without either may only reorder the piece's own words. Words for numbers, negations, days and times are ignored here: they may only come from the precise piece.
+Per language tag, the words a natural wording may use that the precise piece does not have, such as articles, prepositions and verbs. A list replaces the built-in one for that language (German and English have one); a language without either may only reorder the piece's own words. Words of the kinds the check keeps exactly (numbers, negations, days and times, action verbs, kinds of things, hedges) are ignored here: they may only come from the precise piece.
 
 **Type:** table of lists of `string`
 
